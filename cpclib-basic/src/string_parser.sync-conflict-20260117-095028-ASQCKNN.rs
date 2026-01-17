@@ -40,33 +40,6 @@ fn build_tokens(parts: Vec<&mut Vec<BasicToken>>) -> Vec<BasicToken> {
     res
 }
 
-/// Helper function to build a token vector with a base token followed by multiple token vectors.
-#[inline]
-fn build_tokens_with_base(base: BasicToken, parts: Vec<&mut Vec<BasicToken>>) -> Vec<BasicToken> {
-    let mut res = vec![base];
-    for part in parts {
-        res.append(part);
-    }
-    res
-}
-
-/// Helper function to conditionally append an optional token vector.
-#[inline]
-fn append_optional(res: &mut Vec<BasicToken>, opt: Option<Vec<BasicToken>>) {
-    if let Some(mut tokens) = opt {
-        res.append(&mut tokens);
-    }
-}
-
-/// Helper function to append optional pair of token vectors (e.g., comma + expression).
-#[inline]
-fn append_optional_pair(res: &mut Vec<BasicToken>, opt: Option<(Vec<BasicToken>, Vec<BasicToken>)>) {
-    if let Some((mut first, mut second)) = opt {
-        res.append(&mut first);
-        res.append(&mut second);
-    }
-}
-
 /// Phase 3 helpers: Common parsing patterns
 
 /// Helper function for the common peek pattern checking for space/tab/colon/newline/eof
@@ -125,9 +98,9 @@ impl AppendToTokenList for Option<(Vec<BasicToken>, Vec<BasicToken>)> {
 }
 
 /// Phase 4: Token list construction macro
-/// Eliminates repetitive build_tokens_with_base, append_optional, append_optional_pair patterns
+/// Builds token lists with pre-allocation to avoid Vec reallocation.
+/// Works with AppendToTokenList trait for type-safe appending of Vec, Option<Vec>, and Option<(Vec, Vec)>.
 /// Usage: construct_token_list!(base_token, part1, part2, opt_part, opt_pair)
-/// Now with pre-allocation to avoid Vec reallocation!
 macro_rules! construct_token_list {
     ($base:expr $(, $part:expr)*) => {{
         // Calculate total capacity needed
@@ -182,56 +155,24 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
     ' '.context(StrContext::Label("Missing space"))
         .parse_next(input)?;
 
-    // get the tokens
-    let mut tokens = Vec::new();
+    // get the tokens using the helper (stops on newline)
+    let mut tokens = parse_instruction_sequence_impl(input, false, true).unwrap_or_else(|_| Vec::new());
     
-    // I have seen code starting by ":"
-    if let Some(_) = opt(':').parse_next(input)? {
-        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
-    } 
-
-    loop {
-        // Parse an instruction
-        match parse_instruction(input) {
-            Ok(mut instr) => {
-                tokens.append(&mut instr);
-                
-                // Check for delimiter
-                if input.is_empty() {
-                    break;
-                }
-                let checkpoint = input.checkpoint();
-                if let Some(_) = opt(line_ending).parse_next(input)? {
-                    break;
-                }
-                input.reset(&checkpoint);
-                
-                let colon_checkpoint = input.checkpoint();
-                if let Some(_) = opt(':').parse_next(input)? {
-                    tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
-                    continue;
-                }
-                input.reset(&colon_checkpoint);
-                
-                // Try to parse as REM/comment (consume leading spaces first)
-                let mut leading_spaces = parse_space0(input)?;
-                if let Ok(comment) = parse_rem.parse_next(input) {
-                    tokens.append(&mut leading_spaces);
-                    tokens.push(comment);
-                    break;
-                }
-                
-                // No more delimiters or instructions found - restore spaces
-                tokens.append(&mut leading_spaces);
-                break;
-            },
-            Err(_) => {
-                // Even if instruction parsing failed, check for inline comment
-                if let Some(_) = opt::<_, _, ContextError, _>('\'').parse_next(input).ok().flatten() {
-                    let comment_text = take_while(0.., |ch| ch != '\n').parse_next(input)?;
-                    tokens.push(BasicToken::Comment(BasicTokenNoPrefix::SymbolQuote, comment_text.as_bytes().to_vec()));
-                }
-                break;
+    // Handle special case: check for REM/comment after instructions
+    if !input.is_empty() {
+        let checkpoint = input.checkpoint();
+        let mut leading_spaces = parse_space0(input).unwrap_or_default();
+        
+        if let Ok(comment) = parse_rem.parse_next(input) {
+            tokens.append(&mut leading_spaces);
+            tokens.push(comment);
+        } else {
+            input.reset(&checkpoint);
+            
+            // Check for inline comment with '
+            if let Some(_) = opt::<_, _, ContextError, _>('\'').parse_next(input).ok().flatten() {
+                let comment_text = take_while(0.., |ch| ch != '\n').parse_next(input)?;
+                tokens.push(BasicToken::Comment(BasicTokenNoPrefix::SymbolQuote, comment_text.as_bytes().to_vec()));
             }
         }
     }
@@ -728,7 +669,7 @@ pub fn parse_print_expression<'src>(input: &mut &'src str) -> BasicSeveralTokens
     };
 
     let mut tokens = prefix.unwrap_or_default();
-    append_optional(&mut tokens, expr);
+    AppendToTokenList::append_to(expr, &mut tokens);
     Ok(tokens)
 }
 
@@ -796,7 +737,7 @@ pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
     // list of expressions
     let exprs = opt(parse_print_stream_expression).parse_next(input)?;
-    append_optional(&mut tokens, exprs);
+    AppendToTokenList::append_to(exprs, &mut tokens);
     Ok(tokens)
 }
 
@@ -872,36 +813,38 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         .parse_next(input)?;
 
     let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Input), space_a);
+    
+    // Build incrementally using AppendToTokenList for cleaner code
     if let Some(cr) = suppress_cr {
         res.push(BasicToken::SimpleToken(cr.into()));
     }
-    res.append(&mut space_after_cr);
-    append_optional(&mut res, canal);
-    res.append(&mut space_after_canal);
+    AppendToTokenList::append_to(space_after_cr, &mut res);
+    AppendToTokenList::append_to(canal, &mut res);
+    AppendToTokenList::append_to(space_after_canal, &mut res);
     
     if let Some(sep) = channel_sep {
         res.push(BasicToken::SimpleToken(sep.into()));
     }
-    res.append(&mut space_after_sep);
+    AppendToTokenList::append_to(space_after_sep, &mut res);
     
     // Add prompt string if present
-    if let Some(mut string) = prompt_string {
-        res.append(&mut string);
+    if let Some(string) = prompt_string {
+        AppendToTokenList::append_to(string, &mut res);
         if let Some(sep) = prompt_sep {
             res.push(BasicToken::SimpleToken(sep.into()));
         }
-        res.append(&mut space_after_prompt);
+        AppendToTokenList::append_to(space_after_prompt, &mut res);
     }
 
     // Add first variable
-    res.append(&mut first_var.clone());
+    AppendToTokenList::append_to(first_var, &mut res);
 
     // Add remaining variables with their separators
-    for mut arg in more_vars.into_iter() {
-        res.append(&mut arg.0);
+    for arg in more_vars.into_iter() {
+        AppendToTokenList::append_to(arg.0, &mut res);
         res.push(BasicToken::SimpleToken(arg.1.into()));
-        res.append(&mut arg.2);
-        res.append(&mut arg.3);
+        AppendToTokenList::append_to(arg.2, &mut res);
+        AppendToTokenList::append_to(arg.3, &mut res);
     }
 
     Ok(res)
@@ -1092,7 +1035,7 @@ pub fn parse_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 /// FOR variable = start TO end [STEP increment]
 pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut var, mut space_b, eq, mut space_c, mut start_val, mut space_d, _, mut space_e, mut end_val, step_part) = (
+    let (_, space_a, var, space_b, eq, space_c, start_val, space_d, _, space_e, end_val, step_part) = (
         Caseless("FOR"),
         parse_space1,
         cut_err(parse_variable.context(StrContext::Label("Variable expected"))),
@@ -1107,20 +1050,39 @@ pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         opt((parse_space1, Caseless("STEP"), parse_space1, parse_numeric_expression(NumericExpressionConstraint::None)))
     ).parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::For), space_a, var, space_b);
-    res.push(BasicToken::SimpleToken(eq.into()));
-    res.append(&mut space_c);
-    res.append(&mut start_val);
-    res.append(&mut space_d);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::To));
-    res.append(&mut space_e);
-    res.append(&mut end_val);
-    if let Some((mut space_f, _, mut space_g, mut step_val)) = step_part {
-        res.append(&mut space_f);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Step));
-        res.append(&mut space_g);
-        res.append(&mut step_val);
-    }
+    let res = if let Some((space_f, _, space_g, step_val)) = step_part {
+        construct_token_list!(
+            BasicToken::SimpleToken(BasicTokenNoPrefix::For),
+            space_a,
+            var,
+            space_b,
+            vec![BasicToken::SimpleToken(eq.into())],
+            space_c,
+            start_val,
+            space_d,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::To)],
+            space_e,
+            end_val,
+            space_f,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Step)],
+            space_g,
+            step_val
+        )
+    } else {
+        construct_token_list!(
+            BasicToken::SimpleToken(BasicTokenNoPrefix::For),
+            space_a,
+            var,
+            space_b,
+            vec![BasicToken::SimpleToken(eq.into())],
+            space_c,
+            start_val,
+            space_d,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::To)],
+            space_e,
+            end_val
+        )
+    };
     Ok(res)
 }
 
@@ -1136,8 +1098,107 @@ pub fn parse_next<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 }
 
 /// IF condition THEN statements [ELSE statements]
+// Helper function to parse THEN clause line number with implicit GOTO
+fn parse_then_line_number<'src>(input: &mut &'src str) -> Result<Vec<BasicToken>, ErrMode<ContextError>> {
+    let line_num = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)?;
+    Ok(construct_token_list!(
+        BasicToken::SimpleToken(BasicTokenNoPrefix::Goto),
+        line_num
+    ))
+}
+
+// Helper function to parse ELSE clause (either line number or instructions)
+fn parse_else_clause<'src>(input: &mut &'src str) -> Result<Vec<BasicToken>, ErrMode<ContextError>> {
+    let (else_space1, _, else_space2) = (parse_space0, Caseless("ELSE"), parse_space0).parse_next(input)?;
+    
+    let mut res = construct_token_list!(
+        BasicToken::SimpleToken(BasicTokenNoPrefix::Else)
+    );
+    
+    // Prepend and append spaces
+    let mut final_res = Vec::new();
+    AppendToTokenList::append_to(else_space1, &mut final_res);
+    AppendToTokenList::append_to(res, &mut final_res);
+    AppendToTokenList::append_to(else_space2, &mut final_res);
+    
+    // Check if ELSE has a line number (starts with digit)
+    let checkpoint = input.checkpoint();
+    let starts_with_digit = input.trim_start().chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
+    input.reset(&checkpoint);
+    
+    if starts_with_digit {
+        if let Ok(line_num_tokens) = parse_then_line_number(input) {
+            AppendToTokenList::append_to(line_num_tokens, &mut final_res);
+        }
+    } else {
+        // Parse instructions in ELSE clause
+        if let Ok(else_instrs) = parse_instruction_sequence(input) {
+            AppendToTokenList::append_to(else_instrs, &mut final_res);
+        }
+    }
+    
+    Ok(final_res)
+}
+
+// Helper function to parse a sequence of instructions separated by colons
+// stop_on_else: if true, stops when ELSE is encountered (for IF statements)
+// stop_on_newline: if true, stops at line endings (for line parsing)
+fn parse_instruction_sequence_impl<'src>(
+    input: &mut &'src str,
+    stop_on_else: bool,
+    stop_on_newline: bool
+) -> Result<Vec<BasicToken>, ErrMode<ContextError>> {
+    let mut res = Vec::new();
+    
+    loop {
+        // Check stop conditions
+        if stop_on_newline && (input.trim_start().is_empty() || 
+                               input.trim_start().starts_with('\n') || 
+                               input.trim_start().starts_with('\r')) {
+            break;
+        }
+        
+        if stop_on_else {
+            let checkpoint = input.checkpoint();
+            let is_else = input.trim_start().to_uppercase().starts_with("ELSE");
+            input.reset(&checkpoint);
+            if is_else {
+                break;
+            }
+        }
+        
+        // Try to parse an instruction
+        match parse_instruction(input) {
+            Ok(instr) => {
+                AppendToTokenList::append_to(instr, &mut res);
+                
+                // Check for colon separator
+                let sep_checkpoint = input.checkpoint();
+                let space_before = parse_space0.parse_next(input)?;
+                if opt(':').parse_next(input)?.is_some() {
+                    AppendToTokenList::append_to(space_before, &mut res);
+                    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
+                    let space_after = parse_space0.parse_next(input)?;
+                    AppendToTokenList::append_to(space_after, &mut res);
+                } else {
+                    input.reset(&sep_checkpoint);
+                    break;
+                }
+            },
+            Err(_) => break
+        }
+    }
+    
+    Ok(res)
+}
+
+// Helper function for IF statement (stops on ELSE, not on newline)
+fn parse_instruction_sequence<'src>(input: &mut &'src str) -> Result<Vec<BasicToken>, ErrMode<ContextError>> {
+    parse_instruction_sequence_impl(input, true, false)
+}
+
 pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut condition, mut space_b, _, mut space_c) = (
+    let (_, space_a, condition, space_b, _, space_c) = (
         Caseless("IF"),
         parse_space1,
         cut_err(parse_general_expression.context(StrContext::Label("Condition expected"))),
@@ -1146,153 +1207,45 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
         parse_space0
     ).parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::If), space_a, condition, space_b);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Then));
-    res.append(&mut space_c);
+    let mut res = construct_token_list!(
+        BasicToken::SimpleToken(BasicTokenNoPrefix::If),
+        space_a,
+        condition,
+        space_b,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Then)],
+        space_c
+    );
     
-    // Check if there's a line number after THEN (IF...THEN line_number form)
+    // Try parsing THEN with line number (IF...THEN line_number form)
     let checkpoint = input.checkpoint();
-    if let Ok(mut line_num) = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input) {
-        // This is IF condition THEN line_number (implicit GOTO)
-        // Add implicit GOTO
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
-        res.append(&mut line_num);
+    if let Ok(then_goto) = parse_then_line_number(input) {
+        AppendToTokenList::append_to(then_goto, &mut res);
         
-        // Check for ELSE after the line number
-        let else_checkpoint = input.checkpoint();
-        if let Ok((mut else_space1, _, mut else_space2)) = (parse_space0, Caseless("ELSE"), parse_space0).parse_next(input) {
-            res.append(&mut else_space1);
-            res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Else));
-            res.append(&mut else_space2);
-            
-            // Check if ELSE also has a line number (ELSE line_number form)
-            // Only if the next character is a digit (to avoid consuming variable names)
-            let line_num_checkpoint = input.checkpoint();
-            let starts_with_digit = input.trim_start().chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
-            input.reset(&line_num_checkpoint);
-            
-            if starts_with_digit {
-                if let Ok(mut else_line_num) = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input) {
-                    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
-                    res.append(&mut else_line_num);
-                } else {
-                    // Parse the instruction
-                    match parse_instruction(input) {
-                        Ok(mut else_instr) => {
-                            res.append(&mut else_instr);
-                        },
-                        Err(_) => {
-                            // No instruction after ELSE, that's ok
-                        }
-                    }
-                }
-            } else {
-                // ELSE is followed by an instruction (like GOTO or assignment)
-                // Parse the instruction
-                match parse_instruction(input) {
-                    Ok(mut else_instr) => {
-                        res.append(&mut else_instr);
-                    },
-                    Err(_) => {
-                        // No instruction after ELSE, that's ok
-                    }
-                }
-            }
-        } else {
-            input.reset(&else_checkpoint);
+        // Check for optional ELSE after the line number
+        if let Ok(else_clause) = parse_else_clause(input) {
+            AppendToTokenList::append_to(else_clause, &mut res);
         }
         
         return Ok(res);
     }
     input.reset(&checkpoint);
     
-    // Check if there's an instruction after THEN
+    // Parse THEN with instructions
     let checkpoint = input.checkpoint();
-    let is_eol_or_else = input.trim_start().is_empty() || 
-                         input.trim_start().starts_with('\n') || 
-                         input.trim_start().starts_with('\r') ||
-                         input.trim_start().to_uppercase().starts_with("ELSE");
+    let is_eol = input.trim_start().is_empty() || 
+                 input.trim_start().starts_with('\n') || 
+                 input.trim_start().starts_with('\r') ||
+                 input.trim_start().to_uppercase().starts_with("ELSE");
     input.reset(&checkpoint);
     
-    if !is_eol_or_else {
-        // Parse multiple instructions separated by colons in THEN clause
-        loop {
-            // Check if we hit ELSE
-            let else_checkpoint = input.checkpoint();
-            if opt((parse_space0, Caseless::<&str>("ELSE"))).parse_next(input)?.is_some() {
-                input.reset(&else_checkpoint);
-                break;
-            }
-            input.reset(&else_checkpoint);
-            
-            // Try to parse an instruction
-            match parse_instruction(input) {
-                Ok(mut instr) => {
-                    res.append(&mut instr);
-                    
-                    // Check for colon separator
-                    let sep_checkpoint = input.checkpoint();
-                    let mut space_before = parse_space0.parse_next(input)?;
-                    if opt(':').parse_next(input)?.is_some() {
-                        res.append(&mut space_before);
-                        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
-                        let mut space_after = parse_space0.parse_next(input)?;
-                        res.append(&mut space_after);
-                        // Continue to next statement
-                    } else {
-                        input.reset(&sep_checkpoint);
-                        break;
-                    }
-                },
-                Err(_) => break
-            }
+    if !is_eol {
+        if let Ok(then_instrs) = parse_instruction_sequence(input) {
+            AppendToTokenList::append_to(then_instrs, &mut res);
         }
         
-        // Now handle ELSE clause if present
-        let else_checkpoint = input.checkpoint();
-        if let Ok((mut else_space1, _, mut else_space2)) = (parse_space0, Caseless("ELSE"), parse_space0).parse_next(input) {
-            res.append(&mut else_space1);
-            res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Else));
-            res.append(&mut else_space2);
-            
-            // Check if ELSE has a line number (ELSE line_number form)
-            // Only if the next character is a digit (to avoid consuming variable names)
-            let line_num_checkpoint = input.checkpoint();
-            let starts_with_digit = input.trim_start().chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false);
-            input.reset(&line_num_checkpoint);
-            
-            if starts_with_digit {
-                if let Ok(mut else_line_num) = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input) {
-                    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
-                    res.append(&mut else_line_num);
-                }
-            } else {
-                // Parse multiple instructions in ELSE clause
-                loop {
-                    match parse_instruction(input) {
-                        Ok(mut else_instr) => {
-                            res.append(&mut else_instr);
-                            
-                            // Check for colon separator
-                            let sep_checkpoint = input.checkpoint();
-                            let mut space_before = parse_space0.parse_next(input)?;
-                            if opt(':').parse_next(input)?.is_some() {
-                                res.append(&mut space_before);
-                                res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
-                                let mut space_after = parse_space0.parse_next(input)?;
-                                res.append(&mut space_after);
-                                // Continue to next statement
-                            } else {
-                                input.reset(&sep_checkpoint);
-                                break;
-                            }
-                        },
-                        Err(_) => break
-                    }
-                }
-            }
-        } else {
-            input.reset(&else_checkpoint);
+        // Handle optional ELSE clause
+        if let Ok(else_clause) = parse_else_clause(input) {
+            AppendToTokenList::append_to(else_clause, &mut res);
         }
     }
     
@@ -2281,12 +2234,13 @@ pub fn parse_symbol_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResu
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Expression expected")))
     ).parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol), space_a);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::After));
-    res.append(&mut space_b);
-    res.append(&mut expr);
-    
-    Ok(res)
+    Ok(construct_token_list!(
+        BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol),
+        space_a,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::After)],
+        space_b,
+        expr
+    ))
 }
 
 /// MEMORY address
@@ -3276,14 +3230,13 @@ fn parse_any_string_function<'code>(
         )
             .parse_next(input)?;
 
-        let mut res = Vec::new();
-        res.push(code);
-        res.append(&mut space_a);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
-        res.append(&mut expr);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
-
-        Ok(res)
+        Ok(construct_token_list!(
+            code,
+            space_a,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(open))],
+            expr,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(close))]
+        ))
     }
 }
 
@@ -3346,29 +3299,41 @@ fn parse_mid_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     
     let _close = cut_err(')'.context(StrContext::Label(")"))).parse_next(input)?;
     
-    let mut res = vec![code];
-    res.append(&mut space_a);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
-    res.append(&mut string_expr);
-    res.append(&mut space_b);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
-    res.append(&mut space_c);
-    res.append(&mut start_expr);
-    
-    if let Some((mut space_d, _comma, mut space_e, mut length_expr)) = opt_length {
-        res.append(&mut space_d);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
-        res.append(&mut space_e);
-        res.append(&mut length_expr);
-    }
-    
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
+    let res = if let Some((space_d, _comma, space_e, length_expr)) = opt_length {
+        construct_token_list!(
+            code,
+            space_a,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis)],
+            string_expr,
+            space_b,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma)],
+            space_c,
+            start_expr,
+            space_d,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma)],
+            space_e,
+            length_expr,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis)]
+        )
+    } else {
+        construct_token_list!(
+            code,
+            space_a,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis)],
+            string_expr,
+            space_b,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma)],
+            space_c,
+            start_expr,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis)]
+        )
+    };
     Ok(res)
 }
 
 /// LEFT$(string, length)
 fn parse_left_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (code, mut space_a, _open, mut string_expr, mut space_b, _comma, mut space_c, mut length_expr, _close) = (
+    let (code, space_a, _open, string_expr, space_b, _comma, space_c, length_expr, _close) = (
         Caseless("LEFT$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::LeftDollar)),
         parse_space0,
         '(',
@@ -3377,24 +3342,25 @@ fn parse_left_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         cut_err(','.context(StrContext::Label(","))),
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("length"))),
-        cut_err(')'.context(StrContext::Label(")")))
+        cut_err(')'.context(StrContext::Label(")")))  
     ).parse_next(input)?;
     
-    let mut res = vec![code];
-    res.append(&mut space_a);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
-    res.append(&mut string_expr);
-    res.append(&mut space_b);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
-    res.append(&mut space_c);
-    res.append(&mut length_expr);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
-    Ok(res)
+    Ok(construct_token_list!(
+        code,
+        space_a,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis)],
+        string_expr,
+        space_b,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma)],
+        space_c,
+        length_expr,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis)]
+    ))
 }
 
 /// RIGHT$(string, length)
 fn parse_right_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (code, mut space_a, _open, mut string_expr, mut space_b, _comma, mut space_c, mut length_expr, _close) = (
+    let (code, space_a, _open, string_expr, space_b, _comma, space_c, length_expr, _close) = (
         Caseless("RIGHT$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::RightDollar)),
         parse_space0,
         '(',
@@ -3403,19 +3369,20 @@ fn parse_right_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
         cut_err(','.context(StrContext::Label(","))),
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("length"))),
-        cut_err(')'.context(StrContext::Label(")")))
+        cut_err(')'.context(StrContext::Label(")")))  
     ).parse_next(input)?;
     
-    let mut res = vec![code];
-    res.append(&mut space_a);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
-    res.append(&mut string_expr);
-    res.append(&mut space_b);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma));
-    res.append(&mut space_c);
-    res.append(&mut length_expr);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
-    Ok(res)
+    Ok(construct_token_list!(
+        code,
+        space_a,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis)],
+        string_expr,
+        space_b,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma)],
+        space_c,
+        length_expr,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis)]
+    ))
 }
 
 /// SPACE$(count)
@@ -3463,13 +3430,13 @@ fn parse_upper_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 /// BIN$(number[,width])
 /// Converts a number to its binary string representation with optional width
 fn parse_bin_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (code, mut space_a, open) = (
+    let (code, space_a, open) = (
         Caseless("BIN$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::BinDollar)),
         parse_space0,
         '('
     ).parse_next(input)?;
     
-    let mut expr = cut_err(
+    let expr = cut_err(
         parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Number expected"))
     ).parse_next(input)?;
     
@@ -3481,18 +3448,25 @@ fn parse_bin_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     
     let close = cut_err(')'.context(StrContext::Label("Missing ')'"))).parse_next(input)?;
 
-    let mut res = Vec::new();
-    res.push(code);
-    res.append(&mut space_a);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
-    res.append(&mut expr);
-    
-    if let Some((mut comma, mut width)) = opt_width {
-        res.append(&mut comma);
-        res.append(&mut width);
-    }
-    
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
+    let res = if let Some((comma, width)) = opt_width {
+        construct_token_list!(
+            code,
+            space_a,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(open))],
+            expr,
+            comma,
+            width,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(close))]
+        )
+    } else {
+        construct_token_list!(
+            code,
+            space_a,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(open))],
+            expr,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(close))]
+        )
+    };
 
     Ok(res)
 }
@@ -3564,7 +3538,7 @@ fn parse_inkey_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 /// COPYCHR$(#stream)
 /// Returns the character at the current cursor position of the specified stream (0-9)
 fn parse_copychar_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (code, mut space_a, open, mut stream, close) = (
+    let (code, space_a, open, stream, close) = (
         Caseless("COPYCHR$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::CopycharDollar)),
         parse_space0,
         '(',
@@ -3573,12 +3547,13 @@ fn parse_copychar_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
     )
         .parse_next(input)?;
     
-    let mut res = vec![code];
-    res.append(&mut space_a);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis));
-    res.append(&mut stream);
-    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis));
-    Ok(res)
+    Ok(construct_token_list!(
+        code,
+        space_a,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharOpenParenthesis)],
+        stream,
+        vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharCloseParenthesis)]
+    ))
 }
 
 fn parse_any_numeric_function<'code>(
@@ -3587,7 +3562,7 @@ fn parse_any_numeric_function<'code>(
     constraint: NumericExpressionConstraint
 ) -> impl Fn(&mut &'code str) -> BasicSeveralTokensResult<'code> {
     move |input: &mut &'code str| -> BasicSeveralTokensResult<'code> {
-        let (code, mut space_a, open, mut expr, close) = (
+        let (code, space_a, open, expr, close) = (
             Caseless(name).map(|_| code.clone()),
             parse_space0,
             '(',
@@ -3599,14 +3574,13 @@ fn parse_any_numeric_function<'code>(
         )
             .parse_next(input)?;
 
-        let mut res = Vec::new();
-        res.push(code);
-        res.append(&mut space_a);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
-        res.append(&mut expr);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
-
-        Ok(res)
+        Ok(construct_token_list!(
+            code,
+            space_a,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(open))],
+            expr,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(close))]
+        ))
     }
 }
 
@@ -3623,7 +3597,7 @@ fn parse_any_two_arg_numeric_function<'code>(
     constraint: NumericExpressionConstraint
 ) -> impl Fn(&mut &'code str) -> BasicSeveralTokensResult<'code> {
     move |input: &mut &'code str| -> BasicSeveralTokensResult<'code> {
-        let (code, mut space_a, open, mut expr1, comma, mut expr2, close) = (
+        let (code, space_a, open, expr1, comma, expr2, close) = (
             Caseless(name).map(|_| code.clone()),
             parse_space0,
             '(',
@@ -3638,16 +3612,15 @@ fn parse_any_two_arg_numeric_function<'code>(
         )
             .parse_next(input)?;
 
-        let mut res = Vec::new();
-        res.push(code);
-        res.append(&mut space_a);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(open)));
-        res.append(&mut expr1);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(comma)));
-        res.append(&mut expr2);
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
-
-        Ok(res)
+        Ok(construct_token_list!(
+            code,
+            space_a,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(open))],
+            expr1,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(comma))],
+            expr2,
+            vec![BasicToken::SimpleToken(BasicTokenNoPrefix::from(close))]
+        ))
     }
 }
 

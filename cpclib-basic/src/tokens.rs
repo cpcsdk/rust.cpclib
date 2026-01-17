@@ -536,6 +536,10 @@ impl fmt::Display for BasicTokenNoPrefix {
 
             Self::SymbolQuote => write!(f, "'"),
             Self::StatementSeparator => write!(f, ":"),
+            Self::Pipe => write!(f, "|"),
+            Self::CharOpenBrace => write!(f, "{{"),
+            Self::CharCloseBrace => write!(f, "}}"),
+            Self::CharTilde => write!(f, "~"),
 
             Self::EndOfTokenisedLine => Ok(()),
             
