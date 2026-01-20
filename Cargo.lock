@@ -2611,6 +2611,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-catart"
+version = "0.11.0"
+dependencies = [
+ "built",
+ "cpclib-basic",
+ "cpclib-common",
+ "cpclib-image",
+ "delegate",
+ "paste",
+]
+
+[[package]]
 name = "cpclib-common"
 version = "0.11.0"
 dependencies = [

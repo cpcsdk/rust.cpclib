@@ -1,24 +1,19 @@
-use cpclib_orgams_ascii::*;
+use cpclib_orgams_ascii::decoder2;
+use cpclib_common::winnow::LocatingSlice;
 use std::fs;
 
 #[test]
 fn dump_const_i() {
     // Read the .I file
     let i_data = fs::read("tests/orgams-main/CONST.I").expect("Failed to read CONST.I");
-    let orgams_file = OrgamsFile::read(&i_data[..]).expect("Failed to parse CONST.I");
+    // let orgams_file = OrgamsFile::read(&i_data[..]).expect("Failed to parse CONST.I");
     
     // Decode
-    let mut decoder = OrgamsDecoder::new(orgams_file.content.clone());
-    let decoded_elements = decoder.decode().expect("Failed to decode CONST.I");
+    let mut input = LocatingSlice::new(i_data.as_slice());
+    let program = decoder2::parse_orgams_file(&mut input).expect("Failed to decode CONST.I");
     
     // Convert to text
-    let reconstructed = decoded_elements.iter()
-        .map(|elem| match elem {
-            DecodedElement::Text(s) => s.as_str(),
-            _ => "",
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    let reconstructed = program.to_string();
     
     // Write to file
     fs::write("/tmp/const_reconstructed.txt", &reconstructed).expect("Failed to write output");

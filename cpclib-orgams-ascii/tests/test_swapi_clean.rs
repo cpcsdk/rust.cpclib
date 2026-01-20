@@ -1,5 +1,6 @@
 use cpclib_orgams_ascii::*;
-use std::fs;
+use cpclib_orgams_ascii::decoder2;
+use cpclib_common::winnow::LocatingSlice;
 
 #[test]
 fn test_except_reconstruction() {
@@ -8,21 +9,17 @@ fn test_except_reconstruction() {
     let source_lines: Vec<&str> = source.lines().collect();
     
     println!("\n{}", "=".repeat(70));
-    println!("EXCEPT.O Reconstruction Using OrgamsDecoder");
+    println!("EXCEPT.O Reconstruction Using decoder2");
     println!("{}", "=".repeat(70));
     
-    // First parse with OrgamsFile to skip the header
-    let orgams_file = OrgamsFile::read(&data[..]).unwrap();
-    
-    // Now use the updated OrgamsDecoder on the content only
-    let mut decoder = OrgamsDecoder::new(orgams_file.content.clone());
-    let elements = decoder.decode().unwrap();
-    
+    // Use decoder2
+    let mut input = LocatingSlice::new(data.as_slice());
+    let program = decoder2::parse_orgams_file(&mut input).expect("Failed to parse EXCEPT.O");
+
     println!("Source: {} lines", source_lines.len());
-    println!("Decoded: {} elements", elements.len());
+    // println!("Decoded: {} elements", elements.len());
     
-    // Reconstruct using elements_to_z80_source
-    let reconstructed = elements_to_z80_source(&elements);
+    let reconstructed = program.to_string();
     let reconstructed_lines: Vec<&str> = reconstructed.lines().collect();
     
     println!("Reconstructed: {} lines", reconstructed_lines.len());
@@ -48,7 +45,7 @@ fn test_except_reconstruction() {
     
     // Statistics
     let mut matching = 0;
-    let mut total = source_lines.len().max(reconstructed_lines.len());
+    let total = source_lines.len().max(reconstructed_lines.len());
     
     for i in 0..total {
         let src = source_lines.get(i).unwrap_or(&"");

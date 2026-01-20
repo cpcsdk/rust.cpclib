@@ -65,21 +65,32 @@ pub fn parse_tokens(bytes: &mut &[u8]) -> ModalResult<Vec<BasicToken>, ContextEr
 
         match code {
             BasicTokenNoPrefix::ValueIntegerDecimal8bits => {
-                todo!()
+                let val = u8.parse_next(bytes)?;
+                let value = BasicValue::new_integer_by_bytes(val, 0);
+                let token = BasicToken::Constant(code, value);
+                tokens.push(token);
             },
 
-            BasicTokenNoPrefix::ValueIntegerDecimal16bits => {
-                todo!()
-            },
-
-            BasicTokenNoPrefix::ValueIntegerBinary16bits => {
-                todo!()
-            },
-
-            BasicTokenNoPrefix::ValueIntegerHexadecimal16bits => {
+            BasicTokenNoPrefix::ValueIntegerDecimal16bits |
+            BasicTokenNoPrefix::ValueIntegerBinary16bits |
+            BasicTokenNoPrefix::ValueIntegerHexadecimal16bits | 
+            BasicTokenNoPrefix::LineNumber | 
+            BasicTokenNoPrefix::LineMemoryAddressPointer => {
                 let low = u8.parse_next(bytes)?;
                 let high = u8.parse_next(bytes)?;
                 let value = BasicValue::new_integer_by_bytes(low, high);
+                let token = BasicToken::Constant(code, value);
+                tokens.push(token);
+            },
+
+            BasicTokenNoPrefix::ValueFloatingPoint => {
+                let b0 = u8.parse_next(bytes)?;
+                let b1 = u8.parse_next(bytes)?;
+                let b2 = u8.parse_next(bytes)?;
+                let b3 = u8.parse_next(bytes)?;
+                let b4 = u8.parse_next(bytes)?;
+
+                let value = BasicValue::Float(BasicFloat::from_bytes([b0, b1, b2, b3, b4]));
                 let token = BasicToken::Constant(code, value);
                 tokens.push(token);
             },
@@ -97,4 +108,109 @@ pub fn parse_tokens(bytes: &mut &[u8]) -> ModalResult<Vec<BasicToken>, ContextEr
     }
 
     Ok(tokens)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_integer_8bits_decimal() {
+        let expected_val = 100;
+        let data = [
+            BasicTokenNoPrefix::ValueIntegerDecimal8bits as u8, 
+            expected_val
+        ];
+        
+        // Use a slice reference as expected by the parser
+        let mut input: &[u8] = &data;
+        let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
+        
+        assert_eq!(res.len(), 1);
+        match &res[0] {
+             BasicToken::Constant(BasicTokenNoPrefix::ValueIntegerDecimal8bits, BasicValue::Integer(low, high)) => {
+                assert_eq!(*low, expected_val);
+                assert_eq!(*high, 0);
+            },
+            _ => panic!("Expected ValueIntegerDecimal8bits, got {:?}", res[0])
+        }
+    }
+
+    #[test]
+    fn test_parse_integer_16bits_decimal() {
+        let expected_val: u16 = 1000; // 0x03E8
+        let low = (expected_val % 256) as u8;
+        let high = (expected_val / 256) as u8;
+
+        let data = [
+            BasicTokenNoPrefix::ValueIntegerDecimal16bits as u8, 
+            low,
+            high
+        ];
+
+        let mut input: &[u8] = &data;
+        let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
+        
+        assert_eq!(res.len(), 1);
+        match &res[0] {
+             BasicToken::Constant(BasicTokenNoPrefix::ValueIntegerDecimal16bits, BasicValue::Integer(l, h)) => {
+                assert_eq!(*l, low);
+                assert_eq!(*h, high);
+            },
+            _ => panic!("Expected ValueIntegerDecimal16bits, got {:?}", res[0])
+        }
+    }
+
+    #[test]
+    fn test_parse_float() {
+        // 0 value in Amstrad Basic Float: 0x00 0x00 0x00 0x00 0x00
+        let data = [
+            BasicTokenNoPrefix::ValueFloatingPoint as u8,
+            0, 0, 0, 0, 0
+        ];
+        
+        let mut input: &[u8] = &data;
+        let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
+        
+        assert_eq!(res.len(), 1);
+        match &res[0] {
+             BasicToken::Constant(BasicTokenNoPrefix::ValueFloatingPoint, BasicValue::Float(f)) => {
+                 // Check if it corresponds to 0.0
+                 assert_eq!(f.to_f64(), 0.0);
+            },
+            _ => panic!("Expected ValueFloatingPoint, got {:?}", res[0])
+        }    
+    }
+
+    #[test]
+    fn test_parse_prefixed_token() {
+         let data = [
+             BasicTokenNoPrefix::AdditionalTokenMarker as u8,
+             BasicTokenPrefixed::Abs as u8
+         ];
+         let mut input: &[u8] = &data;
+         let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
+         
+         assert_eq!(res.len(), 1);
+         assert_eq!(res[0], BasicToken::PrefixedToken(BasicTokenPrefixed::Abs));
+    }
+
+    #[test]
+    fn test_sequence() {
+        let prefix = BasicTokenNoPrefix::AdditionalTokenMarker as u8;
+        let abs = BasicTokenPrefixed::Abs as u8;
+        let space = BasicTokenNoPrefix::CharSpace as u8;
+        
+        let data = [
+            space,
+            prefix, abs
+        ];
+        
+        let mut input: &[u8] = &data;
+        let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
+        
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0], BasicToken::SimpleToken(BasicTokenNoPrefix::CharSpace));
+        assert_eq!(res[1], BasicToken::PrefixedToken(BasicTokenPrefixed::Abs));
+    }
 }

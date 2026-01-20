@@ -1,5 +1,7 @@
 use cpclib_orgams_ascii::*;
+use cpclib_orgams_ascii::decoder2;
 use std::fs;
+use cpclib_common::winnow::LocatingSlice;
 
 #[test]
 fn test_const_i_parsing() {
@@ -7,20 +9,13 @@ fn test_const_i_parsing() {
     
     // Read the .I file
     let i_data = fs::read("tests/orgams-main/CONST.I").expect("Failed to read CONST.I");
-    let orgams_file = OrgamsFile::read(&i_data[..]).expect("Failed to parse CONST.I");
     
-    // Decode
-    let mut decoder = OrgamsDecoder::new(orgams_file.content.clone());
-    let decoded_elements = decoder.decode().expect("Failed to decode CONST.I");
+    // Decode with decoder2
+    let mut input = LocatingSlice::new(i_data.as_slice());
+    let program = decoder2::parse_orgams_file(&mut input).expect("Failed to parse CONST.I");
     
     // Convert to text
-    let reconstructed = decoded_elements.iter()
-        .map(|elem| match elem {
-            DecodedElement::Text(s) => s.as_str(),
-            _ => "",
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    let reconstructed = program.to_string();
     
     // Read the expected .Z80 file
     let expected = fs::read_to_string("tests/orgams-main/CONST.Z80")
@@ -35,7 +30,7 @@ fn test_const_i_parsing() {
     
     // Count matches
     let mut exact_matches = 0;
-    let mut total_lines = expected_lines.len().max(reconstructed_lines.len());
+    let total_lines = expected_lines.len().max(reconstructed_lines.len());
     
     // Display first 20 lines comparison
     println!("First 20 lines comparison:\n");

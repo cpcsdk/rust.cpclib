@@ -39,11 +39,12 @@ impl Default for Palette {
     /// Create a new palette.
     /// Pens ink are the same than Amsdos ones.
     fn default() -> Self {
-        let mut p = Self::new();
-        for i in 0..15 {
-            p.set(Pen::PENS[i], Ink::INKS[i]);
+        let mut pal = Self::new();
+        for (p, i) in [1, 24, 20, 6, 26, 0, 2, 8, 12, 14, 16, 18, 22, 1, 11].into_iter().enumerate() {
+            pal.set(Pen::from(p as u8), Ink::from(i));
         }
-        p
+        pal.set_border(Ink::from(1));
+        pal
     }
 }
 

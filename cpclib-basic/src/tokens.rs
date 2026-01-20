@@ -297,6 +297,115 @@ pub enum BasicTokenNoPrefix {
     AdditionalTokenMarker
 }
 
+
+impl TryInto<char> for BasicTokenNoPrefix {
+    type Error = ();
+
+    fn try_into(self) -> Result<char, <Self as TryInto<char>>::Error> {
+        match self {
+            BasicTokenNoPrefix::CharSpace => Ok(' '),
+            BasicTokenNoPrefix::CharExclamation => Ok('!'),
+            BasicTokenNoPrefix::CharNumber => Ok('#'),
+            BasicTokenNoPrefix::CharDollar => Ok('$'),
+            BasicTokenNoPrefix::CharPerCent => Ok('%'),
+            BasicTokenNoPrefix::CharAmpersand => Ok('&'),
+            BasicTokenNoPrefix::CharSingleQuote => Ok('\''),
+            BasicTokenNoPrefix::CharOpenParenthesis => Ok('('),
+            BasicTokenNoPrefix::CharCloseParenthesis => Ok(')'),
+            BasicTokenNoPrefix::CharAsterix => Ok('*'),
+            BasicTokenNoPrefix::CharPlus => Ok('+'),
+            BasicTokenNoPrefix::CharComma => Ok(','),
+            BasicTokenNoPrefix::CharHyphen => Ok('-'),
+            BasicTokenNoPrefix::CharDot => Ok('.'),
+            BasicTokenNoPrefix::CharSlash => Ok('/'),
+            BasicTokenNoPrefix::Char0 => Ok('0'),
+            BasicTokenNoPrefix::Char1 => Ok('1'),
+            BasicTokenNoPrefix::Char2 => Ok('2'),
+            BasicTokenNoPrefix::Char3 => Ok('3'),
+            BasicTokenNoPrefix::Char4 => Ok('4'),
+            BasicTokenNoPrefix::Char5 => Ok('5'),
+            BasicTokenNoPrefix::Char6 => Ok('6'),
+            BasicTokenNoPrefix::Char7 => Ok('7'),
+            BasicTokenNoPrefix::Char8 => Ok('8'),
+            BasicTokenNoPrefix::Char9 => Ok('9'),
+            BasicTokenNoPrefix::CharColon => Ok(':'),
+            BasicTokenNoPrefix::CharSemiColon => Ok(';'),
+            BasicTokenNoPrefix::CharLess => Ok('<'),
+            BasicTokenNoPrefix::CharEquals => Ok('='),
+            BasicTokenNoPrefix::CharGreater => Ok('>'),
+            BasicTokenNoPrefix::CharQuestionMark => Ok('?'),
+            BasicTokenNoPrefix::CharAt => Ok('@'),
+            BasicTokenNoPrefix::CharOpenSquareBracket => Ok('['),
+            BasicTokenNoPrefix::CharBackslash => Ok('\\'),
+            BasicTokenNoPrefix::CharCloseSquareBracket => Ok(']'),
+            BasicTokenNoPrefix::CharCaret => Ok('^'),
+            BasicTokenNoPrefix::CharUnderscore => Ok('_'),
+            BasicTokenNoPrefix::CharBacktick => Ok('`'),
+            BasicTokenNoPrefix::CharOpenBrace => Ok('{'),
+            BasicTokenNoPrefix::Pipe => Ok('|'),
+            BasicTokenNoPrefix::CharCloseBrace => Ok('}'),
+            BasicTokenNoPrefix::CharTilde => Ok('~'),
+            BasicTokenNoPrefix::CharTab => Ok('\t'),
+
+            BasicTokenNoPrefix::CharUpperA => Ok('A'),
+            BasicTokenNoPrefix::CharUpperB => Ok('B'),
+            BasicTokenNoPrefix::CharUpperC => Ok('C'),
+            BasicTokenNoPrefix::CharUpperD => Ok('D'),
+            BasicTokenNoPrefix::CharUpperE => Ok('E'),
+            BasicTokenNoPrefix::CharUpperF => Ok('F'),
+            BasicTokenNoPrefix::CharUpperG => Ok('G'),
+            BasicTokenNoPrefix::CharUpperH => Ok('H'),
+            BasicTokenNoPrefix::CharUpperI => Ok('I'),
+            BasicTokenNoPrefix::CharUpperJ => Ok('J'),
+            BasicTokenNoPrefix::CharUpperK => Ok('K'),
+            BasicTokenNoPrefix::CharUpperL => Ok('L'),
+            BasicTokenNoPrefix::CharUpperM => Ok('M'),
+            BasicTokenNoPrefix::CharUpperN => Ok('N'),
+            BasicTokenNoPrefix::CharUpperO => Ok('O'),
+            BasicTokenNoPrefix::CharUpperP => Ok('P'),
+            BasicTokenNoPrefix::CharUpperQ => Ok('Q'),
+            BasicTokenNoPrefix::CharUpperR => Ok('R'),
+            BasicTokenNoPrefix::CharUpperS => Ok('S'),
+            BasicTokenNoPrefix::CharUpperT => Ok('T'),
+            BasicTokenNoPrefix::CharUpperU => Ok('U'),
+            BasicTokenNoPrefix::CharUpperV => Ok('V'),
+            BasicTokenNoPrefix::CharUpperW => Ok('W'),
+            BasicTokenNoPrefix::CharUpperX => Ok('X'),
+            BasicTokenNoPrefix::CharUpperY => Ok('Y'),
+            BasicTokenNoPrefix::CharUpperZ => Ok('Z'),
+
+            BasicTokenNoPrefix::CharLowerA => Ok('a'),
+            BasicTokenNoPrefix::CharLowerB => Ok('b'),
+            BasicTokenNoPrefix::CharLowerC => Ok('c'),
+            BasicTokenNoPrefix::CharLowerD => Ok('d'),
+            BasicTokenNoPrefix::CharLowerE => Ok('e'),
+            BasicTokenNoPrefix::CharLowerF => Ok('f'),
+            BasicTokenNoPrefix::CharLowerG => Ok('g'),
+            BasicTokenNoPrefix::CharLowerH => Ok('h'),
+            BasicTokenNoPrefix::CharLowerI => Ok('i'),
+            BasicTokenNoPrefix::CharLowerJ => Ok('j'),
+            BasicTokenNoPrefix::CharLowerK => Ok('k'),
+            BasicTokenNoPrefix::CharLowerL => Ok('l'),
+            BasicTokenNoPrefix::CharLowerM => Ok('m'),
+            BasicTokenNoPrefix::CharLowerN => Ok('n'),
+            BasicTokenNoPrefix::CharLowerO => Ok('o'),
+            BasicTokenNoPrefix::CharLowerP => Ok('p'),
+            BasicTokenNoPrefix::CharLowerQ => Ok('q'),
+            BasicTokenNoPrefix::CharLowerR => Ok('r'),
+            BasicTokenNoPrefix::CharLowerS => Ok('s'),
+            BasicTokenNoPrefix::CharLowerT => Ok('t'),
+            BasicTokenNoPrefix::CharLowerU => Ok('u'),
+            BasicTokenNoPrefix::CharLowerV => Ok('v'),
+            BasicTokenNoPrefix::CharLowerW => Ok('w'),
+            BasicTokenNoPrefix::CharLowerX => Ok('x'),
+            BasicTokenNoPrefix::CharLowerY => Ok('y'),
+            BasicTokenNoPrefix::CharLowerZ => Ok('z'),
+
+            _ => Err(()),
+        }
+    }
+}
+
 impl From<char> for BasicTokenNoPrefix {
     fn from(c: char) -> Self {
         match c {
@@ -536,10 +645,6 @@ impl fmt::Display for BasicTokenNoPrefix {
 
             Self::SymbolQuote => write!(f, "'"),
             Self::StatementSeparator => write!(f, ":"),
-            Self::Pipe => write!(f, "|"),
-            Self::CharOpenBrace => write!(f, "{{"),
-            Self::CharCloseBrace => write!(f, "}}"),
-            Self::CharTilde => write!(f, "~"),
 
             Self::EndOfTokenisedLine => Ok(()),
             
@@ -588,6 +693,11 @@ impl BasicTokenNoPrefix {
     /// Returns the 8bit code that represents the token
     pub fn value(self) -> u8 {
         self.into()
+    }
+
+    /// Returns the char representation if any
+    pub fn char(&self) -> Option<char> {
+        self.clone().try_into().ok()
     }
 }
 
@@ -1076,6 +1186,21 @@ pub enum BasicToken {
     Constant(BasicTokenNoPrefix, BasicValue),
     /// Encode a comment
     Comment(BasicTokenNoPrefix, Vec<u8>)
+}
+
+impl BasicToken {
+    pub fn char(&self) -> Option<char> {
+        match self {
+            BasicToken::SimpleToken(tok) => {
+                tok.char()
+            },
+            _ => None
+        }
+    }
+    /// Returns true if the token is a statement separator (:)
+    pub fn is_statement_separator(&self) -> bool {
+        matches!(self, BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator))
+    }
 }
 
 impl fmt::Display for BasicToken {

@@ -1,19 +1,20 @@
-use cpclib_orgams_ascii::*;
+use cpclib_orgams_ascii::decoder2::parse_orgams_file;
+use cpclib_common::winnow::stream::LocatingSlice;
+use cpclib_common::winnow::Parser;
 
 #[test]
 fn debug_string_table() {
     let data = std::fs::read("tests/orgams-main/EXCEPT.O").unwrap();
-    let orgams_file = OrgamsFile::read(&data[..]).unwrap();
+    let input = LocatingSlice::new(data.as_slice());
     
-    let decoder = OrgamsDecoder::new(orgams_file.content.clone());
+    // We parse the whole file now, which includes the string table
+    let program = parse_orgams_file.parse(input).unwrap();
     
-    println!("String table size: {}", decoder.string_table().len());
+    // In decoder2, the string table is called "labels" and is part of the Program struct
+    println!("String table size: {}", program.labels.len());
     
     println!("\nAll entries:");
-    let mut entries: Vec<_> = decoder.string_table().iter().collect();
-    entries.sort_by_key(|(k, _)| *k);
-    
-    for (key, value) in entries.iter() {
-        println!("  0x{:02x} ({}): {:?}", key, key, value);
+    for (idx, string) in program.labels.iter().enumerate() {
+        println!("  0x{:02x} ({}): {:?}", idx, idx, string.as_str());
     }
 }

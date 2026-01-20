@@ -147,7 +147,7 @@ macro_rules! keyword_expr_parser {
     ($fn_name:ident, $keyword:expr, $token:ident, $constraint:expr, $error_msg:expr) => {
         #[doc = concat!("Parse ", $keyword, " keyword followed by expression")]
         pub fn $fn_name<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-            let (_, mut space, mut expr) = (
+            let (_, space, expr) = (
                 Caseless($keyword),
                 parse_space1,
                 cut_err(parse_numeric_expression($constraint).context(StrContext::Label($error_msg)))
@@ -427,7 +427,7 @@ pub fn parse_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 pub fn parse_let<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     // LET keyword is optional in Locomotive BASIC, but if present we parse it
     let _ = Caseless("LET").parse_next(input)?;
-    let mut space = parse_space1.parse_next(input)?;
+    let space = parse_space1.parse_next(input)?;
     let mut assign = parse_assign(input)?;
     
     let mut res = space;
@@ -709,7 +709,7 @@ pub fn parse_print_expression<'src>(input: &mut &'src str) -> BasicSeveralTokens
     
     // If we have a SPC/TAB prefix, the following expression is optional
     // Otherwise, an expression is required
-    let mut expr = if prefix.is_some() {
+    let expr = if prefix.is_some() {
         opt(alt((
             parse_quoted_string(true),
             parse_string_expression,
@@ -783,7 +783,7 @@ pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     .parse_next(input)?;
 
     // space after keyword
-    let mut space = parse_space0.parse_next(input)?;
+    let space = parse_space0.parse_next(input)?;
     let mut tokens = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Print), space);
 
     // canal and space
@@ -804,7 +804,7 @@ pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 // TODO implement optional arguments list for CALL
 
 pub fn parse_run<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, fname) = (
+    let (_, space, fname) = (
         Caseless("RUN"),
         parse_space0,
         opt(parse_quoted_string(false))
@@ -829,7 +829,7 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     ))).parse_next(input)?;
     
     // Parse optional spaces and semicolon (to suppress carriage return)
-    let (mut space_a, suppress_cr): (_, _) = (
+    let (space_a, suppress_cr): (_, _) = (
         parse_space0,
         opt(';')
     ).parse_next(input)?;
@@ -855,7 +855,7 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     // Parse optional prompt string with its separator
     // Format: [<string> <separator>] where separator is ; or ,
     let (prompt_string, prompt_sep, mut space_after_prompt) = if let Ok(string) = parse_quoted_string(true).parse_next(input) {
-        let (sp1, sep, sp2): (_, _, _) = (
+        let (_sp1, sep, sp2): (_, _, _) = (
             parse_space0,
             opt(one_of([';', ','])),
             parse_space0
@@ -980,7 +980,7 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 /// CLS [#stream]
 pub fn parse_cls<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, canal) = (
+    let (_, space, canal) = (
         Caseless("CLS"),
         parse_space0,
         opt(parse_canal)
@@ -992,7 +992,7 @@ pub fn parse_cls<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 
 /// LOCATE [#stream,] x, y
 pub fn parse_locate<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, canal_and_comma, mut x_coord, mut comma2, mut y_coord) = (
+    let (_, space_a, canal_and_comma, x_coord, comma2, y_coord) = (
         Caseless("LOCATE"),
         parse_space0,
         opt((parse_canal, parse_comma)),
@@ -1025,7 +1025,7 @@ keyword_expr_parser!(parse_call, "CALL", Call, NumericExpressionConstraint::Inte
 
 /// INK pen, color1 [, color2]
 pub fn parse_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut pen, mut comma1, mut color1, opt_color2) = (
+    let (_, space_a, pen, comma1, color1, opt_color2) = (
         Caseless("INK"),
         parse_space1,
         cut_err(
@@ -1041,13 +1041,13 @@ pub fn parse_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     )
         .parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Ink), space_a, pen, comma1, color1, opt_color2);
+    let res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Ink), space_a, pen, comma1, color1, opt_color2);
     Ok(res)
 }
 
 /// BORDER color [, color]
 pub fn parse_border<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut color1, opt_color2) = (
+    let (_, space_a, color1, opt_color2) = (
         Caseless("BORDER"),
         parse_space1,
         cut_err(
@@ -1058,13 +1058,13 @@ pub fn parse_border<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     )
         .parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Border), space_a, color1, opt_color2);
+    let res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Border), space_a, color1, opt_color2);
     Ok(res)
 }
 
 /// PEN [#stream,] color
 pub fn parse_pen<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, canal, mut space_b, mut color) = (
+    let (_, space_a, canal, space_b, color) = (
         Caseless("PEN"),
         parse_space0,
         opt((parse_canal, parse_comma)),
@@ -1078,7 +1078,7 @@ pub fn parse_pen<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 
 /// PAPER [#stream,] color
 pub fn parse_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, canal, mut space_b, mut color) = (
+    let (_, space_a, canal, space_b, color) = (
         Caseless("PAPER"),
         parse_space0,
         opt((parse_canal, parse_comma)),
@@ -1092,7 +1092,7 @@ pub fn parse_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 /// FOR variable = start TO end [STEP increment]
 pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut var, mut space_b, eq, mut space_c, mut start_val, mut space_d, _, mut space_e, mut end_val, step_part) = (
+    let (_, space_a, var, space_b, eq, mut space_c, mut start_val, mut space_d, _, mut space_e, mut end_val, step_part) = (
         Caseless("FOR"),
         parse_space1,
         cut_err(parse_variable.context(StrContext::Label("Variable expected"))),
@@ -1126,7 +1126,7 @@ pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 
 /// NEXT [variable]
 pub fn parse_next<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_var) = (
+    let (_, space, opt_var) = (
         Caseless("NEXT"),
         parse_space0,
         opt(parse_variable)
@@ -1137,7 +1137,7 @@ pub fn parse_next<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 
 /// IF condition THEN statements [ELSE statements]
 pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut condition, mut space_b, _, mut space_c) = (
+    let (_, space_a, condition, space_b, _, mut space_c) = (
         Caseless("IF"),
         parse_space1,
         cut_err(parse_general_expression.context(StrContext::Label("Condition expected"))),
@@ -1308,7 +1308,7 @@ pub fn parse_else<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 
 /// WHILE condition
 pub fn parse_while<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, mut condition) = (
+    let (_, space, condition) = (
         Caseless("WHILE"),
         parse_space1,
         cut_err(parse_general_expression.context(StrContext::Label("Condition expected")))
@@ -1324,7 +1324,7 @@ pub fn parse_draw<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
     let _ = Caseless("DRAW").parse_next(input)?;
     let _ = peek_keyword_end(input)?;
     
-    let (mut space_a, mut x, mut comma1, mut y, opt_params) = (
+    let (space_a, x, comma1, y, opt_params) = (
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X coordinate expected"))),
         cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
@@ -1344,7 +1344,7 @@ pub fn parse_drawr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     let _ = Caseless("DRAWR").parse_next(input)?;
     let _ = peek_keyword_end(input)?;
     
-    let (mut space_a, mut x, mut comma1, mut y, opt_params) = (
+    let (space_a, x, comma1, y, opt_params) = (
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X offset expected"))),
         cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
@@ -1364,7 +1364,7 @@ pub fn parse_move<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
     let _ = Caseless("MOVE").parse_next(input)?;
     let _ = peek_keyword_end(input)?;
     
-    let (mut space_a, mut x, mut comma1, mut y, opt_params) = (
+    let (space_a, x, comma1, y, opt_params) = (
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X coordinate expected"))),
         cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
@@ -1381,7 +1381,7 @@ pub fn parse_move<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 
 /// MOVER xr, yr [, [ink] [, mode]]
 pub fn parse_mover<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+    let (_, space_a, x, comma1, y, opt_params) = (
         Caseless("MOVER"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X offset expected"))),
@@ -1399,7 +1399,7 @@ pub fn parse_mover<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 /// PLOT x, y [, [ink] [, mode]]
 pub fn parse_plot<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+    let (_, space_a, x, comma1, y, opt_params) = (
         Caseless("PLOT"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X coordinate expected"))),
@@ -1417,7 +1417,7 @@ pub fn parse_plot<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 
 /// PLOTR xr, yr [, [ink] [, mode]]
 pub fn parse_plotr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut x, mut comma1, mut y, opt_params) = (
+    let (_, space_a, x, comma1, y, opt_params) = (
         Caseless("PLOTR"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X offset expected"))),
@@ -1445,7 +1445,7 @@ pub fn parse_data<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space = parse_space0.parse_next(input)?;
+    let space = parse_space0.parse_next(input)?;
     
     // Parse comma-separated data values (strings or numbers)
     let opt_values: Option<(Vec<BasicToken>, Vec<(Vec<BasicToken>, Vec<BasicToken>)>)> = opt(
@@ -1478,7 +1478,7 @@ pub fn parse_data<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 
 /// READ variable [, variable, ...]
 pub fn parse_read<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut first_var, rest_vars) = (
+    let (_, space_a, first_var, rest_vars) = (
         Caseless("READ"),
         parse_space1,
         cut_err(parse_variable.context(StrContext::Label("Variable expected"))),
@@ -1495,7 +1495,7 @@ pub fn parse_read<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 
 /// RESTORE [line]
 pub fn parse_restore<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_line) = (
+    let (_, space, opt_line) = (
         Caseless("RESTORE"),
         parse_space0,
         opt(parse_numeric_expression(NumericExpressionConstraint::Integer))
@@ -1516,7 +1516,7 @@ pub fn parse_dim<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space = parse_space1.parse_next(input)?;
+    let space = parse_space1.parse_next(input)?;
     
     // Parse array declaration: name(dim1[,dim2,...])
     let mut parse_array_decl = |input: &mut &'src str| {
@@ -1554,10 +1554,10 @@ pub fn parse_dim<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     };
     
     // Parse first array
-    let mut first_array = parse_array_decl.parse_next(input)?;
+    let first_array = parse_array_decl.parse_next(input)?;
     
     // Parse optional additional arrays
-    let mut rest_arrays: Vec<Vec<BasicToken>> = repeat(0.., (
+    let rest_arrays: Vec<Vec<BasicToken>> = repeat(0.., (
         parse_comma,
         parse_array_decl
     ).map(|(mut c, mut arr)| {
@@ -1576,7 +1576,7 @@ pub fn parse_dim<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 
 /// POKE address, value
 pub fn parse_poke<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut address, mut comma, mut value) = (
+    let (_, space_a, address, comma, value) = (
         Caseless("POKE"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Address expected"))),
@@ -1589,7 +1589,7 @@ pub fn parse_poke<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 
 /// OUT port, value
 pub fn parse_out<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut port, mut comma, mut value) = (
+    let (_, space_a, port, comma, value) = (
         Caseless("OUT"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Port expected"))),
@@ -1602,20 +1602,20 @@ pub fn parse_out<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 
 /// LOAD filename [, address]
 pub fn parse_load<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut filename, opt_address) = (
+    let (_, space_a, filename, opt_address) = (
         Caseless("LOAD"),
         parse_space0,
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected"))),
         opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
     ).parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Load), space_a, filename, opt_address);
+    let res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Load), space_a, filename, opt_address);
     Ok(res)
 }
 
 /// SAVE filename [, type, ...]
 pub fn parse_save<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut filename) = (
+    let (_, space_a, filename) = (
         Caseless("SAVE"),
         parse_space0,
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
@@ -1628,7 +1628,7 @@ simple_keyword_parser!(parse_new, "NEW", New);
 
 /// CLEAR
 pub fn parse_clear<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_input) = (
+    let (_, space, opt_input) = (
         Caseless("CLEAR"),
         parse_space0,
         opt(Caseless("INPUT").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Input)]))
@@ -1643,7 +1643,7 @@ simple_keyword_parser!(parse_rad, "RAD", Rad);
 
 /// RANDOMIZE [seed]
 pub fn parse_randomize<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_seed) = (
+    let (_, space, opt_seed) = (
         Caseless("RANDOMIZE"),
         parse_space0,
         opt(parse_numeric_expression(NumericExpressionConstraint::None))
@@ -1664,7 +1664,7 @@ pub fn parse_sound<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         eof.void()
     ))).parse_next(input)?;
     
-    let (mut space_a, mut channel, mut comma1, mut period, mut comma2, mut duration) = (
+    let (space_a, channel, comma1, period, comma2, duration) = (
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Channel expected"))),
         cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
@@ -1707,7 +1707,7 @@ pub fn parse_sound<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// ON expression GOTO line1 [, line2, ...]
 /// ON expression GOTO/GOSUB line1 [, line2, ...]
 pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut expr, mut space_b) = (
+    let (_, space_a, expr, space_b) = (
         Caseless("ON"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("Expression expected"))),
@@ -1720,13 +1720,13 @@ pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
         Caseless("GOSUB").map(|_| false)
     )).parse_next(input)?;
     
-    let (mut space_c, mut first_line) = (
+    let (space_c, first_line) = (
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
     ).parse_next(input)?;
     
     // Parse optional additional line numbers
-    let mut rest_lines: Vec<Vec<BasicToken>> = repeat(0.., (
+    let rest_lines: Vec<Vec<BasicToken>> = repeat(0.., (
         parse_comma,
         parse_numeric_expression(NumericExpressionConstraint::Integer)
     ).map(|(mut c, mut line)| {
@@ -1745,7 +1745,7 @@ pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
 
 /// ON ERROR GOTO line
 pub fn parse_on_error_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, _, mut space_c, mut line_num) = (
+    let (_, space_a, _, space_b, _, space_c, line_num) = (
         Caseless("ON"),
         parse_space1,
         cut_err(Caseless("ERROR").context(StrContext::Label("ERROR expected"))),
@@ -1760,7 +1760,7 @@ pub fn parse_on_error_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
 
 /// ON BREAK STOP / CONT / GOSUB line
 pub fn parse_on_break<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b) = (
+    let (_, space_a, _, space_b) = (
         Caseless("ON"),
         parse_space1,
         cut_err(Caseless("BREAK").context(StrContext::Label("BREAK expected"))),
@@ -1772,7 +1772,7 @@ pub fn parse_on_break<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 
 /// SPEED INK period1, period2
 pub fn parse_speed_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, mut period1, mut comma, mut period2) = (
+    let (_, space_a, _, space_b, period1, comma, period2) = (
         Caseless("SPEED"),
         parse_space1,
         cut_err(Caseless("INK").context(StrContext::Label("INK expected"))),
@@ -1787,7 +1787,7 @@ pub fn parse_speed_ink<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<
 
 /// SPEED WRITE speed
 pub fn parse_speed_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, mut speed) = (
+    let (_, space_a, _, space_b, speed) = (
         Caseless("SPEED"),
         parse_space1,
         cut_err(Caseless("WRITE").context(StrContext::Label("WRITE expected"))),
@@ -1800,7 +1800,7 @@ pub fn parse_speed_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
 
 /// SPEED KEY start_delay, repeat_period
 pub fn parse_speed_key<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, mut delay, mut comma, mut period) = (
+    let (_, space_a, _, space_b, delay, comma, period) = (
         Caseless("SPEED"),
         parse_space1,
         cut_err(Caseless("KEY").context(StrContext::Label("KEY expected"))),
@@ -1815,7 +1815,7 @@ pub fn parse_speed_key<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<
 
 /// RESUME [NEXT / line]
 pub fn parse_resume<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_param) = (
+    let (_, space, opt_param) = (
         Caseless("RESUME"),
         parse_space0,
         opt(alt((
@@ -1843,7 +1843,7 @@ pub fn parse_every<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         eof.void()
     ))).parse_next(input)?;
 
-    let (mut space1, mut period) = (
+    let (space1, period) = (
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Period expected")))
     ).parse_next(input)?;
@@ -1852,14 +1852,14 @@ pub fn parse_every<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     let opt_timer = opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))).parse_next(input)?;
 
     // GOSUB keyword
-    let (mut space2, _, mut space3, mut line) = (
+    let (space2, _, space3, line) = (
         parse_space0,
         cut_err(Caseless("GOSUB").context(StrContext::Label("GOSUB expected"))),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
     ).parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Every), space1, period, opt_timer, space2, vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub)], space3, line);
+    let res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Every), space1, period, opt_timer, space2, vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub)], space3, line);
     
     Ok(res)
 }
@@ -1878,7 +1878,7 @@ pub fn parse_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         eof.void()
     ))).parse_next(input)?;
 
-    let (mut space1, mut time) = (
+    let (space1, time) = (
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Time expected")))
     ).parse_next(input)?;
@@ -1887,20 +1887,20 @@ pub fn parse_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     let opt_timer = opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))).parse_next(input)?;
 
     // GOSUB keyword
-    let (mut space2, _, mut space3, mut line) = (
+    let (space2, _, space3, line) = (
         parse_space0,
         cut_err(Caseless("GOSUB").context(StrContext::Label("GOSUB expected"))),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
     ).parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::After), space1, time, opt_timer, space2, vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub)], space3, line);
+    let res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::After), space1, time, opt_timer, space2, vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Gosub)], space3, line);
     Ok(res)
 }
 
 /// LIST [start] [- [end]]
 pub fn parse_list<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space) = (
+    let (_, space) = (
         Caseless("LIST"),
         parse_space0
     ).parse_next(input)?;
@@ -1911,7 +1911,7 @@ pub fn parse_list<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 /// DELETE [start] - end
 /// DELETE [start] [-end]
 pub fn parse_delete<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_range) = (
+    let (_, space, opt_range) = (
         Caseless("DELETE"),
         parse_space0,
         opt((
@@ -1936,7 +1936,7 @@ pub fn parse_delete<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 /// RENUM [new_start] [, old_start [, increment]]
 pub fn parse_renum<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space) = (
+    let (_, space) = (
         Caseless("RENUM"),
         parse_space0
     ).parse_next(input)?;
@@ -1956,7 +1956,7 @@ pub fn parse_auto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space = parse_space0.parse_next(input)?;
+    let space = parse_space0.parse_next(input)?;
     
     // Optional line number
     let opt_line = opt(parse_numeric_expression(NumericExpressionConstraint::Integer)).parse_next(input)?;
@@ -1984,7 +1984,7 @@ pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         '\t'.void()
     ))).parse_next(input)?;
     
-    let (mut space1, _, mut space2) = (
+    let (space1, _, space2) = (
         parse_space1,
         cut_err(Caseless("FN").context(StrContext::Label("FN expected after DEF"))),
         parse_space0
@@ -2006,14 +2006,14 @@ pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     )).parse_next(input)?;
     
     // Equal sign
-    let (mut space3, _, mut space4) = (
+    let (space3, _, space4) = (
         parse_space0,
         cut_err('='.context(StrContext::Label("= expected in DEF FN"))),
         parse_space0
     ).parse_next(input)?;
     
     // Expression (can be numeric or string)
-    let mut expression = alt((
+    let expression = alt((
         parse_string_expression,
         parse_numeric_expression(NumericExpressionConstraint::None)
     )).parse_next(input)?;
@@ -2050,7 +2050,7 @@ pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 /// EDIT line
 pub fn parse_edit<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, mut line_num) = (
+    let (_, space, line_num) = (
         Caseless("EDIT"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Line number expected")))
@@ -2071,11 +2071,11 @@ pub fn parse_erase<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space = parse_space1.parse_next(input)?;
-    let mut first_var = parse_base_variable_name.parse_next(input)?;
+    let space = parse_space1.parse_next(input)?;
+    let first_var = parse_base_variable_name.parse_next(input)?;
     
     // Parse optional additional array names
-    let mut rest_vars: Vec<Vec<BasicToken>> = repeat(0.., (
+    let rest_vars: Vec<Vec<BasicToken>> = repeat(0.., (
         parse_comma,
         parse_base_variable_name
     ).map(|(mut c, mut v)| {
@@ -2094,7 +2094,7 @@ pub fn parse_erase<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 /// SWAP var1, var2
 pub fn parse_swap<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut var1, mut comma, mut var2) = (
+    let (_, space_a, var1, comma, var2) = (
         Caseless("SWAP"),
         parse_space1,
         cut_err(parse_variable.context(StrContext::Label("First variable expected"))),
@@ -2117,7 +2117,7 @@ pub fn parse_defint<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space = parse_space1.parse_next(input)?;
+    let space = parse_space1.parse_next(input)?;
     
     // Parse letter or letter range
     let mut parse_letter_range = |input: &mut &'src str| {
@@ -2132,8 +2132,8 @@ pub fn parse_defint<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         Ok(tokens)
     };
     
-    let mut first = parse_letter_range.parse_next(input)?;
-    let mut rest: Vec<Vec<BasicToken>> = repeat(0.., (
+    let first = parse_letter_range.parse_next(input)?;
+    let rest: Vec<Vec<BasicToken>> = repeat(0.., (
         parse_comma,
         parse_letter_range
     ).map(|(mut c, mut r)| {
@@ -2162,7 +2162,7 @@ pub fn parse_defreal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space = parse_space1.parse_next(input)?;
+    let space = parse_space1.parse_next(input)?;
     
     // Parse letter or letter range
     let mut parse_letter_range = |input: &mut &'src str| {
@@ -2177,8 +2177,8 @@ pub fn parse_defreal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         Ok(tokens)
     };
     
-    let mut first = parse_letter_range.parse_next(input)?;
-    let mut rest: Vec<Vec<BasicToken>> = repeat(0.., (
+    let first = parse_letter_range.parse_next(input)?;
+    let rest: Vec<Vec<BasicToken>> = repeat(0.., (
         parse_comma,
         parse_letter_range
     ).map(|(mut c, mut r)| {
@@ -2207,7 +2207,7 @@ pub fn parse_defstr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space = parse_space1.parse_next(input)?;
+    let space = parse_space1.parse_next(input)?;
     
     // Parse letter or letter range
     let mut parse_letter_range = |input: &mut &'src str| {
@@ -2222,8 +2222,8 @@ pub fn parse_defstr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         Ok(tokens)
     };
     
-    let mut first = parse_letter_range.parse_next(input)?;
-    let mut rest: Vec<Vec<BasicToken>> = repeat(0.., (
+    let first = parse_letter_range.parse_next(input)?;
+    let rest: Vec<Vec<BasicToken>> = repeat(0.., (
         parse_comma,
         parse_letter_range
     ).map(|(mut c, mut r)| {
@@ -2248,7 +2248,7 @@ pub fn parse_symbol<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     let _ = Caseless("SYMBOL").parse_next(input)?;
     let _ = peek_keyword_end(input)?;
     
-    let (mut space_a, mut char_code) = (
+    let (space_a, char_code) = (
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Character code expected")))
     ).parse_next(input)?;
@@ -2256,7 +2256,7 @@ pub fn parse_symbol<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     // Parse exactly 8 rows of pixel data
     let mut rows: Vec<(Vec<BasicToken>, Vec<BasicToken>)> = Vec::new();
     for _ in 0..8 {
-        let (mut comma, mut row) = (
+        let (comma, row) = (
             cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
             cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Row data expected")))
         ).parse_next(input)?;
@@ -2273,7 +2273,7 @@ pub fn parse_symbol<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 /// SYMBOL AFTER expression
 pub fn parse_symbol_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, mut expr) = (
+    let (_, space_a, _, mut space_b, mut expr) = (
         Caseless("SYMBOL"),
         parse_space1,
         cut_err(Caseless("AFTER").context(StrContext::Label("AFTER expected"))),
@@ -2291,7 +2291,7 @@ pub fn parse_symbol_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResu
 
 /// MEMORY address
 pub fn parse_memory<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, mut address) = (
+    let (_, space, address) = (
         Caseless("MEMORY"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Address expected")))
@@ -2312,7 +2312,7 @@ pub fn parse_cursor<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space = parse_space0.parse_next(input)?;
+    let space = parse_space0.parse_next(input)?;
     
     // Try to parse either one or two numeric arguments
     let opt_args = opt(alt((
@@ -2336,7 +2336,7 @@ pub fn parse_cursor<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 /// TAG [#stream]
 pub fn parse_tag<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_canal) = (
+    let (_, space, opt_canal) = (
         Caseless("TAG"),
         parse_space0,
         opt(parse_canal)
@@ -2347,7 +2347,7 @@ pub fn parse_tag<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 
 /// TAGOFF [#stream]
 pub fn parse_tagoff<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, opt_canal) = (
+    let (_, space, opt_canal) = (
         Caseless("TAGOFF"),
         parse_space0,
         opt(parse_canal)
@@ -2358,7 +2358,7 @@ pub fn parse_tagoff<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 /// WAIT port, mask [, inversion]
 pub fn parse_wait<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut port, mut comma1, mut mask, opt_inv) = (
+    let (_, space_a, port, comma1, mask, opt_inv) = (
         Caseless("WAIT"),
         parse_space1,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Port expected"))),
@@ -2367,7 +2367,7 @@ pub fn parse_wait<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
     ).parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Wait), space_a, port, comma1, mask, opt_inv);
+    let res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Wait), space_a, port, comma1, mask, opt_inv);
     Ok(res)
 }
 
@@ -2384,7 +2384,7 @@ pub fn parse_window<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         eof.void()
     ))).parse_next(input)?;
     
-    let (mut space_a, canal, mut left, mut comma1, mut right, mut comma2, mut top, mut comma3, mut bottom) = (
+    let (space_a, canal, left, comma1, right, comma2, top, comma3, bottom) = (
         parse_space0,
         opt((parse_canal, parse_comma)),
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Left expected"))),
@@ -2405,7 +2405,7 @@ pub fn parse_window<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 /// WINDOW SWAP stream1, stream2
 pub fn parse_window_swap<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, mut stream1, mut comma, mut stream2) = (
+    let (_, space_a, _, space_b, stream1, comma, stream2) = (
         Caseless("WINDOW"),
         parse_space1,
         cut_err(Caseless("SWAP").context(StrContext::Label("SWAP expected"))),
@@ -2420,7 +2420,7 @@ pub fn parse_window_swap<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
 
 /// GRAPHICS PEN [mode]
 pub fn parse_graphics_pen<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, opt_mode) = (
+    let (_, space_a, _, space_b, opt_mode) = (
         Caseless("GRAPHICS"),
         parse_space1,
         cut_err(Caseless("PEN").context(StrContext::Label("PEN expected"))),
@@ -2433,7 +2433,7 @@ pub fn parse_graphics_pen<'src>(input: &mut &'src str) -> BasicSeveralTokensResu
 
 /// GRAPHICS PAPER [mode]
 pub fn parse_graphics_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, opt_mode) = (
+    let (_, space_a, _, space_b, opt_mode) = (
         Caseless("GRAPHICS"),
         parse_space1,
         cut_err(Caseless("PAPER").context(StrContext::Label("PAPER expected"))),
@@ -2449,7 +2449,7 @@ pub fn parse_origin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     let _ = Caseless("ORIGIN").parse_next(input)?;
     let _ = peek_keyword_end(input)?;
     
-    let (mut space_a, mut x, mut comma1, mut y, opt_bounds) = (
+    let (space_a, x, comma1, y, opt_bounds) = (
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::None).context(StrContext::Label("X coordinate expected"))),
         cut_err(parse_comma.context(StrContext::Label("Comma expected"))),
@@ -2485,7 +2485,7 @@ pub fn parse_clg<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     let _ = Caseless("CLG").parse_next(input)?;
     let _ = peek_keyword_end(input)?;
     
-    let (mut space, opt_ink) = (
+    let (space, opt_ink) = (
         parse_space0,
         opt(parse_numeric_expression(NumericExpressionConstraint::Integer))
     ).parse_next(input)?;
@@ -2498,7 +2498,7 @@ pub fn parse_mask<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
     let _ = Caseless("MASK").parse_next(input)?;
     let _ = peek_keyword_end(input)?;
     
-    let (mut space, opt_ink1, opt_ink2) = (
+    let (space, opt_ink1, opt_ink2) = (
         parse_space0,
         opt(parse_numeric_expression(NumericExpressionConstraint::Integer)),
         opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
@@ -2511,20 +2511,20 @@ simple_keyword_parser!(parse_frame, "FRAME", Frame);
 
 /// CHAIN filename [, line]
 pub fn parse_chain<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut filename, opt_line) = (
+    let (_, space_a, filename, opt_line) = (
         Caseless("CHAIN"),
         parse_space0,
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected"))),
         opt((parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer)))
     ).parse_next(input)?;
 
-    let mut res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Chain), space_a, filename, opt_line);
+    let res = construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::Chain), space_a, filename, opt_line);
     Ok(res)
 }
 
 /// MERGE filename
 pub fn parse_merge<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut filename) = (
+    let (_, space_a, filename) = (
         Caseless("MERGE"),
         parse_space0,
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
@@ -2537,7 +2537,7 @@ simple_keyword_parser!(parse_cat, "CAT", Cat);
 
 /// OPENIN filename
 pub fn parse_openin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut filename) = (
+    let (_, space_a, filename) = (
         Caseless("OPENIN"),
         parse_space0,
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
@@ -2548,7 +2548,7 @@ pub fn parse_openin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
 /// OPENOUT filename
 pub fn parse_openout<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut filename) = (
+    let (_, space_a, filename) = (
         Caseless("OPENOUT"),
         parse_space0,
         cut_err(parse_quoted_string(true).context(StrContext::Label("Filename expected")))
@@ -2568,7 +2568,7 @@ pub fn parse_line_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
         '\t'.void()
     ))).parse_next(input)?;
     
-    let (mut space_a, _, mut space_b, canal, mut space_c, sep, mut space_d, string, mut space_e, comma, mut space_f, mut var) = (
+    let (space_a, _, space_b, canal, space_c, sep, space_d, string, space_e, comma, space_f, var) = (
         parse_space1,
         cut_err(Caseless("INPUT").context(StrContext::Label("INPUT expected"))),
         parse_space0,
@@ -2601,11 +2601,11 @@ pub fn parse_ent<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space_a = parse_space0.parse_next(input)?;
-    let mut envelope = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)?;
+    let space_a = parse_space0.parse_next(input)?;
+    let envelope = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)?;
     
     // Parse optional additional comma-separated parameters
-    let mut additional: Vec<Vec<BasicToken>> = repeat(
+    let additional: Vec<Vec<BasicToken>> = repeat(
         0..,
         (parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))
             .map(|(mut comma, mut val)| {
@@ -2635,11 +2635,11 @@ pub fn parse_env<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         eof.void()
     ))).parse_next(input)?;
     
-    let mut space_a = parse_space0.parse_next(input)?;
-    let mut envelope = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)?;
+    let space_a = parse_space0.parse_next(input)?;
+    let envelope = parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)?;
     
     // Parse optional additional comma-separated parameters
-    let mut additional: Vec<Vec<BasicToken>> = repeat(
+    let additional: Vec<Vec<BasicToken>> = repeat(
         0..,
         (parse_comma, parse_numeric_expression(NumericExpressionConstraint::Integer))
             .map(|(mut comma, mut val)| {
@@ -2669,7 +2669,7 @@ pub fn parse_release<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         eof.void()
     ))).parse_next(input)?;
     
-    let (mut space, mut channel) = (
+    let (space, channel) = (
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Channel expected")))
     ).parse_next(input)?;
@@ -2679,7 +2679,7 @@ pub fn parse_release<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
 
 /// KEY key_number, string
 pub fn parse_key<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, mut key_num, mut comma) = (
+    let (_, space_a, key_num, comma) = (
         Caseless("KEY"),
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Key number expected"))),
@@ -2691,7 +2691,7 @@ pub fn parse_key<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 
 /// KEY DEF key_number, repeat, delay
 pub fn parse_key_def<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space_a, _, mut space_b, mut key_num, mut comma1, mut repeat, mut comma2, mut delay) = (
+    let (_, space_a, _, space_b, key_num, comma1, repeat, comma2, delay) = (
         Caseless("KEY"),
         parse_space0,
         cut_err(Caseless("DEF").context(StrContext::Label("DEF expected"))),
@@ -2708,7 +2708,7 @@ pub fn parse_key_def<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
 
 /// ZONE width
 pub fn parse_zone<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, mut width) = (
+    let (_, space, width) = (
         Caseless("ZONE"),
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Width expected")))
@@ -2719,7 +2719,7 @@ pub fn parse_zone<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 
 /// WIDTH width
 pub fn parse_width<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut space, mut width) = (
+    let (_, space, width) = (
         Caseless("WIDTH"),
         parse_space0,
         cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Width expected")))
@@ -2733,7 +2733,7 @@ pub fn parse_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     let _ = Caseless("WRITE").parse_next(input)?;
     let _ = peek(alt((' '.void(), '\t'.void(), '#'.void(), ':'.void(), '\n'.void(), '\r'.void(), eof.void()))).parse_next(input)?;
     
-    let (mut space, opt_canal_comma) = (
+    let (space, opt_canal_comma) = (
         parse_space0,
         opt((parse_canal, parse_comma))
     ).parse_next(input)?;
@@ -2776,19 +2776,19 @@ pub fn parse_mid_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
         '('.void()
     ))).parse_next(input)?;
     
-    let (mut space1, open) = (
+    let (space1, open) = (
         parse_space0,
         cut_err('('.context(StrContext::Label("( expected after MID$")))
     ).parse_next(input)?;
     
     // String variable
-    let mut var = cut_err(parse_string_variable.context(StrContext::Label("String variable expected"))).parse_next(input)?;
+    let var = cut_err(parse_string_variable.context(StrContext::Label("String variable expected"))).parse_next(input)?;
     
     // Comma
-    let mut comma1 = cut_err(parse_comma.context(StrContext::Label(", expected"))).parse_next(input)?;
+    let comma1 = cut_err(parse_comma.context(StrContext::Label(", expected"))).parse_next(input)?;
     
     // Start position
-    let mut start_pos = cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Start position expected"))).parse_next(input)?;
+    let start_pos = cut_err(parse_numeric_expression(NumericExpressionConstraint::Integer).context(StrContext::Label("Start position expected"))).parse_next(input)?;
     
     // Optional length after comma
     let opt_length = opt((
@@ -2796,7 +2796,7 @@ pub fn parse_mid_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
         parse_numeric_expression(NumericExpressionConstraint::Integer)
     )).parse_next(input)?;
     
-    let (mut space2, close, mut space3, equals, mut space4) = (
+    let (space2, close, space3, equals, space4) = (
         parse_space0,
         cut_err(')'.context(StrContext::Label(") expected"))),
         parse_space0,
@@ -2805,7 +2805,7 @@ pub fn parse_mid_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
     ).parse_next(input)?;
     
     // Value to assign (string expression)
-    let mut value = cut_err(parse_string_expression.context(StrContext::Label("String expression expected"))).parse_next(input)?;
+    let value = cut_err(parse_string_expression.context(StrContext::Label("String expression expected"))).parse_next(input)?;
     
     Ok(construct_token_list!(BasicToken::SimpleToken(BasicTokenNoPrefix::MidDollar), space1, vec![BasicToken::SimpleToken(open.into())], var, comma1, start_pos, opt_length, space2, vec![BasicToken::SimpleToken(close.into())], space3, vec![BasicToken::SimpleToken(equals.into())], space4, value))
 }
@@ -2938,7 +2938,7 @@ fn parse_boolean_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 
 /// Parse a parenthesized numeric expression: (expression)
 fn parse_parenthesized_numeric_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (_, mut expr, _) = (
+    let (_, expr, _) = (
         '(',
         parse_numeric_expression(NumericExpressionConstraint::None),
         ')'
@@ -3522,7 +3522,7 @@ fn parse_hex_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 /// STRING$(count, string)
 /// Returns a string composed of 'count' repetitions of the first character of 'string'
 fn parse_string_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (code, mut space_a, open, mut count, mut space_b, comma, mut space_c, mut string, mut space_d, close) = (
+    let (code, mut space_a, _open, mut count, mut space_b, _comma, mut space_c, mut string, mut space_d, _close) = (
         Caseless("STRING$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::StringDollar)),
         parse_space0,
         '(',
@@ -3564,7 +3564,7 @@ fn parse_inkey_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 /// COPYCHR$(#stream)
 /// Returns the character at the current cursor position of the specified stream (0-9)
 fn parse_copychar_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (code, mut space_a, open, mut stream, close) = (
+    let (code, mut space_a, _open, mut stream, _close) = (
         Caseless("COPYCHR$").map(|_| BasicToken::PrefixedToken(BasicTokenPrefixed::CopycharDollar)),
         parse_space0,
         '(',

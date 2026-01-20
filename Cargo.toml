@@ -6,6 +6,7 @@ members = [
   "cpclib-basm", "cpclib-basmdoc",
   "cpclib-bdasm",
   "cpclib-bndbuild",
+  "cpclib-catart",
   "cpclib-bndbuild-ratatui",
   "cpclib-bndbuild-tauri/src-tauri",
   "cpclib-rasm-basm-tests",
@@ -46,6 +47,7 @@ default-members = [
   "cpclib-basmdoc",
   "cpclib-bdasm",
   "cpclib-bndbuild",
+  "cpclib-catart",
   "cpclib-common",
   "cpclib-cpr",
   "cpclib-cprcli", 
@@ -89,6 +91,7 @@ cpclib-basm = { version = "0.11.0", path = "cpclib-basm", default-features = fal
 cpclib-basmdoc = { version = "0.11.0", path = "cpclib-basmdoc", default-features = false }
 cpclib-bdasm = { version = "0.11.0", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "0.11.0", path = "cpclib-bndbuild", default-features = false }
+cpclib-catart = { version = "0.11.0", path = "cpclib-catart", default-features = false }
 cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
 cpclib-common = { version = "0.11.0", path = "cpclib-common", default-features = false }
 cpclib-cpr = { version = "0.11.0", path = "cpclib-cpr", default-features = false }

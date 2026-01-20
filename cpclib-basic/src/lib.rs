@@ -303,6 +303,10 @@ impl BasicProgram {
         Ok(())
     }
 
+    pub fn lines(&self) -> &[BasicLine] {
+        &self.lines
+    }
+
     /// Generate the byte stream for the given program
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = self
