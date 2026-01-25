@@ -60,7 +60,13 @@ fn byte2code_naive(bytes: &[u8]) -> String {
                 CMD_SAVEA => "SAVEA".into(),
                 CMD_REPEAT => "REPEAT".into(),
 
-                _ => format!("0x7F 0x{:02X}", b).into()
+
+                _ => if b.is_ascii_graphic(){
+                    (b as char).to_string().into()
+                }
+                else {
+                    format!("0x7F 0x{:02X}", b).into()
+                }
             }
         }
         else {
@@ -77,7 +83,12 @@ fn byte2code_naive(bytes: &[u8]) -> String {
                 MARKER_LABEL_ADDR => "LABEL_ADDR".into(),
                 MARKER_MACRO_DEF => "MACRO_DEF".into(),
 
-                _ => format!("0x{:02X}", b).into(),
+                _ => if b.is_ascii_graphic(){
+                    (b as char).to_string().into()
+                }
+                else {
+                    format!("0x{:02X}", b).into()
+                }
             }
         };
 
@@ -124,6 +135,8 @@ const EXP_MULTI_TERM_END: u8 = 0x45; // 'E'
 const EXP_SHORT_DECIMAL_MAX_VALUE: u8 = 0x1F; // 0x00-0x1F
 
 const EXP_SPACE: u8 = 0x20;
+const EXP_UNARY_MINUS: u8 = b'#';
+const EXP_LOCAL_LABEL: u8 = b'.'; 
 const EXP_OP_PLUS: u8 = 0x2B;
 const EXP_OP_MINUS: u8 = 0x2D;
 const EXP_OP_MULT: u8 = 0x2A;
@@ -323,6 +336,7 @@ pub enum Item {
     Assign(Assign),
     /// Standalone label reference
     Label(LabelRef),
+    LocalLabel(LabelRef),
     /// Macro definition
     Macro(MacroDef),
     /// Statement
@@ -419,6 +433,12 @@ impl Item {
             Item::Label(label) => {
                 let mut bytes = Vec::new();
                 bytes.push(MARKER_LABEL_ADDR);
+                bytes.extend_from_slice(&label.bytes(table));
+                bytes
+            },
+            Item::LocalLabel(label) => {
+                let mut bytes = Vec::new();
+                bytes.push(MARKER_LOCAL_LABEL);
                 bytes.extend_from_slice(&label.bytes(table));
                 bytes
             },
@@ -541,9 +561,11 @@ pub enum ExpressionMember {
     Value(Value),     // decimal/hexadecimal/binary 8/16/custom
     Operator(Operator),
     LabelRef(LabelRef), // Label reference 0x60-0xFF
+    LocalLabelRef(LabelRef), // Local label reference starting with '.'
     Space,              // 0x20
     Dollar,             // 0x24 ($)
-    DoubleDollar        // 0x44 ($$)
+    DoubleDollar,        // 0x44 ($$)
+    UnaryMinus(Box<ExpressionMember>)          // '#'
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -608,6 +630,11 @@ impl Value {
 impl ExpressionMember {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         match self {
+            ExpressionMember::UnaryMinus(inner) => {
+                let mut result = vec![EXP_UNARY_MINUS];
+                result.extend(inner.bytes(table));
+                result
+            },
             ExpressionMember::ShortDecimal(v) => vec![*v],
             ExpressionMember::Value(val) => val.bytes(table),
             ExpressionMember::Operator(op) => {
@@ -624,6 +651,11 @@ impl ExpressionMember {
                 vec![code]
             },
             ExpressionMember::LabelRef(label_ref) => label_ref.bytes(table),
+            ExpressionMember::LocalLabelRef(label_ref) => {
+                let mut bytes = vec![EXP_LOCAL_LABEL];
+                bytes.extend_from_slice(&label_ref.bytes(table));
+                bytes
+            },
             ExpressionMember::Space => vec![0x20],
             ExpressionMember::Dollar => vec![0x24],
             ExpressionMember::DoubleDollar => vec![0x44],
@@ -688,10 +720,10 @@ impl Assign {
 
 
 impl Expression {
-    pub fn display(&self, table: &StringTable) -> String {
+    pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
             Expression::MultiTerm(members) => {
-                members.iter().map(|m| m.display(table)).collect::<Vec<_>>().join("")
+                members.iter().map(|m| m.display(table)).collect::<Vec<_>>().join("").into()
             },
             Expression::SingleTerm(member) => member.display(table)
         }
@@ -699,15 +731,17 @@ impl Expression {
 }
 
 impl ExpressionMember {
-    pub fn display(&self, table: &StringTable) -> String {
+    pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
-            ExpressionMember::ShortDecimal(v) => format!("{}", v),
-            ExpressionMember::Value(v) => v.display(),
-            ExpressionMember::Operator(op) => op.to_string(),
-            ExpressionMember::LabelRef(l) => l.get(table).to_string(),
-            ExpressionMember::Space => " ".to_string(),
-            ExpressionMember::Dollar => "$".to_string(),
-            ExpressionMember::DoubleDollar => "$$".to_string()
+            ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)).into(),
+            ExpressionMember::ShortDecimal(v) => format!("{}", v).into(),
+            ExpressionMember::Value(v) => v.display().into(),
+            ExpressionMember::Operator(op) => op.to_string().into(),
+            ExpressionMember::LabelRef(l) => l.get(table).to_string().into(),
+            ExpressionMember::LocalLabelRef(l) => format!(".{}", l.get(table)).into(),
+            ExpressionMember::Space => " ".into(),
+            ExpressionMember::Dollar => "$".into(),
+            ExpressionMember::DoubleDollar => "$$".into()
         }
     }
 }
@@ -765,8 +799,9 @@ impl Item {
             Item::Indent(count) => " ".repeat(count.0 as usize),
             Item::Assign(assign) => assign.display(table),
             Item::Label(label) => format!("{}", label.get(table)),
+            Item::LocalLabel(label) => format!("{}", label.get(table)),
             Item::Macro(m) => m.display(table),
-            Item::Statement(s) => s.display(table),
+            Item::Statement(s) => s.display(table).into_owned(),
         }
     }
 }
@@ -844,36 +879,49 @@ pub enum Statement {
     Import(String, bool), 
     Org2(SizedExpression, SizedExpression),
     Org(SizedExpression),
-    Byte(Vec<SizedExpression>),
-    Word(Vec<SizedExpression>),
+    Byte(Vec<Expression>),
+    Word(Vec<Expression>),
     Skip(SizedExpression),
     StorePcInstr, // hidden instruction
     StorePcLine, // hidden instruction
     StarRepeat( Box<SizedExpression>, Box<Item>),
     RawString(String),
     MacroUse(Expression, Vec<Expression>),
-    Instruction(Instruction)
+    Instruction(Instruction),
+    Brk
+}
+
+fn bytes_for_word_or_byte(exprs: &[Expression], is_word: bool, table: &StringTable) -> Vec<u8> {
+    
+    let unit_size: usize = if is_word { 2 } else { 1 };
+    let unit_marker: u8= if is_word { MARKER_WORD } else { MARKER_BYTE };
+
+    let exprs = exprs.iter().flat_map(|expr| expr.bytes(table)).collect::<Vec<u8>>();
+    let exprs_len = exprs.len() as u8;
+    let directive_len = (1.max(exprs.len())*unit_size) as u8;
+
+    let mut bytes = Vec::with_capacity(1+1+1+exprs_len as usize+1);
+    bytes.push(unit_marker);
+    bytes.push(exprs_len + 2);
+    bytes.push(directive_len);
+    bytes.extend_from_slice(&exprs);
+    bytes.push(END_MARKER);
+    bytes
 }
 
 impl Statement {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
         match self {
+            Statement::Brk => {
+                bytes.push(MARKER_ESCAPE);
+                bytes.push(CMD_BRK);
+            },
             Statement::Byte(exprs) => {
-                let exprs = exprs.iter().flat_map(|expr| expr.bytes(table)).collect::<Vec<u8>>();
-                bytes.push(MARKER_BYTE);
-                bytes.push(exprs.len() as u8+2);
-                bytes.push(1.max(exprs.len() as u8));
-                bytes.extend_from_slice(&exprs);
-                bytes.push(END_MARKER);
+                bytes.extend_from_slice(&bytes_for_word_or_byte(exprs, false, table));
             }
             Statement::Word(exprs) => {
-                let exprs = exprs.iter().flat_map(|expr| expr.bytes(table)).collect::<Vec<u8>>();
-                bytes.push(MARKER_WORD);
-                bytes.push(exprs.len() as u8+2);
-                bytes.push((1.max(exprs.len() as u8) *2));
-                bytes.extend_from_slice(&exprs);
-                bytes.push(END_MARKER);
+                bytes.extend_from_slice(&bytes_for_word_or_byte(exprs, true, table));
             }
             Statement::If(condition) => {
                 bytes.push(MARKER_ESCAPE);
@@ -971,51 +1019,52 @@ impl Statement {
         bytes
     }
 
-    pub fn display(&self, table: &StringTable) -> String {
+    pub fn display<'a>(&'a self, table: &StringTable) -> Cow<'a, str> {
         match self {
-            Statement::If(expr) => format!("IF {}", expr.display(table)),
-            Statement::Else => "ELSE".to_string(),
-            Statement::End => "END".to_string(),
-            Statement::EndBis => "".to_string(),
-            Statement::EndMacro => "ENDM".to_string(), 
+            Statement::Brk => "BRK".into(),
+            Statement::If(expr) => format!("IF {}", expr.display(table)).into(),
+            Statement::Else => "ELSE".into(),
+            Statement::End => "END".into(),
+            Statement::EndBis => "".into(),
+            Statement::EndMacro => "ENDM".into(), 
             Statement::Import(s, escaped) => {
                 if *escaped && s.starts_with('"') && s.len() >= 3 {
                     // Start is " + user number
                     // End is A (maybe access rights/encoding ?)
                     let stripped = &s[2..s.len()-1];
-                    format!("IMPORT \"{}\"", stripped)
+                    format!("IMPORT \"{}\"", stripped).into()
                 } else {
-                    format!("IMPORT \"{}\"", s)
+                    format!("IMPORT \"{}\"", s).into()
                 }
             },
-            Statement::RawString(s) => s.clone(),
-            Statement::Ent(e) => format!("ENT {}", e.display(table)),
-            Statement::Org(e) => format!("ORG {}", e.display(table)),
-            Statement::Org2(e1, e2) => format!("ORG {},{}", e1.display(table), e2.display(table)),
-            Statement::Skip(e) => format!("SKIP {}", e.display(table)),
+            Statement::RawString(s) => s.as_str().into(),
+            Statement::Ent(e) => format!("ENT {}", e.display(table)).into(),
+            Statement::Org(e) => format!("ORG {}", e.display(table)).into(),
+            Statement::Org2(e1, e2) => format!("ORG {},{}", e1.display(table), e2.display(table)).into(),
+            Statement::Skip(e) => format!("SKIP {}", e.display(table)).into(),
             Statement::Byte(exprs) => {
                 let exprs = exprs.iter().map(|e| e.display(table)).join(",");
-                format!("BYTE {}", exprs)
+                format!("BYTE {}", exprs).into()
             },
             Statement::Word(exprs) => {
-                format!("WORD {}", exprs.iter().map(|e| e.display(table)).join(","))
+                format!("WORD {}", exprs.iter().map(|e| e.display(table)).join(",")).into()
             }
             Statement::StorePcInstr | Statement::StorePcLine => {
                 // norepresentation is expected
-                "".to_owned()
+                "".into()
             },
             Statement::StarRepeat(expr, item) => {
-                format!("{} ** {}",  expr.display(table), item.display(table))
+                format!("{} ** {}",  expr.display(table), item.display(table)).into()
             },
             Statement::MacroUse(name, args) => {
                 //let name_str = name.get(table).to_string();
                 let name_str = name.display(table);
                 let args_str = args.iter().map(|e| e.display(table)).collect::<Vec<_>>().join(",");
 
-                format!("{}({})", name_str, args_str)
+                format!("{}({})", name_str, args_str).into()
             },
             Statement::Instruction(instr) => {
-                instr.display(table)
+                instr.display(table).into()
             }
             
         }
@@ -1101,25 +1150,7 @@ fn z80str_to_expressions_list(repr: &str) -> SmallVec<[ExpressionKind; 2]> {
     kinds
 }
 
-fn parse_indexed_instruction(prefix: u8) -> impl Fn(&mut Input) -> OrgamsParseResult<Instruction> {
-    move |input: &mut Input| {
-        let opcode = any.parse_next(input)?;
-        let repr = if prefix == IX_CODE {
-            TABINSTRDD
-        } else if prefix == IY_CODE {
-            TABINSTRFD
-        } else {
-            panic!("Unsupported prefix: 0x{:02X}", prefix);
-        }[opcode as usize];
-        let kinds = z80str_to_expressions_list(repr);
-        let mut coded_operands = Vec::with_capacity(kinds.len());
-        for _kind in kinds {
-            let expr = parse_sized_expression.parse_next(input)?;
-            coded_operands.push(expr);
-        }
-        Ok(Instruction { prefix: Some(prefix), opcode, coded_operands })
-    }
-}
+
 
         pub struct DisplayState<'f, 'g> {
             pub(crate) f: Option<&'f mut std::fmt::Formatter<'g>>,
@@ -1295,6 +1326,11 @@ fn parse_indexed_instruction(prefix: u8) -> impl Fn(&mut Input) -> OrgamsParseRe
                     let label_str = label.get(labels);
                     state.append_label(label_str.as_str());
                 },
+                Item::LocalLabel(label) => {
+                    let label_str = format!(".{}", label.get(labels));
+                    state.append_label(label_str.as_str());
+
+                },
                 Item::Macro(m) => {
                     let repr = m.display(labels);
                     state.append_token_representation(repr);
@@ -1312,9 +1348,9 @@ fn parse_indexed_instruction(prefix: u8) -> impl Fn(&mut Input) -> OrgamsParseRe
                         },
 
                         _ => {
-                            let repr: String = s.display(labels);
+                            let repr: Cow<'_, str> = s.display(labels);
                             if !repr.is_empty() {
-                                state.append_token_representation(repr);
+                                state.append_token_representation(repr.into_owned());
                             }
                         }
                     }
@@ -1449,7 +1485,13 @@ fn parse_star_repeat(input: &mut Input) -> OrgamsParseResult<Item> {
 /// Parse single item EXCEPT newline, comments,  indenations, label, macrodref.
 /// assign seems to be prefexid by 7f
 fn parse_inner_item(input: &mut Input) -> OrgamsParseResult<Item> {
-    dbg!("parse_inner_item input.len={}", input.len());
+    // stop if end of line
+    if peek(alt((consume_marker(MARKER_NEWLINE), consume_marker(MARKER_INDENT), consume_marker(MARKER_COMMENT)))).parse_next(input).is_ok() {
+        let err = ContextError::new();
+        return Err(ErrMode::Backtrack(err));
+    }
+
+    
     debug_slice(input);
     // if let Some(b) = input.as_bytes().get(0) {
     //    eprintln!("DBG: parse_item input[0]={:02X}", b);
@@ -1469,31 +1511,37 @@ fn parse_inner_item(input: &mut Input) -> OrgamsParseResult<Item> {
 
 
 fn parse_byte(input: &mut Input) -> OrgamsParseResult<Item> {
-    consume_marker(MARKER_BYTE)(input)?;
-
-    let length = any.parse_next(input)? as usize;
-    assert!(length == 2, "Need to handle other cases !!");
-
-    let size = any.parse_next(input)?; // size byte
-    expect_end_marker.parse_next(input)?;
-
-    let mut exprs = Vec::new();
-
-    Ok(Item::Statement(Statement::Byte(exprs)))
+    parse_word_or_byte(false).parse_next(input)
 }
 
 fn parse_word(input: &mut Input) -> OrgamsParseResult<Item> {
-    consume_marker(MARKER_WORD)(input)?;
+    parse_word_or_byte(true).parse_next(input)
+}
 
-    let length = any.parse_next(input)? as usize;
-    assert!(length == 2, "Need to handle other cases !!");
+fn parse_word_or_byte(is_word: bool) -> impl Fn(&mut Input) -> OrgamsParseResult<Item> {
+    move |input: &mut Input| {
+        let marker = if is_word { MARKER_WORD } else { MARKER_BYTE };
 
-    let size = any.parse_next(input)?; // size byte
-    expect_end_marker.parse_next(input)?;
+        consume_marker(marker)(input)?;
 
-    let mut exprs = Vec::new();
+        let expression_length = any.parse_next(input)? as usize;
+        let directive_length = any.parse_next(input)?;
+        let before_expressions = input.checkpoint();
+        let mut exprs = Vec::new();
+        while input.offset_from(&before_expressions) < expression_length-2 {
+            let expression = cut_err(parse_unsized_expression.context(StrContext::Label("Failed to parse expression in list"))).parse_next(input)?;
+            exprs.push(expression);
+        }
 
-    Ok(Item::Statement(Statement::Word(exprs)))
+        expect_end_marker.parse_next(input)?;
+
+        let item = if is_word {
+            Item::Statement(Statement::Word(exprs))
+        } else {
+            Item::Statement(Statement::Byte(exprs))
+        };
+        Ok(item)
+    }
 }
 
 
@@ -1554,8 +1602,15 @@ fn parse_label(input: &mut Input) -> OrgamsParseResult<LabelRef> {
 /// - 0x60-0xFF: Label reference
 fn parse_sized_expression(input: &mut Input) -> OrgamsParseResult<SizedExpression> {
     let size = any.parse_next(input)? as usize;
-    parse_unsized_expression.map(SizedExpression).parse_next(input)
-    // TODO check size
+    let input_checkpoint = input.checkpoint();
+    let exp = parse_unsized_expression.map(SizedExpression).parse_next(input)?;
+    if input.offset_from(&input_checkpoint) != size {
+        let mut err = ContextError::new();
+        err.push(StrContext::Expected(StrContextValue::Description("expression of incorrect size")));
+        return Err(ErrMode::Cut(err));
+    } else {
+        Ok(exp)
+    }
 }
 
 
@@ -1584,19 +1639,40 @@ fn parse_unsized_expression(input: &mut Input) -> OrgamsParseResult<Expression> 
 fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
     let b = any.parse_next(input)?;
 
+    let is_local_label = b == EXP_LOCAL_LABEL;
+    let b = if is_local_label {
+        cut_err(any.context(StrContext::Label("Local label"))).parse_next(input)?
+    } else {
+        b
+    };
+
     if b <= EXP_SHORT_DECIMAL_MAX_VALUE {
         Ok(ExpressionMember::ShortDecimal(b))
     }
     else if b >= SHORT_LABEL_START && b <= SHORT_LABEL_END {
-        Ok(ExpressionMember::LabelRef(LabelRef::new_short_from_stream(b)))
+        let label = LabelRef::new_short_from_stream(b);
+        if is_local_label {
+            Ok(ExpressionMember::LocalLabelRef(label))
+        } else {
+            Ok(ExpressionMember::LabelRef(label))
+        }
     }
     else if b >= LONG_LABEL_START {
          // Long label
          let second_byte = any.parse_next(input)?;
-         Ok(ExpressionMember::LabelRef(LabelRef::new_long_from_stream(b, second_byte)))
+         let label = LabelRef::new_long_from_stream(b, second_byte);
+         if is_local_label {
+            Ok(ExpressionMember::LocalLabelRef(label))
+         } else {
+            Ok(ExpressionMember::LabelRef(label))
+         }
     }
     else {
         match b {
+            EXP_UNARY_MINUS => {
+                let inner = cut_err(parse_expression_member.context(StrContext::Expected(StrContextValue::Description("Negated expression")))).parse_next(input)?;
+                Ok(ExpressionMember::UnaryMinus(Box::new(inner)))
+            }
             EXP_OP_PLUS => Ok(ExpressionMember::Operator(Operator::Plus)),
             EXP_OP_MINUS => Ok(ExpressionMember::Operator(Operator::Minus)),
             EXP_OP_MULT => {
@@ -1754,25 +1830,30 @@ fn parse_nl_or_comment(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
 
 // The label MUST be followed by another token (not newline or comment)
 fn parse_line_starting_with_label(input: &mut Input) -> OrgamsParseResult<Line> {
-    consume_marker(MARKER_LABEL_ADDR)(input)?;
-    let label = cut_err(parse_label.map(Item::Label).context(StrContext::Label("label"))).parse_next(input)?;
+    let label_kind: u8 = any.verify(|&b| b == MARKER_LABEL_ADDR || b == MARKER_LOCAL_LABEL).parse_next(input)?;
+    let label = cut_err(parse_label.context(StrContext::Label("label"))).parse_next(input)?;
+    let label = if label_kind == MARKER_LABEL_ADDR {
+        Item::Label(label)
+    } else {
+        Item::LocalLabel(label)
+    };
     
     let nl_or_comment = opt(parse_nl_or_comment).parse_next(input)?;
-    let (item, nl_or_comment) = if let Some(nl_or_comment) = nl_or_comment {
+    let (mut items, nl_or_comment) = if let Some(nl_or_comment) = nl_or_comment {
         (None, nl_or_comment)
     } else {
-        let item = dbg!(opt(parse_inner_item).parse_next(input))?; // TODO implement when there are several items on the same line
+        let items = parse_items.parse_next(input)?;
         let nl_or_comment = cut_err(parse_nl_or_comment).parse_next(input)?;
-        (item, nl_or_comment)
+        (Some(items), nl_or_comment)
     };
 
-    let mut items = if let Some(item) = item {
-        vec![label, item]
-    } else {
-        vec![label]
-    };
-    items.extend(nl_or_comment);
-    Ok(Line { items })
+    let mut res = Vec::with_capacity(1+items.as_ref().map(|items| items.len()).unwrap_or(0)+1);
+    res.push(label);
+    if let Some(mut items) = items {
+        res.append(&mut items);
+    }
+    res.extend(nl_or_comment);
+    Ok(Line { items: res })
 
 }
 
@@ -1975,6 +2056,10 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
             cut_err(parse_macro_use).parse_next(input).map(Item::Statement)
         },
 
+        CMD_BRK => {
+            Ok(Item::Statement(Statement::Brk))
+        },
+
         _ => {
             let mut err = ContextError::new();
             err.push(StrContext::Expected(StrContextValue::Description("Unknown escaped command")));
@@ -1983,16 +2068,36 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
     }
 }
 
+fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
+    match prefix {
+        IX_CODE => &TABINSTRDD,
+        IY_CODE => &TABINSTRFD,
+        _ => panic!("Unsupported prefix: 0x{:02X}", prefix),
+    }
+}
 
 fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
     let b = dbg!(any.parse_next(input)?);
-    if b == IX_CODE || b == IY_CODE {
-        cut_err(parse_indexed_instruction(b).context(StrContext::Expected(StrContextValue::Description("Indexed instruction")))).parse_next(input)
+    
+    let (prefix, opcode, repr) = if  b == IX_CODE || b == IY_CODE {
+        let prefix = b;
+        let opcode = any.parse_next(input)?;
+        (Some(prefix), opcode, prefix_to_table(prefix)[opcode as usize])
     } else {
-        let mut err = ContextError::new();
-        err.push(StrContext::Expected(StrContextValue::Description("Non-indexed instruction parsing not implemented yet")));
-        Err(ErrMode::Backtrack(err))
-    }
+            // No prefix
+            let prefix = None;
+            let opcode = b;
+            let repr = TABINSTR[opcode as usize];
+            (prefix, opcode, repr)
+    };
+
+        let kinds = z80str_to_expressions_list(repr);
+        let mut coded_operands = Vec::with_capacity(kinds.len());
+        for _kind in kinds {
+            let expr = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression for instruction")))).parse_next(input)?;
+            coded_operands.push(expr);
+        }
+        Ok(Instruction { prefix: prefix, opcode, coded_operands })
 }
 
 
