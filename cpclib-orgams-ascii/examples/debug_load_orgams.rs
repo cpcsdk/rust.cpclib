@@ -7,8 +7,8 @@ use cpclib_common::winnow::{
     token::{literal, take, any},
     error::{StrContext, StrContextValue}
 };
-use cpclib_orgams_ascii::decoder2::DisplayState;
-use cpclib_orgams_ascii::decoder2::{
+use cpclib_orgams_ascii::binary_decoder::DisplayState;
+use cpclib_orgams_ascii::binary_decoder::{
     Input, BasmParseResult, StringTable, 
     parse_labels_table, parse_line,
 };
@@ -22,14 +22,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     
-    let path = &args[1];
-    println!("Reading file: {}", path);
+    let raw_path = std::path::PathBuf::from(&args[1]);
+    // Resolve path: try raw path, then crate manifest dir, then workspace package subdir
+    let path_candidates = vec![
+        raw_path.clone(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(&raw_path),
+        std::path::PathBuf::from("cpclib-orgams-ascii").join(&raw_path),
+    ];
+
+    let path_buf = path_candidates.into_iter().find(|p| p.exists()).unwrap_or(raw_path);
+    println!("Reading file: {}", path_buf.display());
+
     // Check for groundtruth .Z80 file
-    let path_buf = std::path::PathBuf::from(path);
     let z80_path = path_buf.with_extension("Z80");
     let groundtruth = if z80_path.exists() {
         println!("Found groundtruth file: {:?}", z80_path);
-        let content = fs::read_to_string(z80_path)?;
+        let content = fs::read_to_string(&z80_path)?;
         let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         Some(lines)
     } else {
@@ -37,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
     
-    let bytes = fs::read(path)?;
+    let bytes = fs::read(&path_buf)?;
     let mut input = Input::new(&bytes);
     
     let mut groundtruth_iter = groundtruth.as_ref().map(|lines| lines.iter());
@@ -111,6 +119,7 @@ fn debug_orgams_file(input: &mut Input, groundtruth_iter: &mut Option<std::slice
 
 fn parse_all_code_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> BasmParseResult<()> {
     let mut chunk_idx = 0;
+    let mut start_line = 0;
     loop {
         // Peek to check for the terminator (chunk size 0)
         let b = peek(any).parse_next(input)?;
@@ -120,13 +129,13 @@ fn parse_all_code_debug(input: &mut Input, labels: &StringTable, groundtruth_ite
         }
         
         println!("DEBUG: Parsing Chunk #{}", chunk_idx);
-        parse_chunk_debug(input, labels, groundtruth_iter, chunk_idx)?;
+        start_line += parse_chunk_debug(input, labels, groundtruth_iter, chunk_idx, start_line)?;
         chunk_idx += 1;
     }
     Ok(())
 }
 
-fn parse_chunk_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>, chunk_idx: usize) -> BasmParseResult<()> {
+fn parse_chunk_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>, chunk_idx: usize, start_line: usize) -> BasmParseResult<usize> {
     let chunk_size = any.verify(|&s| s<=CHUNK_MAX_SIZE).parse_next(input)? as usize;
     
     // Chunk content peek
@@ -142,6 +151,9 @@ fn parse_chunk_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: 
         
         let line_start_check = input.checkpoint();
         
+
+       // println!("Remaining bytes: [{:02X?}]", &input[.. ]);
+
         match parse_line.parse_next(input) {
             Ok(line) => {
 				line_number += 1;
@@ -158,7 +170,7 @@ fn parse_chunk_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: 
                  // Printable bytes
                  let printable: String = raw_bytes.iter().map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' }).collect();
                 let reconstructed_bytes = line.bytes(&labels);
-				println!("\n Chunk: {}       line: {}", chunk_idx, line_number);
+				println!("\n Chunk: {}       line: {} (total: {})", chunk_idx, line_number, start_line + line_number);
                  println!("          Debug:  {:?}", line);
                  println!("    [{:3}] Bytes:  {:02X?}", line_offset, raw_bytes);
                  println!("  Reconstructed:  {:02X?} ", reconstructed_bytes);
@@ -201,5 +213,5 @@ fn parse_chunk_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: 
         println!("    WARN: Chunk mismatch. Expected {}, got {}", chunk_size, input.offset_from(&chunk_start));
     }
     
-    Ok(())
+    Ok(render.line_number()-1)
 }

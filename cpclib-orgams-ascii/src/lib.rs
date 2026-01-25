@@ -7,7 +7,7 @@
 #![warn(missing_docs)]
 
 pub mod format;
-pub mod decoder2;
+pub mod binary_decoder;
 
 pub use format::{OrgamsFile, OrgamsHeader, LineMarker};
 
