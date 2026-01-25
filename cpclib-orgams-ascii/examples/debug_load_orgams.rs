@@ -9,7 +9,7 @@ use cpclib_common::winnow::{
 };
 use cpclib_orgams_ascii::binary_decoder::DisplayState;
 use cpclib_orgams_ascii::binary_decoder::{
-    Input, BasmParseResult, StringTable, 
+    Input, OrgamsParseResult, StringTable, 
     parse_labels_table, parse_line,
 };
 
@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn debug_orgams_file(input: &mut Input, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> BasmParseResult<()> {
+fn debug_orgams_file(input: &mut Input, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> OrgamsParseResult<()> {
     println!("DEBUG: Starting debug_orgams_file");
     
     // 1. Parse Header
@@ -117,7 +117,7 @@ fn debug_orgams_file(input: &mut Input, groundtruth_iter: &mut Option<std::slice
     Ok(())
 }
 
-fn parse_all_code_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> BasmParseResult<()> {
+fn parse_all_code_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> OrgamsParseResult<()> {
     let mut chunk_idx = 0;
     let mut start_line = 0;
     loop {
@@ -135,7 +135,7 @@ fn parse_all_code_debug(input: &mut Input, labels: &StringTable, groundtruth_ite
     Ok(())
 }
 
-fn parse_chunk_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>, chunk_idx: usize, start_line: usize) -> BasmParseResult<usize> {
+fn parse_chunk_debug(input: &mut Input, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>, chunk_idx: usize, start_line: usize) -> OrgamsParseResult<usize> {
     let chunk_size = any.verify(|&s| s<=CHUNK_MAX_SIZE).parse_next(input)? as usize;
     
     // Chunk content peek

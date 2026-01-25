@@ -143,7 +143,6 @@ impl Screen {
 }
 
 pub struct Interpreter {
-    enable_vdu: bool,
     screen: Screen,
     cursor: Cursor,
     palette: Palette,
@@ -174,7 +173,6 @@ impl Interpreter {
             paper,
             border: paper,
             window: None,
-            enable_vdu: true,
         }
     }
 
@@ -334,7 +332,7 @@ impl Interpreter {
         };
         let finalize = finalize.to_char_commands().expect("Char command conversion failed");
 
-        let commands = commands.into_iter().cloned().chain(finalize.into_iter());
+        let commands = commands.into_iter().cloned().chain(finalize.into_iter().cloned());
         for command in commands {
           self.interpret_command(&command)?;
          /* {
@@ -353,29 +351,24 @@ match std::io::stdin().read_line(&mut input) {
 
 
     pub fn interpret_command(&mut self, command: &CharCommand) -> Result<(), String> {
+        dbg!("Interpreting CharCommand: {:?}", command);
             match command {
-                CharCommand::Nop => {
-                    // No operation - do nothing
-                },
-                CharCommand::SendGraphics(_) => {
-                    // Sending graphics is not simulated; ignore.
-                },
-                CharCommand::PrintSymbol(ch) | CharCommand::Char(ch) if self.enable_vdu => {
+                CharCommand::PrintSymbol(ch) | CharCommand::Char(ch) => {
                     let (width, height) = self.screen.resolution();
                     let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
                     if self.cursor.y >= top && self.cursor.y <= bottom && self.cursor.x >= left && self.cursor.x <= right {
                         if let Some(cell) = self.screen.cell_mut(self.cursor.x, self.cursor.y) {
-                            cell.ch = if matches!(command, CharCommand::Char(_)) {*ch as u8} else {'?' as u8};
+                            cell.ch = *ch;
                             cell.pen = self.pen;
                             cell.paper = self.paper;
                         }
                         self.inc_cursor_x();
                     }
                 },
-                CharCommand::Locate(x, y) if self.enable_vdu => {
+                CharCommand::Locate(x, y) => {
                     self.locate_cursor(*x as _, *y as _);
                 },
-                CharCommand::Cls if self.enable_vdu => {
+                CharCommand::Cls => {
                     let (width, height) = self.screen.resolution();
                     let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
                     for y in top..=bottom {
@@ -389,31 +382,22 @@ match std::io::stdin().read_line(&mut input) {
                     }
                     self.locate_cursor(left, top);
                 },
-                CharCommand::CarriageReturn if self.enable_vdu => {
+                CharCommand::CarriageReturn => {
                     self.locate_cursor(self.window.map_or(1, |(l, _, _, _)| l), self.cursor.y);
                 },
-                CharCommand::CursorDown if self.enable_vdu => {
+                CharCommand::CursorDown => {
                     self.inc_cursor_y();
                 },
-                CharCommand::CursorUp if self.enable_vdu => {
+                CharCommand::CursorUp => {
                     self.dec_cursor_y();
                 },
-                CharCommand::CursorLeft if self.enable_vdu => {
+                CharCommand::CursorLeft => {
                     self.dec_cursor_x();
                 },
-                CharCommand::CursorRight if self.enable_vdu => {
+                CharCommand::CursorRight => {
                     self.inc_cursor_x();
                 },
-                CharCommand::DisableVdu => {
-                    self.enable_vdu = false;
-                }
-                CharCommand::EnableVdu => {
-                    self.enable_vdu = true;
-                },
-                CharCommand::GraphicsInkMode(_) => {
-                    // Graphics ink mode is not simulated; ignore.
-                },
-                CharCommand::Mode(m) if self.enable_vdu  => {
+                CharCommand::SetMode(m) => {
                     let m = match m {
                         0 => Mode::Mode0,
                         1 => Mode::Mode1,
@@ -426,23 +410,23 @@ match std::io::stdin().read_line(&mut input) {
                     self.cursor.x = 1;
                     self.cursor.y = 1;
                 },
-                CharCommand::Pen(p) if self.enable_vdu => {
+                CharCommand::Pen(p) => {
                     self.pen = Pen::from(*p);
                 },
-                CharCommand::Paper(p) if self.enable_vdu => {
+                CharCommand::Paper(p) => {
                     self.paper = Pen::from(*p);
                 },
-                CharCommand::Ink(pen, ink1, _ink2) if self.enable_vdu => {
+                CharCommand::Ink(pen, ink1, _ink2) => {
                     let pen = Pen::from(*pen);
                     let ink = cpclib_image::ga::Ink::from(*ink1);
                     self.palette.set(pen, ink); // blinking is ignored
                 },
-                CharCommand::Border(ink1, _ink2) if self.enable_vdu => {
+                CharCommand::Border(ink1, _ink2) => {
                     let ink = cpclib_image::ga::Ink::from(*ink1);
                     self.palette.set_border(ink);
                     self.border = Pen::Border;
                 },
-                CharCommand::ClearLineStart if self.enable_vdu => {
+                CharCommand::ClearLineStart => {
                     let y = self.cursor.y;
                     let x = self.cursor.x;
                     let (left, _, _, _) = self.window.unwrap_or((1, self.screen.resolution().0, 1, self.screen.resolution().1));
@@ -454,7 +438,7 @@ match std::io::stdin().read_line(&mut input) {
                         }
                     }
                 }
-                CharCommand::ClearLineEnd if self.enable_vdu => {
+                CharCommand::ClearLineEnd => {
                     let y = self.cursor.y;
                     let x = self.cursor.x;
                     let (_, right, _, _) = self.window.unwrap_or((1, self.screen.resolution().0, 1, self.screen.resolution().1));
@@ -466,7 +450,7 @@ match std::io::stdin().read_line(&mut input) {
                         }
                     }
                 }
-                CharCommand::ClearScreenStart if self.enable_vdu => {
+                CharCommand::ClearScreenStart => {
                     let (width, height) = self.screen.resolution();
                     let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
                     let cur_x = self.cursor.x;
@@ -483,7 +467,7 @@ match std::io::stdin().read_line(&mut input) {
                         }
                     }
                 }
-                CharCommand::ClearScreenEnd if self.enable_vdu => {
+                CharCommand::ClearScreenEnd => {
                     let (width, height) = self.screen.resolution();
                     let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
                     let cur_x = self.cursor.x;
@@ -507,20 +491,17 @@ match std::io::stdin().read_line(&mut input) {
                         }
                     }
                 }
-                CharCommand::Window(left, right, top, bottom) if self.enable_vdu => {
+                CharCommand::Window(left, right, top, bottom) => {
                     self.window = Some((*left as u16, *right as u16, *top as u16, *bottom as u16));
                     self.locate_cursor(*left as u16, *top as u16);
                 }
-                CharCommand::Transparency(_p) if self.enable_vdu => {
+                CharCommand::Transparency(_p) => {
                     // Transparency is not simulated; ignore.
                     // a way to implement that would be to stack characters and redraw all of them
                 }
-                CharCommand::ExchangePenAndPaper if self.enable_vdu => {
+                CharCommand::ExchangePenAndPaper => {
                     std::mem::swap(&mut self.pen, &mut self.paper);
                 }
-                c if !self.enable_vdu => {
-                    // When VDU is disabled, ignore all commands except those handled above
-                } 
                 c => {
                     todo!("Interpreter: unhandled CharCommand {:?}. needs an implementation", c);
                 }
@@ -533,28 +514,31 @@ match std::io::stdin().read_line(&mut input) {
 impl Display for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use cpclib_image::ga::Ink;
-        use owo_colors::{OwoColorize, DynColors, colors::CustomColor};
         // Border thickness
         let border = 4;
         let screen_width = self.screen.buffer[0].len();
         let screen_height = self.screen.buffer.len();
         let border_ink = self.palette.get_border();
         let border_rgb = border_ink.color();
-        let border_color = DynColors::Rgb(border_rgb[0], border_rgb[1], border_rgb[2]);
+        let ansi_border_bg = format!("\x1b[48;2;{};{};{}m", border_rgb[0], border_rgb[1], border_rgb[2]);
+        let ansi_border_fg = format!("\x1b[38;2;{};{};{}m", border_rgb[0], border_rgb[1], border_rgb[2]);
+        let ansi_reset = "\x1b[0m";
 
         // Top border
         for _ in 0..border {
+            write!(f, "{}", ansi_border_bg)?;
             for _ in 0..(screen_width + 2 * border) {
-                write!(f, "{}", " ".on_color(border_color))?;
+                write!(f, "{} ", ansi_border_fg)?;
             }
-            writeln!(f)?;
+            writeln!(f, "{}", ansi_reset)?;
         }
 
         // Screen rows with left/right border
         for (row_index, row) in self.screen.buffer.iter().enumerate() {
             // Left border
+            write!(f, "{}", ansi_border_bg)?;
             for _ in 0..border {
-                write!(f, "{}", " ".on_color(border_color))?;
+                write!(f, "{} ", ansi_border_fg)?;
             }
             // Screen content
             for (col_index, cell) in row.iter().enumerate() {
@@ -568,23 +552,26 @@ impl Display for Interpreter {
                 let paper_ink = self.palette.get(&paper);
                 let pen_rgb = pen_ink.color();
                 let paper_rgb = paper_ink.color();
-                let fg = DynColors::Rgb(pen_rgb[0], pen_rgb[1], pen_rgb[2]);
-                let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
-                write!(f, "{}", ch.color(fg).on_color(bg))?;
+                let ansi_fg = format!("\x1b[38;2;{};{};{}m", pen_rgb[0], pen_rgb[1], pen_rgb[2]);
+                let ansi_bg = format!("\x1b[48;2;{};{};{}m", paper_rgb[0], paper_rgb[1], paper_rgb[2]);
+              //  write!(f,"{}{}|{}=", ansi_reset, paper.number(), pen.number());
+                write!(f, "{}{}{}", ansi_fg, ansi_bg, ch)?;
             }
             // Right border
+            write!(f, "{}", ansi_border_bg)?;
             for _ in 0..border {
-                write!(f, "{}", " ".on_color(border_color))?;
+                write!(f, "{} ", ansi_border_fg)?;
             }
-            writeln!(f)?;
+            writeln!(f, "{}", ansi_reset)?;
         }
 
         // Bottom border
         for _ in 0..border {
+            write!(f, "{}", ansi_border_bg)?;
             for _ in 0..(screen_width + 2 * border) {
-                write!(f, "{}", " ".on_color(border_color))?;
+                write!(f, "{} ", ansi_border_fg)?;
             }
-            writeln!(f)?;
+            writeln!(f, "{}", ansi_reset)?;
         }
         Ok(())
     }

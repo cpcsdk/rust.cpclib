@@ -32,15 +32,6 @@ macro_rules! define_basic_char {
             $function_doc
         )]
         pub const $const_name: u8 = $hex_value;
-
-        #[doc = concat!(
-            "Character code `0x",
-            stringify!($hex_value),
-            "` - BASIC equivalent: `",
-            stringify!($basic_equiv),
-            "`\n\n",
-            $function_doc
-        )]
         pub const $basic_equiv: u8 = $const_name;
 
         paste::item! {

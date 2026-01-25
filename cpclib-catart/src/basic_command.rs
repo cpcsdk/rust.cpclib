@@ -281,7 +281,7 @@ impl BasicCommand {
             BasicCommand::CursorOn => Ok(CharCommandList::from(vec![CharCommand::CursorOn])),
             BasicCommand::Ink(pen, ink1, ink2) => Ok(CharCommandList::from(vec![CharCommand::Ink(*pen, *ink1, ink2.unwrap_or(*ink1))])),
             BasicCommand::Locate(col, row) => Ok(CharCommandList::from(vec![CharCommand::Locate(*col, *row)])),
-            BasicCommand::Mode(mode) => Ok(CharCommandList::from(vec![CharCommand::Mode(*mode)])),
+            BasicCommand::Mode(mode) => Ok(CharCommandList::from(vec![CharCommand::SetMode(*mode)])),
             BasicCommand::Paper(pen) => Ok(CharCommandList::from(vec![CharCommand::Paper(*pen)])),
             BasicCommand::Pen(pen) => Ok(CharCommandList::from(vec![CharCommand::Pen(*pen)])),
             BasicCommand::PrintString(data, terminator) => {

@@ -50,7 +50,7 @@ where i32: From<T>
 {
     fn from(item: T) -> Self {
         let pos: i32 = item.into();
-        &Pen::PENS[pos as usize % 17]
+        &Pen::PENS[pos as usize]
     }
 }
 

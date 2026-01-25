@@ -2619,7 +2619,6 @@ dependencies = [
  "cpclib-common",
  "cpclib-image",
  "delegate",
- "owo-colors",
  "paste",
 ]
 
