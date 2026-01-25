@@ -14,6 +14,7 @@ pub mod error;
 pub mod basic_command;
 pub mod char_command;
 pub mod interpret;
+pub mod entry;
 
 pub mod built_info {
     //! Build-time information
