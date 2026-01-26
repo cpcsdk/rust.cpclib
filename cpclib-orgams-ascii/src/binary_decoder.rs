@@ -870,25 +870,26 @@ impl MacroDef {
 /// Statements
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    If(SizedExpression),
+    Brk,
+    Byte(Vec<Expression>),
     Else,
     End,
     EndBis,
     EndMacro,
     Ent(SizedExpression),
+    Fill(SizedExpression, SizedExpression),
+    If(SizedExpression),
     Import(String, bool), 
-    Org2(SizedExpression, SizedExpression),
+    Instruction(Instruction),
+    MacroUse(Expression, Vec<Expression>),
     Org(SizedExpression),
-    Byte(Vec<Expression>),
-    Word(Vec<Expression>),
+    Org2(SizedExpression, SizedExpression),
+    RawString(String),
     Skip(SizedExpression),
+    StarRepeat( Box<SizedExpression>, Box<Item>),
     StorePcInstr, // hidden instruction
     StorePcLine, // hidden instruction
-    StarRepeat( Box<SizedExpression>, Box<Item>),
-    RawString(String),
-    MacroUse(Expression, Vec<Expression>),
-    Instruction(Instruction),
-    Brk
+    Word(Vec<Expression>),
 }
 
 fn bytes_for_word_or_byte(exprs: &[Expression], is_word: bool, table: &StringTable) -> Vec<u8> {
@@ -943,6 +944,12 @@ impl Statement {
             Statement::EndMacro => {
                 bytes.push(MARKER_ESCAPE);
                 bytes.push(CMD_ENDM);
+            },
+            Statement::Fill(count_expr, value_expr) => {
+                bytes.push(MARKER_ESCAPE);
+                bytes.push(CMD_FILL);
+                bytes.extend_from_slice(&count_expr.bytes(table));
+                bytes.extend_from_slice(&value_expr.bytes(table));
             },
             Statement::Import(s, escaped) => {
                 if *escaped {
@@ -1027,6 +1034,9 @@ impl Statement {
             Statement::End => "END".into(),
             Statement::EndBis => "".into(),
             Statement::EndMacro => "ENDM".into(), 
+            Statement::Fill(count_expr, value_expr) => {
+                format!("FILL {},{}", count_expr.display(table), value_expr.display(table)).into()
+            },
             Statement::Import(s, escaped) => {
                 if *escaped && s.starts_with('"') && s.len() >= 3 {
                     // Start is " + user number
@@ -1509,6 +1519,14 @@ fn parse_inner_item(input: &mut Input) -> OrgamsParseResult<Item> {
     .parse_next(input)
 }
 
+
+fn parse_fill_inner(input: &mut Input) -> OrgamsParseResult<Item> {
+    let size_expr = cut_err(parse_sized_expression.context(StrContext::Label("Failed to parse size expression in FILL"))).parse_next(input)?;
+    let value_expr = cut_err(parse_sized_expression.context(StrContext::Label("Failed to parse value expression in FILL"))).parse_next(input)?;
+
+    let item = Item::Statement(Statement::Fill(size_expr, value_expr));
+    Ok(item)
+}
 
 fn parse_byte(input: &mut Input) -> OrgamsParseResult<Item> {
     parse_word_or_byte(false).parse_next(input)
@@ -2008,6 +2026,9 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
         },
         CMD_ENDM => {
              Ok(Item::Statement(Statement::EndMacro))
+        }
+        CMD_FILL => {
+            cut_err(parse_fill_inner.context(StrContext::Label("FILL"))).parse_next(input)
         },
         CMD_IMPORT => {
              // Replaced by top-level parse_import in most cases.
