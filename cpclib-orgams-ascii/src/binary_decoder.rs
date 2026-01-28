@@ -10,7 +10,7 @@ use cpclib_common::smallvec::SmallVec;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::parse;
 use cpclib_common::winnow::combinator::{cut_err, eof, preceded, repeat, terminated, trace};
-use cpclib_common::winnow::error::{ContextError, ErrMode, StrContext, StrContextValue};
+use cpclib_common::winnow::error::{AddContext, ContextError, ErrMode, StrContext, StrContextValue};
 use cpclib_common::winnow::stream::Offset;
 use cpclib_common::winnow::{self, LocatingSlice};
 
@@ -767,7 +767,7 @@ impl Value {
             ValueContent::EightBits(val) => {
                 match self.basis {
                     ValueBasis::Decimal => format!("{}", val),
-                    ValueBasis::Hexadecimal => format!("&{:X}", val),
+                    ValueBasis::Hexadecimal => format!("&{:02X}", val),
                     ValueBasis::Binary => format!("%{:b}", val)
                 }
             },
@@ -1410,14 +1410,20 @@ pub fn parse_orgams_file(input: &mut Input) -> OrgamsParseResult<Program> {
     cut_err(literal(ORGA).context(StrContext::Expected(StrContextValue::StringLiteral("ORGA"))))
         .parse_next(input)?;
 
-    // Skip rest of header (0x67 bytes total, already read 4)
-    let _header = take(0x67 - ORGA.len()).context(StrContext::Expected(StrContextValue::Description("header data"))).parse_next(input)?;
+    // Read version
+    let _version = any.context(StrContext::Expected(StrContextValue::Description("version"))).verify(|&b| b==2).parse_next(input)?;
+
+    // Read header size
+    let header_size = any.context(StrContext::Expected(StrContextValue::Description("header size"))).parse_next(input)?;
+    eprintln!("debug: header_size = {}", header_size);
+
+    // Skip rest of header (header_size bytes total, already read ORGA(4) + version(1) + header_size(1) = 6)
+    let remaining_header = header_size as usize;
+    let _header = take(remaining_header).context(StrContext::Expected(StrContextValue::Description("header data"))).parse_next(input)?;
 
     eprintln!("debug: checking SRCC");
     cut_err(literal(SRCC).context(StrContext::Expected(StrContextValue::StringLiteral("SRCc"))))
         .parse_next(input)?;
-
-    let _version = any.context(StrContext::Expected(StrContextValue::Description("version 2 expected"))).verify(|&b| b==2).parse_next(input)?;
 
     // Parse items
     eprintln!("debug: parsing items");
