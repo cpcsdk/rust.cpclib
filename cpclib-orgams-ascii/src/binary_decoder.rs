@@ -1121,6 +1121,7 @@ impl Instruction {
             match prefix {
                 IX_CODE => TABINSTRDD,
                 IY_CODE => TABINSTRFD,
+                0xED => TABINSTRED,
                 other => panic!("Unknown prefix code: {}", other),
             }
         } else {
@@ -2112,6 +2113,7 @@ fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
     match prefix {
         IX_CODE => &TABINSTRDD,
         IY_CODE => &TABINSTRFD,
+        0xED => &TABINSTRED,
         _ => panic!("Unsupported prefix: 0x{:02X}", prefix),
     }
 }
@@ -2119,11 +2121,12 @@ fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
 fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
     let b = dbg!(any.parse_next(input)?);
     
-    let (prefix, opcode, repr) = if  b == IX_CODE || b == IY_CODE {
+    let (prefix, opcode, repr) = if  b == IX_CODE || b == IY_CODE || b == 0xED {
         let prefix = b;
         let opcode = any.parse_next(input)?;
         (Some(prefix), opcode, prefix_to_table(prefix)[opcode as usize])
-    } else {
+    } 
+    else {
             // No prefix
             let prefix = None;
             let opcode = b;
