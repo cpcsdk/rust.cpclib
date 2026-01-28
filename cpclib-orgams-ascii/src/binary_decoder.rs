@@ -162,6 +162,8 @@ const EXP_BINARY_16: u8 = 0x39;
 const EXP_BINARY_CUSTOM: u8 = 0x3A;
 const EXP_BINARY_CUSTOM_LONG: u8 = 0x3B;
 
+const EXP_STRING: u8 = 0x22; // '"'
+
 const SHORT_LABEL: u8 = SHORT_LABEL_START;
 
 // Command opcodes after 0x7f
@@ -565,7 +567,8 @@ pub enum ExpressionMember {
     Space,              // 0x20
     Dollar,             // 0x24 ($)
     DoubleDollar,        // 0x44 ($$)
-    UnaryMinus(Box<ExpressionMember>)          // '#'
+    UnaryMinus(Box<ExpressionMember>),          // '#'
+    String(SizedString)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -630,6 +633,11 @@ impl Value {
 impl ExpressionMember {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         match self {
+            ExpressionMember::String(s) => {
+                let mut result = vec![EXP_STRING];
+                result.extend_from_slice(&s.bytes());
+                result
+            },
             ExpressionMember::UnaryMinus(inner) => {
                 let mut result = vec![EXP_UNARY_MINUS];
                 result.extend(inner.bytes(table));
@@ -733,6 +741,7 @@ impl Expression {
 impl ExpressionMember {
     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
+            ExpressionMember::String(s) => format!("\"{}\"", s.as_str()).into(),
             ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)).into(),
             ExpressionMember::ShortDecimal(v) => format!("{}", v).into(),
             ExpressionMember::Value(v) => v.display().into(),
@@ -1693,6 +1702,10 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
     }
     else {
         match b {
+            EXP_STRING => {
+                let s = cut_err(parse_sized_text.context(StrContext::Expected(StrContextValue::Description("String value in expression")))).parse_next(input)?;
+                Ok(ExpressionMember::String(s))
+            }
             EXP_UNARY_MINUS => {
                 let inner = cut_err(parse_expression_member.context(StrContext::Expected(StrContextValue::Description("Negated expression")))).parse_next(input)?;
                 Ok(ExpressionMember::UnaryMinus(Box::new(inner)))
