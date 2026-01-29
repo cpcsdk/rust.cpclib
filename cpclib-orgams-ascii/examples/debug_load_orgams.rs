@@ -1,5 +1,6 @@
 use std::env;
 use std::fs;
+use cpclib_common::winnow::binary::le_u16;
 use cpclib_common::winnow::{
     Parser, 
     stream::{Offset, Stream}, 
@@ -69,9 +70,16 @@ fn debug_orgams_file(input: &mut Input, groundtruth_iter: &mut Option<std::slice
     cut_err(literal(ORGA).context(StrContext::Expected(StrContextValue::StringLiteral("ORGA"))))
         .parse_next(input)?;
 
-    // Skip rest of header (0x67 bytes total, already read 4)
-    let _header = take(0x67 - ORGA.len()).parse_next(input)?;
+    let _version = cut_err(any.verify(|&b| b==2).context(StrContext::Expected(StrContextValue::Description("version  expected")))).parse_next(input)?;
 
+    let header_size = any.context(StrContext::Expected(StrContextValue::Description("header size"))).parse_next(input)? as usize;
+
+    dbg!(input[0..10].to_vec());
+    // Skip rest of header (0x67 bytes total, already read 4)
+    let _header = dbg!(take( header_size+1).parse_next(input)?);
+
+
+    dbg!(input[0..10].to_vec());
     cut_err(literal(SRCC).context(StrContext::Expected(StrContextValue::StringLiteral("SRCc"))))
         .parse_next(input)?;
 

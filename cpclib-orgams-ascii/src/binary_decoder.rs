@@ -1140,6 +1140,7 @@ impl Instruction {
                 IX_CODE => TABINSTRDD,
                 IY_CODE => TABINSTRFD,
                 0xED => TABINSTRED,
+                0xCB => TABINSTRCB,
                 other => panic!("Unknown prefix code: {}", other),
             }
         } else {
@@ -1246,7 +1247,7 @@ fn z80str_to_expressions_list(repr: &str) -> SmallVec<[ExpressionKind; 2]> {
                             self.current_line.push(':');
                         } else {
                             const INDENT_AFTER_LABEL: usize = TAB_INSTR as _;
-                            if self.col_number() <= INDENT_AFTER_LABEL {
+                            if self.col_number() < INDENT_AFTER_LABEL {
                                 self.current_line.push_str(" ".repeat(INDENT_AFTER_LABEL - self.col_number()).as_str());
                             } else {
                                 self.current_line.push(' ');
@@ -2147,6 +2148,7 @@ fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
         IX_CODE => &TABINSTRDD,
         IY_CODE => &TABINSTRFD,
         0xED => &TABINSTRED,
+        0xCB => &TABINSTRCB,
         _ => panic!("Unsupported prefix: 0x{:02X}", prefix),
     }
 }
@@ -2154,7 +2156,7 @@ fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
 fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
     let b = dbg!(any.parse_next(input)?);
     
-    let (prefix, opcode, repr) = if  b == IX_CODE || b == IY_CODE || b == 0xED {
+    let (prefix, opcode, repr) = if  b == IX_CODE || b == IY_CODE || b == 0xED || b == 0xCB {
         let prefix = b;
         let opcode = any.parse_next(input)?;
         (Some(prefix), opcode, prefix_to_table(prefix)[opcode as usize])
