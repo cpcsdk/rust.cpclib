@@ -139,13 +139,19 @@ const EXP_UNARY_MINUS: u8 = b'#';
 const EXP_LOCAL_LABEL: u8 = b'.'; 
 const EXP_OP_PLUS: u8 = 0x2B;
 const EXP_OP_MINUS: u8 = 0x2D;
-const EXP_OP_MULT: u8 = 0x2A;
+const EXP_OP_TIMES: u8 = 0x2A;
 const EXP_OP_DIV: u8 = 0x2F;
 const EXP_OP_MOD: u8 = 0x25;
 const EXP_OP_PAREN_OPEN: u8 = 0x28;
 const EXP_OP_PAREN_CLOSE: u8 = 0x29;
 
-const EXP_AND: u8 = 0x26; // '&';
+const EXP_OP_LT: u8  = b'<';
+const EXP_OP_EQ: u8  = b'=';
+const EXP_OP_GT: u8  = b'>';
+const EXP_NONE: u8 = b'?';            // no data (.byte ou .word seul)
+const EXP_OP_OR: u8  = b'@';
+
+const EXP_OP_AND: u8 = 0x26; // '&';
 
 const EXP_DECIMAL_8: u8 = 0x30; // '0'
 const EXP_DECIMAL_16: u8 = 0x31;
@@ -573,6 +579,10 @@ pub enum ExpressionMember {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
+    Or,
+    LessThan,
+    GreaterThan,
+    Equal,
     And,
     Plus,       // 0x2b
     Minus,      // 0x2d
@@ -647,14 +657,18 @@ impl ExpressionMember {
             ExpressionMember::Value(val) => val.bytes(table),
             ExpressionMember::Operator(op) => {
                 let code = match op {
-                    Operator::Plus => 0x2B,
-                    Operator::Minus => 0x2D,
-                    Operator::Multiply => 0x2A,
-                    Operator::Divide => 0x2F,
-                    Operator::Modulo => 0x25,
-                    Operator::ParenOpen => 0x28,
-                    Operator::ParenClose => 0x29,
-                    Operator::And => EXP_AND,
+                    Operator::Plus => EXP_OP_PLUS,
+                    Operator::Minus => EXP_OP_MINUS,
+                    Operator::Multiply => EXP_OP_TIMES,
+                    Operator::Divide => EXP_OP_DIV,
+                    Operator::Modulo => EXP_OP_MOD,
+                    Operator::ParenOpen => EXP_OP_PAREN_OPEN,
+                    Operator::ParenClose => EXP_OP_PAREN_CLOSE,
+                    Operator::And => EXP_OP_AND,
+                    Operator::Or => EXP_OP_OR,
+                    Operator::LessThan => EXP_OP_LT,
+                    Operator::GreaterThan => EXP_OP_GT,
+                    Operator::Equal => EXP_OP_EQ,
                 };
                 vec![code]
             },
@@ -745,7 +759,7 @@ impl ExpressionMember {
             ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)).into(),
             ExpressionMember::ShortDecimal(v) => format!("{}", v).into(),
             ExpressionMember::Value(v) => v.display().into(),
-            ExpressionMember::Operator(op) => op.to_string().into(),
+            ExpressionMember::Operator(op) => op.as_str().into(),
             ExpressionMember::LabelRef(l) => l.get(table).to_string().into(),
             ExpressionMember::LocalLabelRef(l) => format!(".{}", l.get(table)).into(),
             ExpressionMember::Space => " ".into(),
@@ -756,16 +770,20 @@ impl ExpressionMember {
 }
 
 impl Operator {
-    pub fn to_string(&self) -> String {
+    pub fn as_str(&self) -> &'static str {
         match self {
-            Operator::Plus => "+".to_string(),
-            Operator::Minus => "-".to_string(),
-            Operator::Multiply => "*".to_string(),
-            Operator::Divide => "/".to_string(),
-            Operator::Modulo => "%".to_string(),
-            Operator::ParenOpen => "[".to_string(),
-            Operator::ParenClose => "]".to_string(),
-            Operator::And => "AND".to_string(),
+            Operator::Plus => "+",
+            Operator::Minus => "-",
+            Operator::Multiply => "*",
+            Operator::Divide => "/",
+            Operator::Modulo => "%",
+            Operator::ParenOpen => "[",
+            Operator::ParenClose => "]",
+            Operator::And => "AND",
+            Operator::Or => "OR",
+            Operator::LessThan => "<",
+            Operator::GreaterThan => ">",
+            Operator::Equal => "==",
         }
     }
 }
@@ -1367,6 +1385,11 @@ fn z80str_to_expressions_list(repr: &str) -> SmallVec<[ExpressionKind; 2]> {
                             state.append_instruction_representation(repr);
                         },
 
+                        Statement::MacroUse(..) => {
+                            let repr = s.display(labels);
+                            state.append_instruction_representation(repr.into_owned());
+                        },
+
                         _ => {
                             let repr: Cow<'_, str> = s.display(labels);
                             if !repr.is_empty() {
@@ -1654,6 +1677,7 @@ fn parse_unsized_expression(input: &mut Input) -> OrgamsParseResult<Expression> 
         return parse_expression_member.map(Expression::SingleTerm).parse_next(input);
     }
 
+    dbg!("Handle multi term expression");
     let _ = any.parse_next(input)?; // Consume BEGIN
 
     let mut members = Vec::new();
@@ -1664,13 +1688,18 @@ fn parse_unsized_expression(input: &mut Input) -> OrgamsParseResult<Expression> 
             let _ = any.parse_next(input)?;
             break;
         }
-        members.push(parse_expression_member(input)?);
+        let member = cut_err(parse_expression_member.context(StrContext::Expected(StrContextValue::Description("Expression member in multi-term expression")))).parse_next(input)?;
+        dbg!(&member);
+        members.push(member);
     }
 
     Ok(Expression::MultiTerm(members))
 }
 
 fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
+
+    debug_slice(input);
+
     let b = any.parse_next(input)?;
 
     let is_local_label = b == EXP_LOCAL_LABEL;
@@ -1713,8 +1742,8 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
             }
             EXP_OP_PLUS => Ok(ExpressionMember::Operator(Operator::Plus)),
             EXP_OP_MINUS => Ok(ExpressionMember::Operator(Operator::Minus)),
-            EXP_OP_MULT => {
-                if let Ok(next_byte) =  peek(any::<_, ContextError>).parse_next(input) && next_byte == EXP_OP_MULT {
+            EXP_OP_TIMES => {
+                if let Ok(next_byte) =  peek(any::<_, ContextError>).parse_next(input) && next_byte == EXP_OP_TIMES {
                     // Star repeat operator detected
                     let mut err = ContextError::new();
                     err.push(StrContext::Expected(StrContextValue::Description("Use of '**' operator is not allowed in expressions. It is only valid in star repeat statements.")));
@@ -1728,7 +1757,11 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
             EXP_OP_PAREN_OPEN => Ok(ExpressionMember::Operator(Operator::ParenOpen)),
             EXP_OP_PAREN_CLOSE => Ok(ExpressionMember::Operator(Operator::ParenClose)),
             EXP_SPACE => Ok(ExpressionMember::Space),
-            EXP_AND => Ok(ExpressionMember::Operator(Operator::And)),
+            EXP_OP_AND => Ok(ExpressionMember::Operator(Operator::And)),
+            EXP_OP_LT => Ok(ExpressionMember::Operator(Operator::LessThan)),
+            EXP_OP_GT => Ok(ExpressionMember::Operator(Operator::GreaterThan)),
+            EXP_OP_EQ => Ok(ExpressionMember::Operator(Operator::Equal)),
+            EXP_OP_OR => Ok(ExpressionMember::Operator(Operator::Or)),
             0x24 => Ok(ExpressionMember::Dollar), // TO BE CHECKED
             0x44 => Ok(ExpressionMember::DoubleDollar), // TO BE CHECKED
             
@@ -2206,24 +2239,31 @@ fn expect_end_marker(input: &mut Input) -> OrgamsParseResult<()> {
 
 /// Parse macro call: length + name + args + endmarker
 fn parse_macro_use(input: &mut Input) -> OrgamsParseResult<Statement> {
-    let input_start = input.checkpoint();
     let length = cut_err(any).parse_next(input)? as usize;
 
-    
-    //let name = dbg!(parse_expression.parse_next(input))?;
-    let mut args: Vec<Expression> = cut_err(repeat(1.., parse_unsized_expression)).parse_next(input)?;
-    
+    debug_slice(input);
+    let input_start = input.checkpoint();
+    let name = dbg!(parse_unsized_expression.context(StrContext::Expected(StrContextValue::Description("Macro name"))).parse_next(input))?;
+    let mut args = Vec::new();
+    debug_slice(input);
+    dbg!( input.offset_from(&input_start), length);
+    while input.offset_from(&input_start) < length-1 {
+        let arg = dbg!(cut_err(parse_unsized_expression.context(StrContext::Expected(StrContextValue::Description("Macro argument")))).parse_next(input))?;
+        dbg!("Parsed macro arg:", &arg);
+        args.push(arg);
+    dbg!( input.offset_from(&input_start), length);
+    }
 
+    expect_end_marker(input)?;
     let bytes_consumed = input.offset_from(&input_start);
+    dbg!(&args);
+    dbg!("bytes_consumed =", bytes_consumed, "expected length =", length);
     if bytes_consumed != length {
         let mut err = ContextError::new();
         err.push(StrContext::Expected(StrContextValue::Description("Wrong macro length consummed")));
         return Err(ErrMode::Cut(err));
     }
 
-    expect_end_marker(input)?;
-
-    let name = args.remove(0);
 
     Ok(Statement::MacroUse(name, args))
 }
