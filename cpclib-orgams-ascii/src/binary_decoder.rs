@@ -3,20 +3,21 @@
 //! This parser uses winnow combinators and models semantic structures.
 
 use std::borrow::Cow;
-use std::ops::Deref;
 use std::fmt::{Display, Formatter};
+use std::ops::Deref;
 
-use cpclib_common::smallvec::SmallVec;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::parse;
+use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::combinator::{cut_err, eof, preceded, repeat, terminated, trace};
-use cpclib_common::winnow::error::{AddContext, ContextError, ErrMode, StrContext, StrContextValue};
+use cpclib_common::winnow::error::{
+    AddContext, ContextError, ErrMode, StrContext, StrContextValue
+};
 use cpclib_common::winnow::stream::Offset;
 use cpclib_common::winnow::{self, LocatingSlice};
-
-
-use cpclib_tokens::opcode_table::{TABINSTR, TABINSTRCB, TABINSTRDD, TABINSTRDDCB, TABINSTRFD, TABINSTRFDCB, TABINSTRED};
-
+use cpclib_tokens::opcode_table::{
+    TABINSTR, TABINSTRCB, TABINSTRDD, TABINSTRDDCB, TABINSTRED, TABINSTRFD, TABINSTRFDCB
+};
 use winnow::combinator::{alt, opt, peek, repeat_till};
 use winnow::prelude::*;
 use winnow::token::{any, literal, rest, take};
@@ -24,12 +25,10 @@ use winnow::token::{any, literal, rest, take};
 pub type Input<'a> = LocatingSlice<&'a [u8]>;
 pub type OrgamsParseResult<T> = ModalResult<T>;
 
-
 fn byte2code_naive(bytes: &[u8]) -> String {
     let mut results: Vec<Cow<'static, str>> = Vec::with_capacity(bytes.len());
     let mut was_7f = false;
     for b in bytes.iter().cloned() {
-
         let repr = if was_7f {
             was_7f = false;
             match b {
@@ -50,7 +49,7 @@ fn byte2code_naive(bytes: &[u8]) -> String {
                 CMD_BRK => "BRK".into(),
                 CMD_BRK_SET => "BRK_SET".into(),
                 CMD_RESTORE => "RESTORE".into(),
-                CMD_BANK  => "BANK".into(),
+                CMD_BANK => "BANK".into(),
                 CMD_ENDM => "ENDM".into(),
                 CMD_MACRO_USE => "MACRO_USE".into(),
                 CMD_LOAD => "LOAD".into(),
@@ -60,13 +59,14 @@ fn byte2code_naive(bytes: &[u8]) -> String {
                 CMD_SAVEA => "SAVEA".into(),
                 CMD_REPEAT => "REPEAT".into(),
 
-
-                _ => if b.is_ascii_graphic(){
-                    (b as char).to_string().into()
-                }
-                else {
-                    format!("0x7F 0x{:02X}", b).into()
-                }
+                _ => {
+                    if b.is_ascii_graphic() {
+                        (b as char).to_string().into()
+                    }
+                    else {
+                        format!("0x7F 0x{:02X}", b).into()
+                    }
+                },
             }
         }
         else {
@@ -83,12 +83,14 @@ fn byte2code_naive(bytes: &[u8]) -> String {
                 MARKER_LABEL_ADDR => "LABEL_ADDR".into(),
                 MARKER_MACRO_DEF => "MACRO_DEF".into(),
 
-                _ => if b.is_ascii_graphic(){
-                    (b as char).to_string().into()
-                }
-                else {
-                    format!("0x{:02X}", b).into()
-                }
+                _ => {
+                    if b.is_ascii_graphic() {
+                        (b as char).to_string().into()
+                    }
+                    else {
+                        format!("0x{:02X}", b).into()
+                    }
+                },
             }
         };
 
@@ -99,12 +101,19 @@ fn byte2code_naive(bytes: &[u8]) -> String {
 }
 
 fn debug_slice(bytes: &[u8]) {
-    eprintln!("debug: bytes: [{}]", bytes.iter().take(20).map(|b| format!("{:02x}", b)).join(" "));
-    eprint!("debug: codes: [{}]", byte2code_naive(&bytes[..bytes.len().min(20)]));
+    eprintln!(
+        "debug: bytes: [{}]",
+        bytes
+            .iter()
+            .take(20)
+            .map(|b| format!("{:02x}", b))
+            .join(" ")
+    );
+    eprint!(
+        "debug: codes: [{}]",
+        byte2code_naive(&bytes[..bytes.len().min(20)])
+    );
 }
-
-
-
 
 const CHUNK_MAX_SIZE: u8 = 222;
 
@@ -115,15 +124,37 @@ const MARKER_ESCAPE: u8 = 0x7F; // escape code for commands
 const MARKER_COMMENT: u8 = 0x43; // 'C' - introduces a comment
 const MARKER_ASSIGN: u8 = 0x64; // 'd' - introduces an assignment
 const MARKER_WORD: u8 = 0xD7;
-const MARKER_BYTE:u8 = 0xcf;
+const MARKER_BYTE: u8 = 0xCF;
 const MARKER_LOCAL_LABEL: u8 = 0x51;
 const MARKER_LABEL_ADDR: u8 = 0x40;
-const MARKER_MACRO_DEF: u8 = 0x6d;
+const MARKER_MACRO_DEF: u8 = 0x6D;
 
+const fn is_escaped_byte(b: u8) -> bool {
+    // Return false for known command bytes and markers (these are not instructions
+    // and should be treated as commands when following an escape), true otherwise.
+    match b {
+        // Command opcodes (escaped commands)
+    
+        MARKER_ASSIGN |
+        MARKER_BYTE |
+        MARKER_COMMENT |
+        MARKER_ESCAPE |
+        MARKER_INDENT |
+        MARKER_LABEL_ADDR |
+        MARKER_LOCAL_LABEL |
+        MARKER_MACRO_DEF |
+        MARKER_NEWLINE |
+        MARKER_WORD |
+        MARKER_BYTE |
+        0x58 
+         => true,
+        _ => false,
+    }
+}
 
 const TAB_INSTR: u8 = 10;
 const TAB_COMMAND: u8 = 6;
-const TAB_COMMENT: u8 =  24;
+const TAB_COMMENT: u8 = 24;
 
 // Label reference ranges (from ORGAMS format docs)
 const SHORT_LABEL_START: u8 = 0x60; // Short labels: 0x60-0xDF (128 labels)
@@ -136,21 +167,27 @@ const EXP_SHORT_DECIMAL_MAX_VALUE: u8 = 0x1F; // 0x00-0x1F
 
 const EXP_SPACE: u8 = 0x20;
 const EXP_UNARY_MINUS: u8 = b'#';
-const EXP_LOCAL_LABEL: u8 = b'.'; 
+const EXP_LOCAL_LABEL: u8 = b'.';
 const EXP_OP_PLUS: u8 = 0x2B;
 const EXP_OP_MINUS: u8 = 0x2D;
 const EXP_OP_TIMES: u8 = 0x2A;
 const EXP_OP_DIV: u8 = 0x2F;
 const EXP_OP_MOD: u8 = 0x25;
-const EXP_OP_PAREN_OPEN: u8 = 0x28;
-const EXP_OP_PAREN_CLOSE: u8 = 0x29;
+const EXP_OP_PAREN_OPEN: u8 = b'(';
+const EXP_OP_PAREN_CLOSE: u8 = b')';
 
-const EXP_OP_LT: u8  = b'<';
-const EXP_OP_EQ: u8  = b'=';
-const EXP_OP_GT: u8  = b'>';
-const EXP_NONE: u8 = b'?';            // no data (.byte ou .word seul)
-const EXP_OP_OR: u8  = b'@';
+const EXP_OP_LT: u8 = b'<';
+const EXP_OP_EQ: u8 = b'=';
+const EXP_OP_GT: u8 = b'>';
 
+const EXP_OP_LE: u8 = b'L';
+const EXP_OP_GE: u8 = b'M';
+const EXP_OP_NEQ: u8 = b'N';
+
+const EXP_NONE: u8 = b'?'; // no data (.byte ou .word seul)
+
+const EXP_OP_OR: u8 = b'@';
+const EXP_OP_XOR: u8 = b'!';
 const EXP_OP_AND: u8 = 0x26; // '&';
 
 const EXP_DECIMAL_8: u8 = 0x30; // '0'
@@ -190,7 +227,7 @@ const CMD_END_BIS: u8 = 0x0F;
 const CMD_BRK: u8 = 16;
 const CMD_BRK_SET: u8 = 17;
 const CMD_RESTORE: u8 = 18;
-const CMD_BANK : u8 = 19;
+const CMD_BANK: u8 = 19;
 const CMD_ENDM: u8 = 0x14; // Renamed from CMD_MACRO
 const CMD_MACRO_USE: u8 = 0x15; // 0x15 used to be called Endm in decoder2, but decoder.rs calls it MacroUse or If. Assuming unused for now.
 const CMD_LOAD: u8 = 22;
@@ -200,23 +237,20 @@ const CMD_SAVE: u8 = 25;
 const CMD_SAVEA: u8 = 26;
 const CMD_REPEAT: u8 = 0x5B;
 
-const IX_CODE: u8 = 0xdd;
-const IY_CODE: u8 = 0xfd;
-
+const IX_CODE: u8 = 0xDD;
+const IY_CODE: u8 = 0xFD;
 
 const END_MARKER: u8 = 0x41;
 
 #[inline]
 fn consume_marker(marker: u8) -> impl Fn(&mut Input) -> OrgamsParseResult<()> + 'static {
-    move |input: &mut Input| -> OrgamsParseResult<()> {
-        literal(marker).void().parse_next(input)
-    }
+    move |input: &mut Input| -> OrgamsParseResult<()> { literal(marker).void().parse_next(input) }
 }
 
 /// Main program structure
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
-    pub chunks : Vec<Chunk>,
+    pub chunks: Vec<Chunk>,
     pub labels: StringTable
 }
 
@@ -227,17 +261,18 @@ pub struct Line {
 
 impl Deref for Line {
     type Target = Vec<Item>;
+
     fn deref(&self) -> &Self::Target {
         &self.items
     }
 }
 
-
 impl Line {
     pub fn bytes(&self, labels: &StringTable) -> Vec<u8> {
-        self.items.iter()
-         .flat_map(|i| i.bytes(labels).into_iter())
-         .collect()
+        self.items
+            .iter()
+            .flat_map(|i| i.bytes(labels).into_iter())
+            .collect()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Item> {
@@ -247,9 +282,8 @@ impl Line {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chunk {
-    pub lines: Vec<Line>,
+    pub lines: Vec<Line>
 }
-
 
 impl Deref for Chunk {
     type Target = Vec<Line>;
@@ -260,10 +294,10 @@ impl Deref for Chunk {
 }
 
 impl Chunk {
-
     /// Get the bytes of the source part
     pub fn bytes(&self, labels: &StringTable) -> Vec<u8> {
-        let mut bytes: Vec<u8> = self.lines
+        let mut bytes: Vec<u8> = self
+            .lines
             .iter()
             .flat_map(|line| line.items.iter())
             .flat_map(|item| item.bytes(labels).into_iter())
@@ -276,11 +310,9 @@ impl Chunk {
     pub fn items(&self) -> impl Iterator<Item = &Item> {
         self.lines.iter().flat_map(|line| line.items.iter())
     }
-
 }
 
 impl Program {
-
     pub fn items(&self) -> impl Iterator<Item = &Item> {
         self.chunks.iter().flat_map(|chunk| chunk.items())
     }
@@ -346,9 +378,9 @@ pub enum Item {
     Label(LabelRef),
     LocalLabel(LabelRef),
     /// Macro definition
-    Macro(MacroDef),
+    MacroDef(MacroDef),
     /// Statement
-    Statement(Statement),
+    Statement(Statement)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -450,8 +482,8 @@ impl Item {
                 bytes.extend_from_slice(&label.bytes(table));
                 bytes
             },
-            Item::Macro(m) => m.bytes(table),
-            Item::Statement(s) => s.bytes(table),
+            Item::MacroDef(m) => m.bytes(table),
+            Item::Statement(s) => s.bytes(table)
         }
     }
 }
@@ -460,7 +492,7 @@ impl Item {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LabelRef {
     Short(u8),
-    Long(u8, u8),
+    Long(u8, u8)
 }
 
 impl LabelRef {
@@ -468,7 +500,7 @@ impl LabelRef {
         debug_assert!(byte >= SHORT_LABEL_START && byte <= SHORT_LABEL_END);
         LabelRef::Short(byte - SHORT_LABEL_START)
     }
-    
+
     const fn new_long_from_stream(long: u8, byte: u8) -> Self {
         debug_assert!(long >= LONG_LABEL_START && long <= 0xFF); // XXX I do not know if there is a range of values here
         LabelRef::Long(long, byte)
@@ -484,7 +516,7 @@ impl LabelRef {
     pub fn bytes(&self, _table: &StringTable) -> Vec<u8> {
         match self {
             LabelRef::Short(index) => vec![index + SHORT_LABEL_START],
-            LabelRef::Long(long, byte) => vec![*long, *byte],
+            LabelRef::Long(long, byte) => vec![*long, *byte]
         }
     }
 
@@ -535,7 +567,7 @@ impl StringTable {
                 // 0xE0 corresponds to the start of long labels.
                 // 0x60 - 0xDF are short labels (indices 0 - 127)
                 // So index starts at 128
-                let idx = 128 +(((*long as usize) << 8) | (*byte as usize)) - 0xE000 ;
+                let idx = 128 + (((*long as usize) << 8) | (*byte as usize)) - 0xE000;
                 idx
             }
         };
@@ -550,7 +582,24 @@ pub enum Expression {
     SingleTerm(ExpressionMember)
 }
 
-
+impl Expression {
+    /// serve for byte/word to count the number of elements to convert in bytes or word
+    /// globally 1 expect for strings
+    pub fn nb_elements(&self) -> usize {
+        dbg!(&self);
+        match self {
+            Expression::SingleTerm(ExpressionMember::String(s)) => s.len(),
+            Expression::MultiTerm(members) => {
+                match members.first() {
+                    Some(ExpressionMember::String(s)) => s.len(),
+                    Some(_) => 1,
+                    _ => 0
+                }
+            },
+            _ => 1
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SizedExpression(Expression);
@@ -568,21 +617,29 @@ pub enum ExpressionMember {
     ShortDecimal(u8), // number between 0-31
     Value(Value),     // decimal/hexadecimal/binary 8/16/custom
     Operator(Operator),
-    LabelRef(LabelRef), // Label reference 0x60-0xFF
-    LocalLabelRef(LabelRef), // Local label reference starting with '.'
-    Space,              // 0x20
-    Dollar,             // 0x24 ($)
-    DoubleDollar,        // 0x44 ($$)
-    UnaryMinus(Box<ExpressionMember>),          // '#'
-    String(SizedString)
+    LabelRef(LabelRef),                // Label reference 0x60-0xFF
+    LocalLabelRef(LabelRef),           // Local label reference starting with '.'
+    Space,                             // 0x20
+    Dollar,                            // 0x24 ($)
+    DoubleDollar,                      // 0x44 ($$)
+    UnaryMinus(Box<ExpressionMember>), // '#'
+    String(SizedString),
+    ParenthesizedExpression(Vec<ExpressionMember>)
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
     Or,
+    Xor,
+
     LessThan,
     GreaterThan,
     Equal,
+
+    LessEqual,    // 'L'
+    GreaterEqual, // 'M'
+    NotEqual,     //
+
     And,
     Plus,       // 0x2b
     Minus,      // 0x2d
@@ -657,18 +714,22 @@ impl ExpressionMember {
             ExpressionMember::Value(val) => val.bytes(table),
             ExpressionMember::Operator(op) => {
                 let code = match op {
-                    Operator::Plus => EXP_OP_PLUS,
-                    Operator::Minus => EXP_OP_MINUS,
-                    Operator::Multiply => EXP_OP_TIMES,
-                    Operator::Divide => EXP_OP_DIV,
-                    Operator::Modulo => EXP_OP_MOD,
-                    Operator::ParenOpen => EXP_OP_PAREN_OPEN,
-                    Operator::ParenClose => EXP_OP_PAREN_CLOSE,
                     Operator::And => EXP_OP_AND,
-                    Operator::Or => EXP_OP_OR,
-                    Operator::LessThan => EXP_OP_LT,
-                    Operator::GreaterThan => EXP_OP_GT,
+                    Operator::Divide => EXP_OP_DIV,
                     Operator::Equal => EXP_OP_EQ,
+                    Operator::GreaterEqual => EXP_OP_GE,
+                    Operator::GreaterThan => EXP_OP_GT,
+                    Operator::LessEqual => EXP_OP_LE,
+                    Operator::LessThan => EXP_OP_LT,
+                    Operator::Minus => EXP_OP_MINUS,
+                    Operator::Modulo => EXP_OP_MOD,
+                    Operator::Multiply => EXP_OP_TIMES,
+                    Operator::NotEqual => EXP_OP_NEQ,
+                    Operator::Or => EXP_OP_OR,
+                    Operator::ParenClose => EXP_OP_PAREN_CLOSE,
+                    Operator::ParenOpen => EXP_OP_PAREN_OPEN,
+                    Operator::Plus => EXP_OP_PLUS,
+                    Operator::Xor => EXP_OP_XOR
                 };
                 vec![code]
             },
@@ -681,6 +742,13 @@ impl ExpressionMember {
             ExpressionMember::Space => vec![0x20],
             ExpressionMember::Dollar => vec![0x24],
             ExpressionMember::DoubleDollar => vec![0x44],
+            ExpressionMember::ParenthesizedExpression(expr) => {
+                let mut bytes = vec![EXP_OP_PAREN_OPEN];
+                let expr = expr.iter().map(|e| e.bytes(table)).flatten();
+                bytes.extend(expr);
+                bytes.push(EXP_OP_PAREN_CLOSE);
+                bytes
+            }
         }
     }
 }
@@ -708,7 +776,7 @@ impl Expression {
 
 impl SizedExpression {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
-        let mut result= self.0.bytes(table);
+        let mut result = self.0.bytes(table);
         // Prepend size byte
         let size = result.len() as u8;
         let mut with_size = vec![size];
@@ -720,14 +788,14 @@ impl SizedExpression {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Assign {
     pub label: LabelRef,
-    pub expression: SizedExpression,
+    pub expression: SizedExpression
 }
 
 impl Assign {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(MARKER_ASSIGN);
-        
+
         bytes
             .into_iter()
             .chain(
@@ -740,12 +808,16 @@ impl Assign {
     }
 }
 
-
 impl Expression {
     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
             Expression::MultiTerm(members) => {
-                members.iter().map(|m| m.display(table)).collect::<Vec<_>>().join("").into()
+                members
+                    .iter()
+                    .map(|m| m.display(table))
+                    .collect::<Vec<_>>()
+                    .join("")
+                    .into()
             },
             Expression::SingleTerm(member) => member.display(table)
         }
@@ -764,7 +836,10 @@ impl ExpressionMember {
             ExpressionMember::LocalLabelRef(l) => format!(".{}", l.get(table)).into(),
             ExpressionMember::Space => " ".into(),
             ExpressionMember::Dollar => "$".into(),
-            ExpressionMember::DoubleDollar => "$$".into()
+            ExpressionMember::DoubleDollar => "$$".into(),
+            ExpressionMember::ParenthesizedExpression(expr) => {
+                format!("[{}]", expr.iter().map(|e| e.display(table)).collect::<Vec<_>>().join("")).into()
+            }
         }
     }
 }
@@ -772,25 +847,30 @@ impl ExpressionMember {
 impl Operator {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Operator::Plus => "+",
-            Operator::Minus => "-",
-            Operator::Multiply => "*",
-            Operator::Divide => "/",
-            Operator::Modulo => "%",
-            Operator::ParenOpen => "[",
-            Operator::ParenClose => "]",
             Operator::And => "AND",
-            Operator::Or => "OR",
-            Operator::LessThan => "<",
-            Operator::GreaterThan => ">",
+            Operator::Divide => "/",
             Operator::Equal => "==",
+            Operator::GreaterEqual => ">=",
+            Operator::GreaterThan => ">",
+            Operator::LessEqual => "<=",
+            Operator::LessThan => "<",
+            Operator::Minus => "-",
+            Operator::Modulo => "MOD",
+            Operator::Multiply => "*",
+            Operator::NotEqual => "!=",
+            Operator::Or => "OR",
+            Operator::ParenClose => "]",
+            Operator::ParenOpen => "[",
+            Operator::Plus => "+",
+            Operator::Xor => "XOR",
+            Operator::Xor => "XOR"
         }
     }
 }
 
 impl Value {
     pub fn display(&self) -> String {
-         match &self.content {
+        match &self.content {
             ValueContent::EightBits(val) => {
                 match self.basis {
                     ValueBasis::Decimal => format!("{}", val),
@@ -805,51 +885,49 @@ impl Value {
                     ValueBasis::Binary => format!("%{:b}", val)
                 }
             },
-            ValueContent::Custom(_bytes) => {
-                 String::from("<custom>")
-            }
-         }
+            ValueContent::Custom(_bytes) => String::from("<custom>")
+        }
     }
 }
 
 impl Assign {
     pub fn display(&self, table: &StringTable) -> String {
-        format!("{} = {}", self.label.get(table), self.expression.display(table))
+        format!(
+            "{} = {}",
+            self.label.get(table),
+            self.expression.display(table)
+        )
     }
 }
 
 impl Item {
     pub fn display(&self, table: &StringTable) -> String {
-         match self {
+        match self {
             Item::Comment(text) => format!(";{}", text.as_str()),
             Item::NewLine => "\n".to_string(),
             Item::Indent(count) => " ".repeat(count.0 as usize),
             Item::Assign(assign) => assign.display(table),
             Item::Label(label) => format!("{}", label.get(table)),
             Item::LocalLabel(label) => format!("{}", label.get(table)),
-            Item::Macro(m) => m.display(table),
-            Item::Statement(s) => s.display(table).into_owned(),
+            Item::MacroDef(m) => m.display(table),
+            Item::Statement(s) => s.display(table).into_owned()
         }
     }
 }
-
-
-
-
 
 /// Macro definition
 #[derive(Debug, Clone, PartialEq)]
 pub struct MacroDef {
     pub def_block_len: u8, // TODO do not store it but recompute on the fly
     pub name: LabelRef,
-    pub params: Vec<LabelRef>,
+    pub params: Vec<LabelRef>
 }
 
 impl MacroDef {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut content = Vec::new();
         content.extend_from_slice(&self.name.bytes(table));
-        
+
         for param in &self.params {
             content.extend_from_slice(&param.bytes(table));
         }
@@ -858,24 +936,25 @@ impl MacroDef {
         // The original parser saw 0x41 as separator.
         // If we strictly recompute:
         let computed_len = content.len() as u8;
-        
+
         // If we want to be "pure", we use computed_len.
         // But to pass tests requiring exact binary reconstruction of existing files that might have padding/separators:
         let mut bytes = Vec::new();
         bytes.push(MARKER_MACRO_DEF);
-        
+
         if self.def_block_len > computed_len {
-             bytes.push(self.def_block_len);
-             bytes.extend_from_slice(&content);
-             // Fill gap. END_MARKER was the observed separator.
-             for _ in 0..(self.def_block_len - computed_len) {
-                 bytes.push(END_MARKER); 
-             }
-        } else {
-             bytes.push(computed_len);
-             bytes.extend_from_slice(&content);
+            bytes.push(self.def_block_len);
+            bytes.extend_from_slice(&content);
+            // Fill gap. END_MARKER was the observed separator.
+            for _ in 0..(self.def_block_len - computed_len) {
+                bytes.push(END_MARKER);
+            }
         }
-        
+        else {
+            bytes.push(computed_len);
+            bytes.extend_from_slice(&content);
+        }
+
         bytes
     }
 
@@ -883,13 +962,16 @@ impl MacroDef {
         let name = self.name.get(table);
         if self.params.is_empty() {
             format!("MACRO {}", name)
-        } else {
+        }
+        else {
             let mut params = String::new();
-            for p in &self.params {
-                params.push(' ');
-                params.push_str(&p.get(table));
-            }
-            format!("MACRO {}{}", name, params)
+            let params = self
+                .params
+                .iter()
+                .map(|p| p.get(table))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("MACRO {} {}", name, params)
         }
     }
 }
@@ -906,29 +988,36 @@ pub enum Statement {
     Ent(SizedExpression),
     Fill(SizedExpression, SizedExpression),
     If(SizedExpression),
-    Import(String, bool), 
+    Import(String, bool),
     Instruction(Instruction),
     MacroUse(Expression, Vec<Expression>),
     Org(SizedExpression),
     Org2(SizedExpression, SizedExpression),
     RawString(String),
     Skip(SizedExpression),
-    StarRepeat( Box<SizedExpression>, Box<Item>),
+    StarRepeat(Box<SizedExpression>, Box<Item>),
     StorePcInstr, // hidden instruction
-    StorePcLine, // hidden instruction
-    Word(Vec<Expression>),
+    StorePcLine,  // hidden instruction
+    Word(Vec<Expression>)
 }
 
 fn bytes_for_word_or_byte(exprs: &[Expression], is_word: bool, table: &StringTable) -> Vec<u8> {
-    
     let unit_size: usize = if is_word { 2 } else { 1 };
-    let unit_marker: u8= if is_word { MARKER_WORD } else { MARKER_BYTE };
+    let unit_marker: u8 = if is_word { MARKER_WORD } else { MARKER_BYTE };
 
-    let exprs = exprs.iter().flat_map(|expr| expr.bytes(table)).collect::<Vec<u8>>();
+    let directive_len = exprs
+        .iter()
+        .map(|expr| dbg!(expr.nb_elements()))
+        .sum::<usize>() as u8;
+    let directive_len = directive_len.max(1) * unit_size as u8;
+
+    let exprs = exprs
+        .iter()
+        .flat_map(|expr| expr.bytes(table))
+        .collect::<Vec<u8>>();
     let exprs_len = exprs.len() as u8;
-    let directive_len = (1.max(exprs.len())*unit_size) as u8;
 
-    let mut bytes = Vec::with_capacity(1+1+1+exprs_len as usize+1);
+    let mut bytes = Vec::with_capacity(1 + 1 + 1 + exprs_len as usize + 1);
     bytes.push(unit_marker);
     bytes.push(exprs_len + 2);
     bytes.push(directive_len);
@@ -947,14 +1036,15 @@ impl Statement {
             },
             Statement::Byte(exprs) => {
                 bytes.extend_from_slice(&bytes_for_word_or_byte(exprs, false, table));
-            }
+            },
             Statement::Word(exprs) => {
                 bytes.extend_from_slice(&bytes_for_word_or_byte(exprs, true, table));
-            }
+            },
             Statement::If(condition) => {
+                let condition = condition.bytes(table);
                 bytes.push(MARKER_ESCAPE);
                 bytes.push(CMD_IF);
-                bytes.extend_from_slice(&condition.bytes(table));
+                bytes.extend_from_slice(&condition);
             },
             Statement::Else => {
                 bytes.push(MARKER_ESCAPE);
@@ -1017,14 +1107,13 @@ impl Statement {
             },
             Statement::StorePcInstr => {
                 bytes.push(MARKER_ESCAPE);
-                bytes.push(CMD_STORE_PC_INSTR); 
-                
+                bytes.push(CMD_STORE_PC_INSTR);
             },
             Statement::StorePcLine => {
                 bytes.push(MARKER_ESCAPE);
-                bytes.push(CMD_STORE_PC_LINE); 
+                bytes.push(CMD_STORE_PC_LINE);
             },
-            
+
             Statement::StarRepeat(exprs, token) => {
                 bytes.push(CMD_REPEAT);
                 bytes.extend_from_slice(&exprs.bytes(table));
@@ -1056,28 +1145,39 @@ impl Statement {
     pub fn display<'a>(&'a self, table: &StringTable) -> Cow<'a, str> {
         match self {
             Statement::Brk => "BRK".into(),
-            Statement::If(expr) => format!("IF {}", expr.display(table)).into(),
+            Statement::If(expr) => {
+                let cond = expr.display(table);
+                format!("IF {}", cond).into()
+            },
             Statement::Else => "ELSE".into(),
             Statement::End => "END".into(),
             Statement::EndBis => "".into(),
-            Statement::EndMacro => "ENDM".into(), 
+            Statement::EndMacro => "ENDM".into(),
             Statement::Fill(count_expr, value_expr) => {
-                format!("FILL {},{}", count_expr.display(table), value_expr.display(table)).into()
+                format!(
+                    "FILL {},{}",
+                    count_expr.display(table),
+                    value_expr.display(table)
+                )
+                .into()
             },
             Statement::Import(s, escaped) => {
                 if *escaped && s.starts_with('"') && s.len() >= 3 {
                     // Start is " + user number
                     // End is A (maybe access rights/encoding ?)
-                    let stripped = &s[2..s.len()-1];
+                    let stripped = &s[2..s.len() - 1];
                     format!("IMPORT \"{}\"", stripped).into()
-                } else {
+                }
+                else {
                     format!("IMPORT \"{}\"", s).into()
                 }
             },
             Statement::RawString(s) => s.as_str().into(),
             Statement::Ent(e) => format!("ENT {}", e.display(table)).into(),
             Statement::Org(e) => format!("ORG {}", e.display(table)).into(),
-            Statement::Org2(e1, e2) => format!("ORG {},{}", e1.display(table), e2.display(table)).into(),
+            Statement::Org2(e1, e2) => {
+                format!("ORG {},{}", e1.display(table), e2.display(table)).into()
+            },
             Statement::Skip(e) => format!("SKIP {}", e.display(table)).into(),
             Statement::Byte(exprs) => {
                 let exprs = exprs.iter().map(|e| e.display(table)).join(",");
@@ -1085,29 +1185,29 @@ impl Statement {
             },
             Statement::Word(exprs) => {
                 format!("WORD {}", exprs.iter().map(|e| e.display(table)).join(",")).into()
-            }
+            },
             Statement::StorePcInstr | Statement::StorePcLine => {
                 // norepresentation is expected
                 "".into()
             },
             Statement::StarRepeat(expr, item) => {
-                format!("{} ** {}",  expr.display(table), item.display(table)).into()
+                format!("{} ** {}", expr.display(table), item.display(table)).into()
             },
             Statement::MacroUse(name, args) => {
-                //let name_str = name.get(table).to_string();
+                // let name_str = name.get(table).to_string();
                 let name_str = name.display(table);
-                let args_str = args.iter().map(|e| e.display(table)).collect::<Vec<_>>().join(",");
+                let args_str = args
+                    .iter()
+                    .map(|e| e.display(table))
+                    .collect::<Vec<_>>()
+                    .join(",");
 
                 format!("{}({})", name_str, args_str).into()
             },
-            Statement::Instruction(instr) => {
-                instr.display(table).into()
-            }
-            
+            Statement::Instruction(instr) => instr.display(table).into()
         }
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Instruction {
@@ -1116,9 +1216,8 @@ pub struct Instruction {
     // opcode of the instruction. Can explicitely encode operands
     pub opcode: u8,
     // operands as expressions
-    pub coded_operands: Vec<SizedExpression>,
+    pub coded_operands: Vec<SizedExpression>
 }
-
 
 impl Instruction {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
@@ -1127,6 +1226,13 @@ impl Instruction {
         if let Some(prefix) = self.prefix {
             bytes.push(prefix);
         }
+        else {
+            if is_escaped_byte(self.opcode) {
+                // escaped opcode
+                bytes.push(MARKER_ESCAPE);
+            }
+        }
+
         bytes.push(self.opcode);
         for expr in &self.coded_operands {
             bytes.extend_from_slice(&expr.bytes(table));
@@ -1141,9 +1247,10 @@ impl Instruction {
                 IY_CODE => TABINSTRFD,
                 0xED => TABINSTRED,
                 0xCB => TABINSTRCB,
-                other => panic!("Unknown prefix code: {}", other),
+                other => panic!("Unknown prefix code: {}", other)
             }
-        } else {
+        }
+        else {
             TABINSTR
         };
 
@@ -1154,14 +1261,28 @@ impl Instruction {
                 let expr_str = self.coded_operands[i].display(table);
                 result.replace_range(pos..pos + 4, &expr_str);
                 i += 1;
-            } else if let Some(pos) = result.find("nn") {
+            }
+            else if let Some(pos) = result.find("nn") {
                 let expr_str = self.coded_operands[i].display(table);
                 result.replace_range(pos..pos + 2, &expr_str);
                 i += 1;
-            } else {
+            }
+            else {
+                assert_eq!(i, 0);
+                if self.prefix == Some(0xCB) && self.opcode == 0xc6 {
+                    result = result.replace("0", &self.coded_operands[i].display(table));
+                } else {
+                    unimplemented!("Too many coded operands for instruction display");
+                }
                 break;
             }
         }
+
+        result = result
+            .replace("ix+0", "ix")
+            .replace("iy+0", "iy")
+            .replace("ex af,af'", "ex af,af")
+            .replace("sbc a,", "sbc ");
         result
     }
 }
@@ -1179,241 +1300,303 @@ fn z80str_to_expressions_list(repr: &str) -> SmallVec<[ExpressionKind; 2]> {
         if repr[i..].starts_with("nnnn") {
             kinds.push(ExpressionKind::SixteenBits);
             i += 4;
-        } else if repr[i..].starts_with("nn") {
+        }
+        else if repr[i..].starts_with("nn") {
             kinds.push(ExpressionKind::EightBits);
             i += 2;
-        } else {
+        }
+        else {
             i += 1;
         }
     }
     kinds
 }
 
+pub struct DisplayState<'f, 'g> {
+    pub(crate) f: Option<&'f mut std::fmt::Formatter<'g>>,
+    pub(crate) current_line: String,
+    pub(crate) line_number: usize,
+    pub(crate) next_comment_requires_alignment: bool,
+    pub(crate) previous_was_label: bool,
+    pub(crate) previous_was_instruction: bool,
+    pub(crate) last_generated_line: Option<String>
+}
 
+impl<'f, 'g> DisplayState<'f, 'g> {
+    pub fn new(f: Option<&'f mut std::fmt::Formatter<'g>>) -> Self {
+        Self {
+            f,
+            current_line: String::new(),
+            line_number: 1,
+            next_comment_requires_alignment: false,
+            previous_was_label: false,
+            previous_was_instruction: false,
+            last_generated_line: None
+        }
+    }
 
-        pub struct DisplayState<'f, 'g> {
-            pub(crate) f: Option<&'f mut std::fmt::Formatter<'g>>,
-            pub(crate) current_line: String,
-            pub(crate) line_number: usize,
-            pub(crate) next_comment_requires_alignment: bool,
-            pub(crate) previous_was_label: bool,
-            pub(crate) last_generated_line: Option<String>
+    pub fn last_line(&self) -> Option<&str> {
+        self.last_generated_line.as_deref()
+    }
+
+    pub fn line_number(&self) -> usize {
+        self.line_number
+    }
+}
+
+impl<'f, 'g> DisplayState<'f, 'g> {
+    fn emit_line(&mut self) -> std::fmt::Result {
+        if let Some(f) = self.f.as_mut() {
+            write!(f, "{}\r\n", self.current_line)?;
         }
 
-        impl<'f, 'g> DisplayState<'f, 'g> {
-            pub fn new(f: Option<&'f mut std::fmt::Formatter<'g>>) -> Self {
-            Self {
-                f,
-                current_line: String::new(),
-                line_number: 1,
-                next_comment_requires_alignment: false,
-                previous_was_label: false,
-                last_generated_line: None,
-            }
-            }
+        self.last_generated_line = Some(self.current_line.clone());
+        self.current_line.clear();
+        self.line_number += 1;
+        self.next_comment_requires_alignment = false;
+        self.previous_was_label = false;
+        self.previous_was_instruction = false;
+        Ok(())
+    }
 
-            pub fn last_line(&self) -> Option<&str> {
-                self.last_generated_line.as_deref()
+    fn auto_format(&mut self, is_instruction: bool) {
+        if self.current_line.is_empty() {
+            let nb_tabs = if is_instruction {
+                TAB_INSTR
             }
-
-            pub fn line_number(&self) -> usize {
-                self.line_number
+            else {
+                TAB_COMMAND
+            };
+            for _ in 0..nb_tabs {
+                self.current_line.push(' ');
             }
         }
-
-        impl<'f,'g>  DisplayState<'f,'g> {
-            fn emit_line(&mut self) -> std::fmt::Result {
-                if let Some(f) = self.f.as_mut() {
-                    write!(f, "{}\r\n", self.current_line)?;
+        else if !self.has_only_indents() {
+            if self.previous_was_instruction {
+                self.current_line.push(':');
+            }
+            else if !self.current_line.ends_with(' ') {
+                if !self.previous_was_label {
+                    self.current_line.push(':');
                 }
-
-                self.last_generated_line = Some(self.current_line.clone());
-                self.current_line.clear();
-                self.line_number += 1;
-                self.next_comment_requires_alignment = false;
-                self.previous_was_label = false;
-                Ok(())
-            }
-
-            fn auto_format(&mut self, is_instruction: bool) {
-                if self.current_line.is_empty() {
-                    let nb_tabs = if is_instruction { TAB_INSTR } else { TAB_COMMAND };
-                    for _ in 0..nb_tabs {
+                else {
+                    let indent_after_label: usize = if is_instruction {
+                        TAB_INSTR as _
+                    }
+                    else {
+                        TAB_COMMAND as _
+                    };
+                    if self.col_number() < indent_after_label {
+                        self.current_line
+                            .push_str(" ".repeat(indent_after_label - self.col_number()).as_str());
+                    }
+                    else {
                         self.current_line.push(' ');
                     }
-                } else if !self.has_only_indents() {
-                    if !self.current_line.ends_with(' ') {
-                        if !self.previous_was_label{
-                            self.current_line.push(':');
-                        } else {
-                            const INDENT_AFTER_LABEL: usize = TAB_INSTR as _;
-                            if self.col_number() < INDENT_AFTER_LABEL {
-                                self.current_line.push_str(" ".repeat(INDENT_AFTER_LABEL - self.col_number()).as_str());
-                            } else {
-                                self.current_line.push(' ');
-                            }
-                        }
-                    }
                 }
             }
+        }
+    }
 
-            
-            fn append_instruction_representation(&mut self, s: String) {
-                self.append_token_or_instruction_representation(true, s);
+    fn append_instruction_representation(&mut self, s: String) {
+        self.append_token_or_instruction_representation(true, s);
+    }
+
+    fn append_token_representation(&mut self, s: String) {
+        self.append_token_or_instruction_representation(false, s);
+    }
+
+    fn append_token_or_instruction_representation(&mut self, is_instruction: bool, s: String) {
+        if self.previous_was_label
+            && (s.starts_with("WORD") || s.starts_with("BYTE") || s.starts_with("SKIP"))
+        {
+            let indent_after_label: usize = TAB_COMMAND as _;
+            if self.col_number() < indent_after_label {
+                self.current_line
+                    .push_str(" ".repeat(indent_after_label - self.col_number()).as_str());
             }
-
-            fn append_token_representation(&mut self, s: String) {
-                self.append_token_or_instruction_representation(false, s);
+            else {
+                self.current_line.push(' ');
             }
+        }
+        else if !self.current_line.is_empty()
+            && (s.starts_with("WORD") || s.starts_with("BYTE") || s.starts_with("SKIP"))
+        {
+            dbg!(&s, self.previous_was_instruction, self.previous_was_label);
+            if !self.previous_was_label {
+                self.current_line.push(':');
+            }
+            else {
+                self.current_line.push(' ')
+            }
+        }
+        else if !s.starts_with(' ') {
+            // I wonder if it is a hack
+            self.auto_format(is_instruction);
+        }
+        self.append_string_no_indent(s);
+        self.previous_was_label = false;
+        self.previous_was_instruction = is_instruction;
+    }
 
-            fn append_token_or_instruction_representation(&mut self, is_instruction: bool, s: String) {
-                if !self.current_line.is_empty() && (s.starts_with("WORD") || s.starts_with("BYTE") || s.starts_with("SKIP")){
-                    self.current_line.push(' ')
-                } else if !s.starts_with(' ') {
-                    // I wonder if it is a hack
-                    self.auto_format(is_instruction); 
+    fn append_comment(&mut self, c: &str) -> std::fmt::Result {
+        if (self.has_only_indents() || self.is_empty()) && !self.next_comment_requires_alignment {
+            // nothing to do
+        }
+        else {
+            // handle some indentation
+            let current_line_len = self.col_number();
+            let indent = if current_line_len < TAB_COMMENT as usize {
+                format!("{}", " ".repeat(TAB_COMMENT as usize - current_line_len))
+            }
+            else {
+                " ".into()
+            };
+            self.append_string_no_indent(indent);
+        }
+
+        self.append_string_no_indent(format!(";{}", c));
+        self.emit_line()
+    }
+
+    fn append_label(&mut self, label: &str) {
+        self.append_string_no_indent(label.to_string());
+        self.previous_was_label = true;
+        self.previous_was_instruction = false;
+    }
+
+    /// the string already has its indentation. maybe it has to change
+    fn append_assign(&mut self, assignment: &str) {
+        self.append_string_next_comment_aligned(assignment.to_string());
+        self.previous_was_label = false;
+        self.previous_was_instruction = false;
+    }
+
+    fn append_string_no_indent(&mut self, s: String) {
+        self.current_line.push_str(&s);
+    }
+
+    fn append_string_next_comment_aligned(&mut self, s: String) {
+        self.append_string_no_indent(s);
+        self.next_comment_requires_alignment = true;
+    }
+
+    fn col_number(&self) -> usize {
+        self.current_line.len()
+    }
+
+    fn has_only_indents(&self) -> bool {
+        self.current_line.chars().all(|c| c == ' ')
+    }
+
+    fn is_empty(&self) -> bool {
+        self.current_line.is_empty()
+    }
+
+    pub fn render_items<'i>(
+        &mut self,
+        items: impl IntoIterator<Item = &'i Item>,
+        labels: &StringTable
+    ) -> std::fmt::Result {
+        for item in items {
+            self.render_item(item, labels)?;
+        }
+        Ok(())
+    }
+
+    pub fn render_item(&mut self, item: &Item, labels: &StringTable) -> std::fmt::Result {
+        let state = self;
+        match item {
+            Item::Comment(comment) => {
+                let comment = comment.as_str();
+                state.append_comment(comment)?;
+            },
+            Item::NewLine => {
+                state.emit_line()?;
+            },
+            Item::Indent(count) => {
+                state.append_string_no_indent(" ".repeat(count.0 as usize));
+            },
+            Item::Assign(assign) => {
+                let label = labels
+                    .label(&assign.label)
+                    .unwrap_or(format!("<unknown:{:?}>", assign.label));
+                let expr_repr = assign.expression.display(labels);
+
+                // Heuristic: Left padding for short labels
+                let label_len = label.len();
+                let repr = if label_len < 5 {
+                    format!("{}{} = {}", label, " ".repeat(5 - label_len), expr_repr)
                 }
-                self.append_string_no_indent(s);
-                self.previous_was_label = false;
-            }
+                else {
+                    format!("{} = {}", label, expr_repr)
+                };
+                state.append_assign(&repr);
+            },
+            Item::Label(label) => {
+                let label_str = label.get(labels);
+                state.append_label(label_str.as_str());
+            },
+            Item::LocalLabel(label) => {
+                let label_str = format!(".{}", label.get(labels));
+                state.append_label(label_str.as_str());
+            },
+            Item::MacroDef(m) => {
+                let repr = m.display(labels);
+                state.append_token_representation(repr);
+            },
+            Item::Statement(s) => {
+                match s {
+                    Statement::RawString(s) => {
+                        state.append_string_no_indent(s.clone());
+                    },
 
-            fn append_comment(&mut self, c: &str) -> std::fmt::Result {
-              if (self.has_only_indents() || self.is_empty()) && !self.next_comment_requires_alignment{
-                        // nothing to do
-                    } else {
-                        // handle some indentation
-                         let current_line_len = self.col_number();
-                         let indent = if current_line_len < TAB_COMMENT as usize {
-                             format!("{}", " ".repeat(TAB_COMMENT as usize - current_line_len))
-                         } else {
-                             " ".into()
-                         };
-                         self.append_string_no_indent(indent);
-                    }
+                    Statement::Instruction(ins) => {
+                        let repr = ins.display(labels);
+                        state.append_instruction_representation(repr);
+                    },
 
-                self.append_string_no_indent(format!(";{}", c));
-                self.emit_line()
-              }
-
-            fn append_label(&mut self, label: &str) {
-                self.append_string_no_indent(label.to_string());
-                self.previous_was_label = true;
-            }
-
-            /// the string already has its indentation. maybe it has to change
-            fn append_assign(&mut self, assignment: &str)  {
-                self.append_string_next_comment_aligned(assignment.to_string());
-                self.previous_was_label = false;
-            }
-
-            fn append_string_no_indent(&mut self, s: String) {
-                self.current_line.push_str(&s);
-            }
-            fn append_string_next_comment_aligned(&mut self, s: String) {
-                self.append_string_no_indent(s);
-                self.next_comment_requires_alignment = true;
-            }
-
-            fn col_number(&self) -> usize {
-                self.current_line.len()
-            }
-
-            fn has_only_indents(&self) -> bool {
-                self.current_line.chars().all(|c| c == ' ')
-            }
-
-            fn is_empty(&self) -> bool {
-                self.current_line.is_empty()
-            }
-
-            pub fn render_items<'i>(&mut self, items : impl IntoIterator<Item=&'i Item>, labels: &StringTable) -> std::fmt::Result {
-                for item in items {
-                    self.render_item(item, labels)?;
-                }
-                Ok(())
-            }
-
-        pub fn render_item(&mut self, item: &Item, labels: &StringTable) -> std::fmt::Result {
-
-            let state = self;
-            match item {
-                Item::Comment(comment) => {
-                    let comment = comment.as_str();
-                    state.append_comment(comment)?;
-                },
-                Item::NewLine => {
-                    state.emit_line()?;
-                },
-                Item::Indent(count) => {
-                    state.append_string_no_indent(" ".repeat(count.0 as usize));
-                },
-                Item::Assign(assign) => {
-                    let label = labels.label(&assign.label).unwrap_or(format!("<unknown:{:?}>", assign.label));
-                    let expr_repr = assign.expression.display(labels);
-                    
-                    // Heuristic: Left padding for short labels
-                    let label_len = label.len();
-                    let repr = if label_len < 5 {
-                         format!("{}{} = {}", label, " ".repeat(5 - label_len), expr_repr)
-                    } else {
-                         format!("{} = {}", label, expr_repr)
-                    };  
-                    state.append_assign(&repr);
-
-                },
-                Item::Label(label) => {
-                    let label_str = label.get(labels);
-                    state.append_label(label_str.as_str());
-                },
-                Item::LocalLabel(label) => {
-                    let label_str = format!(".{}", label.get(labels));
-                    state.append_label(label_str.as_str());
-
-                },
-                Item::Macro(m) => {
-                    let repr = m.display(labels);
-                    state.append_token_representation(repr);
-                },
-                Item::Statement(s) => {
-                    match s {
-
-                        Statement::RawString(s) => {
-                            state.append_string_no_indent(s.clone());
-                        },
-
-                        Statement::Instruction(ins) => {
-                            let repr = ins.display(labels);
-                            state.append_instruction_representation(repr);
-                        },
-
-                        Statement::MacroUse(..) => {
-                            let repr = s.display(labels);
+                    Statement::If(..)
+                    | Statement::End
+                    | Statement::Import(..)
+                    | Statement::Org(..)
+                    | Statement::Else
+                    | Statement::EndMacro
+                    | Statement::Brk
+                    | Statement::Word(..)
+                    | Statement::Fill(..)
+                    | Statement::Byte(..)
+                    | Statement::Org(..)
+                    | Statement::Org2(..)
+                    | Statement::Skip(..) => {
+                        let repr = s.display(labels);
+                        state.append_token_representation(repr.into_owned());
+                    },
+                    //                        Statement::MacroUse(..) | Statement::StarRepeat(..) => {
+                    // let repr = s.display(labels);
+                    // state.append_instruction_representation(repr.into_owned());
+                    // },
+                    _ => {
+                        let repr: Cow<'_, str> = s.display(labels);
+                        if !repr.is_empty() {
+                            //                              state.append_token_representation(repr.into_owned());
                             state.append_instruction_representation(repr.into_owned());
-                        },
-
-                        _ => {
-                            let repr: Cow<'_, str> = s.display(labels);
-                            if !repr.is_empty() {
-                                state.append_token_representation(repr.into_owned());
-                            }
                         }
                     }
-                },
-
-            }
-                Ok(())
-        }
-        }
-
-        impl<'f, 'g> Drop for DisplayState<'f, 'g> {
-            fn drop(&mut self) {
-                if !self.current_line.is_empty() {
-                    self.emit_line();
                 }
             }
         }
+        Ok(())
+    }
+}
 
-
+impl<'f, 'g> Drop for DisplayState<'f, 'g> {
+    fn drop(&mut self) {
+        if !self.current_line.is_empty() {
+            self.emit_line();
+        }
+    }
+}
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -1426,8 +1609,8 @@ impl std::fmt::Display for Program {
             next_comment_requires_alignment: false,
             last_generated_line: None,
             previous_was_label: false,
+            previous_was_instruction: false
         };
-
 
         Ok(())
     }
@@ -1445,15 +1628,28 @@ pub fn parse_orgams_file(input: &mut Input) -> OrgamsParseResult<Program> {
         .parse_next(input)?;
 
     // Read version
-    let _version = any.context(StrContext::Expected(StrContextValue::Description("version"))).verify(|&b| b==2).parse_next(input)?;
+    let _version = any
+        .context(StrContext::Expected(StrContextValue::Description(
+            "version"
+        )))
+        .verify(|&b| b == 2)
+        .parse_next(input)?;
 
     // Read header size
-    let header_size = any.context(StrContext::Expected(StrContextValue::Description("header size"))).parse_next(input)?;
+    let header_size = any
+        .context(StrContext::Expected(StrContextValue::Description(
+            "header size"
+        )))
+        .parse_next(input)?;
     eprintln!("debug: header_size = {}", header_size);
 
     // Skip rest of header (header_size bytes total, already read ORGA(4) + version(1) + header_size(1) = 6)
     let remaining_header = header_size as usize;
-    let _header = take(remaining_header).context(StrContext::Expected(StrContextValue::Description("header data"))).parse_next(input)?;
+    let _header = take(remaining_header)
+        .context(StrContext::Expected(StrContextValue::Description(
+            "header data"
+        )))
+        .parse_next(input)?;
 
     eprintln!("debug: checking SRCC");
     cut_err(literal(SRCC).context(StrContext::Expected(StrContextValue::StringLiteral("SRCc"))))
@@ -1461,13 +1657,22 @@ pub fn parse_orgams_file(input: &mut Input) -> OrgamsParseResult<Program> {
 
     // Parse items
     eprintln!("debug: parsing items");
-    let chunks = parse_all_code.context(StrContext::Expected(StrContextValue::Description("chunks"))).parse_next(input)?;
+    let chunks = parse_all_code
+        .context(StrContext::Expected(StrContextValue::Description("chunks")))
+        .parse_next(input)?;
 
     // Skip null byte separator before LBLs
-    let _null_separator = literal([0x00]).context(StrContext::Expected(StrContextValue::Description("null after chunks"))).parse_next(input)?;
+    let _null_separator = literal([0x00])
+        .context(StrContext::Expected(StrContextValue::Description(
+            "null after chunks"
+        )))
+        .parse_next(input)?;
 
     // parse labels table
-    eprintln!("debug: parsing labels. Next bytes: {:?}", input.iter().take(10).collect::<Vec<_>>());
+    eprintln!(
+        "debug: parsing labels. Next bytes: {:?}",
+        input.iter().take(10).collect::<Vec<_>>()
+    );
     cut_err(literal(LBLS).context(StrContext::Expected(StrContextValue::StringLiteral("LBLs"))))
         .parse_next(input)?;
     let labels = parse_labels_table.parse_next(input).map_err(|e| {
@@ -1481,9 +1686,8 @@ pub fn parse_orgams_file(input: &mut Input) -> OrgamsParseResult<Program> {
         .parse_next(input)?;
     let _checksum_bytes = take(4usize).parse_next(input)?;
 
-
-    //TODO check checksum
-    //eof.parse_next(input)?;
+    // TODO check checksum
+    // eof.parse_next(input)?;
 
     Ok(Program { chunks, labels })
 }
@@ -1493,18 +1697,37 @@ pub fn parse_labels_table(input: &mut Input) -> OrgamsParseResult<StringTable> {
 
     eprintln!("debug: parsing labels. Next bytes: {:?}", &input[..10]);
     // Parse version
-    let _version = any.context(StrContext::Expected(StrContextValue::Description("labels version"))).verify(|&b| b==2).parse_next(input)?;
-    
-    // collect each of them
-    let (strings, _): (Vec<_>, _) = repeat_till(0.., |input: &mut Input| {
-             let res = parse_bit7on_text.context(StrContext::Expected(StrContextValue::Description("label text"))).parse_next(input);
-             if res.is_err() {
-                 eprintln!("debug: parse_bit7on_text failed at offset unknown");
-             }
-             res
-        }, peek(literal([0x00]).context(StrContext::Expected(StrContextValue::Description("null terminator")))))
-        .context(StrContext::Expected(StrContextValue::Description("labels until null")))
+    let _version = any
+        .context(StrContext::Expected(StrContextValue::Description(
+            "labels version"
+        )))
+        .verify(|&b| b == 2)
         .parse_next(input)?;
+
+    // collect each of them
+    let (strings, _): (Vec<_>, _) = repeat_till(
+        0..,
+        |input: &mut Input| {
+            let res = parse_bit7on_text
+                .context(StrContext::Expected(StrContextValue::Description(
+                    "label text"
+                )))
+                .parse_next(input);
+            if res.is_err() {
+                eprintln!("debug: parse_bit7on_text failed at offset unknown");
+            }
+            res
+        },
+        peek(
+            literal([0x00]).context(StrContext::Expected(StrContextValue::Description(
+                "null terminator"
+            )))
+        )
+    )
+    .context(StrContext::Expected(StrContextValue::Description(
+        "labels until null"
+    )))
+    .parse_next(input)?;
 
     Ok(StringTable::from_vec_bit7on_texts(strings))
 }
@@ -1524,24 +1747,38 @@ fn parse_items_untils_lbls(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
 fn parse_star_repeat(input: &mut Input) -> OrgamsParseResult<Item> {
     consume_marker(CMD_REPEAT)(input)?;
     let expr = parse_sized_expression.parse_next(input)?;
-    let item = cut_err(parse_inner_item.context(StrContext::Label("Failed to parse item after repeat expression"))).parse_next(input)?;
+    let item = cut_err(parse_inner_item.context(StrContext::Label(
+        "Failed to parse item after repeat expression"
+    )))
+    .parse_next(input)?;
 
     // XXX need to be done here ?
-    literal([MARKER_ESCAPE, CMD_END_BIS]).void().parse_next(input)?;
+    literal([MARKER_ESCAPE, CMD_END_BIS])
+        .void()
+        .parse_next(input)?;
 
-    Ok(Item::Statement(Statement::StarRepeat(Box::new(expr), Box::new(item))))
+    Ok(Item::Statement(Statement::StarRepeat(
+        Box::new(expr),
+        Box::new(item)
+    )))
 }
 
 /// Parse single item EXCEPT newline, comments,  indenations, label, macrodref.
 /// assign seems to be prefexid by 7f
 fn parse_inner_item(input: &mut Input) -> OrgamsParseResult<Item> {
     // stop if end of line
-    if peek(alt((consume_marker(MARKER_NEWLINE), consume_marker(MARKER_INDENT), consume_marker(MARKER_COMMENT)))).parse_next(input).is_ok() {
+    if peek(alt((
+        consume_marker(MARKER_NEWLINE),
+        consume_marker(MARKER_INDENT),
+        consume_marker(MARKER_COMMENT)
+    )))
+    .parse_next(input)
+    .is_ok()
+    {
         let err = ContextError::new();
         return Err(ErrMode::Backtrack(err));
     }
 
-    
     debug_slice(input);
     // if let Some(b) = input.as_bytes().get(0) {
     //    eprintln!("DBG: parse_item input[0]={:02X}", b);
@@ -1552,17 +1789,23 @@ fn parse_inner_item(input: &mut Input) -> OrgamsParseResult<Item> {
         parse_word,
         parse_star_repeat,
         parse_assign.map(Item::Assign),
-      //  parse_indent.map(Item::Indent),
+        //  parse_indent.map(Item::Indent),
         parse_import.map(|s| Item::Statement(Statement::Import(s, false))),
         parse_instruction.map(|i| Item::Statement(Statement::Instruction(i)))
     ))
     .parse_next(input)
 }
 
-
 fn parse_fill_inner(input: &mut Input) -> OrgamsParseResult<Item> {
-    let size_expr = cut_err(parse_sized_expression.context(StrContext::Label("Failed to parse size expression in FILL"))).parse_next(input)?;
-    let value_expr = cut_err(parse_sized_expression.context(StrContext::Label("Failed to parse value expression in FILL"))).parse_next(input)?;
+    let size_expr = cut_err(
+        parse_sized_expression
+            .context(StrContext::Label("Failed to parse size expression in FILL"))
+    )
+    .parse_next(input)?;
+    let value_expr = cut_err(parse_sized_expression.context(StrContext::Label(
+        "Failed to parse value expression in FILL"
+    )))
+    .parse_next(input)?;
 
     let item = Item::Statement(Statement::Fill(size_expr, value_expr));
     Ok(item)
@@ -1586,8 +1829,12 @@ fn parse_word_or_byte(is_word: bool) -> impl Fn(&mut Input) -> OrgamsParseResult
         let directive_length = any.parse_next(input)?;
         let before_expressions = input.checkpoint();
         let mut exprs = Vec::new();
-        while input.offset_from(&before_expressions) < expression_length-2 {
-            let expression = cut_err(parse_unsized_expression.context(StrContext::Label("Failed to parse expression in list"))).parse_next(input)?;
+        while input.offset_from(&before_expressions) < expression_length - 2 {
+            let expression = cut_err(
+                parse_unsized_expression
+                    .context(StrContext::Label("Failed to parse expression in list"))
+            )
+            .parse_next(input)?;
             exprs.push(expression);
         }
 
@@ -1595,15 +1842,13 @@ fn parse_word_or_byte(is_word: bool) -> impl Fn(&mut Input) -> OrgamsParseResult
 
         let item = if is_word {
             Item::Statement(Statement::Word(exprs))
-        } else {
+        }
+        else {
             Item::Statement(Statement::Byte(exprs))
         };
         Ok(item)
     }
 }
-
-
-
 
 /// Parse explicit import directive (0x17)
 fn parse_import(input: &mut Input) -> OrgamsParseResult<String> {
@@ -1637,12 +1882,13 @@ fn parse_endline(input: &mut Input) -> OrgamsParseResult<Item> {
 
 fn parse_label(input: &mut Input) -> OrgamsParseResult<LabelRef> {
     // For now, just read one byte as index
-    let index_byte: u8 = any.verify(|&b| b>=SHORT_LABEL_START).parse_next(input)?;
+    let index_byte: u8 = any.verify(|&b| b >= SHORT_LABEL_START).parse_next(input)?;
     if index_byte >= LONG_LABEL_START {
         // Long label
         let second_byte: u8 = any.parse_next(input)?;
         Ok(LabelRef::new_long_from_stream(index_byte, second_byte))
-    } else {
+    }
+    else {
         Ok(LabelRef::new_short_from_stream(index_byte))
     }
 }
@@ -1661,44 +1907,68 @@ fn parse_label(input: &mut Input) -> OrgamsParseResult<LabelRef> {
 fn parse_sized_expression(input: &mut Input) -> OrgamsParseResult<SizedExpression> {
     let size = any.parse_next(input)? as usize;
     let input_checkpoint = input.checkpoint();
-    let exp = parse_unsized_expression.map(SizedExpression).parse_next(input)?;
+    let exp = parse_unsized_expression
+        .map(SizedExpression)
+        .parse_next(input)?;
     if input.offset_from(&input_checkpoint) != size {
         let mut err = ContextError::new();
-        err.push(StrContext::Expected(StrContextValue::Description("expression of incorrect size")));
+        err.push(StrContext::Expected(StrContextValue::Description(
+            "expression of incorrect size"
+        )));
         return Err(ErrMode::Cut(err));
-    } else {
+    }
+    else {
         Ok(exp)
     }
 }
 
-
 fn parse_unsized_expression(input: &mut Input) -> OrgamsParseResult<Expression> {
     let first = peek(any).parse_next(input)?;
+
     if first != EXP_MULTI_TERM_BEGIN {
-        return parse_expression_member.map(Expression::SingleTerm).parse_next(input);
+        return parse_expression_member
+            .map(Expression::SingleTerm)
+            .parse_next(input);
     }
-
-    dbg!("Handle multi term expression");
-    let _ = any.parse_next(input)?; // Consume BEGIN
-
-    let mut members = Vec::new();
-
-    loop {
-        let check = peek(any).parse_next(input)?;
-        if check == EXP_MULTI_TERM_END {
-            let _ = any.parse_next(input)?;
-            break;
-        }
-        let member = cut_err(parse_expression_member.context(StrContext::Expected(StrContextValue::Description("Expression member in multi-term expression")))).parse_next(input)?;
-        dbg!(&member);
-        members.push(member);
+    else {
+        return parse_multi_expression.parse_next(input);
     }
-
+}
+fn parse_multi_expression(input: &mut Input) -> OrgamsParseResult<Expression> {
+    let _ = cut_err(EXP_MULTI_TERM_BEGIN.context(StrContext::Label("multi expression tag"))).parse_next(input)?; // Consume BEGIN
+    let mut members = cut_err(parse_several_expression_member(EXP_MULTI_TERM_END)).parse_next(input)?;
     Ok(Expression::MultiTerm(members))
 }
 
-fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
+fn parse_several_expression_member(closing: u8) -> impl Fn(&mut Input) -> OrgamsParseResult<Vec<ExpressionMember>> {
+    move |input: &mut Input| -> OrgamsParseResult<Vec<ExpressionMember>> {
+        let mut members = Vec::new();
 
+        loop {
+            let check = peek(any).parse_next(input)?;
+            if check == closing {
+                let _ = any.parse_next(input)?;
+                break;
+            }
+            let member = cut_err(parse_expression_member.context(StrContext::Expected(
+                StrContextValue::Description("Expression member in parenthesized expression")
+            )))
+            .parse_next(input)?;
+            dbg!(&member);
+            members.push(member);
+        }
+
+        Ok(members)
+    }
+}
+
+fn parse_parenthesized_expression_inner(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
+    let mut members = parse_several_expression_member(b')').parse_next(input)?;
+    Ok(ExpressionMember::ParenthesizedExpression(members))
+}
+
+
+fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
     debug_slice(input);
 
     let b = any.parse_next(input)?;
@@ -1706,132 +1976,163 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
     let is_local_label = b == EXP_LOCAL_LABEL;
     let b = if is_local_label {
         cut_err(any.context(StrContext::Label("Local label"))).parse_next(input)?
-    } else {
+    }
+    else {
         b
     };
 
-    if b <= EXP_SHORT_DECIMAL_MAX_VALUE {
-        Ok(ExpressionMember::ShortDecimal(b))
-    }
-    else if b >= SHORT_LABEL_START && b <= SHORT_LABEL_END {
-        let label = LabelRef::new_short_from_stream(b);
-        if is_local_label {
-            Ok(ExpressionMember::LocalLabelRef(label))
-        } else {
-            Ok(ExpressionMember::LabelRef(label))
+    match b {
+        ..=EXP_SHORT_DECIMAL_MAX_VALUE => {
+            Ok(ExpressionMember::ShortDecimal(b))
+        },
+        SHORT_LABEL_START..=SHORT_LABEL_END => {
+            let label = LabelRef::new_short_from_stream(b);
+            if is_local_label {
+                Ok(ExpressionMember::LocalLabelRef(label))
+            }
+            else {
+                Ok(ExpressionMember::LabelRef(label))
+            }
+        },
+        LONG_LABEL_START.. => {
+        // Long label
+            let second_byte = any.parse_next(input)?;
+            let label = LabelRef::new_long_from_stream(b, second_byte);
+            if is_local_label {
+                Ok(ExpressionMember::LocalLabelRef(label))
+            }
+            else {
+                Ok(ExpressionMember::LabelRef(label))
+            }
+
         }
-    }
-    else if b >= LONG_LABEL_START {
-         // Long label
-         let second_byte = any.parse_next(input)?;
-         let label = LabelRef::new_long_from_stream(b, second_byte);
-         if is_local_label {
-            Ok(ExpressionMember::LocalLabelRef(label))
-         } else {
-            Ok(ExpressionMember::LabelRef(label))
-         }
-    }
-    else {
-        match b {
-            EXP_STRING => {
-                let s = cut_err(parse_sized_text.context(StrContext::Expected(StrContextValue::Description("String value in expression")))).parse_next(input)?;
-                Ok(ExpressionMember::String(s))
+        EXP_OP_PAREN_CLOSE => {
+            let mut err = ContextError::new();
+            err.push(StrContext::Expected(StrContextValue::Description(
+                "Use of ')' without matching '(' in expression"
+            )));
+            return Err(ErrMode::Backtrack(err));
+        },
+        EXP_OP_PAREN_OPEN => {
+            parse_parenthesized_expression_inner.context(StrContext::Expected(
+                StrContextValue::Description("Parenthesized expression")
+            ))
+            .parse_next(input)
+        }
+        EXP_STRING => {
+            let s = cut_err(parse_sized_text.context(StrContext::Expected(
+                StrContextValue::Description("String value in expression")
+            )))
+            .parse_next(input)?;
+            Ok(ExpressionMember::String(s))
+        },
+        EXP_UNARY_MINUS => {
+            let inner = cut_err(parse_expression_member.context(StrContext::Expected(
+                StrContextValue::Description("Negated expression")
+            )))
+            .parse_next(input)?;
+            Ok(ExpressionMember::UnaryMinus(Box::new(inner)))
+        },
+        EXP_OP_PLUS => Ok(ExpressionMember::Operator(Operator::Plus)),
+        EXP_OP_MINUS => Ok(ExpressionMember::Operator(Operator::Minus)),
+        EXP_OP_TIMES => {
+            if let Ok(next_byte) = peek(any::<_, ContextError>).parse_next(input)
+                && next_byte == EXP_OP_TIMES
+            {
+                // Star repeat operator detected
+                let mut err = ContextError::new();
+                err.push(StrContext::Expected(StrContextValue::Description("Use of '**' operator is not allowed in expressions. It is only valid in star repeat statements.")));
+                return Err(ErrMode::Backtrack(err));
             }
-            EXP_UNARY_MINUS => {
-                let inner = cut_err(parse_expression_member.context(StrContext::Expected(StrContextValue::Description("Negated expression")))).parse_next(input)?;
-                Ok(ExpressionMember::UnaryMinus(Box::new(inner)))
-            }
-            EXP_OP_PLUS => Ok(ExpressionMember::Operator(Operator::Plus)),
-            EXP_OP_MINUS => Ok(ExpressionMember::Operator(Operator::Minus)),
-            EXP_OP_TIMES => {
-                if let Ok(next_byte) =  peek(any::<_, ContextError>).parse_next(input) && next_byte == EXP_OP_TIMES {
-                    // Star repeat operator detected
+            // else normal multiply
+            Ok(ExpressionMember::Operator(Operator::Multiply))
+        },
+        EXP_OP_DIV => Ok(ExpressionMember::Operator(Operator::Divide)),
+        EXP_OP_MOD => Ok(ExpressionMember::Operator(Operator::Modulo)),
+        EXP_OP_PAREN_OPEN => Ok(ExpressionMember::Operator(Operator::ParenOpen)),
+        EXP_OP_PAREN_CLOSE => Ok(ExpressionMember::Operator(Operator::ParenClose)),
+        EXP_SPACE => Ok(ExpressionMember::Space),
+        EXP_OP_AND => Ok(ExpressionMember::Operator(Operator::And)),
+        EXP_OP_OR => Ok(ExpressionMember::Operator(Operator::Or)),
+        EXP_OP_XOR => Ok(ExpressionMember::Operator(Operator::Xor)),
+        EXP_OP_NEQ => Ok(ExpressionMember::Operator(Operator::NotEqual)),
+        EXP_OP_GE => Ok(ExpressionMember::Operator(Operator::GreaterEqual)),
+        EXP_OP_LE => Ok(ExpressionMember::Operator(Operator::LessEqual)),
+        EXP_OP_LT => Ok(ExpressionMember::Operator(Operator::LessThan)),
+        EXP_OP_GT => Ok(ExpressionMember::Operator(Operator::GreaterThan)),
+        EXP_OP_EQ => Ok(ExpressionMember::Operator(Operator::Equal)),
+        EXP_OP_OR => Ok(ExpressionMember::Operator(Operator::Or)),
+        0x24 => Ok(ExpressionMember::Dollar), // TO BE CHECKED
+        0x44 => Ok(ExpressionMember::DoubleDollar), // TO BE CHECKED
+
+        // Value types
+        _ => {
+            let (basis, content) = match b {
+                // decimal
+                EXP_DECIMAL_8 => {
+                    let val = any.parse_next(input)?;
+                    (ValueBasis::Decimal, ValueContent::EightBits(val))
+                },
+                EXP_DECIMAL_16 => {
+                    let low = any.parse_next(input)? as u16;
+                    let high = any.parse_next(input)? as u16;
+                    let val = low | (high << 8);
+                    (ValueBasis::Decimal, ValueContent::SixteenBits(val))
+                },
+                EXP_DECIMAL_CUSTOM | EXP_DECIMAL_CUSTOM_LONG => {
+                    let len = any.parse_next(input)? as usize;
+                    let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
+                    (ValueBasis::Decimal, ValueContent::Custom(bytes))
+                },
+
+                // hexadecimal
+                EXP_HEXDECIMAL_8 => {
+                    let val = any.parse_next(input)?;
+                    (ValueBasis::Hexadecimal, ValueContent::EightBits(val))
+                },
+                EXP_HEXDECIMAL_16 => {
+                    let low = any.parse_next(input)? as u16;
+                    let high = any.parse_next(input)? as u16;
+                    let val = low | (high << 8);
+                    (ValueBasis::Hexadecimal, ValueContent::SixteenBits(val))
+                },
+                EXP_HEXDECIMAL_CUSTOM | EXP_HEXDECIMAL_CUSTOM_LONG => {
+                    let len = any.parse_next(input)? as usize;
+                    let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
+                    (ValueBasis::Hexadecimal, ValueContent::Custom(bytes))
+                },
+
+                // binary
+                EXP_BINARY_8 => {
+                    let val = any.parse_next(input)?;
+                    (ValueBasis::Binary, ValueContent::EightBits(val))
+                },
+                EXP_BINARY_16 => {
+                    let low = any.parse_next(input)? as u16;
+                    let high = any.parse_next(input)? as u16;
+                    let val = low | (high << 8);
+                    (ValueBasis::Binary, ValueContent::SixteenBits(val))
+                },
+                EXP_BINARY_CUSTOM | EXP_BINARY_CUSTOM_LONG => {
+                    let len = any.parse_next(input)? as usize;
+                    let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
+                    (ValueBasis::Binary, ValueContent::Custom(bytes))
+                },
+
+                _ => {
                     let mut err = ContextError::new();
-                    err.push(StrContext::Expected(StrContextValue::Description("Use of '**' operator is not allowed in expressions. It is only valid in star repeat statements.")));
+                    err.push(StrContext::Expected(StrContextValue::Description(
+                        "valid expression member"
+                    )));
                     return Err(ErrMode::Backtrack(err));
                 }
-                // else normal multiply
-                Ok(ExpressionMember::Operator(Operator::Multiply))
-            },
-            EXP_OP_DIV => Ok(ExpressionMember::Operator(Operator::Divide)),
-            EXP_OP_MOD => Ok(ExpressionMember::Operator(Operator::Modulo)),
-            EXP_OP_PAREN_OPEN => Ok(ExpressionMember::Operator(Operator::ParenOpen)),
-            EXP_OP_PAREN_CLOSE => Ok(ExpressionMember::Operator(Operator::ParenClose)),
-            EXP_SPACE => Ok(ExpressionMember::Space),
-            EXP_OP_AND => Ok(ExpressionMember::Operator(Operator::And)),
-            EXP_OP_LT => Ok(ExpressionMember::Operator(Operator::LessThan)),
-            EXP_OP_GT => Ok(ExpressionMember::Operator(Operator::GreaterThan)),
-            EXP_OP_EQ => Ok(ExpressionMember::Operator(Operator::Equal)),
-            EXP_OP_OR => Ok(ExpressionMember::Operator(Operator::Or)),
-            0x24 => Ok(ExpressionMember::Dollar), // TO BE CHECKED
-            0x44 => Ok(ExpressionMember::DoubleDollar), // TO BE CHECKED
-            
-            // Value types
-            _ => {
-                 let (basis, content) = match b {
-                    // decimal
-                    EXP_DECIMAL_8 => {
-                        let val = any.parse_next(input)?;
-                        (ValueBasis::Decimal, ValueContent::EightBits(val))
-                    },
-                    EXP_DECIMAL_16 => {
-                        let low = any.parse_next(input)? as u16;
-                        let high = any.parse_next(input)? as u16;
-                        let val = low | (high << 8);
-                        (ValueBasis::Decimal, ValueContent::SixteenBits(val))
-                    },
-                    EXP_DECIMAL_CUSTOM | EXP_DECIMAL_CUSTOM_LONG => {
-                        let len = any.parse_next(input)? as usize;
-                        let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
-                        (ValueBasis::Decimal, ValueContent::Custom(bytes))
-                    },
+            };
 
-                    // hexadecimal
-                    EXP_HEXDECIMAL_8 => {
-                        let val = any.parse_next(input)?;
-                        (ValueBasis::Hexadecimal, ValueContent::EightBits(val))
-                    },
-                    EXP_HEXDECIMAL_16 => {
-                        let low = any.parse_next(input)? as u16;
-                        let high = any.parse_next(input)? as u16;
-                        let val = low | (high << 8);
-                        (ValueBasis::Hexadecimal, ValueContent::SixteenBits(val))
-                    },
-                    EXP_HEXDECIMAL_CUSTOM | EXP_HEXDECIMAL_CUSTOM_LONG => {
-                        let len = any.parse_next(input)? as usize;
-                        let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
-                        (ValueBasis::Hexadecimal, ValueContent::Custom(bytes))
-                    },
-
-                    // binary
-                    EXP_BINARY_8 => {
-                        let val = any.parse_next(input)?;
-                        (ValueBasis::Binary, ValueContent::EightBits(val))
-                    },
-                    EXP_BINARY_16 => {
-                        let low = any.parse_next(input)? as u16;
-                        let high = any.parse_next(input)? as u16;
-                        let val = low | (high << 8);
-                        (ValueBasis::Binary, ValueContent::SixteenBits(val))
-                    },
-                    EXP_BINARY_CUSTOM | EXP_BINARY_CUSTOM_LONG => {
-                        let len = any.parse_next(input)? as usize;
-                        let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
-                        (ValueBasis::Binary, ValueContent::Custom(bytes))
-                    },
-                    
-                    _ => {
-                        let mut err = ContextError::new();
-                        err.push(StrContext::Expected(StrContextValue::Description("valid expression member")));
-                        return Err(ErrMode::Backtrack(err))
-                    }
-                };
-
-                Ok(ExpressionMember::Value(Value { basis, content }))
-            }
+            Ok(ExpressionMember::Value(Value { basis, content }))
         }
     }
 }
+
 
 /// Parse an assignment: 0x64 <label_ref> <expression>
 fn parse_assign(input: &mut Input) -> OrgamsParseResult<Assign> {
@@ -1839,7 +2140,9 @@ fn parse_assign(input: &mut Input) -> OrgamsParseResult<Assign> {
     let (_, next_byte) = peek((literal([MARKER_ASSIGN]), any)).parse_next(input)?;
     if next_byte < SHORT_LABEL_START {
         let mut err = ContextError::new();
-        err.push(StrContext::Expected(StrContextValue::Description("A label is expected after assignment marker")));
+        err.push(StrContext::Expected(StrContextValue::Description(
+            "A label is expected after assignment marker"
+        )));
         return Err(ErrMode::Cut(err));
     }
 
@@ -1860,10 +2163,8 @@ fn parse_assign(input: &mut Input) -> OrgamsParseResult<Assign> {
     )))
     .parse_next(input)?;
 
-    Ok(Assign { label, expression,})
+    Ok(Assign { label, expression })
 }
-
-
 
 /// Parse a standalone label reference (0x60-0xDF)
 /// These appear at item boundaries and are standalone items
@@ -1875,7 +2176,6 @@ fn parse_label_ref_item(input: &mut Input) -> OrgamsParseResult<Item> {
 /// Parse a line according to orgams t_line grammar
 /// Returns Line for the line (may include indent, content, newline)
 pub fn parse_line(input: &mut Input) -> OrgamsParseResult<Line> {
-
     debug_slice(&input);
 
     // order is quite important here
@@ -1885,7 +2185,7 @@ pub fn parse_line(input: &mut Input) -> OrgamsParseResult<Line> {
         parse_line_assign.context(StrContext::Label("line starting with assignment")),
         parse_line_empty.context(StrContext::Label("empty line")),
         parse_line_starting_with_macro.context(StrContext::Label("line starting with macro")),
-        parse_line_starting_with_item.context(StrContext::Label("line starting with item")),
+        parse_line_starting_with_item.context(StrContext::Label("line starting with item"))
     ))
     .parse_next(input)
 }
@@ -1902,31 +2202,34 @@ fn parse_nl_or_comment(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
 
 // The label MUST be followed by another token (not newline or comment)
 fn parse_line_starting_with_label(input: &mut Input) -> OrgamsParseResult<Line> {
-    let label_kind: u8 = any.verify(|&b| b == MARKER_LABEL_ADDR || b == MARKER_LOCAL_LABEL).parse_next(input)?;
+    let label_kind: u8 = any
+        .verify(|&b| b == MARKER_LABEL_ADDR || b == MARKER_LOCAL_LABEL)
+        .parse_next(input)?;
     let label = cut_err(parse_label.context(StrContext::Label("label"))).parse_next(input)?;
     let label = if label_kind == MARKER_LABEL_ADDR {
         Item::Label(label)
-    } else {
+    }
+    else {
         Item::LocalLabel(label)
     };
-    
+
     let nl_or_comment = opt(parse_nl_or_comment).parse_next(input)?;
     let (mut items, nl_or_comment) = if let Some(nl_or_comment) = nl_or_comment {
         (None, nl_or_comment)
-    } else {
+    }
+    else {
         let items = parse_items.parse_next(input)?;
         let nl_or_comment = cut_err(parse_nl_or_comment).parse_next(input)?;
         (Some(items), nl_or_comment)
     };
 
-    let mut res = Vec::with_capacity(1+items.as_ref().map(|items| items.len()).unwrap_or(0)+1);
+    let mut res = Vec::with_capacity(1 + items.as_ref().map(|items| items.len()).unwrap_or(0) + 1);
     res.push(label);
     if let Some(mut items) = items {
         res.append(&mut items);
     }
     res.extend(nl_or_comment);
     Ok(Line { items: res })
-
 }
 
 fn parse_line_empty(input: &mut Input) -> OrgamsParseResult<Line> {
@@ -1959,7 +2262,8 @@ fn parse_space_and_comment(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
 
     let items = if let Some(space) = space {
         vec![Item::Indent(space), Item::Comment(comment)]
-    } else {
+    }
+    else {
         vec![Item::Comment(comment)]
     };
 
@@ -1967,12 +2271,12 @@ fn parse_space_and_comment(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
 }
 
 fn parse_line_starting_with_comment(input: &mut Input) -> OrgamsParseResult<Line> {
-    parse_space_and_comment.map(|items|Line{items}).parse_next(input)
+    parse_space_and_comment
+        .map(|items| Line { items })
+        .parse_next(input)
 }
 
 fn parse_line_starting_with_item(input: &mut Input) -> OrgamsParseResult<Line> {
-
-
     let mut items: Vec<Item> = Vec::new();
 
     let mut first_loop = true;
@@ -1981,7 +2285,8 @@ fn parse_line_starting_with_item(input: &mut Input) -> OrgamsParseResult<Line> {
         debug_slice(input);
         let item = if first_loop {
             parse_inner_item.parse_next(input)?
-        } else  {
+        }
+        else {
             cut_err(parse_inner_item).parse_next(input)?
         };
         first_loop = false;
@@ -2000,11 +2305,13 @@ fn parse_line_starting_with_item(input: &mut Input) -> OrgamsParseResult<Line> {
             let nl = parse_endline.parse_next(input)?;
             items.push(nl);
             break;
-        } else if next == MARKER_COMMENT {
+        }
+        else if next == MARKER_COMMENT {
             let c = parse_comment.parse_next(input)?;
             items.push(Item::Comment(c));
             break;
-        } else {
+        }
+        else {
             // There is another item on the same line; loop to parse it
             continue;
         }
@@ -2020,7 +2327,7 @@ fn parse_all_code(input: &mut Input) -> OrgamsParseResult<Vec<Chunk>> {
         // Peek to check for the terminator (chunk size 0)
         let b = peek(any).parse_next(input)?;
         if b == 0 {
-             break;
+            break;
         }
 
         let chunk = parse_chunk.parse_next(input)?;
@@ -2030,12 +2337,13 @@ fn parse_all_code(input: &mut Input) -> OrgamsParseResult<Vec<Chunk>> {
     Ok(all_chunks)
 }
 
-
 /// A chunk is composed of several lines, prefixed by its size in bytesa
 /// TODO retreive the logic of parse_chunk_debug it may not be exactly the same now
 pub fn parse_chunk(input: &mut Input) -> OrgamsParseResult<Chunk> {
     eprintln!("debug: parse_chunk start");
-    let chunk_size =  any.verify(|&s| s > 0 && s<=CHUNK_MAX_SIZE).parse_next(input)?;
+    let chunk_size = any
+        .verify(|&s| s > 0 && s <= CHUNK_MAX_SIZE)
+        .parse_next(input)?;
     let mut lines = Vec::new();
 
     let chunk_size = chunk_size as usize;
@@ -2043,25 +2351,40 @@ pub fn parse_chunk(input: &mut Input) -> OrgamsParseResult<Chunk> {
 
     let input_start = input.checkpoint();
     while input.offset_from(&input_start) < chunk_size {
-        eprintln!("debug: parsing line at offset {}", input.offset_from(&input_start));
+        eprintln!(
+            "debug: parsing line at offset {}",
+            input.offset_from(&input_start)
+        );
         let line = parse_line.parse_next(input)?;
         lines.push(line);
     }
 
     if input.offset_from(&input_start) != chunk_size {
-        eprintln!("Length mismatch! Expected: {}, Generated: {}", chunk_size, input.offset_from(&input_start));
+        eprintln!(
+            "Length mismatch! Expected: {}, Generated: {}",
+            chunk_size,
+            input.offset_from(&input_start)
+        );
         todo!("Handle chunk size mismatch and genrete the appropriate error");
     }
 
     Ok(Chunk { lines })
 }
 
-
-
 fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
     eprintln!("debug: parse_escaped_7f_item");
     // Expect escape marker
     consume_marker(MARKER_ESCAPE)(input)?;
+
+    // check if it is escaped instruction
+    let first  = peek(any).parse_next(input)?;
+    if is_escaped_byte(first) {
+        return parse_instruction
+            .map(|i| Item::Statement(Statement::Instruction(i)))
+            .parse_next(input);
+    };
+
+    // otherwhise, parse command
 
     // get the command byte
     let cmd = cut_err(any).parse_next(input)?;
@@ -2069,75 +2392,64 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
 
     match cmd {
         CMD_IF => {
-             let condition = cut_err(parse_sized_expression).parse_next(input)?;
-             Ok(Item::Statement(Statement::If(condition)))
+            cut_err(parse_inner_if.context(StrContext::Label("IF")))
+                .parse_next(input)
+                .map(Item::Statement)
         },
-        CMD_ELSE => {
-             Ok(Item::Statement(Statement::Else))
-        },
-        CMD_END => {
-             Ok(Item::Statement(Statement::End))
-        },
-        CMD_ENDM => {
-             Ok(Item::Statement(Statement::EndMacro))
-        }
-        CMD_FILL => {
-            cut_err(parse_fill_inner.context(StrContext::Label("FILL"))).parse_next(input)
-        },
+        CMD_ELSE => Ok(Item::Statement(Statement::Else)),
+        CMD_END => Ok(Item::Statement(Statement::End)),
+        CMD_ENDM => Ok(Item::Statement(Statement::EndMacro)),
+        CMD_FILL => cut_err(parse_fill_inner.context(StrContext::Label("FILL"))).parse_next(input),
         CMD_IMPORT => {
-             // Replaced by top-level parse_import in most cases.
-             // If seen here, treat as TODO or same logic?
-             // The error trace showed raw 0x17. 
-             // If we must support escaped 0x17, assume string?
-             let s = cut_err(parse_sized_text).parse_next(input)?;
-             Ok(Item::Statement(Statement::Import(s.0, true)))
+            // Replaced by top-level parse_import in most cases.
+            // If seen here, treat as TODO or same logic?
+            // The error trace showed raw 0x17.
+            // If we must support escaped 0x17, assume string?
+            let s = cut_err(parse_sized_text).parse_next(input)?;
+            Ok(Item::Statement(Statement::Import(s.0, true)))
         },
         CMD_ENT => {
             let expr = cut_err(parse_sized_expression).parse_next(input)?;
             Ok(Item::Statement(Statement::Ent(expr)))
-        }
+        },
         CMD_ORG => {
-             let expr = cut_err(parse_sized_expression).parse_next(input)?;
-             Ok(Item::Statement(Statement::Org(expr)))
+            let expr = cut_err(parse_sized_expression).parse_next(input)?;
+            Ok(Item::Statement(Statement::Org(expr)))
         },
         CMD_ORG2 => {
-             let expr1 = cut_err(parse_sized_expression).parse_next(input)?;
-             let expr2 = cut_err(parse_sized_expression).parse_next(input)?;
-             Ok(Item::Statement(Statement::Org2(expr1, expr2)))
+            let expr1 = cut_err(parse_sized_expression).parse_next(input)?;
+            let expr2 = cut_err(parse_sized_expression).parse_next(input)?;
+            Ok(Item::Statement(Statement::Org2(expr1, expr2)))
         },
 
         CMD_SKIP => {
-                let expr = cut_err(parse_sized_expression).parse_next(input)?;
-                Ok(Item::Statement(Statement::Skip(expr)))
-        }
-        CMD_STORE_PC_INSTR => {
-             Ok(Item::Statement(Statement::StorePcInstr))
+            let expr = cut_err(parse_sized_expression).parse_next(input)?;
+            Ok(Item::Statement(Statement::Skip(expr)))
         },
-        CMD_END_BIS => {
-            Ok(Item::Statement(Statement::EndBis))
-        },
+        CMD_STORE_PC_INSTR => Ok(Item::Statement(Statement::StorePcInstr)),
+        CMD_END_BIS => Ok(Item::Statement(Statement::EndBis)),
         CMD_ASIS => {
-             // Raw string: Length + Bytes
-             let len = cut_err(any).parse_next(input)? as usize;
-             let content = cut_err(take(len)).parse_next(input)?;
-             Ok(Item::Statement(Statement::RawString(
-                 String::from_utf8_lossy(content).to_string()
-             )))
+            // Raw string: Length + Bytes
+            let len = cut_err(any).parse_next(input)? as usize;
+            let content = cut_err(take(len)).parse_next(input)?;
+            Ok(Item::Statement(Statement::RawString(
+                String::from_utf8_lossy(content).to_string()
+            )))
         },
-        CMD_REPEAT => {
-            cut_err(parse_star_repeat).parse_next(input)
-        }, 
-        CMD_MACRO_USE => { 
-            cut_err(parse_macro_use).parse_next(input).map(Item::Statement)
+        CMD_REPEAT => cut_err(parse_star_repeat).parse_next(input),
+        CMD_MACRO_USE => {
+            cut_err(parse_macro_use)
+                .parse_next(input)
+                .map(Item::Statement)
         },
 
-        CMD_BRK => {
-            Ok(Item::Statement(Statement::Brk))
-        },
+        CMD_BRK => Ok(Item::Statement(Statement::Brk)),
 
         _ => {
             let mut err = ContextError::new();
-            err.push(StrContext::Expected(StrContextValue::Description("Unknown escaped command")));
+            err.push(StrContext::Expected(StrContextValue::Description(
+                "Unknown escaped command"
+            )));
             Err(ErrMode::Cut(err))
         }
     }
@@ -2149,38 +2461,63 @@ fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
         IY_CODE => &TABINSTRFD,
         0xED => &TABINSTRED,
         0xCB => &TABINSTRCB,
-        _ => panic!("Unsupported prefix: 0x{:02X}", prefix),
+        _ => panic!("Unsupported prefix: 0x{:02X}", prefix)
     }
+}
+
+fn parse_inner_if(input: &mut Input) -> OrgamsParseResult<Statement> {
+    let condition = cut_err(parse_sized_expression).parse_next(input)?;
+
+    Ok(Statement::If(condition))
 }
 
 fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
     let b = dbg!(any.parse_next(input)?);
-    
-    let (prefix, opcode, repr) = if  b == IX_CODE || b == IY_CODE || b == 0xED || b == 0xCB {
+
+    let (prefix, opcode, repr) = if b == IX_CODE || b == IY_CODE || b == 0xED || b == 0xCB {
         let prefix = b;
         let opcode = any.parse_next(input)?;
-        (Some(prefix), opcode, prefix_to_table(prefix)[opcode as usize])
-    } 
+
+        if prefix == 0xCB && opcode == 0xc6 {
+            // manual handling of set (hl)
+            let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set ?; (hl)")))).parse_next(input)?;
+            return Ok(Instruction {
+                prefix: Some(prefix),
+                opcode,
+                coded_operands: vec![param],
+            })
+
+        } else {
+            (
+                Some(prefix),
+                opcode,
+                prefix_to_table(prefix)[opcode as usize]
+            )
+        }   
+    }
     else {
-            // No prefix
-            let prefix = None;
-            let opcode = b;
-            let repr = TABINSTR[opcode as usize];
-            (prefix, opcode, repr)
+        // No prefix
+        let prefix = None;
+        let opcode = b;
+        let repr = TABINSTR[opcode as usize];
+        (prefix, opcode, repr)
     };
 
-        let kinds = z80str_to_expressions_list(repr);
-        let mut coded_operands = Vec::with_capacity(kinds.len());
-        for _kind in kinds {
-            let expr = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression for instruction")))).parse_next(input)?;
-            coded_operands.push(expr);
-        }
-        Ok(Instruction { prefix: prefix, opcode, coded_operands })
+    let kinds = z80str_to_expressions_list(repr);
+    let mut coded_operands = Vec::with_capacity(kinds.len());
+    for _kind in kinds {
+        let expr = cut_err(parse_sized_expression.context(StrContext::Expected(
+            StrContextValue::Description("Expression for instruction")
+        )))
+        .parse_next(input)?;
+        coded_operands.push(expr);
+    }
+    Ok(Instruction {
+        prefix,
+        opcode,
+        coded_operands
+    })
 }
-
-
-
-
 
 /// Parse the arguments of a macro definition.
 /// They are contained in the remaining bytes of the definition block.
@@ -2188,22 +2525,23 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
 fn parse_macro_args(input: &mut Input) -> OrgamsParseResult<Vec<LabelRef>> {
     let mut params = Vec::new();
     while !input.is_empty() {
-         let b = peek(any).parse_next(input)?;
-         
-         // TODO check whats taht
-         if b == END_MARKER {
-             cut_err(any).parse_next(input)?;
-             continue;
-         }
+        let b = peek(any).parse_next(input)?;
 
-         if b >= SHORT_LABEL {
-             let p = cut_err(parse_label).parse_next(input)?;
-             params.push(p);
-         } else {
-             // Unexpected byte in macro definition block?
-             // As we are length-bounded, we just consume it.
-             cut_err(any).parse_next(input)?;
-         }
+        // TODO check whats taht
+        if b == END_MARKER {
+            cut_err(any).parse_next(input)?;
+            continue;
+        }
+
+        if b >= SHORT_LABEL {
+            let p = cut_err(parse_label).parse_next(input)?;
+            params.push(p);
+        }
+        else {
+            // Unexpected byte in macro definition block?
+            // As we are length-bounded, we just consume it.
+            cut_err(any).parse_next(input)?;
+        }
     }
     Ok(params)
 }
@@ -2216,27 +2554,32 @@ fn parse_macro_def_item(input: &mut Input) -> OrgamsParseResult<Item> {
     literal([MARKER_MACRO_DEF]).parse_next(input)?;
     // 2. Length (def_block_len)
     let def_block_len = cut_err(any).parse_next(input)?;
-    
+
     // 3. Take definition content bytes
     let content_bytes = cut_err(take(def_block_len)).parse_next(input)?;
 
     // 4. Parse Name and Params from content
     let mut sub_input = LocatingSlice::new(content_bytes);
-    
+
     let name = cut_err(parse_label).parse_next(&mut sub_input)?;
     let params = cut_err(parse_macro_args).parse_next(&mut sub_input)?;
 
     // Do NOT consume newline here as requested.
 
-    Ok(Item::Macro(MacroDef {
+    Ok(Item::MacroDef(MacroDef {
         def_block_len,
         name,
-        params,
+        params
     }))
 }
 
 fn expect_end_marker(input: &mut Input) -> OrgamsParseResult<()> {
-    cut_err(consume_marker(END_MARKER).context(StrContext::Expected(StrContextValue::Description("Missing end marker")))).parse_next(input)
+    cut_err(
+        consume_marker(END_MARKER).context(StrContext::Expected(StrContextValue::Description(
+            "Missing end marker"
+        )))
+    )
+    .parse_next(input)
 }
 
 /// Parse macro call: length + name + args + endmarker
@@ -2245,27 +2588,44 @@ fn parse_macro_use(input: &mut Input) -> OrgamsParseResult<Statement> {
 
     debug_slice(input);
     let input_start = input.checkpoint();
-    let name = dbg!(parse_unsized_expression.context(StrContext::Expected(StrContextValue::Description("Macro name"))).parse_next(input))?;
+    let name = dbg!(
+        parse_unsized_expression
+            .context(StrContext::Expected(StrContextValue::Description(
+                "Macro name"
+            )))
+            .parse_next(input)
+    )?;
     let mut args = Vec::new();
     debug_slice(input);
-    dbg!( input.offset_from(&input_start), length);
-    while input.offset_from(&input_start) < length-1 {
-        let arg = dbg!(cut_err(parse_unsized_expression.context(StrContext::Expected(StrContextValue::Description("Macro argument")))).parse_next(input))?;
+    dbg!(input.offset_from(&input_start), length);
+    while input.offset_from(&input_start) < length - 1 {
+        let arg = dbg!(
+            cut_err(parse_unsized_expression.context(StrContext::Expected(
+                StrContextValue::Description("Macro argument")
+            )))
+            .parse_next(input)
+        )?;
         dbg!("Parsed macro arg:", &arg);
         args.push(arg);
-    dbg!( input.offset_from(&input_start), length);
+        dbg!(input.offset_from(&input_start), length);
     }
 
     expect_end_marker(input)?;
     let bytes_consumed = input.offset_from(&input_start);
     dbg!(&args);
-    dbg!("bytes_consumed =", bytes_consumed, "expected length =", length);
+    dbg!(
+        "bytes_consumed =",
+        bytes_consumed,
+        "expected length =",
+        length
+    );
     if bytes_consumed != length {
         let mut err = ContextError::new();
-        err.push(StrContext::Expected(StrContextValue::Description("Wrong macro length consummed")));
+        err.push(StrContext::Expected(StrContextValue::Description(
+            "Wrong macro length consummed"
+        )));
         return Err(ErrMode::Cut(err));
     }
-
 
     Ok(Statement::MacroUse(name, args))
 }
@@ -2283,7 +2643,12 @@ fn parse_sized_text(input: &mut Input) -> OrgamsParseResult<SizedString> {
 fn parse_bit7on_text(input: &mut Input) -> OrgamsParseResult<Bit7OnString> {
     let mut bytes = Vec::new();
     loop {
-        let byte: u8 = cut_err(any.context(StrContext::Expected(StrContextValue::Description("bit7on text byte")))).parse_next(input)?;
+        let byte: u8 = cut_err(
+            any.context(StrContext::Expected(StrContextValue::Description(
+                "bit7on text byte"
+            )))
+        )
+        .parse_next(input)?;
         bytes.push(byte);
         if byte & (1 << 7) != 0 {
             break;
@@ -2304,13 +2669,13 @@ mod tests {
         // IF (label 61) ELSE \n
         let data = vec![0x7F, 0x09, 0x01, 0x61, 0x7F, 0x0A, 0x4A];
         let mut input = LocatingSlice::new(data.as_slice());
-        
+
         let result = parse_line.parse_next(&mut input);
         assert!(result.is_ok());
         let items = result.unwrap();
-        
+
         // We want it to parse [If, Else, NewLine] and consume everything.
-        assert_eq!(items.len(), 3); 
+        assert_eq!(items.len(), 3);
         assert!(input.is_empty());
     }
 
@@ -2372,36 +2737,40 @@ mod tests {
         // which encodes as multi-term with labels, operators, spaces
         let expr_content = vec![
             0x42, // EXP_MULTI_TERM_BEGIN
-            0x8a, // label (138 - 96 = 42)
+            0x8A, // label (138 - 96 = 42)
             0x20, // space
-            0x2b, // + operator
+            0x2B, // + operator
             0x20, // space
             0x87, // label (135 - 96 = 39)
             0x20, // space
-            0x2d, // - operator
+            0x2D, // - operator
             0x20, // space
             0x01, // short decimal 1
             0x20, // space
-            0x2f, // / operator
+            0x2F, // / operator
             0x20, // space
             0x87, // label (135 - 96 = 39)
             0x45, // EXP_MULTI_TERM_END
         ];
-        
+
         // Create full expression bytes with size prefix
         let mut expr_bytes = vec![expr_content.len() as u8];
         expr_bytes.extend_from_slice(&expr_content);
-        
+
         let mut input = LocatingSlice::new(&expr_bytes[..]);
-        let expr = parse_sized_expression(&mut input).expect("Failed to parse multi-term expression");
-        
+        let expr =
+            parse_sized_expression(&mut input).expect("Failed to parse multi-term expression");
+
         // Create empty string table for serialization
         let table = StringTable::default();
-        
+
         // Verify it round-trips correctly (bytes() includes size prefix)
         let serialized = expr.bytes(&table);
-        assert_eq!(serialized, expr_bytes, "Expression should round-trip correctly including size byte");
-        
+        assert_eq!(
+            serialized, expr_bytes,
+            "Expression should round-trip correctly including size byte"
+        );
+
         // Verify structure
         match expr {
             SizedExpression(Expression::MultiTerm(members)) => {
@@ -2430,40 +2799,54 @@ mod tests {
 
         // 1. Offset where items start: 0x67 (ORGA block) + 4 (SRCc) + 1 (version) = 0x6C
         let start_items = 0x6C;
-        
+
         // 3. Find ChCk checksum to verify "up to ChCk"
         let expected_limit = data
             .windows(4)
             .position(|w| w == b"ChCk")
             .unwrap_or(data.len());
-        
+
         let generated_limit = generated_bytes
-             .windows(4)
-             .position(|w| w == b"ChCk")
-             .unwrap_or(generated_bytes.len());
+            .windows(4)
+            .position(|w| w == b"ChCk")
+            .unwrap_or(generated_bytes.len());
 
         // Compare up to Checksum (excluding Header)
         let generated_payload = &generated_bytes[start_items..generated_limit];
         let expected_payload = &data[start_items..expected_limit];
-        
+
         if generated_payload.len() != expected_payload.len() {
-             println!("Length mismatch! Expected: {}, Generated: {}", 
-                expected_payload.len(), 
-                generated_payload.len());
+            println!(
+                "Length mismatch! Expected: {}, Generated: {}",
+                expected_payload.len(),
+                generated_payload.len()
+            );
         }
 
         // Better error message: find first diff
-        if let Some(pos) = generated_payload.iter().zip(expected_payload.iter()).position(|(a, b)| a != b) {
+        if let Some(pos) = generated_payload
+            .iter()
+            .zip(expected_payload.iter())
+            .position(|(a, b)| a != b)
+        {
             let abs_pos = start_items + pos;
             panic!(
-                "Byte mismatch at offset {}: expected 0x{:02X}, got 0x{:02X}\nOriginal: {:?}\nGenerated: {:?}", 
-                abs_pos, expected_payload[pos], generated_payload[pos],
-                &expected_payload[pos.saturating_sub(10)..std::cmp::min(pos+10, expected_payload.len())],
-                &generated_payload[pos.saturating_sub(10)..std::cmp::min(pos+10, generated_payload.len())]
+                "Byte mismatch at offset {}: expected 0x{:02X}, got 0x{:02X}\nOriginal: {:?}\nGenerated: {:?}",
+                abs_pos,
+                expected_payload[pos],
+                generated_payload[pos],
+                &expected_payload
+                    [pos.saturating_sub(10)..std::cmp::min(pos + 10, expected_payload.len())],
+                &generated_payload
+                    [pos.saturating_sub(10)..std::cmp::min(pos + 10, generated_payload.len())]
             );
         }
-        
-        assert_eq!(generated_payload.len(), expected_payload.len(), "Payload length mismatch");
+
+        assert_eq!(
+            generated_payload.len(),
+            expected_payload.len(),
+            "Payload length mismatch"
+        );
     }
 
     #[test]
@@ -2472,39 +2855,46 @@ mod tests {
         verify_parsing_and_reconstruction("tests/orgams-main/CONST.I");
     }
 
-
     #[test]
     #[ignore] // ignored while we test only with debug_load_orgams
     fn test_parse_memmap_i() {
         verify_parsing_and_reconstruction("tests/orgams-main/MEMMAP.I");
     }
 
-
     #[test]
     fn test_issue_multiple_comments_one_line() {
-         // This sequence comes from a memory dump where multiple comments appear consecutively
-         // ending with a single newline. The parser should treat each comment as a separate line.
-         let data: &[u8] = &[
-            0x43, 0x2A, 0x20, 0x3C, 0x3C, 0x3C, 0x3C, 0x20, 0x43, 0x6F, 0x6E, 0x73, 0x74, 0x61, 0x6E, 0x74, 0x73, 0x20, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x20, 0x61, 0x63, 0x72, 0x6F, 0x73, 0x73, 0x20, 0x6D, 0x6F, 0x64, 0x75, 0x6C, 0x65, 0x73, 0x20, 0x3E, 0x3E, 0x3E, 0x3E, 
-            0x43, 0x2B, 0x20, 0x32, 0x30, 0x32, 0x35, 0x20, 0x4A, 0x75, 0x6C, 0x20, 0x32, 0x37, 0x3A, 0x20, 0x4D, 0x6F, 0x76, 0x65, 0x20, 0x73, 0x74, 0x6F, 0x72, 0x65, 0x20, 0x6C, 0x65, 0x6E, 0x67, 0x74, 0x68, 0x73, 0x20, 0x74, 0x6F, 0x20, 0x73, 0x77, 0x61, 0x70, 0x69, 0x2E, 0x69, 
-            0x49, 0x05, 0x43, 0x2C, 0x20, 0x4A, 0x75, 0x6E, 0x20, 0x31, 0x31, 0x3A, 0x20, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x20, 0x61, 0x73, 0x73, 0x5F, 0x73, 0x74, 0x6F, 0x72, 0x65, 0x5F, 0x6C, 0x65, 0x6E, 0x20, 0x73, 0x79, 0x6D, 0x62, 0x5F, 0x73, 0x74, 0x6F, 0x72, 0x65, 0x5F, 0x6C, 0x65, 0x6E, 
-            0x49, 0x0D, 0x43, 0x17, 0x20, 0x52, 0x65, 0x6D, 0x6F, 0x76, 0x65, 0x20, 0x6F, 0x62, 0x73, 0x6F, 0x6C, 0x65, 0x74, 0x65, 0x20, 0x63, 0x68, 0x65, 0x63, 0x6B, 0x73, 
-            0x4A
+        // This sequence comes from a memory dump where multiple comments appear consecutively
+        // ending with a single newline. The parser should treat each comment as a separate line.
+        let data: &[u8] = &[
+            0x43, 0x2A, 0x20, 0x3C, 0x3C, 0x3C, 0x3C, 0x20, 0x43, 0x6F, 0x6E, 0x73, 0x74, 0x61,
+            0x6E, 0x74, 0x73, 0x20, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x20, 0x61, 0x63, 0x72,
+            0x6F, 0x73, 0x73, 0x20, 0x6D, 0x6F, 0x64, 0x75, 0x6C, 0x65, 0x73, 0x20, 0x3E, 0x3E,
+            0x3E, 0x3E, 0x43, 0x2B, 0x20, 0x32, 0x30, 0x32, 0x35, 0x20, 0x4A, 0x75, 0x6C, 0x20,
+            0x32, 0x37, 0x3A, 0x20, 0x4D, 0x6F, 0x76, 0x65, 0x20, 0x73, 0x74, 0x6F, 0x72, 0x65,
+            0x20, 0x6C, 0x65, 0x6E, 0x67, 0x74, 0x68, 0x73, 0x20, 0x74, 0x6F, 0x20, 0x73, 0x77,
+            0x61, 0x70, 0x69, 0x2E, 0x69, 0x49, 0x05, 0x43, 0x2C, 0x20, 0x4A, 0x75, 0x6E, 0x20,
+            0x31, 0x31, 0x3A, 0x20, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x20, 0x61, 0x73, 0x73,
+            0x5F, 0x73, 0x74, 0x6F, 0x72, 0x65, 0x5F, 0x6C, 0x65, 0x6E, 0x20, 0x73, 0x79, 0x6D,
+            0x62, 0x5F, 0x73, 0x74, 0x6F, 0x72, 0x65, 0x5F, 0x6C, 0x65, 0x6E, 0x49, 0x0D, 0x43,
+            0x17, 0x20, 0x52, 0x65, 0x6D, 0x6F, 0x76, 0x65, 0x20, 0x6F, 0x62, 0x73, 0x6F, 0x6C,
+            0x65, 0x74, 0x65, 0x20, 0x63, 0x68, 0x65, 0x63, 0x6B, 0x73, 0x4A
         ];
 
         let mut input = LocatingSlice::new(data);
         let mut lines = Vec::new();
         loop {
-             if input.is_empty() { break; }
-             match parse_line(&mut input) {
-                 Ok(line) => {
-                    //println!("Parsed line: {:?}", line);
+            if input.is_empty() {
+                break;
+            }
+            match parse_line(&mut input) {
+                Ok(line) => {
+                    // println!("Parsed line: {:?}", line);
                     lines.push(line);
-                 },
-                 Err(_) => break
-             }
+                },
+                Err(_) => break
+            }
         }
-        
+
         assert_eq!(lines.len(), 5, "Should parse 5 lines. Got: {:?}", lines);
     }
 
@@ -2513,13 +2903,12 @@ mod tests {
         // [49, 0D, 43, 17, ... text ..., 4A]
         // Should be Line(Indent, Comment) then Line(NewLine)
         let data: &[u8] = &[
-            0x49, 0x0D, 
-            0x43, 0x17, 0x20, 0x52, 0x65, 0x6D, 0x6F, 0x76, 0x65, 0x20, 0x6F, 0x62, 0x73, 0x6F, 0x6C, 0x65, 0x74, 0x65, 0x20, 0x63, 0x68, 0x65, 0x63, 0x6B, 0x73, 
-            0x4A
+            0x49, 0x0D, 0x43, 0x17, 0x20, 0x52, 0x65, 0x6D, 0x6F, 0x76, 0x65, 0x20, 0x6F, 0x62,
+            0x73, 0x6F, 0x6C, 0x65, 0x74, 0x65, 0x20, 0x63, 0x68, 0x65, 0x63, 0x6B, 0x73, 0x4A
         ];
 
         let mut input = LocatingSlice::new(data);
-        
+
         // Line 1
         let line1 = parse_line(&mut input).expect("Failed to parse line 1");
         assert_eq!(line1.items.len(), 2);
@@ -2536,4 +2925,3 @@ mod tests {
         verify_parsing_and_reconstruction("tests/orgams-main/MACRO.I");
     }
 }
-
