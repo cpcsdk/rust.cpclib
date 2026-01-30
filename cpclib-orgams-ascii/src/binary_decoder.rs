@@ -128,6 +128,8 @@ const MARKER_BYTE: u8 = 0xCF;
 const MARKER_LOCAL_LABEL: u8 = 0x51;
 const MARKER_LABEL_ADDR: u8 = 0x40;
 const MARKER_MACRO_DEF: u8 = 0x6D;
+const MARKER_IX_IND: u8 = 0xDF;
+const MARKER_IY_IND: u8 = 0xFF;
 
 const fn is_escaped_byte(b: u8) -> bool {
     // Return false for known command bytes and markers (these are not instructions
@@ -150,6 +152,18 @@ const fn is_escaped_byte(b: u8) -> bool {
          => true,
         _ => false,
     }
+}
+
+const fn is_instruction_prefix(b: u8) -> bool {
+    matches!(b, IX_CODE | IY_CODE | 0xED | 0xCB | MARKER_IX_IND | MARKER_IY_IND)
+}
+
+const fn is_cb_altered_opcode(b: u8) -> bool {
+    matches!(b,
+        0x40..=0x47 | // BIT 0, r
+        0x80..=0x87 | // RES 0, r
+        0xC0..=0xC7   // SET 0, r
+    )
 }
 
 const TAB_INSTR: u8 = 10;
@@ -875,7 +889,7 @@ impl Value {
                 match self.basis {
                     ValueBasis::Decimal => format!("{}", val),
                     ValueBasis::Hexadecimal => format!("&{:02X}", val),
-                    ValueBasis::Binary => format!("%{:b}", val)
+                    ValueBasis::Binary => format!("%{:08b}", val)
                 }
             },
             ValueContent::SixteenBits(val) => {
@@ -1237,24 +1251,26 @@ impl Instruction {
         for expr in &self.coded_operands {
             bytes.extend_from_slice(&expr.bytes(table));
         }
+
+        if let Some(MARKER_IX_IND | MARKER_IY_IND) = self.prefix {
+            // for IX/IY with (ix+nn) or (iy+nn), we need to add an end marker
+            bytes.push(0);
+        }
         bytes
     }
 
     pub fn display(&self, table: &StringTable) -> String {
         let tab = if let Some(prefix) = self.prefix {
-            match prefix {
-                IX_CODE => TABINSTRDD,
-                IY_CODE => TABINSTRFD,
-                0xED => TABINSTRED,
-                0xCB => TABINSTRCB,
-                other => panic!("Unknown prefix code: {}", other)
-            }
+            prefix_to_table(prefix)
         }
         else {
-            TABINSTR
+            &TABINSTR
         };
 
         let mut result = tab[self.opcode as usize].to_lowercase();
+
+
+
         let mut i = 0;
         while i < self.coded_operands.len() {
             if let Some(pos) = result.find("nnnn") {
@@ -1269,7 +1285,7 @@ impl Instruction {
             }
             else {
                 assert_eq!(i, 0);
-                if self.prefix == Some(0xCB) && self.opcode == 0xc6 {
+                if self.prefix == Some(0xCB) && is_cb_altered_opcode(self.opcode) {
                     result = result.replace("0", &self.coded_operands[i].display(table));
                 } else {
                     unimplemented!("Too many coded operands for instruction display");
@@ -1283,6 +1299,12 @@ impl Instruction {
             .replace("iy+0", "iy")
             .replace("ex af,af'", "ex af,af")
             .replace("sbc a,", "sbc ");
+
+        // ld a,(iy+0)  -> ld a,(iy)
+        if let Some(MARKER_IX_IND | MARKER_IY_IND) = self.prefix {
+            result = result.replace("+nn", "");
+        }
+
         result
     }
 }
@@ -1558,6 +1580,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
 
                     Statement::If(..)
                     | Statement::End
+                    | Statement::Ent(..)
                     | Statement::Import(..)
                     | Statement::Org(..)
                     | Statement::Else
@@ -2457,8 +2480,8 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
 
 fn prefix_to_table(prefix: u8) -> &'static [&'static str] {
     match prefix {
-        IX_CODE => &TABINSTRDD,
-        IY_CODE => &TABINSTRFD,
+        IX_CODE | MARKER_IX_IND => &TABINSTRDD,
+        IY_CODE | MARKER_IY_IND => &TABINSTRFD,
         0xED => &TABINSTRED,
         0xCB => &TABINSTRCB,
         _ => panic!("Unsupported prefix: 0x{:02X}", prefix)
@@ -2474,13 +2497,13 @@ fn parse_inner_if(input: &mut Input) -> OrgamsParseResult<Statement> {
 fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
     let b = dbg!(any.parse_next(input)?);
 
-    let (prefix, opcode, repr) = if b == IX_CODE || b == IY_CODE || b == 0xED || b == 0xCB {
+    let (prefix, opcode, repr) = if is_instruction_prefix(b) {
         let prefix = b;
         let opcode = any.parse_next(input)?;
 
-        if prefix == 0xCB && opcode == 0xc6 {
+        if prefix == 0xCB && is_cb_altered_opcode(opcode) {
             // manual handling of set (hl)
-            let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set ?; (hl)")))).parse_next(input)?;
+            let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set/res/bit ?; (hl)")))).parse_next(input)?;
             return Ok(Instruction {
                 prefix: Some(prefix),
                 opcode,
@@ -2503,15 +2526,27 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
         (prefix, opcode, repr)
     };
 
-    let kinds = z80str_to_expressions_list(repr);
-    let mut coded_operands = Vec::with_capacity(kinds.len());
-    for _kind in kinds {
-        let expr = cut_err(parse_sized_expression.context(StrContext::Expected(
-            StrContextValue::Description("Expression for instruction")
-        )))
-        .parse_next(input)?;
-        coded_operands.push(expr);
+    dbg!(&prefix, &opcode, &repr);
+
+    let coded_operands = if let Some(MARKER_IX_IND | MARKER_IY_IND) = prefix {
+        cut_err(0.context(StrContext::Expected(StrContextValue::Description("FF/DF handling")))).parse_next(input)?;
+        Vec::new()
     }
+    else {
+
+        let kinds = z80str_to_expressions_list(repr);
+        let mut coded_operands = Vec::with_capacity(kinds.len());
+        for _kind in kinds {
+            let expr = cut_err(parse_sized_expression.context(StrContext::Expected(
+                StrContextValue::Description("Expression for instruction")
+            )))
+            .parse_next(input)?;
+            coded_operands.push(expr);
+        }
+        coded_operands
+    };
+
+
     Ok(Instruction {
         prefix,
         opcode,
