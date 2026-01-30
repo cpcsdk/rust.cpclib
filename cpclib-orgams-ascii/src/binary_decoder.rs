@@ -414,7 +414,7 @@ impl Deref for Comment {
 /// Represent a string where the bit 7 is on on the last char.
 /// The stored string DEOS NOT have the bit 7 on.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Bit7OnString(String);
+pub struct Bit7OnString(OrgamsEncodedString);
 
 impl Bit7OnString {
     // Create a string from a array of bytes where the last char has bit 7 on
@@ -424,11 +424,7 @@ impl Bit7OnString {
         if let Some(last) = content.last_mut() {
             *last &= !(1 << 7); // clear high bit
         }
-        Self(String::from_utf8_lossy(&content).to_string())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
+        Self(OrgamsEncodedString(content))
     }
 
     pub fn bytes(&self) -> Vec<u8> {
@@ -440,18 +436,61 @@ impl Bit7OnString {
     }
 }
 
+impl Deref for Bit7OnString {
+    type Target = OrgamsEncodedString;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
-pub struct SizedString(String);
+pub struct OrgamsEncodedString(Vec<u8>);
+
+impl Deref for OrgamsEncodedString {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for OrgamsEncodedString {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        encoding_rs::WINDOWS_1252
+            .decode(&self.0)
+            .0
+            .fmt(f)
+    }
+}
+
+impl OrgamsEncodedString {
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SizedString(OrgamsEncodedString);
+impl Deref for SizedString {
+    type Target = OrgamsEncodedString;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl PartialEq<str> for Bit7OnString {
     fn eq(&self, other: &str) -> bool {
-        self.0 == other
+        &self.0.to_string() == other
     }
 }
 
 impl PartialEq<&str> for Bit7OnString {
     fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
+        &self.0.to_string() == *other
     }
 }
 
@@ -459,16 +498,8 @@ impl SizedString {
     pub fn bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.0.len() + 1);
         bytes.push(self.0.len() as u8);
-        bytes.extend_from_slice(self.0.as_bytes());
+        bytes.extend_from_slice(&self.0);
         bytes
-    }
-}
-
-impl Deref for SizedString {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }
 
@@ -520,11 +551,10 @@ impl LabelRef {
         LabelRef::Long(long, byte)
     }
 
-    pub fn get(&self, table: &StringTable) -> Cow<'_, str> {
+    pub fn get<'l, 't>(&'l self, table: &'t StringTable) -> &'t OrgamsEncodedString {
         table
             .label(self)
-            .map(|s| Cow::Owned(s))
-            .unwrap_or(Cow::Borrowed("<unknown label>"))
+            .unwrap()
     }
 
     pub fn bytes(&self, _table: &StringTable) -> Vec<u8> {
@@ -572,7 +602,7 @@ impl StringTable {
         self.strings.len() - 1
     }
 
-    fn label(&self, label_ref: &LabelRef) -> Option<String> {
+    fn label(&self, label_ref: &LabelRef) -> Option<&OrgamsEncodedString> {
         let index = match label_ref {
             LabelRef::Short(idx) => *idx as usize,
             LabelRef::Long(long, byte) => {
@@ -585,7 +615,7 @@ impl StringTable {
                 idx
             }
         };
-        self.get(index).map(|s| s.as_str().to_string())
+        self.get(index).map(|s| s.deref())
     }
 }
 
@@ -841,7 +871,7 @@ impl Expression {
 impl ExpressionMember {
     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
-            ExpressionMember::String(s) => format!("\"{}\"", s.as_str()).into(),
+            ExpressionMember::String(s) => format!("\"{}\"", s.to_string()).into(),
             ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)).into(),
             ExpressionMember::ShortDecimal(v) => format!("{}", v).into(),
             ExpressionMember::Value(v) => v.display().into(),
@@ -917,7 +947,7 @@ impl Assign {
 impl Item {
     pub fn display(&self, table: &StringTable) -> String {
         match self {
-            Item::Comment(text) => format!(";{}", text.as_str()),
+            Item::Comment(text) => format!(";{}", text.deref().to_string()),
             Item::NewLine => "\n".to_string(),
             Item::Indent(count) => " ".repeat(count.0 as usize),
             Item::Assign(assign) => assign.display(table),
@@ -982,7 +1012,7 @@ impl MacroDef {
             let params = self
                 .params
                 .iter()
-                .map(|p| p.get(table))
+                .map(|p| p.get(table).to_string())
                 .collect::<Vec<_>>()
                 .join(",");
             format!("MACRO {} {}", name, params)
@@ -1002,14 +1032,16 @@ pub enum Statement {
     Ent(SizedExpression),
     Fill(SizedExpression, SizedExpression),
     If(SizedExpression),
-    Import(String, bool),
+    Import(SizedString, bool),
     Instruction(Instruction),
     MacroUse(Expression, Vec<Expression>),
     Org(SizedExpression),
     Org2(SizedExpression, SizedExpression),
-    RawString(String),
+    RawString(OrgamsEncodedString),
     Skip(SizedExpression),
-    StarRepeat(Box<SizedExpression>, Box<Item>),
+    RepeatInstruction(Box<SizedExpression>, Box<Item>),
+    StartRepeatBloc(SizedExpression),
+    StopRepeatBloc,
     StorePcInstr, // hidden instruction
     StorePcLine,  // hidden instruction
     Word(Vec<Expression>)
@@ -1044,6 +1076,17 @@ impl Statement {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
         match self {
+            Statement::StartRepeatBloc(expr) => 
+            {
+                let expr_bytes = expr.bytes(table);
+                bytes.push(MARKER_ESCAPE);
+                bytes.push(CMD_FACTOR_BLOC);
+                bytes.extend_from_slice(&expr_bytes);
+            },
+            Statement::StopRepeatBloc => {
+                bytes.push(MARKER_ESCAPE);
+                bytes.push(CMD_FACTOR_BLOC_END);
+            },
             Statement::Brk => {
                 bytes.push(MARKER_ESCAPE);
                 bytes.push(CMD_BRK);
@@ -1088,12 +1131,11 @@ impl Statement {
                 }
                 bytes.push(CMD_IMPORT); // Not escaped usually?
                 bytes.push(s.len() as u8);
-                bytes.extend_from_slice(s.as_bytes());
+                bytes.extend_from_slice(s.as_slice());
             },
-            Statement::RawString(s) => {
+            Statement::RawString(content) => {
                 bytes.push(MARKER_ESCAPE);
                 bytes.push(CMD_ASIS); // Raw string command
-                let content = s.as_bytes();
                 bytes.push(content.len() as u8);
                 bytes.extend_from_slice(content);
             },
@@ -1128,7 +1170,7 @@ impl Statement {
                 bytes.push(CMD_STORE_PC_LINE);
             },
 
-            Statement::StarRepeat(exprs, token) => {
+            Statement::RepeatInstruction(exprs, token) => {
                 bytes.push(CMD_REPEAT);
                 bytes.extend_from_slice(&exprs.bytes(table));
                 bytes.extend_from_slice(&token.bytes(table));
@@ -1158,6 +1200,10 @@ impl Statement {
 
     pub fn display<'a>(&'a self, table: &StringTable) -> Cow<'a, str> {
         match self {
+            Statement::StartRepeatBloc(expr) => {
+                format!("{} ** [", expr.display(table)).into()
+            },
+            Statement::StopRepeatBloc => "]".into(),
             Statement::Brk => "BRK".into(),
             Statement::If(expr) => {
                 let cond = expr.display(table);
@@ -1176,17 +1222,17 @@ impl Statement {
                 .into()
             },
             Statement::Import(s, escaped) => {
-                if *escaped && s.starts_with('"') && s.len() >= 3 {
+                if *escaped && s.starts_with(&[b'"']) && s.len() >= 3 {
                     // Start is " + user number
                     // End is A (maybe access rights/encoding ?)
                     let stripped = &s[2..s.len() - 1];
-                    format!("IMPORT \"{}\"", stripped).into()
+                    format!("IMPORT \"{}\"", encoding_rs::WINDOWS_1252.decode(stripped).0).into()
                 }
                 else {
-                    format!("IMPORT \"{}\"", s).into()
+                    format!("IMPORT \"{}\"", s.to_string()).into()
                 }
             },
-            Statement::RawString(s) => s.as_str().into(),
+            Statement::RawString(s) => s.to_string().into(),
             Statement::Ent(e) => format!("ENT {}", e.display(table)).into(),
             Statement::Org(e) => format!("ORG {}", e.display(table)).into(),
             Statement::Org2(e1, e2) => {
@@ -1204,7 +1250,7 @@ impl Statement {
                 // norepresentation is expected
                 "".into()
             },
-            Statement::StarRepeat(expr, item) => {
+            Statement::RepeatInstruction(expr, item) => {
                 format!("{} ** {}", expr.display(table), item.display(table)).into()
             },
             Statement::MacroUse(name, args) => {
@@ -1341,6 +1387,7 @@ pub struct DisplayState<'f, 'g> {
     pub(crate) next_comment_requires_alignment: bool,
     pub(crate) previous_was_label: bool,
     pub(crate) previous_was_instruction: bool,
+    pub(crate) previous_was_start_block: bool,
     pub(crate) last_generated_line: Option<String>
 }
 
@@ -1353,6 +1400,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             next_comment_requires_alignment: false,
             previous_was_label: false,
             previous_was_instruction: false,
+            previous_was_start_block: false,
             last_generated_line: None
         }
     }
@@ -1368,16 +1416,21 @@ impl<'f, 'g> DisplayState<'f, 'g> {
 
 impl<'f, 'g> DisplayState<'f, 'g> {
     fn emit_line(&mut self) -> std::fmt::Result {
+            // we have rendering bug to fix. In the meanwhile here is a workaround
+            let line = self.current_line
+                .replace("[:", "[")
+                .replace(":]", "]");
         if let Some(f) = self.f.as_mut() {
-            write!(f, "{}\r\n", self.current_line)?;
+            write!(f, "{}\r\n", line)?;
         }
 
-        self.last_generated_line = Some(self.current_line.clone());
+        self.last_generated_line = Some(line);
         self.current_line.clear();
         self.line_number += 1;
         self.next_comment_requires_alignment = false;
         self.previous_was_label = false;
         self.previous_was_instruction = false;
+        self.previous_was_start_block = false;
         Ok(())
     }
 
@@ -1395,11 +1448,11 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         }
         else if !self.has_only_indents() {
             if self.previous_was_instruction {
-                self.current_line.push(':');
+                    self.current_line.push(':');
             }
             else if !self.current_line.ends_with(' ') {
                 if !self.previous_was_label {
-                    self.current_line.push(':');
+                        self.current_line.push(':');
                 }
                 else {
                     let indent_after_label: usize = if is_instruction {
@@ -1428,6 +1481,16 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         self.append_token_or_instruction_representation(false, s);
     }
 
+    fn append_start_bloc(&mut self, s: String) {
+        self.append_token_representation(s);
+        self.previous_was_start_block = true;
+    }
+
+    fn append_stop_bloc(&mut self, s: String) {
+        self.previous_was_label = true;
+        self.append_instruction_representation(s);
+    }
+
     fn append_token_or_instruction_representation(&mut self, is_instruction: bool, s: String) {
         if self.previous_was_label
             && (s.starts_with("WORD") || s.starts_with("BYTE") || s.starts_with("SKIP"))
@@ -1444,9 +1507,10 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         else if !self.current_line.is_empty()
             && (s.starts_with("WORD") || s.starts_with("BYTE") || s.starts_with("SKIP"))
         {
-            dbg!(&s, self.previous_was_instruction, self.previous_was_label);
             if !self.previous_was_label {
-                self.current_line.push(':');
+                if !self.previous_was_start_block {
+                    self.current_line.push(':');
+                }
             }
             else {
                 self.current_line.push(' ')
@@ -1459,6 +1523,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         self.append_string_no_indent(s);
         self.previous_was_label = false;
         self.previous_was_instruction = is_instruction;
+        self.previous_was_start_block = true;
     }
 
     fn append_comment(&mut self, c: &str) -> std::fmt::Result {
@@ -1485,6 +1550,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         self.append_string_no_indent(label.to_string());
         self.previous_was_label = true;
         self.previous_was_instruction = false;
+        self.previous_was_start_block = false;
     }
 
     /// the string already has its indentation. maybe it has to change
@@ -1492,6 +1558,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         self.append_string_next_comment_aligned(assignment.to_string());
         self.previous_was_label = false;
         self.previous_was_instruction = false;
+        self.previous_was_start_block = false;
     }
 
     fn append_string_no_indent(&mut self, s: String) {
@@ -1530,8 +1597,8 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         let state = self;
         match item {
             Item::Comment(comment) => {
-                let comment = comment.as_str();
-                state.append_comment(comment)?;
+                let comment = comment.to_string();
+                state.append_comment(&comment)?;
             },
             Item::NewLine => {
                 state.emit_line()?;
@@ -1542,7 +1609,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             Item::Assign(assign) => {
                 let label = labels
                     .label(&assign.label)
-                    .unwrap_or(format!("<unknown:{:?}>", assign.label));
+                    .unwrap();
                 let expr_repr = assign.expression.display(labels);
 
                 // Heuristic: Left padding for short labels
@@ -1557,11 +1624,11 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             },
             Item::Label(label) => {
                 let label_str = label.get(labels);
-                state.append_label(label_str.as_str());
+                state.append_label(&label_str.to_string());
             },
             Item::LocalLabel(label) => {
                 let label_str = format!(".{}", label.get(labels));
-                state.append_label(label_str.as_str());
+                state.append_label(&label_str.to_string());
             },
             Item::MacroDef(m) => {
                 let repr = m.display(labels);
@@ -1570,7 +1637,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             Item::Statement(s) => {
                 match s {
                     Statement::RawString(s) => {
-                        state.append_string_no_indent(s.clone());
+                        state.append_string_no_indent(s.to_string());
                     },
 
                     Statement::Instruction(ins) => {
@@ -1591,10 +1658,23 @@ impl<'f, 'g> DisplayState<'f, 'g> {
                     | Statement::Byte(..)
                     | Statement::Org(..)
                     | Statement::Org2(..)
-                    | Statement::Skip(..) => {
+                    | Statement::Skip(..) 
+                    => {
                         let repr = s.display(labels);
                         state.append_token_representation(repr.into_owned());
                     },
+
+                     Statement::StartRepeatBloc(..) => {
+                        let repr = dbg!(s.display(labels));
+                        state.append_start_bloc(repr.into_owned());
+                     }
+
+                     Statement::StopRepeatBloc => {
+                        let repr = s.display(labels);
+                        state.append_stop_bloc(repr.into_owned());
+                     }
+
+
                     //                        Statement::MacroUse(..) | Statement::StarRepeat(..) => {
                     // let repr = s.display(labels);
                     // state.append_instruction_representation(repr.into_owned());
@@ -1632,7 +1712,8 @@ impl std::fmt::Display for Program {
             next_comment_requires_alignment: false,
             last_generated_line: None,
             previous_was_label: false,
-            previous_was_instruction: false
+            previous_was_instruction: false,
+            previous_was_start_block: false
         };
 
         Ok(())
@@ -1767,7 +1848,7 @@ fn parse_items_untils_lbls(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
     terminated(parse_items, LBLS).parse_next(input)
 }
 
-fn parse_star_repeat(input: &mut Input) -> OrgamsParseResult<Item> {
+fn parse_star_repeat_single(input: &mut Input) -> OrgamsParseResult<Item> {
     consume_marker(CMD_REPEAT)(input)?;
     let expr = parse_sized_expression.parse_next(input)?;
     let item = cut_err(parse_inner_item.context(StrContext::Label(
@@ -1780,11 +1861,12 @@ fn parse_star_repeat(input: &mut Input) -> OrgamsParseResult<Item> {
         .void()
         .parse_next(input)?;
 
-    Ok(Item::Statement(Statement::StarRepeat(
+    Ok(Item::Statement(Statement::RepeatInstruction(
         Box::new(expr),
         Box::new(item)
     )))
 }
+
 
 /// Parse single item EXCEPT newline, comments,  indenations, label, macrodref.
 /// assign seems to be prefexid by 7f
@@ -1810,7 +1892,7 @@ fn parse_inner_item(input: &mut Input) -> OrgamsParseResult<Item> {
         parse_escaped_7f_item,
         parse_byte,
         parse_word,
-        parse_star_repeat,
+        parse_star_repeat_single,
         parse_assign.map(Item::Assign),
         //  parse_indent.map(Item::Indent),
         parse_import.map(|s| Item::Statement(Statement::Import(s, false))),
@@ -1874,9 +1956,9 @@ fn parse_word_or_byte(is_word: bool) -> impl Fn(&mut Input) -> OrgamsParseResult
 }
 
 /// Parse explicit import directive (0x17)
-fn parse_import(input: &mut Input) -> OrgamsParseResult<String> {
+fn parse_import(input: &mut Input) -> OrgamsParseResult<SizedString> {
     consume_marker(CMD_IMPORT)(input)?;
-    parse_sized_text.parse_next(input).map(|s| s.0)
+    parse_sized_text.parse_next(input)
 }
 
 fn parse_item_with_endline(input: &mut Input) -> OrgamsParseResult<Item> {
@@ -2414,6 +2496,17 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
     eprintln!("debug: parse_escaped_7f_item cmd=0x{:02x}", cmd);
 
     match cmd {
+        CMD_FACTOR_BLOC => {
+            let expr = cut_err(parse_sized_expression.context(StrContext::Label("Start repeat bloc expression"))).parse_next(input)?;
+            Ok(
+                Item::Statement(Statement::StartRepeatBloc(expr))
+            )
+        },
+        CMD_FACTOR_BLOC_END => {
+            Ok(
+                Item::Statement(Statement::StopRepeatBloc)
+            )          
+        },
         CMD_IF => {
             cut_err(parse_inner_if.context(StrContext::Label("IF")))
                 .parse_next(input)
@@ -2429,7 +2522,7 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
             // The error trace showed raw 0x17.
             // If we must support escaped 0x17, assume string?
             let s = cut_err(parse_sized_text).parse_next(input)?;
-            Ok(Item::Statement(Statement::Import(s.0, true)))
+            Ok(Item::Statement(Statement::Import(s, true)))
         },
         CMD_ENT => {
             let expr = cut_err(parse_sized_expression).parse_next(input)?;
@@ -2456,10 +2549,10 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
             let len = cut_err(any).parse_next(input)? as usize;
             let content = cut_err(take(len)).parse_next(input)?;
             Ok(Item::Statement(Statement::RawString(
-                String::from_utf8_lossy(content).to_string()
+                OrgamsEncodedString(content.to_vec())
             )))
         },
-        CMD_REPEAT => cut_err(parse_star_repeat).parse_next(input),
+        CMD_REPEAT => cut_err(parse_star_repeat_single).parse_next(input),
         CMD_MACRO_USE => {
             cut_err(parse_macro_use)
                 .parse_next(input)
@@ -2671,7 +2764,7 @@ fn parse_sized_text(input: &mut Input) -> OrgamsParseResult<SizedString> {
     let size = any.parse_next(input)? as usize;
     let text_bytes: Vec<u8> = cut_err(take(size)).parse_next(input)?.to_vec();
     Ok(SizedString(
-        String::from_utf8_lossy(&text_bytes).to_string()
+        OrgamsEncodedString(text_bytes)
     ))
 }
 

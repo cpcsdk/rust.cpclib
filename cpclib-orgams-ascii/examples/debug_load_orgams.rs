@@ -1,5 +1,6 @@
 use std::env;
 use std::fs;
+use encoding_rs::WINDOWS_1252;
 use cpclib_common::winnow::binary::le_u16;
 use cpclib_common::winnow::{
     Parser, 
@@ -38,8 +39,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let z80_path = path_buf.with_extension("Z80");
     let groundtruth = if z80_path.exists() {
         println!("Found groundtruth file: {:?}", z80_path);
-        let content = fs::read_to_string(&z80_path)?;
-        let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        let content = fs::read(&z80_path)?;
+        let (decoded, _, _) = WINDOWS_1252.decode(&content);
+        let lines: Vec<String> = decoded.lines().map(|s| s.to_string()).collect();
         Some(lines)
     } else {
         println!("No groundtruth file found (checked {:?})", z80_path);
@@ -112,7 +114,7 @@ fn debug_orgams_file(input: &mut Input, groundtruth_iter: &mut Option<std::slice
     
     // Print labels
     for (idx, label) in labels.iter().enumerate() {
-         println!("  Label #{:03}: \"{}\"", idx, label.as_str());
+         println!("  Label #{:03}: \"{}\"", idx, label.to_string());
     }
 
     // 5. Rewind to code start

@@ -16,3 +16,4 @@ independent = true
 #cpclib-asm = { workspace = true }
 cpclib-common = { workspace = true }
 cpclib-tokens = { workspace = true }
+encoding_rs = "0.8"
