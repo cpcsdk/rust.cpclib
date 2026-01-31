@@ -179,6 +179,10 @@ const EXP_MULTI_TERM_BEGIN: u8 = 0x42; // 'B'
 const EXP_MULTI_TERM_END: u8 = 0x45; // 'E'
 const EXP_SHORT_DECIMAL_MAX_VALUE: u8 = 0x1F; // 0x00-0x1F
 
+const EXP_ITER1: u8 = b'I';
+const EXP_ITER2: u8 = b'J';
+const EXP_ITER3: u8 = b'K';
+
 const EXP_SPACE: u8 = 0x20;
 const EXP_UNARY_MINUS: u8 = b'#';
 const EXP_LOCAL_LABEL: u8 = b'.';
@@ -702,7 +706,8 @@ pub enum ExpressionMember {
     DoubleDollar,                      // 0x44 ($$)
     UnaryMinus(Box<ExpressionMember>), // '#'
     String(SizedString),
-    ParenthesizedExpression(Vec<ExpressionMember>)
+    ParenthesizedExpression(Vec<ExpressionMember>),
+    Iter(u8), // 'I', 'J', 'K'
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -778,6 +783,15 @@ impl Value {
 impl ExpressionMember {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         match self {
+            ExpressionMember::Iter(n) => {
+                let code = match n {
+                    1 => EXP_ITER1,
+                    2 => EXP_ITER2,
+                    3 => EXP_ITER3,
+                    _ => unreachable!("Invalid iteration count: {}", n)
+                };
+                vec![code]
+            },
             ExpressionMember::String(s) => {
                 let mut result = vec![EXP_STRING];
                 result.extend_from_slice(&s.bytes());
@@ -905,6 +919,12 @@ impl Expression {
 impl ExpressionMember {
     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
+            ExpressionMember::Iter(n) => match n {
+                1 => "#".into(),
+                2 => "##".into(),
+                3 => "###".into(),
+                _ => unreachable!("Invalid iteration count: {}", n)
+            },
             ExpressionMember::String(s) => format!("\"{}\"", s.to_string()).into(),
             ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)).into(),
             ExpressionMember::ShortDecimal(v) => format!("{}", v).into(),
@@ -1758,14 +1778,15 @@ fn parse_items_untils_lbls(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
 
 fn parse_star_repeat_single(input: &mut Input) -> OrgamsParseResult<Item> {
     consume_marker(CMD_REPEAT)(input)?;
-    let expr = parse_sized_expression.parse_next(input)?;
+    let expr = cut_err(parse_sized_expression.context(StrContext::Label("Repeat counter"))).parse_next(input)?;
     let item = cut_err(parse_inner_item.context(StrContext::Label(
         "Failed to parse item after repeat expression"
     )))
     .parse_next(input)?;
 
     // XXX need to be done here ?
-    literal([MARKER_ESCAPE, CMD_END_BIS])
+    cut_err(literal([MARKER_ESCAPE, CMD_END_BIS])
+        .context(StrContext::Label("Expected end of repeat block")))
         .void()
         .parse_next(input)?;
 
@@ -1838,8 +1859,8 @@ fn parse_word_or_byte(is_word: bool) -> impl Fn(&mut Input) -> OrgamsParseResult
 
         consume_marker(marker)(input)?;
 
-        let expression_length = any.parse_next(input)? as usize;
-        let directive_length = any.parse_next(input)?;
+        let expression_length = cut_err(any).parse_next(input)? as usize;
+        let directive_length = cut_err(any).parse_next(input)?;
         let before_expressions = input.checkpoint();
         let mut exprs = Vec::new();
         while input.offset_from(&before_expressions) < expression_length - 2 {
@@ -1939,12 +1960,12 @@ fn parse_unsized_expression(input: &mut Input) -> OrgamsParseResult<Expression> 
     let first = peek(any).parse_next(input)?;
 
     if first != EXP_MULTI_TERM_BEGIN {
-        return parse_expression_member
+        return cut_err(parse_expression_member.context(StrContext::Label("single expression member")))
             .map(Expression::SingleTerm)
-            .parse_next(input);
+            .parse_next(input)
     }
     else {
-        return parse_multi_expression.parse_next(input);
+        return cut_err(parse_multi_expression.context(StrContext::Label("multi expression"))).parse_next(input);
     }
 }
 fn parse_multi_expression(input: &mut Input) -> OrgamsParseResult<Expression> {
@@ -1982,9 +2003,10 @@ fn parse_parenthesized_expression_inner(input: &mut Input) -> OrgamsParseResult<
 
 
 fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
-    debug_slice(input);
 
-    let b = any.parse_next(input)?;
+    let b = cut_err(any).parse_next(input)?;
+
+    dbg!(b);
 
     let is_local_label = b == EXP_LOCAL_LABEL;
     let b = if is_local_label {
@@ -2009,7 +2031,7 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
         },
         LONG_LABEL_START.. => {
         // Long label
-            let second_byte = any.parse_next(input)?;
+            let second_byte = cut_err(any).parse_next(input)?;
             let label = LabelRef::new_long_from_stream(b, second_byte);
             if is_local_label {
                 Ok(ExpressionMember::LocalLabelRef(label))
@@ -2027,9 +2049,9 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
             return Err(ErrMode::Backtrack(err));
         },
         EXP_OP_PAREN_OPEN => {
-            parse_parenthesized_expression_inner.context(StrContext::Expected(
+            cut_err(parse_parenthesized_expression_inner.context(StrContext::Expected(
                 StrContextValue::Description("Parenthesized expression")
-            ))
+            )))
             .parse_next(input)
         }
         EXP_STRING => {
@@ -2078,22 +2100,26 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
         0x24 => Ok(ExpressionMember::Dollar), // TO BE CHECKED
         0x44 => Ok(ExpressionMember::DoubleDollar), // TO BE CHECKED
 
+        EXP_ITER1 => Ok(ExpressionMember::Iter(1)),
+        EXP_ITER2 => Ok(ExpressionMember::Iter(2)),
+        EXP_ITER3 => Ok(ExpressionMember::Iter(3)),
+
         // Value types
         _ => {
             let (basis, content) = match b {
                 // decimal
                 EXP_DECIMAL_8 => {
-                    let val = any.parse_next(input)?;
+                    let val = cut_err(any).parse_next(input)?;
                     (ValueBasis::Decimal, ValueContent::EightBits(val))
                 },
                 EXP_DECIMAL_16 => {
-                    let low = any.parse_next(input)? as u16;
-                    let high = any.parse_next(input)? as u16;
+                    let low = cut_err(any).parse_next(input)? as u16;
+                    let high = cut_err(any).parse_next(input)? as u16;
                     let val = low | (high << 8);
                     (ValueBasis::Decimal, ValueContent::SixteenBits(val))
                 },
                 EXP_DECIMAL_CUSTOM | EXP_DECIMAL_CUSTOM_LONG => {
-                    let len = any.parse_next(input)? as usize;
+                    let len = cut_err(any).parse_next(input)? as usize;
                     let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
                     (ValueBasis::Decimal, ValueContent::Custom(bytes))
                 },
@@ -2104,13 +2130,13 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
                     (ValueBasis::Hexadecimal, ValueContent::EightBits(val))
                 },
                 EXP_HEXDECIMAL_16 => {
-                    let low = any.parse_next(input)? as u16;
-                    let high = any.parse_next(input)? as u16;
+                    let low = cut_err(any).parse_next(input)? as u16;
+                    let high = cut_err(any).parse_next(input)? as u16;
                     let val = low | (high << 8);
                     (ValueBasis::Hexadecimal, ValueContent::SixteenBits(val))
                 },
                 EXP_HEXDECIMAL_CUSTOM | EXP_HEXDECIMAL_CUSTOM_LONG => {
-                    let len = any.parse_next(input)? as usize;
+                    let len = cut_err(any).parse_next(input)? as usize;
                     let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
                     (ValueBasis::Hexadecimal, ValueContent::Custom(bytes))
                 },
@@ -2127,15 +2153,17 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
                     (ValueBasis::Binary, ValueContent::SixteenBits(val))
                 },
                 EXP_BINARY_CUSTOM | EXP_BINARY_CUSTOM_LONG => {
-                    let len = any.parse_next(input)? as usize;
+                    let len = cut_err(any).parse_next(input)? as usize;
                     let bytes: Vec<u8> = take(len).parse_next(input)?.to_vec();
                     (ValueBasis::Binary, ValueContent::Custom(bytes))
                 },
 
+
                 _ => {
+                    dbg!(b);
                     let mut err = ContextError::new();
                     err.push(StrContext::Expected(StrContextValue::Description(
-                        "valid expression member"
+                        "Invalid expression member"
                     )));
                     return Err(ErrMode::Backtrack(err));
                 }
@@ -2460,7 +2488,7 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
                 OrgamsEncodedString(content.to_vec())
             )))
         },
-        CMD_REPEAT => cut_err(parse_star_repeat_single).parse_next(input),
+        CMD_REPEAT => cut_err(parse_star_repeat_single.context(StrContext::Label("REPEAT single instruction"))).parse_next(input),
         CMD_MACRO_USE => {
             cut_err(parse_macro_use)
                 .parse_next(input)
@@ -2527,8 +2555,6 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
         (prefix, opcode, repr)
     };
 
-    dbg!(&prefix, &opcode, &repr);
-
 
         let kinds = z80str_to_expressions_list(repr);
         let mut coded_operands = Vec::with_capacity(kinds.len());
@@ -2543,11 +2569,11 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
 
 
 
-    dbg!(Ok(Instruction {
+    Ok(Instruction {
         prefix,
         opcode,
         coded_operands
-    }))
+    })
 
 }
 
