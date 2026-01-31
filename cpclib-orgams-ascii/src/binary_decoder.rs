@@ -668,7 +668,7 @@ impl StringTable {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     MultiTerm(Vec<ExpressionMember>),
-    SingleTerm(ExpressionMember)
+    SingleTerm(ExpressionMember),
 }
 
 impl Expression {
@@ -691,14 +691,9 @@ impl Expression {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SizedExpression(Expression);
-
-impl Deref for SizedExpression {
-    type Target = Expression;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+pub enum SizedExpression{
+    Empty,
+    Sized(Expression),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -875,12 +870,35 @@ impl Expression {
 
 impl SizedExpression {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
-        let mut result = self.0.bytes(table);
-        // Prepend size byte
-        let size = result.len() as u8;
-        let mut with_size = vec![size];
-        with_size.extend(result);
-        with_size
+        match self {
+            SizedExpression::Empty => vec![0],
+            SizedExpression::Sized(expr) => {
+                let mut result = expr.bytes(table);
+                // Prepend size byte
+                let size = result.len() as u8;
+                let mut with_size = vec![size];
+                with_size.extend(result);
+                with_size
+            }
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, SizedExpression::Empty)
+    }
+
+    pub fn expr(&self) -> Option<&Expression> {
+        match self {
+            SizedExpression::Empty => None,
+            SizedExpression::Sized(expr) => Some(expr)
+        }
+    }
+
+    pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
+        match self {
+            SizedExpression::Empty => "0".into(),
+            SizedExpression::Sized(expr) => expr.display(table)
+        }
     }
 }
 
@@ -1077,7 +1095,7 @@ pub enum Statement {
     Ent(SizedExpression),
     Fill(SizedExpression, SizedExpression),
     If(SizedExpression),
-    Import(SizedString, bool),
+    Import(SizedString, bool), // TODO remove this boolean; it was an issue I think
     Instruction(Instruction),
     MacroUse(Expression, Vec<Expression>),
     Org(SizedExpression),
@@ -1179,6 +1197,8 @@ impl Statement {
             Statement::Import(s, escaped) => {
                 if *escaped {
                     bytes.push(MARKER_ESCAPE);
+                } else {
+                    panic!("This is a bug, no ?");
                 }
                 bytes.push(CMD_IMPORT); // Not escaped usually?
                 bytes.push(s.len() as u8);
@@ -1390,12 +1410,14 @@ impl Instruction {
         }
 
         result = result
-            .replace("ix+0", "ix")
-            .replace("iy+0", "iy")
+            .replace("(ix+0)", "(ix)")
+            .replace("(iy+0)", "(iy)")
+            .replace("ld a,(ix)", "ld a,(ix+0)") // current orgams version do not shrink for a
+            .replace("ld a,(iy)", "ld a,(iy+0)")
             .replace("ex af,af'", "ex af,af")
             .replace("sbc a,", "sbc ");
 
-        // ld a,(iy+0)  -> ld a,(iy)
+        // TODO : remove ?
         if let Some(MARKER_IX_IND | MARKER_IY_IND) = self.prefix {
             result = result.replace("+nn", "");
         }
@@ -1839,7 +1861,6 @@ fn parse_inner_item(input: &mut Input) -> OrgamsParseResult<Item> {
         parse_star_repeat_single,
         parse_assign.map(Item::Assign),
         //  parse_indent.map(Item::Indent),
-        parse_import.map(|s| Item::Statement(Statement::Import(s, false))),
         parse_instruction.map(|i| Item::Statement(Statement::Instruction(i)))
     ))
     .parse_next(input)
@@ -1955,19 +1976,25 @@ fn parse_label(input: &mut Input) -> OrgamsParseResult<LabelRef> {
 /// - 0x60-0xFF: Label reference
 fn parse_sized_expression(input: &mut Input) -> OrgamsParseResult<SizedExpression> {
     let size = any.parse_next(input)? as usize;
-    let input_checkpoint = input.checkpoint();
-    let exp = parse_unsized_expression
-        .map(SizedExpression)
-        .parse_next(input)?;
-    if input.offset_from(&input_checkpoint) != size {
-        let mut err = ContextError::new();
-        err.push(StrContext::Expected(StrContextValue::Description(
-            "expression of incorrect size"
-        )));
-        return Err(ErrMode::Cut(err));
+
+    if size == 0 {
+        Ok(SizedExpression::Empty)
     }
-    else {
-        Ok(exp)
+               else {
+                    let input_checkpoint = input.checkpoint();
+                    let exp = parse_unsized_expression
+                        .map(SizedExpression::Sized)
+                        .parse_next(input)?;
+                    if input.offset_from(&input_checkpoint) != size {
+                        let mut err = ContextError::new();
+                        err.push(StrContext::Expected(StrContextValue::Description(
+                            "expression of incorrect size"
+                        )));
+                        return Err(ErrMode::Cut(err));
+                    }
+                    else {
+                        Ok(exp)
+                    }
     }
 }
 
