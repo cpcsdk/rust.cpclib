@@ -18,8 +18,16 @@ need_room = 1
    ; ld hl,(&beee)        
 
       IMPORT "monomap.i"
+      IMPORT "memmap.i"
+      IMPORT "macro.i"
 
 ; \/\/\/\/\/\ 2025 \/\/\/\/\/\
+;---- HH beta K ----
+   ; Dec 28 AY Call Stack:
+                  ; - max_stack: 8 -> 14
+                  ; - bufBT: move @ 5700 (didn't fit anymore)
+                  ; - display labels from imported sources as well
+
 ;---- HH beta J ----
    ; Dec 24 AX Add CHECK_BK_BASE
 ;---- HH beta I ----
@@ -267,9 +275,10 @@ org_select = org + &3F
 ;symb.o
 adr_to_id = &FFE7       ;In:  DE=adr
                         ;Out: Carry and HL=id, NC otherwise
-
 visu  = &FFCC
 get_line_from_pc = visu+3
+
+getkey_ext = &FDEA
 
 ;---In bric rom----------    
 
@@ -279,10 +288,6 @@ disp_init = disp
 
 conv  = &FD67
 put_deci_long = conv + 3
-
-aap   = &FE30
-aap_getkey = aap+9
-aap_get# = aap+21       ; out: HL=nb labels
 
 ; -------------
 
@@ -489,6 +494,7 @@ clean_bk
       END
 
 code2
+jps
           jp trace_cold_init
           jp trace
           jp trace_no_swap
@@ -812,43 +818,23 @@ affLine   ld a,(hl)
           djnz affSrc
       ENDM
 
-;        Initialise tableau de bord
-
 
 iniTr
+; Initialise tableau de bord
+; Done after BRK or T
           call set_full
           ld hl,reg
           call affReg
 
-;   Affiche [5] "'" empiles  (dump separator avec 4 bytes)
-; Disabled since overwritten by space anyway.
+          ld hl,(sp_)
+          call call_stack ; before swap! since copyHere
+          ld (endFrame),de
+          call disp_call_stack
 
-      IF 0
-          ld de,y0+1*256+39
-          ld ixl,5
-affAp_lp
-          ld a,"'"
-          call affAsc
-          dec e
-          inc d
-          dec ixl
-          jr nz,affAp_lp
-      END
-
-          xor a
-          ld (nb_adr_buf_explore),a
-          ld hl,buf_explore_
-          ld (pnt_buf_explore),hl
+          ld a,buf_explore/&0100:ld (pnt_buf_explore+1),a ; sanitize
 
           ld a,(last_com)
           call disp_last_com_
-
-          ld hl,(sp_)
-          call call_stack ; before swap! since copyHere
-;To: if Z: display '--- orgams call ---'
-          ld (endFrame),de
-
-          call disp_call_stack ; before Stack itself
 
           call majDump
           call maj_trace_code_history
@@ -1121,15 +1107,15 @@ disp_call_stack
           ex de,hl
           ld ixh,y3
 dcs_lp
+          ld a,l:cp bufBT AND &FF
+          jr z,dcs_end
+
           2 ** dec hl   ; Skip ret address
           dec hl:ld d,(hl) ; NB: garbage pre-first entry. Nevermind
           dec hl:ld e,(hl)
 
           call set_gris
           ld a,(pntFrame):cp l:call z,set_full
-
-          ld a,l:cp bufBT AND &FF
-          jr c,dcs_end
 
           push hl
           push ix
@@ -1144,17 +1130,17 @@ dcs_lp
           jr dcs_nxt
 
 dcs_ok
+;A = tab hl = id
           push de
-          ex de,hl
+          ex de,hl      ; de = id
           CHECK_BK_BASE()
           ld hl,tmp_buf
           push hl
           push iy       ; needed?
-          CALL_BRIC(aap_getkey)
+          CALL_ASS(getkey_ext)
           pop iy
           pop hl
           pop de
-
           call affText
 dcs_nxt
           inc ixh
@@ -1188,8 +1174,8 @@ call_stack
 ;Out: de=past last entry (oldest).
     ;  z if main entry point met
 
-max_stack = 8           ; max calls reported.
-peek_stack = &40        ; Estimation: how much stack we need to look at.
+max_stack = 14          ; max calls reported.
+peek_stack = max_stack*8 ; Estimation: how much stack we need to look at
 
           CHECK_BK_BASE()
           ld de,tmp_buf
@@ -1732,11 +1718,11 @@ _frameCom
 
 frameDown
           ld a,(pntFrame)
-          dec a
           cp bufBT AND &FF
-          ret c
+          ret z
           ld l,a
           ld h,bufBT/&0100
+          dec l
           ld d,(hl):dec l ; Ret address
           ld e,(hl):dec l
           dec l
@@ -1771,7 +1757,6 @@ no_end_push
           dec hl
           ld (hl),e
           ld (pnt_buf_explore),hl
-
           ret
 
 
@@ -1868,9 +1853,14 @@ get_source_line#
 
 trace_cold_init
 ;Might be EI here (at least for nrts).
+          xor a
+          ld (nb_adr_buf_explore),a
+          ld hl,buf_explore_
+          ld (pnt_buf_explore),hl
+
+          inc a         ; 1=flag sep
           ld hl,opcode_history
           ld b,nbPCbck * oh_size
-          ld a,1        ; flag sep
 fill      ld (hl),a:inc l:djnz fill
           ret
 
@@ -2018,7 +2008,7 @@ tmp_save_sp WORD        ; NB: could move at 9xxx (after swap)
 nb_adr_buf_explore BYTE 
 pnt_buf_explore WORD 
 buf_explore 16 ** WORD 
-buf_explore_
+buf_explore_ ASSERT($-1 / &0100 == buf_explore/&0100)
 
 line_num_src WORD 
 pc_nav WORD 
@@ -2033,21 +2023,20 @@ last_com BYTE
 adr_dump = &76E2        ;m address for memory dump (set by mon)
 
       ORG &7ED0
-szBT  = 4               ; size of one entry
-bufBT SKIP max_stack*szBT ; See call_stack
-bufBT_
 pntFrame BYTE           ; Current frame (end = younger)
 endFrame WORD           ; Mark past the of end of call stack
 navFrame0 WORD          ; Retain > pos in youngest frame
 flagInDbg BYTE          ; "B" if already in debug
 source# BYTE 
-
-      SKIP &7EFC-$      ; cocopy
+      SKIP clipboard-$
 
       IF endFrame - 1 - pntFrame
  !! must be contiguous
       END
 
-      ORG savepc,saveobj ; for host (truinrt.o)
+szBT  = 4               ; size of one entry
+bufBT = buf_trui
+bufBT_ = buf_trui + max_stack*szBT ; (&38)
 
+      ORG savepc,saveobj ; for host (truinrt.o)
 

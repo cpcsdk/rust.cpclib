@@ -1,0 +1,146 @@
+; Enum of special codes for source encoding.
+; ------------------------------------------
+
+; Orgams sources are pre-assembled. Most z80 opcodes are encoding as-is.
+; E.g. 'xor a' would appear as &af in the source.
+; That explains why custom formating (case, spacing) cannot be preserved.
+
+; Now, we also need to encode non-z80 directives (comments, ORG, BYTE...)
+; Some rarely encountered opcodes (like &40 aka ld b,b) were repurposed
+; for those. They are prefixed ec_ (as escape code).
+; As they are quite limited, &7f (aka ld a,a) is used as a generic
+; escape code, followed by ec2_* codes from 0 to &3f max.
+
+; "monique" is mnemonic for mnemonique.
+
+; \\\\\\\ 2025 \\\\\\\\\\
+; Jul
+; --- HH Beta 2 ---
+   ; 18: Add < > <= >= = != (e_lt and co)
+
+; --- GG Release ---
+;  Jan 20 ec2_save / ec2_load
+
+; ----------------------------------
+
+ec_label_adr = &40
+ec_comment = &43        ;'C'
+ec_tab = &49
+ec_nl = &4A
+ec_label_local = &51    ;
+;ec_comma  = 0
+ec_factor = &5B         ;5** inc c  ("[")
+ec_label_equ = &64
+;ec_space = &6D          ;suivi de nb space
+ec_macro_def = &6D
+
+tab_instr = 10          ;pos tab pour mnemoniques
+tab_command = 6
+tab_comment = 24
+
+ec_byte = &CF           ;"O"+$80
+ec_word = &D7           ;"W"+$80
+;ec_&skip   = 0             ;sentinelle
+ec_ix_ind = &DF
+ec_iy_ind = &FF
+
+ec_esc = &7F
+ec2_eoc = 0             ;end of chunk
+ec2_asis = 1
+ec2_store_pc_line = 2   ;trigger $ and $$ saving for "<<" rewind
+ec2_store_pc_instr = 3  ;trigger $ and $$ saving for use in subsequent instr
+ec2_org = 4             ;ORG x
+ec2_org2 = 5            ;ORG x,y
+ec2_ent = 6
+ec2_fill = 7
+ec2_skip = 8
+ec2_if = 9
+ec2_else = 10
+;ec2_elif  = 11
+ec2_end = 12
+ec2_factor_bloc = 13    ; 4 ** [
+ec2_factor_bloc_end = 14 ; ]
+ec2_factor_end = 15     ; implicit ]
+ec2_brk = 16
+ec2_brk_set = 17
+ec2_restore = 18
+ec2_bank = 19
+ec2_endmacro = 20
+ec2_macro_use = 21
+ec2_load = 22
+ec2_import = 23
+ec2_str = 24
+ec2_save = 25
+ec2_savea = 26
+; !!! MAX = 63
+
+; Next?
+;save
+;assert
+;align
+;
+; ----------------------------------
+; Expression encoding
+; ----------------------------------
+
+short_decimal_max = 31  ;code 0 a 31 inclus
+short_label = &60       ;de $60 a $df : 128 first labels
+long_label = &E0        ;from $E000 to $ffff : 8192 other labels
+e_zero = 0
+
+e__start = &20
+
+; Sorted in ASCII order
+e_space = " "
+;reuse some dams tokens. Quite arbitrary. Advantage = in #21-#40
+e_xor = "!"
+e_string = &22
+e_minus_unary = "#"
+;$ eval_pc
+e_mod = "%"
+e_and = "&"
+;' free
+e_paren_open = "("      ;"[" & "]" in text
+e_paren_close = ")"
+e_times = "*"
+e_plus = "+"
+;, free 
+e_minus = "-"
+;. local
+e_divide = "/"
+e_decimal_8 = &30
+e_decimal_16 = &31
+e_decimal_long = &32
+e_decimal_custom = &33  ;custom format. not used yet
+e_hexa_8 = &34
+e_hexa_16 = &35
+e_hexa_long = &36
+e_hexa_custom = &37
+e_binary_8 = &38
+e_binary_16 = &39
+e_binary_long = &3A
+e_binary_custom = &3B
+e_lt  = "<"
+e_eq  = "="
+e_gt  = ">"
+e_none = "?"            ;no data (.byte ou .word seul)
+e_or  = "@"
+e_endofdata = "A"       ;repasse en mode 'opcode' (pour .byte .word ...)
+e_begin = "B"           ;multi-terms
+e_cos = "C"
+; D = eval_objc
+e_end = "E"             ;end multi-terms
+; F = eval_forward  (not implemented)
+; G = eval_backward (not implemented)
+
+e_iter1 = "I"
+e_iter2 = "J"
+e_iter3 = "K"
+e_le  = "L"
+e_ge  = "M"
+e_neq = "N"
+
+e_sin = "S"
+
+e_abs = "V"
+; After Z: [\]^_ backtick

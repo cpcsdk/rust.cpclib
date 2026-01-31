@@ -39,14 +39,15 @@ free0
 ; ---- aap -----
 pool  = &5600           ; first chunk labels  (TODO: is it still here)
 
-;5700-6000 free ?       ; it seems so.
+buf_trui = &5700
+free1 = &5770
+;5770-6000 free ?       ; it seems so.
 
 ;6000 ????  ; first byte used; by whom?
 
-
 mulf  = &6100           ; direct run multiface
 
-free2 = &6120
+free2 = &6120           ; really?
 
 pilot_str = &6200       ; ed
 backup_key_translate = &6500 ; ed
@@ -101,7 +102,7 @@ source_begin = vo0
   !! shared with org, swap
       END
 deps  = &7083           ; shared by org, impeva
-depsrec = &708E         ; shared by org, swap, cache
+depsrec = &708E         ; shared by org, swap, cache, import, symb
 up_to_date_since_ass = &7082 ; "
 up_to_date_since_visu_pc = &7097 ; "
 

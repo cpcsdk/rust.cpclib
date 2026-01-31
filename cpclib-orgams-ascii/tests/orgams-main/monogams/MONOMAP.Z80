@@ -8,8 +8,8 @@ mon_farcall = &DF24
 
 mon_rom = &DF46         ; !! palette at &e000-6
                         ; 2 free
-rsx_rom = &E7AA         ; &5 free
-trui_rom = &E850        ; &f free
+rsx_rom = &E7AA         ; 3 free
+trui_rom = &E84C        ; 0 free
 monui_rom = &F100       ; 1 free
 monhelp_rom = &F7C0     ; 5 free
 monui_rom' = &F900      ; 0 free
@@ -18,8 +18,8 @@ bt    = &FDCF           ; 0 free
 bt_   = &FDFA           ; ???
 histriom = &FE00
 mon_farcall_new = &FF00
-txt_beta_date = &FF88
 
+txt_beta_date = &FF88
 ; ---------- JUMPS -------------------
 rsx_jp = &FF9D
 trui_jp = &FFA0

@@ -1,6 +1,8 @@
 ; << impeva Eval labels from imported files >>
 inRom = 1               ; 1 to auto-install in rom
 rom   = &1D
+main_rom = &0A          ; ORGAMS.ROM 
+romextNrt = &1A
 dev_checks = 1
 dev_checks' = 1-inRom   ; optional checks
 need_room = 1
@@ -17,9 +19,12 @@ todo  = 1
       IMPORT "macro.i"
 
 ; \\\ 2025 \\\\\\\
-; -------- HH Beta J ---------
+; -------- HH Beta K ---------
  ; Dec
+   ;28  o: Expose getkey_ext (for call stack in trui)
+; -------- HH Beta J ---------
    ; 9  n: s/vo_curbk/va_curbk (nrt)
+         ; nrt_setup: set romextNrt
 ; -------- HH Beta I ---------
  ; Nov
    ; 28 m Clean-up: don't save vo_curbk: shouldn't be changed
@@ -90,8 +95,6 @@ todo  = 1
 ; oct 9. v1: WIP /eval_label_in_any_imported_source/
 
 
-main_rom = &0A          ; ORGAMS.ROM 
-;ext_rom = &1A           ; ORGEXT.ROM
 bk_dev = &C7            ; Temporary orgams instance will use c4-c7
 
 nrt_buf = &0F00
@@ -300,14 +303,18 @@ nrt_setup
 
 ; -- Work rom --
           ld c,rom:call kl_rom_select
-;vt_extrom = &9D02
+vt_extrom = &9D02
 vt_assrom = &9D08
 vt_currom = &9D0A
-;vo    = &7CE8
-;vo_romExt = vo+18
+vo    = &7CE8
+vo_romExt = vo+18
           ld a,rom
           ld (vt_assrom),a
           ld (vt_currom),a
+
+          ld a,romextNrt
+          ld (vt_extrom),a
+          ld (vo_romExt),a
           ret
 
 signature BYTE "Orgams"
@@ -676,15 +683,10 @@ common_setup
 ;Put label name in buffer, setup v_deps
 ;IN: A = tab 
 ;  ; de= id label
-;Out: carry if ok
-    ; A= 0
-          CALL_ORG(connect_aap_pool) ; works if self selected or not
-          ret nc
-
-          ld c,l
-          ld b,h
+;Out: If ok, carry, A= 0
           ld hl,buffer
-          CALL_BRIC(di_getkey_custom_pool)
+          call getkey_ext
+          ret nc
 ;bk base reconnected
       IF dev_checks
 ; sanity check: deps has properly been init and not overwritten
@@ -705,6 +707,22 @@ common_setup
 ; --- Init
           xor a:ld (v_label_met),a
           scf
+          ret
+
+getkey_ext
+; Get label from any tab (can be current one)
+;IN: A = tab 
+;  ; de= id label
+   ; hl= buffer dest
+;Out: Carry if ok  
+          push hl
+          CALL_ORG(connect_aap_pool) ; works if self selected or not
+          ld c,l
+          ld b,h
+          pop hl
+          ret nc
+
+          CALL_BRIC(di_getkey_custom_pool)
           ret
 
 get_id_in_import
@@ -766,7 +784,7 @@ code3 = $$
       ORG codedest3,$$
 
 jpTable'
-          3 ** BRK      ; was jp fetch_id_in_import
+          jp getkey_ext
 
       IF inRom
       FILL limit3-$,&F7

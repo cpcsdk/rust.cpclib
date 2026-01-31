@@ -1,5 +1,7 @@
 ; ---- Rom ASS Map ----
-; 2025 Jul 21 Move import
+; 2025 Dec 28 cocopy_module c940 -> c939
+            ; import c6a0 -> c66c
+     ; Jul 21 Move import
 
 ass_start = &C000
 org_jp_end = &C09B
@@ -17,9 +19,9 @@ chunkcc_jp = &C200      ; jp + code
 find  = &C260
 ;free     
 except = &C4E0
-impeva_module = &C5A0   ; 3 free
-import = &C6A0
-cocopy_module = &C940
+impeva_module = &C5A0   ; xx free
+import = &C66C
+cocopy_module = &C939
 symb3 = &CCCB
 asseto = &CD08          ;0 free
 ; free was except = &CDB0          ;17 free
@@ -44,7 +46,7 @@ asseva2 = &F100         ;
 visu_module = &F7BB     ; 0 
 scan  = &FA00           ; 13 free
 ; &fb40 free was cocopy_module'  
-symb2 = &FCA0           ; 1 free (enchaine with jp cocopy)
+symb2 = &FC66           ; 0 free 
 
 ; --jp--    
 impeva_jp' = &FDEA      ; 0 free

@@ -164,7 +164,7 @@ limit2 = org5
 ; - factorize terms using f_buildopcode_reg16_ ? (bof, complique)
 ; - arrays of 4 size word for bisect search
 ; - ps_or_litt (combi or_terms and ps_litt)
-re
+
 ; Pour quelques octets de plus:
   ; - rearrange routs before start (to use jr instead of jp)
   ; - or: align all routs to 4 (no need to jump at all)

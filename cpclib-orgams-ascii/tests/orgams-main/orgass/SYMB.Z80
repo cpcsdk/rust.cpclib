@@ -3,7 +3,7 @@ inRom = 1
 rom   = &1D
 dev_checks = 1
 dev_checks' = 1         ; new checks
-;Those nrt_checks are to heavy (time and room) to leave in rom
+;Those nrt_checks are too heavy (time and room) to sit in rom
 nrt_checks = 1 - inRom
 need_room = 1
 todo  = 1
@@ -41,6 +41,7 @@ todo  = 1
  ; Dec
   ;28 au: Fix test_free (use const.chunks_per_bk)
         ; sy_reset_if_imported: fix #1f7
+        ; source_adr_to_id: also try import (test_adr_to_id_import)
 ; ----- HH Beta i -----
  ; Nov
   ;28 at: sy_walk: s/vo_basebk/I/ for check
@@ -228,7 +229,8 @@ org_load = org+18
 ;org_save = org+21
 org_assemble = org+111  ; without code installation
 orgset = org + &90      ; for nrt
-org_is_self_selected = org + &60 ;connect bk base
+org_is_self_selected = org + &60 ; connects bk base
+org_get_current_selection = org + &30
 
 swap  = &FE69
 connect_symb_index = swap+9
@@ -275,6 +277,9 @@ disp  = &FF14
 disp_deci_a = disp+&48
 disp_hexa_a = disp+&5A
 disp_hexa_hl = disp+&63
+
+bitset = &FED0
+bs_get = bitset+6
 
 ;----
 chunks_per_bank = &3C   ;nrt 
@@ -460,7 +465,6 @@ tests
 ; A bit brittle!! Since e.g. org_assemble will use old version in ROM
 ; Burn new change in extra rom.
           NRT_INIT(0)
-          call test_redefine_imported
 
       2 ** [
 ; 1st pass: with full init
@@ -480,6 +484,7 @@ tests
           NRT_INIT(#):call test_sy_get2
           NRT_INIT(#):call test_sy_setdefined_bk
           NRT_INIT(#):call test_adr_to_id
+          NRT_INIT(#):call test_adr_to_id_import
           NRT_INIT(#):call test_bank_setup
       2 ** [
           NRT_INIT(#):call test_free
@@ -654,7 +659,7 @@ test_adr_to_id
 ;-------------
           CALL_ORG(org_init)
 
-          ld hl,source_adr_to_id
+          ld hl,.source_adr_to_id
           call nrt_set_source
 
           ld de,nrt_buf ; nevermind, since code not installed
@@ -663,19 +668,46 @@ test_adr_to_id
 
           ld de,&BABE:call adr_to_id:call c,&BE00
           ld de,&CAFE:call adr_to_id:call nc,&BE00
+          or a:call nz,&BE00 ; Tab 0
           CHECK_HL_EQ(1) ; Second label
           ld de,&CAFF:call adr_to_id:call nc,&BE00
+          or a:call nz,&BE00 ; Tab 0
           CHECK_HL_EQ(2)
           ld de,&CAFE:call adr_to_id:call nc,&BE00 ; Sanity
+          or a:call nz,&BE00 ; Tab 0
           CHECK_HL_EQ(1) ; Second label
           ret
 
-source_adr_to_id
+.source_adr_to_id
       BYTE "toto=1",0
       BYTE "tata",0
       BYTE "ei",0
       BYTE "titi",0
       BYTE 0
+
+test_adr_to_id_import
+;--------------------
+          CALL_ORG(org_init)
+
+          ld hl,.src
+          call nrt_set_source
+
+          ld de,nrt_buf ; nevermind, since code not installed
+          ld bc,&CAFE   ; $
+          CALL_ORG(org_assemble)
+
+          ld de,&CAFE+2:call adr_to_id:call nc,&BE00
+          cp 1:call nz,&BE00 ; 2nd tab
+          CHECK_HL_EQ(0)
+          ld de,&CAFE+4:call adr_to_id:call nc,&BE00
+          cp 1:call nz,&BE00 ; 2nd tab
+          CHECK_HL_EQ(1)
+          ret
+
+.src
+      BYTE "import",34,"testdata/labels.o",0,0
+
+
 
 test_bank_setup
           ld a,tst_bk
@@ -1789,10 +1821,10 @@ sy_walk
 ; Caller routine adr_to_id uses the internals
 
 ;In: IX= routine to apply at each symbol    
-          ; In: hl=symbol,
-              ; de=user value 
+          ; In: HL=symbol,
               ; A =work bank. (symbs chunk)
-              ; C =passed value 
+              ; DE=user value 
+              ; C =user value 
               ; iyl: chunk number
           ; Out: !!! must preserve B and HL
                ; !!! base bk must be reconnected.  
@@ -2357,15 +2389,37 @@ adr_to_id
 ; Nb: filter EQUs, so  'toto = $' won't be seen.
 
 ; In: de = adr
-;   ; Carry if found  hl = id
+;   ; Carry if found  hl = id, a = tab
     ; NC otherwise
 
           ld (save_sp),sp ; for walk exit shortcut
 
+          CALL_ORG(org_get_current_selection)
           ld ix,adr_to_id_one
+          ld c,a
           call sy_walk
-          or a
-          ret
+
+;here: walk exhausted without hit. Try deps.
+          xor a
+.lp
+          ld hl,depsrec
+          CALL_BRIC(bs_get)
+          jr z,.nxt
+
+          push de
+          call sy_sync_ext_index_to_live
+          pop de
+          ld c,a
+          push af
+          call sy_walk
+          pop af
+.nxt
+          inc a
+          cp max_sources
+          jr c,.lp
+
+; nc here
+          jp sy_sync_cur_index_to_live
 
 adr_to_id_one
 ;Is it a defined label (but not equ)?
@@ -2382,14 +2436,13 @@ adr_to_id_one
           ld a,d:cp (hl):2 ** dec hl:ret nz
 
           ld a,iyl      ; index chunk
-      IF spc-&40
- !! update code
-      ELSE
+          ASSERT(spc == &40)
       2 ** [srl a:rr l]
           ld h,a        ; hl=id
-      END
 
+          ld a,c        ; tab
           call connect_bk_base_i
+          call sy_sync_cur_index_to_live
           ld sp,(save_sp)
           scf
           ret
