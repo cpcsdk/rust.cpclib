@@ -1410,15 +1410,13 @@ impl Instruction {
             }
         }
 
+        if self.prefix == Some(MARKER_IX_IND) && self.coded_operands[0].is_empty() {
+            result = result.replace("(ix+0)", "(ix)");
+        }
+        else if self.prefix == Some(MARKER_IY_IND) && self.coded_operands[0].is_empty() {
+            result = result.replace("(iy+0)", "(iy)");
+        }
         result = result
-            .replace("(ix+0)", "(ix)") // TODO remove it should be handled by print stuff
-            .replace("(iy+0)", "(iy)")
-            
-            .replace("ld a,(ix)", "ld a,(ix+0)") // TODO remove orgams is able to handle both representations
-            .replace("ld a,(iy)", "ld a,(iy+0)")
-            .replace("cp (ix)", "cp (ix+0)") // TODO remove orgams is able to handle both representations
-            .replace("cp (iy)", "cp (iy+0)") // TODO remove orgams is able to handle both representations
-            
             .replace("(ix+-", "(ix-")
             .replace("(iy+-", "(iy-")
             .replace("ex af,af'", "ex af,af")
@@ -1525,7 +1523,9 @@ impl<'f, 'g> DisplayState<'f, 'g> {
     }
 
     fn append_stop_bloc<S: AsRef<str>>(&mut self, s: S) {
-        self.line_state = LineState::AfterRepeatBloc;
+        if self.line_state != LineState::Empty{
+            self.line_state = LineState::AfterRepeatBloc; // we want to avoid :
+        }
         self.append_instruction(s);
         self.line_state = LineState::AfterStatement(false);
     }
@@ -1631,8 +1631,14 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             Item::Statement(Statement::StorePcInstr | Statement::StorePcLine) => {
                 // we do stricly nothing
             }
+            Item::Statement(Statement::StartRepeatBloc(_)) => {
+                self.append_start_bloc(repr);
+            }
+            Item::Statement(Statement::StopRepeatBloc) => {
+                self.append_stop_bloc(repr);
+            }
             Item::Statement(Statement::Instruction(..)) | Item::Statement(Statement::MacroUse(..)
-            | Statement::RepeatInstruction(..) | Statement::StopRepeatBloc
+            | Statement::RepeatInstruction(..) 
             ) => {
                 self.append_instruction(repr);
             }
