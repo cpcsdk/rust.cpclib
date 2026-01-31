@@ -6,6 +6,7 @@ pub mod builder;
 pub mod macro_segment;
 pub mod symbols;
 pub mod tokens;
+pub mod opcode_table;
 
 pub use macro_segment::MacroSegment;
 pub use tokens::*;

@@ -22,16 +22,25 @@ use paste::paste;
 /// define_basic_char!(0x02, STX, CURSOR_0, "Turn off text cursor");
 /// ```
 macro_rules! define_basic_char {
-    ($hex_value:expr, $const_name:ident =$nb:expr, $basic_equiv:ident, $function_doc:expr) => {
+    ($hex_value:expr, $const_name:ident = $nb:expr, $basic_equiv:ident, $function_doc:expr) => {
         #[doc = concat!(
-            "Character code `0x",
-            stringify!($hex_value),
-            "` - BASIC equivalent: `",
-            stringify!($basic_equiv),
-            "`\n\n",
-            $function_doc
-        )]
+                    "Character code `0x",
+                    stringify!($hex_value),
+                    "` - BASIC equivalent: `",
+                    stringify!($basic_equiv),
+                    "`\n\n",
+                    $function_doc
+                )]
         pub const $const_name: u8 = $hex_value;
+
+        #[doc = concat!(
+                    "Character code `0x",
+                    stringify!($hex_value),
+                    "` - BASIC equivalent: `",
+                    stringify!($basic_equiv),
+                    "`\n\n",
+                    $function_doc
+                )]
         pub const $basic_equiv: u8 = $const_name;
 
         paste::item! {
@@ -41,9 +50,7 @@ macro_rules! define_basic_char {
 
     ($hex_value:expr, $const_name:ident, $basic_equiv:ident, $function_doc:expr) => {
         define_basic_char!($hex_value, $const_name = 0, $basic_equiv, $function_doc);
-        
     };
-
 
     ($hex_value:expr, $const_name:ident, $function_doc:expr) => {
         define_basic_char!($hex_value, $const_name = 0, $function_doc);
@@ -51,11 +58,11 @@ macro_rules! define_basic_char {
 
     ($hex_value:expr, $const_name:ident = $nb:expr, $function_doc:expr) => {
         #[doc = concat!(
-            "Character code `0x",
-            stringify!($hex_value),
-            "`\n\n",
-            $function_doc
-        )]
+                    "Character code `0x",
+                    stringify!($hex_value),
+                    "`\n\n",
+                    $function_doc
+                )]
         pub const $const_name: u8 = $hex_value;
 
         paste::item! {
@@ -67,19 +74,36 @@ macro_rules! define_basic_char {
 // Control characters with Locomotive BASIC equivalents (0x00-0x1F)
 
 define_basic_char!(0x00, NUL, "No effect. Ignored.");
-define_basic_char!(0x01, SOH = 1, "Print a specific character symbol (parameter: 0-255). This allows the symbols in the range 0 to 31 to be printed.");
+define_basic_char!(
+    0x01,
+    SOH = 1,
+    "Print a specific character symbol (parameter: 0-255). This allows the symbols in the range 0 to 31 to be printed."
+);
 define_basic_char!(0x02, STX, CURSOR_0, "Turn off text cursor.");
 define_basic_char!(0x03, ETX, CURSOR_1, "Turn on text cursor.");
 define_basic_char!(0x04, EOT = 1, MODE, "Set screen mode (parameter: 0-2).");
-define_basic_char!(0x05, ENQ = 1, "Send the parameter character to the graphics cursor");
+define_basic_char!(
+    0x05,
+    ENQ = 1,
+    "Send the parameter character to the graphics cursor"
+);
 define_basic_char!(0x06, ACK, "Enable text screen.");
 define_basic_char!(0x07, BEL, "Beep.");
 define_basic_char!(0x08, BS, "BackSpace / Cursor Left.");
 define_basic_char!(0x09, TAB, "Cursor Right / Tab.");
 define_basic_char!(0x0A, LF, "Line Feed / Cursor Down.");
 define_basic_char!(0x0B, VT, "Vertical Tab / Cursor Up.");
-define_basic_char!(0x0C, FF, CLS, "Clear text window and move cursor to top left corner.");
-define_basic_char!(0x0D, CR, "Carriage Return. Left edge of window on current line");
+define_basic_char!(
+    0x0C,
+    FF,
+    CLS,
+    "Clear text window and move cursor to top left corner."
+);
+define_basic_char!(
+    0x0D,
+    CR,
+    "Carriage Return. Left edge of window on current line"
+);
 define_basic_char!(0x0E, SO = 1, PAPER, "Set Paper Ink (parameter: 0-15).");
 define_basic_char!(0x0F, SI = 1, PEN, "Set Pen Ink (parameter: 0-15).");
 define_basic_char!(0x10, DLE, "Delete character under cursor.");
@@ -87,17 +111,46 @@ define_basic_char!(0x11, DC1, "Clear to start of line.");
 define_basic_char!(0x12, DC2, "Clear to end of line.");
 define_basic_char!(0x13, DC3, "Clear to start of screen.");
 define_basic_char!(0x14, DC4, "Clear to end of screen.");
-define_basic_char!(0x15, NAK,  "Disable text screen.");
+define_basic_char!(0x15, NAK, "Disable text screen.");
 define_basic_char!(0x16, SYN = 1, "Set transparency 0 disable 1 enable");
-define_basic_char!(0x17, ETB = 1, "Set graphics ink mode. 0 normal, 1 XOR, 2 AND, 3 OR");
+define_basic_char!(
+    0x17,
+    ETB = 1,
+    "Set graphics ink mode. 0 normal, 1 XOR, 2 AND, 3 OR"
+);
 define_basic_char!(0x18, CAN, "Exchange Pen and Paper inks (Reverse).");
-define_basic_char!(0x19, EM = 9, SYMBOL, "Set the matrix for user definable character (9 parameters).");
-define_basic_char!(0x1A, SUB = 4, WINDOW, "Set Window (parameters: left, right, top, bottom edges).");
+define_basic_char!(
+    0x19,
+    EM = 9,
+    SYMBOL,
+    "Set the matrix for user definable character (9 parameters)."
+);
+define_basic_char!(
+    0x1A,
+    SUB = 4,
+    WINDOW,
+    "Set Window (parameters: left, right, top, bottom edges)."
+);
 define_basic_char!(0x1B, ESC, "No effecT. Ignored");
-define_basic_char!(0x1C, FS= 3, INK, "Set Ink to a pair of colors (3 parameters).");
-define_basic_char!(0x1D, GS = 2, BORDER, "Set Border to a pair of colors (2 parameters).");
+define_basic_char!(
+    0x1C,
+    FS = 3,
+    INK,
+    "Set Ink to a pair of colors (3 parameters)."
+);
+define_basic_char!(
+    0x1D,
+    GS = 2,
+    BORDER,
+    "Set Border to a pair of colors (2 parameters)."
+);
 define_basic_char!(0x1E, RS, "Move cursor to top left corner.");
-define_basic_char!(0x1F, US = 2, LOCATE, "Move cursor to position (parameters: column, line).");
+define_basic_char!(
+    0x1F,
+    US = 2,
+    LOCATE,
+    "Move cursor to position (parameters: column, line)."
+);
 
 // Build NB_PARAMS_FOR_CODE at compile time using the __CHAR_PARAMS_XX constants
 pub(crate) const NB_PARAMS_FOR_CODE: &[u8; 32] = &[
@@ -132,14 +185,12 @@ pub(crate) const NB_PARAMS_FOR_CODE: &[u8; 32] = &[
     __CHAR_PARAMS_0x1C__,
     __CHAR_PARAMS_0x1D__,
     __CHAR_PARAMS_0x1E__,
-    __CHAR_PARAMS_0x1F__,
+    __CHAR_PARAMS_0x1F__
 ];
 
 // Standard printable ASCII range (0x20-0x7E)
 // These are standard ASCII and don't need special BASIC equivalents
 // but are included for completeness
-
-
 
 /// Character code `0x20` - Space
 pub const SPACE: u8 = 0x20;
@@ -377,10 +428,6 @@ pub const RIGHT_BRACE: u8 = 0x7D;
 
 /// Character code `0x7E` - Tilde `~`
 pub const TILDE: u8 = 0x7E;
-
-
-
-
 
 #[cfg(test)]
 mod tests {

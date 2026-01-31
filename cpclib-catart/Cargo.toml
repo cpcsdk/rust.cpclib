@@ -19,6 +19,7 @@ cpclib-common.workspace = true
 cpclib-image.workspace = true
 paste.workspace = true
 delegate.workspace = true
+owo-colors.workspace = true
 
 [build-dependencies]
 built.workspace = true

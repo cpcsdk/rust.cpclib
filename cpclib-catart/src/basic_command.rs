@@ -1,6 +1,5 @@
 /// This file encodes the CatArt basic commands as the could be handled in a basic program
-
-use std::{fmt::Display};
+use std::fmt::Display;
 
 use crate::char_command::{CharCommand, CharCommandList};
 
@@ -12,7 +11,7 @@ pub enum PrintArgument {
     /// A single character code (CHR$).
     ChrDollar(u8),
     /// A composite argument, containing multiple PrintArguments.
-    Composite(Vec<PrintArgument>),
+    Composite(Vec<PrintArgument>)
 }
 
 impl PrintArgument {
@@ -44,7 +43,7 @@ impl<const N: usize> From<&[u8; N]> for PrintArgument {
     }
 }
 
-impl From <Vec<u8>> for PrintArgument {
+impl From<Vec<u8>> for PrintArgument {
     fn from(data: Vec<u8>) -> Self {
         PrintArgument::String(data)
     }
@@ -56,16 +55,13 @@ impl From<Vec<PrintArgument>> for PrintArgument {
     }
 }
 
-
-
-
 impl PrintArgument {
     /// Convert the argument to a sequence of bytes (control codes or text)
     pub fn bytes(&self) -> Vec<u8> {
         match self {
             PrintArgument::String(data) => data.clone(),
             PrintArgument::ChrDollar(char_code) => vec![*char_code],
-            PrintArgument::Composite(args) => args.iter().flat_map(|arg| arg.bytes()).collect(),
+            PrintArgument::Composite(args) => args.iter().flat_map(|arg| arg.bytes()).collect()
         }
     }
 }
@@ -90,7 +86,7 @@ impl Display for PrintArgument {
                     first = false;
                 }
                 Ok(())
-            },
+            }
         }
     }
 }
@@ -101,14 +97,14 @@ pub enum PrintTerminator {
     /// Ends with semicolon (no new line)
     None,
     /// Ends with CRLF (new line)
-    CrLf,
+    CrLf
 }
 
 impl Display for PrintTerminator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PrintTerminator::None => write!(f, ";"),
-            PrintTerminator::CrLf => write!(f, ""),
+            PrintTerminator::CrLf => write!(f, "")
         }
     }
 }
@@ -125,7 +121,7 @@ pub enum BasicCommand {
     /// CURSOR ON
     CursorOn,
     /// INK pen, ink1, [ink2]
-    Ink(u8, u8, Option<u8>), // pen (0-15), ink1(0-31), ink2(0-31) 
+    Ink(u8, u8, Option<u8>), // pen (0-15), ink1(0-31), ink2(0-31)
     /// LOCATE col, row
     Locate(u8, u8), // column (1-80), row (1-25)
     /// MODE m
@@ -139,8 +135,7 @@ pub enum BasicCommand {
     /// SYMBOL char, matrix...
     Symbol(u8, u8, u8, u8, u8, u8, u8, u8, u8), // char, row1..row8
     /// WINDOW left, right, top, bottom
-    Window(u8, u8, u8, u8), // left (1-80), right (1-80), top (1-25), bottom (1-25)
-
+    Window(u8, u8, u8, u8) // left (1-80), right (1-80), top (1-25), bottom (1-25)
 }
 
 /// A list of BasicCommands with builder pattern for ergonomic construction
@@ -160,7 +155,7 @@ impl BasicCommandList {
     }
 
     /// Add multiple commands
-    pub fn extend<I: IntoIterator<Item=BasicCommand>>(mut self, iter: I) -> Self {
+    pub fn extend<I: IntoIterator<Item = BasicCommand>>(mut self, iter: I) -> Self {
         self.0.extend(iter);
         self
     }
@@ -193,63 +188,77 @@ impl BasicCommand {
     pub fn border(ink1: u8, ink2: Option<u8>) -> Self {
         BasicCommand::Border(ink1, ink2)
     }
+
     /// Create a CLS command
     pub fn cls() -> Self {
         BasicCommand::Cls
     }
+
     /// Create a CURSOR OFF command
     pub fn cursor_off() -> Self {
         BasicCommand::CursorOff
     }
+
     /// Create a CURSOR ON command
     pub fn cursor_on() -> Self {
         BasicCommand::CursorOn
     }
+
     /// Create an INK command
     pub fn ink(pen: u8, ink1: u8, ink2: Option<u8>) -> Self {
         BasicCommand::Ink(pen, ink1, ink2)
     }
+
     /// Create a LOCATE command
     pub fn locate(col: u8, row: u8) -> Self {
         BasicCommand::Locate(col, row)
     }
+
     /// Create a MODE command
     pub fn mode(mode: u8) -> Self {
         BasicCommand::Mode(mode)
     }
+
     /// Create a PAPER command
     pub fn paper(pen: u8) -> Self {
         BasicCommand::Paper(pen)
     }
+
     /// Create a PEN command
     pub fn pen(pen: u8) -> Self {
         BasicCommand::Pen(pen)
     }
+
     /// Create a PRINT command without newline (terminated by ;)
     pub fn print_string<S: Into<PrintArgument>>(data: S) -> Self {
-        BasicCommand::PrintString(
-            data.into(),
-            PrintTerminator::None
-        )
+        BasicCommand::PrintString(data.into(), PrintTerminator::None)
     }
+
     /// Create a PRINT command with newline (terminated by nothing)
     pub fn print_string_crlf<S: Into<PrintArgument>>(data: S) -> Self {
-        BasicCommand::PrintString(
-            data.into(),
-            PrintTerminator::CrLf
-        )
+        BasicCommand::PrintString(data.into(), PrintTerminator::CrLf)
     }
+
     /// Create a SYMBOL command
-    pub fn symbol(char_code: u8, r1: u8, r2: u8, r3: u8, r4: u8, r5: u8, r6: u8, r7: u8, r8: u8) -> Self {
+    pub fn symbol(
+        char_code: u8,
+        r1: u8,
+        r2: u8,
+        r3: u8,
+        r4: u8,
+        r5: u8,
+        r6: u8,
+        r7: u8,
+        r8: u8
+    ) -> Self {
         BasicCommand::Symbol(char_code, r1, r2, r3, r4, r5, r6, r7, r8)
     }
+
     /// Create a WINDOW command
     pub fn window(left: u8, right: u8, top: u8, bottom: u8) -> Self {
         BasicCommand::Window(left, right, top, bottom)
     }
 }
-
-
 
 impl BasicCommandList {
     pub fn to_char_commands(&self) -> Result<CharCommandList, String> {
@@ -267,21 +276,39 @@ impl BasicCommand {
 
     pub fn bytes(&self) -> Vec<u8> {
         match self.to_char_commands() {
-            Ok(cmds) => cmds.as_slice().iter().flat_map(|cmd: &CharCommand| cmd.bytes()).collect(),
-            Err(_) => vec![],
+            Ok(cmds) => {
+                cmds.as_slice()
+                    .iter()
+                    .flat_map(|cmd: &CharCommand| cmd.bytes())
+                    .collect()
+            },
+            Err(_) => vec![]
         }
     }
 
     /// Convert this BasicCommand into a list of CharCommands (control codes and parameters)
     pub fn to_char_commands(&self) -> Result<CharCommandList, String> {
         match self {
-            BasicCommand::Border(ink1, ink2) => Ok(CharCommandList::from(vec![CharCommand::Border(*ink1, ink2.unwrap_or(*ink1))])),
+            BasicCommand::Border(ink1, ink2) => {
+                Ok(CharCommandList::from(vec![CharCommand::Border(
+                    *ink1,
+                    ink2.unwrap_or(*ink1)
+                )]))
+            },
             BasicCommand::Cls => Ok(CharCommandList::from(vec![CharCommand::Cls])),
             BasicCommand::CursorOff => Ok(CharCommandList::from(vec![CharCommand::CursorOff])),
             BasicCommand::CursorOn => Ok(CharCommandList::from(vec![CharCommand::CursorOn])),
-            BasicCommand::Ink(pen, ink1, ink2) => Ok(CharCommandList::from(vec![CharCommand::Ink(*pen, *ink1, ink2.unwrap_or(*ink1))])),
-            BasicCommand::Locate(col, row) => Ok(CharCommandList::from(vec![CharCommand::Locate(*col, *row)])),
-            BasicCommand::Mode(mode) => Ok(CharCommandList::from(vec![CharCommand::SetMode(*mode)])),
+            BasicCommand::Ink(pen, ink1, ink2) => {
+                Ok(CharCommandList::from(vec![CharCommand::Ink(
+                    *pen,
+                    *ink1,
+                    ink2.unwrap_or(*ink1)
+                )]))
+            },
+            BasicCommand::Locate(col, row) => {
+                Ok(CharCommandList::from(vec![CharCommand::Locate(*col, *row)]))
+            },
+            BasicCommand::Mode(mode) => Ok(CharCommandList::from(vec![CharCommand::Mode(*mode)])),
             BasicCommand::Paper(pen) => Ok(CharCommandList::from(vec![CharCommand::Paper(*pen)])),
             BasicCommand::Pen(pen) => Ok(CharCommandList::from(vec![CharCommand::Pen(*pen)])),
             BasicCommand::PrintString(data, terminator) => {
@@ -297,30 +324,40 @@ impl BasicCommand {
                 Ok(CharCommandList::from(cmds_vec))
             },
             BasicCommand::Symbol(char_code, r1, r2, r3, r4, r5, r6, r7, r8) => {
-                Ok(CharCommandList::from(vec![CharCommand::Symbol(*char_code, *r1, *r2, *r3, *r4, *r5, *r6, *r7, *r8)]))
+                Ok(CharCommandList::from(vec![CharCommand::Symbol(
+                    *char_code, *r1, *r2, *r3, *r4, *r5, *r6, *r7, *r8
+                )]))
             },
             BasicCommand::Window(left, right, top, bottom) => {
-                Ok(CharCommandList::from(vec![CharCommand::Window(*left, *right, *top, *bottom)]))
+                Ok(CharCommandList::from(vec![CharCommand::Window(
+                    *left, *right, *top, *bottom
+                )]))
             },
         }
     }
-
-
 }
 
 impl Display for BasicCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BasicCommand::Border(ink1, ink2) => if let Some(ink2) = ink2 {
-                write!(f, "BORDER {},{}", ink1, ink2)} else {
-                write!(f, "BORDER {}", ink1)
+            BasicCommand::Border(ink1, ink2) => {
+                if let Some(ink2) = ink2 {
+                    write!(f, "BORDER {},{}", ink1, ink2)
+                }
+                else {
+                    write!(f, "BORDER {}", ink1)
+                }
             },
             BasicCommand::Cls => write!(f, "CLS"),
             BasicCommand::CursorOff => write!(f, "CURSOR OFF"),
             BasicCommand::CursorOn => write!(f, "CURSOR ON"),
-            BasicCommand::Ink(pen, ink1, ink2) => if let Some(ink2) = ink2 {
-                write!(f, "INK {},{},{}", pen, ink1, ink2)} else {
-                write!(f, "INK {},{}", pen, ink1)
+            BasicCommand::Ink(pen, ink1, ink2) => {
+                if let Some(ink2) = ink2 {
+                    write!(f, "INK {},{},{}", pen, ink1, ink2)
+                }
+                else {
+                    write!(f, "INK {},{}", pen, ink1)
+                }
             },
             BasicCommand::Locate(col, row) => write!(f, "LOCATE {},{}", col, row),
             BasicCommand::Mode(mode) => write!(f, "MODE {}", mode),
@@ -330,9 +367,15 @@ impl Display for BasicCommand {
                 write!(f, "PRINT {}{}", data, termin)
             },
             BasicCommand::Symbol(char_code, r1, r2, r3, r4, r5, r6, r7, r8) => {
-                write!(f, "SYMBOL {},{},{},{},{},{},{},{},{}", char_code, r1, r2, r3, r4, r5, r6, r7, r8)
+                write!(
+                    f,
+                    "SYMBOL {},{},{},{},{},{},{},{},{}",
+                    char_code, r1, r2, r3, r4, r5, r6, r7, r8
+                )
             },
-            BasicCommand::Window(left, right, top, bottom) => write!(f, "WINDOW {},{},{},{}", left, right, top, bottom),
+            BasicCommand::Window(left, right, top, bottom) => {
+                write!(f, "WINDOW {},{},{},{}", left, right, top, bottom)
+            },
         }
     }
 }
@@ -348,7 +391,6 @@ impl BasicCommandList {
     pub fn iter(&self) -> impl Iterator<Item = &BasicCommand> {
         self.0.iter()
     }
-
 }
 
 impl Display for BasicCommandList {

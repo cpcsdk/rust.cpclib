@@ -2619,6 +2619,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-image",
  "delegate",
+ "owo-colors",
  "paste",
 ]
 
@@ -2795,6 +2796,8 @@ name = "cpclib-orgams-ascii"
 version = "0.11.0"
 dependencies = [
  "cpclib-common",
+ "cpclib-tokens",
+ "encoding_rs",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
 // Allow iteration over &CharCommandList as &CharCommand
 impl<'a> IntoIterator for &'a CharCommandList {
-    type Item = &'a CharCommand;
     type IntoIter = std::slice::Iter<'a, CharCommand>;
+    type Item = &'a CharCommand;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -10,6 +10,23 @@ impl<'a> IntoIterator for &'a CharCommandList {
 /// A list of CharCommands with builder pattern for ergonomic construction
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct CharCommandList(Vec<CharCommand>);
+
+impl IntoIterator for CharCommandList {
+    type IntoIter = std::vec::IntoIter<CharCommand>;
+    type Item = CharCommand;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl Deref for CharCommandList {
+    type Target = [CharCommand];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl CharCommandList {
     /// Create a new empty CharCommandList
@@ -24,7 +41,7 @@ impl CharCommandList {
     }
 
     /// Add multiple commands
-    pub fn extend<I: IntoIterator<Item=CharCommand>>(mut self, iter: I) -> Self {
+    pub fn extend<I: IntoIterator<Item = CharCommand>>(mut self, iter: I) -> Self {
         self.0.extend(iter);
         self
     }
@@ -41,6 +58,49 @@ impl CharCommandList {
 
     pub fn iter(&self) -> std::slice::Iter<'_, CharCommand> {
         self.0.iter()
+    }
+
+    pub fn from_bytes(data: &[u8]) -> Self {
+        let mut idx = 0;
+        let mut list = Vec::new();
+        while idx < data.len() {
+            let cmd_or_missing = CharCommand::char_to_command_or_count(data[idx]);
+            match cmd_or_missing {
+                Ok(cmd) => {
+                    list.push(cmd);
+                    idx += 1;
+                },
+                Err(missing) => {
+                    let mut params = Vec::new();
+                    for i in 0..missing {
+                        params.push(data[idx + 1 + i]);
+                    }
+                    let cmd = match data[idx] {
+                        SOH => CharCommand::PrintSymbol(params[0]),
+                        EOT => CharCommand::Mode(params[0]),
+                        ENQ => CharCommand::SendGraphics(params[0]),
+                        SO => CharCommand::Paper(params[0]),
+                        SI => CharCommand::Pen(params[0]),
+                        SYN => CharCommand::Transparency(params[0]),
+                        ETB => CharCommand::GraphicsInkMode(params[0]),
+                        EM => {
+                            CharCommand::Symbol(
+                                params[0], params[1], params[2], params[3], params[4], params[5],
+                                params[6], params[7], params[8]
+                            )
+                        },
+                        SUB => CharCommand::Window(params[0], params[1], params[2], params[3]),
+                        FS => CharCommand::Ink(params[0], params[1], params[2]),
+                        GS => CharCommand::Border(params[0], params[1]),
+                        US => CharCommand::Locate(params[0], params[1]),
+                        _ => panic!("Logic error in from_bytes for char {}", data[idx])
+                    };
+                    list.push(cmd);
+                    idx += 1 + missing;
+                }
+            }
+        }
+        list.into()
     }
 }
 
@@ -59,10 +119,15 @@ impl Into<Vec<CharCommand>> for CharCommandList {
 // This file encodes the CatArt chars commands as they could be handled in a stream of chars.
 // They are mainly produced from a Basic list of command. But it is still possible to create them
 
+use std::fmt::Debug;
+use std::ops::Deref;
+
+use cpclib_common::smallvec::{SmallVec, smallvec};
+
 use crate::basic_chars::*;
 
 /// Represents the possible commands encoded in a stream of characters on the Amstrad CPC
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum CharCommand {
     /// No operation (0x00)
     Nop,
@@ -73,7 +138,7 @@ pub enum CharCommand {
     /// Enable cursor (0x03)
     CursorOn,
     /// Set Mode (0x04)
-    SetMode(u8), // 0, 1, 2
+    Mode(u8), // 0, 1, 2
     /// Send Graphics (0x05). however we cannot position the graphics cursor, so usage is very limite
     SendGraphics(u8),
     /// Enable VDU (0x06)
@@ -131,45 +196,117 @@ pub enum CharCommand {
     Char(u8)
 }
 
-impl CharCommand {
-    /// Convert the command to a sequence of control codes and bytes for the CPC
-    pub fn bytes(&self) -> Vec<u8>{
+impl Debug for CharCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CharCommand::Nop => vec![NUL],
-            CharCommand::PrintSymbol(c) => vec![SOH, *c],
-            CharCommand::CursorOff => vec![STX],
-            CharCommand::CursorOn => vec![ETX],
-            CharCommand::SendGraphics(m) => vec![ENQ, *m],
-            CharCommand::SetMode(m) => vec![EOT, *m],
-            CharCommand::EnableVdu => vec![ACK],
-            CharCommand::Beep => vec![BEL],
-            CharCommand::CursorLeft => vec![BS],
-            CharCommand::CursorRight => vec![TAB],
-            CharCommand::CursorDown => vec![LF],
-            CharCommand::CursorUp => vec![VT],
-            CharCommand::Cls => vec![FF],
-            CharCommand::CarriageReturn => vec![CR],
-            CharCommand::Paper(p) => vec![SO, *p],
-            CharCommand::Pen(p) => vec![SI, *p],
-            CharCommand::Delete => vec![DLE],
-            CharCommand::ClearLineEnd => vec![DC1],
-            CharCommand::ClearLineStart => vec![DC2],
-            CharCommand::ClearScreenEnd => vec![DC3],
-            CharCommand::ClearScreenStart => vec![DC4],
-            CharCommand::DisableVdu => vec![NAK],
-            CharCommand::Transparency(p) => vec![SYN, *p],
-            CharCommand::GraphicsInkMode(p) => vec![ETB, *p],
-            CharCommand::ExchangePenAndPaper => vec![CAN],
+            CharCommand::Nop => write!(f, "Nop"),
+            CharCommand::PrintSymbol(c) => write!(f, "PrintSymbol({})", c),
+            CharCommand::CursorOff => write!(f, "CursorOff"),
+            CharCommand::CursorOn => write!(f, "CursorOn"),
+            CharCommand::Mode(m) => write!(f, "Mode({})", m),
+            CharCommand::SendGraphics(m) => write!(f, "SendGraphics({})", m),
+            CharCommand::EnableVdu => write!(f, "EnableVdu"),
+            CharCommand::Beep => write!(f, "Beep"),
+            CharCommand::CursorLeft => write!(f, "CursorLeft"),
+            CharCommand::CursorRight => write!(f, "CursorRight"),
+            CharCommand::CursorDown => write!(f, "CursorDown"),
+            CharCommand::CursorUp => write!(f, "CursorUp"),
+            CharCommand::Cls => write!(f, "Cls"),
+            CharCommand::CarriageReturn => write!(f, "CarriageReturn"),
+            CharCommand::Paper(p) => write!(f, "Paper({})", p),
+            CharCommand::Pen(p) => write!(f, "Pen({})", p),
+            CharCommand::Delete => write!(f, "Delete"),
+            CharCommand::ClearLineEnd => write!(f, "ClearLineEnd"),
+            CharCommand::ClearLineStart => write!(f, "ClearLineStart"),
+            CharCommand::ClearScreenEnd => write!(f, "ClearScreenEnd"),
+            CharCommand::ClearScreenStart => write!(f, "ClearScreenStart"),
+            CharCommand::DisableVdu => write!(f, "DisableVdu"),
+            CharCommand::Transparency(p) => write!(f, "Transparency({})", p),
+            CharCommand::GraphicsInkMode(p) => write!(f, "GraphicsInkMode({})", p),
+            CharCommand::ExchangePenAndPaper => write!(f, "ExchangePenAndPaper"),
             CharCommand::Symbol(c, r1, r2, r3, r4, r5, r6, r7, r8) => {
-                vec![EM, *c, *r1, *r2, *r3, *r4, *r5, *r6, *r7, *r8]
+                write!(
+                    f,
+                    "Symbol({}, {}, {}, {}, {}, {}, {}, {}, {})",
+                    c, r1, r2, r3, r4, r5, r6, r7, r8
+                )
             },
-            CharCommand::Window(l, r, t, b) => vec![SUB, *l, *r, *t, *b],
-            CharCommand::Esc => vec![ESC],
-            CharCommand::Ink(p, i1, i2) => vec![FS, *p, *i1, *i2],
-            CharCommand::Border(i1, i2) => vec![GS, *i1, *i2],
-            CharCommand::Home => vec![RS],
-            CharCommand::Locate(c, l) => vec![US, *c, *l],
-            CharCommand::Char(c) => vec![*c],
+            CharCommand::Window(l, r, t, b) => write!(f, "Window({}, {}, {}, {})", l, r, t, b),
+            CharCommand::Esc => write!(f, "Esc"),
+            CharCommand::Ink(p, i1, i2) => write!(f, "Ink({}, {}, {})", p, i1, i2),
+            CharCommand::Border(i1, i2) => write!(f, "Border({}, {})", i1, i2),
+            CharCommand::Home => write!(f, "Home"),
+            CharCommand::Locate(c, l) => write!(f, "Locate({}, {})", c, l),
+            CharCommand::Char(c) => {
+                if c.is_ascii_graphic() {
+                    write!(f, "Char('{}')", *c as char)
+                }
+                else {
+                    write!(f, "Char({})", c)
+                }
+            },
+        }
+    }
+}
+
+impl CharCommand {
+    pub fn len(&self) -> usize {
+        self.bytes().len()
+    }
+
+    #[inline]
+    pub fn first_byte(&self) -> u8 {
+        self.bytes()[0]
+    }
+
+    #[inline]
+    pub fn second_byte(&self) -> u8 {
+        self.bytes()[1]
+    }
+
+    #[inline]
+    pub fn third_byte(&self) -> u8 {
+        self.bytes()[2]
+    }
+
+    /// Convert the command to a sequence of control codes and bytes for the CPC
+    pub fn bytes(&self) -> SmallVec<[u8; 3]> {
+        match self {
+            CharCommand::Nop => smallvec![NUL],
+            CharCommand::PrintSymbol(c) => smallvec![SOH, *c],
+            CharCommand::CursorOff => smallvec![STX],
+            CharCommand::CursorOn => smallvec![ETX],
+            CharCommand::SendGraphics(m) => smallvec![ENQ, *m],
+            CharCommand::Mode(m) => smallvec![EOT, *m],
+            CharCommand::EnableVdu => smallvec![ACK],
+            CharCommand::Beep => smallvec![BEL],
+            CharCommand::CursorLeft => smallvec![BS],
+            CharCommand::CursorRight => smallvec![TAB],
+            CharCommand::CursorDown => smallvec![LF],
+            CharCommand::CursorUp => smallvec![VT],
+            CharCommand::Cls => smallvec![FF],
+            CharCommand::CarriageReturn => smallvec![CR],
+            CharCommand::Paper(p) => smallvec![SO, *p],
+            CharCommand::Pen(p) => smallvec![SI, *p],
+            CharCommand::Delete => smallvec![DLE],
+            CharCommand::ClearLineEnd => smallvec![DC1],
+            CharCommand::ClearLineStart => smallvec![DC2],
+            CharCommand::ClearScreenEnd => smallvec![DC3],
+            CharCommand::ClearScreenStart => smallvec![DC4],
+            CharCommand::DisableVdu => smallvec![NAK],
+            CharCommand::Transparency(p) => smallvec![SYN, *p],
+            CharCommand::GraphicsInkMode(p) => smallvec![ETB, *p],
+            CharCommand::ExchangePenAndPaper => smallvec![CAN],
+            CharCommand::Symbol(c, r1, r2, r3, r4, r5, r6, r7, r8) => {
+                smallvec![EM, *c, *r1, *r2, *r3, *r4, *r5, *r6, *r7, *r8]
+            },
+            CharCommand::Window(l, r, t, b) => smallvec![SUB, *l, *r, *t, *b],
+            CharCommand::Esc => smallvec![ESC],
+            CharCommand::Ink(p, i1, i2) => smallvec![FS, *p, *i1, *i2],
+            CharCommand::Border(i1, i2) => smallvec![GS, *i1, *i2],
+            CharCommand::Home => smallvec![RS],
+            CharCommand::Locate(c, l) => smallvec![US, *c, *l],
+            CharCommand::Char(c) => smallvec![*c]
         }
     }
 
@@ -196,9 +333,9 @@ impl CharCommand {
             CAN => Ok(CharCommand::ExchangePenAndPaper),
             ESC => Ok(CharCommand::Esc),
             RS => Ok(CharCommand::Home),
-            
+
             0x20..=0x7F | 0x80..=0xFF => Ok(CharCommand::Char(c)),
-            _ => Err(NB_PARAMS_FOR_CODE[c as usize] as usize), 
+            _ => Err(NB_PARAMS_FOR_CODE[c as usize] as usize)
         }
     }
 
@@ -217,29 +354,66 @@ impl CharCommand {
                         if let Some(pc) = iter.next() {
                             params.push(*pc);
                             missing -= 1;
-                        } else {
-                            return Err(format!("Not enough parameters to build CharCommand for char {}", c));
+                        }
+                        else {
+                            return Err(format!(
+                                "Not enough parameters to build CharCommand for char {}",
+                                c
+                            ));
                         }
                     }
                     let cmd = match *c {
                         SOH => CharCommand::PrintSymbol(params[0]),
-                        EOT => CharCommand::SetMode(params[0]),
+                        EOT => CharCommand::Mode(params[0]),
                         ENQ => CharCommand::SendGraphics(params[0]),
                         SO => CharCommand::Paper(params[0]),
                         SI => CharCommand::Pen(params[0]),
                         SYN => CharCommand::Transparency(params[0]),
                         ETB => CharCommand::GraphicsInkMode(params[0]),
-                        EM => CharCommand::Symbol(params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7], params[8]),
+                        EM => {
+                            CharCommand::Symbol(
+                                params[0], params[1], params[2], params[3], params[4], params[5],
+                                params[6], params[7], params[8]
+                            )
+                        },
                         SUB => CharCommand::Window(params[0], params[1], params[2], params[3]),
                         FS => CharCommand::Ink(params[0], params[1], params[2]),
                         GS => CharCommand::Border(params[0], params[1]),
                         US => CharCommand::Locate(params[0], params[1]),
-                        _ => return Err(format!("Logic error in from_string for char {}", c)),
+                        _ => return Err(format!("Logic error in from_string for char {}", c))
                     };
                     res.push(cmd);
                 }
             }
         }
         Ok(CharCommandList::from(res))
+    }
+
+    pub fn is_mode(&self) -> bool {
+        matches!(self, CharCommand::Mode(_))
+    }
+
+    pub fn is_pen(&self) -> bool {
+        matches!(self, CharCommand::Pen(_))
+    }
+
+    pub fn is_paper(&self) -> bool {
+        matches!(self, CharCommand::Paper(_))
+    }
+
+    pub fn is_ink(&self) -> bool {
+        matches!(self, CharCommand::Ink(_, _, _))
+    }
+
+    pub fn is_border(&self) -> bool {
+        matches!(self, CharCommand::Border(_, _))
+    }
+
+    pub fn is_locate(&self) -> bool {
+        matches!(self, CharCommand::Locate(_, _))
+    }
+
+    pub fn is_print_symbol(&self) -> bool {
+        matches!(self, CharCommand::PrintSymbol(_))
     }
 }

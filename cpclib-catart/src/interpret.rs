@@ -4,7 +4,7 @@
 //! #[derive(Clone, Debug)]
 pub struct Cursor {
     pub x: u16,
-    pub y: u16,
+    pub y: u16
 }
 
 impl Cursor {
@@ -31,7 +31,8 @@ impl Cursor {
         let (width, _) = mode.resolution();
         if self.x > 1 {
             self.x -= 1;
-        } else {
+        }
+        else {
             self.x = width;
             self.dec_y(mode);
         }
@@ -52,27 +53,25 @@ impl Cursor {
     }
 }
 
-
-
-
-use crate::{basic_command::{BasicCommand, BasicCommandList, PrintArgument}, char_command::{CharCommand, CharCommandList}};
 use std::fmt::{self, Display, Write};
 
+use crate::basic_command::{BasicCommand, BasicCommandList, PrintArgument};
+use crate::char_command::{CharCommand, CharCommandList};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
     Mode0,
     Mode1,
-    Mode2,
+    Mode2
 }
 
 impl Mode {
     /// Returns the resolution (width, height) for the given mode (in chars).
     pub fn resolution(&self) -> (u16, u16) {
         match self {
-            Mode::Mode0 => (160/8, 200/8),
-            Mode::Mode1 => (320/8, 200/8),
-            Mode::Mode2 => (640/8, 200/8),
+            Mode::Mode0 => (160 / 8, 200 / 8),
+            Mode::Mode1 => (320 / 8, 200 / 8),
+            Mode::Mode2 => (640 / 8, 200 / 8)
         }
     }
 
@@ -82,14 +81,13 @@ impl Mode {
     }
 }
 
-
 use cpclib_image::ga::{Palette, Pen};
 
 #[derive(Clone, Debug)]
 pub struct ScreenCell {
     pub ch: u8,
     pub pen: Pen,
-    pub paper: Pen,
+    pub paper: Pen
 }
 
 impl ScreenCell {
@@ -101,7 +99,7 @@ impl ScreenCell {
 #[derive(Clone, Debug)]
 pub struct Screen {
     mode: Mode,
-    buffer: Vec<Vec<ScreenCell>>,
+    buffer: Vec<Vec<ScreenCell>>
 }
 
 impl Screen {
@@ -127,7 +125,8 @@ impl Screen {
         let (width, height) = self.resolution();
         if x == 0 || y == 0 || x > width || y > height {
             None
-        } else {
+        }
+        else {
             Some(&mut self.buffer[(y - 1) as usize][(x - 1) as usize])
         }
     }
@@ -136,20 +135,22 @@ impl Screen {
         let (width, height) = self.resolution();
         if x == 0 || y == 0 || x > width || y > height {
             None
-        } else {
+        }
+        else {
             Some(&self.buffer[(y - 1) as usize][(x - 1) as usize])
         }
     }
 }
 
 pub struct Interpreter {
+    enable_vdu: bool,
     screen: Screen,
     cursor: Cursor,
     palette: Palette,
     pen: Pen,
     paper: Pen,
     border: Pen,
-    window: Option<(u16, u16, u16, u16)>, // (left, right, top, bottom)
+    window: Option<(u16, u16, u16, u16)> // (left, right, top, bottom)
 }
 
 impl Interpreter {
@@ -173,9 +174,9 @@ impl Interpreter {
             paper,
             border: paper,
             window: None,
+            enable_vdu: true
         }
     }
-
 
     pub fn new_6128() -> Self {
         let mut inter = Self::new(Mode::Mode1);
@@ -197,13 +198,18 @@ impl Interpreter {
             BasicCommand::print_string_crlf(b"Ready"),
         ]);
 
-        let commands = start_text.to_char_commands().expect("Char command conversion failed");
-        self.interpret(commands.as_slice(), true).expect("Initialization failed");
+        let commands = start_text
+            .to_char_commands()
+            .expect("Char command conversion failed");
+        self.interpret(commands.as_slice(), true)
+            .expect("Initialization failed");
     }
 
     pub fn inc_cursor_x(&mut self) {
         let (width, _) = self.screen.resolution();
-        let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, self.screen.resolution().1));
+        let (left, right, top, bottom) =
+            self.window
+                .unwrap_or((1, width, 1, self.screen.resolution().1));
         self.cursor.x += 1;
         if self.cursor.x > right {
             self.cursor.x = left;
@@ -216,10 +222,13 @@ impl Interpreter {
 
     pub fn dec_cursor_x(&mut self) {
         let (width, _) = self.screen.resolution();
-        let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, self.screen.resolution().1));
+        let (left, right, top, bottom) =
+            self.window
+                .unwrap_or((1, width, 1, self.screen.resolution().1));
         if self.cursor.x > left {
             self.cursor.x -= 1;
-        } else {
+        }
+        else {
             self.cursor.x = right;
             if self.cursor.y > top {
                 self.cursor.y -= 1;
@@ -229,7 +238,9 @@ impl Interpreter {
 
     pub fn inc_cursor_y(&mut self) {
         let (_, height) = self.screen.resolution();
-        let (left, right, top, bottom) = self.window.unwrap_or((1, self.screen.resolution().0, 1, height));
+        let (left, right, top, bottom) =
+            self.window
+                .unwrap_or((1, self.screen.resolution().0, 1, height));
         self.cursor.y += 1;
         if self.cursor.y > bottom {
             self.cursor.y = bottom;
@@ -238,7 +249,9 @@ impl Interpreter {
 
     pub fn dec_cursor_y(&mut self) {
         let (_, height) = self.screen.resolution();
-        let (left, right, top, bottom) = self.window.unwrap_or((1, self.screen.resolution().0, 1, height));
+        let (left, right, top, bottom) =
+            self.window
+                .unwrap_or((1, self.screen.resolution().0, 1, height));
         if self.cursor.y > top {
             self.cursor.y -= 1;
         }
@@ -253,14 +266,20 @@ impl Interpreter {
 
     pub fn scroll_screen_up(&mut self) {
         let width = self.screen.resolution().0;
-        let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, self.screen.resolution().1));
+        let (left, right, top, bottom) =
+            self.window
+                .unwrap_or((1, width, 1, self.screen.resolution().1));
         // Collect source cells first to avoid borrow checker issues
-        let mut next_row_cells = vec![vec![ScreenCell::make(b' ', self.pen, self.paper); (right-left+1) as usize]; (bottom-top+1) as usize];
+        let mut next_row_cells =
+            vec![
+                vec![ScreenCell::make(b' ', self.pen, self.paper); (right - left + 1) as usize];
+                (bottom - top + 1) as usize
+            ];
         for y in top..=bottom {
             for x in left..=right {
                 let next_y = y + 1;
-                let idx_y = (y-top) as usize;
-                let idx_x = (x-left) as usize;
+                let idx_y = (y - top) as usize;
+                let idx_x = (x - left) as usize;
                 if next_y <= bottom {
                     if let Some(src) = self.screen.cell(x, next_y) {
                         next_row_cells[idx_y][idx_x] = src.clone();
@@ -270,8 +289,8 @@ impl Interpreter {
         }
         for y in top..=bottom {
             for x in left..=right {
-                let idx_y = (y-top) as usize;
-                let idx_x = (x-left) as usize;
+                let idx_y = (y - top) as usize;
+                let idx_x = (x - left) as usize;
                 if let Some(cell) = self.screen.cell_mut(x, y) {
                     let src = &next_row_cells[idx_y][idx_x];
                     *cell = src.clone();
@@ -288,14 +307,20 @@ impl Interpreter {
 
     pub fn scroll_screen_down(&mut self) {
         let width = self.screen.resolution().0;
-        let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, self.screen.resolution().1));
+        let (left, right, top, bottom) =
+            self.window
+                .unwrap_or((1, width, 1, self.screen.resolution().1));
         // Collect source cells first to avoid borrow checker issues
-        let mut prev_row_cells = vec![vec![ScreenCell::make(b' ', self.pen, self.paper); (right-left+1) as usize]; (bottom-top+1) as usize];
+        let mut prev_row_cells =
+            vec![
+                vec![ScreenCell::make(b' ', self.pen, self.paper); (right - left + 1) as usize];
+                (bottom - top + 1) as usize
+            ];
         for y in (top..=bottom).rev() {
             for x in left..=right {
                 let prev_y = if y > top { y - 1 } else { top };
-                let idx_y = (y-top) as usize;
-                let idx_x = (x-left) as usize;
+                let idx_y = (y - top) as usize;
+                let idx_x = (x - left) as usize;
                 if prev_y >= top {
                     if let Some(src) = self.screen.cell(x, prev_y) {
                         prev_row_cells[idx_y][idx_x] = src.clone();
@@ -305,8 +330,8 @@ impl Interpreter {
         }
         for y in (top..=bottom).rev() {
             for x in left..=right {
-                let idx_y = (y-top) as usize;
-                let idx_x = (x-left) as usize;
+                let idx_y = (y - top) as usize;
+                let idx_x = (x - left) as usize;
                 if let Some(cell) = self.screen.cell_mut(x, y) {
                     let src = &prev_row_cells[idx_y][idx_x];
                     *cell = src.clone();
@@ -322,256 +347,292 @@ impl Interpreter {
     }
 
     pub fn interpret<'a, I>(&mut self, commands: I, print_ready: bool) -> Result<(), String>
-    where
-        I: IntoIterator<Item = &'a CharCommand>,
-    {
+    where I: IntoIterator<Item = &'a CharCommand> {
         let finalize = if print_ready {
             BasicCommandList::from(vec![BasicCommand::print_string_crlf(b"Ready")])
-        } else {
+        }
+        else {
             BasicCommandList::default()
         };
-        let finalize = finalize.to_char_commands().expect("Char command conversion failed");
+        let finalize = finalize
+            .to_char_commands()
+            .expect("Char command conversion failed");
 
-        let commands = commands.into_iter().cloned().chain(finalize.into_iter().cloned());
+        let commands = commands.into_iter().cloned().chain(finalize.into_iter());
         for command in commands {
-          self.interpret_command(&command)?;
-         /* {
-          println!("{}", self);
-        let mut input = String::new();
-match std::io::stdin().read_line(&mut input) {
-    Ok(n) => {
-        println!("{n} bytes read");
-        println!("{input}");
-    }
-    Err(error) => println!("error: {error}"),
-}}*/
+            self.interpret_command(&command)?;
+            // {
+            // println!("{}", self);
+            // let mut input = String::new();
+            // match std::io::stdin().read_line(&mut input) {
+            // Ok(n) => {
+            // println!("{n} bytes read");
+            // println!("{input}");
+            // }
+            // Err(error) => println!("error: {error}"),
+            // }}
         }
         Ok(())
     }
 
-
     pub fn interpret_command(&mut self, command: &CharCommand) -> Result<(), String> {
-        dbg!("Interpreting CharCommand: {:?}", command);
-            match command {
-                CharCommand::PrintSymbol(ch) | CharCommand::Char(ch) => {
-                    let (width, height) = self.screen.resolution();
-                    let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
-                    if self.cursor.y >= top && self.cursor.y <= bottom && self.cursor.x >= left && self.cursor.x <= right {
-                        if let Some(cell) = self.screen.cell_mut(self.cursor.x, self.cursor.y) {
-                            cell.ch = *ch;
-                            cell.pen = self.pen;
-                            cell.paper = self.paper;
+        match command {
+            CharCommand::Nop => {
+                // No operation - do nothing
+            },
+            CharCommand::SendGraphics(_) => {
+                // Sending graphics is not simulated; ignore.
+            },
+            CharCommand::PrintSymbol(ch) | CharCommand::Char(ch) if self.enable_vdu => {
+                let (width, height) = self.screen.resolution();
+                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                if self.cursor.y >= top
+                    && self.cursor.y <= bottom
+                    && self.cursor.x >= left
+                    && self.cursor.x <= right
+                {
+                    if let Some(cell) = self.screen.cell_mut(self.cursor.x, self.cursor.y) {
+                        cell.ch = if matches!(command, CharCommand::Char(_)) {
+                            *ch as u8
                         }
-                        self.inc_cursor_x();
+                        else {
+                            '?' as u8
+                        };
+                        cell.pen = self.pen;
+                        cell.paper = self.paper;
                     }
-                },
-                CharCommand::Locate(x, y) => {
-                    self.locate_cursor(*x as _, *y as _);
-                },
-                CharCommand::Cls => {
-                    let (width, height) = self.screen.resolution();
-                    let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
-                    for y in top..=bottom {
-                        for x in left..=right {
-                            if let Some(cell) = self.screen.cell_mut(x, y) {
-                                cell.ch = b' ';
-                                cell.pen = self.pen;
-                                cell.paper = self.paper;
-                            }
-                        }
-                    }
-                    self.locate_cursor(left, top);
-                },
-                CharCommand::CarriageReturn => {
-                    self.locate_cursor(self.window.map_or(1, |(l, _, _, _)| l), self.cursor.y);
-                },
-                CharCommand::CursorDown => {
-                    self.inc_cursor_y();
-                },
-                CharCommand::CursorUp => {
-                    self.dec_cursor_y();
-                },
-                CharCommand::CursorLeft => {
-                    self.dec_cursor_x();
-                },
-                CharCommand::CursorRight => {
                     self.inc_cursor_x();
-                },
-                CharCommand::SetMode(m) => {
-                    let m = match m {
-                        0 => Mode::Mode0,
-                        1 => Mode::Mode1,
-                        2 => Mode::Mode2,
-                        _ => return Err(format!("Invalid mode {}", m)),
-                    };
-                    self.locate_cursor(1, 1);
-                    self.screen.reset_mode(m, self.pen, self.paper);
-                    self.window = None;
-                    self.cursor.x = 1;
-                    self.cursor.y = 1;
-                },
-                CharCommand::Pen(p) => {
-                    self.pen = Pen::from(*p);
-                },
-                CharCommand::Paper(p) => {
-                    self.paper = Pen::from(*p);
-                },
-                CharCommand::Ink(pen, ink1, _ink2) => {
-                    let pen = Pen::from(*pen);
-                    let ink = cpclib_image::ga::Ink::from(*ink1);
-                    self.palette.set(pen, ink); // blinking is ignored
-                },
-                CharCommand::Border(ink1, _ink2) => {
-                    let ink = cpclib_image::ga::Ink::from(*ink1);
-                    self.palette.set_border(ink);
-                    self.border = Pen::Border;
-                },
-                CharCommand::ClearLineStart => {
-                    let y = self.cursor.y;
-                    let x = self.cursor.x;
-                    let (left, _, _, _) = self.window.unwrap_or((1, self.screen.resolution().0, 1, self.screen.resolution().1));
-                    for col in left..=x {
-                        if let Some(cell) = self.screen.cell_mut(col, y) {
+                }
+            },
+            CharCommand::Locate(x, y) if self.enable_vdu => {
+                self.locate_cursor(*x as _, *y as _);
+            },
+            CharCommand::Cls if self.enable_vdu => {
+                let (width, height) = self.screen.resolution();
+                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                for y in top..=bottom {
+                    for x in left..=right {
+                        if let Some(cell) = self.screen.cell_mut(x, y) {
                             cell.ch = b' ';
                             cell.pen = self.pen;
                             cell.paper = self.paper;
                         }
                     }
                 }
-                CharCommand::ClearLineEnd => {
-                    let y = self.cursor.y;
-                    let x = self.cursor.x;
-                    let (_, right, _, _) = self.window.unwrap_or((1, self.screen.resolution().0, 1, self.screen.resolution().1));
-                    for col in x..=right {
-                        if let Some(cell) = self.screen.cell_mut(col, y) {
+                self.locate_cursor(left, top);
+            },
+            CharCommand::CarriageReturn if self.enable_vdu => {
+                self.locate_cursor(self.window.map_or(1, |(l, ..)| l), self.cursor.y);
+            },
+            CharCommand::CursorDown if self.enable_vdu => {
+                self.inc_cursor_y();
+            },
+            CharCommand::CursorUp if self.enable_vdu => {
+                self.dec_cursor_y();
+            },
+            CharCommand::CursorLeft if self.enable_vdu => {
+                self.dec_cursor_x();
+            },
+            CharCommand::CursorRight if self.enable_vdu => {
+                self.inc_cursor_x();
+            },
+            CharCommand::DisableVdu => {
+                self.enable_vdu = false;
+            },
+            CharCommand::EnableVdu => {
+                self.enable_vdu = true;
+            },
+            CharCommand::GraphicsInkMode(_) => {
+                // Graphics ink mode is not simulated; ignore.
+            },
+            CharCommand::Mode(m) if self.enable_vdu => {
+                let m = match m {
+                    0 => Mode::Mode0,
+                    1 => Mode::Mode1,
+                    2 => Mode::Mode2,
+                    _ => return Err(format!("Invalid mode {}", m))
+                };
+                self.locate_cursor(1, 1);
+                self.screen.reset_mode(m, self.pen, self.paper);
+                self.window = None;
+                self.cursor.x = 1;
+                self.cursor.y = 1;
+            },
+            CharCommand::Pen(p) if self.enable_vdu => {
+                self.pen = Pen::from(*p);
+            },
+            CharCommand::Paper(p) if self.enable_vdu => {
+                self.paper = Pen::from(*p);
+            },
+            CharCommand::Ink(pen, ink1, _ink2) if self.enable_vdu => {
+                let pen = Pen::from(*pen);
+                let ink = cpclib_image::ga::Ink::from(*ink1);
+                self.palette.set(pen, ink); // blinking is ignored
+            },
+            CharCommand::Border(ink1, _ink2) if self.enable_vdu => {
+                let ink = cpclib_image::ga::Ink::from(*ink1);
+                self.palette.set_border(ink);
+                self.border = Pen::Border;
+            },
+            CharCommand::ClearLineStart if self.enable_vdu => {
+                let y = self.cursor.y;
+                let x = self.cursor.x;
+                let (left, ..) = self.window.unwrap_or((
+                    1,
+                    self.screen.resolution().0,
+                    1,
+                    self.screen.resolution().1
+                ));
+                for col in left..=x {
+                    if let Some(cell) = self.screen.cell_mut(col, y) {
+                        cell.ch = b' ';
+                        cell.pen = self.pen;
+                        cell.paper = self.paper;
+                    }
+                }
+            },
+            CharCommand::ClearLineEnd if self.enable_vdu => {
+                let y = self.cursor.y;
+                let x = self.cursor.x;
+                let (_, right, ..) = self.window.unwrap_or((
+                    1,
+                    self.screen.resolution().0,
+                    1,
+                    self.screen.resolution().1
+                ));
+                for col in x..=right {
+                    if let Some(cell) = self.screen.cell_mut(col, y) {
+                        cell.ch = b' ';
+                        cell.pen = self.pen;
+                        cell.paper = self.paper;
+                    }
+                }
+            },
+            CharCommand::ClearScreenStart if self.enable_vdu => {
+                let (width, height) = self.screen.resolution();
+                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                let cur_x = self.cursor.x;
+                let cur_y = self.cursor.y;
+                for y in top..=cur_y {
+                    let max_x = if y == cur_y { cur_x } else { right };
+                    for x in left..=max_x {
+                        if let Some(cell) = self.screen.cell_mut(x, y) {
                             cell.ch = b' ';
                             cell.pen = self.pen;
                             cell.paper = self.paper;
                         }
                     }
                 }
-                CharCommand::ClearScreenStart => {
-                    let (width, height) = self.screen.resolution();
-                    let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
-                    let cur_x = self.cursor.x;
-                    let cur_y = self.cursor.y;
-                    for y in top..=cur_y {
-                        let max_x = if y == cur_y { cur_x } else { right };
-                        for x in left..=max_x {
-                            if let Some(cell) = self.screen.cell_mut(x, y) {
-                                cell.ch = b' ';
-                                cell.pen = self.pen;
-                                cell.paper = self.paper;
-                            }
-
-                        }
+            },
+            CharCommand::ClearScreenEnd if self.enable_vdu => {
+                let (width, height) = self.screen.resolution();
+                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                let cur_x = self.cursor.x;
+                let cur_y = self.cursor.y;
+                // Fill from cursor to right edge on current line
+                for x in cur_x..=right {
+                    if let Some(cell) = self.screen.cell_mut(x, cur_y) {
+                        cell.ch = b' ';
+                        cell.pen = self.pen;
+                        cell.paper = self.paper;
                     }
                 }
-                CharCommand::ClearScreenEnd => {
-                    let (width, height) = self.screen.resolution();
-                    let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
-                    let cur_x = self.cursor.x;
-                    let cur_y = self.cursor.y;
-                    // Fill from cursor to right edge on current line
-                    for x in cur_x..=right {
-                        if let Some(cell) = self.screen.cell_mut(x, cur_y) {
+                // Fill all lines below
+                for y in (cur_y + 1)..=bottom {
+                    for x in left..=right {
+                        if let Some(cell) = self.screen.cell_mut(x, y) {
                             cell.ch = b' ';
                             cell.pen = self.pen;
                             cell.paper = self.paper;
                         }
                     }
-                    // Fill all lines below
-                    for y in (cur_y+1)..=bottom {
-                        for x in left..=right {
-                            if let Some(cell) = self.screen.cell_mut(x, y) {
-                                cell.ch = b' ';
-                                cell.pen = self.pen;
-                                cell.paper = self.paper;
-                            }
-                        }
-                    }
                 }
-                CharCommand::Window(left, right, top, bottom) => {
-                    self.window = Some((*left as u16, *right as u16, *top as u16, *bottom as u16));
-                    self.locate_cursor(*left as u16, *top as u16);
-                }
-                CharCommand::Transparency(_p) => {
-                    // Transparency is not simulated; ignore.
-                    // a way to implement that would be to stack characters and redraw all of them
-                }
-                CharCommand::ExchangePenAndPaper => {
-                    std::mem::swap(&mut self.pen, &mut self.paper);
-                }
-                c => {
-                    todo!("Interpreter: unhandled CharCommand {:?}. needs an implementation", c);
-                }
+            },
+            CharCommand::Window(left, right, top, bottom) if self.enable_vdu => {
+                self.window = Some((*left as u16, *right as u16, *top as u16, *bottom as u16));
+                self.locate_cursor(*left as u16, *top as u16);
+            },
+            CharCommand::Transparency(_p) if self.enable_vdu => {
+                // Transparency is not simulated; ignore.
+                // a way to implement that would be to stack characters and redraw all of them
+            },
+            CharCommand::ExchangePenAndPaper if self.enable_vdu => {
+                std::mem::swap(&mut self.pen, &mut self.paper);
+            },
+            c if !self.enable_vdu => {
+                // When VDU is disabled, ignore all commands except those handled above
+            },
+            c => {
+                todo!(
+                    "Interpreter: unhandled CharCommand {:?}. needs an implementation",
+                    c
+                );
             }
+        }
 
-            Ok(())
+        Ok(())
     }
 }
 
 impl Display for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use cpclib_image::ga::Ink;
+        use owo_colors::colors::CustomColor;
+        use owo_colors::{DynColors, OwoColorize};
         // Border thickness
         let border = 4;
         let screen_width = self.screen.buffer[0].len();
         let screen_height = self.screen.buffer.len();
         let border_ink = self.palette.get_border();
         let border_rgb = border_ink.color();
-        let ansi_border_bg = format!("\x1b[48;2;{};{};{}m", border_rgb[0], border_rgb[1], border_rgb[2]);
-        let ansi_border_fg = format!("\x1b[38;2;{};{};{}m", border_rgb[0], border_rgb[1], border_rgb[2]);
-        let ansi_reset = "\x1b[0m";
+        let border_color = DynColors::Rgb(border_rgb[0], border_rgb[1], border_rgb[2]);
 
         // Top border
         for _ in 0..border {
-            write!(f, "{}", ansi_border_bg)?;
             for _ in 0..(screen_width + 2 * border) {
-                write!(f, "{} ", ansi_border_fg)?;
+                write!(f, "{}", " ".on_color(border_color))?;
             }
-            writeln!(f, "{}", ansi_reset)?;
+            writeln!(f)?;
         }
 
         // Screen rows with left/right border
         for (row_index, row) in self.screen.buffer.iter().enumerate() {
             // Left border
-            write!(f, "{}", ansi_border_bg)?;
             for _ in 0..border {
-                write!(f, "{} ", ansi_border_fg)?;
+                write!(f, "{}", " ".on_color(border_color))?;
             }
             // Screen content
             for (col_index, cell) in row.iter().enumerate() {
-                let (pen, paper, ch) = if row_index as u16 + 1 == self.cursor.y && col_index as u16 + 1 == self.cursor.x {
+                let (pen, paper, ch) = if row_index as u16 + 1 == self.cursor.y
+                    && col_index as u16 + 1 == self.cursor.x
+                {
                     // Caret: use current interpreter pen/paper
                     (self.pen, self.paper, '█')
-                } else {
+                }
+                else {
                     (cell.pen, cell.paper, cell.ch as char)
                 };
                 let pen_ink = self.palette.get(&pen);
                 let paper_ink = self.palette.get(&paper);
                 let pen_rgb = pen_ink.color();
                 let paper_rgb = paper_ink.color();
-                let ansi_fg = format!("\x1b[38;2;{};{};{}m", pen_rgb[0], pen_rgb[1], pen_rgb[2]);
-                let ansi_bg = format!("\x1b[48;2;{};{};{}m", paper_rgb[0], paper_rgb[1], paper_rgb[2]);
-              //  write!(f,"{}{}|{}=", ansi_reset, paper.number(), pen.number());
-                write!(f, "{}{}{}", ansi_fg, ansi_bg, ch)?;
+                let fg = DynColors::Rgb(pen_rgb[0], pen_rgb[1], pen_rgb[2]);
+                let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
+                write!(f, "{}", ch.color(fg).on_color(bg))?;
             }
             // Right border
-            write!(f, "{}", ansi_border_bg)?;
             for _ in 0..border {
-                write!(f, "{} ", ansi_border_fg)?;
+                write!(f, "{}", " ".on_color(border_color))?;
             }
-            writeln!(f, "{}", ansi_reset)?;
+            writeln!(f)?;
         }
 
         // Bottom border
         for _ in 0..border {
-            write!(f, "{}", ansi_border_bg)?;
             for _ in 0..(screen_width + 2 * border) {
-                write!(f, "{} ", ansi_border_fg)?;
+                write!(f, "{}", " ".on_color(border_color))?;
             }
-            writeln!(f, "{}", ansi_reset)?;
+            writeln!(f)?;
         }
         Ok(())
     }

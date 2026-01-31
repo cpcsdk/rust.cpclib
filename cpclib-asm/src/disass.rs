@@ -1,5 +1,5 @@
 use crate::preamble::*;
-use crate::opcode_table::{
+use cpclib_tokens::opcode_table::{
     TABINSTRED, TABINSTR, TABINSTRCB, TABINSTRDD, TABINSTRDDCB, TABINSTRFD, TABINSTRFDCB,
 };
 

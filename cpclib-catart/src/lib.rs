@@ -1,18 +1,19 @@
 //! Catart-related functionality for Amstrad CPC demos
-//! 
+//!
 //! This crate provides utilities for working with Catart demo code,
 //! building on top of the BASIC parsing capabilities from cpclib-basic.
 
 #![warn(missing_docs)]
 
 pub mod basic_chars;
-/// Conversion utilities
-pub mod convert;
-/// Error definitions
-pub mod error;
 /// Command definitions (e.g. PRINT, LOCATE, etc.)
 pub mod basic_command;
 pub mod char_command;
+/// Conversion utilities
+pub mod convert;
+pub mod entry;
+/// Error definitions
+pub mod error;
 pub mod interpret;
 
 pub mod built_info {

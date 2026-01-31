@@ -18,14 +18,19 @@ fn test_char_command_from_chr18_and_chr20() {
 fn test_interpreter_clear_line_end() {
     let mut interp = Interpreter::new(Mode::Mode1);
     // Write some text, then ClearLineEnd
-    interp.interpret(&[
-        CharCommand::Locate(1, 1),
-        CharCommand::PrintSymbol(b'A'),
-        CharCommand::PrintSymbol(b'B'),
-        CharCommand::PrintSymbol(b'C'),
-        CharCommand::Locate(1, 1),
-        CharCommand::ClearLineEnd,
-    ], false).unwrap();
+    interp
+        .interpret(
+            &[
+                CharCommand::Locate(1, 1),
+                CharCommand::PrintSymbol(b'A'),
+                CharCommand::PrintSymbol(b'B'),
+                CharCommand::PrintSymbol(b'C'),
+                CharCommand::Locate(1, 1),
+                CharCommand::ClearLineEnd
+            ],
+            false
+        )
+        .unwrap();
     // The rest of the line after the cursor should be filled with paper color
     let screen = interp.screen();
     dbg!(screen);
@@ -41,13 +46,18 @@ fn test_interpreter_clear_line_end() {
 fn test_interpreter_clear_screen_end() {
     let mut interp = Interpreter::new(Mode::Mode1);
     // Write some text, then ClearScreenEnd
-    interp.interpret(&[
-        CharCommand::PrintSymbol(b'A'),
-        CharCommand::PrintSymbol(b'B'),
-        CharCommand::CursorDown,
-        CharCommand::PrintSymbol(b'C'),
-        CharCommand::ClearScreenEnd,
-    ], false).unwrap();
+    interp
+        .interpret(
+            &[
+                CharCommand::PrintSymbol(b'A'),
+                CharCommand::PrintSymbol(b'B'),
+                CharCommand::CursorDown,
+                CharCommand::PrintSymbol(b'C'),
+                CharCommand::ClearScreenEnd
+            ],
+            false
+        )
+        .unwrap();
     // The rest of the current line and all lines below should be filled with paper color
     let screen = interp.screen();
     let (width, height) = screen.resolution();

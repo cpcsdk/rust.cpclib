@@ -468,10 +468,11 @@ impl Deref for OrgamsEncodedString {
 
 impl Display for OrgamsEncodedString {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        encoding_rs::WINDOWS_1252
+        let res = encoding_rs::WINDOWS_1252
             .decode(&self.0)
-            .0
-            .fmt(f)
+            .0;
+        dbg!(&self.0, &res);
+        res.fmt(f)
     }
 }
 
@@ -1410,10 +1411,16 @@ impl Instruction {
         }
 
         result = result
-            .replace("(ix+0)", "(ix)")
+            .replace("(ix+0)", "(ix)") // TODO remove it should be handled by print stuff
             .replace("(iy+0)", "(iy)")
-            .replace("ld a,(ix)", "ld a,(ix+0)") // current orgams version do not shrink for a
+            
+            .replace("ld a,(ix)", "ld a,(ix+0)") // TODO remove orgams is able to handle both representations
             .replace("ld a,(iy)", "ld a,(iy+0)")
+            .replace("cp (ix)", "cp (ix+0)") // TODO remove orgams is able to handle both representations
+            .replace("cp (iy)", "cp (iy+0)") // TODO remove orgams is able to handle both representations
+            
+            .replace("(ix+-", "(ix-")
+            .replace("(iy+-", "(iy-")
             .replace("ex af,af'", "ex af,af")
             .replace("sbc a,", "sbc ");
 
@@ -1490,10 +1497,8 @@ impl<'f, 'g> DisplayState<'f, 'g> {
 
 impl<'f, 'g> DisplayState<'f, 'g> {
     fn emit_line(&mut self) -> std::fmt::Result {
-            // we have rendering bug to fix. In the meanwhile here is a workaround
-            let line = self.current_line
-                .replace("[:", "[")
-                .replace(":]", "]");
+        // we have rendering bug to fix. In the meanwhile here is a workaround
+        let line = self.current_line.clone();
         if let Some(f) = self.f.as_mut() {
             write!(f, "{}\r\n", line)?;
         }
