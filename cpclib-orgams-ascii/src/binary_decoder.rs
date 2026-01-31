@@ -1085,6 +1085,7 @@ pub enum Statement {
     RawString(OrgamsEncodedString),
     Skip(SizedExpression),
     RepeatInstruction(Box<SizedExpression>, Box<Item>),
+    Restore,
     StartRepeatBloc(SizedExpression),
     StopRepeatBloc,
     StorePcInstr, // hidden instruction
@@ -1120,6 +1121,7 @@ fn bytes_for_word_or_byte(exprs: &[Expression], is_word: bool, table: &StringTab
 impl Statement {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
+
         match self {
             Statement::StartRepeatBloc(expr) => 
             {
@@ -1135,6 +1137,10 @@ impl Statement {
             Statement::Brk => {
                 bytes.push(MARKER_ESCAPE);
                 bytes.push(CMD_BRK);
+            },
+            Statement::Restore => {
+                bytes.push(MARKER_ESCAPE);
+                bytes.push(CMD_RESTORE);
             },
             Statement::Byte(exprs) => {
                 bytes.extend_from_slice(&bytes_for_word_or_byte(exprs, false, table));
@@ -1250,6 +1256,7 @@ impl Statement {
             },
             Statement::StopRepeatBloc => "]".into(),
             Statement::Brk => "BRK".into(),
+            Statement::Restore => "RESTORE".into(),
             Statement::If(expr) => {
                 let cond = expr.display(table);
                 format!("IF {}", cond).into()
@@ -2504,6 +2511,7 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
         },
 
         CMD_BRK => Ok(Item::Statement(Statement::Brk)),
+        CMD_RESTORE => Ok(Item::Statement(Statement::Restore)),
 
         _ => {
             let mut err = ContextError::new();
