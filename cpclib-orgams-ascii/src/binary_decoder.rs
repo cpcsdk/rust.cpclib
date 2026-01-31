@@ -531,6 +531,40 @@ impl Item {
             Item::Statement(s) => s.bytes(table)
         }
     }
+
+
+    pub fn display<'i>(&'i self, labels: &StringTable) -> Cow<'i, str> {
+        match self {
+            Item::Comment(text) => format!(";{}", text.to_string()).into(),
+            Item::NewLine => "\n".into(),
+            Item::Indent(count) => " ".repeat(count.0 as usize).into(),
+            Item::Assign(assign) => {
+                 let label = labels
+                    .label(&assign.label)
+                    .unwrap();
+                let expr_repr = assign.expression.display(labels);
+
+                // Heuristic: Left padding for short labels
+                let label_len = label.len();
+                if label_len < 5 {
+                    format!("{}{} = {}", label, " ".repeat(5 - label_len), expr_repr)
+                }
+                else {
+                    format!("{} = {}", label, expr_repr)
+                }.into()
+            }
+            Item::Label(label) => {
+                label.get(labels).to_string().into()
+            },
+            Item::LocalLabel(label) => {
+                format!(".{}", label.get(labels).to_string()).into()
+            }
+            Item::MacroDef(m) => {
+                m.display(labels).into()
+            },
+            Item::Statement(s) => s.display(labels)
+        }
+    }
 }
 
 /// Label reference (index into string table)
@@ -944,22 +978,6 @@ impl Assign {
     }
 }
 
-impl Item {
-    pub fn display(&self, table: &StringTable) -> String {
-        match self {
-            Item::Comment(text) => format!(";{}", text.deref().to_string()),
-            Item::NewLine => "\n".to_string(),
-            Item::Indent(count) => " ".repeat(count.0 as usize),
-            Item::Assign(assign) => assign.display(table),
-            Item::Label(label) => format!("{}", label.get(table)),
-            Item::LocalLabel(label) => format!("{}", label.get(table)),
-            Item::MacroDef(m) => m.display(table),
-            Item::Statement(s) => s.display(table).into_owned()
-        }
-    }
-}
-
-/// Macro definition
 #[derive(Debug, Clone, PartialEq)]
 pub struct MacroDef {
     pub def_block_len: u8, // TODO do not store it but recompute on the fly
@@ -1380,14 +1398,20 @@ fn z80str_to_expressions_list(repr: &str) -> SmallVec<[ExpressionKind; 2]> {
     kinds
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LineState {
+    Empty,
+    AfterLabel,
+    AfterAssign,
+    AfterStatement(bool), // true if instruction
+    AfterRepeatBloc
+}
+
 pub struct DisplayState<'f, 'g> {
     pub(crate) f: Option<&'f mut std::fmt::Formatter<'g>>,
     pub(crate) current_line: String,
     pub(crate) line_number: usize,
-    pub(crate) next_comment_requires_alignment: bool,
-    pub(crate) previous_was_label: bool,
-    pub(crate) previous_was_instruction: bool,
-    pub(crate) previous_was_start_block: bool,
+    pub(crate) line_state: LineState,
     pub(crate) last_generated_line: Option<String>
 }
 
@@ -1397,10 +1421,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             f,
             current_line: String::new(),
             line_number: 1,
-            next_comment_requires_alignment: false,
-            previous_was_label: false,
-            previous_was_instruction: false,
-            previous_was_start_block: false,
+            line_state: LineState::Empty,
             last_generated_line: None
         }
     }
@@ -1427,108 +1448,65 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         self.last_generated_line = Some(line);
         self.current_line.clear();
         self.line_number += 1;
-        self.next_comment_requires_alignment = false;
-        self.previous_was_label = false;
-        self.previous_was_instruction = false;
-        self.previous_was_start_block = false;
+        self.line_state = LineState::Empty;
         Ok(())
     }
 
-    fn auto_format(&mut self, is_instruction: bool) {
-        if self.current_line.is_empty() {
-            let nb_tabs = if is_instruction {
-                TAB_INSTR
-            }
-            else {
-                TAB_COMMAND
-            };
-            for _ in 0..nb_tabs {
-                self.current_line.push(' ');
-            }
-        }
-        else if !self.has_only_indents() {
-            if self.previous_was_instruction {
-                    self.current_line.push(':');
-            }
-            else if !self.current_line.ends_with(' ') {
-                if !self.previous_was_label {
-                        self.current_line.push(':');
-                }
-                else {
-                    let indent_after_label: usize = if is_instruction {
-                        TAB_INSTR as _
-                    }
-                    else {
-                        TAB_COMMAND as _
-                    };
-                    if self.col_number() < indent_after_label {
-                        self.current_line
-                            .push_str(" ".repeat(indent_after_label - self.col_number()).as_str());
-                    }
-                    else {
-                        self.current_line.push(' ');
-                    }
-                }
-            }
-        }
-    }
 
-    fn append_instruction_representation(&mut self, s: String) {
+    fn append_instruction<S: AsRef<str>>(&mut self, s: S) {
         self.append_token_or_instruction_representation(true, s);
     }
 
-    fn append_token_representation(&mut self, s: String) {
+    fn append_token<S: AsRef<str>>(&mut self, s: S) {
         self.append_token_or_instruction_representation(false, s);
     }
 
-    fn append_start_bloc(&mut self, s: String) {
-        self.append_token_representation(s);
-        self.previous_was_start_block = true;
+    fn append_start_bloc<S: AsRef<str>>(&mut self, s: S) {
+        self.append_token(s);
+        self.line_state = LineState::AfterRepeatBloc;
     }
 
-    fn append_stop_bloc(&mut self, s: String) {
-        self.previous_was_label = true;
-        self.append_instruction_representation(s);
+    fn append_stop_bloc<S: AsRef<str>>(&mut self, s: S) {
+        self.line_state = LineState::AfterRepeatBloc;
+        self.append_instruction(s);
+        self.line_state = LineState::AfterStatement(false);
     }
 
-    fn append_token_or_instruction_representation(&mut self, is_instruction: bool, s: String) {
-        if self.previous_was_label
-            && (s.starts_with("WORD") || s.starts_with("BYTE") || s.starts_with("SKIP"))
-        {
-            let indent_after_label: usize = TAB_COMMAND as _;
-            if self.col_number() < indent_after_label {
-                self.current_line
-                    .push_str(" ".repeat(indent_after_label - self.col_number()).as_str());
-            }
-            else {
-                self.current_line.push(' ');
-            }
+    fn append_token_or_instruction_representation<S: AsRef<str>>(&mut self, is_instruction: bool, s: S) {
+        let indent_size: usize = if is_instruction {
+            TAB_INSTR as _
         }
-        else if !self.current_line.is_empty()
-            && (s.starts_with("WORD") || s.starts_with("BYTE") || s.starts_with("SKIP"))
-        {
-            if !self.previous_was_label {
-                if !self.previous_was_start_block {
-                    self.current_line.push(':');
+        else {
+            TAB_COMMAND as _
+        };
+
+        // handle indentation
+        match self.line_state {
+            LineState::Empty | LineState::AfterLabel | LineState::AfterAssign => {
+                let indent_after_label: usize = indent_size;
+                if self.col_number() < indent_after_label {
+                    self.current_line
+                        .push_str(" ".repeat(indent_after_label - self.col_number()).as_str());
                 }
-            }
-            else {
-                self.current_line.push(' ')
+                else {
+                    self.current_line.push(' ');
+                }
+            },
+            LineState::AfterStatement(_)=> {
+                self.current_line.push(':');
+            },
+            LineState::AfterRepeatBloc => {
+                // nothing to do
             }
         }
-        else if !s.starts_with(' ') {
-            // I wonder if it is a hack
-            self.auto_format(is_instruction);
-        }
-        self.append_string_no_indent(s);
-        self.previous_was_label = false;
-        self.previous_was_instruction = is_instruction;
-        self.previous_was_start_block = true;
+
+        self.current_line.push_str(s.as_ref());
+        self.line_state = LineState::AfterStatement(is_instruction);
     }
 
-    fn append_comment(&mut self, c: &str) -> std::fmt::Result {
-        if (self.has_only_indents() || self.is_empty()) && !self.next_comment_requires_alignment {
-            // nothing to do
+    fn append_comment<S: AsRef<str>>(&mut self, c: S) -> std::fmt::Result {
+        if self.line_state == LineState::Empty || self.has_only_indents() {
+            //nothing to do   
         }
         else {
             // handle some indentation
@@ -1542,39 +1520,34 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             self.append_string_no_indent(indent);
         }
 
-        self.append_string_no_indent(format!(";{}", c));
+
+        self.append_string_no_indent(c);
         self.emit_line()
     }
 
-    fn append_label(&mut self, label: &str) {
-        self.append_string_no_indent(label.to_string());
-        self.previous_was_label = true;
-        self.previous_was_instruction = false;
-        self.previous_was_start_block = false;
+    fn append_label<S: AsRef<str>>(&mut self, label: S) {
+        self.append_string_no_indent(label);
+        self.line_state = LineState::AfterLabel;
     }
 
     /// the string already has its indentation. maybe it has to change
-    fn append_assign(&mut self, assignment: &str) {
-        self.append_string_next_comment_aligned(assignment.to_string());
-        self.previous_was_label = false;
-        self.previous_was_instruction = false;
-        self.previous_was_start_block = false;
+    fn append_assign<S: AsRef<str>>(&mut self, assignment: S) {
+        self.append_string_no_indent(assignment);
+        self.line_state = LineState::AfterAssign;
     }
 
-    fn append_string_no_indent(&mut self, s: String) {
-        self.current_line.push_str(&s);
+    /// XXX does not change the state (so empty stays empty)
+    fn append_string_no_indent(&mut self, s: impl AsRef<str>) {
+        self.current_line.push_str(s.as_ref());
     }
 
-    fn append_string_next_comment_aligned(&mut self, s: String) {
-        self.append_string_no_indent(s);
-        self.next_comment_requires_alignment = true;
-    }
 
     fn col_number(&self) -> usize {
         self.current_line.len()
     }
 
     fn has_only_indents(&self) -> bool {
+        dbg!(&self.current_line);
         self.current_line.chars().all(|c| c == ' ')
     }
 
@@ -1594,101 +1567,43 @@ impl<'f, 'g> DisplayState<'f, 'g> {
     }
 
     pub fn render_item(&mut self, item: &Item, labels: &StringTable) -> std::fmt::Result {
-        let state = self;
+        let repr = item.display(labels);
+
         match item {
-            Item::Comment(comment) => {
-                let comment = comment.to_string();
-                state.append_comment(&comment)?;
-            },
-            Item::NewLine => {
-                state.emit_line()?;
-            },
-            Item::Indent(count) => {
-                state.append_string_no_indent(" ".repeat(count.0 as usize));
-            },
-            Item::Assign(assign) => {
-                let label = labels
-                    .label(&assign.label)
-                    .unwrap();
-                let expr_repr = assign.expression.display(labels);
-
-                // Heuristic: Left padding for short labels
-                let label_len = label.len();
-                let repr = if label_len < 5 {
-                    format!("{}{} = {}", label, " ".repeat(5 - label_len), expr_repr)
-                }
-                else {
-                    format!("{} = {}", label, expr_repr)
-                };
-                state.append_assign(&repr);
-            },
-            Item::Label(label) => {
-                let label_str = label.get(labels);
-                state.append_label(&label_str.to_string());
-            },
-            Item::LocalLabel(label) => {
-                let label_str = format!(".{}", label.get(labels));
-                state.append_label(&label_str.to_string());
-            },
-            Item::MacroDef(m) => {
-                let repr = m.display(labels);
-                state.append_token_representation(repr);
-            },
-            Item::Statement(s) => {
-                match s {
-                    Statement::RawString(s) => {
-                        state.append_string_no_indent(s.to_string());
-                    },
-
-                    Statement::Instruction(ins) => {
-                        let repr = ins.display(labels);
-                        state.append_instruction_representation(repr);
-                    },
-
-                    Statement::If(..)
-                    | Statement::End
-                    | Statement::Ent(..)
-                    | Statement::Import(..)
-                    | Statement::Org(..)
-                    | Statement::Else
-                    | Statement::EndMacro
-                    | Statement::Brk
-                    | Statement::Word(..)
-                    | Statement::Fill(..)
-                    | Statement::Byte(..)
-                    | Statement::Org(..)
-                    | Statement::Org2(..)
-                    | Statement::Skip(..) 
-                    => {
-                        let repr = s.display(labels);
-                        state.append_token_representation(repr.into_owned());
-                    },
-
-                     Statement::StartRepeatBloc(..) => {
-                        let repr = dbg!(s.display(labels));
-                        state.append_start_bloc(repr.into_owned());
-                     }
-
-                     Statement::StopRepeatBloc => {
-                        let repr = s.display(labels);
-                        state.append_stop_bloc(repr.into_owned());
-                     }
-
-
-                    //                        Statement::MacroUse(..) | Statement::StarRepeat(..) => {
-                    // let repr = s.display(labels);
-                    // state.append_instruction_representation(repr.into_owned());
-                    // },
-                    _ => {
-                        let repr: Cow<'_, str> = s.display(labels);
-                        if !repr.is_empty() {
-                            //                              state.append_token_representation(repr.into_owned());
-                            state.append_instruction_representation(repr.into_owned());
-                        }
-                    }
-                }
+            Item::Statement(Statement::StorePcInstr | Statement::StorePcLine) => {
+                // we do stricly nothing
             }
+            Item::Statement(Statement::Instruction(..)) | Item::Statement(Statement::MacroUse(..)
+            | Statement::RepeatInstruction(..)
+            ) => {
+                self.append_instruction(repr);
+            }
+
+            Item::NewLine => {
+                self.emit_line()?;
+            }
+            Item::Comment(..) => {
+                self.append_comment(&repr)?;
+            },
+            Item::Label(..) | Item::LocalLabel(..) => {
+                self.append_label(&repr);
+            },
+            Item::Assign(..) => {
+                self.append_assign(&repr);
+            }
+             Item::Statement(Statement::RawString(..)) => {
+                self.append_string_no_indent(repr);
+            }
+            Item::Indent(..) => {
+                self.append_string_no_indent(repr);
+            }
+            _ => {
+                self.append_token(repr);
+            }
+
+
         }
+        
         Ok(())
     }
 }
@@ -1709,11 +1624,8 @@ impl std::fmt::Display for Program {
             f: Some(f),
             current_line: String::new(),
             line_number: 1,
-            next_comment_requires_alignment: false,
             last_generated_line: None,
-            previous_was_label: false,
-            previous_was_instruction: false,
-            previous_was_start_block: false
+            line_state: LineState::Empty
         };
 
         Ok(())
