@@ -1574,7 +1574,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
                 // we do stricly nothing
             }
             Item::Statement(Statement::Instruction(..)) | Item::Statement(Statement::MacroUse(..)
-            | Statement::RepeatInstruction(..)
+            | Statement::RepeatInstruction(..) | Statement::StopRepeatBloc
             ) => {
                 self.append_instruction(repr);
             }
