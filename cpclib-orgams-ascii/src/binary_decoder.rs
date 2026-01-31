@@ -1316,10 +1316,6 @@ impl Instruction {
             bytes.extend_from_slice(&expr.bytes(table));
         }
 
-        if let Some(MARKER_IX_IND | MARKER_IY_IND) = self.prefix {
-            // for IX/IY with (ix+nn) or (iy+nn), we need to add an end marker
-            bytes.push(0);
-        }
         bytes
     }
 
@@ -2533,11 +2529,6 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
 
     dbg!(&prefix, &opcode, &repr);
 
-    let coded_operands = if let Some(MARKER_IX_IND | MARKER_IY_IND) = prefix {
-        cut_err(0.context(StrContext::Expected(StrContextValue::Description("FF/DF handling")))).parse_next(input)?;
-        Vec::new()
-    }
-    else {
 
         let kinds = z80str_to_expressions_list(repr);
         let mut coded_operands = Vec::with_capacity(kinds.len());
@@ -2548,15 +2539,16 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
             .parse_next(input)?;
             coded_operands.push(expr);
         }
-        coded_operands
-    };
 
 
-    Ok(Instruction {
+
+
+    dbg!(Ok(Instruction {
         prefix,
         opcode,
         coded_operands
-    })
+    }))
+
 }
 
 /// Parse the arguments of a macro definition.
