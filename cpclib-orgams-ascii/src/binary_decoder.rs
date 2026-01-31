@@ -158,11 +158,18 @@ const fn is_instruction_prefix(b: u8) -> bool {
     matches!(b, IX_CODE | IY_CODE | 0xED | 0xCB | MARKER_IX_IND | MARKER_IY_IND)
 }
 
-const fn is_cb_altered_opcode(b: u8) -> bool {
+
+const fn is_cb_opcode_with_extra_expression(b: u8) -> bool {
     matches!(b,
         0x40..=0x47 | // BIT 0, r
         0x80..=0x87 | // RES 0, r
         0xC0..=0xC7   // SET 0, r
+    )
+}
+
+const fn is_standard_opcode_with_extra_expression(b:u8) -> bool {
+    matches!(b,
+        0xC7 // RST
     )
 }
 
@@ -1365,8 +1372,9 @@ impl Instruction {
             }
             else {
                 assert_eq!(i, 0);
-                if self.prefix == Some(0xCB) && is_cb_altered_opcode(self.opcode) {
-                    result = result.replace("0", &self.coded_operands[i].display(table));
+                if (self.prefix == Some(0xCB) && is_cb_opcode_with_extra_expression(self.opcode)) | 
+                    (self.prefix == None && is_standard_opcode_with_extra_expression(self.opcode)) {
+                    result = result.replace("00", "0").replace("0", &self.coded_operands[i].display(table));
                 } else {
                     unimplemented!("Too many coded operands for instruction display");
                 }
@@ -2530,7 +2538,7 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
         let prefix = b;
         let opcode = any.parse_next(input)?;
 
-        if prefix == 0xCB && is_cb_altered_opcode(opcode) {
+        if prefix == 0xCB && is_cb_opcode_with_extra_expression(opcode) {
             // manual handling of set (hl)
             let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set/res/bit ?; (hl)")))).parse_next(input)?;
             return Ok(Instruction {
@@ -2552,8 +2560,22 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
         let prefix = None;
         let opcode = b;
         let repr = TABINSTR[opcode as usize];
-        (prefix, opcode, repr)
+
+        if is_standard_opcode_with_extra_expression(b) {
+            // manual handling of set (hl)
+            let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set/res/bit ?; (hl)")))).parse_next(input)?;
+            return Ok(Instruction {
+                prefix: None,
+                opcode,
+                coded_operands: vec![param],
+            })
+
+        } else {
+            (prefix, opcode, repr)
+        }
     };
+
+    dbg!(repr);
 
 
         let kinds = z80str_to_expressions_list(repr);
@@ -2569,11 +2591,11 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
 
 
 
-    Ok(Instruction {
+    dbg!(Ok(Instruction {
         prefix,
         opcode,
         coded_operands
-    })
+    }))
 
 }
 
