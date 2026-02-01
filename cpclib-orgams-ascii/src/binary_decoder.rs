@@ -7,113 +7,22 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
 use cpclib_common::itertools::Itertools;
-use cpclib_common::parse;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_common::winnow::combinator::{cut_err, eof, preceded, repeat, terminated, trace};
+use cpclib_common::winnow::combinator::{cut_err, repeat, terminated};
 use cpclib_common::winnow::error::{
-    AddContext, ContextError, ErrMode, StrContext, StrContextValue
+    ContextError, ErrMode, StrContext, StrContextValue
 };
 use cpclib_common::winnow::stream::Offset;
 use cpclib_common::winnow::{self, LocatingSlice};
 use cpclib_tokens::opcode_table::{
     TABINSTR, TABINSTRCB, TABINSTRDD, TABINSTRDDCB, TABINSTRED, TABINSTRFD, TABINSTRFDCB
 };
-use winnow::combinator::{alt, opt, peek, repeat_till};
+use winnow::combinator::{alt, opt, peek};
 use winnow::prelude::*;
-use winnow::token::{any, literal, rest, take};
+use winnow::token::{any, literal, take};
 
 pub type Input<'a> = LocatingSlice<&'a [u8]>;
 pub type OrgamsParseResult<T> = ModalResult<T>;
-
-fn byte2code_naive(bytes: &[u8]) -> String {
-    let mut results: Vec<Cow<'static, str>> = Vec::with_capacity(bytes.len());
-    let mut was_7f = false;
-    for b in bytes.iter().cloned() {
-        let repr = if was_7f {
-            was_7f = false;
-            match b {
-                CMD_ASIS => "ASIS".into(),
-                CMD_STORE_PC_LINE => "STORE_PC_LINE".into(),
-                CMD_STORE_PC_INSTR => "STORE_PC_INSTR".into(),
-                CMD_ORG => "ORG".into(),
-                CMD_ORG2 => "ORG2".into(),
-                CMD_ENT => "ENT".into(),
-                CMD_FILL => "FILL".into(),
-                CMD_SKIP => "SKIP".into(),
-                CMD_IF => "IF".into(),
-                CMD_ELSE => "ELSE".into(),
-                CMD_END => "END".into(),
-                CMD_FACTOR_BLOC => "FACTOR_BLOC".into(),
-                CMD_FACTOR_BLOC_END => "FACTOR_BLOC_END".into(),
-                CMD_END_BIS => "END_BIS".into(),
-                CMD_BRK => "BRK".into(),
-                CMD_BRK_SET => "BRK_SET".into(),
-                CMD_RESTORE => "RESTORE".into(),
-                CMD_BANK => "BANK".into(),
-                CMD_ENDM => "ENDM".into(),
-                CMD_MACRO_USE => "MACRO_USE".into(),
-                CMD_LOAD => "LOAD".into(),
-                CMD_IMPORT => "IMPORT".into(),
-                CMD_STR => "STR".into(),
-                CMD_SAVE => "SAVE".into(),
-                CMD_SAVEA => "SAVEA".into(),
-                CMD_REPEAT => "REPEAT".into(),
-
-                _ => {
-                    if b.is_ascii_graphic() {
-                        (b as char).to_string().into()
-                    }
-                    else {
-                        format!("0x7F 0x{:02X}", b).into()
-                    }
-                },
-            }
-        }
-        else {
-            was_7f = b == MARKER_ESCAPE;
-            match b {
-                MARKER_NEWLINE => "NL".into(),
-                MARKER_INDENT => "IND".into(),
-                MARKER_ESCAPE => "ESC".into(),
-                MARKER_COMMENT => "COMT".into(),
-                MARKER_ASSIGN => "ASS".into(),
-                MARKER_WORD => "WORD".into(),
-                MARKER_BYTE => "BYTE".into(),
-                MARKER_LOCAL_LABEL => "LOCAL_LABEL".into(),
-                MARKER_LABEL_ADDR => "LABEL_ADDR".into(),
-                MARKER_MACRO_DEF => "MACRO_DEF".into(),
-
-                _ => {
-                    if b.is_ascii_graphic() {
-                        (b as char).to_string().into()
-                    }
-                    else {
-                        format!("0x{:02X}", b).into()
-                    }
-                },
-            }
-        };
-
-        results.push(repr);
-    }
-
-    results.iter().join(",")
-}
-
-fn debug_slice(bytes: &[u8]) {
-    eprintln!(
-        "debug: bytes: [{}]",
-        bytes
-            .iter()
-            .take(20)
-            .map(|b| format!("{:02x}", b))
-            .join(" ")
-    );
-    eprint!(
-        "debug: codes: [{}]",
-        byte2code_naive(&bytes[..bytes.len().min(20)])
-    );
-}
 
 const CHUNK_MAX_SIZE: u8 = 222;
 
@@ -232,8 +141,7 @@ impl InstructionPrefix {
 
     pub const fn requires_extra_expression(&self, opcode: u8) -> bool {
         match self {
-            InstructionPrefix::CB => is_cb_opcode_with_extra_expression(opcode),
-            InstructionPrefix::DF | InstructionPrefix::FF => is_df_ff_opcode_with_extra_expression(opcode),
+            InstructionPrefix::CB | InstructionPrefix::DF | InstructionPrefix::FF => is_cb_opcode_with_extra_expression(opcode),
             InstructionPrefix::None => is_standard_opcode_with_extra_expression(opcode),
             _ => false,
         }
@@ -249,13 +157,6 @@ impl InstructionPrefix {
 
 
 const fn is_cb_opcode_with_extra_expression(b: u8) -> bool {
-    matches!(b,
-        0x40..=0x47 | // BIT 0, r
-        0x80..=0x87 | // RES 0, r
-        0xC0..=0xC7   // SET 0, r
-    )
-}
-const fn is_df_ff_opcode_with_extra_expression(b: u8) -> bool {
     matches!(b,
         0x40..=0x47 | // BIT 0, r
         0x80..=0x87 | // RES 0, r
@@ -519,7 +420,7 @@ impl Deref for Comment {
 }
 
 /// Represent a string where the bit 7 is on on the last char.
-/// The stored string DEOS NOT have the bit 7 on.
+/// The stored string DOES NOT have the bit 7 on.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Bit7OnString(OrgamsEncodedString);
 
@@ -852,7 +753,7 @@ pub struct Value {
 
 impl Value {
     pub fn bytes(&self, _table: &StringTable) -> Vec<u8> {
-        // TODO everything is false here : we need to output the code and content
+        // Outputs the appropriate encoding marker followed by the value content
         match (&self.basis, &self.content) {
             (ValueBasis::Decimal, ValueContent::EightBits(v)) => vec![0x30, *v],
             (ValueBasis::Hexadecimal, ValueContent::EightBits(v)) => vec![0x34, *v],
@@ -1080,7 +981,6 @@ impl Operator {
             Operator::ParenClose => "]",
             Operator::ParenOpen => "[",
             Operator::Plus => "+",
-            Operator::Xor => "XOR",
             Operator::Xor => "XOR"
         }
     }
@@ -1120,7 +1020,8 @@ impl Assign {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MacroDef {
-    pub def_block_len: u8, // TODO do not store it but recompute on the fly
+    /// Original block length from file (preserved for exact binary reconstruction)
+    pub def_block_len: u8,
     pub name: LabelRef,
     pub params: Vec<LabelRef>
 }
@@ -1190,7 +1091,7 @@ pub enum Statement {
     Ent(SizedExpression),
     Fill(SizedExpression, SizedExpression),
     If(SizedExpression),
-    Import(SizedString, bool), // TODO remove this boolean; it was an issue I think
+    Import(SizedString),
     Instruction(Instruction),
     MacroUse(Expression, Vec<Expression>),
     Org(SizedExpression),
@@ -1289,13 +1190,9 @@ impl Statement {
                 bytes.extend_from_slice(&count_expr.bytes(table));
                 bytes.extend_from_slice(&value_expr.bytes(table));
             },
-            Statement::Import(s, escaped) => {
-                if *escaped {
-                    bytes.push(MARKER_ESCAPE);
-                } else {
-                    panic!("This is a bug, no ?");
-                }
-                bytes.push(CMD_IMPORT); // Not escaped usually?
+            Statement::Import(s) => {
+                bytes.push(MARKER_ESCAPE);
+                bytes.push(CMD_IMPORT);
                 bytes.push(s.len() as u8);
                 bytes.extend_from_slice(s.as_slice());
             },
@@ -1388,8 +1285,8 @@ impl Statement {
                 )
                 .into()
             },
-            Statement::Import(s, escaped) => {
-                if *escaped && s.starts_with(&[b'"']) && s.len() >= 3 {
+            Statement::Import(s) => {
+                if s.starts_with(&[b'"']) && s.len() >= 3 {
                     // Start is " + user number
                     // End is A (maybe access rights/encoding ?)
                     let stripped = &s[2..s.len() - 1];
@@ -1512,7 +1409,7 @@ impl Instruction {
             .replace("ex af,af'", "ex af,af")
             .replace("sbc a,", "sbc ");
 
-        // TODO : remove ?
+        // Clean up offset notation for Orgams IX/IY indirect addressing
         if self.prefix.is_orgams_ix_iy_indirect(){
             result = result.replace("+nn", "");
         }
@@ -2665,12 +2562,9 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
         CMD_ENDM => Ok(Item::Statement(Statement::EndMacro)),
         CMD_FILL => cut_err(parse_fill_inner.context(StrContext::Label("FILL"))).parse_next(input),
         CMD_IMPORT => {
-            // Replaced by top-level parse_import in most cases.
-            // If seen here, treat as TODO or same logic?
-            // The error trace showed raw 0x17.
-            // If we must support escaped 0x17, assume string?
+            // Escaped IMPORT command with sized text
             let s = cut_err(parse_sized_text).parse_next(input)?;
-            Ok(Item::Statement(Statement::Import(s, true)))
+            Ok(Item::Statement(Statement::Import(s)))
         },
         CMD_ENT => {
             let expr = cut_err(parse_sized_expression).parse_next(input)?;
