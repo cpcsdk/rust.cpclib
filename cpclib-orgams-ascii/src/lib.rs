@@ -6,25 +6,9 @@
 #![feature(str_as_str)]
 #![warn(missing_docs)]
 
-pub mod format;
 pub mod binary_decoder;
-
-pub use format::{OrgamsFile, OrgamsHeader, LineMarker};
+pub mod convert;
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_version() {
-        assert!(!VERSION.is_empty());
-    }
-    
-    #[test]
-    fn test_magic_constant() {
-        assert_eq!(format::MAGIC, b"ORGA");
-    }
-}

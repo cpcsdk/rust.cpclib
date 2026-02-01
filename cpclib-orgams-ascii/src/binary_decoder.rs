@@ -567,7 +567,6 @@ impl Display for OrgamsEncodedString {
         let res = encoding_rs::WINDOWS_1252
             .decode(&self.0)
             .0;
-        dbg!(&self.0, &res);
         res.fmt(f)
     }
 }
@@ -772,7 +771,6 @@ impl Expression {
     /// serve for byte/word to count the number of elements to convert in bytes or word
     /// globally 1 expect for strings
     pub fn nb_elements(&self) -> usize {
-        dbg!(&self);
         match self {
             Expression::SingleTerm(ExpressionMember::String(s)) => s.len(),
             Expression::MultiTerm(members) => {
@@ -1214,7 +1212,7 @@ fn bytes_for_word_or_byte(exprs: &[Expression], is_word: bool, table: &StringTab
 
     let directive_len = exprs
         .iter()
-        .map(|expr| dbg!(expr.nb_elements()))
+        .map(|expr| expr.nb_elements())
         .sum::<usize>() as u8;
     let directive_len = directive_len.max(1) * unit_size as u8;
 
@@ -1697,7 +1695,6 @@ impl<'f, 'g> DisplayState<'f, 'g> {
     }
 
     fn has_only_indents(&self) -> bool {
-        dbg!(&self.current_line);
         self.current_line.chars().all(|c| c == ' ')
     }
 
@@ -1788,86 +1785,85 @@ impl std::fmt::Display for Program {
     }
 }
 
-/// Parse complete Orgams file
-pub fn parse_orgams_file(input: &mut Input) -> OrgamsParseResult<Program> {
+
+pub fn parse_orgams_file(debug: bool, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> impl FnMut(&mut Input) -> OrgamsParseResult<Program> {
+
+    move |input: &mut Input| {
+
+    if debug {println!("DEBUG: Starting debug_orgams_file");}
+    
+    // 1. Parse Header
     const ORGA: &[u8] = b"ORGA";
     const SRCC: &[u8] = b"SRCc";
     const LBLS: &[u8] = b"LBLs";
-    const CHCK: &[u8] = b"ChCk";
 
-    // Verify ORGA magic bytes
-    cut_err(literal(ORGA).context(StrContext::Expected(StrContextValue::StringLiteral("ORGA"))))
+    cut_err(literal(ORGA)
+        .context(StrContext::Expected(StrContextValue::StringLiteral("ORGA"))))
         .parse_next(input)?;
 
-    // Read version
-    let _version = any
-        .context(StrContext::Expected(StrContextValue::Description(
-            "version"
-        )))
-        .verify(|&b| b == 2)
-        .parse_next(input)?;
+    let _version = cut_err(any.verify(|&b| b==2)
+        .context(StrContext::Expected(StrContextValue::Description("version  expected")))).parse_next(input)?;
 
-    // Read header size
-    let header_size = any
-        .context(StrContext::Expected(StrContextValue::Description(
-            "header size"
-        )))
-        .parse_next(input)?;
-    eprintln!("debug: header_size = {}", header_size);
+    let header_size = any.context(StrContext::Expected(StrContextValue::Description("header size"))).parse_next(input)? as usize;
 
-    // Skip rest of header (header_size bytes total, already read ORGA(4) + version(1) + header_size(1) = 6)
-    let remaining_header = header_size as usize;
-    let _header = take(remaining_header)
-        .context(StrContext::Expected(StrContextValue::Description(
-            "header data"
-        )))
-        .parse_next(input)?;
+    // Skip rest of header (0x67 bytes total, already read 4)
+    let _header = take( header_size+1).parse_next(input)?;
 
-    eprintln!("debug: checking SRCC");
+
     cut_err(literal(SRCC).context(StrContext::Expected(StrContextValue::StringLiteral("SRCc"))))
         .parse_next(input)?;
 
-    // Parse items
-    eprintln!("debug: parsing items");
-    let chunks = parse_all_code
-        .context(StrContext::Expected(StrContextValue::Description("chunks")))
-        .parse_next(input)?;
+    let _version = any.verify(|&b| b==2).context(StrContext::Expected(StrContextValue::Description("version 2 expected"))).parse_next(input)?;
 
-    // Skip null byte separator before LBLs
-    let _null_separator = literal([0x00])
-        .context(StrContext::Expected(StrContextValue::Description(
-            "null after chunks"
-        )))
-        .parse_next(input)?;
+    // 2. Mark code start
+    let code_start_checkpoint = input.checkpoint();
+    
+    // 3. Skip chunks to find LBLs
+    if debug { println!("DEBUG: Skipping chunks to find LBLs..."); }
+    let mut chunk_count = 0;
+    loop {
+        let b = peek(any).parse_next(input)?;
+        if b == 0 {
+            // Found terminator
+             break;
+        }
+        let chunk_size = any.verify(|&s| s<=CHUNK_MAX_SIZE).parse_next(input)?;
+        let _ = take(chunk_size as usize).parse_next(input)?;
+        chunk_count += 1;
+    }
+    if debug { println!("DEBUG: Found terminator 0 after {} chunks", chunk_count); }
 
-    // parse labels table
-    eprintln!(
-        "debug: parsing labels. Next bytes: {:?}",
-        input.iter().take(10).collect::<Vec<_>>()
-    );
+    // 4. Parse Labels
+    let _null_separator = literal([0x00]).parse_next(input)?;
     cut_err(literal(LBLS).context(StrContext::Expected(StrContextValue::StringLiteral("LBLs"))))
         .parse_next(input)?;
-    let labels = parse_labels_table.parse_next(input).map_err(|e| {
-        eprintln!("debug: parse_labels_table failed: {:?}", e);
-        e
-    })?;
+    let labels = parse_labels_table.parse_next(input)?;
+    if debug { println!("DEBUG: Labels parsed. Count: {}", labels.len()); }
+    
+    // Print labels
+    if debug {
+        for (idx, label) in labels.iter().enumerate() {
+            println!("  Label #{:03}: \"{}\"", idx, label.to_string());
+        }
+    }
 
-    // parse checksum
-    let _null_separator = literal([0x00]).parse_next(input)?;
-    cut_err(literal(CHCK).context(StrContext::Expected(StrContextValue::StringLiteral("ChCk"))))
-        .parse_next(input)?;
-    let _checksum_bytes = take(4usize).parse_next(input)?;
-
-    // TODO check checksum
-    // eof.parse_next(input)?;
-
+    // 5. Rewind to code start
+    input.reset(&code_start_checkpoint);
+    
+    // 6. Parse Code with debug
+    if debug { println!("DEBUG: Parsing code with trace..."); }
+    let chunks= parse_all_code(debug, &labels, groundtruth_iter).parse_next(input)?;
     Ok(Program { chunks, labels })
 }
+}
 
+
+
+
+/// Parse complete Orgams file
 pub fn parse_labels_table(input: &mut Input) -> OrgamsParseResult<StringTable> {
     use winnow::combinator::{peek, repeat_till};
 
-    eprintln!("debug: parsing labels. Next bytes: {:?}", &input[..10]);
     // Parse version
     let _version = any
         .context(StrContext::Expected(StrContextValue::Description(
@@ -1900,6 +1896,9 @@ pub fn parse_labels_table(input: &mut Input) -> OrgamsParseResult<StringTable> {
         "labels until null"
     )))
     .parse_next(input)?;
+
+    // Consume the null terminator that was only peeked
+    literal([0x00]).parse_next(input)?;
 
     Ok(StringTable::from_vec_bit7on_texts(strings))
 }
@@ -1953,7 +1952,6 @@ fn parse_inner_item(input: &mut Input) -> OrgamsParseResult<Item> {
         return Err(ErrMode::Backtrack(err));
     }
 
-    debug_slice(input);
     // if let Some(b) = input.as_bytes().get(0) {
     //    eprintln!("DBG: parse_item input[0]={:02X}", b);
     //}
@@ -2133,7 +2131,6 @@ fn parse_several_expression_member(closing: u8) -> impl Fn(&mut Input) -> Orgams
                 StrContextValue::Description("Expression member in parenthesized expression")
             )))
             .parse_next(input)?;
-            dbg!(&member);
             members.push(member);
         }
 
@@ -2150,8 +2147,6 @@ fn parse_parenthesized_expression_inner(input: &mut Input) -> OrgamsParseResult<
 fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
 
     let b = cut_err(any).parse_next(input)?;
-
-    dbg!(b);
 
     let is_local_label = b == EXP_LOCAL_LABEL;
     let b = if is_local_label {
@@ -2305,7 +2300,6 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
 
 
                 _ => {
-                    dbg!(b);
                     let mut err = ContextError::new();
                     err.push(StrContext::Expected(StrContextValue::Description(
                         "Invalid expression member"
@@ -2362,7 +2356,6 @@ fn parse_label_ref_item(input: &mut Input) -> OrgamsParseResult<Item> {
 /// Parse a line according to orgams t_line grammar
 /// Returns Line for the line (may include indent, content, newline)
 pub fn parse_line(input: &mut Input) -> OrgamsParseResult<Line> {
-    debug_slice(&input);
 
     // order is quite important here
     alt((
@@ -2377,7 +2370,6 @@ pub fn parse_line(input: &mut Input) -> OrgamsParseResult<Line> {
 }
 
 fn parse_nl_or_comment(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
-    dbg!(&input[..10]);
     alt((
         parse_endline.map(|_| vec![Item::NewLine]),
         parse_space_and_comment
@@ -2467,8 +2459,6 @@ fn parse_line_starting_with_item(input: &mut Input) -> OrgamsParseResult<Line> {
 
     let mut first_loop = true;
     loop {
-        dbg!("in loop and already collected", &items);
-        debug_slice(input);
         let item = if first_loop {
             parse_inner_item.parse_next(input)?
         }
@@ -2506,59 +2496,137 @@ fn parse_line_starting_with_item(input: &mut Input) -> OrgamsParseResult<Line> {
     Ok(Line { items })
 }
 
-fn parse_all_code(input: &mut Input) -> OrgamsParseResult<Vec<Chunk>> {
-    let mut all_chunks = Vec::new();
-
+fn parse_all_code(debug: bool, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> impl FnMut(&mut Input) -> OrgamsParseResult<Vec<Chunk>> {
+move |input: &mut Input| {
+    let mut chunks = Vec::new();
+    let mut chunk_idx = 0;
+    let mut start_line = 0;
     loop {
         // Peek to check for the terminator (chunk size 0)
         let b = peek(any).parse_next(input)?;
         if b == 0 {
-            break;
+            if debug {
+             println!("DEBUG: End of code segments (byte 0 found).");
+            }
+             break;
         }
-
-        let chunk = parse_chunk.parse_next(input)?;
-        all_chunks.push(chunk);
+        
+        if debug {
+            println!("DEBUG: Parsing Chunk #{}", chunk_idx);
+        }
+        let (line_count, chunk) = parse_chunk( debug, labels, groundtruth_iter, chunk_idx, start_line).parse_next(input)?;
+        start_line += line_count.unwrap_or_default(); // We don't care in no debug
+        chunk_idx += 1;
+        chunks.push(chunk)
     }
+    Ok(chunks)
 
-    Ok(all_chunks)
+}
 }
 
 /// A chunk is composed of several lines, prefixed by its size in bytesa
 /// TODO retreive the logic of parse_chunk_debug it may not be exactly the same now
-pub fn parse_chunk(input: &mut Input) -> OrgamsParseResult<Chunk> {
-    eprintln!("debug: parse_chunk start");
-    let chunk_size = any
-        .verify(|&s| s > 0 && s <= CHUNK_MAX_SIZE)
-        .parse_next(input)?;
-    let mut lines = Vec::new();
-
-    let chunk_size = chunk_size as usize;
-    eprintln!("debug: chunk size: {}", chunk_size);
-
-    let input_start = input.checkpoint();
-    while input.offset_from(&input_start) < chunk_size {
-        eprintln!(
-            "debug: parsing line at offset {}",
-            input.offset_from(&input_start)
-        );
-        let line = parse_line.parse_next(input)?;
-        lines.push(line);
+pub fn parse_chunk(debug: bool, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>, chunk_idx: usize, start_line: usize) -> impl FnMut(&mut Input) -> OrgamsParseResult<(Option<usize>, Chunk)> {
+    move |input: &mut Input| {
+    let chunk_size = any.verify(|&s| s<=CHUNK_MAX_SIZE).parse_next(input)? as usize;
+    
+    // Chunk content peek
+    let chunk_content = peek(take(chunk_size)).parse_next(input)?;
+    if debug {
+        println!("DEBUG: Chunk #{} size: {} bytes", chunk_idx, chunk_size);
+        println!("DEBUG: Chunk #{} content bytes: {:02X?}", chunk_idx, chunk_content);
     }
+    
+    let chunk_start = input.checkpoint();
 
-    if input.offset_from(&input_start) != chunk_size {
-        eprintln!(
-            "Length mismatch! Expected: {}, Generated: {}",
-            chunk_size,
-            input.offset_from(&input_start)
-        );
-        todo!("Handle chunk size mismatch and genrete the appropriate error");
+	let mut render = if debug { Some(DisplayState::new(None)) } else { None };
+    let mut line_number = 0;    
+	
+    let mut chunk_content = Vec::new();
+    while input.offset_from(&chunk_start) < chunk_size {
+        let line_offset = input.offset_from(&chunk_start);
+        
+        let line_start_check = input.checkpoint();
+        
+
+       // println!("Remaining bytes: [{:02X?}]", &input[.. ]);
+
+        let line = match parse_line.parse_next(input) {
+            Ok(line) => {
+				line_number += 1;
+                 let consumed_len = input.offset_from(&line_start_check);
+
+                  if let Some(render) = render.as_mut() {
+                   // Reconstruct line
+				    render.render_items(line.iter(), labels).unwrap();
+				    let line_text = render.last_line().unwrap().to_string(); // XXX we assume only one line has been generated
+
+                 // Get bytes
+                 input.reset(&line_start_check);
+                 let raw_bytes = take(consumed_len).parse_next(input)?;
+
+                 // Printable bytes
+                 let printable: String = raw_bytes.iter().map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' }).collect();
+                let reconstructed_bytes = line.bytes(&labels);
+				println!("\n Chunk: {}       line: {} (total: {})", chunk_idx, line_number, start_line + line_number);
+                 println!("          Debug:  {:?}", line);
+                 println!("    [{:3}] Bytes:  {:02X?}", line_offset, raw_bytes);
+                 println!("  Reconstructed:  {:02X?} ", reconstructed_bytes);
+                 println!("      Printable:  {}", printable);
+                 println!("           Text:  `{}`", line_text);
+                 let groundtruth = if let Some(iter) = groundtruth_iter {
+                     if let Some(ground) = iter.next() {
+                         println!("         Ground:  `{}`", ground);
+					 	Some(ground.to_owned())
+                     } else {
+                         println!("         Ground:  <End of Stream>");
+						 Some("".to_owned())
+                     }
+                 } else {
+					None
+				 };
+
+				 assert_eq!(raw_bytes, reconstructed_bytes, "Reconstructed bytes do not match original bytes at chunk offset {}", line_offset);
+				 if let Some(groundtruth) = groundtruth {
+					 assert_eq!(groundtruth, line_text, "Groundtruth does not match reconstructed text at chunk offset {}", line_offset);
+				 }
+				 assert_eq!(render.line_number()-1, line_number, "Line number mismatch at chunk offset {}", line_offset);
+                }
+
+                line
+            },
+            Err(e) => {
+                if debug {
+                println!("    ERROR at chunk offset {}: {:?}", line_offset, e);
+                let remainder = &input[..];
+                let context_len = std::cmp::min(100, remainder.len());
+                let context_bytes = &remainder[..context_len];
+                let context_printable: String = context_bytes.iter().map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' }).collect();
+
+                println!("    Context bytes (next {}): {:02X?}", context_len, context_bytes);
+                println!("    Context chars (next {}): {}", context_len, context_printable);
+                }
+                return Err(e);
+            }
+        };
+
+        chunk_content.push(line);
     }
-
-    Ok(Chunk { lines })
+    
+    if input.offset_from(&chunk_start) != chunk_size {
+        println!("    WARN: Chunk mismatch. Expected {}, got {}", chunk_size, input.offset_from(&chunk_start));
+    }
+    
+    let line = if let Some(render) = render.as_mut() {
+        Some(render.line_number()-1)
+    } else {
+        None
+    };
+    Ok((line, Chunk { lines: chunk_content }) )
+    }
 }
 
 fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
-    eprintln!("debug: parse_escaped_7f_item");
     // Expect escape marker
     consume_marker(MARKER_ESCAPE)(input)?;
 
@@ -2574,7 +2642,6 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
 
     // get the command byte
     let cmd = cut_err(any).parse_next(input)?;
-    eprintln!("debug: parse_escaped_7f_item cmd=0x{:02x}", cmd);
 
     match cmd {
         CMD_FACTOR_BLOC => {
@@ -2714,11 +2781,11 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
 
 
 
-    dbg!(Ok(Instruction {
+    Ok(Instruction {
         prefix,
         opcode,
         coded_operands
-    }))
+    })
 
 }
 
@@ -2752,7 +2819,6 @@ fn parse_macro_args(input: &mut Input) -> OrgamsParseResult<Vec<LabelRef>> {
 /// Parse macro header: 0x60 <len> <name> <params...>
 /// Returns Item::Macro. The body follows in the stream.
 fn parse_macro_def_item(input: &mut Input) -> OrgamsParseResult<Item> {
-    eprintln!("debug: parse_macro_def");
     // 1. Marker
     literal([MARKER_MACRO_DEF]).parse_next(input)?;
     // 2. Length (def_block_len)
@@ -2789,40 +2855,28 @@ fn expect_end_marker(input: &mut Input) -> OrgamsParseResult<()> {
 fn parse_macro_use(input: &mut Input) -> OrgamsParseResult<Statement> {
     let length = cut_err(any).parse_next(input)? as usize;
 
-    debug_slice(input);
     let input_start = input.checkpoint();
-    let name = dbg!(
+    let name = 
         parse_unsized_expression
             .context(StrContext::Expected(StrContextValue::Description(
                 "Macro name"
             )))
             .parse_next(input)
-    )?;
+    ?;
     let mut args = Vec::new();
-    debug_slice(input);
-    dbg!(input.offset_from(&input_start), length);
     while input.offset_from(&input_start) < length - 1 {
-        let arg = dbg!(
+        let arg = 
             cut_err(parse_unsized_expression.context(StrContext::Expected(
                 StrContextValue::Description("Macro argument")
             )))
             .parse_next(input)
-        )?;
-        dbg!("Parsed macro arg:", &arg);
+        ?;
         args.push(arg);
-        dbg!(input.offset_from(&input_start), length);
     }
 
     expect_end_marker(input)?;
     let bytes_consumed = input.offset_from(&input_start);
-    dbg!(&args);
-    dbg!(
-        "bytes_consumed =",
-        bytes_consumed,
-        "expected length =",
-        length
-    );
-    if bytes_consumed != length {
+        if bytes_consumed != length {
         let mut err = ContextError::new();
         err.push(StrContext::Expected(StrContextValue::Description(
             "Wrong macro length consummed"
@@ -2890,7 +2944,7 @@ mod tests {
 
         let result = parse_comment(&mut input);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().as_str(), "Hello, World!");
+        assert_eq!(&result.unwrap().to_string(), "Hello, World!");
     }
 
     #[test]
@@ -2901,7 +2955,7 @@ mod tests {
 
         let result = parse_comment(&mut input);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().as_str(), "This is a comment");
+        assert_eq!(&result.unwrap().to_string(), "This is a comment");
 
         // Newline should be next
         assert_eq!(input[0], MARKER_NEWLINE);
@@ -2917,7 +2971,7 @@ mod tests {
         let result = parse_comment(&mut input);
         assert!(result.is_ok());
         assert_eq!(
-            result.unwrap().as_str(),
+            &result.unwrap().to_string(),
             " <<<< Constants shared across modules >>>>"
         );
     }
@@ -2976,7 +3030,7 @@ mod tests {
 
         // Verify structure
         match expr {
-            SizedExpression(Expression::MultiTerm(members)) => {
+            SizedExpression::Sized(Expression::MultiTerm(members)) => {
                 assert_eq!(members.len(), 13, "Multi-term should have 13 members");
             },
             _ => panic!("Expected MultiTerm expression")
@@ -2987,7 +3041,7 @@ mod tests {
         let data = fs::read(path).unwrap();
         let input = LocatingSlice::new(data.as_slice());
 
-        let result = parse_orgams_file.parse(input);
+        let result = parse_orgams_file(false, &mut None).parse(input);
 
         assert!(
             result.is_ok(),
