@@ -148,18 +148,114 @@ const fn is_escaped_byte(b: u8) -> bool {
         MARKER_NEWLINE |
         MARKER_WORD |
         MARKER_BYTE |
-        0x58 
+        0x52 |
+        0x58 |
+        0x5b
          => true,
         _ => false,
     }
 }
 
-const fn is_instruction_prefix(b: u8) -> bool {
-    matches!(b, IX_CODE | IY_CODE | 0xED | 0xCB | MARKER_IX_IND | MARKER_IY_IND)
+#[derive(Debug, Clone, PartialEq)]
+pub enum InstructionPrefix {
+    None,
+    DD,
+    FD,
+    DDCB,
+    FDCB,
+    DF,
+    FF,
+    DFCB,
+    FFCB,
+    CB,
+    ED
+}
+
+impl InstructionPrefix {
+    pub fn from_byte(b: u8) -> Self {
+        match b {
+            IX_CODE => InstructionPrefix::DD,
+            IY_CODE => InstructionPrefix::FD,
+            0xDF => InstructionPrefix::DF,
+            0xFF => InstructionPrefix::FF,
+            0xCB => InstructionPrefix::CB,
+            0xED => InstructionPrefix::ED,
+            _ => unreachable!("Invalid instruction prefix byte: 0x{:02X}", b)
+        }
+    }
+
+    pub fn from_bytes(first: u8, second: u8) -> Self {
+        match (first, second) {
+            (IX_CODE, 0xCB) => InstructionPrefix::DDCB,
+            (IY_CODE, 0xCB) => InstructionPrefix::FDCB,
+            (0xDF, 0xCB) => InstructionPrefix::DFCB,
+            (0xFF, 0xCB) => InstructionPrefix::FFCB,
+            _ => unreachable!("Invalid instruction prefix bytes: 0x{:02X} 0x{:02X}", first, second)
+        }
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+     match self {
+        InstructionPrefix::None => &[],
+        InstructionPrefix::DD => &[IX_CODE],
+        InstructionPrefix::DF => &[0xDF],
+        InstructionPrefix::FD => &[IY_CODE],
+        InstructionPrefix::FF => &[0xFF],
+        InstructionPrefix::DDCB => &[IX_CODE, 0xCB],
+        InstructionPrefix::DFCB => &[0xDF, 0xCB],
+        InstructionPrefix::FDCB => &[IY_CODE, 0xCB],
+        InstructionPrefix::FFCB => &[0xFF, 0xCB],
+        InstructionPrefix::CB => &[0xCB],
+        InstructionPrefix::ED => &[0xED],
+     }   
+   }
+
+   pub fn is_prefix(&self) -> bool {
+        !matches!(self, InstructionPrefix::None)
+   }
+
+    pub const fn is_valid_prefix(b: u8) -> bool {
+        matches!(b, IX_CODE | IY_CODE | 0xED | 0xCB | MARKER_IX_IND | MARKER_IY_IND)
+    }
+
+    pub const fn disassembler_table(&self) -> &'static [&'static str; 256] {
+        match self {
+            InstructionPrefix::None => &TABINSTR,
+            InstructionPrefix::DD | InstructionPrefix::DF => &TABINSTRDD,
+            InstructionPrefix::FD | InstructionPrefix::FF=> &TABINSTRFD,
+            InstructionPrefix::DDCB | InstructionPrefix::DFCB => &TABINSTRDDCB,
+            InstructionPrefix::FDCB | InstructionPrefix::FFCB => &TABINSTRFDCB,
+            InstructionPrefix::CB => &TABINSTRCB,
+            InstructionPrefix::ED => &TABINSTRED,
+        }
+    }
+
+    pub const fn requires_extra_expression(&self, opcode: u8) -> bool {
+        match self {
+            InstructionPrefix::CB => is_cb_opcode_with_extra_expression(opcode),
+            InstructionPrefix::DF | InstructionPrefix::FF => is_df_ff_opcode_with_extra_expression(opcode),
+            InstructionPrefix::None => is_standard_opcode_with_extra_expression(opcode),
+            _ => false,
+        }
+    }
+
+    pub const fn is_orgams_ix_iy_indirect(&self) -> bool {
+        matches!(self, InstructionPrefix::DF | InstructionPrefix::FF | InstructionPrefix::DFCB | InstructionPrefix::FFCB)
+    }
 }
 
 
+
+
+
 const fn is_cb_opcode_with_extra_expression(b: u8) -> bool {
+    matches!(b,
+        0x40..=0x47 | // BIT 0, r
+        0x80..=0x87 | // RES 0, r
+        0xC0..=0xC7   // SET 0, r
+    )
+}
+const fn is_df_ff_opcode_with_extra_expression(b: u8) -> bool {
     matches!(b,
         0x40..=0x47 | // BIT 0, r
         0x80..=0x87 | // RES 0, r
@@ -1345,7 +1441,7 @@ impl Statement {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Instruction {
     // prefix for IX/IY related instructions
-    pub prefix: Option<u8>,
+    pub prefix: InstructionPrefix,
     // opcode of the instruction. Can explicitely encode operands
     pub opcode: u8,
     // operands as expressions
@@ -1356,17 +1452,20 @@ impl Instruction {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
 
-        if let Some(prefix) = self.prefix {
-            bytes.push(prefix);
-        }
-        else {
+
+        if self.prefix.is_prefix() {
+          // prefixed opcode
+            let prefix_bytes = self.prefix.bytes();
+            bytes.extend_from_slice(&prefix_bytes);
+        } else  {
             if is_escaped_byte(self.opcode) {
                 // escaped opcode
                 bytes.push(MARKER_ESCAPE);
-            }
+            } 
         }
 
         bytes.push(self.opcode);
+
         for expr in &self.coded_operands {
             bytes.extend_from_slice(&expr.bytes(table));
         }
@@ -1375,16 +1474,9 @@ impl Instruction {
     }
 
     pub fn display(&self, table: &StringTable) -> String {
-        let tab = if let Some(prefix) = self.prefix {
-            prefix_to_table(prefix)
-        }
-        else {
-            &TABINSTR
-        };
+        let tab = self.prefix.disassembler_table();
 
         let mut result = tab[self.opcode as usize].to_lowercase();
-
-
 
         let mut i = 0;
         while i < self.coded_operands.len() {
@@ -1400,9 +1492,10 @@ impl Instruction {
             }
             else {
                 assert_eq!(i, 0);
-                if (self.prefix == Some(0xCB) && is_cb_opcode_with_extra_expression(self.opcode)) | 
-                    (self.prefix == None && is_standard_opcode_with_extra_expression(self.opcode)) {
-                    result = result.replace("00", "0").replace("0", &self.coded_operands[i].display(table));
+                if  self.prefix.requires_extra_expression(self.opcode) {
+                    result = result
+                        .replace("00", "0") // because of RST
+                        .replace("0", &self.coded_operands[i].display(table)); //0 may be a rel expression
                 } else {
                     unimplemented!("Too many coded operands for instruction display");
                 }
@@ -1410,11 +1503,10 @@ impl Instruction {
             }
         }
 
-        if self.prefix == Some(MARKER_IX_IND) && self.coded_operands[0].is_empty() {
-            result = result.replace("(ix+0)", "(ix)");
-        }
-        else if self.prefix == Some(MARKER_IY_IND) && self.coded_operands[0].is_empty() {
-            result = result.replace("(iy+0)", "(iy)");
+        if self.prefix.is_orgams_ix_iy_indirect() && self.coded_operands[0].is_empty() {
+            result = result
+                .replace("(ix+0)", "(ix)")
+                .replace("(iy+0)", "(iy)");
         }
         result = result
             .replace("(ix+-", "(ix-")
@@ -1423,7 +1515,7 @@ impl Instruction {
             .replace("sbc a,", "sbc ");
 
         // TODO : remove ?
-        if let Some(MARKER_IX_IND | MARKER_IY_IND) = self.prefix {
+        if self.prefix.is_orgams_ix_iy_indirect(){
             result = result.replace("+nn", "");
         }
 
@@ -2577,52 +2669,36 @@ fn parse_inner_if(input: &mut Input) -> OrgamsParseResult<Statement> {
     Ok(Statement::If(condition))
 }
 
-fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
-    let b = dbg!(any.parse_next(input)?);
-
-    let (prefix, opcode, repr) = if is_instruction_prefix(b) {
-        let prefix = b;
-        let opcode = any.parse_next(input)?;
-
-        if prefix == 0xCB && is_cb_opcode_with_extra_expression(opcode) {
-            // manual handling of set (hl)
-            let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set/res/bit ?; (hl)")))).parse_next(input)?;
-            return Ok(Instruction {
-                prefix: Some(prefix),
-                opcode,
-                coded_operands: vec![param],
-            })
-
+fn parse_instruction_prefix(input: &mut Input) -> OrgamsParseResult<InstructionPrefix> {
+    let b = cut_err(peek(any)).parse_next(input)?;
+    if !InstructionPrefix::is_valid_prefix(b) {
+        Ok(InstructionPrefix::None)
+    } else {
+        let first = cut_err(any).parse_next(input)?;
+        if [0xDD, 0xDF, 0xDF, 0xFF].contains(&first) {
+            let second = peek(opt(0xcb)).parse_next(input)?;
+            if let Some(second) = second {
+                let _ = cut_err(any).parse_next(input)?; // consume
+                Ok(InstructionPrefix::from_bytes(first, second))
+            } else {
+                Ok(InstructionPrefix::from_byte(first))
+            }
         } else {
-            (
-                Some(prefix),
-                opcode,
-                prefix_to_table(prefix)[opcode as usize]
-            )
-        }   
-    }
-    else {
-        // No prefix
-        let prefix = None;
-        let opcode = b;
-        let repr = TABINSTR[opcode as usize];
-
-        if is_standard_opcode_with_extra_expression(b) {
-            // manual handling of set (hl)
-            let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set/res/bit ?; (hl)")))).parse_next(input)?;
-            return Ok(Instruction {
-                prefix: None,
-                opcode,
-                coded_operands: vec![param],
-            })
-
-        } else {
-            (prefix, opcode, repr)
+            Ok(InstructionPrefix::from_byte(first))
         }
-    };
+    }
 
-    dbg!(repr);
+}
 
+fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
+    let prefix = cut_err(parse_instruction_prefix.context(StrContext::Label("Instruction prefix"))).parse_next(input)?;
+    let opcode = cut_err(any.context(StrContext::Label("Opcode"))).parse_next(input)?;
+    let repr = prefix.disassembler_table()[opcode as usize];
+
+    let coded_operands = if prefix.requires_extra_expression(opcode) {
+        let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set/res/bit ?; (hl)")))).parse_next(input)?;
+        vec![param]
+    } else {
 
         let kinds = z80str_to_expressions_list(repr);
         let mut coded_operands = Vec::with_capacity(kinds.len());
@@ -2633,7 +2709,8 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
             .parse_next(input)?;
             coded_operands.push(expr);
         }
-
+        coded_operands
+    };
 
 
 
