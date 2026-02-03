@@ -265,7 +265,7 @@ impl BasicCommandList {
         let mut result = CharCommandList::new();
         for cmd in &self.0 {
             let cmds = cmd.to_char_commands()?;
-            result = result.extend(cmds.as_slice().iter().cloned());
+            result.extend(cmds.as_slice().iter().cloned());
         }
         Ok(result)
     }

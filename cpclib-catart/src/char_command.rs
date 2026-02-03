@@ -11,6 +11,20 @@ impl<'a> IntoIterator for &'a CharCommandList {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct CharCommandList(Vec<CharCommand>);
 
+
+impl From<&[u8]> for CharCommandList {
+    fn from(data: &[u8]) -> Self {
+        Self::from_bytes(data)
+    }
+}
+
+impl<const C: usize> From<&[u8; C]> for CharCommandList
+{
+    fn from(data: &[u8; C]) -> Self {
+        Self::from(&data[..])
+    }
+}
+
 impl IntoIterator for CharCommandList {
     type IntoIter = std::vec::IntoIter<CharCommand>;
     type Item = CharCommand;
@@ -35,13 +49,13 @@ impl CharCommandList {
     }
 
     /// Add a command to the list (builder style)
-    pub fn push(mut self, cmd: CharCommand) -> Self {
+    pub fn push(&mut self, cmd: CharCommand) -> &mut Self {
         self.0.push(cmd);
         self
     }
 
     /// Add multiple commands
-    pub fn extend<I: IntoIterator<Item = CharCommand>>(mut self, iter: I) -> Self {
+    pub fn extend<I: IntoIterator<Item = CharCommand>>(&mut self, iter: I) -> &mut Self {
         self.0.extend(iter);
         self
     }
@@ -83,6 +97,7 @@ impl CharCommandList {
                         SI => CharCommand::Pen(params[0]),
                         SYN => CharCommand::Transparency(params[0]),
                         ETB => CharCommand::GraphicsInkMode(params[0]),
+                        LF => CharCommand::CursorDown,
                         EM => {
                             CharCommand::Symbol(
                                 params[0], params[1], params[2], params[3], params[4], params[5],
@@ -102,6 +117,17 @@ impl CharCommandList {
         }
         list.into()
     }
+
+
+    /// Helper to add n newlines (CR LF) to commands
+    pub fn add_newlines(&mut self,  count: usize) {
+        for _ in 0..count {
+            self.0.push(CharCommand::CarriageReturn);
+            self.0.push(CharCommand::CursorDown);
+        }
+    }
+
+
 }
 
 impl From<Vec<CharCommand>> for CharCommandList {
@@ -149,7 +175,7 @@ pub enum CharCommand {
     CursorLeft,
     /// Cursor Right (0x09)
     CursorRight,
-    /// Cursor Down (0x0A)
+    /// Cursor Down (0x0A) Line Feed LF
     CursorDown,
     /// Cursor Up (0x0B)
     CursorUp,
@@ -244,7 +270,7 @@ impl Debug for CharCommand {
                 else {
                     write!(f, "Char({})", c)
                 }
-            },
+            }
         }
     }
 }

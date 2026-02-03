@@ -264,6 +264,20 @@ impl Interpreter {
         self.cursor.y = y.clamp(top, bottom);
     }
 
+    pub fn move_cursor_to_left(&mut self) {
+        let (width, _) = self.screen.resolution();
+        let (left, _, top, bottom) =
+            self.window
+                .unwrap_or((1, width, 1, self.screen.resolution().1));
+        self.cursor.x = left;
+        if self.cursor.y < top {
+            self.cursor.y = top;
+        }
+        else if self.cursor.y > bottom {
+            self.cursor.y = bottom;
+        }
+    }
+
     pub fn scroll_screen_up(&mut self) {
         let width = self.screen.resolution().0;
         let (left, right, top, bottom) =
@@ -422,7 +436,7 @@ impl Interpreter {
                 self.locate_cursor(left, top);
             },
             CharCommand::CarriageReturn if self.enable_vdu => {
-                self.locate_cursor(self.window.map_or(1, |(l, ..)| l), self.cursor.y);
+                self.move_cursor_to_left();
             },
             CharCommand::CursorDown if self.enable_vdu => {
                 self.inc_cursor_y();

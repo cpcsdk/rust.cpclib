@@ -17,6 +17,8 @@ independent = true
 cpclib-basic.workspace = true
 cpclib-common.workspace = true
 cpclib-image.workspace = true
+
+bon.workspace = true
 paste.workspace = true
 delegate.workspace = true
 owo-colors.workspace = true
