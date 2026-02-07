@@ -20,6 +20,7 @@ cpclib-common.workspace = true
 
 arrayref.workspace = true
 cfg-if.workspace = true
+clap = { workspace = true, features = ["derive"], optional = true }
 custom_error.workspace = true
 delegate.workspace = true
 either.workspace = true
@@ -48,7 +49,7 @@ built.workspace = true
 [features]
 default = ["dskmanager", "catalog", "hideur"]
 dskmanager = ["cmdline"]
-catalog = ["cmdline", "log", "simple_logger"]
+catalog = ["cmdline", "log", "simple_logger", "clap"]
 hideur = ["cmdline"]
 hfe = ["hxcfe", "enumn", "camino-tempfile"]
 cmdline = ["cpclib-common/cmdline"]

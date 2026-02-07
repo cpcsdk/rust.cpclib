@@ -118,6 +118,10 @@ impl Disc for AnyDisc {
         Self: Sized,
         P: AsRef<Utf8Path>
     {
+        let path = path.as_ref();
+        if path.extension().map(|ext| ext.eq_ignore_ascii_case("hfe")).unwrap_or(false) {
+            return Err("HFE support is not enabled. Rebuild with --features hfe".to_string());
+        }
         ExtendedDsk::open(path).map(|d| d.into())
     }
 }
