@@ -1,0 +1,26 @@
+[package]
+name = "cpclib-catalog"
+version.workspace = true
+description = "Amsdos catalog manipulation tool"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[package.metadata.workspaces]
+independent = true
+
+[dependencies]
+cpclib-common.workspace = true
+cpclib-disc.workspace = true
+cpclib-catart.workspace = true
+cpclib-basic.workspace = true
+
+clap = { workspace = true, features = ["derive"] }
+log.workspace = true
+simple_logger.workspace = true
+
+[[bin]]
+name = "catalog"
+path = "src/main.rs"
