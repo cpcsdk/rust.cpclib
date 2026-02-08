@@ -2810,7 +2810,7 @@ fn parse_bit7on_text(input: &mut Input) -> OrgamsParseResult<Bit7OnString> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use fs_err as fs;
 
     use super::*;
 

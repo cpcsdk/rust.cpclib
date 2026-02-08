@@ -1,4 +1,4 @@
-use std::fs;
+use fs_err as fs;
 
 use camino::Utf8Path;
 use cpclib_bndbuild::BndBuilder;

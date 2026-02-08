@@ -14,6 +14,7 @@ cpclib-disc.workspace = true
 cpclib-common.workspace = true
 delegate.workspace = true
 either.workspace = true
+fs-err.workspace = true
 
 
 [lints]

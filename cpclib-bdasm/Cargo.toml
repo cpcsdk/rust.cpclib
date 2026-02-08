@@ -18,6 +18,7 @@ independent = true
 cpclib-common.workspace = true
 cpclib-asm.workspace = true
 cpclib-disc.workspace = true
+fs-err.workspace = true
 const_format.workspace = true
 time = "0.3.44"
 

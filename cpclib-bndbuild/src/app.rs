@@ -352,12 +352,12 @@ impl BndBuilderCommand {
                     let output = child.wait_with_output().map_err(|e| {
                         BndBuilderError::AnyError(format!("Error when executing  dot. {e}"))
                     })?;
-                    std::fs::write(path, output.stdout).map_err(|e| {
+                    fs_err::write(path, output.stdout).map_err(|e| {
                         BndBuilderError::AnyError(format!("Error while saving {path}. {e}"))
                     })
                 },
                 Some("dot") => {
-                    std::fs::write(path, dot).map_err(|e| BndBuilderError::AnyError(e.to_string()))
+                    fs_err::write(path, dot).map_err(|e| BndBuilderError::AnyError(e.to_string()))
                 },
                 Some(ext) => {
                     Err(BndBuilderError::AnyError(format!(
@@ -714,7 +714,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             base_cache_folder().to_owned()
         };
 
-        std::fs::remove_dir_all(folder)
+        fs_err::remove_dir_all(folder)
             .context("Error when removing cache folder")
             .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
         observers.emit_stdout(">> Cache folder cleared\n");

@@ -5,7 +5,7 @@ const FILENAME: &str = "tests/simple_code.asm";
 
 #[test]
 fn test_simple_aggregate() {
-    let code = std::fs::read_to_string(FILENAME).unwrap();
+    let code = fs_err::read_to_string(FILENAME).unwrap();
     let tokens = dbg!(parse_z80_str(&code).unwrap());
     let doc = dbg!(aggregate_documentation_on_tokens(&tokens, UndocumentedConfig::none()));
 

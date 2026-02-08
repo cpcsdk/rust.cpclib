@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fs::File;
+use fs_err::File;
 use std::io::Read;
 
 use cpclib_asm::{

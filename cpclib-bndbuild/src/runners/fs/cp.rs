@@ -57,7 +57,7 @@ impl<E: EventObserver> Runner for CpRunner<E> {
         let dest = files.last();
 
         let copy = |from: &Utf8Path, to: &Utf8Path, error: &mut String| {
-            std::fs::copy(from, to)
+            fs_err::copy(from, to)
                 .map_err(|e| error.push_str(&format!("Error when copying {from} to {to}. {e}.\n")))
         };
 
@@ -128,7 +128,7 @@ mod test {
 
         let src = src.into_temp_path();
         let dst = dst.into_temp_path();
-        std::fs::remove_file(&dst).unwrap();
+        fs_err::remove_file(&dst).unwrap();
 
         assert!(src.exists());
         assert!(!dst.exists());

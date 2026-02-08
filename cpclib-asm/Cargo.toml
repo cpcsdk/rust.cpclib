@@ -18,6 +18,7 @@ cpclib-crunchers.workspace = true
 cpclib-sna.workspace = true
 cpclib-tokens.workspace = true
 cpclib-disc.workspace = true
+fs-err.workspace = true
 cpclib-common.workspace = true
 cpclib-cpr.workspace = true
 cpclib-image.workspace = true
@@ -81,6 +82,7 @@ bench = false
 built.workspace = true
 #cc.workspace = true
 build-deps = "0.1.4"
+fs-err.workspace = true
 
 #[lib]
 #crate-type = ["cdylib", "dylib"]

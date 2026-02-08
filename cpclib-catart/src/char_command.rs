@@ -1,3 +1,6 @@
+use cpclib_common::itertools::Itertools;
+
+
 // Allow iteration over &CharCommandList as &CharCommand
 impl<'a> IntoIterator for &'a CharCommandList {
     type IntoIter = std::slice::Iter<'a, CharCommand>;
@@ -128,6 +131,24 @@ impl CharCommandList {
     }
 
 
+    pub fn to_basic_string(&self) -> String {
+        self.0.iter()
+            .map(|cmd| cmd.to_basic_string())
+            .join(":")
+    }
+
+
+}
+
+impl Display for CharCommandList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    	let mut interpreter = Interpreter::new_6128();
+	    interpreter.interpret(&self.0, false)
+		    .map_err(|e| panic!("Failed to interpret commands: {:?}", e));
+	
+	    let screen_output = interpreter.to_string();
+        write!(f, "{}", screen_output)  
+    }
 }
 
 impl From<Vec<CharCommand>> for CharCommandList {
@@ -145,12 +166,13 @@ impl Into<Vec<CharCommand>> for CharCommandList {
 // This file encodes the CatArt chars commands as they could be handled in a stream of chars.
 // They are mainly produced from a Basic list of command. But it is still possible to create them
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
 use cpclib_common::smallvec::{SmallVec, smallvec};
 
 use crate::basic_chars::*;
+use crate::interpret::Interpreter;
 
 /// Represents the possible commands encoded in a stream of characters on the Amstrad CPC
 #[derive(Clone, PartialEq, Eq)]
@@ -219,7 +241,8 @@ pub enum CharCommand {
     /// Locate (0x1F)
     Locate(u8, u8),
     /// Standard character
-    Char(u8)
+    Char(u8),
+    String(Vec<u8>), // list of ascii chars
 }
 
 impl Debug for CharCommand {
@@ -270,7 +293,8 @@ impl Debug for CharCommand {
                 else {
                     write!(f, "Char({})", c)
                 }
-            }
+            },
+            CharCommand::String(s) => write!(f, "String({:?})", s)
         }
     }
 }
@@ -293,6 +317,15 @@ impl CharCommand {
     #[inline]
     pub fn third_byte(&self) -> u8 {
         self.bytes()[2]
+    }
+
+    // Ensure some Char are translated to their command
+    pub fn normalize(self) -> Self {
+        match self {
+            Self::Char(NAK) => Self::DisableVdu,
+            Self::Char(ACK) => Self::EnableVdu,
+            _ => self
+        }
     }
 
     /// Convert the command to a sequence of control codes and bytes for the CPC
@@ -332,7 +365,8 @@ impl CharCommand {
             CharCommand::Border(i1, i2) => smallvec![GS, *i1, *i2],
             CharCommand::Home => smallvec![RS],
             CharCommand::Locate(c, l) => smallvec![US, *c, *l],
-            CharCommand::Char(c) => smallvec![*c]
+            CharCommand::Char(c) => smallvec![*c],
+            CharCommand::String(s) => s.iter().cloned().collect()
         }
     }
 
@@ -441,5 +475,28 @@ impl CharCommand {
 
     pub fn is_print_symbol(&self) -> bool {
         matches!(self, CharCommand::PrintSymbol(_))
+    }
+
+
+    pub fn to_basic_string(&self) -> String {
+        match self {
+            Self::Char(c) if *c != b'"' && *c >= 32 => format!("PRINT \"{}\";", *c as char),
+            Self::Char(c) => format!("PRINT CHR$({});", *c),
+            Self::EnableVdu => format!("PRINT CHR$({}));", ACK),
+            Self::DisableVdu => format!("PRINT CHR$({}));", NAK),
+            Self::Border(a, b) => format!("BORDER {}, {}", a, b),
+            Self::Pen(a) => format!("PEN {}", a),
+            Self::Paper(a) => format!("PAPER {}", a),
+            Self::Ink(a, b, c) => format!("INK {}, {}, {}", a, b, c),
+            Self::GraphicsInkMode(a) => format!("PRINT CHAR$({});CHAR$({});", ETB, a),
+            Self::Mode(a) => format!("MODE {}", a),
+            Self::Nop => "".to_string(),
+            Self::Cls => "CLS".to_string(),
+            Self::Locate(a, b) => format!("LOCATE {}, {}", a, b),
+            Self::CarriageReturn => "PRINT CHR$(13);".to_string(),
+            Self::Window(a, b, c, d) => format!("WINDOW {}, {}, {}, {}", a, b, c, d),
+            Self::String(s) => format!("PRINT \"{}\";", String::from_utf8_lossy(s)),
+            _ => unimplemented!("to_basic_string not implemented for command {:?}", self)
+        }
     }
 }

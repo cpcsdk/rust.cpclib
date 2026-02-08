@@ -70,7 +70,7 @@ impl<E: EventObserver> Runner for MvRunner<E> {
                     dest.to_path_buf()
                 };
 
-                std::fs::rename(from, &to).map_err(|e| {
+                fs_err::rename(from, &to).map_err(|e| {
                     error.push_str(&format!("Error when moving {from} to {to}. {e}.\n"))
                 })
             };
@@ -111,7 +111,7 @@ mod test {
 
         let src = src.into_temp_path();
         let dst = dst.into_temp_path();
-        std::fs::remove_file(&dst).unwrap();
+        fs_err::remove_file(&dst).unwrap();
 
         assert!(src.exists());
         assert!(!dst.exists());

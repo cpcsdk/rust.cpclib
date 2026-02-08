@@ -6,6 +6,7 @@ members = [
   "cpclib-basm", "cpclib-basmdoc",
   "cpclib-bdasm",
   "cpclib-bndbuild",
+  "cpclib-catalog",
   "cpclib-catart",
   "cpclib-bndbuild-ratatui",
   "cpclib-bndbuild-tauri/src-tauri",
@@ -34,7 +35,7 @@ members = [
   "cpclib-wasm", 
   "cpclib-xfer",
   "cpclib-xfertool",
-  "cpclib-z80emu",
+  "cpclib-z80emu", "cpclib-borgams",
   #"cpclib-bndbuild-ratatui",
   #  "cpclib-xferfs",
 ]
@@ -47,6 +48,7 @@ default-members = [
   "cpclib-basmdoc",
   "cpclib-bdasm",
   "cpclib-bndbuild",
+  "cpclib-catalog",
   "cpclib-catart",
   "cpclib-common",
   "cpclib-cpr",
@@ -61,6 +63,7 @@ default-members = [
   "cpclib-image",
   "cpclib-imgconverter",
   "cpclib-macros",
+  "cpclib-orgams-ascii",
   "cpclib-runner", 
   "cpclib-sna",
   "cpclib-sprite-compiler", 
@@ -91,6 +94,7 @@ cpclib-basm = { version = "0.11.0", path = "cpclib-basm", default-features = fal
 cpclib-basmdoc = { version = "0.11.0", path = "cpclib-basmdoc", default-features = false }
 cpclib-bdasm = { version = "0.11.0", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "0.11.0", path = "cpclib-bndbuild", default-features = false }
+cpclib-borgams = { version = "0.11.0", path = "cpclib-borgams", default-features = false }
 cpclib-catart = { version = "0.11.0", path = "cpclib-catart", default-features = false }
 cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
 cpclib-common = { version = "0.11.0", path = "cpclib-common", default-features = false }
@@ -104,6 +108,7 @@ cpclib-files = { version = "0.11.0", path = "cpclib-files", default-features = f
 cpclib-image = { version = "0.11.0", path = "cpclib-image", default-features = false }
 cpclib-imgconverter = { version = "0.11.0", path = "cpclib-imgconverter", default-features = false }
 cpclib-macros = { version = "0.11.0", path = "cpclib-macros", default-features = false }
+cpclib-orgams-ascii = { version = "0.11.0", path = "cpclib-orgams-ascii", default-features = false }
 cpclib-runner = { version = "0.11.0", path = "cpclib-runner", default-features = false }
 cpclib-sna = { version = "0.11.0", path = "cpclib-sna", default-features = false }
 cpclib-sprite-compiler = { version = "0.11.0", path = "cpclib-sprite-compiler", default-features = false }
@@ -145,6 +150,7 @@ enumn = "0.1.14"
 env_logger = "0.11"
 evalexpr = "13.1.0"
 exitcode = "1.1.2"
+fs-err = "3.3.0"
 gag = "1.0.0"
 getset = "0.1.6"
 gif = "0.13" # XXX may be compatible with gif-dispose

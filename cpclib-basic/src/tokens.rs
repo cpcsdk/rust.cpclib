@@ -680,7 +680,7 @@ impl fmt::Display for BasicTokenNoPrefix {
             _ => {
                 let c = (*self as u8) as char;
                 match c {
-                    ' '..='z' => write!(f, "{c}"),
+                    c if c.is_ascii_graphic() || c.is_ascii_whitespace() => write!(f, "{c}"),
 
                     _ => unimplemented!("{:?}", self)
                 }

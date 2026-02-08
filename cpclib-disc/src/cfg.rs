@@ -1,5 +1,5 @@
 use std::fmt;
-use std::fs::File;
+use fs_err::File;
 use std::io::Read;
 use std::iter::Iterator;
 use std::str::FromStr;

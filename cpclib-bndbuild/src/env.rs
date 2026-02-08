@@ -26,7 +26,7 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
         let dir = dir.as_ref().to_path_buf();
         move |name| {
             let path = dir.join(name); // TODO add a safety ??
-            match std::fs::read_to_string(path) {
+            match fs_err::read_to_string(path) {
                 Ok(result) => Ok(Some(result)),
                 Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(err) => {

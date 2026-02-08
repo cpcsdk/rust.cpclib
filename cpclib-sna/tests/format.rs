@@ -1,4 +1,4 @@
-use std::fs::read;
+use fs_err::read;
 
 use camino_tempfile::NamedUtf8TempFile;
 use cpclib_sna::{Snapshot, SnapshotVersion};

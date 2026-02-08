@@ -38,7 +38,7 @@ pub trait ListingExt {
     fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>>;
     /// Save the listing on disc in a string version
     fn save<P: AsRef<Utf8Path>>(&self, path: P) -> ::std::io::Result<()> {
-        use std::fs::File;
+        use fs_err::File;
         use std::io::prelude::*;
 
         // Open a file in write-only mode, returns `io::Result<File>`

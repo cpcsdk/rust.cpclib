@@ -2427,6 +2427,7 @@ dependencies = [
  "delegate",
  "either",
  "enumflags2",
+ "fs-err",
  "getset",
  "globset",
  "hashbag",
@@ -2456,6 +2457,7 @@ dependencies = [
  "cpclib-disc",
  "cpclib-sna",
  "either",
+ "fs-err",
  "paste",
  "serde",
  "thiserror 2.0.17",
@@ -2474,6 +2476,7 @@ dependencies = [
  "cpclib-disc",
  "cpclib-xfer",
  "criterion",
+ "fs-err",
  "glob",
  "globset",
  "parking_lot",
@@ -2498,6 +2501,7 @@ dependencies = [
  "delegate",
  "dirs 5.0.1",
  "flate2",
+ "fs-err",
  "glob",
  "indicatif 0.17.11",
  "lazy_static",
@@ -2523,6 +2527,7 @@ dependencies = [
  "cpclib-asm",
  "cpclib-common",
  "cpclib-disc",
+ "fs-err",
  "time",
 ]
 
@@ -2556,6 +2561,7 @@ dependencies = [
  "either",
  "fancy-duration",
  "fancy-regex 0.17.0",
+ "fs-err",
  "globmatch",
  "hostname",
  "lazy-regex",
@@ -2591,6 +2597,7 @@ dependencies = [
  "camino",
  "cfg-if",
  "cpclib-bndbuild",
+ "fs-err",
  "gag",
  "log",
  "serde",
@@ -2611,9 +2618,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-borgams"
+version = "0.11.0"
+dependencies = [
+ "built",
+ "cpclib-common",
+ "cpclib-files",
+ "cpclib-orgams-ascii",
+]
+
+[[package]]
+name = "cpclib-catalog"
+version = "0.11.0"
+dependencies = [
+ "clap",
+ "cpclib-basic",
+ "cpclib-catart",
+ "cpclib-common",
+ "cpclib-disc",
+ "log",
+ "simple_logger",
+]
+
+[[package]]
 name = "cpclib-catart"
 version = "0.11.0"
 dependencies = [
+ "bon",
  "built",
  "cpclib-basic",
  "cpclib-common",
@@ -2652,6 +2683,7 @@ name = "cpclib-cpr"
 version = "0.11.0"
 dependencies = [
  "cpclib-common",
+ "fs-err",
 ]
 
 [[package]]
@@ -2694,6 +2726,7 @@ version = "0.11.0"
 dependencies = [
  "codespan-reporting 0.13.1",
  "cpclib-common",
+ "fs-err",
  "test-generator",
 ]
 
@@ -2713,12 +2746,14 @@ dependencies = [
  "built",
  "camino-tempfile",
  "cfg-if",
+ "clap",
  "cpclib-common",
  "cpclib-tokens",
  "custom_error",
  "delegate",
  "either",
  "enumn",
+ "fs-err",
  "getset",
  "hxcfe",
  "log",
@@ -2749,6 +2784,7 @@ dependencies = [
  "cpclib-disc",
  "delegate",
  "either",
+ "fs-err",
 ]
 
 [[package]]
@@ -2758,6 +2794,7 @@ dependencies = [
  "anyhow",
  "as-slice",
  "cpclib-common",
+ "fs-err",
  "gif 0.13.3",
  "gif-dispose",
  "image",
@@ -2777,6 +2814,7 @@ dependencies = [
  "cpclib-image",
  "crossbeam-channel",
  "exitcode",
+ "fs-err",
  "notify 8.2.0",
 ]
 
@@ -2786,6 +2824,7 @@ version = "0.11.0"
 dependencies = [
  "cpclib-asm",
  "cpclib-common",
+ "fs-err",
  "proc-macro2 1.0.105",
  "quote 1.0.43",
  "syn 2.0.113",
@@ -2798,6 +2837,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-tokens",
  "encoding_rs",
+ "fs-err",
 ]
 
 [[package]]
@@ -2823,6 +2863,7 @@ dependencies = [
  "build-deps",
  "camino-tempfile",
  "cpclib-bndbuild",
+ "fs-err",
  "test-generator",
  "walkdir",
 ]
@@ -2841,6 +2882,7 @@ dependencies = [
  "directories",
  "enigo",
  "flate2",
+ "fs-err",
  "fs_extra",
  "glob",
  "rust-embed",
@@ -2867,6 +2909,7 @@ dependencies = [
  "comfy-table",
  "cpclib-common",
  "delegate",
+ "fs-err",
  "line-span",
  "minus",
  "nutype",
@@ -2956,6 +2999,7 @@ dependencies = [
  "custom_error",
  "delegate",
  "either",
+ "fs-err",
  "getset",
  "path-absolutize",
  "serde",
@@ -4703,6 +4747,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fs-err"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73fde052dbfc920003cfd2c8e2c6e6d4cc7c1091538c3a24226cec0665ab08c0"
+dependencies = [
+ "autocfg",
 ]
 
 [[package]]

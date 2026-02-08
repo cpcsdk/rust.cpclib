@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 #[cfg(feature = "cmdline")]
-use std::fs::File;
+use fs_err::File;
 #[cfg(feature = "cmdline")]
 use std::io::{Read, Write};
 #[cfg(feature = "cmdline")]
@@ -289,10 +289,10 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             if let Some(file) = file {
                 // filename do not contain user
                 if sub.get_flag("noheader") {
-                    std::fs::write(ams_filename.filename(), file.content())?;
+                    fs_err::write(ams_filename.filename(), file.content())?;
                 }
                 else {
-                    std::fs::write(ams_filename.filename(), file.header_and_content())?;
+                    fs_err::write(ams_filename.filename(), file.header_and_content())?;
                 }
             }
             else {
@@ -593,7 +593,7 @@ pub fn dsk_manager_build_arg_parser() -> Command {
 
 /// Open the file and remove the header if any
 pub fn read<P: AsRef<Utf8Path>>(p: P) -> Result<(VecDeque<u8>, Option<AmsdosHeader>), AmsdosError> {
-    let data = std::fs::read(p.as_ref()).map_err(|e| AmsdosError::IO(e.to_string()))?;
+    let data = fs_err::read(p.as_ref()).map_err(|e| AmsdosError::IO(e.to_string()))?;
 
     Ok(split_header(data))
 }

@@ -8,6 +8,7 @@ walkdir = { workspace = true }
 camino-tempfile = { workspace = true }
 cpclib-bndbuild = { workspace = true }
 anyhow = { workspace = true }
+fs-err = { workspace = true }
 
 [dev-dependencies]
 test-generator = "0.3.1"

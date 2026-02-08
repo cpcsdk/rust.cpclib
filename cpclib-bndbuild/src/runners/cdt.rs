@@ -1,4 +1,4 @@
-use std::fs::File;
+use fs_err::File;
 use std::marker::PhantomData;
 
 use clap::{Arg, ArgAction, FromArgMatches};

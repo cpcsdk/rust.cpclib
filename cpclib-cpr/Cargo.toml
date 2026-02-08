@@ -12,3 +12,4 @@ homepage.workspace = true
 [dependencies]
 
 cpclib-common.workspace = true
+fs-err.workspace = true

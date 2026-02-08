@@ -1,6 +1,6 @@
 #![feature(path_file_prefix)]
 
-use std::fs;
+use fs_err as fs;
 use std::sync::Arc;
 
 use camino_tempfile::NamedUtf8TempFile;
@@ -48,7 +48,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 }
 
 fn macro_expansion_benchmark(c: &mut Criterion) {
-    let code = std::fs::read_to_string("tests/asm/macros/macro_bench.asm")
+    let code = fs_err::read_to_string("tests/asm/macros/macro_bench.asm")
         .expect("Unable to read macro benchmark file");
 
     c.bench_function("macro_expansion_~420_invocations", |b| {

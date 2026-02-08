@@ -84,7 +84,7 @@ impl DownloadableInformation for AmspiritVersion {
 
         let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
             Box::new(move |d: &DelegateApplicationDescription<E>| {
-                std::fs::rename(
+                fs_err::rename(
                     d.cache_folder().join(&owned_original),
                     d.cache_folder().join(&owned_result)
                 )

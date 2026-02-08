@@ -77,17 +77,17 @@ fn bankset_check_save() {
     assert_eq!(&mem[0x1C000..(0x1C000 + 4)], &DATA_1_3);
 
     // check the content of the saved file
-    assert_eq!(&std::fs::read("good_bankset_0_0.o").unwrap(), &DATA_0_0);
-    assert_eq!(&std::fs::read("good_bankset_0_1.o").unwrap(), &DATA_0_1);
-    assert_eq!(&std::fs::read("good_bankset_0_2.o").unwrap(), &DATA_0_2);
-    assert_eq!(&std::fs::read("good_bankset_0_3.o").unwrap(), &DATA_0_3);
+    assert_eq!(&fs_err::read("good_bankset_0_0.o").unwrap(), &DATA_0_0);
+    assert_eq!(&fs_err::read("good_bankset_0_1.o").unwrap(), &DATA_0_1);
+    assert_eq!(&fs_err::read("good_bankset_0_2.o").unwrap(), &DATA_0_2);
+    assert_eq!(&fs_err::read("good_bankset_0_3.o").unwrap(), &DATA_0_3);
 
-    assert_eq!(&std::fs::read("good_bankset_1_0.o").unwrap(), &DATA_1_0);
-    assert_eq!(&std::fs::read("good_bankset_1_1.o").unwrap(), &DATA_1_1);
-    assert_eq!(&std::fs::read("good_bankset_1_2.o").unwrap(), &DATA_1_2);
-    assert_eq!(&std::fs::read("good_bankset_1_3.o").unwrap(), &DATA_1_3);
+    assert_eq!(&fs_err::read("good_bankset_1_0.o").unwrap(), &DATA_1_0);
+    assert_eq!(&fs_err::read("good_bankset_1_1.o").unwrap(), &DATA_1_1);
+    assert_eq!(&fs_err::read("good_bankset_1_2.o").unwrap(), &DATA_1_2);
+    assert_eq!(&fs_err::read("good_bankset_1_3.o").unwrap(), &DATA_1_3);
 
     for fname in glob::glob("good_bankset_?_?.o").unwrap() {
-        std::fs::remove_file(fname.unwrap()).unwrap();
+        fs_err::remove_file(fname.unwrap()).unwrap();
     }
 }

@@ -3,6 +3,8 @@ use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 use bon::{Builder, builder};
 
+use cpclib_basic::BasicProgram;
+use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_image::image::Mode;
 use owo_colors::OwoColorize;
@@ -59,6 +61,84 @@ impl TryFrom<&[PrintableEntryFileName]> for Catalog {
 }
 
 impl Catalog {
+    /// XXX does not take into account any ordering or mode.
+    /// so it is quite buggy and can only serve for debbubing purposes
+    /// TODO handle ordering and mode to be able to use this for catart generation
+    pub fn to_basic_string(&self) ->String {
+	    self.entries()
+		.map(|e| {e.fname.commands().to_basic_string()})
+		.enumerate()
+		.map(|(i, e)| format!("{} {}", i*10, e))
+		.join("\n")
+    }
+
+
+    pub fn extract_basic_from_sequential_catart(&self) -> BasicProgram {
+        let unified = UnifiedCatalog::from(self.clone());
+        let grid = EntriesGrid::from_entries(
+            unified.entries().map(Cow::Borrowed).collect(),
+            2, // TODO handle number of columns based on mode and catalog type
+            ScreenMode::Mode1, // TODO handle mode
+            CatalogType::Cat // TODO handle catalog type
+        );
+
+        let mut enable = true;
+        let mut entries = Vec::new();
+        for commands in grid.entries_display_order().map(|e| e.fname.commands()) {
+            let mut current_file = Vec::new();
+            let mut current_string = Vec::new();
+
+            for (i,c) in commands.into_iter().enumerate() {
+                let c = c.normalize(); // TODO check if it is mandaotyr to do that
+
+                let will_disable = matches!(c, CharCommand::DisableVdu);
+                let will_enable = matches!(c, CharCommand::EnableVdu);
+                
+                let is_nop = matches!(c, CharCommand::Nop);
+                let is_enable = matches!(c, CharCommand::EnableVdu);
+                let is_dot_handling = matches!(c, CharCommand::GraphicsInkMode(46));
+                let is_visible_char_handling = matches!(c, CharCommand::Char(c) if c.is_ascii_graphic() && c!=b'"');
+
+                if enable && !will_disable && !is_nop && (!is_enable && i!=1) && !is_dot_handling{
+
+                    if is_visible_char_handling {
+                        current_string.push(c.first_byte());
+                    }
+                    else {
+                        if !current_string.is_empty() {
+                            current_file.push(CharCommand::String(current_string.clone()));
+                            current_string.clear();
+                        }
+                        current_file.push(c);
+                    }
+                }
+
+                if will_disable {
+                    enable = false;
+                }
+                else if will_enable {
+                    enable = true;
+                }
+            }
+
+            if !current_string.is_empty() {
+                current_file.push(CharCommand::String(current_string.clone()));
+            }
+            entries.push(current_file);
+        };
+
+        let basic_str = entries.into_iter()
+            .map(|cmds| cmds.into_iter().map(|c| c.to_basic_string()).join(":"))
+            .enumerate()
+            .map(|(i, s)| format!("{} {}", (i+1)*10, s))
+            .join("\n");
+
+
+        BasicProgram::parse(&basic_str).expect("Failed to parse generated BASIC listing")
+
+    }
+
+
     pub fn empty() -> Self {
         Catalog {
             entries: [PrintableEntry::empty(); 64]
@@ -183,7 +263,6 @@ pub struct UnifiedPrintableEntry {
 impl From<Vec<PrintableEntry>> for UnifiedPrintableEntry {
     // this is valid if all entries have the same filename and user
     fn from(raw_entries: Vec<PrintableEntry>) -> Self {
-        dbg!("Merging entries: {:?}", &raw_entries);
 
         let mut iter = raw_entries.into_iter();
         let mut init: Self = iter.next().unwrap().into();
@@ -246,8 +325,8 @@ impl UnifiedPrintableEntry {
 
     // BUG does not handle file protection display
     pub fn all_generated_bytes(&self) -> [u8; 17] {
-        let fname = dbg!(self.fname.all_generated_bytes());
-        let size = dbg!(format!("{:>4}K", self.size_kb));
+        let fname = self.fname.all_generated_bytes();
+        let size = format!("{:>4}K", self.size_kb);
         let size = size.as_bytes();
 
         [
@@ -421,6 +500,8 @@ impl<'cat> EntriesGrid<'cat> {
             "EntriesGrid must never have more than 64 entries, got {}",
             entries.len()
         );
+
+        let entries = entries.into_iter().filter(|e| !e.is_system()); // remove not visible entries
         let mut columns: Vec<Vec<Cow<'cat, UnifiedPrintableEntry>>> = vec![vec![]; num_columns];
         for (i, entry) in entries.into_iter().enumerate() {
             columns[i % num_columns].push(entry);
@@ -991,7 +1072,9 @@ impl UnifiedCatalog {
         order: CatalogType
     ) -> CharCommandList {
         let grid = self.entries_by_mode_and_order(mode, order);
-        grid.commands()
+        let commands = grid.commands();
+        let bytes = commands.iter().flat_map(|cmd| cmd.bytes().into_iter()).collect::<Vec<_>>(); // ensure we merge commands
+        CharCommandList::from_bytes(&bytes)
 
     }
 }

@@ -1,5 +1,5 @@
 use std::env;
-use std::fs;
+use fs_err as fs;
 use cpclib_orgams_ascii::binary_decoder::parse_orgams_file;
 use encoding_rs::WINDOWS_1252;
 use cpclib_common::winnow::binary::le_u16;

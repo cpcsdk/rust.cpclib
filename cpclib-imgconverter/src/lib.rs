@@ -1,4 +1,4 @@
-use std::fs::File;
+use fs_err::File;
 use std::io::Write;
 
 use anyhow::{self, Error};
@@ -812,7 +812,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
                     scr.to_vec()
                 };
 
-                std::fs::write(fname, &scr)?;
+                fs_err::write(fname, &scr)?;
 
                 do_export_palette!(sub_scr, palette);
             },
@@ -1397,7 +1397,7 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
 
     let mode0ratio = matches.get_flag("MODE0RATIO");
     // read the data file
-    let data = std::fs::read(input_fname).expect("Unable to read input file");
+    let data = fs_err::read(input_fname).expect("Unable to read input file");
 
     // remove header if any
     let data = if data.len() >= 128
@@ -1593,7 +1593,7 @@ pub fn fade_handle_matches(matches: &ArgMatches) -> Result<(), String> {
     };
 
     if let Some(fname) = matches.get_one::<String>("OUTPUT") {
-        std::fs::write(fname, content).expect("Error while saving file");
+        fs_err::write(fname, content).expect("Error while saving file");
     }
     else {
         println!("{content}");

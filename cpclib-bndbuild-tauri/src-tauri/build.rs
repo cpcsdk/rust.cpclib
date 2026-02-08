@@ -20,7 +20,7 @@ fn get_graphviz_resources() {
         let mut buffer = Vec::new();
         content.read_to_end(&mut buffer).unwrap();
 
-        std::fs::create_dir_all(dst).expect("Unable to create resource dir");
+        fs_err::create_dir_all(dst).expect("Unable to create resource dir");
         zip_extract::extract(Cursor::new(buffer), dst, true)
             .expect("Unable to extract graphivz/windows in resources folder");
     }

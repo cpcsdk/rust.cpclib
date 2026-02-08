@@ -1,4 +1,4 @@
-use std::fs;
+use fs_err as fs;
 
 use cpclib_common::camino::Utf8Path;
 use curl::easy::{Easy, Form};

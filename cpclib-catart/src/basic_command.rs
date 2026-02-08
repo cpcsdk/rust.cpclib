@@ -1,7 +1,10 @@
 /// This file encodes the CatArt basic commands as the could be handled in a basic program
-use std::fmt::Display;
+use std::{fmt::Display, ops::Deref};
 
-use crate::char_command::{CharCommand, CharCommandList};
+
+use cpclib_basic::BasicProgram;
+
+use crate::{char_command::{CharCommand, CharCommandList}, error::CatArtError};
 
 /// Represents an argument to the PRINT command.
 #[derive(Clone, Debug, PartialEq)]
@@ -110,7 +113,7 @@ impl Display for PrintTerminator {
 }
 
 /// Represents a CatArt command
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum BasicCommand {
     /// BORDER ink1, ink2
     Border(u8, Option<u8>), // 0-31, 0-31
@@ -138,9 +141,62 @@ pub enum BasicCommand {
     Window(u8, u8, u8, u8) // left (1-80), right (1-80), top (1-25), bottom (1-25)
 }
 
+impl PartialEq for BasicCommand {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (BasicCommand::Border(ink1a, ink2a), BasicCommand::Border(ink1b, ink2b)) => {
+                ink1a == ink1b && ink2a.unwrap_or(*ink1a) == ink2b.unwrap_or(*ink1b)
+            },
+            (BasicCommand::Ink(pena, ink1a, ink2a), BasicCommand::Ink(penb, ink1b, ink2b)) => {
+                pena == penb && ink1a == ink1b && ink2a.unwrap_or(*ink1a) == ink2b.unwrap_or(*ink1b)
+            },
+            (BasicCommand::Cls, BasicCommand::Cls) => true,
+            (BasicCommand::CursorOff, BasicCommand::CursorOff) => true,
+            (BasicCommand::CursorOn, BasicCommand::CursorOn) => true,
+            (BasicCommand::Locate(col_a, row_a), BasicCommand::Locate(col_b, row_b)) => {
+                col_a == col_b && row_a == row_b
+            },
+            (BasicCommand::Mode(mode_a), BasicCommand::Mode(mode_b)) => mode_a == mode_b,
+            (BasicCommand::Paper(pen_a), BasicCommand::Paper(pen_b)) => pen_a == pen_b,
+            (BasicCommand::Pen(pen_a), BasicCommand::Pen(pen_b)) => pen_a == pen_b,
+            (BasicCommand::PrintString(arg_a, term_a), BasicCommand::PrintString(arg_b, term_b)) => {
+                arg_a == arg_b && term_a == term_b
+            },
+            (BasicCommand::Symbol(char_a, r1a, r2a, r3a, r4a, r5a, r6a, r7a, r8a),
+             BasicCommand::Symbol(char_b, r1b, r2b, r3b, r4b, r5b, r6b, r7b, r8b)) => {
+                char_a == char_b &&
+                r1a == r1b && r2a == r2b && r3a == r3b && r4a == r4b &&
+                r5a == r5b && r6a
+                    == r6b && r7a == r7b && r8a == r8b
+            },
+            (BasicCommand::Window(left_a, right_a, top_a, bottom_a),
+             BasicCommand::Window(left_b, right_b, top_b, bottom_b)) => {
+                left_a == left_b && right_a == right_b && top_a == top_b && bottom_a == bottom_b
+            },
+            _ => false
+        }
+    }
+}
+
 /// A list of BasicCommands with builder pattern for ergonomic construction
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct BasicCommandList(Vec<BasicCommand>);
+
+
+impl Deref for BasicCommandList {
+    type Target = Vec<BasicCommand>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<&BasicProgram> for BasicCommandList {
+    type Error = CatArtError;
+    fn try_from(program: &BasicProgram) -> Result<Self, Self::Error> {
+        crate::convert::basic_to_commands(program)
+    }
+}
 
 impl BasicCommandList {
     /// Create a new empty BasicCommandList

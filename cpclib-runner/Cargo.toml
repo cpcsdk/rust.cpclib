@@ -28,6 +28,7 @@ rust-embed = { workspace = true, features = ["compression", "debug-embed"] }
 bon.workspace = true
 directories = "6.0.0"
 flate2 = "1.1.5"
+fs-err.workspace = true
 glob.workspace = true
 tar = "0.4.44"
 rust-ini.workspace = true

@@ -108,7 +108,7 @@ fn check_string_generation_succeeds_without_verifying_content() {
 
 		let fname = std::path::Path::new("tests/orgams-main").join(base);
 		println!("Generate the content of {}", fname.display());
-		let content = std::fs::read(&fname).expect("Failed to read file");
+		let content = fs_err::read(&fname).expect("Failed to read file");
 
 		let unicode = binary_orgams_to_utf8(&content).expect("Failed to convert to UTF-8");
 	}

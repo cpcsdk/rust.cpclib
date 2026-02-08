@@ -1,6 +1,6 @@
 // http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
 
-use std::fs::File;
+use fs_err::File;
 use std::io::prelude::*;
 use std::iter::zip;
 use std::string::ToString;

@@ -24,6 +24,7 @@ clap = { workspace = true, features = ["derive"], optional = true }
 custom_error.workspace = true
 delegate.workspace = true
 either.workspace = true
+fs-err.workspace = true
 getset.workspace = true
 #memchr.workspace = true
 serde.workspace = true
@@ -63,10 +64,4 @@ required-features = ["dskmanager"]
 name = "hideur"
 path = "exec/hideur.rs"
 required-features = ["hideur"]
-
-
-[[bin]]
-name = "catalog"
-path = "exec/catalog.rs"
-required-features = ["catalog"]
 

@@ -1,5 +1,5 @@
 use std::env;
-use std::fs::File;
+use fs_err::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 

@@ -442,7 +442,7 @@ pub fn base_cache_folder() -> Utf8PathBuf {
 }
 
 pub fn clear_base_cache_folder() -> std::io::Result<()> {
-    std::fs::remove_dir_all(base_cache_folder())
+    fs_err::remove_dir_all(base_cache_folder())
 }
 
 impl<E: EventObserver> DelegateApplicationDescription<E> {
@@ -454,7 +454,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
         let base_cache = base_cache_folder();
 
         if !base_cache.exists() {
-            std::fs::create_dir_all(&base_cache).unwrap();
+            fs_err::create_dir_all(&base_cache).unwrap();
         }
 
         base_cache.join(self.folder)
@@ -469,7 +469,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
             dbg!("There was an error, we need to do some cleaning", e);
             let dest = self.cache_folder();
             dbg!("Try to remove ", &dest);
-            let _ = std::fs::remove_dir_all(dest); // ignore error
+            let _ = fs_err::remove_dir_all(dest); // ignore error
             dbg!("Should be done");
         })
     }
@@ -488,8 +488,8 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 o.emit_stdout(&format!(">> Save to {}\n", self.exec_fname()));
                 let mut buffer = Vec::new();
                 input.read_to_end(&mut buffer).unwrap();
-                std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-                std::fs::write(self.exec_fname(), &buffer).map_err(|e| e.to_string())?;
+                fs_err::create_dir_all(&dest).map_err(|e| e.to_string())?;
+                fs_err::write(self.exec_fname(), &buffer).map_err(|e| e.to_string())?;
             },
             ArchiveFormat::Tar => {
                 o.emit_stdout(">> Open tar archive\n");

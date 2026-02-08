@@ -1,6 +1,6 @@
 use cpclib_basic::string_parser::parse_basic_line;
 use cpclib_common::winnow::Parser;
-use std::fs;
+use fs_err as fs;
 
 /// Helper function to parse a complete BASIC file line by line
 fn parse_basic_file(filename: &str) -> Result<usize, String> {

@@ -19,6 +19,7 @@ cpclib-common.workspace = true
 cfg-if.workspace = true
 comfy-table = { version = "7.2.1", optional = true }
 delegate.workspace = true
+fs-err.workspace = true
 line-span = { version = "0.1.5", optional = true }
 nutype.workspace = true
 serde.workspace = true

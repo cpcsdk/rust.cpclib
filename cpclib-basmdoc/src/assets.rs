@@ -21,7 +21,7 @@ fn get_cache_dir() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("cpclib-basmdoc");
     
-    std::fs::create_dir_all(&cache_dir).ok();
+    fs_err::create_dir_all(&cache_dir).ok();
     cache_dir
 }
 
@@ -31,7 +31,7 @@ fn download_or_cache(url: &str, filename: &str) -> Result<String, Box<dyn std::e
     
     // Check if cached file exists
     if cache_file.exists() {
-        return Ok(std::fs::read_to_string(&cache_file)?);
+        return Ok(fs_err::read_to_string(&cache_file)?);
     }
     
     // Download the file
@@ -39,7 +39,7 @@ fn download_or_cache(url: &str, filename: &str) -> Result<String, Box<dyn std::e
     let content = response.into_string()?;
     
     // Cache it
-    std::fs::write(&cache_file, &content).ok();
+    fs_err::write(&cache_file, &content).ok();
     
     Ok(content)
 }

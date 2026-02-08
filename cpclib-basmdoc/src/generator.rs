@@ -182,7 +182,7 @@ impl BasmDocGenerator {
     fn find_asm_files(path: &Path) -> Result<Vec<String>, String> {
         let mut asm_files = Vec::new();
 
-        let entries = std::fs::read_dir(path)
+        let entries = fs_err::read_dir(path)
             .map_err(|e| format!("Failed to read directory {}: {}", path.display(), e))?;
 
         for entry in entries {
@@ -502,19 +502,19 @@ impl BasmDocGenerator {
                 html
             };
             
-            std::fs::write(output_path, final_html)
+            fs_err::write(output_path, final_html)
                 .map_err(|e| format!("Unable to write {} file. {}", output_path.display(), e))?;
         } else if is_md {
             let md = self.generate_markdown()?;
             
-            std::fs::write(output_path, md)
+            fs_err::write(output_path, md)
                 .map_err(|e| format!("Unable to write {} file. {}", output_path.display(), e))?;
         } else if is_pdf {
             // Generate markdown first, then convert to PDF using pandoc
             let md = self.generate_markdown()?;
             
             let md_path = output_path.with_extension("md");
-            std::fs::write(&md_path, md)
+            fs_err::write(&md_path, md)
                 .map_err(|e| format!("Unable to write temporary markdown file. {}", e))?;
 
             let mut pandoc = pandoc::new();

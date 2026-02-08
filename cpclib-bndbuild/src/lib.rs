@@ -348,13 +348,13 @@ pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {
         )));
     }
 
-    std::fs::write(&bndbuild_yml, include_bytes!("default_bndbuild.yml"))
+    fs_err::write(&bndbuild_yml, include_bytes!("default_bndbuild.yml"))
         .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
-    std::fs::write(&main_asm, include_bytes!("default_main.asm"))
+    fs_err::write(&main_asm, include_bytes!("default_main.asm"))
         .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
-    std::fs::write(&data_asm, include_bytes!("default_data.asm"))
+    fs_err::write(&data_asm, include_bytes!("default_data.asm"))
         .map_err(|e| BndBuilderError::AnyError(e.to_string()))?;
 
     Ok(())

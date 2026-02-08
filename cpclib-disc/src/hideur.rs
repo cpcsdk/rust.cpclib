@@ -1,6 +1,6 @@
 use std::fmt::Display;
 #[cfg(feature = "cmdline")]
-use std::fs::File;
+use fs_err::File;
 #[cfg(feature = "cmdline")]
 use std::io::{Read, Write};
 

@@ -872,7 +872,7 @@ impl ColorMatrixList {
     /// Animations are stored within GIF files.
     /// TODO allow over kind of image data
     pub fn convert_from_fname(fname: &str, conversion: ConversionRule) -> anyhow::Result<Self> {
-        use std::fs::File;
+        use fs_err::File;
 
         // Decode a gif into frames
         let input = File::open(fname)?;

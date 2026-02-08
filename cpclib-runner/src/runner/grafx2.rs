@@ -64,10 +64,10 @@ impl Grafx2Version {
                     use std::os::unix::fs::PermissionsExt;
 
                     let app_image = desc.exec_fname();
-                    let mut perms = std::fs::metadata(&app_image).unwrap().permissions();
+                    let mut perms = fs_err::metadata(&app_image).unwrap().permissions();
                     let mode = perms.mode() | 0o100; // Add execution mode
                     perms.set_mode(mode);
-                    let _ = std::fs::set_permissions(&app_image, perms);
+                    let _ = fs_err::set_permissions(&app_image, perms);
                     Ok(())
                 }
             );

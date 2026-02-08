@@ -17,6 +17,7 @@ minify = ["dep:minify-html"]
 cpclib-asm.workspace = true
 cpclib-tokens.workspace = true
 cpclib-common.workspace = true
+fs-err.workspace = true
 
 delegate.workspace = true
 glob.workspace = true
@@ -45,6 +46,7 @@ tempfile = "3.6"
 
 [build-dependencies]
 cpclib-asm.workspace = true
+fs-err.workspace = true
 
 [lints]
 workspace = true

@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::fs::File;
+use fs_err::File;
 use std::io::Write;
 
 use cpclib_common::bitfield::{BitRange, BitRangeMut};

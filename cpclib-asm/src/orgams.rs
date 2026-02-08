@@ -541,7 +541,7 @@ pub fn convert_source(code: &str) -> Result<String, ToOrgamsError> {
 
 pub fn convert_from<P: AsRef<Utf8Path>>(p: P) -> Result<String, ToOrgamsError> {
     let p = p.as_ref();
-    let code = std::fs::read_to_string(p)
+    let code = fs_err::read_to_string(p)
         .map_err(|e| ToOrgamsError(format!("Error while reading {p}. {e}")))?;
     convert_source(&code).map_err(|e| format!("Error while handling {p}. {e}").into())
 }
@@ -558,7 +558,7 @@ pub fn convert_from_to<P1: AsRef<Utf8Path>, P2: AsRef<Utf8Path>>(
     let src = src.as_ref();
     let tgt = tgt.as_ref();
     let orgams = convert_from(src)?;
-    std::fs::write(tgt, orgams.as_bytes())
+    fs_err::write(tgt, orgams.as_bytes())
         .map_err(|e| format!("Error while saving {tgt}. {e}").into())
 }
 

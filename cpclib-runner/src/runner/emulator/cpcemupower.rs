@@ -77,7 +77,7 @@ impl DownloadableInformation for CpcEmuPowerVersion {
 
                 let fname = d.cache_folder().join(&fname);
 
-                let mut perms = std::fs::metadata(&fname)
+                let mut perms = fs_err::metadata(&fname)
                     .map_err(|e| {
                         format!("Error when setting execution rights to {}. {}", &fname, e)
                     })?
@@ -85,7 +85,7 @@ impl DownloadableInformation for CpcEmuPowerVersion {
 
                 let mode = perms.mode() | 0o100; // Add execution mode
                 perms.set_mode(mode);
-                std::fs::set_permissions(&fname, perms).map_err(|e| e.to_string())?;
+                fs_err::set_permissions(&fname, perms).map_err(|e| e.to_string())?;
 
                 Ok(())
             });

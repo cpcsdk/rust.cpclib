@@ -449,7 +449,7 @@ pub fn merge_rasm_debug<P: AsRef<Utf8Path>>(from: &[P]) -> std::io::Result<Strin
     // collect all of them
     let mut content = String::new();
     for (i, fname) in from.iter().enumerate() {
-        std::fs::File::open(fname.as_ref())?.read_to_string(&mut content)?;
+        fs_err::File::open(fname.as_ref())?.read_to_string(&mut content)?;
         if i != from.len() - 1 && !content.ends_with(';') {
             content.push(';')
         }
@@ -473,14 +473,14 @@ pub fn merge_rasm_debug_to_tmp<P: AsRef<Utf8Path>>(from: &[P]) -> std::io::Resul
         .unwrap();
     let path = tempfile.into_temp_path();
     let path = path.keep().unwrap();
-    std::fs::write(&path, content)?;
+    fs_err::write(&path, content)?;
 
     Ok(path)
 }
 
 /// Read a rasm debug file and convert it in winape sym string
 pub fn rasm_debug_to_winape_sym(src: &Utf8Path) -> std::io::Result<String> {
-    let content = std::fs::read_to_string(src)?;
+    let content = fs_err::read_to_string(src)?;
     Ok(content
         .split(";")
         .filter(|code| code.starts_with("label") | code.starts_with("alias"))
@@ -632,7 +632,7 @@ impl EmulatorConf {
                             .unwrap();
                         let path = tempfile.into_temp_path();
                         let path = path.keep().unwrap();
-                        std::fs::write(&path, sym_string).unwrap();
+                        fs_err::write(&path, sym_string).unwrap();
                         let fname = emu.wine_compatible_fname(&path)?;
                         args.push(format!("/SYM:{fname}"));
                     }
@@ -726,7 +726,7 @@ impl EmulatorConf {
         // Get the path as Utf8PathBuf before writing
         let temp_path_utf8 = tempfile.path().to_owned();
 
-        std::fs::write(&temp_path_utf8, csl_content)
+        fs_err::write(&temp_path_utf8, csl_content)
             .map_err(|e| format!("Failed to write CSL file: {}", e))?;
 
         // Keep the temporary file (prevent automatic deletion)
@@ -841,7 +841,7 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
             }
             else {
                 let content =
-                    std::fs::read_to_string(&auto_type).expect("Failed to read auto-type file");
+                    fs_err::read_to_string(&auto_type).expect("Failed to read auto-type file");
                 let key_output = KeyOutput::try_from(content.as_str())
                     .expect("Failed to convert auto-type content to KeyOutput");
                 builder = builder
@@ -882,7 +882,7 @@ pub fn get_emulator_window(emu: &Emulator, conf: &EmulatorConf) -> EmuWindow {
 // XX this code seems buggy ATM it is unable to collect the window, no idea why
 fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
     // get the latest x server. Lets' hope it is the virtual one of the transparent emulator
-    let display = std::fs::read_dir("/tmp/.X11-unix")
+    let display = fs_err::read_dir("/tmp/.X11-unix")
         .unwrap()
         .filter_map(|f| f.ok())
         .filter(|f| f.file_name().to_str().unwrap().starts_with("X"))
@@ -992,7 +992,7 @@ impl UsedEmulator for AceUsedEmulator {
             im = xcap::image::open(file);
         }
         let im = im.unwrap().into_rgba8();
-        std::fs::remove_file(file).unwrap();
+        fs_err::remove_file(file).unwrap();
         im
     }
 }
@@ -1857,10 +1857,10 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                     println!("Install {src} in {dst}");
                     let data =
                         EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
-                    std::fs::write(&dst, data.data).unwrap();
+                    fs_err::write(&dst, data.data).unwrap();
                 }
                 else if exists && remove {
-                    std::fs::remove_file(&dst).unwrap();
+                    fs_err::remove_file(&dst).unwrap();
                 }
 
                 let key = format!("ROM{slot}");
@@ -1887,11 +1887,11 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 .join(emu_folder.file_name().unwrap().to_owned() + ".bak");
 
             if backup_folder.exists() {
-                std::fs::remove_dir_all(&backup_folder).unwrap();
+                fs_err::remove_dir_all(&backup_folder).unwrap();
             }
 
             if emu_folder.exists() {
-                std::fs::rename(&emu_folder, &backup_folder).map_err(|e| e.to_string())?;
+                fs_err::rename(&emu_folder, &backup_folder).map_err(|e| e.to_string())?;
             }
 
             Some((backup_folder, emu_folder))
@@ -1939,7 +1939,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             .content_only(true);
         let emu_folder = emu.albireo_folder();
         if emu_folder.exists() {
-            std::fs::remove_dir_all(&emu_folder).unwrap();
+            fs_err::remove_dir_all(&emu_folder).unwrap();
         }
         fs_extra::dir::copy(albireo, &emu_folder, &option).unwrap();
     }
@@ -2054,12 +2054,12 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                     .skip_exist(false)
                     .content_only(true);
                 let albireo = cli.albireo.as_ref().unwrap();
-                std::fs::remove_dir_all(albireo).unwrap();
+                fs_err::remove_dir_all(albireo).unwrap();
                 fs_extra::dir::copy(&emu_folder, albireo, &option).unwrap();
 
                 // restore previous
                 if backup_folder.exists() {
-                    std::fs::rename(&backup_folder, &emu_folder).map_err(|e| e.to_string())?;
+                    fs_err::rename(&backup_folder, &emu_folder).map_err(|e| e.to_string())?;
                 }
             }
         }

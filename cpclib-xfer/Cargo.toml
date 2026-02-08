@@ -17,6 +17,7 @@ independent = true
 cpclib-disc.workspace = true
 cpclib-sna.workspace = true
 cpclib-common = {workspace = true, features=["network"]}
+fs-err.workspace = true
 
 camino-tempfile.workspace = true
 arrayref.workspace = true

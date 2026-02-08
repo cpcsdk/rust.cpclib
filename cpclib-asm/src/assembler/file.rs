@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
-use std::fs::File;
+use fs_err::File;
 use std::io::Read;
 use std::ops::Deref;
 

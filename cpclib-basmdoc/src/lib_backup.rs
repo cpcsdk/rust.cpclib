@@ -43,7 +43,7 @@ impl Default for UndocumentedConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
+    use fs_err::File;
     use std::io::Write;
     use tempfile::tempdir;
 
@@ -199,7 +199,7 @@ fn get_cache_dir() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("cpclib-basmdoc");
     
-    std::fs::create_dir_all(&cache_dir).ok();
+    fs_err::create_dir_all(&cache_dir).ok();
     cache_dir
 }
 
@@ -209,7 +209,7 @@ fn download_or_cache(url: &str, filename: &str) -> Result<String, Box<dyn std::e
     
     // Check if cached file exists
     if cache_file.exists() {
-        return Ok(std::fs::read_to_string(&cache_file)?);
+        return Ok(fs_err::read_to_string(&cache_file)?);
     }
     
     // Download the file
@@ -217,7 +217,7 @@ fn download_or_cache(url: &str, filename: &str) -> Result<String, Box<dyn std::e
     let content = response.into_string()?;
     
     // Cache it
-    std::fs::write(&cache_file, &content).ok();
+    fs_err::write(&cache_file, &content).ok();
     
     Ok(content)
 }
@@ -508,10 +508,10 @@ impl Object for DocumentationPage {
                             // workspace-relative path while content stores absolute
                             // paths), attempt to locate the absolute path from
                             // existing content entries and read that instead.
-                            let mut code = std::fs::read_to_string(&fname).unwrap_or_default();
+                            let mut code = fs_err::read_to_string(&fname).unwrap_or_default();
                             if code.is_empty() {
                                 if let Some(it) = self.content.iter().find(|it| it.source_file.ends_with(&fname)) {
-                                    code = std::fs::read_to_string(&it.source_file).unwrap_or_default();
+                                    code = fs_err::read_to_string(&it.source_file).unwrap_or_default();
                                 }
                             }
 
@@ -542,10 +542,10 @@ impl Object for DocumentationPage {
                             // No source item found for this merged file; try reading
                             // the merge-provided path first, then fallback to any
                             // matching absolute path found in content.
-                            let mut code = std::fs::read_to_string(&mf.source_file).unwrap_or_default();
+                            let mut code = fs_err::read_to_string(&mf.source_file).unwrap_or_default();
                             if code.is_empty() {
                                 if let Some(it) = self.content.iter().find(|it| it.source_file.ends_with(&mf.source_file)) {
-                                    code = std::fs::read_to_string(&it.source_file).unwrap_or_default();
+                                    code = fs_err::read_to_string(&it.source_file).unwrap_or_default();
                                 }
                             }
 
@@ -605,8 +605,8 @@ impl Object for DocumentationPage {
 impl DocumentationPage {
     // TODO handle errors
     pub fn for_file(fname: &str, display_name: &str, include_undocumented: UndocumentedConfig) -> Result<Self, String> {
-        let code = std::fs::read_to_string(fname)
-            .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
+        let code = fs_err::read_to_string(fname)
+            .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;;
         
         // Parse the source code, but continue even if there's a parse error
         let parse_result = parse_z80_str(&code);
@@ -665,7 +665,7 @@ impl DocumentationPage {
     /// Parse file without populating cross-references (for later batch processing)
     /// Returns both the documentation page and the parsed tokens
     pub fn for_file_without_refs(fname: &str, display_name: &str, include_undocumented: UndocumentedConfig) -> Result<(Self, LocatedListing), String> {
-        let code = std::fs::read_to_string(fname)
+        let code = fs_err::read_to_string(fname)
             .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
         
         // Parse the source code, but continue even if there's a parse error

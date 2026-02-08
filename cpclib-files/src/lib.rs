@@ -115,6 +115,11 @@ impl FileAndSupport {
         }
     }
 
+    /// Create a new FileAndSupport from a string that may contain a '#'
+    /// If the string contains a '#', the part before is considered as the container
+    /// (disc or tape image) and the part after as the file name inside the container
+    /// If no '#', the file is considered as a host file
+    /// If header is true, the file is considered as an Amsdos file, otherwise as a raw file
     pub fn new_auto<P: Into<Utf8PathBuf>>(p: P, header: bool) -> Self {
         let fname = p.into();
 
@@ -293,7 +298,7 @@ impl FileAndSupport {
                     Either::Right(buffer) => (self.filename().into(), *buffer)
                 };
 
-                std::fs::write(&fname, content)
+                fs_err::write(&fname, content)
                     .map_err(|e| format!("Error while saving \"{fname}\". {e}"))?;
             }
         }

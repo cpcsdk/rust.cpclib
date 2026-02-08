@@ -1,6 +1,6 @@
 use cpclib_basic::string_parser::parse_basic_line;
 use cpclib_common::winnow::Parser;
-use std::fs;
+use fs_err as fs;
 
 #[test]
 fn show_skipped_lines() {

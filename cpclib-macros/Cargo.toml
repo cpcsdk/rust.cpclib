@@ -17,6 +17,7 @@ independent = true
 [dependencies]
 cpclib-asm.workspace = true
 cpclib-common.workspace = true
+fs-err.workspace = true
 
 syn.workspace = true
 quote.workspace = true

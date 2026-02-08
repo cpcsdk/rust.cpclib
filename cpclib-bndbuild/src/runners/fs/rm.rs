@@ -47,10 +47,10 @@ impl<E: EventObserver> Runner for RmRunner<E> {
         for fname in itr.iter().map(|s| s.as_ref()).flat_map(expand_glob) {
             let fname = Utf8Path::new(&fname);
             let res = if fname.is_dir() {
-                std::fs::remove_dir_all(fname)
+                fs_err::remove_dir_all(fname)
             }
             else {
-                std::fs::remove_file(fname)
+                fs_err::remove_file(fname)
             };
 
             match res {

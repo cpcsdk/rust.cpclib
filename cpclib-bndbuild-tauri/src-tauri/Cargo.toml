@@ -24,6 +24,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+fs-err.workspace = true
 
 [target."cfg(windows)".build-dependencies]
 ureq.workspace = true

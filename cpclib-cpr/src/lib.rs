@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::fs::File;
+use fs_err::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{Read, Write};
 use std::ops::Deref;

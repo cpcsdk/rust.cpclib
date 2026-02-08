@@ -19,6 +19,7 @@ cpclib-common.workspace = true
 
 anyhow.workspace = true
 as-slice.workspace = true
+fs-err.workspace = true
 gif-dispose.workspace = true
 gif.workspace = true
 image.workspace = true

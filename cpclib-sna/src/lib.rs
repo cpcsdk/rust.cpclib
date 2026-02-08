@@ -1,4 +1,4 @@
-use std::fs::File;
+use fs_err::File;
 use std::io::prelude::*;
 use std::ops::Deref;
 

@@ -28,6 +28,7 @@ cpclib-asm.workspace = true
 cpclib-crunch.workspace = true
 cpclib-sna = { workspace = true, features = ["cmdline"] }
 cpclib-disc = { workspace = true, features = ["cmdline"] }
+fs-err.workspace = true
 cpclib-imgconverter = { workspace = true, features = ["xferlib"] }
 cpclib-xfertool.workspace = true
 

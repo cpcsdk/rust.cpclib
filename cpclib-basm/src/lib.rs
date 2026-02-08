@@ -1,7 +1,7 @@
 #![feature(box_patterns)]
 
 use std::fmt::Display;
-use std::fs::File;
+use fs_err::File;
 use std::io;
 use std::io::Write;
 use std::ops::Deref;
@@ -371,7 +371,7 @@ pub fn assemble(
                 && let Some(fname) = matches.get_one::<String>("REMU_OUTPUT")
             {
                 let content = remu.data();
-                std::fs::write(fname, content).map_err(|e| {
+                fs_err::write(fname, content).map_err(|e| {
                     BasmError::Io {
                         io: e,
                         ctx: format!("Error while saving {fname}")
@@ -383,7 +383,7 @@ pub fn assemble(
                 && let Some(fname) = matches.get_one::<String>("WABP_OUTPUT")
             {
                 let content = wabp.data();
-                std::fs::write(fname, content).map_err(|e| {
+                fs_err::write(fname, content).map_err(|e| {
                     BasmError::Io {
                         io: e,
                         ctx: format!("Error while saving {fname}")

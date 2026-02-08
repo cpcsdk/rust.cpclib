@@ -12,7 +12,7 @@
 )]
 #![deny(clippy::pedantic)]
 
-use std::fs::File;
+use fs_err::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
@@ -94,7 +94,7 @@ fn main() -> std::io::Result<()> {
     }
     else if let Some(fname) = matches.get_one::<PathBuf>("BASIC_BINARY") {
         // Read the basic source file
-        let ascii_content: Vec<u8> = std::fs::read(fname)?;
+        let ascii_content: Vec<u8> = fs_err::read(fname)?;
         let mut ascii_content = &ascii_content[..];
         let tokens = binary_parser::program(&mut ascii_content).expect("Error in the basic file");
 

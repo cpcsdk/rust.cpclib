@@ -19,6 +19,7 @@ cpclib-common =  {workspace = true, features=["cmdline"]}
 cpclib-xfer = {workspace=true, default-features=false, optional=true}
 cpclib-disc.workspace = true
 
+fs-err.workspace = true
 rust-ini.workspace = true
 const_format.workspace = true
 #diff = "0.1.13"

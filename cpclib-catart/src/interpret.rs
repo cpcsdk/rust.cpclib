@@ -363,7 +363,10 @@ impl Interpreter {
     pub fn interpret<'a, I>(&mut self, commands: I, print_ready: bool) -> Result<(), String>
     where I: IntoIterator<Item = &'a CharCommand> {
         let finalize = if print_ready {
-            BasicCommandList::from(vec![BasicCommand::print_string_crlf(b"Ready")])
+            BasicCommandList::from(vec![
+                BasicCommand::print_string_crlf(b""),
+                BasicCommand::print_string_crlf(b""),
+                BasicCommand::print_string_crlf(b"Ready")])
         }
         else {
             BasicCommandList::default()

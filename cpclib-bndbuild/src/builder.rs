@@ -147,7 +147,7 @@ impl BndBuilder {
         };
         let fname = fname.as_path();
 
-        let file = std::fs::File::open(fname).map_err(|e| {
+        let file = fs_err::File::open(fname).map_err(|e| {
             BndBuilderError::InputFileError {
                 fname: fname.to_string(),
                 error: e
@@ -165,7 +165,7 @@ impl BndBuilder {
 
     pub fn save<P: AsRef<Utf8Path>>(&self, path: P) -> std::io::Result<()> {
         let contents = self.inner.borrow_owner().to_string();
-        std::fs::write(path.as_ref(), contents)
+        fs_err::write(path.as_ref(), contents)
     }
 
     pub fn decode_from_reader<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(

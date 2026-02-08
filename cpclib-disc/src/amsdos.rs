@@ -1,5 +1,5 @@
 use std::convert::{TryFrom, TryInto};
-use std::fs::File;
+use fs_err::File;
 use std::io::Read;
 use std::iter::Iterator;
 
@@ -1341,14 +1341,19 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         unimplemented!();
     }
 
+    /// Return the raw bytes of the Amsdos catalog (2048 bytes = 64 entries * 32 bytes/entry)
+    /// This is useful for tools that need to work with the raw catalog data without parsing
+    pub fn catalog_slice(&self) -> Vec<u8> {
+        self.disc
+            .consecutive_sectors_read_bytes(self.head, 0, DATA_FIRST_SECTOR_NUMBER, 4)
+            .unwrap()
+    }
+
     /// Return the entries of the Amsdos catalog
     /// Panic if dsk is not compatible
     pub fn catalog(&self) -> AmsdosEntries {
         let mut entries = Vec::new();
-        let bytes = self
-            .disc
-            .consecutive_sectors_read_bytes(self.head, 0, DATA_FIRST_SECTOR_NUMBER, 4)
-            .unwrap();
+        let bytes = self.catalog_slice();
 
         for idx in 0..DIRECTORY_SIZE
         // (bytes.len() / 32)

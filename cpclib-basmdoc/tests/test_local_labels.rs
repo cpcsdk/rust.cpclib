@@ -3,7 +3,7 @@ use cpclib_basmdoc::{aggregate_documentation_on_tokens, build_documentation_page
 
 #[test]
 fn test_local_labels() {
-    let code = std::fs::read_to_string("tests/local_labels.asm").unwrap();
+    let code = fs_err::read_to_string("tests/local_labels.asm").unwrap();
     let tokens = parse_z80_str(&code).unwrap();
     let doc = aggregate_documentation_on_tokens(&tokens, UndocumentedConfig::none());
     

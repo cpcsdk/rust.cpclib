@@ -31,7 +31,7 @@ fn assemble_with_bndbuild_basm(_bndbuild: &Path, asm_path: &Path) -> Result<Vec<
     process_matches(&matches)?;
 
     let mut buf = Vec::new();
-    let mut f = std::fs::File::open(out_path.as_str()).context("opening basm output")?;
+    let mut f = fs_err::File::open(out_path.as_str()).context("opening basm output")?;
     f.read_to_end(&mut buf).context("reading basm output")?;
     Ok(buf)
 }
@@ -64,7 +64,7 @@ fn assemble_with_bndbuild_rasm(_bndbuild: &Path, rasm_path: &Path) -> Result<Vec
     process_matches(&matches)?;
 
     let mut buf = Vec::new();
-    let mut f = std::fs::File::open(out_path.as_str()).context("opening rasm output")?;
+    let mut f = fs_err::File::open(out_path.as_str()).context("opening rasm output")?;
     f.read_to_end(&mut buf).context("reading rasm output")?;
     Ok(buf)
 }

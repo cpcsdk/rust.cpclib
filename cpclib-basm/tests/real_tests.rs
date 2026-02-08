@@ -39,7 +39,7 @@ fn manual_cleanup() {
     ] {
         let p = std::path::Path::new(fname);
         if p.exists() {
-            std::fs::remove_file(p).unwrap()
+            fs_err::remove_file(p).unwrap()
         }
     }
 }
@@ -77,9 +77,9 @@ fn specific_test(folder: &str, fname: &str) {
 #[test]
 #[ignore]
 fn test_roudoudou_generated_code() {
-    let _ = std::fs::create_dir("generated_sprites");
+    let _ = fs_err::create_dir("generated_sprites");
     specific_test("tests/asm/roudoudou", "rasm_sprites.asm");
-    let _ = std::fs::remove_dir("generated_sprites");
+    let _ = fs_err::remove_dir("generated_sprites");
 }
 
 #[test_resources("cpclib-basm/tests/asm/warning_*.asm")]
@@ -97,7 +97,7 @@ fn expect_warning_but_success(real_fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content = std::fs::read_to_string(&real_fname["cpclib-basm/".len()..])
+    let content = fs_err::read_to_string(&real_fname["cpclib-basm/".len()..])
         .expect("Unable to read_source");
 
     static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r";.*$").unwrap());
@@ -131,7 +131,7 @@ fn expect_warning_but_success(real_fname: &str) {
         let input_file =
             camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
         let input_fname = input_file.path().as_os_str().to_str().unwrap();
-        std::fs::write(input_fname, content).unwrap();
+        fs_err::write(input_fname, content).unwrap();
 
         let res = Command::new("../target/debug/basm")
             .args([
@@ -185,7 +185,7 @@ fn expect_one_line_success(real_fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content = std::fs::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
+    let content = fs_err::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
         .expect("Unable to read_source");
 
     static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r";.*$").unwrap());
@@ -219,7 +219,7 @@ fn expect_one_line_success(real_fname: &str) {
         let input_file =
             camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
         let input_fname = input_file.path().as_os_str().to_str().unwrap();
-        std::fs::write(input_fname, content).unwrap();
+        fs_err::write(input_fname, content).unwrap();
 
         let res = Command::new("../target/debug/basm")
             .args([
@@ -264,7 +264,7 @@ fn expect_several_empty_lines_success(real_fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content = std::fs::read_to_string(&real_fname["cpclib-basm/".len()..])
+    let content = fs_err::read_to_string(&real_fname["cpclib-basm/".len()..])
         .expect("Unable to read_source");
 
     static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)([^\\])\n").unwrap());
@@ -283,7 +283,7 @@ fn expect_several_empty_lines_success(real_fname: &str) {
     let input_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let input_fname = input_file.path().as_os_str().to_str().unwrap();
-    std::fs::write(input_fname, content).unwrap();
+    fs_err::write(input_fname, content).unwrap();
 
     let res = Command::new("../target/debug/basm")
         .args([
@@ -387,8 +387,8 @@ fn expect_symbols_success(fname: &str) {
         );
     }
 
-    let sym_gt = std::fs::read_to_string(fname).unwrap();
-    let sym = std::fs::read_to_string(symbol_fname).expect("Symbols not generated");
+    let sym_gt = fs_err::read_to_string(fname).unwrap();
+    let sym = fs_err::read_to_string(symbol_fname).expect("Symbols not generated");
 
     assert_eq!(sym_gt, sym, "Symbols differ.");
 }
@@ -432,8 +432,8 @@ fn expect_success(fname: &str) {
                 panic!()
             }
 
-            let output_content = std::fs::read(output_fname).unwrap();
-            let equiv_output_content = std::fs::read(equiv_output_fname).unwrap();
+            let output_content = fs_err::read(output_fname).unwrap();
+            let equiv_output_content = fs_err::read(equiv_output_fname).unwrap();
             assert_eq!(
                 output_content, equiv_output_content,
                 "Content differ between {} and {}.",
@@ -489,7 +489,7 @@ fn test_output_directive() {
     // Clean up any pre-existing testoutput.bin
     let output_path = std::path::Path::new("testoutput.bin");
     if output_path.exists() {
-        std::fs::remove_file(output_path).unwrap();
+        fs_err::remove_file(output_path).unwrap();
     }
 
     let fname = "tests/asm/good_document_output.asm";
@@ -513,14 +513,14 @@ fn test_output_directive() {
     );
 
     // Verify the file has content (should have assembled code)
-    let file_content = std::fs::read(output_path).expect("Unable to read testoutput.bin");
+    let file_content = fs_err::read(output_path).expect("Unable to read testoutput.bin");
     assert!(
         !file_content.is_empty(),
         "testoutput.bin should not be empty"
     );
 
     // Clean up
-    std::fs::remove_file(output_path).unwrap();
+    fs_err::remove_file(output_path).unwrap();
 }
 
 #[test]
@@ -533,10 +533,10 @@ fn test_output_directive_with_command_line() {
     let cmdline_path = std::path::Path::new("cmdline_output.bin");
 
     if directive_path.exists() {
-        std::fs::remove_file(directive_path).unwrap();
+        fs_err::remove_file(directive_path).unwrap();
     }
     if cmdline_path.exists() {
-        std::fs::remove_file(cmdline_path).unwrap();
+        fs_err::remove_file(cmdline_path).unwrap();
     }
 
     let fname = "tests/asm/good_document_output.asm";
@@ -564,8 +564,8 @@ fn test_output_directive_with_command_line() {
     );
 
     // Verify both files have the same content
-    let directive_content = std::fs::read(directive_path).expect("Unable to read testoutput.bin");
-    let cmdline_content = std::fs::read(cmdline_path).expect("Unable to read cmdline_output.bin");
+    let directive_content = fs_err::read(directive_path).expect("Unable to read testoutput.bin");
+    let cmdline_content = fs_err::read(cmdline_path).expect("Unable to read cmdline_output.bin");
 
     assert_eq!(
         directive_content, cmdline_content,
@@ -577,6 +577,6 @@ fn test_output_directive_with_command_line() {
     );
 
     // Clean up
-    std::fs::remove_file(directive_path).unwrap();
-    std::fs::remove_file(cmdline_path).unwrap();
+    fs_err::remove_file(directive_path).unwrap();
+    fs_err::remove_file(cmdline_path).unwrap();
 }

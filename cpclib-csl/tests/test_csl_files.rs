@@ -1,6 +1,6 @@
 //! Integration tests for parsing real CSL files
 
-use std::fs;
+use fs_err as fs;
 use std::path::PathBuf;
 
 use cpclib_csl::parse_csl_with_rich_errors;
