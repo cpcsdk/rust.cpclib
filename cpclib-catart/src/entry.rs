@@ -14,6 +14,75 @@ use crate::basic_chars::{ACK, BS, CAN, DC1, DLE, EOT, ETB, NAK, SI, SO, SUB, US}
 use crate::char_command::{CharCommand, CharCommandList};
 use crate::{entry, interpret};
 
+
+/*
+
+       // Extract only the actual command bytes based on entry structure
+        // 
+        // Special case: First entry with mode (f1 == 4 = EOT)
+        // f1: Mode command byte - PARSE THIS
+        // f2-f7: command bytes
+        // f8, e1: dot-hiding pair
+        // e2: command byte
+        //
+        // Regular case: Sequential basic (f1 > 4)
+        // f1: index for sorting - NOT DISPLAYED, NOT A COMMAND
+        // f2: ACK (0x06) - structural EnableVdu, skip
+        // f3-f7: 5 command bytes - PARSE THESE
+        // f8, e1: dot-hiding pair - one is structural, one is command byte
+        // e2: 1 command byte - PARSE THIS
+        // e3: NAK (0x15) - structural DisableVdu, skip
+
+        let mut command_bytes = Vec::new();
+        
+        // f1: Only parse if it's the first entry (Mode command)
+        if self.f1 == 4 {
+            // First entry: f1 is the mode command byte (EOT = 0x04 = Mode)
+            command_bytes.push(self.f1);
+        }
+        // Otherwise f1 is just the sorting index, not included in commands
+        
+        // f2: Skip if ACK (structural), otherwise parse
+        if self.f2 != ACK {
+            command_bytes.push(self.f2);
+        }
+        
+        // f3-f7: Always command bytes
+        command_bytes.push(self.f3);
+        command_bytes.push(self.f4);
+        command_bytes.push(self.f5);
+        command_bytes.push(self.f6);
+        command_bytes.push(self.f7);
+        
+        // Dot-hiding logic for f8/e1 pair:
+        if self.f8 == ETB {
+            // AsModeParameter: f8=ETB (skip), e1=command byte
+            command_bytes.push(self.e1);
+        } else if self.e1 == BS {
+            // Erased: f8=command byte, e1=BS (skip)
+            command_bytes.push(self.f8);
+        } else if self.e1 == b'.' {
+            // Default: f8=command byte, e1='.' (skip)
+            command_bytes.push(self.f8);
+        } else {
+            // Fallback: include f8
+            command_bytes.push(self.f8);
+        }
+        
+        // e2: Always a command byte
+        command_bytes.push(self.e2);
+        
+        // e3: Skip if NAK (structural)
+        if self.e3 != NAK {
+            command_bytes.push(self.e3);
+        }
+        
+        // Parse the filtered command bytes
+        CharCommandList::from_bytes(&command_bytes)
+
+*/
+
+
 /// The catalog may contain several entries for a given file
 /// This directly represents the catalog maniplted by Amsdos
 #[repr(C)]
@@ -84,22 +153,24 @@ impl Catalog {
 
         let mut enable = true;
         let mut entries = Vec::new();
-        for commands in grid.entries_display_order().map(|e| e.fname.commands()) {
+        for (entry_nb, commands) in grid.entries_display_order().map(|e| e.fname.commands()).enumerate().peekable() {
             let mut current_file = Vec::new();
             let mut current_string = Vec::new();
 
-            for (i,c) in commands.into_iter().enumerate() {
+            let mut commands_iter = commands.into_iter().enumerate().peekable();
+            while let Some((command_nb,c)) = commands_iter.next() {
                 let c = c.normalize(); // TODO check if it is mandaotyr to do that
 
-                let will_disable = matches!(c, CharCommand::DisableVdu);
-                let will_enable = matches!(c, CharCommand::EnableVdu);
+                // Handle the cat art encoding to show/hide stuff
+                let is_catart_disabling = matches!(c, CharCommand::DisableVdu) && commands_iter.peek().is_none();
+                let is_catart_enabling = matches!(c, CharCommand::EnableVdu) && command_nb == 1 && entry_nb != 0; 
+                let is_dot_handling = matches!(c, CharCommand::GraphicsInkMode(46));
                 
                 let is_nop = matches!(c, CharCommand::Nop);
                 let is_enable = matches!(c, CharCommand::EnableVdu);
-                let is_dot_handling = matches!(c, CharCommand::GraphicsInkMode(46));
                 let is_visible_char_handling = matches!(c, CharCommand::Char(c) if c.is_ascii_graphic() && c!=b'"');
 
-                if enable && !will_disable && !is_nop && (!is_enable && i!=1) && !is_dot_handling{
+                if enable && !is_catart_disabling && !is_catart_enabling && !is_nop && !is_dot_handling {
 
                     if is_visible_char_handling {
                         current_string.push(c.first_byte());
@@ -113,10 +184,10 @@ impl Catalog {
                     }
                 }
 
-                if will_disable {
+                if is_catart_disabling {
                     enable = false;
                 }
-                else if will_enable {
+                else if is_catart_enabling {
                     enable = true;
                 }
             }
@@ -169,6 +240,18 @@ impl Catalog {
 
     pub fn entries(&self) -> impl Iterator<Item = &PrintableEntry> {
         self.entries.iter().filter(|e| !e.is_empty())
+    }
+
+    /// Convert the catalog to a byte slice (2048 bytes = 64 entries × 32 bytes)
+    /// 
+    /// # Safety
+    /// This method uses unsafe code to reinterpret the Catalog's memory as bytes.
+    /// This is safe because Catalog is `#[repr(C)]` with a fixed layout.
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe {
+            let ptr = std::ptr::from_ref(self) as *const u8;
+            std::slice::from_raw_parts(ptr, std::mem::size_of::<Catalog>())
+        }
     }
 }
 
@@ -569,7 +652,7 @@ impl<'cat> EntriesGrid<'cat> {
     }
 
     pub fn commands(&self) -> CharCommandList {
-        let mut available = 178;
+        let mut available: u16 = 178;
         let mut commands = CharCommandList::new();
 
         const SHOW_COMMAND: bool = true;
@@ -591,7 +674,7 @@ impl<'cat> EntriesGrid<'cat> {
         // Iterate over rows using the new grid structure
         for row_entries in self.rows() {
             for (col, entry) in row_entries.flatten().enumerate() {
-                available -= entry.size_kb();
+                available = available.saturating_sub(entry.size_kb());
                 commands.extend(entry.commands());
                 
                 let nb_spaces = match self.mode {
@@ -856,20 +939,19 @@ impl PrintableEntryFileName {
         char4: u8,
         char5: u8,
         char6: u8,
-        char7: u8
     ) -> Self {
-        let (f8, e1) = Self::handle_dot_hiding(dot_hiding, char6);
+        let (f8, e1) = Self::handle_dot_hiding(dot_hiding, char5);
         PrintableEntryFileName {
-            f1: EOT,   // 4 for screen mode and 1st indexx
-            f2: mode,  // sceren mode
-            f3: char1, // Displayable byte
-            f4: char2, // Displayable byte
-            f5: char3, // Displayable byte
-            f6: char4, // Displayable byte
-            f7: char5, // Displayable byte
+            f1: b' ', //Index
+            f2: EOT,   // 4 for screen mode and 1st indexx
+            f3: mode,  // sceren mode
+            f4: char1, // Displayable byte
+            f5: char2, // Displayable byte
+            f6: char3, // Displayable byte
+            f7: char4, // Displayable byte
             f8,
             e1,
-            e2: char7, // Displayble byte
+            e2: char6, // Displayble byte
             e3: NAK    // Disable display of file size info and next entry's index
         }
     }
@@ -1345,7 +1427,6 @@ impl EntryKind {
                     args[4],
                     args[5],
                     args[6],
-                    args[7]
                 )
             },
             EntryKind::SequentialFirstWithoutMode(dot_hiding) => {
@@ -1444,7 +1525,7 @@ impl EntryKind {
                 EntryConstraint {
                     slots: smallvec![
                         EntryConstraintItem::Mode,
-                        EntryConstraintItem::Any(5 + dot_help[0]),
+                        EntryConstraintItem::Any(4 + dot_help[0]),
                         EntryConstraintItem::Any(1 + dot_help[1])
                     ]
                 }
@@ -1604,7 +1685,7 @@ impl SerialCatalogBuilder {
                     first_entry.build_entry(&commands_buffer, None)
                 }
                 else {
-                    other_entry_kinds.build_entry(&commands_buffer, Some((entries.len() + 4) as u8))
+                    other_entry_kinds.build_entry(&commands_buffer, Some((entries.len() as u8 + b' ') as u8))
                 };
 
                 if entries.len() >= 64 {

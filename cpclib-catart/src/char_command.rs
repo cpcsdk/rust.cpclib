@@ -137,6 +137,12 @@ impl CharCommandList {
             .join(":")
     }
 
+    pub fn bytes(&self) -> Vec<u8> {
+        self.0.iter()
+            .flat_map(|cmd| cmd.bytes())
+            .collect()
+    }
+
 
 }
 
@@ -482,8 +488,8 @@ impl CharCommand {
         match self {
             Self::Char(c) if *c != b'"' && *c >= 32 => format!("PRINT \"{}\";", *c as char),
             Self::Char(c) => format!("PRINT CHR$({});", *c),
-            Self::EnableVdu => format!("PRINT CHR$({}));", ACK),
-            Self::DisableVdu => format!("PRINT CHR$({}));", NAK),
+            Self::EnableVdu => format!("PRINT CHR$({});", ACK),
+            Self::DisableVdu => format!("PRINT CHR$({});", NAK),
             Self::Border(a, b) => format!("BORDER {}, {}", a, b),
             Self::Pen(a) => format!("PEN {}", a),
             Self::Paper(a) => format!("PAPER {}", a),
@@ -496,6 +502,12 @@ impl CharCommand {
             Self::CarriageReturn => "PRINT CHR$(13);".to_string(),
             Self::Window(a, b, c, d) => format!("WINDOW {}, {}, {}, {}", a, b, c, d),
             Self::String(s) => format!("PRINT \"{}\";", String::from_utf8_lossy(s)),
+            Self::CursorOff => "PRINT CHR$(2);".to_string(),
+            Self::CursorOn => "PRINT CHR$(3);".to_string(),
+            Self::CursorLeft => "PRINT CHR$(8);".to_string(),
+            Self::CursorRight => "PRINT CHR$(9);".to_string(),
+            Self::CursorDown => "PRINT CHR$(10);".to_string(),
+            Self::CursorUp => "PRINT CHR$(11);".to_string(),
             _ => unimplemented!("to_basic_string not implemented for command {:?}", self)
         }
     }

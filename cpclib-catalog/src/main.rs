@@ -322,8 +322,111 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
         .collect();
     let catalog_for_reconstruction = Catalog::try_from(fnames_for_reconstruction.as_slice())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    let unified_catalog_reconstructed = UnifiedCatalog::from(catalog_for_reconstruction);
-    let reconstructed_commands = unified_catalog_reconstructed.commands_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+    
+    // Extract commands from catalog entries directly (not using commands_by_mode_and_order which generates DIR listing)
+    let mut reconstructed_commands = CharCommandList::new();
+    for entry in catalog_for_reconstruction.entries.iter() {
+        if !entry.is_empty() {
+            let entry_commands = entry.fname.commands();
+            reconstructed_commands.extend(entry_commands);
+        }
+    }
+    
+    // Step 7.3: Byte-level comparison (using CharCommandList::bytes() which merges consecutive strings/chars)
+    info!("\n=== BYTE-LEVEL ROUND-TRIP COMPARISON ===");
+    
+    // Convert to bytes using the CharCommandList method (merges consecutive strings/chars)
+    let original_bytes = char_commands.bytes();
+    info!("Original: {} commands -> {} bytes", char_commands.len(), original_bytes.len());
+    
+    let reconstructed_bytes = reconstructed_commands.bytes();
+    info!("Reconstructed: {} commands -> {} bytes", reconstructed_commands.len(), reconstructed_bytes.len());
+    
+    // Parse both byte streams back to commands
+    let original_parsed = CharCommandList::from_bytes(&original_bytes);
+    info!("Original bytes parsed back to {} commands", original_parsed.len());
+    
+    let reconstructed_parsed = CharCommandList::from_bytes(&reconstructed_bytes);
+    info!("Reconstructed bytes parsed back to {} commands", reconstructed_parsed.len());
+    
+    // Compare the parsed command lists
+    info!("\nComparing byte-parsed commands:");
+    let min_len = original_parsed.len().min(reconstructed_parsed.len());
+    let mut byte_diff_count = 0;
+    
+    for idx in 0..min_len {
+        if original_parsed[idx] != reconstructed_parsed[idx] {
+            info!("  [{}] BYTE-DIFF: {:?} != {:?}", idx, original_parsed[idx], reconstructed_parsed[idx]);
+            byte_diff_count += 1;
+            if byte_diff_count >= 30 {
+                info!("  ... (showing first 30 byte-level differences)");
+                break;
+            }
+        }
+    }
+    
+    if byte_diff_count == 0 && original_parsed.len() == reconstructed_parsed.len() {
+        info!("  ✓ Byte-parsed commands match perfectly!");
+    }
+    
+    if original_parsed.len() != reconstructed_parsed.len() {
+        info!("  Byte-parsed length mismatch: original={}, reconstructed={}", 
+            original_parsed.len(), reconstructed_parsed.len());
+        if reconstructed_parsed.len() > original_parsed.len() {
+            info!("  Extra commands in reconstructed (first 10):");
+            for (idx, cmd) in reconstructed_parsed.iter().skip(original_parsed.len()).take(10).enumerate() {
+                info!("    [{}]: {:?}", original_parsed.len() + idx, cmd);
+            }
+        } else {
+            info!("  Missing commands from reconstructed (first 10):");
+            for (idx, cmd) in original_parsed.iter().skip(reconstructed_parsed.len()).take(10).enumerate() {
+                info!("    [{}]: {:?}", reconstructed_parsed.len() + idx, cmd);
+            }
+        }
+    }
+    
+    // Step 7.4: Direct command comparison
+    info!("\n=== DIRECT COMMAND COMPARISON ===");
+    info!("  Original: {} commands", char_commands.len());
+    info!("  Reconstructed: {} commands", reconstructed_commands.len());
+    
+    // Find differences in commands
+    let mut diff_count = 0;
+    let cmd_min_len = char_commands.len().min(reconstructed_commands.len());
+    
+    for idx in 0..cmd_min_len {
+        if char_commands[idx] != reconstructed_commands[idx] {
+            info!("  [{}] CMD-DIFF: {:?} != {:?}", idx, char_commands[idx], reconstructed_commands[idx]);
+            diff_count += 1;
+            if diff_count >= 30 {
+                info!("  ... (showing first 30 command differences)");
+                break;
+            }
+        }
+    }
+    
+    if diff_count == 0 && char_commands.len() == reconstructed_commands.len() {
+        info!("  ✓ All commands match perfectly!");
+    }
+    
+    if char_commands.len() != reconstructed_commands.len() {
+        info!("  Command length mismatch! Original has {} extra, Reconstructed has {} extra",
+            char_commands.len().saturating_sub(reconstructed_commands.len()),
+            reconstructed_commands.len().saturating_sub(char_commands.len()));
+        
+        // Show what's missing or extra
+        if reconstructed_commands.len() > char_commands.len() {
+            info!("  Extra commands in reconstructed (showing first 10):");
+            for (idx, cmd) in reconstructed_commands.iter().skip(char_commands.len()).take(10).enumerate() {
+                info!("    [{}]: {:?}", char_commands.len() + idx, cmd);
+            }
+        } else {
+            info!("  Missing commands from reconstructed (showing first 10):");
+            for (idx, cmd) in char_commands.iter().skip(reconstructed_commands.len()).take(10).enumerate() {
+                info!("    [{}]: {:?}", reconstructed_commands.len() + idx, cmd);
+            }
+        }
+    }
     
     let mut reconstructed_interpreter = Interpreter::new(Mode::Mode1);
     reconstructed_interpreter.interpret(&reconstructed_commands, false)
@@ -348,12 +451,70 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
         println!("{}", diff_display);
     }
     
-    // Step 8: Display the generated BASIC program
+    // Step 8: Display the generated BASIC program and compare its bytes
     info!("Displaying generated BASIC program from catalog:");
     println!("\n=== Reconstructed BASIC Program ===");
     match catalog_to_basic_listing(&catalog_bytes, CatalogType::Cat) {
-        Ok(basic_program) => {
-            println!("\n{}", basic_program);
+        Ok(reconstructed_basic) => {
+            println!("\n{}", reconstructed_basic);
+            
+            // Convert to CharCommandList for byte comparison
+            info!("\n=== BASIC PROGRAM BYTE COMPARISON ===");
+            match basic_to_char_commands(&reconstructed_basic) {
+                Ok(reconstructed_basic_commands) => {
+                    // Get bytes from both original and reconstructed BASIC programs
+                    let original_basic_bytes = char_commands.bytes();
+                    let reconstructed_basic_bytes = reconstructed_basic_commands.bytes();
+                    
+                    info!("Original BASIC program: {} commands -> {} bytes", 
+                        char_commands.len(), original_basic_bytes.len());
+                    info!("Reconstructed BASIC program: {} commands -> {} bytes", 
+                        reconstructed_basic_commands.len(), reconstructed_basic_bytes.len());
+                    
+                    // Compare byte arrays
+                    if original_basic_bytes == reconstructed_basic_bytes {
+                        info!("✓ BASIC program bytes match perfectly!");
+                    } else {
+                        info!("⚠ BASIC program bytes differ!");
+                        info!("  Byte length: original={}, reconstructed={}", 
+                            original_basic_bytes.len(), reconstructed_basic_bytes.len());
+                        
+                        // Find first difference
+                        let min_len = original_basic_bytes.len().min(reconstructed_basic_bytes.len());
+                        let mut first_diff = None;
+                        for i in 0..min_len {
+                            if original_basic_bytes[i] != reconstructed_basic_bytes[i] {
+                                first_diff = Some(i);
+                                break;
+                            }
+                        }
+                        
+                        if let Some(idx) = first_diff {
+                            info!("  First difference at byte index {}", idx);
+                            let start = idx.saturating_sub(5);
+                            let end = (idx + 10).min(min_len);
+                            info!("  Original bytes [{}..{}]: {:02X?}", start, end, &original_basic_bytes[start..end]);
+                            info!("  Reconstructed bytes [{}..{}]: {:02X?}", start, end, &reconstructed_basic_bytes[start..end]);
+                        }
+                        
+                        // Show extra bytes if lengths differ
+                        if reconstructed_basic_bytes.len() > original_basic_bytes.len() {
+                            let extra_start = original_basic_bytes.len();
+                            let extra_end = (extra_start + 20).min(reconstructed_basic_bytes.len());
+                            info!("  Extra bytes in reconstructed [{}..{}]: {:02X?}", 
+                                extra_start, extra_end, &reconstructed_basic_bytes[extra_start..extra_end]);
+                        } else if original_basic_bytes.len() > reconstructed_basic_bytes.len() {
+                            let missing_start = reconstructed_basic_bytes.len();
+                            let missing_end = (missing_start + 20).min(original_basic_bytes.len());
+                            info!("  Missing bytes from reconstructed [{}..{}]: {:02X?}", 
+                                missing_start, missing_end, &original_basic_bytes[missing_start..missing_end]);
+                        }
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Warning: Failed to convert reconstructed BASIC to commands: {}", e);
+                }
+            }
         },
         Err(e) => {
             eprintln!("Warning: Failed to generate BASIC listing: {}", e);

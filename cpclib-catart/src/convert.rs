@@ -289,7 +289,7 @@ fn consume_print_statement<'b>(
     Ok((arg, terminator))
 }
 
-/// Convert a BASIC program to its control character equivalent
+/// Convert a BASIC program to its control character equivalent.
 pub fn basic_to_commands<'b>(basic: &'b BasicProgram) -> Result<BasicCommandList, CatArtError> {
     // get the tokens in reverse order to pop them
     let mut line_token_pairs: Vec<(u16, &'b BasicToken)> = basic

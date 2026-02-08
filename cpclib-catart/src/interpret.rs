@@ -158,6 +158,11 @@ impl Interpreter {
     pub fn screen(&self) -> &Screen {
         &self.screen
     }
+    
+    /// Public getter for the palette
+    pub fn palette(&self) -> &Palette {
+        &self.palette
+    }
 
     pub fn new(mode: Mode) -> Self {
         let pen = Pen::Pen1;
@@ -394,6 +399,9 @@ impl Interpreter {
 
     pub fn interpret_command(&mut self, command: &CharCommand) -> Result<(), String> {
         match command {
+            CharCommand::Symbol(..) => {
+                // Symbols are not simulated; ignore.
+            },
             CharCommand::Nop => {
                 // No operation - do nothing
             },
@@ -576,6 +584,7 @@ impl Interpreter {
             CharCommand::ExchangePenAndPaper if self.enable_vdu => {
                 std::mem::swap(&mut self.pen, &mut self.paper);
             },
+
             c if !self.enable_vdu => {
                 // When VDU is disabled, ignore all commands except those handled above
             },
@@ -653,4 +662,153 @@ impl Display for Interpreter {
         }
         Ok(())
     }
+}
+
+/// Compares two screens and returns true if they are identical
+pub fn screens_are_equal(screen1: &Screen, screen2: &Screen) -> bool {
+    if screen1.buffer.len() != screen2.buffer.len() {
+        return false;
+    }
+    
+    for (row1, row2) in screen1.buffer.iter().zip(screen2.buffer.iter()) {
+        if row1.len() != row2.len() {
+            return false;
+        }
+        for (cell1, cell2) in row1.iter().zip(row2.iter()) {
+            if cell1.ch != cell2.ch || cell1.pen != cell2.pen || cell1.paper != cell2.paper {
+                return false;
+            }
+        }
+    }
+    
+    true
+}
+
+/// Displays two screens side-by-side with a difference map in the middle
+pub fn display_screen_diff(screen1: &Screen, palette1: &Palette, screen2: &Screen, palette2: &Palette) -> String {
+    use cpclib_image::ga::Ink;
+    use owo_colors::{DynColors, OwoColorize};
+    
+    let border = 2;
+    let height = screen1.buffer.len();
+    let width = screen1.buffer[0].len();
+    
+    let mut output = String::new();
+    
+    // Header
+    output.push_str(&format!("\n{:^width$}   {:^width$}   {:^width$}\n", 
+        "ORIGINAL", "DIFF", "RECONSTRUCTED", width = width + 2 * border));
+    output.push_str(&format!("{}\n", "=".repeat((width + 2 * border) * 3 + 6)));
+    
+    // Border thickness
+    let border_ink1 = palette1.get_border();
+    let border_rgb1 = border_ink1.color();
+    let border_color1 = DynColors::Rgb(border_rgb1[0], border_rgb1[1], border_rgb1[2]);
+    
+    let border_ink2 = palette2.get_border();
+    let border_rgb2 = border_ink2.color();
+    let border_color2 = DynColors::Rgb(border_rgb2[0], border_rgb2[1], border_rgb2[2]);
+    
+    // Top borders
+    for _ in 0..border {
+        for _ in 0..(width + 2 * border) {
+            output.push_str(&format!("{}", " ".on_color(border_color1)));
+        }
+        output.push_str("   ");
+        for _ in 0..(width + 2 * border) {
+            output.push(' ');
+        }
+        output.push_str("   ");
+        for _ in 0..(width + 2 * border) {
+            output.push_str(&format!("{}", " ".on_color(border_color2)));
+        }
+        output.push('\n');
+    }
+    
+    // Screen rows
+    for (row_idx, (row1, row2)) in screen1.buffer.iter().zip(screen2.buffer.iter()).enumerate() {
+        // Left border for screen1
+        for _ in 0..border {
+            output.push_str(&format!("{}", " ".on_color(border_color1)));
+        }
+        
+        // Screen1 content
+        for cell in row1.iter() {
+            let pen_ink = palette1.get(&cell.pen);
+            let paper_ink = palette1.get(&cell.paper);
+            let pen_rgb = pen_ink.color();
+            let paper_rgb = paper_ink.color();
+            let fg = DynColors::Rgb(pen_rgb[0], pen_rgb[1], pen_rgb[2]);
+            let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
+            output.push_str(&format!("{}", (cell.ch as char).color(fg).on_color(bg)));
+        }
+        
+        // Right border for screen1
+        for _ in 0..border {
+            output.push_str(&format!("{}", " ".on_color(border_color1)));
+        }
+        
+        output.push_str("   ");
+        
+        // Diff map (no border)
+        for _ in 0..border {
+            output.push(' ');
+        }
+        for (cell1, cell2) in row1.iter().zip(row2.iter()) {
+            let is_different = cell1.ch != cell2.ch || cell1.pen != cell2.pen || cell1.paper != cell2.paper;
+            if is_different {
+                // Red background for differences
+                output.push_str(&format!("{}", "█".red()));
+            } else {
+                // Black/dark for matches
+                output.push_str(&format!("{}", "░".black()));
+            }
+        }
+        for _ in 0..border {
+            output.push(' ');
+        }
+        
+        output.push_str("   ");
+        
+        // Left border for screen2
+        for _ in 0..border {
+            output.push_str(&format!("{}", " ".on_color(border_color2)));
+        }
+        
+        // Screen2 content
+        for cell in row2.iter() {
+            let pen_ink = palette2.get(&cell.pen);
+            let paper_ink = palette2.get(&cell.paper);
+            let pen_rgb = pen_ink.color();
+            let paper_rgb = paper_ink.color();
+            let fg = DynColors::Rgb(pen_rgb[0], pen_rgb[1], pen_rgb[2]);
+            let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
+            output.push_str(&format!("{}", (cell.ch as char).color(fg).on_color(bg)));
+        }
+        
+        // Right border for screen2
+        for _ in 0..border {
+            output.push_str(&format!("{}", " ".on_color(border_color2)));
+        }
+        
+        output.push('\n');
+    }
+    
+    // Bottom borders
+    for _ in 0..border {
+        for _ in 0..(width + 2 * border) {
+            output.push_str(&format!("{}", " ".on_color(border_color1)));
+        }
+        output.push_str("   ");
+        for _ in 0..(width + 2 * border) {
+            output.push(' ');
+        }
+        output.push_str("   ");
+        for _ in 0..(width + 2 * border) {
+            output.push_str(&format!("{}", " ".on_color(border_color2)));
+        }
+        output.push('\n');
+    }
+    
+    output
 }
