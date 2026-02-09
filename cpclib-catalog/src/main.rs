@@ -64,6 +64,10 @@ enum Commands {
         /// Output file (defaults to catart.dsk). Use .dsk or .hfe extension for disc images, otherwise creates raw binary
         #[arg(short = 'o', long = "output")]
         output_file: Option<String>,
+        
+        /// Optional PNG file to save pixel-accurate rendering of the catart
+        #[arg(long = "png")]
+        png_output: Option<String>,
     },
     
     /// Modify an entry in the catalog
@@ -253,7 +257,7 @@ fn save_catalog_output(catalog_bytes: &[u8], output_path: &str) -> std::io::Resu
 }
 
 /// Main build process: BASIC file -> catalog output
-fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::io::Result<()> {
+fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_output: Option<&str>) -> std::io::Result<()> {
     info!("Building catart from BASIC file: {}", basic_filename);
     
     // Step 1: Parse the BASIC file
@@ -275,6 +279,19 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to interpret original commands: {}", e)))?;
     let original_screen = original_interpreter.screen().clone();
     let original_palette = original_interpreter.palette().clone();
+    
+    // Step 2.5.1: Save PNG if requested
+    if let Some(png_path) = png_output {
+        info!("Generating pixel-accurate PNG: {}", png_path);
+        let color_matrix = original_interpreter.memory_screen()
+            .to_color_matrix_with_border(8)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to convert screen to image"))?;
+        
+        let img = color_matrix.as_image();
+        img.save(png_path)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to save PNG: {}", e)))?;
+        info!("Successfully saved PNG to: {}", png_path);
+    }
     
     // Step 2.6: Display original catart output
     info!("Original catart output:");
@@ -549,13 +566,13 @@ fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Commands::Build { basic_file, output_file } => {
+        Commands::Build { basic_file, output_file, png_output } => {
             // Use Build's basic_file if provided, otherwise fall back to top-level input_file
             let input = basic_file.or(args.input_file).ok_or_else(|| {
                 std::io::Error::new(std::io::ErrorKind::InvalidInput, "BASIC file must be provided either as top-level argument or with the build command")
             })?;
             let output = output_file.as_deref().unwrap_or("catart.dsk");
-            build_catart_from_basic(&input, output)
+            build_catart_from_basic(&input, output, png_output.as_deref())
         }
         
         Commands::Cat => {
