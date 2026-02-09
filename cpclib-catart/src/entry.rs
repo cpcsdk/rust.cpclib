@@ -445,7 +445,12 @@ pub struct PrintableEntry {
 impl From<PrintableEntryFileName> for PrintableEntry{
     fn from(raw: PrintableEntryFileName) -> Self {
         let mut empty = Self::empty();
+        if !raw.is_empty() {
+        empty.user = 0;
+        empty.sectors = [0; 16];
+        empty.pieces = [0; 4];
         empty.fname = raw;
+        }
         empty
     }
 }
@@ -453,10 +458,10 @@ impl From<PrintableEntryFileName> for PrintableEntry{
 impl PrintableEntry {
     pub fn empty() -> Self {
         PrintableEntry {
-            user: 0,
+            user: 0xe5,
             fname: PrintableEntryFileName::empty(),
-            pieces: [0; 4],
-            sectors: [0; 16]
+            pieces: [0xe5; 4],
+            sectors: [0xe5; 16]
         }
     }
 
@@ -1000,17 +1005,17 @@ impl PrintableEntryFileName {
 impl PrintableEntryFileName {
     pub fn empty() -> Self {
         PrintableEntryFileName {
-            f1: 0,
-            f2: 0,
-            f3: 0,
-            f4: 0,
-            f5: 0,
-            f6: 0,
-            f7: 0,
-            f8: 0,
-            e1: 0,
-            e2: 0,
-            e3: 0
+            f1: 0xe5,
+            f2: 0xe5,
+            f3: 0xe5,
+            f4: 0xe5,
+            f5: 0xe5,
+            f6: 0xe5,
+            f7: 0xe5,
+            f8: 0xe5,
+            e1: 0xe5,
+            e2: 0xe5,
+            e3: 0xe5
         }
     }
 
