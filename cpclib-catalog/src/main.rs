@@ -16,7 +16,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use cpclib_catalog::{catalog_to_basic_listing, display_catalog_using_catart};
 use cpclib_catart::char_command::CharCommandList;
 use cpclib_catart::entry::{Catalog, CatalogType, PrintableEntryFileName, ScreenMode, SerialCatalogBuilder, UnifiedCatalog};
@@ -35,73 +35,79 @@ use simple_logger::SimpleLogger;
 #[command(name = "catalog")]
 #[command(about = "Amsdos catalog manipulation tool.", author = "Krusty/Benediction")]
 struct Args {
-    /// List the content of the catalog ONLY for files having no control chars
-    #[arg(short = 'l', long, requires = "input_file")]
-    list: bool,
-
-    /// List the content of the catalog EVEN for files having no control chars
-    #[arg(short = 'a', long, requires = "input_file")]
-    listall: bool,
-
-    /// Display the catalog using CatArt rendering (sorted alphabetically)
-    #[arg(long, requires = "input_file")]
-    cat: bool,
-
-    /// Display the catalog using CatArt rendering (directory order, unsorted)
-    #[arg(long, requires = "input_file")]
-    dir: bool,
-
-    /// Build a catart from a BASIC program. Output will be a DSK/HFE file if the output filename ends with .dsk or .hfe, otherwise a raw 2048-byte catalog binary.
-    #[arg(long, value_name = "BASIC_FILE", conflicts_with = "input_file")]
-    build: Option<String>,
-
-    /// Output file for --build operation (defaults to catart.dsk)
-    #[arg(short = 'o', long = "output", requires = "build")]
-    output_file: Option<String>,
-
-    /// Input/Output file that contains the entries of the catalog (a binary file or a dsk)
-    #[arg(short = 'i', long = "input", conflicts_with = "build")]
+    /// Input file that contains the entries of the catalog (a binary file or a dsk). For 'build' command, this is the BASIC file if not specified in the command.
     input_file: Option<String>,
+    
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    /// Selects the entry to modify
-    #[arg(long, value_parser = value_parser!(u8).range(..=63), requires = "input_file")]
-    entry: Option<u8>,
-
-    /// Set the selected entry readonly
-    #[arg(long = "readonly", requires = "entry")]
-    setreadonly: bool,
-
-    /// Set the selected entry hidden
-    #[arg(long = "system", requires = "entry")]
-    setsystem: bool,
-
-    /// Set the selected entry read and write
-    #[arg(long = "noreadonly", requires = "entry")]
-    unsetreadonly: bool,
-
-    /// Set the selected entry visible
-    #[arg(long = "nosystem", requires = "entry")]
-    unsetsystem: bool,
-
-    /// Set the user value
-    #[arg(long, requires = "entry")]
-    user: Option<u8>,
-
-    /// Set the filename of the entry
-    #[arg(long, requires = "entry")]
-    filename: Option<String>,
-
-    /// Set the blocs to load (and update the number of blocs accordingly to that)
-    #[arg(long, requires = "entry", num_args = ..=16)]
-    blocs: Option<Vec<u8>>,
-
-    /// Set the page number
-    #[arg(long)]
-    numpage: Option<String>,
-
-    /// Force the size of the entry
-    #[arg(long)]
-    size: Option<String>,
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Display the catalog using CatArt rendering (sorted alphabetically)
+    Cat,
+    
+    /// Display the catalog using CatArt rendering (directory order, unsorted)
+    Dir,
+    
+    /// List the content of the catalog ONLY for files having no control chars
+    List,
+    
+    /// List the content of the catalog EVEN for files having control chars
+    Listall,
+    
+    /// Build a catart from a BASIC program. Output will be a DSK/HFE file if the output filename ends with .dsk or .hfe, otherwise a raw 2048-byte catalog binary.
+    Build {
+        /// BASIC file to convert to catart (optional if input_file is provided at top level)
+        basic_file: Option<String>,
+        
+        /// Output file (defaults to catart.dsk). Use .dsk or .hfe extension for disc images, otherwise creates raw binary
+        #[arg(short = 'o', long = "output")]
+        output_file: Option<String>,
+    },
+    
+    /// Modify an entry in the catalog
+    Modify {
+        /// Selects the entry to modify
+        #[arg(long, value_parser = value_parser!(u8).range(..=63))]
+        entry: u8,
+        
+        /// Set the selected entry readonly
+        #[arg(long = "readonly")]
+        setreadonly: bool,
+        
+        /// Set the selected entry hidden
+        #[arg(long = "system")]
+        setsystem: bool,
+        
+        /// Set the selected entry read and write
+        #[arg(long = "noreadonly")]
+        unsetreadonly: bool,
+        
+        /// Set the selected entry visible
+        #[arg(long = "nosystem")]
+        unsetsystem: bool,
+        
+        /// Set the user value
+        #[arg(long)]
+        user: Option<u8>,
+        
+        /// Set the filename of the entry
+        #[arg(long)]
+        filename: Option<String>,
+        
+        /// Set the blocs to load (and update the number of blocs accordingly to that)
+        #[arg(long, num_args = ..=16)]
+        blocs: Option<Vec<u8>>,
+        
+        /// Set the page number
+        #[arg(long)]
+        numpage: Option<String>,
+        
+        /// Force the size of the entry
+        #[arg(long)]
+        size: Option<String>,
+    },
 }
 
 #[must_use]
@@ -158,7 +164,7 @@ fn list_catalog_entries(catalog_content: &AmsdosEntries, listall: bool) {
         else if contains_id && contains_control_chars && listall {
             println!("{idx}. => CAT ART <=");
         }
-        else if !contains_id {
+        else if !contains_id && listall {
             println!("{idx}. => EMPTY SLOT <=");
         } 
     }
@@ -542,124 +548,201 @@ fn main() -> std::io::Result<()> {
 
     let args = Args::parse();
 
-    // Handle --build option
-    if let Some(ref basic_file) = args.build {
-        let output_file = args.output_file.as_ref().map(|s| s.as_str()).unwrap_or("catart.dsk");
+    match args.command {
+        Commands::Build { basic_file, output_file } => {
+            // Use Build's basic_file if provided, otherwise fall back to top-level input_file
+            let input = basic_file.or(args.input_file).ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "BASIC file must be provided either as top-level argument or with the build command")
+            })?;
+            let output = output_file.as_deref().unwrap_or("catart.dsk");
+            build_catart_from_basic(&input, output)
+        }
         
-        return build_catart_from_basic(basic_file, output_file);
+        Commands::Cat => {
+            let input_file = args.input_file.ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'cat' command")
+            })?;
+            display_catalog_command(&input_file, CatalogType::Cat)
+        }
+        
+        Commands::Dir => {
+            let input_file = args.input_file.ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'dir' command")
+            })?;
+            display_catalog_command(&input_file, CatalogType::Dir)
+        }
+        
+        Commands::List => {
+            let input_file = args.input_file.ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'list' command")
+            })?;
+            list_catalog_command(&input_file, false)
+        }
+        
+        Commands::Listall => {
+            let input_file = args.input_file.ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'listall' command")
+            })?;
+            list_catalog_command(&input_file, true)
+        }
+        
+        Commands::Modify {
+            entry: idx,
+            setreadonly,
+            setsystem,
+            unsetreadonly,
+            unsetsystem,
+            user,
+            filename,
+            blocs,
+            numpage,
+            size,
+        } => {
+            let input_file = args.input_file.ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'modify' command")
+            })?;
+            modify_entry_command(
+                &input_file,
+                idx,
+                setreadonly,
+                setsystem,
+                unsetreadonly,
+                unsetsystem,
+                user,
+                filename,
+                blocs,
+                numpage,
+                size,
+            )
+        }
     }
+}
 
-    // Retrieve the current entries ...
-    let catalog_fname = args.input_file.as_ref()
-        .ok_or_else(|| std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "Either --build or --input must be provided"
-        ))?;
-    let mut catalog_content: AmsdosEntries = {
+fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> std::io::Result<()> {
+    // For CatArt display, we need the raw catalog bytes
+    let catalog_bytes: Vec<u8> = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
+        // Get raw bytes directly from disc
+        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
+        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
+        manager.catalog_slice()
+    } else {
+        // For catalog files, re-read the raw content
+        let mut file = File::open(catalog_fname)?;
         let mut content = Vec::new();
-
-        if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
-            // Read a dsk or hfe file
-            error!(
-                "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
-            );
-            let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
-            let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-            manager.catalog()
-        }
-        else {
-            // Read a catalog file
-            let mut file = File::open(catalog_fname)?;
-            file.read_to_end(&mut content)?;
-            AmsdosEntries::from_slice(&content)
-        }
+        file.read_to_end(&mut content)?;
+        content
     };
 
-    // ... and manipulate them
-    if args.cat || args.dir {
-        // For CatArt display, we need the raw catalog bytes
-        let catalog_bytes: Vec<u8> = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
-            // Get raw bytes directly from disc
-            let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
-            let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-            manager.catalog_slice()
-        } else {
-            // For catalog files, re-read the raw content
-            let mut file = File::open(catalog_fname)?;
-            let mut content = Vec::new();
-            file.read_to_end(&mut content)?;
-            content
-        };
-
-        let catalog_type = if args.cat { CatalogType::Cat } else { CatalogType::Dir };
-        if let Err(e) = display_catalog_using_catart(&catalog_bytes, catalog_type) {
-            error!("Failed to display catalog using CatArt: {}", e);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
-        }
+    if let Err(e) = display_catalog_using_catart(&catalog_bytes, catalog_type) {
+        error!("Failed to display catalog using CatArt: {}", e);
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
     }
-    else if args.list || args.listall {
-        list_catalog_entries(&catalog_content, args.listall);
+    
+    Ok(())
+}
+
+fn list_catalog_command(catalog_fname: &str, listall: bool) -> std::io::Result<()> {
+    let catalog_content: AmsdosEntries = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
+        // Read a dsk or hfe file
+        error!(
+            "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
+        );
+        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
+        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
+        manager.catalog()
+    } else {
+        // Read a catalog file
+        let mut file = File::open(catalog_fname)?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)?;
+        AmsdosEntries::from_slice(&content)
+    };
+    
+    list_catalog_entries(&catalog_content, listall);
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn modify_entry_command(
+    catalog_fname: &str,
+    idx: u8,
+    setreadonly: bool,
+    setsystem: bool,
+    unsetreadonly: bool,
+    unsetsystem: bool,
+    user: Option<u8>,
+    filename: Option<String>,
+    blocs: Option<Vec<u8>>,
+    numpage: Option<String>,
+    size: Option<String>,
+) -> std::io::Result<()> {
+    let mut catalog_content: AmsdosEntries = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
+        // Read a dsk or hfe file
+        error!(
+            "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
+        );
+        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
+        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
+        manager.catalog()
+    } else {
+        // Read a catalog file
+        let mut file = File::open(catalog_fname)?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)?;
+        AmsdosEntries::from_slice(&content)
+    };
+    
+    info!("Manipulate entry {idx}");
+
+    let entry = catalog_content.get_entry_mut(idx as _);
+
+    if setreadonly {
+        entry.set_read_only();
+    }
+    if setsystem {
+        entry.set_system();
+    }
+    if unsetreadonly {
+        entry.unset_read_only();
+    }
+    if unsetsystem {
+        entry.unset_system();
+    }
+
+    if let Some(user_val) = user {
+        entry.set_user(user_val);
+    }
+
+    if let Some(ref fname) = filename {
+        entry.set_filename(fname);
+    }
+
+    if let Some(ref blocs_vec) = blocs {
+        let blocs_idx = blocs_vec
+            .iter()
+            .map(|bloc| BlocIdx::from(*bloc))
+            .collect::<Vec<BlocIdx>>();
+        entry.set_blocs(&blocs_idx);
+    }
+
+    if let Some(ref numpage_str) = numpage {
+        entry.set_num_page(to_number::<u8>(numpage_str));
+    }
+
+    // XXX It is important ot keep it AFTER the blocs as it override their value
+    if let Some(ref size_str) = size {
+        let size_val = to_number::<u8>(size_str);
+        entry.set_page_size(size_val);
+    }
+
+    // Write the result
+    if catalog_fname.contains("dsk") {
+        unimplemented!("Need to implement that");
     }
     else {
-        let catalog_fname_lower = catalog_fname.to_lowercase();
-        if catalog_fname_lower.contains("dsk") || catalog_fname_lower.contains("hfe") {
-            list_catalog_entries(&catalog_content, args.listall);
-        }
+        let mut file = File::create(catalog_fname)?;
+        file.write_all(&catalog_content.as_bytes())?;
     }
-
-    if let Some(idx) = args.entry {
-        info!("Manipulate entry {idx}");
-
-        let entry = catalog_content.get_entry_mut(idx as _);
-
-        if args.setreadonly {
-            entry.set_read_only();
-        }
-        if args.setsystem {
-            entry.set_system();
-        }
-        if args.unsetreadonly {
-            entry.unset_read_only();
-        }
-        if args.unsetsystem {
-            entry.unset_system();
-        }
-
-        if let Some(user) = args.user {
-            entry.set_user(user);
-        }
-
-        if let Some(ref filename) = args.filename {
-            entry.set_filename(filename);
-        }
-
-        if let Some(ref blocs) = args.blocs {
-            let blocs = blocs
-                .iter()
-                .map(|bloc| BlocIdx::from(*bloc))
-                .collect::<Vec<BlocIdx>>();
-            entry.set_blocs(&blocs);
-        }
-
-        if let Some(ref numpage) = args.numpage {
-            entry.set_num_page(to_number::<u8>(numpage));
-        }
-
-        // XXX It is important ot keep it AFTER the blocs as it override their value
-        if let Some(ref size) = args.size {
-            let size = to_number::<u8>(size);
-            entry.set_page_size(size);
-        }
-
-        // Write the result
-        if catalog_fname.contains("dsk") {
-            unimplemented!("Need to implement that");
-        }
-        else {
-            let mut file = File::create(catalog_fname)?;
-            file.write_all(&catalog_content.as_bytes())?;
-        }
-    }
-
+    
     Ok(())
 }
