@@ -189,6 +189,11 @@ impl BasicMemoryScreen {
     
     /// Write a character at the given position (x, y in character coordinates)
     pub fn write_char(&mut self, ch: u8, x: u16, y: u16, pen: Pen, paper: Pen) {
+        // CPC coordinates are 1-based, so we need to check for valid values
+        if x == 0 || y == 0 {
+            return; // Invalid coordinates, do nothing
+        }
+        
         // Get the character bitmap
         let bitmap = Self::get_char_bitmap(ch);
         
@@ -207,7 +212,11 @@ impl BasicMemoryScreen {
             
             // Calculate byte position within the line based on x position and mode
             let char_x = (x - 1) as usize;
-            let byte_offset = char_x * self.bytes_per_char();
+            // Mode 0 requires special handling: multiply x by 4
+            let byte_offset = match self.mode {
+                cpclib_image::image::Mode::Zero => char_x * 4,
+                _ => char_x * self.bytes_per_char(),
+            };
             let final_addr = addr + byte_offset;
             
             // Write the bytes to memory
@@ -264,6 +273,32 @@ impl BasicMemoryScreen {
         
         // Then convert sprite to color matrix
         let mut color_matrix = sprite.to_color_matrix()?;
+        
+        // For Mode 2, duplicate each line to maintain correct aspect ratio
+        // Mode 2 pixels are twice as thin on real hardware, so each scanline should appear twice
+        if let cpclib_image::image::Mode::Two = self.mode {
+            let height = color_matrix.height() as usize;
+            // Work backwards to avoid index issues when inserting
+            for line_idx in (0..height).rev() {
+                // Get the line data
+                let line = color_matrix.get_line(line_idx).to_vec();
+                // Insert a duplicate right after the current line
+                color_matrix.add_line((line_idx + 1) as usize, &line);
+            }
+        }
+        
+        // For Mode 0, duplicate each column to maintain correct aspect ratio
+        // Mode 0 pixels are wider on real hardware
+        if let cpclib_image::image::Mode::Zero = self.mode {
+            let width = color_matrix.width() as usize;
+            // Work backwards to avoid index issues when inserting
+            for col_idx in (0..width).rev() {
+                // Get the column data
+                let column = color_matrix.get_column(col_idx).to_vec();
+                // Insert a duplicate right after the current column
+                color_matrix.add_column((col_idx + 1) as usize, &column);
+            }
+        }
         
         // Add border around the image
         let border_ink = self.palette.get_border();
