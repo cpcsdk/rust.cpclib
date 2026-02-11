@@ -821,8 +821,12 @@ impl Interpreter {
         
         // If we need to print "Ready" and cursor, ensure we're at the start of a line
         if print_ready {
-            // Move to beginning of line if not already there
-            if self.cursor.x != 1 {
+            // Get window bounds (or use full screen if no window defined)
+            let (width, height) = self.screen.resolution();
+            let (left, _, _, _) = self.window.unwrap_or((1, width, 1, height));
+            
+            // Move to beginning of window line if not already there
+            if self.cursor.x != left {
                 self.interpret_command(&CharCommand::CarriageReturn)?;
                 self.interpret_command(&CharCommand::CursorDown)?;
             }
@@ -879,7 +883,13 @@ impl Interpreter {
                 }
             },
             CharCommand::Locate(x, y) if self.enable_vdu => {
-                self.locate_cursor(*x as _, *y as _);
+                // Locate coordinates are relative to the window
+                let (width, height) = self.screen.resolution();
+                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                // Convert window-relative (1-based) to absolute screen coordinates
+                let abs_x = left + (*x as u16) - 1;
+                let abs_y = top + (*y as u16) - 1;
+                self.locate_cursor(abs_x, abs_y);
             },
             CharCommand::Cls if self.enable_vdu => {
                 let (width, height) = self.screen.resolution();
@@ -1004,7 +1014,8 @@ impl Interpreter {
             },
             CharCommand::Window(left, right, top, bottom) if self.enable_vdu => {
                 self.window = Some((*left as u16, *right as u16, *top as u16, *bottom as u16));
-                self.locate_cursor(*left as u16, *top as u16);
+                // Position cursor at top-left corner of window
+                self.locate_cursor(*left as u16 - 1, *top as u16 - 1);
             },
             CharCommand::Transparency(p) if self.enable_vdu => {
                 // Handle transparency mode

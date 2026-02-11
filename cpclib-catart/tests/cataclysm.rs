@@ -333,3 +333,9 @@ fn cataclysm_464good() {
 fn cataclysm_force1() {
     test_cataclysm_triplet("FORCE1", 1);
 }
+
+#[test]
+fn cataclysm_crtc() {
+    test_cataclysm_triplet("CRTC", 1);
+}
+
