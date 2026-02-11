@@ -395,9 +395,6 @@ impl TrackInformation {
         let data_rate: DataRate = buffer[0x12].into();
         let recording_mode = buffer[0x13].into();
 
-        println!(
-            "Track {track_number} Head {head_number} sector_size {sector_size} nb_sectors {number_of_sectors} gap length {gap3_length:x}, filler_byte {filler_byte:x}"
-        );
         let sector_information_list =
             SectorInformationList::from_buffer(&buffer[0x18..], number_of_sectors);
 
@@ -970,12 +967,7 @@ impl ExtendedDsk {
         assert!(buffer.len() >= 256);
         let disc_info = DiscInformation::from_buffer(&buffer[..256]);
 
-        println!(
-            "Disc info {:?} / total {} / nb_tracks {}",
-            disc_info,
-            disc_info.total_tracks_lengths(),
-            disc_info.number_of_distinct_tracks()
-        );
+
         let track_list =
             TrackInformationList::from_buffer_and_disc_information(&buffer[256..], &disc_info);
 

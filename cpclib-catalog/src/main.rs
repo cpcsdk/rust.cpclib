@@ -17,10 +17,10 @@ use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
 use clap::{Parser, Subcommand};
-use cpclib_catalog::{catalog_to_basic_listing, display_catalog_using_catart};
+use cpclib_catalog::{catalog_to_basic_listing, catalog_to_catart_commands, display_catalog_using_catart};
 use cpclib_catart::char_command::CharCommandList;
 use cpclib_catart::entry::{Catalog, CatalogType, PrintableEntryFileName, ScreenMode, SerialCatalogBuilder, UnifiedCatalog};
-use cpclib_catart::interpret::{Interpreter, Mode, screens_are_equal, display_screen_diff};
+use cpclib_catart::interpret::{Interpreter, Locale, Mode, screens_are_equal, display_screen_diff};
 use cpclib_basic::BasicProgram;
 use cpclib_common::clap::value_parser;
 use cpclib_common::num::Num;
@@ -42,13 +42,70 @@ struct Args {
     command: Commands,
 }
 
+/// Shared rendering options for PNG output and locale selection
+#[derive(Parser, Debug)]
+struct RenderOptions {
+    /// Optional PNG file to save pixel-accurate rendering of the catart
+    #[arg(long = "png")]
+    png_output: Option<String>,
+    
+    /// Font locale to use when generating PNG (english, french, spanish, german, danish). Defaults to english.
+    #[arg(long = "locale", default_value = "english", alias="language")]
+    locale: String,
+    
+    /// Screen mode to use for catart rendering (0, 1, 2, or 3). Defaults to mode 1.
+    #[arg(long = "mode", default_value = "1")]
+    mode: u8,
+}
+
+impl RenderOptions {
+    /// Parse the locale string into a Locale enum, with error handling
+    fn parse_locale(&self) -> Locale {
+        match self.locale.to_lowercase().as_str() {
+            "english" | "en" => Locale::English,
+            "french" | "fr" => Locale::French,
+            "spanish" | "es" => Locale::Spanish,
+            "german" | "de" => Locale::German,
+            "danish" | "da" => Locale::Danish,
+            _ => {
+                error!("Unknown locale '{}', defaulting to English. Valid options: english, french, spanish, german, danish", self.locale);
+                Locale::English
+            }
+        }
+    }
+    
+    /// Parse the mode value into a Mode enum, with validation
+    fn parse_mode(&self) -> Mode {
+        match self.mode {
+            0 => Mode::Mode0,
+            1 => Mode::Mode1,
+            2 => Mode::Mode2,
+            _ => {
+                error!("Invalid mode '{}', defaulting to Mode 1. Valid options: 0, 1, 2", self.mode);
+                Mode::Mode1
+            }
+        }
+    }
+    
+    /// Get PNG output path as Option<&str>
+    fn png_path(&self) -> Option<&str> {
+        self.png_output.as_deref()
+    }
+}
+
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Display the catalog using CatArt rendering (sorted alphabetically)
-    Cat,
+    Cat {
+        #[command(flatten)]
+        render_options: RenderOptions,
+    },
     
     /// Display the catalog using CatArt rendering (directory order, unsorted)
-    Dir,
+    Dir {
+        #[command(flatten)]
+        render_options: RenderOptions,
+    },
     
     /// List the content of the catalog ONLY for files having no control chars
     List,
@@ -62,6 +119,16 @@ enum Commands {
         basic_file: Option<String>,
         
         /// Output file (defaults to catart.dsk). Use .dsk or .hfe extension for disc images, otherwise creates raw binary
+        #[arg(short = 'o', long = "output")]
+        output_file: Option<String>,
+        
+        #[command(flatten)]
+        render_options: RenderOptions,
+    },
+
+    /// Extract the Basic listing from the input dsk. If no --output is provided the listing is printed on standard output otherwhise it is saved in the provided filname
+    Decode {
+        /// Optional output file for the decoded BASIC listing. If not provided, prints to stdout.
         #[arg(short = 'o', long = "output")]
         output_file: Option<String>,
     },
@@ -253,7 +320,7 @@ fn save_catalog_output(catalog_bytes: &[u8], output_path: &str) -> std::io::Resu
 }
 
 /// Main build process: BASIC file -> catalog output
-fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::io::Result<()> {
+fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_output: Option<&str>, locale: Locale) -> std::io::Result<()> {
     info!("Building catart from BASIC file: {}", basic_filename);
     
     // Step 1: Parse the BASIC file
@@ -266,23 +333,36 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
     println!("{}\n", basic_program);
     
     // Step 2: Convert to CharCommandList
-    let char_commands = basic_to_char_commands(&basic_program)?;
-    info!("Converted to {} char commands", char_commands.len());
+    let generated_char_commands = basic_to_char_commands(&basic_program)?;
+    info!("Converted to {} char commands", generated_char_commands.len());
     
     // Step 2.5: Interpret original catart to get Screen
-    let mut original_interpreter = Interpreter::new(Mode::Mode1);
-    original_interpreter.interpret(&char_commands, false)
+    let mut original_interpreter = Interpreter::new_with_locale(Mode::Mode1, locale);
+    original_interpreter.interpret(&generated_char_commands, false)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to interpret original commands: {}", e)))?;
     let original_screen = original_interpreter.screen().clone();
     let original_palette = original_interpreter.palette().clone();
     
+    // Step 2.5.1: Save PNG if requested
+    if let Some(png_path) = png_output {
+        info!("Generating pixel-accurate PNG: {}", png_path);
+        let color_matrix = original_interpreter.memory_screen()
+            .to_color_matrix_with_border(8)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to convert screen to image"))?;
+        
+        let img = color_matrix.as_image();
+        img.save(png_path)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to save PNG: {}", e)))?;
+        info!("Successfully saved PNG to: {}", png_path);
+    }
+    
     // Step 2.6: Display original catart output
     info!("Original catart output:");
     println!("=== Original CatArt Output ===");
-    println!("{}\n", char_commands);
+    println!("{}\n", generated_char_commands);
     
     // Step 3: Build UnifiedCatalog using SerialCatalogBuilder
-    let unified_catalog = build_unified_catalog(&char_commands);
+    let unified_catalog = build_unified_catalog(&generated_char_commands);
     info!("Built unified catalog with {} entries", unified_catalog.entries.len());
     
     // Step 4: Convert to Catalog using existing infrastructure
@@ -342,8 +422,8 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
     info!("\n=== BYTE-LEVEL ROUND-TRIP COMPARISON ===");
     
     // Convert to bytes using the CharCommandList method (merges consecutive strings/chars)
-    let original_bytes = char_commands.bytes();
-    info!("Original: {} commands -> {} bytes", char_commands.len(), original_bytes.len());
+    let original_bytes = generated_char_commands.bytes();
+    info!("Original: {} commands -> {} bytes", generated_char_commands.len(), original_bytes.len());
     
     let reconstructed_bytes = reconstructed_commands.bytes();
     info!("Reconstructed: {} commands -> {} bytes", reconstructed_commands.len(), reconstructed_bytes.len());
@@ -393,16 +473,16 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
     
     // Step 7.4: Direct command comparison
     info!("\n=== DIRECT COMMAND COMPARISON ===");
-    info!("  Original: {} commands", char_commands.len());
+    info!("  Original: {} commands", generated_char_commands.len());
     info!("  Reconstructed: {} commands", reconstructed_commands.len());
     
     // Find differences in commands
     let mut diff_count = 0;
-    let cmd_min_len = char_commands.len().min(reconstructed_commands.len());
+    let cmd_min_len = generated_char_commands.len().min(reconstructed_commands.len());
     
     for idx in 0..cmd_min_len {
-        if char_commands[idx] != reconstructed_commands[idx] {
-            info!("  [{}] CMD-DIFF: {:?} != {:?}", idx, char_commands[idx], reconstructed_commands[idx]);
+        if generated_char_commands[idx] != reconstructed_commands[idx] {
+            info!("  [{}] CMD-DIFF: {:?} != {:?}", idx, generated_char_commands[idx], reconstructed_commands[idx]);
             diff_count += 1;
             if diff_count >= 30 {
                 info!("  ... (showing first 30 command differences)");
@@ -411,24 +491,24 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
         }
     }
     
-    if diff_count == 0 && char_commands.len() == reconstructed_commands.len() {
+    if diff_count == 0 && generated_char_commands.len() == reconstructed_commands.len() {
         info!("  ✓ All commands match perfectly!");
     }
     
-    if char_commands.len() != reconstructed_commands.len() {
+    if generated_char_commands.len() != reconstructed_commands.len() {
         info!("  Command length mismatch! Original has {} extra, Reconstructed has {} extra",
-            char_commands.len().saturating_sub(reconstructed_commands.len()),
-            reconstructed_commands.len().saturating_sub(char_commands.len()));
+            generated_char_commands.len().saturating_sub(reconstructed_commands.len()),
+            reconstructed_commands.len().saturating_sub(generated_char_commands.len()));
         
         // Show what's missing or extra
-        if reconstructed_commands.len() > char_commands.len() {
+        if reconstructed_commands.len() > generated_char_commands.len() {
             info!("  Extra commands in reconstructed (showing first 10):");
-            for (idx, cmd) in reconstructed_commands.iter().skip(char_commands.len()).take(10).enumerate() {
-                info!("    [{}]: {:?}", char_commands.len() + idx, cmd);
+            for (idx, cmd) in reconstructed_commands.iter().skip(generated_char_commands.len()).take(10).enumerate() {
+                info!("    [{}]: {:?}", generated_char_commands.len() + idx, cmd);
             }
         } else {
             info!("  Missing commands from reconstructed (showing first 10):");
-            for (idx, cmd) in char_commands.iter().skip(reconstructed_commands.len()).take(10).enumerate() {
+            for (idx, cmd) in generated_char_commands.iter().skip(reconstructed_commands.len()).take(10).enumerate() {
                 info!("    [{}]: {:?}", reconstructed_commands.len() + idx, cmd);
             }
         }
@@ -469,11 +549,11 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
             match basic_to_char_commands(&reconstructed_basic) {
                 Ok(reconstructed_basic_commands) => {
                     // Get bytes from both original and reconstructed BASIC programs
-                    let original_basic_bytes = char_commands.bytes();
+                    let original_basic_bytes = generated_char_commands.bytes();
                     let reconstructed_basic_bytes = reconstructed_basic_commands.bytes();
                     
                     info!("Original BASIC program: {} commands -> {} bytes", 
-                        char_commands.len(), original_basic_bytes.len());
+                        generated_char_commands.len(), original_basic_bytes.len());
                     info!("Reconstructed BASIC program: {} commands -> {} bytes", 
                         reconstructed_basic_commands.len(), reconstructed_basic_bytes.len());
                     
@@ -530,6 +610,42 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str) -> std::
     Ok(())
 }
 
+fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> std::io::Result<()> {
+    info!("Decoding catart from: {}", catalog_fname);
+    
+    // For CatArt display, we need the raw catalog bytes
+    let catalog_bytes: Vec<u8> = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
+        // Get raw bytes directly from disc
+        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
+        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
+        manager.catalog_slice()
+    } else {
+        // For catalog files, re-read the raw content
+        let mut file = File::open(catalog_fname)?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)?;
+        content
+    };
+
+    match catalog_to_basic_listing(&catalog_bytes, CatalogType::Cat) {
+        Ok(basic_program) => {
+             if let Some(path) = output_path {
+                 let mut file = File::create(path)?;
+                 write!(file, "{}", basic_program)?;
+                 info!("Saved BASIC listing to {}", path);
+            } else {
+                 println!("{}", basic_program);
+            }
+        },
+        Err(e) => {
+            error!("Failed to decode catalog: {}", e);
+             return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+        }
+    }
+    
+    Ok(())
+}
+
 
 #[allow(clippy::too_many_lines)]
 fn main() -> std::io::Result<()> {
@@ -549,27 +665,30 @@ fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Commands::Build { basic_file, output_file } => {
+        Commands::Build { basic_file, output_file, render_options } => {
             // Use Build's basic_file if provided, otherwise fall back to top-level input_file
             let input = basic_file.or(args.input_file).ok_or_else(|| {
                 std::io::Error::new(std::io::ErrorKind::InvalidInput, "BASIC file must be provided either as top-level argument or with the build command")
             })?;
             let output = output_file.as_deref().unwrap_or("catart.dsk");
-            build_catart_from_basic(&input, output)
+            
+            build_catart_from_basic(&input, output, render_options.png_path(), render_options.parse_locale())
         }
         
-        Commands::Cat => {
+        Commands::Cat { render_options } => {
             let input_file = args.input_file.ok_or_else(|| {
                 std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'cat' command")
             })?;
-            display_catalog_command(&input_file, CatalogType::Cat)
+            
+            display_catalog_command(&input_file, CatalogType::Cat, render_options.png_path(), render_options.parse_locale(), render_options.parse_mode())
         }
         
-        Commands::Dir => {
+        Commands::Dir { render_options } => {
             let input_file = args.input_file.ok_or_else(|| {
                 std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'dir' command")
             })?;
-            display_catalog_command(&input_file, CatalogType::Dir)
+            
+            display_catalog_command(&input_file, CatalogType::Dir, render_options.png_path(), render_options.parse_locale(), render_options.parse_mode())
         }
         
         Commands::List => {
@@ -584,6 +703,13 @@ fn main() -> std::io::Result<()> {
                 std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'listall' command")
             })?;
             list_catalog_command(&input_file, true)
+        }
+
+        Commands::Decode { output_file } => {
+            let input_file = args.input_file.ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'decode' command")
+            })?;
+            decode_catalog_command(&input_file, output_file.as_deref())
         }
         
         Commands::Modify {
@@ -618,7 +744,7 @@ fn main() -> std::io::Result<()> {
     }
 }
 
-fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> std::io::Result<()> {
+fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType, png_output: Option<&str>, locale: Locale, mode: Mode) -> std::io::Result<()> {
     // For CatArt display, we need the raw catalog bytes
     let catalog_bytes: Vec<u8> = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
         // Get raw bytes directly from disc
@@ -633,9 +759,34 @@ fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> st
         content
     };
 
+    // Display the catalog
     if let Err(e) = display_catalog_using_catart(&catalog_bytes, catalog_type) {
         error!("Failed to display catalog using CatArt: {}", e);
         return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+    }
+    
+    // Generate PNG if requested
+    if let Some(png_path) = png_output {
+        info!("Generating pixel-accurate PNG: {}", png_path);
+        
+        // Convert catalog bytes to CharCommandList
+        let commands = catalog_to_catart_commands(&catalog_bytes, catalog_type)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to extract catalog commands: {}", e)))?;
+        
+        // Interpret the commands with the selected locale and mode
+        let mut interpreter = Interpreter::new_with_locale(mode, locale);
+        interpreter.interpret(&commands, false)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to interpret commands: {}", e)))?;
+        
+        // Generate PNG
+        let color_matrix = interpreter.memory_screen()
+            .to_color_matrix_with_border(8)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to convert screen to image"))?;
+        
+        let img = color_matrix.as_image();
+        img.save(png_path)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to save PNG: {}", e)))?;
+        info!("Successfully saved PNG to: {}", png_path);
     }
     
     Ok(())
