@@ -1,0 +1,12 @@
+10 MODE 2
+11 INK 0,0
+12 INK 1,26
+13 BORDER 0
+20 LOCATE 20,10
+21 PRINT "The GPA Presents"
+30 LOCATE 30,13
+40 PRINT "another intriging tool"
+50 LOCATE 40,16
+60 PRINT "CATaclysme"
+70 LOCATE 20,23
+80 PRINT "Type : RUN CATACLYS to start the toolbox."

@@ -23,5 +23,8 @@ paste.workspace = true
 delegate.workspace = true
 owo-colors.workspace = true
 
+[dev-dependencies]
+image.workspace = true
+
 [build-dependencies]
 built.workspace = true

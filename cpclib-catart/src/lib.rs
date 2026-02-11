@@ -16,6 +16,9 @@ pub mod entry;
 pub mod error;
 pub mod interpret;
 
+// Re-export commonly used types
+pub use interpret::Locale;
+
 pub mod built_info {
     //! Build-time information
     include!(concat!(env!("OUT_DIR"), "/built.rs"));

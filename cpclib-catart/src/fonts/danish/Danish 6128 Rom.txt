@@ -1,0 +1,23 @@
+I had finaly dump my Amstrad 6128 Danish firmware rom.
+
+
+The Files
+----------
+
+1. 6128-BasicDanish.rom
+1. 6128-LowerDanish.rom
+2. 6130-LowerDanish z key Corrected.rom
+
+
+
+6128-LowerDanish.rom is the original rom but for some reason the z key
+was moved one pixel up, therefore i had made a rom where i had corrected
+the faulty z and name it "6130-LowerDanish z key Corrected.rom"
+
+
+I don't think there are any difference between the Danish and English basic ROM
+
+
+Johnny Olsen
+
+

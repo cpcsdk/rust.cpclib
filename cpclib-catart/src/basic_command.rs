@@ -34,6 +34,12 @@ impl PrintArgument {
     }
 }
 
+impl From<u8> for PrintArgument {
+    fn from(char_code: u8) -> Self {
+        PrintArgument::ChrDollar(char_code)
+    }
+}
+
 impl From<&[u8]> for PrintArgument {
     fn from(data: &[u8]) -> Self {
         PrintArgument::String(data.to_vec())
@@ -361,9 +367,7 @@ impl BasicCommand {
                     ink2.unwrap_or(*ink1)
                 )]))
             },
-            BasicCommand::Locate(col, row) => {
-                Ok(CharCommandList::from(vec![CharCommand::Locate(*col, *row)]))
-            },
+
             BasicCommand::Mode(mode) => Ok(CharCommandList::from(vec![CharCommand::Mode(*mode)])),
             BasicCommand::Paper(pen) => Ok(CharCommandList::from(vec![CharCommand::Paper(*pen)])),
             BasicCommand::Pen(pen) => Ok(CharCommandList::from(vec![CharCommand::Pen(*pen)])),
@@ -384,10 +388,13 @@ impl BasicCommand {
                     *char_code, *r1, *r2, *r3, *r4, *r5, *r6, *r7, *r8
                 )]))
             },
-            BasicCommand::Window(left, right, top, bottom) => {
+            BasicCommand::Window(left, right, top, bottom) => { // XXX -1 because of the offset between BASIC and CPC char command
                 Ok(CharCommandList::from(vec![CharCommand::Window(
                     *left, *right, *top, *bottom
                 )]))
+            },
+            BasicCommand::Locate(col, row) => { // -1 because of the offset between BASIC and CPC char command
+                Ok(CharCommandList::from(vec![CharCommand::Locate(*col-1, *row-1)]))
             },
         }
     }

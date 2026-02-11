@@ -143,6 +143,10 @@ impl Catalog {
 
 
     pub fn extract_basic_from_sequential_catart(&self) -> BasicProgram {
+        let kind = CatalogType::Cat; // TODO handle this properly
+        let mode = ScreenMode::Mode1; // TODO handle this properly
+        let num_columns = 2; // kind.num_columns(mode);
+
         let unified = UnifiedCatalog::from(self.clone());
         let grid = EntriesGrid::from_entries(
             unified.entries().map(Cow::Borrowed).collect(),
@@ -198,6 +202,7 @@ impl Catalog {
             entries.push(current_file);
         };
 
+
         let basic_str = entries.into_iter()
             .map(|cmds| cmds.into_iter().map(|c| c.to_basic_string()).join(":"))
             .enumerate()
@@ -229,10 +234,8 @@ impl Catalog {
     }
 
     pub fn add(&mut self, entry: PrintableEntry) -> Result<(), String> {
-        if self.entries.len() >= 64 {
-            return Err("Catalog is full, cannot add more entries".to_string());
-        }
-        let available = self.entries.iter_mut().find(|e| e.is_empty()).unwrap(); 
+        let available = self.entries.iter_mut().find(|e| e.is_empty())
+            .ok_or_else(|| "Catalog is full, cannot add more entries".to_string())?;
         
         *available = entry;
         Ok(())
@@ -657,12 +660,14 @@ impl<'cat> EntriesGrid<'cat> {
     }
 
     pub fn commands(&self) -> CharCommandList {
+        self.commands_with_params(true)
+    }
+
+    pub fn commands_with_params(&self, show_headers: bool) -> CharCommandList {
         let mut available: u16 = 178;
         let mut commands = CharCommandList::new();
 
-        const SHOW_COMMAND: bool = true;
-
-        if SHOW_COMMAND {
+        if show_headers {
             // Inject the command that requires catalog display
             let cmd = match self.order {
                 CatalogType::Cat => CharCommandList::from(b"CAT"),
@@ -670,11 +675,12 @@ impl<'cat> EntriesGrid<'cat> {
             };
             commands.extend(cmd);
             commands.add_newlines(1);
-        }
+        
 
-        commands.add_newlines(1);
-        commands.extend(CharCommandList::from(format!("Drive {}: user {}", self.drive, self.user).as_bytes()));
-        commands.add_newlines(2);
+            commands.add_newlines(1);
+            commands.extend(CharCommandList::from(format!("Drive {}: user {}", self.drive, self.user).as_bytes()));
+            commands.add_newlines(2);
+        }
 
         // Iterate over rows using the new grid structure
         for row_entries in self.rows() {
@@ -693,9 +699,11 @@ impl<'cat> EntriesGrid<'cat> {
             }
         }
 
-        commands.add_newlines(2);
-        commands.extend(CharCommandList::from(format!("{:>3}K free", available).as_bytes()));
-        commands.add_newlines(2);
+        if show_headers {
+            commands.add_newlines(2);
+            commands.extend(CharCommandList::from(format!("{:>3}K free", available).as_bytes()));
+            //commands.add_newlines(2);
+        }
 
         commands.into()
     }
@@ -1120,6 +1128,7 @@ impl UnifiedCatalog {
     pub fn entries_by_mode_and_order(&self, mode: ScreenMode, order: CatalogType) -> EntriesGrid {
         let entries = self.sorted_entries(order);
 
+        // TODO compute that with order or mode
         let num_columns = match mode {
             ScreenMode::Mode0 => 1,
             ScreenMode::Mode1 => 2,
@@ -1158,8 +1167,17 @@ impl UnifiedCatalog {
         mode: ScreenMode,
         order: CatalogType
     ) -> CharCommandList {
+        self.commands_by_mode_and_order_with_params(mode, order, true)
+    }
+        
+    pub fn commands_by_mode_and_order_with_params(
+        &self,
+        mode: ScreenMode,
+        order: CatalogType,
+        show_headers: bool
+    ) -> CharCommandList {
         let grid = self.entries_by_mode_and_order(mode, order);
-        let commands = grid.commands();
+        let commands = grid.commands_with_params(show_headers);
         let bytes = commands.iter().flat_map(|cmd| cmd.bytes().into_iter()).collect::<Vec<_>>(); // ensure we merge commands
         CharCommandList::from_bytes(&bytes)
 
@@ -2177,17 +2195,17 @@ mod tests {
         let mut entries = Vec::new();
         for _ in 0..64 {
             entries.push(PrintableEntryFileName {
-                f1: 0,
-                f2: 0,
-                f3: 0,
-                f4: 0,
-                f5: 0,
-                f6: 0,
-                f7: 0,
-                f8: 0,
-                e1: 0,
-                e2: 0,
-                e3: 0
+                f1: 0xe5,
+                f2: 0xe5,
+                f3: 0xe5,
+                f4: 0xe5,
+                f5: 0xe5,
+                f6: 0xe5,
+                f7: 0xe5,
+                f8: 0xe5,
+                e1: 0xe5,
+                e2: 0xe5,
+                e3: 0xe5
             });
         }
 
@@ -2419,6 +2437,7 @@ mod tests {
                 _  => 3,
             };
 
+            // XXX it currently fails but maybe it should not
             assert_eq!(
                 unified_catalog.entries().count(),
                 expected_nb_entries,
@@ -2429,7 +2448,7 @@ mod tests {
 
             // Reconstruct commands from catalog
             let reconstructed_commands =
-                unified_catalog.commands_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+                unified_catalog.commands_by_mode_and_order_with_params(ScreenMode::Mode1, CatalogType::Cat, false);
 
             // Interpret both to get screen output
             let mut original_interpreter = interpret::Interpreter::new(Mode::Mode1.into());
@@ -2474,7 +2493,7 @@ mod tests {
 
         // Reconstruct commands from catalog
         let reconstructed_commands =
-            catalog.commands_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+            catalog.commands_by_mode_and_order_with_params(ScreenMode::Mode1, CatalogType::Cat, false);
         // Interpret both to get screen output
         let mut original_interpreter = interpret::Interpreter::new_6128();
         let original_result = original_interpreter.interpret(&commands, true);
@@ -2488,8 +2507,6 @@ mod tests {
 
         eprint!("Original Screen:\n{}", original_interpreter.to_string());
         eprint!("Reconstructed Screen:\n{}", reconstructed_interpreter.to_string());
-
-        panic!("Debugging");
 
         // They should produce the same screen output
         assert_eq!(
@@ -2512,9 +2529,13 @@ mod tests {
         let reconstructed_commands =
             unified_catalog.commands_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
 
-        // Both should be empty
+        // input commands are empty
         assert_eq!(commands.as_slice().len(), 0);
-        assert_eq!(reconstructed_commands.as_slice().len(), 0);
+        // reconstructed catalog is empty because there are no files
+        assert_eq!(unified_catalog.entries.len(), 0);
+        
+        // reconstructed commands are NOT empty because of headers
+        assert!(reconstructed_commands.as_slice().len() > 0);
     }
 
     #[test]
@@ -2783,8 +2804,6 @@ mod tests {
         interpreter.interpret(&display_commands, true).unwrap();
         let screen_output = interpreter.to_string();
         println!("Screen Output:\n{}", screen_output);
-
-        panic!("Debugging");
 
 
         /*
