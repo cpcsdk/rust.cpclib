@@ -17,7 +17,8 @@ use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
 use clap::{Parser, Subcommand};
-use cpclib_catalog::{catalog_to_basic_listing, catalog_to_catart_commands, display_catalog_using_catart};
+use cpclib_catalog::{catalog_extraction, catalog_to_basic_listing};
+use cpclib_catart::basic_command::BasicCommandList;
 use cpclib_catart::char_command::CharCommandList;
 use cpclib_catart::entry::{Catalog, CatalogType, PrintableEntryFileName, ScreenMode, SerialCatalogBuilder, UnifiedCatalog};
 use cpclib_catart::interpret::{Interpreter, Locale, Mode, screens_are_equal, display_screen_diff};
@@ -174,6 +175,17 @@ enum Commands {
         /// Force the size of the entry
         #[arg(long)]
         size: Option<String>,
+    },
+    
+    /// Debug catart by displaying each entry's bytes and corresponding BASIC commands
+    Debug {
+        /// Display entries in catalog (sorted alphabetically) order
+        #[arg(long)]
+        cat: bool,
+        
+        /// Display entries in directory (unsorted) order
+        #[arg(long)]
+        dir: bool,
     },
 }
 
@@ -524,10 +536,27 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_outp
     if screens_are_equal(&original_screen, &reconstructed_screen) {
         info!("✓ Screens are identical!");
         println!("\n=== Reconstructed CatArt Output ===");
-        match display_catalog_using_catart(&catalog_bytes, CatalogType::Cat) {
-            Ok(_) => {},
+        // Use the same code path as test_crtc_catart
+        match catalog_to_basic_listing(&catalog_bytes, CatalogType::Cat) {
+            Ok(catalog_basic_program) => {
+                match BasicCommandList::try_from(&catalog_basic_program) {
+                    Ok(catalog_basic_command_list) => {
+                        match catalog_basic_command_list.to_char_commands() {
+                            Ok(commands) => {
+                                println!("{}", commands.to_string());
+                            }
+                            Err(e) => {
+                                eprintln!("Warning: Failed to convert BASIC to CharCommandList: {:?}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to convert BASIC program to BasicCommandList: {:?}", e);
+                    }
+                }
+            }
             Err(e) => {
-                eprintln!("Warning: Failed to display catart: {}", e);
+                eprintln!("Warning: Failed to extract BASIC program from catalog: {}", e);
             }
         }
     } else {
@@ -741,6 +770,29 @@ fn main() -> std::io::Result<()> {
                 size,
             )
         }
+        
+        Commands::Debug { cat, dir } => {
+            let input_file = args.input_file.ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'debug' command")
+            })?;
+            
+            // Determine catalog type based on flags
+            let catalog_type = if cat && !dir {
+                CatalogType::Cat
+            } else if dir && !cat {
+                CatalogType::Dir
+            } else if !cat && !dir {
+                // Default: no sorting (directory order)
+                CatalogType::Dir
+            } else {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Cannot specify both --cat and --dir"
+                ));
+            };
+            
+            debug_catalog_command(&input_file, catalog_type)
+        }
     }
 }
 
@@ -759,19 +811,22 @@ fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType, png_o
         content
     };
 
-    // Display the catalog
-    if let Err(e) = display_catalog_using_catart(&catalog_bytes, catalog_type) {
-        error!("Failed to display catalog using CatArt: {}", e);
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
-    }
+    // Use the same code path as test_crtc_catart: catalog → BasicProgram → BasicCommandList → CharCommandList
+    let catalog_basic_program = catalog_to_basic_listing(&catalog_bytes, catalog_type)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to extract BASIC program from catalog: {}", e)))?;
+    
+    let catalog_basic_command_list = BasicCommandList::try_from(&catalog_basic_program)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Unable to get cat art commands from catalog BASIC: {:?}", e)))?;
+    
+    let commands = catalog_basic_command_list.to_char_commands()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to convert BASIC to CharCommandList: {:?}", e)))?;
+    
+    // Display the catalog in terminal
+    println!("{}", commands.to_string());
     
     // Generate PNG if requested
     if let Some(png_path) = png_output {
         info!("Generating pixel-accurate PNG: {}", png_path);
-        
-        // Convert catalog bytes to CharCommandList
-        let commands = catalog_to_catart_commands(&catalog_bytes, catalog_type)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to extract catalog commands: {}", e)))?;
         
         // Interpret the commands with the selected locale and mode
         let mut interpreter = Interpreter::new_with_locale(mode, locale);
@@ -810,6 +865,132 @@ fn list_catalog_command(catalog_fname: &str, listall: bool) -> std::io::Result<(
     };
     
     list_catalog_entries(&catalog_content, listall);
+    Ok(())
+}
+
+fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> std::io::Result<()> {
+    // Get raw catalog bytes from either binary file or disc
+    let catalog_bytes: Vec<u8> = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
+        // Get raw bytes directly from disc
+        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
+        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
+        manager.catalog_slice()
+    } else {
+        // For catalog files, re-read the raw content
+        let mut file = File::open(catalog_fname)?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)?;
+        content
+    };
+    
+    // Validate catalog size
+    if catalog_bytes.len() != 64 * 32 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Invalid catalog size: expected {} bytes, got {}", 64 * 32, catalog_bytes.len())
+        ));
+    }
+    
+    println!("=== CatArt Debug Information ===\n");
+    
+    // Extract catalog and convert to UnifiedCatalog
+    let catalog = catalog_extraction(&catalog_bytes, catalog_type)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let unified_catalog = UnifiedCatalog::from(catalog);
+    
+    // Get sorted entries using EntriesGrid delegation
+    let sorted_entries = unified_catalog.sorted_entries(catalog_type);
+    
+    // Create a map from fname to original index for reference
+    let mut fname_to_idx: std::collections::HashMap<[u8; 11], usize> = std::collections::HashMap::new();
+    for chunk_idx in 0..64 {
+        let offset = chunk_idx * 32;
+        let entry_bytes = &catalog_bytes[offset..offset + 32];
+        let fname_bytes = [
+            entry_bytes[1], entry_bytes[2], entry_bytes[3], entry_bytes[4],
+            entry_bytes[5], entry_bytes[6], entry_bytes[7], entry_bytes[8],
+            entry_bytes[9], entry_bytes[10], entry_bytes[11]
+        ];
+        fname_to_idx.insert(fname_bytes, chunk_idx);
+    }
+    
+    // Process each entry in sorted order
+    for entry in sorted_entries {
+        let fname = entry.fname();
+        
+        // Skip empty entries
+        if fname.is_empty() {
+            // Find original index for empty entry
+            let fname_bytes = [
+                fname.f1, fname.f2, fname.f3, fname.f4,
+                fname.f5, fname.f6, fname.f7, fname.f8,
+                fname.e1, fname.e2, fname.e3
+            ];
+            if let Some(&original_idx) = fname_to_idx.get(&fname_bytes) {
+                println!("Entry {}: (empty)", original_idx);
+            }
+            continue;
+        }
+        
+        // Find original index for this entry
+        let fname_bytes = [
+            fname.f1, fname.f2, fname.f3, fname.f4,
+            fname.f5, fname.f6, fname.f7, fname.f8,
+            fname.e1, fname.e2, fname.e3
+        ];
+        let original_idx = fname_to_idx.get(&fname_bytes).copied().unwrap_or(0);
+        
+        // Get the 8+3 bytes (without dot) as hexadecimal
+        let bytes_without_dot: Vec<String> = fname.filename()
+            .iter()
+            .chain(fname.extension().iter())
+            .map(|b| format!("{:02X}", b))
+            .collect();
+        
+        // Get the 8+1+3 bytes (with dot) for BASIC conversion
+        let all_bytes = fname.all_generated_bytes();
+        
+        // Convert bytes to printable string (replace non-printable with dots)
+        let printable_bytes: String = all_bytes
+            .iter()
+            .map(|&b| {
+                if b >= 32 && b <= 126 {
+                    b as char
+                } else {
+                    '.'
+                }
+            })
+            .collect();
+        
+        // Print entry information
+        println!("Entry {:<2}: {}", original_idx, bytes_without_dot.join(" "));
+        println!("          {}", printable_bytes);
+        
+        // Check if entry is hidden/system
+        if fname.is_hidden() || fname.is_system() {
+            let mut flags = Vec::new();
+            if fname.is_hidden() {
+                flags.push("hidden");
+            }
+            if fname.is_system() {
+                flags.push("system");
+            }
+            println!("  Status: ({})", flags.join(", "));
+        } else {
+            // Get the commands that represent this entry
+            let commands = fname.commands();
+            
+            // Show CharCommands (more explicit than BASIC)
+            println!("          {}", commands.to_command_string());
+            
+            // Convert commands to BASIC string
+            let basic_string = commands.to_basic_string();
+            
+            println!("          {}", basic_string);
+        }
+        println!();
+    }
+    
     Ok(())
 }
 
