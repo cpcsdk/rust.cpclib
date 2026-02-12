@@ -184,18 +184,10 @@ impl Catalog {
                             current_file.push(CharCommand::String(current_string.clone()));
                             current_string.clear();
                         }
-                        // Transform coordinates from catalog storage to CharCommand convention:
-                        // - Window: catalog stores 0-based → add 1 for CharCommand (1-based)
-                        // - Locate: catalog stores 1-based (BASIC level) → subtract 1 for CharCommand (0-based)
-                        let c = match c {
-                            CharCommand::Window(left, right, top, bottom) => {
-                                CharCommand::Window(left + 1, right + 1, top + 1, bottom + 1)
-                            },
-                            CharCommand::Locate(x, y) => {
-                                CharCommand::Locate(x.saturating_sub(1), y.saturating_sub(1))
-                            },
-                            _ => c
-                        };
+                        // CharCommands already have correct coordinates from parsing:
+                        // - Window: already 1-based (from CharCommand::from_bytes)
+                        // - Locate: already 0-based internal (from CharCommand::from_bytes)
+                        // No transformation needed here.
                         current_file.push(c);
                     }
                 }
