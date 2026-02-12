@@ -107,7 +107,7 @@ impl CharCommandList {
                                 params[6], params[7], params[8]
                             )
                         },
-                        SUB => CharCommand::Window(params[0], params[1], params[2], params[3]), 
+                        SUB => CharCommand::Window(params[0]+1, params[1]+1, params[2]+1, params[3]+1),  // catalog stores 0-based, CharCommand expects 1-based
                         FS => CharCommand::Ink(params[0], params[1], params[2]),
                         GS => CharCommand::Border(params[0], params[1]),
                         US => CharCommand::Locate(params[0], params[1]) ,
