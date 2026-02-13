@@ -287,6 +287,73 @@ fn build_unified_catalog(commands: &CharCommandList) -> UnifiedCatalog {
 
 
 
+/// Check if the filename is a disc image (DSK or HFE)
+fn is_disc_image(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.ends_with(".dsk") || lower.ends_with(".hfe")
+}
+
+/// Load raw catalog bytes from a disc image or binary file
+fn load_catalog_bytes(catalog_fname: &str) -> std::io::Result<Vec<u8>> {
+    if is_disc_image(catalog_fname) {
+        let disc = open_disc(catalog_fname, true)
+            .map_err(|e| std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Unable to read the disc file: {:?}", e)
+            ))?;
+        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
+        Ok(manager.catalog_slice())
+    } else {
+        let mut file = File::open(catalog_fname)?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)?;
+        Ok(content)
+    }
+}
+
+/// Load catalog entries (AmsdosEntries) from a disc image or binary file
+fn load_catalog_entries(catalog_fname: &str) -> std::io::Result<AmsdosEntries> {
+    if is_disc_image(catalog_fname) {
+        error!(
+            "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
+        );
+        let disc = open_disc(catalog_fname, true)
+            .map_err(|e| std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Unable to read the disc file: {:?}", e)
+            ))?;
+        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
+        Ok(manager.catalog())
+    } else {
+        let mut file = File::open(catalog_fname)?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)?;
+        Ok(AmsdosEntries::from_slice(&content))
+    }
+}
+
+/// Generate PNG from interpreter screen
+fn save_interpreter_png(interpreter: &Interpreter, png_path: &str) -> std::io::Result<()> {
+    info!("Generating pixel-accurate PNG: {}", png_path);
+    
+    let color_matrix = interpreter.memory_screen()
+        .to_color_matrix_with_border(8)
+        .ok_or_else(|| std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Failed to convert screen to image"
+        ))?;
+    
+    let img = color_matrix.as_image();
+    img.save(png_path)
+        .map_err(|e| std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to save PNG: {}", e)
+        ))?;
+    
+    info!("Successfully saved PNG to: {}", png_path);
+    Ok(())
+}
+
 /// Save catalog as binary file or disc image
 fn save_catalog_output(catalog_bytes: &[u8], output_path: &str) -> std::io::Result<()> {
     let output_lower = output_path.to_lowercase();
@@ -357,15 +424,7 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_outp
     
     // Step 2.5.1: Save PNG if requested
     if let Some(png_path) = png_output {
-        info!("Generating pixel-accurate PNG: {}", png_path);
-        let color_matrix = original_interpreter.memory_screen()
-            .to_color_matrix_with_border(8)
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to convert screen to image"))?;
-        
-        let img = color_matrix.as_image();
-        img.save(png_path)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to save PNG: {}", e)))?;
-        info!("Successfully saved PNG to: {}", png_path);
+        save_interpreter_png(&original_interpreter, png_path)?;
     }
     
     // Step 2.6: Display original catart output
@@ -642,19 +701,8 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_outp
 fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> std::io::Result<()> {
     info!("Decoding catart from: {}", catalog_fname);
     
-    // For CatArt display, we need the raw catalog bytes
-    let catalog_bytes: Vec<u8> = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
-        // Get raw bytes directly from disc
-        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
-        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-        manager.catalog_slice()
-    } else {
-        // For catalog files, re-read the raw content
-        let mut file = File::open(catalog_fname)?;
-        let mut content = Vec::new();
-        file.read_to_end(&mut content)?;
-        content
-    };
+    // Load the raw catalog bytes
+    let catalog_bytes = load_catalog_bytes(catalog_fname)?;
 
     match catalog_to_basic_listing(&catalog_bytes, CatalogType::Cat) {
         Ok(basic_program) => {
@@ -797,19 +845,8 @@ fn main() -> std::io::Result<()> {
 }
 
 fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType, png_output: Option<&str>, locale: Locale, mode: Mode) -> std::io::Result<()> {
-    // For CatArt display, we need the raw catalog bytes
-    let catalog_bytes: Vec<u8> = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
-        // Get raw bytes directly from disc
-        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
-        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-        manager.catalog_slice()
-    } else {
-        // For catalog files, re-read the raw content
-        let mut file = File::open(catalog_fname)?;
-        let mut content = Vec::new();
-        file.read_to_end(&mut content)?;
-        content
-    };
+    // Load the raw catalog bytes
+    let catalog_bytes = load_catalog_bytes(catalog_fname)?;
 
     // Use the same code path as test_crtc_catart: catalog → BasicProgram → BasicCommandList → CharCommandList
     let catalog_basic_program = catalog_to_basic_listing(&catalog_bytes, catalog_type)
@@ -826,62 +863,27 @@ fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType, png_o
     
     // Generate PNG if requested
     if let Some(png_path) = png_output {
-        info!("Generating pixel-accurate PNG: {}", png_path);
-        
         // Interpret the commands with the selected locale and mode
         let mut interpreter = Interpreter::new_with_locale(mode, locale);
         interpreter.interpret(&commands, false)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to interpret commands: {}", e)))?;
         
-        // Generate PNG
-        let color_matrix = interpreter.memory_screen()
-            .to_color_matrix_with_border(8)
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to convert screen to image"))?;
-        
-        let img = color_matrix.as_image();
-        img.save(png_path)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to save PNG: {}", e)))?;
-        info!("Successfully saved PNG to: {}", png_path);
+        save_interpreter_png(&interpreter, png_path)?;
     }
     
     Ok(())
 }
 
 fn list_catalog_command(catalog_fname: &str, listall: bool) -> std::io::Result<()> {
-    let catalog_content: AmsdosEntries = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
-        // Read a dsk or hfe file
-        error!(
-            "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
-        );
-        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
-        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-        manager.catalog()
-    } else {
-        // Read a catalog file
-        let mut file = File::open(catalog_fname)?;
-        let mut content = Vec::new();
-        file.read_to_end(&mut content)?;
-        AmsdosEntries::from_slice(&content)
-    };
+    let catalog_content = load_catalog_entries(catalog_fname)?;
     
     list_catalog_entries(&catalog_content, listall);
     Ok(())
 }
 
 fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> std::io::Result<()> {
-    // Get raw catalog bytes from either binary file or disc
-    let catalog_bytes: Vec<u8> = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
-        // Get raw bytes directly from disc
-        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
-        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-        manager.catalog_slice()
-    } else {
-        // For catalog files, re-read the raw content
-        let mut file = File::open(catalog_fname)?;
-        let mut content = Vec::new();
-        file.read_to_end(&mut content)?;
-        content
-    };
+    // Load the raw catalog bytes
+    let catalog_bytes = load_catalog_bytes(catalog_fname)?;
     
     // Validate catalog size
     if catalog_bytes.len() != 64 * 32 {
@@ -1008,21 +1010,7 @@ fn modify_entry_command(
     numpage: Option<String>,
     size: Option<String>,
 ) -> std::io::Result<()> {
-    let mut catalog_content: AmsdosEntries = if catalog_fname.to_lowercase().contains("dsk") || catalog_fname.to_lowercase().contains("hfe") {
-        // Read a dsk or hfe file
-        error!(
-            "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
-        );
-        let disc = open_disc(catalog_fname, true).expect("unable to read the disc file");
-        let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
-        manager.catalog()
-    } else {
-        // Read a catalog file
-        let mut file = File::open(catalog_fname)?;
-        let mut content = Vec::new();
-        file.read_to_end(&mut content)?;
-        AmsdosEntries::from_slice(&content)
-    };
+    let mut catalog_content = load_catalog_entries(catalog_fname)?;
     
     info!("Manipulate entry {idx}");
 

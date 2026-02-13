@@ -21,6 +21,10 @@ clap = { workspace = true, features = ["derive"] }
 log.workspace = true
 simple_logger.workspace = true
 
+[dev-dependencies]
+cpclib-image.workspace = true
+image.workspace = true
+
 [[bin]]
 name = "catalog"
 path = "src/main.rs"

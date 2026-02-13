@@ -130,6 +130,11 @@ impl CharCommandList {
         }
     }
 
+    pub fn to_command_string(&self) -> String {
+        self.0.iter()
+            .map(|cmd| cmd.to_command_string())
+            .join(":")
+    }
 
     pub fn to_basic_string(&self) -> String {
         self.0.iter()
@@ -309,6 +314,55 @@ impl Debug for CharCommand {
 }
 
 impl CharCommand {
+    pub fn to_command_string(&self) -> String {
+    
+        match self {
+            CharCommand::Nop => "NOP".to_string(),
+            CharCommand::PrintSymbol(c) => format!("PRINT CHR$({})", c),
+            CharCommand::CursorOff => "CURSOR OFF".to_string(),
+            CharCommand::CursorOn => "CURSOR ON".to_string(),
+            CharCommand::Mode(m) => format!("MODE {}", m),
+            CharCommand::SendGraphics(m) => format!("SendGraphics({})", m),
+            CharCommand::EnableVdu => "ENABLE".to_string(),
+            CharCommand::Beep => "BEEP".to_string(),
+            CharCommand::CursorLeft => "LEFT".to_string(),
+            CharCommand::CursorRight => "RIGHT".to_string(),
+            CharCommand::CursorDown => "DOWN".to_string(),
+            CharCommand::CursorUp => "UP".to_string(),
+            CharCommand::Cls => "CLS".to_string(),
+            CharCommand::CarriageReturn => "CR".to_string(),
+            CharCommand::Paper(p) => format!("PAPER {}", p),
+            CharCommand::Pen(p) => format!("PEN {}", p),
+            CharCommand::Delete => "DELETE".to_string(),
+            CharCommand::ClearLineEnd => "CLEAR LINE END".to_string(),
+            CharCommand::ClearLineStart => "CLEAR LINE START".to_string(),
+            CharCommand::ClearScreenEnd => "CLEAR SCREEN END".to_string(),
+            CharCommand::ClearScreenStart => "CLEAR SCREEN START".to_string(),
+            CharCommand::DisableVdu => "DISABLE".to_string(),
+            CharCommand::Transparency(p) => format!("TRANSPARENCY {}", p),
+            CharCommand::GraphicsInkMode(p) => format!("GFX INK MODE {}", p),
+            CharCommand::ExchangePenAndPaper => "EXCHANGE PEN AND PAPER".to_string(),
+            CharCommand::Symbol(c, r1, r2, r3, r4, r5, r6, r7, r8) =>
+                format!("Symbol({}, {}, {}, {}, {}, {}, {}, {}, {})", c, r1, r2, r3, r4, r5, r6, r7, r8),
+            CharCommand::Window(l, r, t, b) =>
+                format!("WINDOW {}, {}, {}, {}", l+1, r+1, t+1, b+1),
+            CharCommand::Esc => "ESC".to_string(),
+            CharCommand::Ink(p, i1, i2) => format!("INK {}, {}, {}", p, i1, i2),
+            CharCommand::Border(i1, i2) => format!("BORDER {}, {}", i1, i2),
+            CharCommand::Home => "HOME".to_string(),
+            CharCommand::Locate(c, l) => format!("LOCATE {}, {}", c+1, l+1),
+            CharCommand::Char(c) => {
+                if c.is_ascii_graphic() {
+                    format!("PRINT '{}'", *c as char)
+                }
+                else {
+                    format!("PRINT CHR$({})", c)
+                }
+            },
+            CharCommand::String(s) => format!("PRINT \"{}\"", String::from_utf8_lossy(&s)),
+        }
+    }       
+
     pub fn len(&self) -> usize {
         self.bytes().len()
     }
