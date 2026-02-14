@@ -107,10 +107,10 @@ impl CharCommandList {
                                 params[6], params[7], params[8]
                             )
                         },
-                        SUB => CharCommand::Window(params[0]+1, params[1]+1, params[2]+1, params[3]+1),  // catalog stores 0-based, CharCommand expects 1-based
+                        SUB => CharCommand::Window(params[0], params[1], params[2], params[3]),
                         FS => CharCommand::Ink(params[0], params[1], params[2]),
                         GS => CharCommand::Border(params[0], params[1]),
-                        US => CharCommand::Locate(params[0], params[1]),  // catalog stores 1-based BASIC, CharCommand stores 1-based (pass through)
+                        US => CharCommand::Locate(params[0].saturating_sub(1), params[1].saturating_sub(1)),  // catalog 1-based → CharCommand 0-based
                         _ => panic!("Logic error in from_bytes for char {}", data[idx])
                     };
                     list.push(cmd);
@@ -422,12 +422,12 @@ impl CharCommand {
             CharCommand::Symbol(c, r1, r2, r3, r4, r5, r6, r7, r8) => {
                 smallvec![EM, *c, *r1, *r2, *r3, *r4, *r5, *r6, *r7, *r8]
             },
-            CharCommand::Window(l, r, t, b) => smallvec![SUB, l.saturating_sub(1), r.saturating_sub(1), t.saturating_sub(1), b.saturating_sub(1)],  // CharCommand 1-based → catalog 0-based
+            CharCommand::Window(l, r, t, b) => smallvec![SUB, *l, *r, *t, *b],
             CharCommand::Esc => smallvec![ESC],
             CharCommand::Ink(p, i1, i2) => smallvec![FS, *p, *i1, *i2],
             CharCommand::Border(i1, i2) => smallvec![GS, *i1, *i2],
             CharCommand::Home => smallvec![RS],
-            CharCommand::Locate(c, l) => smallvec![US, *c, *l],  // CharCommand 1-based → catalog 1-based (pass through) 
+            CharCommand::Locate(c, l) => smallvec![US, c+1, l+1],  // CharCommand 0-based → catalog 1-based
             CharCommand::Char(c) => smallvec![*c],
             CharCommand::String(s) => s.iter().cloned().collect()
         }
@@ -547,8 +547,8 @@ impl CharCommand {
             CharCommand::Pen(p) => Some(BasicCommand::Pen(*p)),
             CharCommand::Ink(p, i1, i2) => Some(BasicCommand::Ink(*p, *i1, Some(*i2))),
             CharCommand::Border(i1, i2) => Some(BasicCommand::Border(*i1, Some(*i2))),
-            CharCommand::Locate(c, l) => Some(BasicCommand::Locate(*c, *l)),
-            CharCommand::Window(a, b, c, d) => Some(BasicCommand::Window(*a, *b, *c, *d)),
+            CharCommand::Locate(c, l) => Some(BasicCommand::Locate(*c+1, *l+1)), // CharCommand 0-based → BASIC 1-based
+            CharCommand::Window(a, b, c, d) => Some(BasicCommand::Window(*a+1, *b+1, *c+1, *d+1)), // CharCommand 0-based → BASIC 1-based
             CharCommand::PrintSymbol(c) => Some(BasicCommand::PrintString(PrintArgument::from(*c), PrintTerminator::None)),
             CharCommand::Char(c) => Some(BasicCommand::PrintString(PrintArgument::from(*c), PrintTerminator::None)),
             CharCommand::String(s) => Some(BasicCommand::PrintString(PrintArgument::from(s.clone()), PrintTerminator::None)),

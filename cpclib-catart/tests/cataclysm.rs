@@ -178,19 +178,31 @@ fn generate_comparison_png(
         .unwrap_or_else(|e| panic!("Failed to load original PNG {}: {}", original_png_path.display(), e));
     
     // Calculate border size in pixels (after any pixel doubling)
-    // The mode determines if pixels are doubled
+    // The mode determines character dimensions and if pixels are doubled
     let mode = memory_screen.mode();
+    
+    // Character dimensions in pixels for each mode (before doubling)
+    let (char_width_pixels, char_height_pixels) = match mode {
+        cpclib_image::image::Mode::Zero | cpclib_image::image::Mode::Three => (8, 8),   // Mode 0: 16 columns
+        cpclib_image::image::Mode::One => (4, 8),    // Mode 1: 20 columns
+        cpclib_image::image::Mode::Two => (2, 8),    // Mode 2: 40 columns
+    };
+    
+    // Pixel multiplier for the doubling that happens in to_color_matrix_with_border
     let pixel_multiplier = match mode {
-        cpclib_image::image::Mode::One => 2,  // Mode 1: pixels are doubled
+        cpclib_image::image::Mode::One => 2,  // Mode 1: both dimensions are doubled
         _ => 1,
     };
     
-    // Use the maximum border as uniform border (since to_color_matrix_with_border adds uniform borders)
-    let max_border_chars = BORDER_TOP_CHARS.max(BORDER_LEFT_CHARS).max(BORDER_RIGHT_CHARS).max(BORDER_BOTTOM_CHARS);
-    let border_pixels = max_border_chars * CHAR_HEIGHT_PIXELS * pixel_multiplier;
+    // Use the maximum border for each dimension
+    let max_h_border_chars = BORDER_LEFT_CHARS.max(BORDER_RIGHT_CHARS);
+    let max_v_border_chars = BORDER_TOP_CHARS.max(BORDER_BOTTOM_CHARS);
+    
+    let border_horizontal = max_h_border_chars * char_width_pixels * pixel_multiplier;
+    let border_vertical = max_v_border_chars * char_height_pixels * pixel_multiplier;
     
     // Convert memory screen to PNG (actual result)
-    let color_matrix = memory_screen.to_color_matrix_with_border(border_pixels)
+    let color_matrix = memory_screen.to_color_matrix_with_border(border_horizontal, border_vertical)
         .expect("Failed to convert memory screen to color matrix");
     
     // Convert color matrix to image
@@ -238,7 +250,7 @@ fn generate_comparison_png(
     }
     
     // Convert difference screen to PNG (use same border size as the actual screen)
-    let diff_color_matrix = diff_screen.to_color_matrix_with_border(border_pixels)
+    let diff_color_matrix = diff_screen.to_color_matrix_with_border(border_horizontal, border_vertical)
         .expect("Failed to convert diff screen to color matrix");
     
     let diff_width = diff_color_matrix.width() as u32;

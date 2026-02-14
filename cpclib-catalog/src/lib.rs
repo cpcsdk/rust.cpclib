@@ -42,11 +42,7 @@ pub fn catalog_extraction(catalog_bytes: &[u8], catalog_type: CatalogType) -> Re
         
         let status = entry_bytes[0];
         
-        // Skip erased entries (0xE5), disc labels (32), and timestamps (33)
-		// XXX should we keep them ?
-        if status == 0xE5 {
-            continue;
-        }
+        // empty entries are kept as-is (status 0xE5)
         
         // Create PrintableEntryFileName directly from raw CP/M bytes
         // Bytes 1-8: filename (f1-f8), Bytes 9-11: extension (e1-e3)
@@ -101,8 +97,12 @@ pub fn catalog_to_catart_commands(catalog_bytes: &[u8], catalog_type: CatalogTyp
 
 
 pub fn catalog_to_basic_listing(catalog_bytes: &[u8], catalog_type: CatalogType) -> Result<BasicProgram, String> {
+	catalog_to_basic_listing_with_headers(catalog_bytes, catalog_type, true)
+}
+
+pub fn catalog_to_basic_listing_with_headers(catalog_bytes: &[u8], catalog_type: CatalogType, show_headers: bool) -> Result<BasicProgram, String> {
 	let catalog = catalog_extraction(catalog_bytes, catalog_type)?;
 
-	// Get BASIC listing
-	Ok(catalog.extract_basic_from_sequential_catart())
+	// Get BASIC listing with optional headers
+	Ok(catalog.extract_basic_from_sequential_catart(show_headers))
 }

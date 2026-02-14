@@ -44,6 +44,45 @@ pub fn memory_addr_to_char_coords(addr: usize, mode: Mode) -> (u16, u16) {
     ((char_col + 1) as u16, (char_row + 1) as u16)
 }
 
+/// Get all memory addresses for a character cell (given 1-indexed coordinates)
+/// Each character spans 8 scanlines in interleaved memory layout
+fn char_coords_to_memory_addrs(char_x: u16, char_y: u16, mode: Mode) -> Vec<usize> {
+    const LINE_INTERLEAVE: usize = 0x800;  // Distance between pixel lines
+    const BYTES_PER_CHAR_ROW: usize = 80;  // Bytes per character row
+    
+    let char_row = (char_y - 1) as usize;  // Convert to 0-indexed
+    let char_col = (char_x - 1) as usize;  // Convert to 0-indexed
+    
+    let bytes_per_char = match mode {
+        Mode::Zero => 4,  // Mode 0: 4 bytes per char
+        Mode::One => 2,   // Mode 1: 2 bytes per char
+        Mode::Two => 1,   // Mode 2: 1 byte per char
+        _ => 2,
+    };
+    
+    let mut addresses = Vec::new();
+    
+    // Each character spans 8 scanlines (pixel lines)
+    for scanline in 0..8 {
+        // Base address for this scanline's block
+        let block_base = scanline * LINE_INTERLEAVE;
+        // Offset within block for this character row
+        let row_offset = char_row * BYTES_PER_CHAR_ROW;
+        // Offset within row for this character column
+        let col_offset = char_col * bytes_per_char;
+        
+        // Add all bytes for this character at this scanline
+        for byte in 0..bytes_per_char {
+            let addr = block_base + row_offset + col_offset + byte;
+            if addr < 16384 {
+                addresses.push(addr);
+            }
+        }
+    }
+    
+    addresses
+}
+
 /// Compare two memory screens and generate a visual comparison if different
 /// Returns true if screens are identical, false otherwise
 pub fn compare_screens_with_visual_diff(
@@ -114,21 +153,32 @@ fn generate_comparison_png_from_interpreters(
     let mode = memory_screen1.mode();
     
     // Calculate border size in pixels (after any pixel doubling)
+    // Character dimensions in pixels for each mode (before doubling)
+    let (char_width_pixels, char_height_pixels) = match mode {
+        Mode::Zero => (8, 8),   // Mode 0: 16 columns
+        Mode::One => (4, 8),    // Mode 1: 20 columns
+        Mode::Two => (2, 8),    // Mode 2: 40 columns
+        _ => (4, 8),
+    };
+    
     let pixel_multiplier = match mode {
         Mode::One => 2,  // Mode 1: pixels are doubled
         _ => 1,
     };
     
-    let max_border_chars = BORDER_TOP_CHARS.max(BORDER_LEFT_CHARS).max(BORDER_RIGHT_CHARS).max(BORDER_BOTTOM_CHARS);
-    let border_pixels = max_border_chars * CHAR_HEIGHT_PIXELS * pixel_multiplier;
+    let max_h_border_chars = BORDER_LEFT_CHARS.max(BORDER_RIGHT_CHARS);
+    let max_v_border_chars = BORDER_TOP_CHARS.max(BORDER_BOTTOM_CHARS);
+    
+    let border_horizontal = max_h_border_chars * char_width_pixels * pixel_multiplier;
+    let border_vertical = max_v_border_chars * char_height_pixels * pixel_multiplier;
     
     // Convert first interpreter screen to PNG
-    let color_matrix1 = memory_screen1.to_color_matrix_with_border(border_pixels)
+    let color_matrix1 = memory_screen1.to_color_matrix_with_border(border_horizontal, border_vertical)
         .expect("Failed to convert screen1 to color matrix");
     let img1 = color_matrix_to_rgb_image(&color_matrix1);
     
     // Convert second interpreter screen to PNG
-    let color_matrix2 = memory_screen2.to_color_matrix_with_border(border_pixels)
+    let color_matrix2 = memory_screen2.to_color_matrix_with_border(border_horizontal, border_vertical)
         .expect("Failed to convert screen2 to color matrix");
     let img2 = color_matrix_to_rgb_image(&color_matrix2);
     
@@ -163,7 +213,7 @@ fn generate_comparison_png_from_interpreters(
     }
     
     // Convert difference screen to PNG
-    let diff_color_matrix = diff_screen.to_color_matrix_with_border(border_pixels)
+    let diff_color_matrix = diff_screen.to_color_matrix_with_border(border_horizontal, border_vertical)
         .expect("Failed to convert diff screen to color matrix");
     let diff_img = color_matrix_to_rgb_image(&diff_color_matrix);
     
@@ -256,38 +306,48 @@ pub fn compare_memory_with_visual_diff(
     
     println!("✗ Found {} screen differences", differences.len());
     
-    let border_size = BORDER_TOP_CHARS * CHAR_HEIGHT_PIXELS;
-    
     //Use the actual screen memory (second parameter) to generate the actual image
     let mode = Mode::One;
     
+    // Calculate border sizes based on Mode 1 character dimensions
+    let char_width_pixels = 4;  // Mode 1
+    let char_height_pixels = 8;
+    let pixel_multiplier = 2;  // Mode 1 doubles pixels
+    
+    let max_h_border_chars = BORDER_LEFT_CHARS.max(BORDER_RIGHT_CHARS);
+    let max_v_border_chars = BORDER_TOP_CHARS.max(BORDER_BOTTOM_CHARS);
+    
+    let border_horizontal = max_h_border_chars * char_width_pixels * pixel_multiplier;
+    let border_vertical = max_v_border_chars * char_height_pixels * pixel_multiplier;
+    
     // Create image from actual memory by building a basic screen and rendering it
-    let img_actual = memory_to_image(actual, &mode, &palette, border_size);
-    let img_expected = memory_to_image(expected, &mode, &palette, border_size);
+    let img_actual = memory_to_image(actual, &mode, &palette, border_horizontal, border_vertical);
+    let img_expected = memory_to_image(expected, &mode, &palette, border_horizontal, border_vertical);
     
-    // Create difference visualization
-    let width = 40u16;  // Mode1 resolution
-    let height = 25u16;
-    let mut diff_screen = BasicMemoryScreen::new(mode, palette.clone());
+    // Create difference visualization - start with blank memory and mark ONLY differences
+    let mut diff_memory = [0u8; 16384];  // Blank screen
     
-    // Fill with black background
-    for y in 1..=height {
-        for x in 1..=width {
-            diff_screen.write_char(b' ', x, y, Pen::Pen1, Pen::Pen0, false);
-        }
-    }
-    
-    // Mark differences with 0x8F character (red marker)
+    // Collect unique character cells that have differences
+    use std::collections::HashSet;
+    let mut diff_chars: HashSet<(u16, u16)> = HashSet::new();
     for &(addr, _byte1, _byte2) in &differences {
-        let coords = memory_addr_to_char_coords(addr, Mode::One);
-        if coords.0 >= 1 && coords.0 <= width && coords.1 >= 1 && coords.1 <= height {
-            diff_screen.write_char(0x8F, coords.0, coords.1, Pen::Pen1, Pen::Pen0, false);
+        let coords = memory_addr_to_char_coords(addr, mode);
+        diff_chars.insert(coords);
+    }
+    
+    // Mark ALL bytes for each affected character cell (complete 8×8 blocks)
+    // In Mode 1, 0xFF creates bright white pixels to highlight differences
+    for &(char_x, char_y) in &diff_chars {
+        let addresses = char_coords_to_memory_addrs(char_x, char_y, mode);
+        for addr in addresses {
+            if addr < diff_memory.len() {
+                diff_memory[addr] = 0xFF;  // Bright pixels for entire character block
+            }
         }
     }
     
-    let diff_color_matrix = diff_screen.to_color_matrix_with_border(border_size)
-        .expect("Failed to convert diff screen to color matrix");
-    let diff_img = color_matrix_to_rgb_image(&diff_color_matrix);
+    // Convert diff memory to image using the same method as expected/actual
+    let diff_img = memory_to_image(&diff_memory, &mode, &palette, border_horizontal, border_vertical);
     
     // Create three-way comparison image
     let separator = 20;
@@ -347,7 +407,7 @@ pub fn compare_memory_with_visual_diff(
 }
 
 /// Helper to convert raw CPC memory to an RGB image with border
-fn memory_to_image(memory: &[u8; 16384], mode: &Mode, palette: &Palette, border_size: usize) -> RgbImage {
+fn memory_to_image(memory: &[u8; 16384], mode: &Mode, palette: &Palette, border_horizontal: usize, border_vertical: usize) -> RgbImage {
     // Create a color matrix from the raw memory using cpclib_image
     // For Mode1: 40 characters wide, 2 bytes per character = 80 bytes per line
     let bytes_width = match mode {
@@ -361,27 +421,26 @@ fn memory_to_image(memory: &[u8; 16384], mode: &Mode, palette: &Palette, border_
     let mut color_matrix = ColorMatrix::from_screen(memory, bytes_width, *mode, palette);
     
     // Add borders to match typical CPC screen appearance
-    if border_size > 0 {
+    if border_horizontal > 0 || border_vertical > 0 {
         let border_ink = *palette.get(&Pen::Pen0);  // Border uses pen 0 color
         let width = color_matrix.width() as usize;
-        let height = color_matrix.height() as usize;
         
         // Add top border lines
-        for _ in 0..border_size {
+        for _ in 0..border_vertical {
             let border_line = vec![border_ink; width];
             color_matrix.add_line(0, &border_line);
         }
         
         // Add bottom border lines
-        let new_height = color_matrix.height() as usize;
-        for _ in 0..border_size {
+        for _ in 0..border_vertical {
             let border_line = vec![border_ink; width];
-            color_matrix.add_line(new_height, &border_line);
+            let current_height = color_matrix.height() as usize;
+            color_matrix.add_line(current_height, &border_line);
         }
         
         // Add left and right border columns
         let final_height = color_matrix.height() as usize;
-        for _ in 0..border_size {
+        for _ in 0..border_horizontal {
             // Add left border column
             let border_column = vec![border_ink; final_height];
             color_matrix.add_column(0, &border_column);

@@ -16,7 +16,7 @@ fn test_char_command_from_chr18_and_chr20() {
 
 #[test]
 fn test_interpreter_clear_line_end() {
-    let mut interp = Interpreter::new(Mode::Mode1);
+    let mut interp = Interpreter::builder().screen_mode(Mode::Mode1.into()).as_6128(false).locale(cpclib_catart::Locale::English).build();
     // Write some text, then ClearLineEnd
     interp
         .interpret(
@@ -44,7 +44,7 @@ fn test_interpreter_clear_line_end() {
 
 #[test]
 fn test_interpreter_clear_screen_end() {
-    let mut interp = Interpreter::new(Mode::Mode1);
+    let mut interp = Interpreter::builder().screen_mode(Mode::Mode1.into()).as_6128(false).locale(cpclib_catart::Locale::English).build();
     // Write some text, then ClearScreenEnd
     interp
         .interpret(

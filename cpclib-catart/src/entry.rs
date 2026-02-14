@@ -12,7 +12,7 @@ use owo_colors::colors::css::ForestGreen;
 
 use crate::basic_chars::{ACK, BS, CAN, DC1, DLE, EOT, ETB, NAK, SI, SO, SUB, US};
 use crate::char_command::{CharCommand, CharCommandList};
-use crate::{entry, interpret};
+use crate::{Locale, entry, interpret};
 
 
 /*
@@ -142,7 +142,7 @@ impl Catalog {
     }
 
 
-    pub fn extract_basic_from_sequential_catart(&self) -> BasicProgram {
+    pub fn extract_basic_from_sequential_catart(&self, show_headers: bool) -> BasicProgram {
         let kind = CatalogType::Cat; // TODO handle this properly
         let mode = ScreenMode::Mode1; // TODO handle this properly
         let num_columns = 2; // kind.num_columns(mode);
@@ -2455,11 +2455,11 @@ mod tests {
                 unified_catalog.commands_by_mode_and_order_with_params(ScreenMode::Mode1, CatalogType::Cat, false);
 
             // Interpret both to get screen output
-            let mut original_interpreter = interpret::Interpreter::new(Mode::Mode1.into());
+            let mut original_interpreter = interpret::Interpreter::new_6128();
             original_interpreter.interpret(&commands, false).unwrap();
             let original_screen = original_interpreter.to_string();
 
-            let mut reconstructed_interpreter = interpret::Interpreter::new(Mode::Mode1.into());
+            let mut reconstructed_interpreter = interpret::Interpreter::new_6128();
             reconstructed_interpreter
                 .interpret(&reconstructed_commands, false)
                 .unwrap();

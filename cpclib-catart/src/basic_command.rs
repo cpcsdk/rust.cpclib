@@ -390,7 +390,7 @@ impl BasicCommand {
             },
             BasicCommand::Window(left, right, top, bottom) => { // XXX -1 because of the offset between BASIC and CPC char command
                 Ok(CharCommandList::from(vec![CharCommand::Window(
-                    *left, *right, *top, *bottom
+                    *left-1, *right-1, *top-1, *bottom-1
                 )]))
             },
             BasicCommand::Locate(col, row) => { // -1 because of the offset between BASIC and CPC char command

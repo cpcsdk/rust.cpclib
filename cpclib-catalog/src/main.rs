@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 
 /// Catalog tool manipulator.
 use clap::{Parser, Subcommand};
-use cpclib_catalog::{catalog_extraction, catalog_to_basic_listing};
+use cpclib_catalog::{catalog_extraction, catalog_to_basic_listing, catalog_to_catart_commands};
 use cpclib_catart::basic_command::BasicCommandList;
 use cpclib_catart::char_command::CharCommandList;
 use cpclib_catart::entry::{Catalog, CatalogType, PrintableEntryFileName, ScreenMode, SerialCatalogBuilder, UnifiedCatalog};
@@ -250,33 +250,27 @@ fn list_catalog_entries(catalog_content: &AmsdosEntries, listall: bool) {
 }
 
 /// Parse a BASIC program from a file
-fn parse_basic_file(basic_filename: &str) -> std::io::Result<BasicProgram> {
-    let mut file = File::open(basic_filename)?;
+fn parse_basic_file(basic_filename: &str) -> Result<BasicProgram, String> {
+    let mut file = File::open(basic_filename).map_err(|e| e.to_string())?;
     let mut content = String::new();
-    file.read_to_string(&mut content)?;
+    file.read_to_string(&mut content).map_err(|e| e.to_string())?;
     
     BasicProgram::parse(&content)
-        .map_err(|e| std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Failed to parse BASIC program: {:?}", e)
+        .map_err(|e| format!("Failed to parse BASIC program: {:?}", e
         ))
 }
 
 /// Convert BASIC program to CharCommandList
-fn basic_to_char_commands(basic: &BasicProgram) -> std::io::Result<CharCommandList> {
+fn basic_to_char_commands(basic: &BasicProgram) -> Result<CharCommandList, String> {
     use cpclib_catart::basic_command::BasicCommandList;
     
     let basic_commands = BasicCommandList::try_from(basic)
-        .map_err(|e| std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Failed to convert BASIC to commands: {:?}", e)
-        ))?;
+                .map_err(|e|format!("Failed to convert BASIC to commands: {:?}", e))?;
+           
     
     basic_commands.to_char_commands()
-        .map_err(|e| std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Failed to convert commands to char commands: {:?}", e)
-        ))
+        .map_err(|e|format!("Failed to convert commands to char commands: {:?}", e)
+        )
 }
 
 /// Build UnifiedCatalog using SerialCatalogBuilder
@@ -294,68 +288,57 @@ fn is_disc_image(filename: &str) -> bool {
 }
 
 /// Load raw catalog bytes from a disc image or binary file
-fn load_catalog_bytes(catalog_fname: &str) -> std::io::Result<Vec<u8>> {
+fn load_catalog_bytes(catalog_fname: &str) -> Result<Vec<u8>, String> {
     if is_disc_image(catalog_fname) {
         let disc = open_disc(catalog_fname, true)
-            .map_err(|e| std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Unable to read the disc file: {:?}", e)
-            ))?;
+            .map_err(|e| format!("Unable to read the disc file: {:?}", e))?;
         let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
         Ok(manager.catalog_slice())
     } else {
-        let mut file = File::open(catalog_fname)?;
+        let mut file = File::open(catalog_fname).map_err(|e| e.to_string())?;
         let mut content = Vec::new();
-        file.read_to_end(&mut content)?;
+        file.read_to_end(&mut content).map_err(|e| e.to_string())?;
         Ok(content)
     }
 }
 
 /// Load catalog entries (AmsdosEntries) from a disc image or binary file
-fn load_catalog_entries(catalog_fname: &str) -> std::io::Result<AmsdosEntries> {
+fn load_catalog_entries(catalog_fname: &str) -> Result<AmsdosEntries, String> {
     if is_disc_image(catalog_fname) {
         error!(
             "Current implementation is buggy when using dsks. Please extract first the catalog with another tool for real results."
         );
         let disc = open_disc(catalog_fname, true)
-            .map_err(|e| std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Unable to read the disc file: {:?}", e)
-            ))?;
+            .map_err(|e| format!("Unable to read the disc file: {:?}", e))?;
         let manager = AmsdosManagerNonMut::new_from_disc(&disc, Head::A);
         Ok(manager.catalog())
     } else {
-        let mut file = File::open(catalog_fname)?;
+        let mut file = File::open(catalog_fname).map_err(|e| e.to_string())?;
         let mut content = Vec::new();
-        file.read_to_end(&mut content)?;
+        file.read_to_end(&mut content).map_err(|e| e.to_string())?;
         Ok(AmsdosEntries::from_slice(&content))
     }
 }
 
 /// Generate PNG from interpreter screen
-fn save_interpreter_png(interpreter: &Interpreter, png_path: &str) -> std::io::Result<()> {
+fn save_interpreter_png(interpreter: &Interpreter, png_path: &str) -> Result<(), String> {
     info!("Generating pixel-accurate PNG: {}", png_path);
     
     let color_matrix = interpreter.memory_screen()
-        .to_color_matrix_with_border(8)
-        .ok_or_else(|| std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        .to_color_matrix()
+        .ok_or_else(|| 
             "Failed to convert screen to image"
-        ))?;
+        .to_string())?;
     
     let img = color_matrix.as_image();
-    img.save(png_path)
-        .map_err(|e| std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to save PNG: {}", e)
-        ))?;
+    img.save(png_path).map_err(|e| format!("Failed to save PNG: {}", e))?;
     
     info!("Successfully saved PNG to: {}", png_path);
     Ok(())
 }
 
 /// Save catalog as binary file or disc image
-fn save_catalog_output(catalog_bytes: &[u8], output_path: &str) -> std::io::Result<()> {
+fn save_catalog_output(catalog_bytes: &[u8], output_path: &str) -> Result<(), String> {
     let output_lower = output_path.to_lowercase();
     
     if output_lower.ends_with(".dsk") || output_lower.ends_with(".hfe") {
@@ -375,23 +358,18 @@ fn save_catalog_output(catalog_bytes: &[u8], output_path: &str) -> std::io::Resu
             
             let sector_id = 0xC1 + sector_idx as u8;
             disc.sector_write_bytes(head, track_id, sector_id, chunk)
-                .map_err(|e| std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to write sector: {:?}", e)
-                ))?;
+                .map_err(|e| format!("Failed to write sector: {:?}", e))?;
         }
         
         disc.save(output_path)
-            .map_err(|e| std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to save disc: {:?}", e)
-            ))?;
+            .map_err(|e| format!("Failed to save disc: {:?}", e))?;
+
         
         info!("Created disc image: {}", output_path);
     } else {
         // Save as raw binary file
-        let mut file = File::create(output_path)?;
-        file.write_all(catalog_bytes)?;
+        let mut file = File::create(output_path).map_err(|e| e.to_string())?;
+        file.write_all(catalog_bytes).map_err(|e| e.to_string())?;
         info!("Created binary catalog: {}", output_path);
     }
     
@@ -399,7 +377,7 @@ fn save_catalog_output(catalog_bytes: &[u8], output_path: &str) -> std::io::Resu
 }
 
 /// Main build process: BASIC file -> catalog output
-fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_output: Option<&str>, locale: Locale) -> std::io::Result<()> {
+fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_output: Option<&str>, locale: Locale) -> Result<(), String> {
     info!("Building catart from BASIC file: {}", basic_filename);
     
     // Step 1: Parse the BASIC file
@@ -416,9 +394,11 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_outp
     info!("Converted to {} char commands", generated_char_commands.len());
     
     // Step 2.5: Interpret original catart to get Screen
-    let mut original_interpreter = Interpreter::new_with_locale(Mode::Mode1, locale);
+    let mut original_interpreter = Interpreter::builder()
+        .screen_mode(Mode::Mode1)
+        .locale(locale).as_6128(true).build();
     original_interpreter.interpret(&generated_char_commands, false)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to interpret original commands: {}", e)))?;
+        .map_err(|e| format!("Failed to interpret original commands: {}", e))?;
     let original_screen = original_interpreter.screen().clone();
     let original_palette = original_interpreter.palette().clone();
     
@@ -444,7 +424,7 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_outp
         .collect();
     
     let catalog = Catalog::try_from(fnames.as_slice())
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        .map_err(|e| format!("Failed to build catalog: {}", e))?;
     info!("Converted to catalog");
     
     // Step 5: Convert to bytes (32*64 = 2048 bytes)
@@ -478,7 +458,7 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_outp
         .map(|e| e.fname)
         .collect();
     let catalog_for_reconstruction = Catalog::try_from(fnames_for_reconstruction.as_slice())
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        .map_err(|e| format!("Failed to create catalog for reconstruction: {}", e))?;
     
     // Extract commands from catalog entries directly (not using commands_by_mode_and_order which generates DIR listing)
     let mut reconstructed_commands = CharCommandList::new();
@@ -585,9 +565,13 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_outp
         }
     }
     
-    let mut reconstructed_interpreter = Interpreter::new(Mode::Mode1);
+    let mut reconstructed_interpreter = Interpreter::builder()
+        .as_6128(true)
+        .screen_mode(Mode::Mode1)
+        .locale(locale)
+        .build();
     reconstructed_interpreter.interpret(&reconstructed_commands, false)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to interpret reconstructed commands: {}", e)))?;
+        .map_err(|e| format!("Failed to interpret reconstructed commands: {}", e))?;
     let reconstructed_screen = reconstructed_interpreter.screen().clone();
     let reconstructed_palette = reconstructed_interpreter.palette().clone();
     
@@ -698,7 +682,7 @@ fn build_catart_from_basic(basic_filename: &str, output_filename: &str, png_outp
     Ok(())
 }
 
-fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> std::io::Result<()> {
+fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> Result<(), String> {
     info!("Decoding catart from: {}", catalog_fname);
     
     // Load the raw catalog bytes
@@ -707,8 +691,8 @@ fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> std
     match catalog_to_basic_listing(&catalog_bytes, CatalogType::Cat) {
         Ok(basic_program) => {
              if let Some(path) = output_path {
-                 let mut file = File::create(path)?;
-                 write!(file, "{}", basic_program)?;
+                 let mut file = File::create(path).map_err(|e| format!("Failed to create output file: {}", e))?;
+                 write!(file, "{}", basic_program).map_err(|e| format!("Failed to write output file: {}", e))?;
                  info!("Saved BASIC listing to {}", path);
             } else {
                  println!("{}", basic_program);
@@ -716,7 +700,7 @@ fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> std
         },
         Err(e) => {
             error!("Failed to decode catalog: {}", e);
-             return Err(std::io::Error::new(std::io::ErrorKind::Other, e));
+             return Err(format!("Failed to decode catalog: {}", e));
         }
     }
     
@@ -725,16 +709,7 @@ fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> std
 
 
 #[allow(clippy::too_many_lines)]
-fn main() -> std::io::Result<()> {
-    // XXX this has been disabled for compatbility reasons with gpu
-    // XXX as this software has been used since ages, I have no idea if this is an issue or not
-    // TermLogger::init(
-    // LevelFilter::Debug,
-    // Config::default(),
-    // TerminalMode::Mixed,
-    // ColorChoice::Auto
-    // )
-    // .expect("Unable to build logger");
+fn main() -> Result<(), String> {
     let logger = SimpleLogger::new();
     log::set_max_level(log::LevelFilter::Debug);
     log::set_boxed_logger(Box::new(logger)).unwrap();
@@ -745,7 +720,7 @@ fn main() -> std::io::Result<()> {
         Commands::Build { basic_file, output_file, render_options } => {
             // Use Build's basic_file if provided, otherwise fall back to top-level input_file
             let input = basic_file.or(args.input_file).ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "BASIC file must be provided either as top-level argument or with the build command")
+                format!("BASIC file must be provided either as top-level argument or with the build command")
             })?;
             let output = output_file.as_deref().unwrap_or("catart.dsk");
             
@@ -754,7 +729,7 @@ fn main() -> std::io::Result<()> {
         
         Commands::Cat { render_options } => {
             let input_file = args.input_file.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'cat' command")
+                format!("input_file is required for 'cat' command")
             })?;
             
             display_catalog_command(&input_file, CatalogType::Cat, render_options.png_path(), render_options.parse_locale(), render_options.parse_mode())
@@ -762,7 +737,7 @@ fn main() -> std::io::Result<()> {
         
         Commands::Dir { render_options } => {
             let input_file = args.input_file.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'dir' command")
+                format!("input_file is required for 'dir' command")
             })?;
             
             display_catalog_command(&input_file, CatalogType::Dir, render_options.png_path(), render_options.parse_locale(), render_options.parse_mode())
@@ -770,21 +745,21 @@ fn main() -> std::io::Result<()> {
         
         Commands::List => {
             let input_file = args.input_file.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'list' command")
+                format!("input_file is required for 'list' command")
             })?;
             list_catalog_command(&input_file, false)
         }
         
         Commands::Listall => {
             let input_file = args.input_file.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'listall' command")
+                format!("input_file is required for 'listall' command")
             })?;
             list_catalog_command(&input_file, true)
         }
 
         Commands::Decode { output_file } => {
             let input_file = args.input_file.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'decode' command")
+                format!("input_file is required for 'decode' command")
             })?;
             decode_catalog_command(&input_file, output_file.as_deref())
         }
@@ -802,7 +777,7 @@ fn main() -> std::io::Result<()> {
             size,
         } => {
             let input_file = args.input_file.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'modify' command")
+                format!("input_file is required for 'modify' command")
             })?;
             modify_entry_command(
                 &input_file,
@@ -821,7 +796,7 @@ fn main() -> std::io::Result<()> {
         
         Commands::Debug { cat, dir } => {
             let input_file = args.input_file.ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "input_file is required for 'debug' command")
+                format!("input_file is required for 'debug' command")
             })?;
             
             // Determine catalog type based on flags
@@ -833,10 +808,7 @@ fn main() -> std::io::Result<()> {
                 // Default: no sorting (directory order)
                 CatalogType::Dir
             } else {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Cannot specify both --cat and --dir"
-                ));
+                return Err(format!("Cannot specify both --cat and --dir"));
             };
             
             debug_catalog_command(&input_file, catalog_type)
@@ -844,60 +816,58 @@ fn main() -> std::io::Result<()> {
     }
 }
 
-fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType, png_output: Option<&str>, locale: Locale, mode: Mode) -> std::io::Result<()> {
+fn display_catalog_command(catalog_fname: &str, catalog_type: CatalogType, png_output: Option<&str>, locale: Locale, mode: Mode) -> Result<(), String> {
     // Load the raw catalog bytes
-    let catalog_bytes = load_catalog_bytes(catalog_fname)?;
+    let catalog_bytes = load_catalog_bytes(catalog_fname)
+        .map_err(|e| format!("Error while loading catalog {}", e))
+        ?;
 
-    // Use the same code path as test_crtc_catart: catalog → BasicProgram → BasicCommandList → CharCommandList
-    let catalog_basic_program = catalog_to_basic_listing(&catalog_bytes, catalog_type)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to extract BASIC program from catalog: {}", e)))?;
-    
-    let catalog_basic_command_list = BasicCommandList::try_from(&catalog_basic_program)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Unable to get cat art commands from catalog BASIC: {:?}", e)))?;
-    
-    let commands = catalog_basic_command_list.to_char_commands()
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to convert BASIC to CharCommandList: {:?}", e)))?;
-    
-    // Display the catalog in terminal
-    println!("{}", commands.to_string());
-    
+    let commands = catalog_to_catart_commands(&catalog_bytes, catalog_type)?;
+
+     
+    // Interpret the commands with the selected locale and mode
+    let mut interpreter = Interpreter::builder()
+        .as_6128(true)
+        .screen_mode(mode)
+        .locale(locale)
+        .build();
+    interpreter.interpret(&commands, true)
+        .map_err(|e| format!("Failed to interpret commands: {}", e))?;
+
+    println!("{}", interpreter.to_string());
     // Generate PNG if requested
     if let Some(png_path) = png_output {
-        // Interpret the commands with the selected locale and mode
-        let mut interpreter = Interpreter::new_with_locale(mode, locale);
-        interpreter.interpret(&commands, false)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to interpret commands: {}", e)))?;
-        
+       
         save_interpreter_png(&interpreter, png_path)?;
     }
     
     Ok(())
 }
 
-fn list_catalog_command(catalog_fname: &str, listall: bool) -> std::io::Result<()> {
-    let catalog_content = load_catalog_entries(catalog_fname)?;
+fn list_catalog_command(catalog_fname: &str, listall: bool) ->  Result<(), String> {
+    let catalog_content = load_catalog_entries(catalog_fname)
+        .map_err(|e| format!("Error while loading catalog entries: {}", e))?;
     
     list_catalog_entries(&catalog_content, listall);
     Ok(())
 }
 
-fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> std::io::Result<()> {
+fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Result<(), String> {
     // Load the raw catalog bytes
-    let catalog_bytes = load_catalog_bytes(catalog_fname)?;
+    let catalog_bytes = load_catalog_bytes(catalog_fname)
+        .map_err(|e| format!("Error while loading catalog bytes: {}", e))?;
     
     // Validate catalog size
     if catalog_bytes.len() != 64 * 32 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Invalid catalog size: expected {} bytes, got {}", 64 * 32, catalog_bytes.len())
-        ));
+        return Err(format!("Invalid catalog size: expected {} bytes, got {}", 64 * 32, catalog_bytes.len())
+        );
     }
     
     println!("=== CatArt Debug Information ===\n");
     
     // Extract catalog and convert to UnifiedCatalog
     let catalog = catalog_extraction(&catalog_bytes, catalog_type)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        .map_err(|e| format!("Error while extracting catalog: {}", e))?;
     let unified_catalog = UnifiedCatalog::from(catalog);
     
     // Get sorted entries using EntriesGrid delegation
@@ -1009,8 +979,9 @@ fn modify_entry_command(
     blocs: Option<Vec<u8>>,
     numpage: Option<String>,
     size: Option<String>,
-) -> std::io::Result<()> {
-    let mut catalog_content = load_catalog_entries(catalog_fname)?;
+) -> Result<(), String> {
+    let mut catalog_content = load_catalog_entries(catalog_fname)
+        .map_err(|e| format!("Error while loading catalog entries: {}", e))?;
     
     info!("Manipulate entry {idx}");
 
@@ -1060,8 +1031,9 @@ fn modify_entry_command(
         unimplemented!("Need to implement that");
     }
     else {
-        let mut file = File::create(catalog_fname)?;
-        file.write_all(&catalog_content.as_bytes())?;
+        let mut file = File::create(catalog_fname).map_err(|e| format!("Failed to create catalog file: {}", e))?;
+        file.write_all(&catalog_content.as_bytes())
+            .map_err(|e| format!("Failed to write catalog file: {}", e))?;
     }
     
     Ok(())
