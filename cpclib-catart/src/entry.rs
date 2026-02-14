@@ -149,7 +149,7 @@ impl Catalog {
 
         let unified = UnifiedCatalog::from(self.clone());
         let grid = EntriesGrid::from_entries(
-            unified.entries().map(Cow::Borrowed).collect(),
+            unified.visible_entries().map(Cow::Borrowed).collect(),
             2, // TODO handle number of columns based on mode and catalog type
             ScreenMode::Mode1, // TODO handle mode
             CatalogType::Cat // TODO handle catalog type
@@ -1006,11 +1006,15 @@ impl PrintableEntryFileName {
 
 impl PrintableEntryFileName {
     pub fn is_hidden(&self) -> bool {
-        self.e1 & 1 << 7 != 0
+        self.is_system() || self.is_empty()
     }
 
     pub fn is_system(&self) -> bool {
-        self.e3 & 1 << 7 != 0
+        self.e2 & 1 << 7 != 0
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        self.e1 & 1 << 7 != 0
     }
 }
 
@@ -1112,25 +1116,25 @@ pub enum CatalogType {
 
 impl UnifiedCatalog {
 
-    pub fn entries(&self) -> impl Iterator<Item = &UnifiedPrintableEntry> {
-        self.entries.iter()
+    pub fn visible_entries(&self) -> impl Iterator<Item = &UnifiedPrintableEntry> {
+        self.entries.iter().filter(|e| !e.fname().is_system())
     }
 
-    pub fn sorted_entries(&self, order: CatalogType) -> Vec<&UnifiedPrintableEntry> {
-        let mut entries: Vec<&UnifiedPrintableEntry> = self.entries().collect();
+    pub fn visible_sorted_entries(&self, order: CatalogType) -> Vec<&UnifiedPrintableEntry> {
+        let mut entries: Vec<&UnifiedPrintableEntry> = self.visible_entries().collect();
 
         if let CatalogType::Cat = order {
-            entries.sort_by(|a, b| {
-                let a_name = a.fname().all_generated_bytes();
-                let b_name = b.fname().all_generated_bytes();
-                a_name.cmp(&b_name)
+            entries.sort_by_cached_key(|a| {
+                let a = a.fname();
+                let a_name = a.filename().iter().chain(a.extension().iter()).cloned().collect::<Vec<u8>>();
+                a_name
             });
         }
         entries
     }
 
-    pub fn entries_by_mode_and_order(&self, mode: ScreenMode, order: CatalogType) -> EntriesGrid {
-        let entries = self.sorted_entries(order);
+    pub fn visible_entries_by_mode_and_order(&self, mode: ScreenMode, order: CatalogType) -> EntriesGrid {
+        let entries = self.visible_sorted_entries(order);
 
         // TODO compute that with order or mode
         let num_columns = match mode {
@@ -1150,6 +1154,7 @@ impl UnifiedCatalog {
                 for col in 0..num_columns {
                     for _ in 0..max_height {
                         if let Some(entry) = entries_iter.next() {
+                            assert!(!entry.is_system());
                             columns[col].push(Cow::Borrowed(entry));
                         }
                     }
@@ -1180,7 +1185,7 @@ impl UnifiedCatalog {
         order: CatalogType,
         show_headers: bool
     ) -> CharCommandList {
-        let grid = self.entries_by_mode_and_order(mode, order);
+        let grid = self.visible_entries_by_mode_and_order(mode, order);
         let commands = grid.commands_with_params(show_headers);
         let bytes = commands.iter().flat_map(|cmd| cmd.bytes().into_iter()).collect::<Vec<_>>(); // ensure we merge commands
         CharCommandList::from_bytes(&bytes)
@@ -1739,11 +1744,11 @@ impl SerialCatalogBuilder {
         let mut cat =
             UnifiedCatalog::from(entries.as_slice());
         assert_eq!(
-            cat.entries().count(),
+            cat.visible_entries().count(),
             entries.len(),
             "Number of entries in catalog does not match provided entries"
         );
-        let grid = cat.entries_by_mode_and_order(start_mode, CatalogType::Cat);
+        let grid = cat.visible_entries_by_mode_and_order(start_mode, CatalogType::Cat);
 
         let ordered_idx = grid
             .entries_display_order()
@@ -1861,7 +1866,7 @@ mod tests {
     fn test_entries_by_mode_and_order_mode0() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Cat);
+        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Cat);
 
         // Mode0 should have 1 column
         assert_eq!(result.num_columns(), 1);
@@ -1872,7 +1877,7 @@ mod tests {
     fn test_entries_by_mode_and_order_mode1() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
 
         // Mode1 should have 2 columns
         assert_eq!(result.num_columns(), 2);
@@ -1889,7 +1894,7 @@ mod tests {
     fn test_entries_by_mode_and_order_mode2() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
 
         // Mode2 should have 4 columns
         assert_eq!(result.num_columns(), 4);
@@ -1904,7 +1909,7 @@ mod tests {
     fn test_entries_by_mode_and_order_cat_sorting() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Cat);
+        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Cat);
 
         // Should be sorted alphabetically (apple, banana, cher, dog, file05, ...)
         let first_five: Vec<String> = result
@@ -1922,7 +1927,7 @@ mod tests {
     fn test_entries_by_mode_and_order_dir_no_sorting() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Dir);
+        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Dir);
 
         // Should maintain original order (zebra, apple, banana, cher, dog, ...)
         let first_five: Vec<String> = result
@@ -2009,8 +2014,8 @@ mod tests {
         let catalog = Catalog::try_from(entries.as_slice()).expect("Failed to create test entries");
         let unified_catalog = UnifiedCatalog::from(catalog);
 
-        let sorted_cat = unified_catalog.sorted_entries(CatalogType::Cat);
-        let sorted_dir = unified_catalog.sorted_entries(CatalogType::Dir);
+        let sorted_cat = unified_catalog.visible_sorted_entries(CatalogType::Cat);
+        let sorted_dir = unified_catalog.visible_sorted_entries(CatalogType::Dir);
 
         assert_eq!(
             sorted_cat
@@ -2028,7 +2033,7 @@ mod tests {
         );
 
         // Test CAT (sorted alphabetically)
-        let cat_result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let cat_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
         assert_eq!(cat_result.num_columns(), 4); // 4 columns for Mode2
 
         // Extract display names from each column
@@ -2063,7 +2068,7 @@ mod tests {
         assert_eq!(col3, columns_cat[3]);
 
         // Test DIR (original order)
-        let dir_result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Dir);
+        let dir_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Dir);
         assert_eq!(dir_result.num_columns(), 4); // 4 columns for Mode2
 
         // Extract display names from each column
@@ -2104,7 +2109,7 @@ mod tests {
     fn test_entries_by_mode_and_order_row_major() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
 
         // Mode1 should have 2 columns
         assert_eq!(result.num_columns(), 2);
@@ -2168,7 +2173,7 @@ mod tests {
         let unified_catalog = UnifiedCatalog::from(catalog);
 
         // Test Mode2 (4 columns) with CAT sorting - uses horizontal filling
-        let result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
         assert_eq!(result.num_columns(), 4);
 
         // With 64 entries in 4 columns, each should have 16 entries
@@ -2217,7 +2222,7 @@ mod tests {
         let unified_catalog = UnifiedCatalog::from(catalog);
 
         // Test CAT mode - all empty entries should be filtered out
-        let cat_result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let cat_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
         assert_eq!(cat_result.num_columns(), 2);
         // All entries are empty, so no entries should be distributed
         assert_eq!(
@@ -2226,7 +2231,7 @@ mod tests {
         );
 
         // Test DIR mode - entries should maintain original order
-        let dir_result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Dir);
+        let dir_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Dir);
         assert_eq!(dir_result.num_columns(), 2);
         assert_eq!(
             dir_result.column(0).unwrap().len() + dir_result.column(1).unwrap().len(),
@@ -2271,7 +2276,7 @@ mod tests {
         let unified_catalog = UnifiedCatalog::from(catalog);
 
         // Test DIR mode - maintains original order with horizontal filling
-        let dir_result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Dir);
+        let dir_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Dir);
         assert_eq!(dir_result.num_columns(), 4);
 
         // Only non-empty entries are distributed, so only 1 entry total
@@ -2287,7 +2292,7 @@ mod tests {
         );
 
         // Test CAT mode - sorts alphabetically, so "test" should be the only entry
-        let cat_result = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let cat_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
         assert_eq!(cat_result.num_columns(), 4);
 
         // Only 1 non-empty entry
@@ -2328,7 +2333,7 @@ mod tests {
     fn test_entries_grid_to_owned() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let grid = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let grid = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
 
         // Convert to owned
         let owned_grid = grid.to_owned();
@@ -2356,25 +2361,25 @@ mod tests {
     fn test_from_entries_grid_for_catalog() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog.clone());
-        let grid = unified_catalog.entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let grid = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
 
         // Convert back to catalog
         let reconstructed_unified: UnifiedCatalog = grid.into();
 
         // Should have 64 entries
-        let entries: Vec<_> = reconstructed_unified.entries().collect();
+        let entries: Vec<_> = reconstructed_unified.visible_entries().collect();
         assert_eq!(entries.len(), 64);
 
         // Create a new grid for comparison
         let comparison_grid =
-            unified_catalog.entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
         let grid_entries: Vec<String> = comparison_grid
             .entries_display_order()
             .map(|entry| entry.display_name())
             .collect();
 
         let catalog_entries: Vec<String> = reconstructed_unified
-            .entries()
+            .visible_entries()
             .map(|entry| entry.display_name())
             .collect();
 
@@ -2388,18 +2393,18 @@ mod tests {
         let original_unified = UnifiedCatalog::from(original_catalog.clone());
 
         // Convert to grid and back to catalog
-        let grid = original_unified.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let grid = original_unified.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
         let reconstructed_unified: UnifiedCatalog = grid.into();
 
         // Should preserve the entries in display order
         let original_display_order: Vec<String> = original_unified
-            .entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat)
+            .visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat)
             .entries_display_order()
             .map(|entry| entry.display_name())
             .collect();
 
         let reconstructed_display_order: Vec<String> = reconstructed_unified
-            .entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat)
+            .visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat)
             .entries_display_order()
             .map(|entry| entry.display_name())
             .collect();
@@ -2443,7 +2448,7 @@ mod tests {
 
             // XXX it currently fails but maybe it should not
             assert_eq!(
-                unified_catalog.entries().count(),
+                unified_catalog.visible_entries().count(),
                 expected_nb_entries,
                 "Catalog should have {} entries for {} commands",
                 expected_nb_entries,
@@ -2761,7 +2766,7 @@ mod tests {
     #[test]
     fn test_unified_catalog_mode1() {
         let mut catalog = UnifiedCatalog::empty();
-        assert_eq!(0, catalog.entries().count());
+        assert_eq!(0, catalog.visible_entries().count());
 
         let fname = PrintableEntryFileName::new("TEST.TXT");
         assert_eq!(&fname.all_generated_bytes(), b"TEST    .TXT");
@@ -2769,11 +2774,11 @@ mod tests {
         let entry: UnifiedPrintableEntry = entry.into();
         assert_eq!(5, entry.size_kb());
         catalog.push(entry.clone()).unwrap();
-        assert_eq!(1, catalog.entries().count());
+        assert_eq!(1, catalog.visible_entries().count());
 
         let err=  catalog.push(entry.into());
         assert!(err.is_err());
-        assert_eq!(1, catalog.entries().count());
+        assert_eq!(1, catalog.visible_entries().count());
 
         let fname = PrintableEntryFileName::new("TEST2.TXT");
         assert_eq!(&fname.all_generated_bytes(), b"TEST2   .TXT");
@@ -2781,7 +2786,7 @@ mod tests {
         let entry: UnifiedPrintableEntry = entry.into();
         assert_eq!(20, entry.size_kb());
         catalog.push(entry).unwrap();
-        assert_eq!(2, catalog.entries().count());
+        assert_eq!(2, catalog.visible_entries().count());
 
 
 
@@ -2792,11 +2797,11 @@ mod tests {
         let entry: UnifiedPrintableEntry = entry.into();
         assert_eq!(16, entry.size_kb());
         catalog.push(entry).unwrap();
-        assert_eq!(3, catalog.entries().count());
+        assert_eq!(3, catalog.visible_entries().count());
 
         assert_eq!(41, catalog.size_kb());
 
-        let cat = catalog.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let cat = catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
         assert_eq!(2, cat.num_columns());
         assert_eq!(2, cat.max_num_rows());
         assert_eq!(cat.get(0,0).unwrap().display_name(), "ABCDEFGH.IJK");

@@ -249,6 +249,27 @@ impl BasicMemoryScreen {
         }
         pens
     }
+
+    
+    /// Clamp pen number to valid range for current mode
+    /// Mode 0 and Mode 1: pens must be 0-3 (4 colors)
+    /// Mode 2: pens must be 0-1 (2 colors)
+    fn clamp_pen_for_mode(&self, pen: Pen) -> Pen {
+        let pen_number = pen.number();
+        let max_pen = match self.mode {
+            cpclib_image::image::Mode::Zero => 16,  // Mode 0: 16 colors (pens 0-15)
+            cpclib_image::image::Mode::One => 3,   // Mode 1: 4 colors (pens 0-3)
+            cpclib_image::image::Mode::Two => 1,   // Mode 2: 2 colors (pens 0-1)
+            _ => 3,
+        };
+        
+        if pen_number <= max_pen {
+            pen
+        } else {
+            // Use modulo to wrap pen number into valid range
+            Pen::from(pen_number % (max_pen))
+        }
+    }
     
     /// Write a character at the given position (x, y in character coordinates)
     /// If transparent is true, the character is overlaid on existing pixels (transparent mode)
@@ -257,6 +278,10 @@ impl BasicMemoryScreen {
         if x == 0 || y == 0 {
             return; // Invalid coordinates, do nothing
         }
+        
+        // Clamp pen and paper to valid range for current mode to prevent assertion failures
+        let pen = self.clamp_pen_for_mode(pen);
+        let paper = self.clamp_pen_for_mode(paper);
         
         // Get the character bitmap for this locale
         let bitmap = self.get_char_bitmap(ch);
@@ -965,6 +990,15 @@ impl Interpreter {
                 }
                 self.locate_cursor(left, top);
             },
+            CharCommand::Home if self.enable_vdu => {
+                let (width, height) = self.screen.resolution();
+                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                self.locate_cursor(left, top);
+            },
+            CharCommand::Esc if self.enable_vdu => {
+                // Escape is ignored.
+            },
+
             CharCommand::CarriageReturn if self.enable_vdu => {
                 self.move_cursor_to_left();
             },
@@ -1010,8 +1044,10 @@ impl Interpreter {
                 self.paper = Pen::from(*p);
             },
             CharCommand::Ink(pen, ink1, _ink2) if self.enable_vdu => {
-                let pen = Pen::from(*pen);
-                let ink = cpclib_image::ga::Ink::from(*ink1);
+                let pen = (*pen).clamp(0, 15);
+                let ink1 = (*ink1).clamp(0, 31);
+                let pen = Pen::from(pen);
+                let ink = cpclib_image::ga::Ink::from(ink1);
                 self.palette.set(pen, ink); // blinking is ignored
                 self.memory_screen.set_palette(pen, ink);
             },

@@ -418,7 +418,7 @@ fn main() {
         let builder = SerialCatalogBuilder::new();
         let catalog = builder.build(&char_cmds, cpclib_catart::entry::ScreenMode::Mode1);
         println!("\n--- Catalog for {} ---", name);
-        println!("Number of entries: {}", catalog.entries().count());
+        println!("Number of entries: {}", catalog.visible_entries().count());
         // Optionally, verify by reconstructing commands
         let reconstructed_cmds = catalog.commands_by_mode_and_order(
             cpclib_catart::entry::ScreenMode::Mode1,

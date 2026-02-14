@@ -871,7 +871,7 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
     let unified_catalog = UnifiedCatalog::from(catalog);
     
     // Get sorted entries using EntriesGrid delegation
-    let sorted_entries = unified_catalog.sorted_entries(catalog_type);
+    let sorted_entries = unified_catalog.visible_sorted_entries(catalog_type);
     
     // Create a map from fname to original index for reference
     let mut fname_to_idx: std::collections::HashMap<[u8; 11], usize> = std::collections::HashMap::new();
