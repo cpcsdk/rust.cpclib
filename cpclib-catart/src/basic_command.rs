@@ -3,6 +3,7 @@ use std::{fmt::Display, ops::Deref};
 
 use cpclib_basic::BasicProgram;
 
+use crate::basic_chars::LF;
 use crate::char_command::{CharCommand, CharCommandList};
 use crate::error::CatArtError;
 
@@ -307,6 +308,10 @@ impl BasicCommand {
     /// Create a PRINT command with newline (terminated by nothing)
     pub fn print_string_crlf<S: Into<PrintArgument>>(data: S) -> Self {
         BasicCommand::PrintString(data.into(), PrintTerminator::CrLf)
+    }
+
+    pub fn move_cursor_down() -> Self {
+        BasicCommand::PrintString(LF.into(), PrintTerminator::None)
     }
 
     /// Create a SYMBOL command

@@ -696,15 +696,14 @@ impl<'cat> EntriesGrid<'cat> {
         if show_headers {
             // Inject the command that requires catalog display
             let cmd = match self.order {
-                CatalogType::Cat => CharCommandList::from(b"CAT"),
-                CatalogType::Dir => CharCommandList::from(b"|DIR")
+                CatalogType::Cat => CharCommandList::from(b"cat"),
+                CatalogType::Dir => CharCommandList::from(b"|dir")
             };
             commands.extend(cmd);
-            commands.add_newlines(1);
-
-            commands.add_newlines(1);
+            commands.add_newlines(2);
+            
             commands.extend(CharCommandList::from(
-                format!("Drive {}: user {}", self.drive, self.user).as_bytes()
+                format!("Drive {}: user  {}", self.drive, self.user).as_bytes()
             ));
             commands.add_newlines(2);
         }
@@ -716,14 +715,7 @@ impl<'cat> EntriesGrid<'cat> {
                 commands.extend(entry.commands());
 
                 let nb_spaces = match self.mode {
-                    ScreenMode::Mode1 => {
-                        if col == self.num_columns() - 1 {
-                            2
-                        }
-                        else {
-                            4
-                        }
-                    },
+                    ScreenMode::Mode1 => 3,
                     _ => unimplemented!()
                 };
 
@@ -734,11 +726,11 @@ impl<'cat> EntriesGrid<'cat> {
         }
 
         if show_headers {
-            commands.add_newlines(2);
+            commands.add_newlines(1);
             commands.extend(CharCommandList::from(
                 format!("{:>3}K free", available).as_bytes()
             ));
-            // commands.add_newlines(2);
+            commands.add_newlines(2);
         }
 
         commands.into()

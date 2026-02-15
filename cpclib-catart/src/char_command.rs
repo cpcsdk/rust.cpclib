@@ -127,8 +127,8 @@ impl CharCommandList {
 
     /// Helper to add n newlines (CR LF) to commands
     pub fn add_newlines(&mut self, count: usize) {
+        self.0.push(CharCommand::CarriageReturn);
         for _ in 0..count {
-            self.0.push(CharCommand::CarriageReturn);
             self.0.push(CharCommand::CursorDown);
         }
     }

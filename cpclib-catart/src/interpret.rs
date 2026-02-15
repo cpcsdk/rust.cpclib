@@ -695,16 +695,16 @@ impl Interpreter {
 
     fn initialize_6128(&mut self) {
         let start_text = BasicCommandList::from(vec![
-            BasicCommand::print_string_crlf(b" Amstrad 128K Microcomputer (v3)"),
-            BasicCommand::print_string_crlf(b""),
+            BasicCommand::move_cursor_down(),
+            BasicCommand::print_string_crlf(b" Amstrad 128K Microcomputer  (v3)"),
+            BasicCommand::move_cursor_down(),
             BasicCommand::print_string(b" "),
             BasicCommand::print_string(PrintArgument::ChrDollar(0xA4)),
             BasicCommand::print_string_crlf(b"1985 Amstrad Consumer Electronics plc"),
             BasicCommand::print_string_crlf(b"           and Locomotive Software Ltd."),
-            BasicCommand::print_string_crlf(b""),
+            BasicCommand::move_cursor_down(),
             BasicCommand::print_string_crlf(b" BASIC 1.1"),
-            BasicCommand::print_string_crlf(b""),
-            BasicCommand::print_string_crlf(b"Ready"),
+            BasicCommand::move_cursor_down(),
         ]);
 
         let commands = start_text
