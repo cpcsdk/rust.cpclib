@@ -19,6 +19,7 @@ independent = true
 cpclib-disc.workspace = true
 cpclib-common = {workspace = true, features=["cmdline"]}
 cpclib-sna.workspace = true
+cpclib-files.workspace = true
 fs-err.workspace = true
 
 #arrayref.workspace = true

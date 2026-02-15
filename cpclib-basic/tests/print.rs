@@ -36,7 +36,7 @@ fn print_using_alpha() {
 }
 
 #[test]
-#[should_panic]
+
 fn print_string_fail() {
     test_parse("PRINT \"HELLO");
 }

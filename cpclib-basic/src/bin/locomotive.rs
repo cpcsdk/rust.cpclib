@@ -12,11 +12,13 @@
 )]
 #![deny(clippy::pedantic)]
 
+use cpclib_common::camino::Utf8PathBuf;
+use cpclib_files::FileAndSupport;
 use fs_err::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
-use cpclib_basic::{BasicProgram, binary_parser};
+use cpclib_basic::BasicProgram;
 use cpclib_common::clap;
 /// ! Locomotive BASIC manipulation tool.
 use cpclib_common::clap::{Arg, ArgAction, Command};
@@ -32,7 +34,7 @@ fn main() -> std::io::Result<()> {
                 .short('b')
                 .help("Amstrad basic file")
                 .action(ArgAction::Set)
-                .value_parser(cpclib_common::utf8pathbuf_value_parser(true))
+                .value_parser(cpclib_common::existing_utf8pathbuf_value_parser)
                 .required_unless_present("BASIC_SOURCE")
         )
         .arg(
@@ -41,7 +43,7 @@ fn main() -> std::io::Result<()> {
                 .short('a')
                 .help("Source file that contains the basic program as an ascii file")
                 .action(ArgAction::Set)
-                .value_parser(clap::value_parser!(PathBuf))
+                .value_parser(cpclib_common::existing_utf8pathbuf_value_parser)
                 .required_unless_present("BASIC_BINARY")
         )
         .arg(
@@ -54,7 +56,7 @@ fn main() -> std::io::Result<()> {
         .arg(
             Arg::new("OUTPUT")
                 .help("Output file")
-                .value_parser(clap::value_parser!(PathBuf))
+                .value_parser(clap::value_parser!(Utf8PathBuf))
                 .action(ArgAction::Set) //         .required(true)
         )
         .get_matches();
@@ -77,13 +79,13 @@ fn main() -> std::io::Result<()> {
         // Bytes of the basic program
         let basic_bytes = basic_tokens.as_bytes();
 
-        if let Some(output) = matches.get_one::<PathBuf>("OUTPUT") {
+        if let Some(output) = matches.get_one::<Utf8PathBuf>("OUTPUT") {
             let mut f = File::create(output)?;
 
             // Add header if needed
             if matches.contains_id("HEADER") {
                 let header = AmsdosHeader::compute_basic_header(
-                    &AmsdosFileName::from_slice(output.display().to_string().as_bytes()),
+                    &AmsdosFileName::from_slice(output.as_str().as_bytes()),
                     &basic_bytes
                 );
                 f.write_all(header.as_bytes().as_ref())?;
@@ -92,15 +94,15 @@ fn main() -> std::io::Result<()> {
             f.write_all(&basic_bytes)?;
         }
     }
-    else if let Some(fname) = matches.get_one::<PathBuf>("BASIC_BINARY") {
+    else if let Some(fname) = matches.get_one::<Utf8PathBuf>("BASIC_BINARY") {
         // Read the basic source file
-        let ascii_content: Vec<u8> = fs_err::read(fname)?;
-        let mut ascii_content = &ascii_content[..];
-        let tokens = binary_parser::program(&mut ascii_content).expect("Error in the basic file");
+        let file = FileAndSupport::build(fname);
+        let content = file.content();
 
-        dbg!(&tokens);
-
-        todo!("print");
+        let tokens = BasicProgram::decode(content.as_ref()).expect("Error in the basic file");
+        let repr = tokens.to_string();
+        println!("{}", repr);
+        
     }
     else {
         unreachable!()

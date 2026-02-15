@@ -178,6 +178,18 @@ impl BasicProgram {
         }
     }
 
+    /// Create the program from a binary content
+    pub fn decode(bytes: &[u8]) -> Result<Self, BasicError> {
+        match binary_parser::program.parse(bytes) {
+            Ok(prog) => Ok(prog),
+            Err(e) => {
+                Err(BasicError::ParseError {
+                    msg: format!("Error while parsing the Basic content: {e}")
+                })
+            },
+        }
+    }
+
     /// Add a line to the program. If a line with the same number already exists, it is replaced
     pub fn add_line(&mut self, line: BasicLine) {
         self.lines.push(line);

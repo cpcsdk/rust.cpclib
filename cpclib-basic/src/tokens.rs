@@ -1184,8 +1184,8 @@ pub enum BasicToken {
     Variable(String, BasicValue),
     /// Encode a constant. The first field can only take ValueIntegerDecimal8bits, ValueIntegerDecimal16bits, ValueIntegerBinary16bits, ValueIntegerHexadecimal16bits
     Constant(BasicTokenNoPrefix, BasicValue),
-    /// Encode a comment
-    Comment(BasicTokenNoPrefix, Vec<u8>)
+    /// Encode a comment or quoted string. The boolean indicates if the string should be closed with a quote when displayed.
+    CommentOrString(BasicTokenNoPrefix, Vec<u8>, bool)
 }
 
 impl BasicToken {
@@ -1212,12 +1212,26 @@ impl fmt::Display for BasicToken {
             BasicToken::PrefixedToken(tok) => {
                 write!(f, "{tok}")?;
             },
-            BasicToken::Comment(tok, comment) => {
+            BasicToken::CommentOrString(tok, comment, closed) => {
                 write!(f, "{tok}")?;
                 write!(f, "{}", String::from_utf8_lossy(comment))?;
+                if *closed {
+                    write!(f, "\"")?;
+                }
             },
             BasicToken::Constant(kind, constant) => {
                 let repr = match kind {
+                    BasicTokenNoPrefix::ConstantNumber0 => "0".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber1 => "1".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber2 => "2".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber3 => "3".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber4 => "4".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber5 => "5".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber6 => "6".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber7 => "7".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber8 => "8".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber9 => "9".to_string(),
+                    BasicTokenNoPrefix::ConstantNumber10 => "10".to_string(),
                     BasicTokenNoPrefix::ValueIntegerHexadecimal16bits => {
                         constant.int_hexdecimal_representation().unwrap()
                     },
@@ -1274,7 +1288,7 @@ impl BasicToken {
                 data
             },
 
-            BasicToken::Comment(comment_type, comment) => {
+            BasicToken::CommentOrString(comment_type, comment, _closed) => {
                 let mut data = vec![comment_type.value()];
                 data.extend_from_slice(comment);
                 data
