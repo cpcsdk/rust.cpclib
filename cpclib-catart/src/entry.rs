@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
-use bon::{Builder, builder};
 
+use bon::{Builder, builder};
 use cpclib_basic::BasicProgram;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::{SmallVec, smallvec};
@@ -14,74 +14,69 @@ use crate::basic_chars::{ACK, BS, CAN, DC1, DLE, EOT, ETB, NAK, SI, SO, SUB, US}
 use crate::char_command::{CharCommand, CharCommandList};
 use crate::{Locale, entry, interpret};
 
-
-/*
-
-       // Extract only the actual command bytes based on entry structure
-        // 
-        // Special case: First entry with mode (f1 == 4 = EOT)
-        // f1: Mode command byte - PARSE THIS
-        // f2-f7: command bytes
-        // f8, e1: dot-hiding pair
-        // e2: command byte
-        //
-        // Regular case: Sequential basic (f1 > 4)
-        // f1: index for sorting - NOT DISPLAYED, NOT A COMMAND
-        // f2: ACK (0x06) - structural EnableVdu, skip
-        // f3-f7: 5 command bytes - PARSE THESE
-        // f8, e1: dot-hiding pair - one is structural, one is command byte
-        // e2: 1 command byte - PARSE THIS
-        // e3: NAK (0x15) - structural DisableVdu, skip
-
-        let mut command_bytes = Vec::new();
-        
-        // f1: Only parse if it's the first entry (Mode command)
-        if self.f1 == 4 {
-            // First entry: f1 is the mode command byte (EOT = 0x04 = Mode)
-            command_bytes.push(self.f1);
-        }
-        // Otherwise f1 is just the sorting index, not included in commands
-        
-        // f2: Skip if ACK (structural), otherwise parse
-        if self.f2 != ACK {
-            command_bytes.push(self.f2);
-        }
-        
-        // f3-f7: Always command bytes
-        command_bytes.push(self.f3);
-        command_bytes.push(self.f4);
-        command_bytes.push(self.f5);
-        command_bytes.push(self.f6);
-        command_bytes.push(self.f7);
-        
-        // Dot-hiding logic for f8/e1 pair:
-        if self.f8 == ETB {
-            // AsModeParameter: f8=ETB (skip), e1=command byte
-            command_bytes.push(self.e1);
-        } else if self.e1 == BS {
-            // Erased: f8=command byte, e1=BS (skip)
-            command_bytes.push(self.f8);
-        } else if self.e1 == b'.' {
-            // Default: f8=command byte, e1='.' (skip)
-            command_bytes.push(self.f8);
-        } else {
-            // Fallback: include f8
-            command_bytes.push(self.f8);
-        }
-        
-        // e2: Always a command byte
-        command_bytes.push(self.e2);
-        
-        // e3: Skip if NAK (structural)
-        if self.e3 != NAK {
-            command_bytes.push(self.e3);
-        }
-        
-        // Parse the filtered command bytes
-        CharCommandList::from_bytes(&command_bytes)
-
-*/
-
+// Extract only the actual command bytes based on entry structure
+//
+// Special case: First entry with mode (f1 == 4 = EOT)
+// f1: Mode command byte - PARSE THIS
+// f2-f7: command bytes
+// f8, e1: dot-hiding pair
+// e2: command byte
+//
+// Regular case: Sequential basic (f1 > 4)
+// f1: index for sorting - NOT DISPLAYED, NOT A COMMAND
+// f2: ACK (0x06) - structural EnableVdu, skip
+// f3-f7: 5 command bytes - PARSE THESE
+// f8, e1: dot-hiding pair - one is structural, one is command byte
+// e2: 1 command byte - PARSE THIS
+// e3: NAK (0x15) - structural DisableVdu, skip
+//
+// let mut command_bytes = Vec::new();
+//
+// f1: Only parse if it's the first entry (Mode command)
+// if self.f1 == 4 {
+// First entry: f1 is the mode command byte (EOT = 0x04 = Mode)
+// command_bytes.push(self.f1);
+// }
+// Otherwise f1 is just the sorting index, not included in commands
+//
+// f2: Skip if ACK (structural), otherwise parse
+// if self.f2 != ACK {
+// command_bytes.push(self.f2);
+// }
+//
+// f3-f7: Always command bytes
+// command_bytes.push(self.f3);
+// command_bytes.push(self.f4);
+// command_bytes.push(self.f5);
+// command_bytes.push(self.f6);
+// command_bytes.push(self.f7);
+//
+// Dot-hiding logic for f8/e1 pair:
+// if self.f8 == ETB {
+// AsModeParameter: f8=ETB (skip), e1=command byte
+// command_bytes.push(self.e1);
+// } else if self.e1 == BS {
+// Erased: f8=command byte, e1=BS (skip)
+// command_bytes.push(self.f8);
+// } else if self.e1 == b'.' {
+// Default: f8=command byte, e1='.' (skip)
+// command_bytes.push(self.f8);
+// } else {
+// Fallback: include f8
+// command_bytes.push(self.f8);
+// }
+//
+// e2: Always a command byte
+// command_bytes.push(self.e2);
+//
+// e3: Skip if NAK (structural)
+// if self.e3 != NAK {
+// command_bytes.push(self.e3);
+// }
+//
+// Parse the filtered command bytes
+// CharCommandList::from_bytes(&command_bytes)
+//
 
 /// The catalog may contain several entries for a given file
 /// This directly represents the catalog maniplted by Amsdos
@@ -92,8 +87,8 @@ pub struct Catalog {
 }
 
 impl IntoIterator for Catalog {
-    type Item = PrintableEntry;
     type IntoIter = std::array::IntoIter<PrintableEntry, 64>;
+    type Item = PrintableEntry;
 
     fn into_iter(self) -> Self::IntoIter {
         std::array::IntoIter::new(self.entries)
@@ -115,8 +110,6 @@ impl TryFrom<&[PrintableEntry]> for Catalog {
     }
 }
 
-
-
 impl TryFrom<&[PrintableEntryFileName]> for Catalog {
     type Error = String;
 
@@ -133,14 +126,13 @@ impl Catalog {
     /// XXX does not take into account any ordering or mode.
     /// so it is quite buggy and can only serve for debbubing purposes
     /// TODO handle ordering and mode to be able to use this for catart generation
-    pub fn to_basic_string(&self) ->String {
-	    self.entries()
-		.map(|e| {e.fname.commands().to_basic_string()})
-		.enumerate()
-		.map(|(i, e)| format!("{} {}", i*10, e))
-		.join("\n")
+    pub fn to_basic_string(&self) -> String {
+        self.entries()
+            .map(|e| e.fname.commands().to_basic_string())
+            .enumerate()
+            .map(|(i, e)| format!("{} {}", i * 10, e))
+            .join("\n")
     }
-
 
     pub fn extract_basic_from_sequential_catart(&self, show_headers: bool) -> BasicProgram {
         let kind = CatalogType::Cat; // TODO handle this properly
@@ -150,32 +142,44 @@ impl Catalog {
         let unified = UnifiedCatalog::from(self.clone());
         let grid = EntriesGrid::from_entries(
             unified.visible_entries().map(Cow::Borrowed).collect(),
-            2, // TODO handle number of columns based on mode and catalog type
-            ScreenMode::Mode1, // TODO handle mode
-            CatalogType::Cat // TODO handle catalog type
+            num_columns,
+            mode,
+            kind
         );
 
         let mut enable = true;
         let mut entries = Vec::new();
-        for (entry_nb, commands) in grid.entries_display_order().map(|e| e.fname.commands()).enumerate().peekable() {
+        for (entry_nb, commands) in grid
+            .entries_display_order()
+            .map(|e| e.commands())
+            .enumerate()
+            .peekable()
+        {
             let mut current_file = Vec::new();
             let mut current_string = Vec::new();
 
             let mut commands_iter = commands.into_iter().enumerate().peekable();
-            while let Some((command_nb,c)) = commands_iter.next() {
+            while let Some((command_nb, c)) = commands_iter.next() {
                 let c = c.normalize(); // TODO check if it is mandaotyr to do that
 
                 // Handle the cat art encoding to show/hide stuff
-                let is_catart_disabling = matches!(c, CharCommand::DisableVdu) && commands_iter.peek().is_none();
-                let is_catart_enabling = matches!(c, CharCommand::EnableVdu) && command_nb == 1 && entry_nb != 0; 
+                let is_catart_disabling =
+                    matches!(c, CharCommand::DisableVdu) && commands_iter.peek().is_none();
+                let is_catart_enabling =
+                    matches!(c, CharCommand::EnableVdu) && command_nb == 1 && entry_nb != 0;
                 let is_dot_handling = matches!(c, CharCommand::GraphicsInkMode(46));
-                
+
                 let is_nop = matches!(c, CharCommand::Nop);
                 let is_enable = matches!(c, CharCommand::EnableVdu);
-                let is_visible_char_handling = matches!(c, CharCommand::Char(c) if c.is_ascii_graphic() && c!=b'"');
+                let is_visible_char_handling =
+                    matches!(c, CharCommand::Char(c) if c.is_ascii_graphic() && c!=b'"');
 
-                if enable && !is_catart_disabling && !is_catart_enabling && !is_nop && !is_dot_handling {
-
+                if enable
+                    && !is_catart_disabling
+                    && !is_catart_enabling
+                    && !is_nop
+                    && !is_dot_handling
+                {
                     if is_visible_char_handling {
                         current_string.push(c.first_byte());
                     }
@@ -204,20 +208,17 @@ impl Catalog {
                 current_file.push(CharCommand::String(current_string.clone()));
             }
             entries.push(current_file);
-        };
+        }
 
-
-        let basic_str = entries.into_iter()
+        let basic_str = entries
+            .into_iter()
             .map(|cmds| cmds.into_iter().map(|c| c.to_basic_string()).join(":"))
             .enumerate()
-            .map(|(i, s)| format!("{} {}", (i+1)*10, s))
+            .map(|(i, s)| format!("{} {}", (i + 1) * 10, s))
             .join("\n");
 
-
         BasicProgram::parse(&basic_str).expect("Failed to parse generated BASIC listing")
-
     }
-
 
     pub fn empty() -> Self {
         Catalog {
@@ -238,9 +239,12 @@ impl Catalog {
     }
 
     pub fn add(&mut self, entry: PrintableEntry) -> Result<(), String> {
-        let available = self.entries.iter_mut().find(|e| e.is_empty())
+        let available = self
+            .entries
+            .iter_mut()
+            .find(|e| e.is_empty())
             .ok_or_else(|| "Catalog is full, cannot add more entries".to_string())?;
-        
+
         *available = entry;
         Ok(())
     }
@@ -250,7 +254,7 @@ impl Catalog {
     }
 
     /// Convert the catalog to a byte slice (2048 bytes = 64 entries × 32 bytes)
-    /// 
+    ///
     /// # Safety
     /// This method uses unsafe code to reinterpret the Catalog's memory as bytes.
     /// This is safe because Catalog is `#[repr(C)]` with a fixed layout.
@@ -272,25 +276,32 @@ pub struct UnifiedCatalog {
 impl From<&[UnifiedPrintableEntry]> for UnifiedCatalog {
     fn from(value: &[UnifiedPrintableEntry]) -> Self {
         let entries = value.to_vec();
-        UnifiedCatalog{entries}
+        UnifiedCatalog { entries }
     }
 }
 
 impl From<&[PrintableEntryFileName]> for UnifiedCatalog {
     fn from(value: &[PrintableEntryFileName]) -> Self {
-        let entries = value.iter().map(|fname| UnifiedPrintableEntry::from(*fname)).collect();
-        UnifiedCatalog{entries}
+        let entries = value
+            .iter()
+            .map(|fname| UnifiedPrintableEntry::from(*fname))
+            .collect();
+        UnifiedCatalog { entries }
     }
 }
 
 impl UnifiedCatalog {
     pub fn new(entries: [UnifiedPrintableEntry; 64]) -> Self {
         let entries_vec = entries.to_vec();
-        UnifiedCatalog { entries: entries_vec }
+        UnifiedCatalog {
+            entries: entries_vec
+        }
     }
 
     pub fn empty() -> Self {
-        UnifiedCatalog { entries: Vec::new() }
+        UnifiedCatalog {
+            entries: Vec::new()
+        }
     }
 
     pub fn push(&mut self, entry: UnifiedPrintableEntry) -> Result<(), String> {
@@ -299,7 +310,9 @@ impl UnifiedCatalog {
             return Err("UnifiedCatalog is full, cannot add more entries".to_string());
         }
         if self.entries.iter().any(|e| e.fname == entry.fname) {
-            return Err("UnifiedCatalog already contains an entry with the same file name".to_string());
+            return Err(
+                "UnifiedCatalog already contains an entry with the same file name".to_string()
+            );
         }
         self.entries.push(entry.into());
         Ok(())
@@ -315,21 +328,20 @@ impl UnifiedCatalog {
 }
 
 impl From<Catalog> for UnifiedCatalog {
-
-
     fn from(catalog: Catalog) -> Self {
         let mut entries: Vec<UnifiedPrintableEntry> = Vec::new();
 
         for raw_entry in catalog.into_iter() {
             if raw_entry.is_empty() {
-                continue;   
+                continue;
             }
 
             let entry_size = raw_entry.size_kb();
 
             if let Some(existing_entry) = entries.iter_mut().find(|e| e.fname == raw_entry.fname) {
                 existing_entry.size_kb += entry_size;
-            } else {
+            }
+            else {
                 entries.push(UnifiedPrintableEntry {
                     user: raw_entry.user,
                     fname: raw_entry.fname,
@@ -338,22 +350,20 @@ impl From<Catalog> for UnifiedCatalog {
             }
         }
 
-        UnifiedCatalog { entries}
-
+        UnifiedCatalog { entries }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnifiedPrintableEntry {
-    pub user: u8, // Currently ignored. TODO handle user 
+    pub user: u8, // Currently ignored. TODO handle user
     pub fname: PrintableEntryFileName,
-    pub size_kb: u16,
+    pub size_kb: u16
 }
 
 impl From<Vec<PrintableEntry>> for UnifiedPrintableEntry {
     // this is valid if all entries have the same filename and user
     fn from(raw_entries: Vec<PrintableEntry>) -> Self {
-
         let mut iter = raw_entries.into_iter();
         let mut init: Self = iter.next().unwrap().into();
         for entry in iter {
@@ -420,16 +430,18 @@ impl UnifiedPrintableEntry {
         let size = size.as_bytes();
 
         [
-            fname[0], fname[1], fname[2], fname[3], fname[4], fname[5], fname[6], fname[7], 
-            fname[8], 
-            fname[9], fname[10], fname[11],
-            size[0], size[1], size[2], size[3], size[4] // not sure this is correct. Maybe some space are drawn wheareas they are supposed to be skip
+            fname[0], fname[1], fname[2], fname[3], fname[4], fname[5], fname[6], fname[7],
+            fname[8], fname[9], fname[10], fname[11], size[0], size[1], size[2], size[3],
+            size[4] /* not sure this is correct. Maybe some space are drawn wheareas they are supposed to be skip */
         ]
     }
 
     pub fn commands(&self) -> CharCommandList {
         let bytes = self.all_generated_bytes();
-        let commands = bytes.iter().map(|&b| CharCommand::Char(b)).collect::<Vec<CharCommand>>();
+        let commands = bytes
+            .iter()
+            .map(|&b| CharCommand::Char(b))
+            .collect::<Vec<CharCommand>>();
         CharCommandList::from(commands)
     }
 
@@ -440,8 +452,7 @@ impl UnifiedPrintableEntry {
 
 // https://cpc.sylvestre.org/technique/technique_catart1.html
 #[repr(C)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[derive(Builder)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Builder)]
 pub struct PrintableEntry {
     pub user: u8, // 0 to be printed
     pub fname: PrintableEntryFileName,
@@ -449,14 +460,14 @@ pub struct PrintableEntry {
     pub sectors: [u8; 16]
 }
 
-impl From<PrintableEntryFileName> for PrintableEntry{
+impl From<PrintableEntryFileName> for PrintableEntry {
     fn from(raw: PrintableEntryFileName) -> Self {
         let mut empty = Self::empty();
         if !raw.is_empty() {
-        empty.user = 0;
-        empty.sectors = [0; 16];
-        empty.pieces = [0; 4];
-        empty.fname = raw;
+            empty.user = 0;
+            empty.sectors = [0; 16];
+            empty.pieces = [0; 4];
+            empty.fname = raw;
         }
         empty
     }
@@ -465,10 +476,10 @@ impl From<PrintableEntryFileName> for PrintableEntry{
 impl PrintableEntry {
     pub fn empty() -> Self {
         PrintableEntry {
-            user: 0xe5,
+            user: 0xE5,
             fname: PrintableEntryFileName::empty(),
-            pieces: [0xe5; 4],
-            sectors: [0xe5; 16]
+            pieces: [0xE5; 4],
+            sectors: [0xE5; 16]
         }
     }
 
@@ -512,8 +523,6 @@ impl PrintableEntry {
         self.sectors.iter().filter(|&&s| s != 0).count() as u16
     }
 }
-
-
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -572,14 +581,24 @@ pub struct EntriesGrid<'cat> {
 
 impl<'cat> EntriesGrid<'cat> {
     /// Create a new EntriesGrid from columns
-    pub fn new(columns: Vec<Vec<Cow<'cat, UnifiedPrintableEntry>>>, mode: ScreenMode, order: CatalogType) -> Self {
+    pub fn new(
+        columns: Vec<Vec<Cow<'cat, UnifiedPrintableEntry>>>,
+        mode: ScreenMode,
+        order: CatalogType
+    ) -> Self {
         let total_entries = columns.iter().map(|col| col.len()).sum::<usize>();
         assert!(
             total_entries <= 64,
             "EntriesGrid must never have more than 64 entries, got {}",
             total_entries
         );
-        EntriesGrid { columns, mode, order, drive: 'A', user: 0 }
+        EntriesGrid {
+            columns,
+            mode,
+            order,
+            drive: 'A',
+            user: 0
+        }
     }
 
     /// Create a new EntriesGrid from entries and number of columns
@@ -602,7 +621,13 @@ impl<'cat> EntriesGrid<'cat> {
             columns[i % num_columns].push(entry);
         }
 
-        EntriesGrid { columns, mode, order, drive: 'A', user: 0}
+        EntriesGrid {
+            columns,
+            mode,
+            order,
+            drive: 'A',
+            user: 0
+        }
     }
 
     /// Get the number of columns
@@ -624,7 +649,7 @@ impl<'cat> EntriesGrid<'cat> {
     pub fn column(&self, index: usize) -> Option<&Vec<Cow<'cat, UnifiedPrintableEntry>>> {
         self.columns.get(index)
     }
-    
+
     pub fn get(&self, row: usize, col: usize) -> Option<&Cow<'cat, UnifiedPrintableEntry>> {
         self.columns.get(col).and_then(|column| column.get(row))
     }
@@ -632,8 +657,7 @@ impl<'cat> EntriesGrid<'cat> {
     /// Iterate over rows, yielding an iterator over entries in each row
     pub fn rows(
         &self
-    ) -> impl Iterator<Item = impl Iterator<Item = Option<&Cow<'cat, UnifiedPrintableEntry>>>>
-    {
+    ) -> impl Iterator<Item = impl Iterator<Item = Option<&Cow<'cat, UnifiedPrintableEntry>>>> {
         let num_rows = self.max_num_rows();
         (0..num_rows).map(move |row| {
             (0..self.num_columns())
@@ -642,9 +666,7 @@ impl<'cat> EntriesGrid<'cat> {
     }
 
     /// Iterate over all entries in row-major order (left to right, then next row)
-    pub fn entries_display_order(
-        &self
-    ) -> impl Iterator<Item = &Cow<'cat, UnifiedPrintableEntry>> {
+    pub fn entries_display_order(&self) -> impl Iterator<Item = &Cow<'cat, UnifiedPrintableEntry>> {
         self.rows().flatten().filter_map(|entry| entry)
     }
 
@@ -679,10 +701,11 @@ impl<'cat> EntriesGrid<'cat> {
             };
             commands.extend(cmd);
             commands.add_newlines(1);
-        
 
             commands.add_newlines(1);
-            commands.extend(CharCommandList::from(format!("Drive {}: user {}", self.drive, self.user).as_bytes()));
+            commands.extend(CharCommandList::from(
+                format!("Drive {}: user {}", self.drive, self.user).as_bytes()
+            ));
             commands.add_newlines(2);
         }
 
@@ -691,12 +714,19 @@ impl<'cat> EntriesGrid<'cat> {
             for (col, entry) in row_entries.flatten().enumerate() {
                 available = available.saturating_sub(entry.size_kb());
                 commands.extend(entry.commands());
-                
+
                 let nb_spaces = match self.mode {
-                    ScreenMode::Mode1 => if col == self.num_columns() - 1 { 2 } else { 4 },
+                    ScreenMode::Mode1 => {
+                        if col == self.num_columns() - 1 {
+                            2
+                        }
+                        else {
+                            4
+                        }
+                    },
                     _ => unimplemented!()
                 };
-                
+
                 for _ in 0..nb_spaces {
                     commands.push(CharCommand::CursorRight);
                 }
@@ -705,8 +735,10 @@ impl<'cat> EntriesGrid<'cat> {
 
         if show_headers {
             commands.add_newlines(2);
-            commands.extend(CharCommandList::from(format!("{:>3}K free", available).as_bytes()));
-            //commands.add_newlines(2);
+            commands.extend(CharCommandList::from(
+                format!("{:>3}K free", available).as_bytes()
+            ));
+            // commands.add_newlines(2);
         }
 
         commands.into()
@@ -726,7 +758,6 @@ impl PrintableEntryFileName {
         else {
             (fname.as_str(), "")
         };
-
 
         assert!(name.len() <= 8, "Filename part too long: {}", name);
         assert!(ext.len() <= 3, "Extension part too long: {}", ext);
@@ -753,7 +784,6 @@ impl PrintableEntryFileName {
             e3: bytes[10]
         }
     }
-
 
     /// Helper method to handle dot hiding logic
     fn handle_dot_hiding(dot_hiding: DotHiding, display_char: u8) -> (u8, u8) {
@@ -955,11 +985,11 @@ impl PrintableEntryFileName {
         char3: u8,
         char4: u8,
         char5: u8,
-        char6: u8,
+        char6: u8
     ) -> Self {
         let (f8, e1) = Self::handle_dot_hiding(dot_hiding, char5);
         PrintableEntryFileName {
-            f1: b' ', //Index
+            f1: b' ',  // Index
             f2: EOT,   // 4 for screen mode and 1st indexx
             f3: mode,  // sceren mode
             f4: char1, // Displayable byte
@@ -1021,17 +1051,17 @@ impl PrintableEntryFileName {
 impl PrintableEntryFileName {
     pub fn empty() -> Self {
         PrintableEntryFileName {
-            f1: 0xe5,
-            f2: 0xe5,
-            f3: 0xe5,
-            f4: 0xe5,
-            f5: 0xe5,
-            f6: 0xe5,
-            f7: 0xe5,
-            f8: 0xe5,
-            e1: 0xe5,
-            e2: 0xe5,
-            e3: 0xe5
+            f1: 0xE5,
+            f2: 0xE5,
+            f3: 0xE5,
+            f4: 0xE5,
+            f5: 0xE5,
+            f6: 0xE5,
+            f7: 0xE5,
+            f8: 0xE5,
+            e1: 0xE5,
+            e2: 0xE5,
+            e3: 0xE5
         }
     }
 
@@ -1079,6 +1109,9 @@ impl PrintableEntryFileName {
         self.sequential_commands()
     }
 
+    /// Generate the CharCommandList for this entry, considering it is a sequential entry.
+    /// However it can fails when additional arguments are obtained from file size and so on.
+    /// In that case wrong parameters are set to 0xFF to avoid panicing. So to not be really trusted
     pub fn sequential_commands(&self) -> CharCommandList {
         let bytes = self.all_generated_bytes();
 
@@ -1113,11 +1146,9 @@ pub enum CatalogType {
     Dir
 }
 
-
 impl UnifiedCatalog {
-
     pub fn visible_entries(&self) -> impl Iterator<Item = &UnifiedPrintableEntry> {
-        self.entries.iter().filter(|e| !e.fname().is_system())
+        self.entries.iter().filter(|e| !e.is_hidden())
     }
 
     pub fn visible_sorted_entries(&self, order: CatalogType) -> Vec<&UnifiedPrintableEntry> {
@@ -1126,14 +1157,23 @@ impl UnifiedCatalog {
         if let CatalogType::Cat = order {
             entries.sort_by_cached_key(|a| {
                 let a = a.fname();
-                let a_name = a.filename().iter().chain(a.extension().iter()).cloned().collect::<Vec<u8>>();
+                let a_name = a
+                    .filename()
+                    .iter()
+                    .chain(a.extension().iter())
+                    .cloned()
+                    .collect::<Vec<u8>>();
                 a_name
             });
         }
         entries
     }
 
-    pub fn visible_entries_by_mode_and_order(&self, mode: ScreenMode, order: CatalogType) -> EntriesGrid {
+    pub fn visible_entries_by_mode_and_order(
+        &self,
+        mode: ScreenMode,
+        order: CatalogType
+    ) -> EntriesGrid {
         let entries = self.visible_sorted_entries(order);
 
         // TODO compute that with order or mode
@@ -1178,7 +1218,7 @@ impl UnifiedCatalog {
     ) -> CharCommandList {
         self.commands_by_mode_and_order_with_params(mode, order, true)
     }
-        
+
     pub fn commands_by_mode_and_order_with_params(
         &self,
         mode: ScreenMode,
@@ -1187,9 +1227,11 @@ impl UnifiedCatalog {
     ) -> CharCommandList {
         let grid = self.visible_entries_by_mode_and_order(mode, order);
         let commands = grid.commands_with_params(show_headers);
-        let bytes = commands.iter().flat_map(|cmd| cmd.bytes().into_iter()).collect::<Vec<_>>(); // ensure we merge commands
+        let bytes = commands
+            .iter()
+            .flat_map(|cmd| cmd.bytes().into_iter())
+            .collect::<Vec<_>>(); // ensure we merge commands
         CharCommandList::from_bytes(&bytes)
-
     }
 }
 
@@ -1373,10 +1415,9 @@ impl EntryConstraint {
     }
 }
 
-
 /// Represents a familly of catart entries
 pub enum EntryKind {
-    // Enties are sequentially ordered and the first one must set the mode 
+    // Enties are sequentially ordered and the first one must set the mode
     SequentialFirstWithMode(DotHiding),
     // Enties are sequentially ordered and the first does not set the mode
     SequentialFirstWithoutMode(DotHiding),
@@ -1468,7 +1509,7 @@ impl EntryKind {
                     args[3],
                     args[4],
                     args[5],
-                    args[6],
+                    args[6]
                 )
             },
             EntryKind::SequentialFirstWithoutMode(dot_hiding) => {
@@ -1727,7 +1768,8 @@ impl SerialCatalogBuilder {
                     first_entry.build_entry(&commands_buffer, None)
                 }
                 else {
-                    other_entry_kinds.build_entry(&commands_buffer, Some((entries.len() as u8 + b' ') as u8))
+                    other_entry_kinds
+                        .build_entry(&commands_buffer, Some((entries.len() as u8 + b' ') as u8))
                 };
 
                 if entries.len() >= 64 {
@@ -1751,8 +1793,7 @@ impl SerialCatalogBuilder {
         // update the numbers of the entries because they were created without correct numbering.
         // Their current number is the number in the cataog + 4 (as per spec) but now we it to become the number in the display grid row by row
         // Remember to display in the grid the entries or order by their number in a column, but they are displayed row by row
-        let mut cat =
-            UnifiedCatalog::from(entries.as_slice());
+        let mut cat = UnifiedCatalog::from(entries.as_slice());
         assert_eq!(
             cat.visible_entries().count(),
             entries.len(),
@@ -1876,7 +1917,8 @@ mod tests {
     fn test_entries_by_mode_and_order_mode0() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Cat);
+        let result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Cat);
 
         // Mode0 should have 1 column
         assert_eq!(result.num_columns(), 1);
@@ -1887,7 +1929,8 @@ mod tests {
     fn test_entries_by_mode_and_order_mode1() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
 
         // Mode1 should have 2 columns
         assert_eq!(result.num_columns(), 2);
@@ -1904,7 +1947,8 @@ mod tests {
     fn test_entries_by_mode_and_order_mode2() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
 
         // Mode2 should have 4 columns
         assert_eq!(result.num_columns(), 4);
@@ -1919,7 +1963,8 @@ mod tests {
     fn test_entries_by_mode_and_order_cat_sorting() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Cat);
+        let result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Cat);
 
         // Should be sorted alphabetically (apple, banana, cher, dog, file05, ...)
         let first_five: Vec<String> = result
@@ -1937,7 +1982,8 @@ mod tests {
     fn test_entries_by_mode_and_order_dir_no_sorting() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Dir);
+        let result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode0, CatalogType::Dir);
 
         // Should maintain original order (zebra, apple, banana, cher, dog, ...)
         let first_five: Vec<String> = result
@@ -2043,7 +2089,8 @@ mod tests {
         );
 
         // Test CAT (sorted alphabetically)
-        let cat_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let cat_result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
         assert_eq!(cat_result.num_columns(), 4); // 4 columns for Mode2
 
         // Extract display names from each column
@@ -2078,7 +2125,8 @@ mod tests {
         assert_eq!(col3, columns_cat[3]);
 
         // Test DIR (original order)
-        let dir_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Dir);
+        let dir_result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Dir);
         assert_eq!(dir_result.num_columns(), 4); // 4 columns for Mode2
 
         // Extract display names from each column
@@ -2119,7 +2167,8 @@ mod tests {
     fn test_entries_by_mode_and_order_row_major() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
 
         // Mode1 should have 2 columns
         assert_eq!(result.num_columns(), 2);
@@ -2145,14 +2194,16 @@ mod tests {
     fn test_entries_by_mode_and_order_column_distribution() {
         // Create a catalog with exactly 64 entries for testing vertical distribution in CAT mode
         let mut entries = Vec::new();
-        
-        // Create 64 unique entries (0-63) 
+
+        // Create 64 unique entries (0-63)
         for i in 0..64 {
             let name_char = if i < 26 {
                 (b'a' + i as u8) as char
-            } else if i < 52 {
+            }
+            else if i < 52 {
                 (b'A' + (i - 26) as u8) as char
-            } else {
+            }
+            else {
                 (b'0' + (i - 52) as u8) as char
             };
             entries.push(PrintableEntryFileName {
@@ -2170,20 +2221,32 @@ mod tests {
             });
         }
 
-        let catalog = Catalog::try_from(entries.iter().map(|f| PrintableEntry::from(*f)).collect::<Vec<_>>().as_slice()).unwrap();
+        let catalog = Catalog::try_from(
+            entries
+                .iter()
+                .map(|f| PrintableEntry::from(*f))
+                .collect::<Vec<_>>()
+                .as_slice()
+        )
+        .unwrap();
         let unified_catalog = UnifiedCatalog::from(catalog);
 
         // Test Mode2 (4 columns) with CAT sorting - uses horizontal filling
-        let result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
         assert_eq!(result.num_columns(), 4);
 
         // With 64 entries in 4 columns, each should have 16 entries
         for col_idx in 0..result.num_columns() {
-            assert_eq!(result.column(col_idx).unwrap().len(), 16, 
-                "Column {} should have 16 entries", col_idx);
+            assert_eq!(
+                result.column(col_idx).unwrap().len(),
+                16,
+                "Column {} should have 16 entries",
+                col_idx
+            );
         }
 
-        // Verify we have all 64 unique entries distributed 
+        // Verify we have all 64 unique entries distributed
         let total_entries: usize = (0..result.num_columns())
             .map(|i| result.column(i).unwrap().len())
             .sum();
@@ -2196,25 +2259,33 @@ mod tests {
         let mut entries = Vec::new();
         for _ in 0..64 {
             entries.push(PrintableEntryFileName {
-                f1: 0xe5,
-                f2: 0xe5,
-                f3: 0xe5,
-                f4: 0xe5,
-                f5: 0xe5,
-                f6: 0xe5,
-                f7: 0xe5,
-                f8: 0xe5,
-                e1: 0xe5,
-                e2: 0xe5,
-                e3: 0xe5
+                f1: 0xE5,
+                f2: 0xE5,
+                f3: 0xE5,
+                f4: 0xE5,
+                f5: 0xE5,
+                f6: 0xE5,
+                f7: 0xE5,
+                f8: 0xE5,
+                e1: 0xE5,
+                e2: 0xE5,
+                e3: 0xE5
             });
         }
 
-        let catalog = Catalog::try_from(entries.iter().map(|f| PrintableEntry::from(*f)).collect::<Vec<_>>().as_slice()).unwrap();
+        let catalog = Catalog::try_from(
+            entries
+                .iter()
+                .map(|f| PrintableEntry::from(*f))
+                .collect::<Vec<_>>()
+                .as_slice()
+        )
+        .unwrap();
         let unified_catalog = UnifiedCatalog::from(catalog);
 
         // Test CAT mode - all empty entries should be filtered out
-        let cat_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let cat_result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
         assert_eq!(cat_result.num_columns(), 2);
         // All entries are empty, so no entries should be distributed
         assert_eq!(
@@ -2223,7 +2294,8 @@ mod tests {
         );
 
         // Test DIR mode - entries should maintain original order
-        let dir_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Dir);
+        let dir_result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Dir);
         assert_eq!(dir_result.num_columns(), 2);
         assert_eq!(
             dir_result.column(0).unwrap().len() + dir_result.column(1).unwrap().len(),
@@ -2252,11 +2324,19 @@ mod tests {
             entries.push(PrintableEntryFileName::empty());
         }
 
-        let catalog = Catalog::try_from(entries.iter().map(|f| PrintableEntry::from(*f)).collect::<Vec<_>>().as_slice()).unwrap();
+        let catalog = Catalog::try_from(
+            entries
+                .iter()
+                .map(|f| PrintableEntry::from(*f))
+                .collect::<Vec<_>>()
+                .as_slice()
+        )
+        .unwrap();
         let unified_catalog = UnifiedCatalog::from(catalog);
 
         // Test DIR mode - maintains original order with horizontal filling
-        let dir_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Dir);
+        let dir_result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Dir);
         assert_eq!(dir_result.num_columns(), 4);
 
         // Only non-empty entries are distributed, so only 1 entry total
@@ -2272,7 +2352,8 @@ mod tests {
         );
 
         // Test CAT mode - sorts alphabetically, so "test" should be the only entry
-        let cat_result = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let cat_result =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
         assert_eq!(cat_result.num_columns(), 4);
 
         // Only 1 non-empty entry
@@ -2313,7 +2394,8 @@ mod tests {
     fn test_entries_grid_to_owned() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog);
-        let grid = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let grid =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
 
         // Convert to owned
         let owned_grid = grid.to_owned();
@@ -2341,7 +2423,8 @@ mod tests {
     fn test_from_entries_grid_for_catalog() {
         let catalog = Catalog::new(create_test_entries());
         let unified_catalog = UnifiedCatalog::from(catalog.clone());
-        let grid = unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
+        let grid =
+            unified_catalog.visible_entries_by_mode_and_order(ScreenMode::Mode2, CatalogType::Cat);
 
         // Convert back to catalog
         let reconstructed_unified: UnifiedCatalog = grid.into();
@@ -2373,7 +2456,8 @@ mod tests {
         let original_unified = UnifiedCatalog::from(original_catalog.clone());
 
         // Convert to grid and back to catalog
-        let grid = original_unified.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
+        let grid =
+            original_unified.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
         let reconstructed_unified: UnifiedCatalog = grid.into();
 
         // Should preserve the entries in display order
@@ -2421,9 +2505,9 @@ mod tests {
             let unified_catalog = builder.build(&commands, ScreenMode::Mode1);
 
             let expected_nb_entries = match i {
-                1..=6 => 1,   // Mode + "Hello" fits in first entry (7 bytes <= 8 bytes capacity)
-                7..=10 => 2,  // Pen + Locate + "Wo" fits in second entry (7 bytes = 7 bytes capacity)
-                _  => 3,      // Remaining chars need third entry
+                1..=6 => 1,  // Mode + "Hello" fits in first entry (7 bytes <= 8 bytes capacity)
+                7..=10 => 2, /* Pen + Locate + "Wo" fits in second entry (7 bytes = 7 bytes capacity) */
+                _ => 3       // Remaining chars need third entry
             };
 
             // XXX it currently fails but maybe it should not
@@ -2436,8 +2520,11 @@ mod tests {
             );
 
             // Reconstruct commands from catalog
-            let reconstructed_commands =
-                unified_catalog.commands_by_mode_and_order_with_params(ScreenMode::Mode1, CatalogType::Cat, false);
+            let reconstructed_commands = unified_catalog.commands_by_mode_and_order_with_params(
+                ScreenMode::Mode1,
+                CatalogType::Cat,
+                false
+            );
 
             // Interpret both to get screen output
             let mut original_interpreter = interpret::Interpreter::new_6128();
@@ -2449,7 +2536,6 @@ mod tests {
                 .interpret(&reconstructed_commands, false)
                 .unwrap();
             let reconstructed_screen = reconstructed_interpreter.to_string();
-
 
             // They should produce the same screen output
             assert_eq!(original_screen, reconstructed_screen);
@@ -2481,8 +2567,11 @@ mod tests {
         let catalog = builder.build(&commands, ScreenMode::Mode1);
 
         // Reconstruct commands from catalog
-        let reconstructed_commands =
-            catalog.commands_by_mode_and_order_with_params(ScreenMode::Mode1, CatalogType::Cat, false);
+        let reconstructed_commands = catalog.commands_by_mode_and_order_with_params(
+            ScreenMode::Mode1,
+            CatalogType::Cat,
+            false
+        );
         // Interpret both to get screen output
         let mut original_interpreter = interpret::Interpreter::new_6128();
         original_interpreter.interpret(&commands, false).unwrap();
@@ -2516,7 +2605,7 @@ mod tests {
         assert_eq!(commands.as_slice().len(), 0);
         // reconstructed catalog is empty because there are no files
         assert_eq!(unified_catalog.entries.len(), 0);
-        
+
         // reconstructed commands are NOT empty because of headers
         assert!(reconstructed_commands.as_slice().len() > 0);
     }
@@ -2580,9 +2669,9 @@ mod tests {
         assert_eq!(
             entry,
             PrintableEntryFileName {
-                f1: b' ',  // index placeholder
-                f2: cmd_mode1[0],  // EOT
-                f3: cmd_mode1[1],  // mode value
+                f1: b' ',         // index placeholder
+                f2: cmd_mode1[0], // EOT
+                f3: cmd_mode1[1], // mode value
                 f4: nop,
                 f5: nop,
                 f6: nop,
@@ -2610,9 +2699,9 @@ mod tests {
         assert_eq!(
             entry,
             PrintableEntryFileName {
-                f1: b' ',  // index placeholder
-                f2: cmd_mode1[0],  // EOT
-                f3: cmd_mode1[1],  // mode value
+                f1: b' ',         // index placeholder
+                f2: cmd_mode1[0], // EOT
+                f3: cmd_mode1[1], // mode value
                 f4: b'A',
                 f5: b'B',
                 f6: b'C',
@@ -2623,7 +2712,6 @@ mod tests {
                 e3: dis
             }
         );
-
     }
 
     #[test]
@@ -2651,27 +2739,27 @@ mod tests {
             // First entry: SequentialFirstWithMode contains Mode + H,e,l,l,o
             // f1 is space (index placeholder), f2=EOT, f3=mode_value
             PrintableEntryFileName {
-                f1: b' ',  // Space: index placeholder
-                f2: CharCommand::Mode(1).first_byte(),   // EOT
-                f3: CharCommand::Mode(1).second_byte(),  // mode value
+                f1: b' ',                               // Space: index placeholder
+                f2: CharCommand::Mode(1).first_byte(),  // EOT
+                f3: CharCommand::Mode(1).second_byte(), // mode value
                 f4: b'H',
                 f5: b'e',
                 f6: b'l',
                 f7: b'l',
                 f8: CharCommand::GraphicsInkMode(b'.').first_byte(),
-                e1: b'o',  // Only one byte fills Any(2) slot
-                e2: 0,     // Padding (Pen command goes to next entry)
+                e1: b'o', // Only one byte fills Any(2) slot
+                e2: 0,    // Padding (Pen command goes to next entry)
                 e3: CharCommand::DisableVdu.first_byte()
             },
             // Second entry: SequentialBasic contains Pen + Locate + W,o
             // f1 is the index character (calculated by builder)
             PrintableEntryFileName {
-                f1: b'!',  // Index 33 (0x21)
-                f2: CharCommand::EnableVdu.first_byte(),  // ACK
-                f3: CharCommand::Pen(2).first_byte(),  // SI
-                f4: CharCommand::Pen(2).second_byte(),  // 2
+                f1: b'!',                                      // Index 33 (0x21)
+                f2: CharCommand::EnableVdu.first_byte(),       // ACK
+                f3: CharCommand::Pen(2).first_byte(),          // SI
+                f4: CharCommand::Pen(2).second_byte(),         // 2
                 f5: CharCommand::Locate(10, 20).first_byte(),  // US
-                f6: CharCommand::Locate(10, 20).second_byte(),  // 11
+                f6: CharCommand::Locate(10, 20).second_byte(), // 11
                 f7: CharCommand::Locate(10, 20).third_byte(),  // 21
                 f8: CharCommand::GraphicsInkMode(b'.').first_byte(),
                 e1: b'W',
@@ -2680,7 +2768,7 @@ mod tests {
             },
             // Third entry: SequentialBasic contains r,l,d,Cls + padding
             PrintableEntryFileName {
-                f1: b'"',  // Index 34 (0x22)
+                f1: b'"', // Index 34 (0x22)
                 f2: CharCommand::EnableVdu.first_byte(),
                 f3: b'r',
                 f4: b'l',
@@ -2701,14 +2789,13 @@ mod tests {
         // Further assertions can be added based on expected entries
     }
 
-
     #[test]
     fn test_raw_printable_entries() {
         let fname = PrintableEntryFileName::new("TEST.TXT");
         let size2 = PrintableEntry::artificial(fname, 2);
         let size16 = PrintableEntry::artificial(fname, 16);
         let size17 = PrintableEntry::artificial(fname, 17);
-        let size33= PrintableEntry::artificial(fname, 33);
+        let size33 = PrintableEntry::artificial(fname, 33);
 
         assert_eq!(size2.len(), 1);
         assert_eq!(size16.len(), 1);
@@ -2729,7 +2816,7 @@ mod tests {
         catalog.push(entry.clone()).unwrap();
         assert_eq!(1, catalog.visible_entries().count());
 
-        let err=  catalog.push(entry.into());
+        let err = catalog.push(entry.into());
         assert!(err.is_err());
         assert_eq!(1, catalog.visible_entries().count());
 
@@ -2740,9 +2827,6 @@ mod tests {
         assert_eq!(20, entry.size_kb());
         catalog.push(entry).unwrap();
         assert_eq!(2, catalog.visible_entries().count());
-
-
-
 
         let fname = PrintableEntryFileName::new("ABCDEFGH.IJK");
         assert_eq!(&fname.all_generated_bytes(), b"ABCDEFGH.IJK");
@@ -2757,9 +2841,9 @@ mod tests {
         let cat = catalog.visible_entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Cat);
         assert_eq!(2, cat.num_columns());
         assert_eq!(2, cat.max_num_rows());
-        assert_eq!(cat.get(0,0).unwrap().display_name(), "ABCDEFGH.IJK");
-        assert_eq!(cat.get(0,1).unwrap().display_name(), "TEST2   .TXT");
-        assert_eq!(cat.get(1,0).unwrap().display_name(), "TEST    .TXT");
+        assert_eq!(cat.get(0, 0).unwrap().display_name(), "ABCDEFGH.IJK");
+        assert_eq!(cat.get(0, 1).unwrap().display_name(), "TEST2   .TXT");
+        assert_eq!(cat.get(1, 0).unwrap().display_name(), "TEST    .TXT");
 
         let display_commands = cat.commands();
         let mut interpreter = crate::interpret::Interpreter::new_6128();
@@ -2767,12 +2851,8 @@ mod tests {
         let screen_output = interpreter.to_string();
         println!("Screen Output:\n{}", screen_output);
 
-
-        /*
-        let dir = catalog.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Dir);
-        assert_eq!(3, dir.num_columns());
-        assert_eq!(2, dir.max_num_rows());
-        */
-
+        // let dir = catalog.entries_by_mode_and_order(ScreenMode::Mode1, CatalogType::Dir);
+        // assert_eq!(3, dir.num_columns());
+        // assert_eq!(2, dir.max_num_rows());
     }
 }

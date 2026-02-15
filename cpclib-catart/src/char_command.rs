@@ -1,6 +1,5 @@
 use cpclib_common::itertools::Itertools;
 
-
 // Allow iteration over &CharCommandList as &CharCommand
 impl<'a> IntoIterator for &'a CharCommandList {
     type IntoIter = std::slice::Iter<'a, CharCommand>;
@@ -14,15 +13,13 @@ impl<'a> IntoIterator for &'a CharCommandList {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct CharCommandList(Vec<CharCommand>);
 
-
 impl From<&[u8]> for CharCommandList {
     fn from(data: &[u8]) -> Self {
         Self::from_bytes(data)
     }
 }
 
-impl<const C: usize> From<&[u8; C]> for CharCommandList
-{
+impl<const C: usize> From<&[u8; C]> for CharCommandList {
     fn from(data: &[u8; C]) -> Self {
         Self::from(&data[..])
     }
@@ -90,7 +87,9 @@ impl CharCommandList {
                 Err(missing) => {
                     let mut params = Vec::new();
                     for i in 0..missing {
-                        params.push(data[idx + 1 + i]);
+                        params.push(data.get(idx + 1 + i)
+                            .cloned()
+                            .unwrap_or_else(|| {eprintln!("missing byte"); 0xff}));
                     }
                     let cmd = match data[idx] {
                         SOH => CharCommand::PrintSymbol(params[0]),
@@ -110,7 +109,12 @@ impl CharCommandList {
                         SUB => CharCommand::Window(params[0], params[1], params[2], params[3]),
                         FS => CharCommand::Ink(params[0], params[1], params[2]),
                         GS => CharCommand::Border(params[0], params[1]),
-                        US => CharCommand::Locate(params[0].saturating_sub(1), params[1].saturating_sub(1)),  // catalog 1-based → CharCommand 0-based
+                        US => {
+                            CharCommand::Locate(
+                                params[0],
+                                params[1]
+                            )
+                        }, // catalog 1-based → CharCommand 0-based
                         _ => panic!("Logic error in from_bytes for char {}", data[idx])
                     };
                     list.push(cmd);
@@ -121,9 +125,8 @@ impl CharCommandList {
         list.into()
     }
 
-
     /// Helper to add n newlines (CR LF) to commands
-    pub fn add_newlines(&mut self,  count: usize) {
+    pub fn add_newlines(&mut self, count: usize) {
         for _ in 0..count {
             self.0.push(CharCommand::CarriageReturn);
             self.0.push(CharCommand::CursorDown);
@@ -131,34 +134,27 @@ impl CharCommandList {
     }
 
     pub fn to_command_string(&self) -> String {
-        self.0.iter()
-            .map(|cmd| cmd.to_command_string())
-            .join(":")
+        self.0.iter().map(|cmd| cmd.to_command_string()).join(":")
     }
 
     pub fn to_basic_string(&self) -> String {
-        self.0.iter()
-            .map(|cmd| cmd.to_basic_string())
-            .join(":")
+        self.0.iter().map(|cmd| cmd.to_basic_string()).join(":")
     }
 
     pub fn bytes(&self) -> Vec<u8> {
-        self.0.iter()
-            .flat_map(|cmd| cmd.bytes())
-            .collect()
+        self.0.iter().flat_map(|cmd| cmd.bytes()).collect()
     }
-
-
 }
 
 impl Display for CharCommandList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    	let mut interpreter = Interpreter::new_6128();
-	    interpreter.interpret(&self.0, false)
-		    .map_err(|e| panic!("Failed to interpret commands: {:?}", e));
-	
-	    let screen_output = interpreter.to_string();
-        write!(f, "{}", screen_output)  
+        let mut interpreter = Interpreter::new_6128();
+        interpreter
+            .interpret(&self.0, false)
+            .map_err(|e| panic!("Failed to interpret commands: {:?}", e));
+
+        let screen_output = interpreter.to_string();
+        write!(f, "{}", screen_output)
     }
 }
 
@@ -224,10 +220,10 @@ pub enum CharCommand {
     Pen(u8),
     /// Delete character (0x10)
     Delete,
-    /// Clear to end of line (0x11)
-    ClearLineEnd,
-    /// Clear to start of line (0x12)
-    ClearLineStart,
+    /// Clear to end of line (0x12)
+    ClearCursorToLineEnd,
+    /// Clear to start of line (0x11)
+    ClearLineStartToCursor,
     /// Clear to end of screen (0x13)
     ClearScreenEnd,
     /// Clear to start of screen (0x14)
@@ -243,7 +239,7 @@ pub enum CharCommand {
     /// Define Symbol (0x19). However we cannot print the sybols that can be redifined
     Symbol(u8, u8, u8, u8, u8, u8, u8, u8, u8),
     /// Define Window (0x1A)
-    /// There is an offset of 1 between the BASIC command and the CPC char command. 
+    /// There is an offset of 1 between the BASIC command and the CPC char command.
     Window(u8, u8, u8, u8),
     /// Set Ink (0x1C). Even if 2 inks are setup there is no flashing
     Ink(u8, u8, u8),
@@ -256,7 +252,7 @@ pub enum CharCommand {
     Locate(u8, u8),
     /// Standard character
     Char(u8),
-    String(Vec<u8>), // list of ascii chars
+    String(Vec<u8>) // list of ascii chars
 }
 
 impl Debug for CharCommand {
@@ -279,8 +275,8 @@ impl Debug for CharCommand {
             CharCommand::Paper(p) => write!(f, "Paper({})", p),
             CharCommand::Pen(p) => write!(f, "Pen({})", p),
             CharCommand::Delete => write!(f, "Delete"),
-            CharCommand::ClearLineEnd => write!(f, "ClearLineEnd"),
-            CharCommand::ClearLineStart => write!(f, "ClearLineStart"),
+            CharCommand::ClearCursorToLineEnd => write!(f, "ClearLineEnd"),
+            CharCommand::ClearLineStartToCursor => write!(f, "ClearLineStart"),
             CharCommand::ClearScreenEnd => write!(f, "ClearScreenEnd"),
             CharCommand::ClearScreenStart => write!(f, "ClearScreenStart"),
             CharCommand::DisableVdu => write!(f, "DisableVdu"),
@@ -315,7 +311,6 @@ impl Debug for CharCommand {
 
 impl CharCommand {
     pub fn to_command_string(&self) -> String {
-    
         match self {
             CharCommand::Nop => "NOP".to_string(),
             CharCommand::PrintSymbol(c) => format!("PRINT CHR$({})", c),
@@ -334,34 +329,39 @@ impl CharCommand {
             CharCommand::Paper(p) => format!("PAPER {}", p),
             CharCommand::Pen(p) => format!("PEN {}", p),
             CharCommand::Delete => "DELETE".to_string(),
-            CharCommand::ClearLineEnd => "CLEAR LINE END".to_string(),
-            CharCommand::ClearLineStart => "CLEAR LINE START".to_string(),
+            CharCommand::ClearCursorToLineEnd => "CLEAR LINE END".to_string(),
+            CharCommand::ClearLineStartToCursor => "CLEAR LINE START".to_string(),
             CharCommand::ClearScreenEnd => "CLEAR SCREEN END".to_string(),
             CharCommand::ClearScreenStart => "CLEAR SCREEN START".to_string(),
             CharCommand::DisableVdu => "DISABLE".to_string(),
             CharCommand::Transparency(p) => format!("TRANSPARENCY {}", p),
             CharCommand::GraphicsInkMode(p) => format!("GFX INK MODE {}", p),
             CharCommand::ExchangePenAndPaper => "EXCHANGE PEN AND PAPER".to_string(),
-            CharCommand::Symbol(c, r1, r2, r3, r4, r5, r6, r7, r8) =>
-                format!("Symbol({}, {}, {}, {}, {}, {}, {}, {}, {})", c, r1, r2, r3, r4, r5, r6, r7, r8),
-            CharCommand::Window(l, r, t, b) =>
-                format!("WINDOW {}, {}, {}, {}", l+1, r+1, t+1, b+1),
+            CharCommand::Symbol(c, r1, r2, r3, r4, r5, r6, r7, r8) => {
+                format!(
+                    "Symbol({}, {}, {}, {}, {}, {}, {}, {}, {})",
+                    c, r1, r2, r3, r4, r5, r6, r7, r8
+                )
+            },
+            CharCommand::Window(l, r, t, b) => {
+                format!("WINDOW {}, {}, {}, {}", l, r, t, b)
+            },
             CharCommand::Esc => "ESC".to_string(),
             CharCommand::Ink(p, i1, i2) => format!("INK {}, {}, {}", p, i1, i2),
             CharCommand::Border(i1, i2) => format!("BORDER {}, {}", i1, i2),
             CharCommand::Home => "HOME".to_string(),
-            CharCommand::Locate(c, l) => format!("LOCATE {}, {}", c+1, l+1),
+            CharCommand::Locate(c, l) => format!("LOCATE {}, {}", c, l),
             CharCommand::Char(c) => {
-                if c.is_ascii_graphic() {
-                    format!("PRINT '{}'", *c as char)
+                if c.is_ascii_graphic() || *c == b' ' {
+                    format!("PRINT \"{}\"", *c as char)
                 }
                 else {
                     format!("PRINT CHR$({})", c)
                 }
             },
-            CharCommand::String(s) => format!("PRINT \"{}\"", String::from_utf8_lossy(&s)),
+            CharCommand::String(s) => format!("PRINT \"{}\"", String::from_utf8_lossy(&s))
         }
-    }       
+    }
 
     pub fn len(&self) -> usize {
         self.bytes().len()
@@ -411,8 +411,8 @@ impl CharCommand {
             CharCommand::Paper(p) => smallvec![SO, *p],
             CharCommand::Pen(p) => smallvec![SI, *p],
             CharCommand::Delete => smallvec![DLE],
-            CharCommand::ClearLineEnd => smallvec![DC1],
-            CharCommand::ClearLineStart => smallvec![DC2],
+            CharCommand::ClearCursorToLineEnd => smallvec![DC2],
+            CharCommand::ClearLineStartToCursor => smallvec![DC1],
             CharCommand::ClearScreenEnd => smallvec![DC3],
             CharCommand::ClearScreenStart => smallvec![DC4],
             CharCommand::DisableVdu => smallvec![NAK],
@@ -427,7 +427,7 @@ impl CharCommand {
             CharCommand::Ink(p, i1, i2) => smallvec![FS, *p, *i1, *i2],
             CharCommand::Border(i1, i2) => smallvec![GS, *i1, *i2],
             CharCommand::Home => smallvec![RS],
-            CharCommand::Locate(c, l) => smallvec![US, c+1, l+1],  // CharCommand 0-based → catalog 1-based
+            CharCommand::Locate(c, l) => smallvec![US, *c, *l],
             CharCommand::Char(c) => smallvec![*c],
             CharCommand::String(s) => s.iter().cloned().collect()
         }
@@ -448,8 +448,8 @@ impl CharCommand {
             FF => Ok(CharCommand::Cls),
             CR => Ok(CharCommand::CarriageReturn),
             DLE => Ok(CharCommand::Delete),
-            DC1 => Ok(CharCommand::ClearLineStart),
-            DC2 => Ok(CharCommand::ClearLineEnd),
+            DC1 => Ok(CharCommand::ClearLineStartToCursor),
+            DC2 => Ok(CharCommand::ClearCursorToLineEnd),
             DC3 => Ok(CharCommand::ClearScreenStart),
             DC4 => Ok(CharCommand::ClearScreenEnd),
             NAK => Ok(CharCommand::DisableVdu),
@@ -502,7 +502,7 @@ impl CharCommand {
                         SUB => CharCommand::Window(params[0], params[1], params[2], params[3]),
                         FS => CharCommand::Ink(params[0], params[1], params[2]),
                         GS => CharCommand::Border(params[0], params[1]),
-                        US => CharCommand::Locate(params[0], params[1]) ,
+                        US => CharCommand::Locate(params[0], params[1]),
                         _ => return Err(format!("Logic error in from_string for char {}", c))
                     };
                     res.push(cmd);
@@ -547,27 +547,100 @@ impl CharCommand {
             CharCommand::Pen(p) => Some(BasicCommand::Pen(*p)),
             CharCommand::Ink(p, i1, i2) => Some(BasicCommand::Ink(*p, *i1, Some(*i2))),
             CharCommand::Border(i1, i2) => Some(BasicCommand::Border(*i1, Some(*i2))),
-            CharCommand::Locate(c, l) => Some(BasicCommand::Locate(*c+1, *l+1)), // CharCommand 0-based → BASIC 1-based
-            CharCommand::Window(a, b, c, d) => Some(BasicCommand::Window(*a+1, *b+1, *c+1, *d+1)), // CharCommand 0-based → BASIC 1-based
-            CharCommand::PrintSymbol(c) => Some(BasicCommand::PrintString(PrintArgument::from(*c), PrintTerminator::None)),
-            CharCommand::Char(c) => Some(BasicCommand::PrintString(PrintArgument::from(*c), PrintTerminator::None)),
-            CharCommand::String(s) => Some(BasicCommand::PrintString(PrintArgument::from(s.clone()), PrintTerminator::None)),
-            CharCommand::CarriageReturn => Some(BasicCommand::PrintString(PrintArgument::from(CR), PrintTerminator::None)),
-            CharCommand::CursorDown => Some(BasicCommand::PrintString(PrintArgument::from(LF), PrintTerminator::None)),
-            CharCommand::Beep => Some(BasicCommand::PrintString(PrintArgument::from(BEL), PrintTerminator::None)),
-            CharCommand::CursorLeft => Some(BasicCommand::PrintString(PrintArgument::from(BS), PrintTerminator::None)),
-            CharCommand::CursorRight => Some(BasicCommand::PrintString(PrintArgument::from(TAB), PrintTerminator::None)),
-            CharCommand::CursorUp => Some(BasicCommand::PrintString(PrintArgument::from(VT), PrintTerminator::None)),
+            CharCommand::Locate(c, l) => Some(BasicCommand::Locate(c.wrapping_add(1), l.wrapping_add(1))), /* CharCommand 0-based → BASIC 1-based */
+            CharCommand::Window(a, b, c, d) => {
+                Some(BasicCommand::Window(a.wrapping_add(1), b.wrapping_add(1), c.wrapping_add(1), d.wrapping_add(1)))
+            }, /* CharCommand 0-based → BASIC 1-based */
+            CharCommand::PrintSymbol(c) => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(*c),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::Char(c) => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(*c),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::String(s) => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(s.clone()),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::CarriageReturn => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(CR),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::CursorDown => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(LF),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::Beep => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(BEL),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::CursorLeft => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(BS),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::CursorRight => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(TAB),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::CursorUp => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(VT),
+                    PrintTerminator::None
+                ))
+            },
             CharCommand::Cls => Some(BasicCommand::Cls),
-            CharCommand::EnableVdu => Some(BasicCommand::PrintString(PrintArgument::from(ACK), PrintTerminator::None)),
-            CharCommand::DisableVdu => Some(BasicCommand::PrintString(PrintArgument::from(NAK), PrintTerminator::None)),
-            CharCommand::GraphicsInkMode(mode) => Some(BasicCommand::PrintString(PrintArgument::from(vec![ETB, *mode]), PrintTerminator::None)),
+            CharCommand::EnableVdu => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(ACK),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::DisableVdu => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(NAK),
+                    PrintTerminator::None
+                ))
+            },
+            CharCommand::GraphicsInkMode(mode) => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(vec![ETB, *mode]),
+                    PrintTerminator::None
+                ))
+            },
             CharCommand::Nop => None, // no equivalent in BASIC
-            CharCommand::Transparency(v) => Some(BasicCommand::PrintString(PrintArgument::Composite(vec![SYN.into(), (*v).into()]), PrintTerminator::None)),
+            CharCommand::Transparency(v) => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::Composite(vec![SYN.into(), (*v).into()]),
+                    PrintTerminator::None
+                ))
+            },
+
+            CharCommand::ClearCursorToLineEnd => {
+                Some(BasicCommand::PrintString(
+                    PrintArgument::from(DC1),
+                    PrintTerminator::None
+                ))
+            }
             _ => unimplemented!("to_basic_command not implemented for command {:?}", self)
         }
     }
-
 
     pub fn to_basic_string(&self) -> String {
         self.to_basic_command()
@@ -577,6 +650,6 @@ impl CharCommand {
                     CharCommand::Nop => String::new(),
                     _ => panic!("to_basic_string not implemented for command {:?}", self)
                 }
-             })
+            })
     }
 }

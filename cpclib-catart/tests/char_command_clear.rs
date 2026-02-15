@@ -8,7 +8,7 @@ use cpclib_catart::interpret::{Interpreter, Mode};
 fn test_char_command_from_chr18_and_chr20() {
     // CHR$(18) should map to ClearLineEnd
     let cc18 = CharCommand::char_to_command_or_count(18u8).unwrap();
-    assert_eq!(cc18, CharCommand::ClearLineEnd);
+    assert_eq!(cc18, CharCommand::ClearCursorToLineEnd);
     // CHR$(20) should map to ClearScreenEnd
     let cc20 = CharCommand::char_to_command_or_count(20u8).unwrap();
     assert_eq!(cc20, CharCommand::ClearScreenEnd);
@@ -16,7 +16,11 @@ fn test_char_command_from_chr18_and_chr20() {
 
 #[test]
 fn test_interpreter_clear_line_end() {
-    let mut interp = Interpreter::builder().screen_mode(Mode::Mode1.into()).as_6128(false).locale(cpclib_catart::Locale::English).build();
+    let mut interp = Interpreter::builder()
+        .screen_mode(Mode::Mode1.into())
+        .as_6128(false)
+        .locale(cpclib_catart::Locale::English)
+        .build();
     // Write some text, then ClearLineEnd
     interp
         .interpret(
@@ -26,7 +30,7 @@ fn test_interpreter_clear_line_end() {
                 CharCommand::PrintSymbol(b'B'),
                 CharCommand::PrintSymbol(b'C'),
                 CharCommand::Locate(1, 1),
-                CharCommand::ClearLineEnd
+                CharCommand::ClearCursorToLineEnd
             ],
             false
         )
@@ -44,7 +48,11 @@ fn test_interpreter_clear_line_end() {
 
 #[test]
 fn test_interpreter_clear_screen_end() {
-    let mut interp = Interpreter::builder().screen_mode(Mode::Mode1.into()).as_6128(false).locale(cpclib_catart::Locale::English).build();
+    let mut interp = Interpreter::builder()
+        .screen_mode(Mode::Mode1.into())
+        .as_6128(false)
+        .locale(cpclib_catart::Locale::English)
+        .build();
     // Write some text, then ClearScreenEnd
     interp
         .interpret(

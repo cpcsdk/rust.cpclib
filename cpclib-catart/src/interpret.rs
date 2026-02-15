@@ -10,7 +10,11 @@ pub struct Cursor {
 
 impl Cursor {
     pub fn new() -> Self {
-        Self { x: 1, y: 1, visible: true }
+        Self {
+            x: 1,
+            y: 1,
+            visible: true
+        }
     }
 
     pub fn locate(&mut self, x: u16, y: u16, mode: &Mode) {
@@ -72,7 +76,7 @@ pub enum Locale {
     /// German font (placeholder using English)
     German,
     /// Danish font (placeholder using English)
-    Danish,
+    Danish
 }
 
 impl Default for Locale {
@@ -92,17 +96,17 @@ impl Locale {
             // https://www.cpcwiki.eu/index.php/ROM_List#Lower_ROMs
             Locale::Spanish => include_bytes!("fonts/font_spanish.bin"),
             Locale::German => include_bytes!("fonts/font_english.bin"),
-            Locale::Danish => include_bytes!("fonts/font_danish.bin"),
+            Locale::Danish => include_bytes!("fonts/font_danish.bin")
         }
     }
 }
 
 // CPC screen memory layout constants
-const CPC_SCREEN_MEMORY_SIZE: usize = 0x4000;  // 16KB video memory
-const CPC_LINE_INTERLEAVE: usize = 0x800;      // Distance between pixel lines within a char row
+const CPC_SCREEN_MEMORY_SIZE: usize = 0x4000; // 16KB video memory
+const CPC_LINE_INTERLEAVE: usize = 0x800; // Distance between pixel lines within a char row
 const CPC_BYTES_PER_CHARACTER_LINE: usize = 80; // Bytes per character row
-const CPC_SCREEN_HEIGHT_PIXELS: usize = 200;   // Screen height in pixels
-const CPC_CHARACTER_HEIGHT: usize = 8;         // Character height in pixels
+const CPC_SCREEN_HEIGHT_PIXELS: usize = 200; // Screen height in pixels
+const CPC_CHARACTER_HEIGHT: usize = 8; // Character height in pixels
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mode {
@@ -125,13 +129,21 @@ impl Mode {
         let (width, height) = self.resolution();
         vec![vec![b' '; width as usize]; height as usize]
     }
-    
+
     /// Convert Mode to cpclib_image::image::Mode
     pub fn to_image_mode(&self) -> cpclib_image::image::Mode {
         match self {
             Mode::Mode0 => cpclib_image::image::Mode::Zero,
             Mode::Mode1 => cpclib_image::image::Mode::One,
-            Mode::Mode2 => cpclib_image::image::Mode::Two,
+            Mode::Mode2 => cpclib_image::image::Mode::Two
+        }
+    }
+
+    pub fn max_pens(&self) -> usize {
+        match self {
+            Mode::Mode0 => 16, // Mode 0 supports 16 colors (pens 0-15)
+            Mode::Mode1 => 4,  // Mode 1 supports 4 colors (pens 0-3)
+            Mode::Mode2 => 2,  // Mode 2 supports 2 colors (pens 0-1)
         }
     }
 }
@@ -161,7 +173,7 @@ pub struct BasicMemoryScreen {
     palette: Palette,
     locale: Locale,
     memory: [u8; 0x4000],
-    r12r13: u16  // CRTC registers R12/R13 - screen start address offset
+    r12r13: u16 // CRTC registers R12/R13 - screen start address offset
 }
 
 impl BasicMemoryScreen {
@@ -169,9 +181,13 @@ impl BasicMemoryScreen {
     pub fn new(mode: cpclib_image::image::Mode, palette: Palette) -> Self {
         Self::new_with_locale(mode, palette, Locale::default())
     }
-    
+
     /// Create a new screen with specified locale
-    pub fn new_with_locale(mode: cpclib_image::image::Mode, palette: Palette, locale: Locale) -> Self {
+    pub fn new_with_locale(
+        mode: cpclib_image::image::Mode,
+        palette: Palette,
+        locale: Locale
+    ) -> Self {
         Self {
             mode,
             palette,
@@ -180,33 +196,33 @@ impl BasicMemoryScreen {
             r12r13: 0
         }
     }
-    
+
     /// Get bytes per character for the current mode
     fn bytes_per_char(&self) -> usize {
         match self.mode {
-            cpclib_image::image::Mode::Zero => 2,  // Mode 0: 2 bytes per char (2 bits/pixel, 4 pixels/byte)
-            cpclib_image::image::Mode::One => 2,   // Mode 1: 2 bytes per char (2 bits/pixel, 4 pixels/byte)
-            cpclib_image::image::Mode::Two => 1,   // Mode 2: 1 byte per char (1 bit/pixel, 8 pixels/byte)
-            _ => 2,
+            cpclib_image::image::Mode::Zero => 2, /* Mode 0: 2 bytes per char (2 bits/pixel, 4 pixels/byte) */
+            cpclib_image::image::Mode::One => 2, /* Mode 1: 2 bytes per char (2 bits/pixel, 4 pixels/byte) */
+            cpclib_image::image::Mode::Two => 1, /* Mode 2: 1 byte per char (1 bit/pixel, 8 pixels/byte) */
+            _ => 2
         }
     }
-    
+
     /// Get screen width in pixels for the current mode
     fn screen_width_pixels(&self) -> usize {
         match self.mode {
             cpclib_image::image::Mode::Zero => 160,
             cpclib_image::image::Mode::One => 320,
             cpclib_image::image::Mode::Two => 640,
-            _ => 320,
+            _ => 320
         }
     }
-    
+
     pub fn reset_mode(&mut self, mode: cpclib_image::image::Mode, pen: Pen, paper: Pen) {
         self.mode = mode;
-        self.r12r13 = 0;  // Reset CRTC offset on mode change
+        self.r12r13 = 0; // Reset CRTC offset on mode change
         self.cls(pen, paper);
     }
-    
+
     pub fn cls(&mut self, pen: Pen, paper: Pen) {
         // Clear memory with paper color pattern
         let paper_pattern = Self::get_paper_pattern(paper, self.mode);
@@ -214,7 +230,7 @@ impl BasicMemoryScreen {
             *byte = paper_pattern;
         }
     }
-    
+
     /// Get the byte pattern for a solid color (used for paper)
     fn get_paper_pattern(pen: Pen, mode: cpclib_image::image::Mode) -> u8 {
         // Create a pattern of 8 pixels all with the same pen color
@@ -222,22 +238,21 @@ impl BasicMemoryScreen {
         let bytes = pixels::pens_to_vec(&pens, mode);
         bytes[0] // Return first byte (pattern repeats)
     }
-    
+
     /// Get the 8x8 bitmap for a character using the screen's locale font
     fn get_char_bitmap(&self, ch: u8) -> &'static [u8; 8] {
         let font_data = self.locale.font_data();
         // Font data is directly from CPC ROM (no header)
         let offset = (ch as usize) * 8;
         if offset + 8 <= font_data.len() {
-            unsafe {
-                &*(font_data.as_ptr().add(offset) as *const [u8; 8])
-            }
-        } else {
+            unsafe { &*(font_data.as_ptr().add(offset) as *const [u8; 8]) }
+        }
+        else {
             // Return empty bitmap for out of range chars
             &[0; 8]
         }
     }
-    
+
     /// Convert a bitmap line (8 bits) to an array of Pens based on pen/paper colors
     fn bitmap_to_pens(bitmap_line: u8, pen: Pen, paper: Pen) -> [Pen; 8] {
         let mut pens = [paper; 8];
@@ -250,27 +265,27 @@ impl BasicMemoryScreen {
         pens
     }
 
-    
     /// Clamp pen number to valid range for current mode
     /// Mode 0 and Mode 1: pens must be 0-3 (4 colors)
     /// Mode 2: pens must be 0-1 (2 colors)
     fn clamp_pen_for_mode(&self, pen: Pen) -> Pen {
         let pen_number = pen.number();
         let max_pen = match self.mode {
-            cpclib_image::image::Mode::Zero => 16,  // Mode 0: 16 colors (pens 0-15)
+            cpclib_image::image::Mode::Zero => 16, // Mode 0: 16 colors (pens 0-15)
             cpclib_image::image::Mode::One => 3,   // Mode 1: 4 colors (pens 0-3)
             cpclib_image::image::Mode::Two => 1,   // Mode 2: 2 colors (pens 0-1)
-            _ => 3,
+            _ => 3
         };
-        
+
         if pen_number <= max_pen {
             pen
-        } else {
+        }
+        else {
             // Use modulo to wrap pen number into valid range
             Pen::from(pen_number % (max_pen))
         }
     }
-    
+
     /// Write a character at the given position (x, y in character coordinates)
     /// If transparent is true, the character is overlaid on existing pixels (transparent mode)
     pub fn write_char(&mut self, ch: u8, x: u16, y: u16, pen: Pen, paper: Pen, transparent: bool) {
@@ -278,55 +293,56 @@ impl BasicMemoryScreen {
         if x == 0 || y == 0 {
             return; // Invalid coordinates, do nothing
         }
-        
+
         // Clamp pen and paper to valid range for current mode to prevent assertion failures
         let pen = self.clamp_pen_for_mode(pen);
         let paper = self.clamp_pen_for_mode(paper);
-        
+
         // Get the character bitmap for this locale
         let bitmap = self.get_char_bitmap(ch);
-        
+
         // For each of the 8 lines in the character
         for line_idx in 0..8 {
             // Convert bitmap line to pens
             let char_pens = Self::bitmap_to_pens(bitmap[line_idx], pen, paper);
-            
+
             // Calculate memory offset for this line using CRTC R12R13 offset
             // CPC memory layout: character rows are 80 bytes apart, pixel lines within char are 0x800 bytes apart
-            let pixel_y = (y - 1) * 8 + line_idx as u16;  // Convert to pixel row
+            let pixel_y = (y - 1) * 8 + line_idx as u16; // Convert to pixel row
             let base_addr = (0x800 * (pixel_y % 8) + 80 * (pixel_y / 8)) as usize;
             let addr = base_addr;
-            
+
             // Calculate byte position within the line based on x position and mode
             let char_x = (x - 1) as usize;
             // Mode 0 requires special handling: multiply x by 4
             let byte_offset = match self.mode {
                 cpclib_image::image::Mode::Zero => char_x * 4,
-                _ => char_x * self.bytes_per_char(),
+                _ => char_x * self.bytes_per_char()
             };
             // Apply CRTC R12R13 offset: physical_address = (base + offset + 2*R12R13) % 0x4000
-            let final_addr = ((addr + byte_offset) + (2 * self.r12r13 as usize)) % CPC_SCREEN_MEMORY_SIZE;
-            
+            let final_addr =
+                ((addr + byte_offset) + (2 * self.r12r13 as usize)) % CPC_SCREEN_MEMORY_SIZE;
+
             // Calculate how many bytes we need for this character line
             let bytes_needed = match self.mode {
                 cpclib_image::image::Mode::Zero => 4,
                 cpclib_image::image::Mode::One => 2,
                 cpclib_image::image::Mode::Two => 1,
-                _ => 2,
+                _ => 2
             };
-            
+
             // Write the bytes to memory
             if final_addr + bytes_needed <= CPC_SCREEN_MEMORY_SIZE {
                 if transparent {
                     // Transparent mode: merge with existing pixels
                     // Read existing bytes from memory
                     let existing_bytes = &self.memory[final_addr..final_addr + bytes_needed];
-                    
+
                     // Convert existing bytes to pens
                     let existing_pens: Vec<Pen> = pixels::bytes_to_pens(existing_bytes, self.mode)
                         .take(8)
                         .collect();
-                    
+
                     // Merge: for each pixel, use char pen if bitmap bit is set, otherwise keep existing pen
                     let mut merged_pens = [pen; 8];
                     for i in 0..8 {
@@ -334,20 +350,22 @@ impl BasicMemoryScreen {
                         if (bitmap[line_idx] & mask) != 0 {
                             // Bitmap pixel is set: use character pen
                             merged_pens[i] = pen;
-                        } else {
+                        }
+                        else {
                             // Bitmap pixel is not set: keep existing pixel (transparent)
                             merged_pens[i] = existing_pens.get(i).copied().unwrap_or(paper);
                         }
                     }
-                    
+
                     // Convert merged pens back to bytes
                     let merged_bytes = pixels::pens_to_vec(&merged_pens, self.mode);
-                    
+
                     // Write merged bytes
                     for (i, &byte) in merged_bytes.iter().enumerate().take(bytes_needed) {
                         self.memory[final_addr + i] = byte;
                     }
-                } else {
+                }
+                else {
                     // Opaque mode: write character directly with pen/paper
                     let bytes = pixels::pens_to_vec(&char_pens, self.mode);
                     for (i, &byte) in bytes.iter().enumerate().take(bytes_needed) {
@@ -357,60 +375,65 @@ impl BasicMemoryScreen {
             }
         }
     }
-    
+
     /// Convert the memory to pens (2D array of Pen values)
     pub fn to_pens(&self) -> Vec<Vec<Pen>> {
         let width_pixels = self.screen_width_pixels();
         let height_pixels = CPC_SCREEN_HEIGHT_PIXELS;
-        
+
         let mut pens = Vec::with_capacity(height_pixels);
-        
+
         for y in 0..height_pixels {
             let mut line_pens = Vec::with_capacity(width_pixels);
-            
+
             // Calculate the memory offset for this line (interleaved CPC format)
             // CPC memory: character rows are 80 bytes apart, pixel lines within a char row are 0x800 bytes apart
             let char_row = y / CPC_CHARACTER_HEIGHT;
             let pixel_line_in_char = y % CPC_CHARACTER_HEIGHT;
-            let base_offset = char_row * CPC_BYTES_PER_CHARACTER_LINE + pixel_line_in_char * CPC_LINE_INTERLEAVE;
-            
+            let base_offset =
+                char_row * CPC_BYTES_PER_CHARACTER_LINE + pixel_line_in_char * CPC_LINE_INTERLEAVE;
+
             // DO NOT apply R12R13 offset when reading - read raw memory
             // The R12R13 offset is only for WRITING characters to scrolled positions
             // When reading for comparison, we read the raw memory as-is
             let line_offset = base_offset;
-            
+
             // All modes use 80 bytes per line (full character row width)
             let bytes_per_line = CPC_BYTES_PER_CHARACTER_LINE;
-            
+
             // Read bytes for this line and convert to pens
             let line_bytes = &self.memory[line_offset..line_offset + bytes_per_line];
             let pixels_iter = pixels::bytes_to_pens(line_bytes, self.mode);
             line_pens.extend(pixels_iter.take(width_pixels));
-            
+
             pens.push(line_pens);
         }
-        
+
         pens
     }
-    
+
     /// Convert the memory screen to a Sprite
     pub fn to_sprite(&self) -> cpclib_image::image::Sprite {
         let pens = self.to_pens();
         cpclib_image::image::Sprite::from_pens(&pens, self.mode, Some(self.palette.clone()))
     }
-    
+
     pub fn to_color_matrix(&self) -> Option<cpclib_image::image::ColorMatrix> {
         self.to_color_matrix_with_border(3, 4)
     }
 
     /// Convert the memory screen to a ColorMatrix (with border)
-    pub fn to_color_matrix_with_border(&self, border_horizontal: usize, border_vertical: usize) -> Option<cpclib_image::image::ColorMatrix> {
+    pub fn to_color_matrix_with_border(
+        &self,
+        border_horizontal: usize,
+        border_vertical: usize
+    ) -> Option<cpclib_image::image::ColorMatrix> {
         // First convert to sprite
         let sprite = self.to_sprite();
-        
+
         // Then convert sprite to color matrix
         let mut color_matrix = sprite.to_color_matrix()?;
-        
+
         // For Mode 1, duplicate each line and column to match ground truth size
         // This makes it easier to compare with reference images
         if let cpclib_image::image::Mode::One = self.mode {
@@ -427,7 +450,7 @@ impl BasicMemoryScreen {
                 color_matrix.add_column((col_idx + 1) as usize, &column);
             }
         }
-        
+
         // For Mode 2, duplicate each line to maintain correct aspect ratio
         // Mode 2 pixels are twice as thin on real hardware, so each scanline should appear twice
         if let cpclib_image::image::Mode::Two = self.mode {
@@ -440,7 +463,7 @@ impl BasicMemoryScreen {
                 color_matrix.add_line((line_idx + 1) as usize, &line);
             }
         }
-        
+
         // For Mode 0, duplicate each column to maintain correct aspect ratio
         // Mode 0 pixels are wider on real hardware
         if let cpclib_image::image::Mode::Zero = self.mode {
@@ -453,86 +476,87 @@ impl BasicMemoryScreen {
                 color_matrix.add_column((col_idx + 1) as usize, &column);
             }
         }
-        
+
         // Add border around the image
         let border_ink = self.palette.get_border();
-        
+
         // Step 1: Add left border columns (insert at position 0, border_horizontal times)
         let left_column = vec![*border_ink; color_matrix.height() as usize];
         for _ in 0..border_horizontal {
             color_matrix.add_column(0, &left_column);
         }
-        
+
         // Step 2: Add right border columns (append at the end)
         let right_column = vec![*border_ink; color_matrix.height() as usize];
         for _ in 0..border_horizontal {
             color_matrix.add_column(color_matrix.width() as usize, &right_column);
         }
-        
+
         // Step 3: Add top border lines (insert at position 0, border_vertical times)
         // Now the width has increased, so create border_line with new width
         let top_line = vec![*border_ink; color_matrix.width() as usize];
         for _ in 0..border_vertical {
             color_matrix.add_line(0, &top_line);
         }
-        
+
         // Step 4: Add bottom border lines (append at the end)
         // The height has increased from adding top lines, but add_line handles that
         let bottom_line = vec![*border_ink; color_matrix.width() as usize];
         for _ in 0..border_vertical {
             color_matrix.add_line(color_matrix.height() as usize, &bottom_line);
         }
-        
+
         Some(color_matrix)
     }
-    
+
     /// Get a reference to the memory buffer
     pub fn memory(&self) -> &[u8; CPC_SCREEN_MEMORY_SIZE] {
         &self.memory
     }
-    
+
     /// Get the current mode
     pub fn mode(&self) -> cpclib_image::image::Mode {
         self.mode
     }
-    
+
     /// Get the current palette
     pub fn palette(&self) -> &Palette {
         &self.palette
     }
-    
+
     /// Get the current CRTC R12R13 register value (screen start offset)
     pub fn r12r13(&self) -> u16 {
         self.r12r13
     }
-    
+
     /// Set a palette entry
     pub fn set_palette(&mut self, pen: Pen, ink: cpclib_image::ga::Ink) {
         self.palette.set(pen, ink);
     }
-    
+
     /// Set the border ink
     pub fn set_border(&mut self, ink: cpclib_image::ga::Ink) {
         self.palette.set_border(ink);
     }
-    
+
     /// Hardware scroll up: increment R12R13 by 40 (one character line)
     pub fn hardware_scroll_up(&mut self) {
-        self.r12r13 = (self.r12r13 + 40) % (0x4000 / 2);  // Wrap at 0x2000 (half of 0x4000 since R12R13 is in words)
+        self.r12r13 = (self.r12r13 + 40) % (0x4000 / 2); // Wrap at 0x2000 (half of 0x4000 since R12R13 is in words)
     }
-    
+
     /// Clear a specific character line with paper color
     pub fn clear_line(&mut self, y: u16, paper: Pen) {
         let paper_pattern = Self::get_paper_pattern(paper, self.mode);
-        
+
         // Clear all 8 pixel rows of this character line
         for line_idx in 0..8 {
             let pixel_y = (y - 1) * 8 + line_idx as u16;
             let base_addr = (0x800 * (pixel_y % 8) + 80 * (pixel_y / 8)) as usize;
-            
+
             // Apply R12R13 offset and clear the entire line
             for byte_offset in 0..CPC_BYTES_PER_CHARACTER_LINE {
-                let final_addr = ((base_addr + byte_offset) + (2 * self.r12r13 as usize)) % CPC_SCREEN_MEMORY_SIZE;
+                let final_addr = ((base_addr + byte_offset) + (2 * self.r12r13 as usize))
+                    % CPC_SCREEN_MEMORY_SIZE;
                 self.memory[final_addr] = paper_pattern;
             }
         }
@@ -602,16 +626,15 @@ impl Screen {
 pub struct Interpreter {
     enable_vdu: bool,
     screen: Screen,
-    memory_screen: BasicMemoryScreen,  // Pixel-accurate representation
+    memory_screen: BasicMemoryScreen, // Pixel-accurate representation
     cursor: Cursor,
     palette: Palette,
     pen: Pen,
     paper: Pen,
     border: Pen,
     window: Option<(u16, u16, u16, u16)>, // (left, right, top, bottom)
-    transparent: bool, // Transparency mode for character printing
-    mode: Mode,
-    locale: Locale,
+    transparent: bool,                    // Transparency mode for character printing
+    locale: Locale
 }
 
 #[bon::bon]
@@ -620,12 +643,12 @@ impl Interpreter {
     pub fn screen(&self) -> &Screen {
         &self.screen
     }
-    
+
     /// Public getter for the palette
     pub fn palette(&self) -> &Palette {
         &self.palette
     }
-    
+
     /// Public getter for the pixel-accurate memory screen
     pub fn memory_screen(&self) -> &BasicMemoryScreen {
         &self.memory_screen
@@ -645,7 +668,7 @@ impl Interpreter {
         let paper = Pen::Pen0;
         let palette = Palette::default();
         let image_mode = screen_mode.to_image_mode();
-        
+
         let mut interpreter = Self {
             screen: Screen {
                 mode: screen_mode.clone(),
@@ -660,14 +683,13 @@ impl Interpreter {
             window: None,
             enable_vdu: true,
             transparent: false,
-            mode: screen_mode,
-            locale,
+            locale
         };
-        
+
         if as_6128 {
             interpreter.initialize_6128();
         }
-        
+
         interpreter
     }
 
@@ -694,9 +716,9 @@ impl Interpreter {
 
     pub fn inc_cursor_x(&mut self) {
         let (width, _) = self.screen.resolution();
-        let (left, right, _, _) =
-            self.window
-                .unwrap_or((1, width, 1, self.screen.resolution().1));
+        let (left, right, ..) = self
+            .window
+            .unwrap_or((1, width, 1, self.screen.resolution().1));
         self.cursor.x += 1;
         if self.cursor.x > right {
             self.cursor.x = left;
@@ -747,7 +769,7 @@ impl Interpreter {
     pub fn locate_cursor(&mut self, x: u16, y: u16) {
         let (width, height) = self.screen.resolution();
         let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
-        
+
         // LOCATE command provides 0-based coordinates, convert to 1-based for cursor
         self.cursor.x = (x + 1).clamp(left, right);
         self.cursor.y = (y + 1).clamp(top, bottom);
@@ -771,7 +793,10 @@ impl Interpreter {
     /// This centralizes the char writing logic and transparency handling
     fn write_char_to_screens(&mut self, ch: u8, x: u16, y: u16) {
         if y == 1 || y == 2 {
-            eprintln!("write_char_to_screens: ch={:?} ({}) at ({}, {})", ch as char, ch, x, y);
+            eprintln!(
+                "write_char_to_screens: ch={:?} ({}) at ({}, {})",
+                ch as char, ch, x, y
+            );
         }
         // Update text screen
         if let Some(cell) = self.screen.cell_mut(x, y) {
@@ -779,35 +804,27 @@ impl Interpreter {
             cell.pen = self.pen;
             cell.paper = self.paper;
         }
-        
+
         // Update pixel-accurate memory screen with transparency support
-        self.memory_screen.write_char(
-            ch, 
-            x, 
-            y, 
-            self.pen, 
-            self.paper, 
-            self.transparent
-        );
+        self.memory_screen
+            .write_char(ch, x, y, self.pen, self.paper, self.transparent);
     }
 
     pub fn scroll_screen_up(&mut self) {
         let width = self.screen.resolution().0;
         let height = self.screen.resolution().1;
-        let (left, right, top, bottom) =
-            self.window
-                .unwrap_or((1, width, 1, height));
-        
+        let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+
         // Check if we're using hardware scrolling (no window or full-screen window)
-        let is_full_screen = self.window.is_none() || 
-            (left == 1 && right == width && top == 1 && bottom == height);
-        
+        let is_full_screen =
+            self.window.is_none() || (left == 1 && right == width && top == 1 && bottom == height);
+
         if is_full_screen {
             // Hardware scroll: increment R12R13 and clear last line
             self.memory_screen.hardware_scroll_up();
             self.memory_screen.clear_line(height, self.paper);
         }
-        
+
         // Always do software scroll for the character buffer
         // Collect source cells first to avoid borrow checker issues
         let mut next_row_cells =
@@ -843,16 +860,15 @@ impl Interpreter {
                 }
             }
         }
-        
+
         // If not full screen (windowed), also update the memory screen with software scroll
         // by redrawing all visible characters
         if !is_full_screen {
             for y in top..=bottom {
                 for x in left..=right {
                     if let Some(cell) = self.screen.cell(x, y) {
-                        self.memory_screen.write_char(
-                            cell.ch, x, y, cell.pen, cell.paper, false
-                        );
+                        self.memory_screen
+                            .write_char(cell.ch, x, y, cell.pen, cell.paper, false);
                     }
                 }
             }
@@ -906,44 +922,51 @@ impl Interpreter {
         for command in commands {
             self.interpret_command(command)?;
         }
-        
+
         // If we need to print "Ready" and cursor, ensure we're at the start of a line
         if print_ready {
             // Get window bounds (or use full screen if no window defined)
             let (width, height) = self.screen.resolution();
-            let (left, _, _, _) = self.window.unwrap_or((1, width, 1, height));
-            
+            let (left, ..) = self.window.unwrap_or((1, width, 1, height));
+
             // Move to beginning of window line if not already there
             if self.cursor.x != left {
                 self.interpret_command(&CharCommand::CarriageReturn)?;
                 self.interpret_command(&CharCommand::CursorDown)?;
             }
-            
+
             // Now add the finalize sequence
             let finalize = BasicCommandList::from(vec![
                 BasicCommand::print_string(ACK), // activate visualisation
-                BasicCommand::cursor_on(), // show cursor
-                BasicCommand::print_string_crlf(b"Ready")]
-            ).to_char_commands().unwrap();
-            
+                BasicCommand::cursor_on(),       // show cursor
+                BasicCommand::print_string_crlf(b"Ready"),
+            ])
+            .to_char_commands()
+            .unwrap();
+
             for command in finalize {
                 self.interpret_command(&command)?;
             }
         }
-        
+
         // Draw cursor if visible (cursor is stored in CPC video memory)
         if self.cursor.visible {
             self.memory_screen.write_char(
-                0x8F,  // Cursor character
+                0x8F, // Cursor character
                 self.cursor.x,
                 self.cursor.y,
                 self.pen,
                 self.paper,
-                false  // Cursor is always opaque
+                false // Cursor is always opaque
             );
         }
-        
+
         Ok(())
+    }
+
+    pub fn mode(&self) -> Mode {
+        assert_eq!(self.screen.mode.to_image_mode(), self.memory_screen.mode());
+        self.screen.mode.clone()
     }
 
     pub fn interpret_command(&mut self, command: &CharCommand) -> Result<(), String> {
@@ -982,7 +1005,7 @@ impl Interpreter {
             CharCommand::Cls if self.enable_vdu => {
                 let (width, height) = self.screen.resolution();
                 let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
-                
+
                 for y in top..=bottom {
                     for x in left..=right {
                         self.write_char_to_screens(b' ', x, y);
@@ -1032,7 +1055,8 @@ impl Interpreter {
                 };
                 self.locate_cursor(1, 1);
                 self.screen.reset_mode(m.clone(), self.pen, self.paper);
-                self.memory_screen.reset_mode(m.to_image_mode(), self.pen, self.paper);
+                self.memory_screen
+                    .reset_mode(m.to_image_mode(), self.pen, self.paper);
                 self.window = None;
                 self.cursor.x = 1;
                 self.cursor.y = 1;
@@ -1041,7 +1065,8 @@ impl Interpreter {
                 self.pen = Pen::from(*p);
             },
             CharCommand::Paper(p) if self.enable_vdu => {
-                self.paper = Pen::from(*p);
+                let p = (*p)%self.mode().max_pens() as u8;
+                self.paper = Pen::from(p);
             },
             CharCommand::Ink(pen, ink1, _ink2) if self.enable_vdu => {
                 let pen = (*pen).clamp(0, 15);
@@ -1057,7 +1082,7 @@ impl Interpreter {
                 self.memory_screen.set_border(ink);
                 self.border = Pen::Border;
             },
-            CharCommand::ClearLineStart if self.enable_vdu => {
+            CharCommand::ClearLineStartToCursor if self.enable_vdu => {
                 let y = self.cursor.y;
                 let x = self.cursor.x;
                 let (left, ..) = self.window.unwrap_or((
@@ -1070,7 +1095,7 @@ impl Interpreter {
                     self.write_char_to_screens(b' ', col, y);
                 }
             },
-            CharCommand::ClearLineEnd if self.enable_vdu => {
+            CharCommand::ClearCursorToLineEnd if self.enable_vdu => {
                 let y = self.cursor.y;
                 let x = self.cursor.x;
                 let (_, right, ..) = self.window.unwrap_or((
@@ -1113,7 +1138,12 @@ impl Interpreter {
             },
             CharCommand::Window(left, right, top, bottom) if self.enable_vdu => {
                 // CharCommand stores 0-based, window needs 1-based
-                self.window = Some((*left as u16 + 1, *right as u16 + 1, *top as u16 + 1, *bottom as u16 + 1));
+                self.window = Some((
+                    *left as u16 + 1,
+                    *right as u16 + 1,
+                    *top as u16 + 1,
+                    *bottom as u16 + 1
+                ));
                 // Position cursor at top-left corner (CharCommand is 0-based, locate_cursor expects 0-based)
                 self.locate_cursor(*left as u16, *top as u16);
             },
@@ -1121,7 +1151,7 @@ impl Interpreter {
                 // Handle transparency mode
                 // When p is 0, transparency is off (opaque)
                 // When p is 1, transparency is on (transparent)
-                self.transparent = *p != 0;
+                self.transparent = (*p % 2) == 1;
             },
             CharCommand::ExchangePenAndPaper if self.enable_vdu => {
                 std::mem::swap(&mut self.pen, &mut self.paper);
@@ -1140,9 +1170,9 @@ impl Interpreter {
 
             CharCommand::Beep => {
                 // ignore
-            }
+            },
 
-            c=> {
+            c => {
                 todo!(
                     "Interpreter: unhandled CharCommand {:?}. needs an implementation",
                     c
@@ -1223,7 +1253,7 @@ pub fn screens_are_equal(screen1: &Screen, screen2: &Screen) -> bool {
     if screen1.buffer.len() != screen2.buffer.len() {
         return false;
     }
-    
+
     for (row1, row2) in screen1.buffer.iter().zip(screen2.buffer.iter()) {
         if row1.len() != row2.len() {
             return false;
@@ -1234,35 +1264,45 @@ pub fn screens_are_equal(screen1: &Screen, screen2: &Screen) -> bool {
             }
         }
     }
-    
+
     true
 }
 
 /// Displays two screens side-by-side with a difference map in the middle
-pub fn display_screen_diff(screen1: &Screen, palette1: &Palette, screen2: &Screen, palette2: &Palette) -> String {
+pub fn display_screen_diff(
+    screen1: &Screen,
+    palette1: &Palette,
+    screen2: &Screen,
+    palette2: &Palette
+) -> String {
     use cpclib_image::ga::Ink;
     use owo_colors::{DynColors, OwoColorize};
-    
+
     let border = 2;
     let height = screen1.buffer.len();
     let width = screen1.buffer[0].len();
-    
+
     let mut output = String::new();
-    
+
     // Header
-    output.push_str(&format!("\n{:^width$}   {:^width$}   {:^width$}\n", 
-        "ORIGINAL", "DIFF", "RECONSTRUCTED", width = width + 2 * border));
+    output.push_str(&format!(
+        "\n{:^width$}   {:^width$}   {:^width$}\n",
+        "ORIGINAL",
+        "DIFF",
+        "RECONSTRUCTED",
+        width = width + 2 * border
+    ));
     output.push_str(&format!("{}\n", "=".repeat((width + 2 * border) * 3 + 6)));
-    
+
     // Border thickness
     let border_ink1 = palette1.get_border();
     let border_rgb1 = border_ink1.color();
     let border_color1 = DynColors::Rgb(border_rgb1[0], border_rgb1[1], border_rgb1[2]);
-    
+
     let border_ink2 = palette2.get_border();
     let border_rgb2 = border_ink2.color();
     let border_color2 = DynColors::Rgb(border_rgb2[0], border_rgb2[1], border_rgb2[2]);
-    
+
     // Top borders
     for _ in 0..border {
         for _ in 0..(width + 2 * border) {
@@ -1278,14 +1318,14 @@ pub fn display_screen_diff(screen1: &Screen, palette1: &Palette, screen2: &Scree
         }
         output.push('\n');
     }
-    
+
     // Screen rows
     for (row_idx, (row1, row2)) in screen1.buffer.iter().zip(screen2.buffer.iter()).enumerate() {
         // Left border for screen1
         for _ in 0..border {
             output.push_str(&format!("{}", " ".on_color(border_color1)));
         }
-        
+
         // Screen1 content
         for cell in row1.iter() {
             let pen_ink = palette1.get(&cell.pen);
@@ -1296,24 +1336,26 @@ pub fn display_screen_diff(screen1: &Screen, palette1: &Palette, screen2: &Scree
             let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
             output.push_str(&format!("{}", (cell.ch as char).color(fg).on_color(bg)));
         }
-        
+
         // Right border for screen1
         for _ in 0..border {
             output.push_str(&format!("{}", " ".on_color(border_color1)));
         }
-        
+
         output.push_str("   ");
-        
+
         // Diff map (no border)
         for _ in 0..border {
             output.push(' ');
         }
         for (cell1, cell2) in row1.iter().zip(row2.iter()) {
-            let is_different = cell1.ch != cell2.ch || cell1.pen != cell2.pen || cell1.paper != cell2.paper;
+            let is_different =
+                cell1.ch != cell2.ch || cell1.pen != cell2.pen || cell1.paper != cell2.paper;
             if is_different {
                 // Red background for differences
                 output.push_str(&format!("{}", "█".red()));
-            } else {
+            }
+            else {
                 // Black/dark for matches
                 output.push_str(&format!("{}", "░".black()));
             }
@@ -1321,14 +1363,14 @@ pub fn display_screen_diff(screen1: &Screen, palette1: &Palette, screen2: &Scree
         for _ in 0..border {
             output.push(' ');
         }
-        
+
         output.push_str("   ");
-        
+
         // Left border for screen2
         for _ in 0..border {
             output.push_str(&format!("{}", " ".on_color(border_color2)));
         }
-        
+
         // Screen2 content
         for cell in row2.iter() {
             let pen_ink = palette2.get(&cell.pen);
@@ -1339,15 +1381,15 @@ pub fn display_screen_diff(screen1: &Screen, palette1: &Palette, screen2: &Scree
             let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
             output.push_str(&format!("{}", (cell.ch as char).color(fg).on_color(bg)));
         }
-        
+
         // Right border for screen2
         for _ in 0..border {
             output.push_str(&format!("{}", " ".on_color(border_color2)));
         }
-        
+
         output.push('\n');
     }
-    
+
     // Bottom borders
     for _ in 0..border {
         for _ in 0..(width + 2 * border) {
@@ -1363,6 +1405,6 @@ pub fn display_screen_diff(screen1: &Screen, palette1: &Palette, screen2: &Scree
         }
         output.push('\n');
     }
-    
+
     output
 }

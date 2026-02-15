@@ -1,10 +1,10 @@
 /// This file encodes the CatArt basic commands as the could be handled in a basic program
 use std::{fmt::Display, ops::Deref};
 
-
 use cpclib_basic::BasicProgram;
 
-use crate::{char_command::{CharCommand, CharCommandList}, error::CatArtError};
+use crate::char_command::{CharCommand, CharCommandList};
+use crate::error::CatArtError;
 
 /// Represents an argument to the PRINT command.
 #[derive(Clone, Debug, PartialEq)]
@@ -165,20 +165,28 @@ impl PartialEq for BasicCommand {
             (BasicCommand::Mode(mode_a), BasicCommand::Mode(mode_b)) => mode_a == mode_b,
             (BasicCommand::Paper(pen_a), BasicCommand::Paper(pen_b)) => pen_a == pen_b,
             (BasicCommand::Pen(pen_a), BasicCommand::Pen(pen_b)) => pen_a == pen_b,
-            (BasicCommand::PrintString(arg_a, term_a), BasicCommand::PrintString(arg_b, term_b)) => {
-                arg_a == arg_b && term_a == term_b
+            (
+                BasicCommand::PrintString(arg_a, term_a),
+                BasicCommand::PrintString(arg_b, term_b)
+            ) => arg_a == arg_b && term_a == term_b,
+            (
+                BasicCommand::Symbol(char_a, r1a, r2a, r3a, r4a, r5a, r6a, r7a, r8a),
+                BasicCommand::Symbol(char_b, r1b, r2b, r3b, r4b, r5b, r6b, r7b, r8b)
+            ) => {
+                char_a == char_b
+                    && r1a == r1b
+                    && r2a == r2b
+                    && r3a == r3b
+                    && r4a == r4b
+                    && r5a == r5b
+                    && r6a == r6b
+                    && r7a == r7b
+                    && r8a == r8b
             },
-            (BasicCommand::Symbol(char_a, r1a, r2a, r3a, r4a, r5a, r6a, r7a, r8a),
-             BasicCommand::Symbol(char_b, r1b, r2b, r3b, r4b, r5b, r6b, r7b, r8b)) => {
-                char_a == char_b &&
-                r1a == r1b && r2a == r2b && r3a == r3b && r4a == r4b &&
-                r5a == r5b && r6a
-                    == r6b && r7a == r7b && r8a == r8b
-            },
-            (BasicCommand::Window(left_a, right_a, top_a, bottom_a),
-             BasicCommand::Window(left_b, right_b, top_b, bottom_b)) => {
-                left_a == left_b && right_a == right_b && top_a == top_b && bottom_a == bottom_b
-            },
+            (
+                BasicCommand::Window(left_a, right_a, top_a, bottom_a),
+                BasicCommand::Window(left_b, right_b, top_b, bottom_b)
+            ) => left_a == left_b && right_a == right_b && top_a == top_b && bottom_a == bottom_b,
             _ => false
         }
     }
@@ -187,7 +195,6 @@ impl PartialEq for BasicCommand {
 /// A list of BasicCommands with builder pattern for ergonomic construction
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct BasicCommandList(Vec<BasicCommand>);
-
 
 impl Deref for BasicCommandList {
     type Target = Vec<BasicCommand>;
@@ -199,6 +206,7 @@ impl Deref for BasicCommandList {
 
 impl TryFrom<&BasicProgram> for BasicCommandList {
     type Error = CatArtError;
+
     fn try_from(program: &BasicProgram) -> Result<Self, Self::Error> {
         crate::convert::basic_to_commands(program)
     }
@@ -388,14 +396,22 @@ impl BasicCommand {
                     *char_code, *r1, *r2, *r3, *r4, *r5, *r6, *r7, *r8
                 )]))
             },
-            BasicCommand::Window(left, right, top, bottom) => { // XXX -1 because of the offset between BASIC and CPC char command
+            BasicCommand::Window(left, right, top, bottom) => {
+                // XXX -1 because of the offset between BASIC and CPC char command
                 Ok(CharCommandList::from(vec![CharCommand::Window(
-                    *left-1, *right-1, *top-1, *bottom-1
+                    left.wrapping_sub(1),
+                    right.wrapping_sub(1),
+                    top.wrapping_sub(1),
+                    bottom.wrapping_sub(1)
                 )]))
             },
-            BasicCommand::Locate(col, row) => { // -1 because of the offset between BASIC and CPC char command
-                Ok(CharCommandList::from(vec![CharCommand::Locate(*col-1, *row-1)]))
-            },
+            BasicCommand::Locate(col, row) => {
+                // -1 because of the offset between BASIC and CPC char command
+                Ok(CharCommandList::from(vec![CharCommand::Locate(
+                    col.wrapping_sub(1),
+                    row.wrapping_sub(1)
+                )]))
+            }
         }
     }
 }
@@ -438,7 +454,7 @@ impl Display for BasicCommand {
             },
             BasicCommand::Window(left, right, top, bottom) => {
                 write!(f, "WINDOW {},{},{},{}", left, right, top, bottom)
-            },
+            }
         }
     }
 }
