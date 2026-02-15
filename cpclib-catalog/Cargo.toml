@@ -21,6 +21,9 @@ clap = { workspace = true, features = ["derive"] }
 log.workspace = true
 simple_logger.workspace = true
 
+[build-dependencies]
+built.workspace = true
+
 [dev-dependencies]
 cpclib-image.workspace = true
 image.workspace = true

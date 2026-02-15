@@ -107,7 +107,10 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                     EmulatorFacadeRunner::default().run(dbg!(task.args()), observer)
                 },
             }
-        },
+        }
+        InnerTask::Catalog(args) => {
+            crate::runners::disc::CatalogRunner::<E>::default().run(task.args(), observer)
+        }
         InnerTask::Cdt(cdt, args) => {
             match cdt {
                 crate::runners::cdt::CdtManager::Rtzx => {

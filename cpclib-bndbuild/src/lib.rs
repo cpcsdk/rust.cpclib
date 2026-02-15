@@ -31,7 +31,7 @@ use thiserror::Error;
 pub use crate::BndBuilder;
 use crate::event::BndBuilderObserverRc;
 use crate::executor::*;
-use crate::task::{BASMDOC_CMDS, CPC2IMG_CMDS, GRAFX2_CMDS, MINY_CMDS, RTZX_CMDS};
+use crate::task::{BASMDOC_CMDS, CATALOG_CMDS, CPC2IMG_CMDS, GRAFX2_CMDS, MINY_CMDS, RTZX_CMDS};
 
 pub mod app;
 pub mod builder;
@@ -72,6 +72,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (BASMDOC_CMDS, false),
     (BDASM_CMDS, false),
     (BNDBUILD_CMDS, false),
+    (CATALOG_CMDS, false),
     (CHIPNSFX_CMDS, true),
     (CONVGENERIC_CMDS, true),
     (CP_CMDS, false),

@@ -96,6 +96,7 @@ cpclib-bdasm = { version = "0.11.0", path = "cpclib-bdasm", default-features = f
 cpclib-bndbuild = { version = "0.11.0", path = "cpclib-bndbuild", default-features = false }
 cpclib-borgams = { version = "0.11.0", path = "cpclib-borgams", default-features = false }
 cpclib-catart = { version = "0.11.0", path = "cpclib-catart", default-features = false }
+cpclib-catalog = { version = "0.11.0", path = "cpclib-catalog", default-features = false }
 cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
 cpclib-common = { version = "0.11.0", path = "cpclib-common", default-features = false }
 cpclib-cpr = { version = "0.11.0", path = "cpclib-cpr", default-features = false }

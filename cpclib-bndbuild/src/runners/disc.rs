@@ -1,16 +1,21 @@
 use std::marker::PhantomData;
-
-use clap::{Arg, ArgAction};
-use cpclib_common::clap::{self, Command};
+use clap::{Arg, ArgAction, FromArgMatches, Parser};
+use cpclib_catalog::cli::CatalogApp;
+use cpclib_common::clap::{self, Command, CommandFactory};
 use cpclib_disc::dsk_manager_build_arg_parser;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
-use crate::task::DISC_CMDS;
+use crate::task::{CATALOG_CMDS, DISC_CMDS};
 
 pub struct DiscManagerRunner<E: EventObserver> {
+    command: clap::Command,
+    _phantom: PhantomData<E>
+}
+
+pub struct CatalogRunner<E: EventObserver> {
     command: clap::Command,
     _phantom: PhantomData<E>
 }
@@ -51,13 +56,61 @@ impl<E: EventObserver> Default for DiscManagerRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClap for DiscManagerRunner<E> {
+
+
+impl<E: EventObserver> Default for CatalogRunner<E> {
+    fn default() -> Self {
+        let command = cpclib_catalog::cli::CatalogApp::command();
+        let command = command
+            .disable_help_flag(true)
+            .disable_version_flag(true)
+            .arg(
+                Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true) // does not seem to work
+            )
+            .arg(
+                Arg::new("version")
+                    .long("version")
+                    .short('V')
+                    .help("Print version")
+                    .action(ArgAction::SetTrue)
+                    .exclusive(true)
+            )
+            .no_binary_name(true)
+            .after_help(format!(
+                "{} {} embedded by {} {}",
+                cpclib_catalog::built_info::PKG_NAME,
+                cpclib_catalog::built_info::PKG_VERSION,
+                built_info::PKG_NAME,
+                built_info::PKG_VERSION
+            ));
+        Self {
+            command,
+            _phantom: Default::default()
+        }
+    }
+}
+
+
+
+impl<E: EventObserver> RunnerWithClap for CatalogRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
     }
 }
 
 impl<E: EventObserver> RunnerWithClapMatches for DiscManagerRunner<E> {}
+
+impl<E: EventObserver> RunnerWithClap for DiscManagerRunner<E> {
+    fn get_clap_command(&self) -> &Command {
+        &self.command
+    }
+}
+
+impl<E: EventObserver> RunnerWithClapMatches for CatalogRunner<E> {}
 
 impl<E: EventObserver> Runner for DiscManagerRunner<E> {
     type EventObserver = E;
@@ -74,5 +127,19 @@ impl<E: EventObserver> Runner for DiscManagerRunner<E> {
 
     fn get_command(&self) -> &str {
         DISC_CMDS[0]
+    }
+}
+
+
+impl<E: EventObserver> Runner for CatalogRunner<E> {
+    type EventObserver = E;
+
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+        let app = CatalogApp::try_parse_from(itr.into_iter().map(|s| s.as_ref().to_string())).map_err(|e| e.to_string())?;
+        cpclib_catalog::handle_catalog_command(app)
+    }
+
+    fn get_command(&self) -> &str {
+        CATALOG_CMDS[0]
     }
 }

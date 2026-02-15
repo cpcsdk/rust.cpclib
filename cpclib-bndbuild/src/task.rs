@@ -50,6 +50,7 @@ pub enum InnerTask {
     Assembler(Assembler, StandardTaskArguments),
     BasmDoc(StandardTaskArguments),
     BndBuild(StandardTaskArguments),
+    Catalog(StandardTaskArguments),
     Convgeneric(StandardTaskArguments),
     Cp(StandardTaskArguments),
     CpcToImg(StandardTaskArguments),
@@ -197,6 +198,7 @@ pub const RM_CMDS: &[&str] = &["rm", "del"];
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
+pub const CATALOG_CMDS: &[&str] = &["catalog", "cat"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 
@@ -239,6 +241,7 @@ impl Display for InnerTask {
             Self::BasmDoc(s) => (BASMDOC_CMDS[0], s),
             Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Self::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
+            Self::Catalog(s) => (CATALOG_CMDS[0], s),
             Self::Cp(s) => (CP_CMDS[0], s),
             Self::Mv(s) => (MV_CMDS[0], s),
             Self::CpcToImg(s) => (CPC2IMG_CMDS[0], s),
@@ -291,7 +294,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit, at, ayt,
     basm, basmdoc, bdasm, bndbuild,
-    capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower, cpc2img,
+    catalog, capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower, cpc2img,
     disark, disc,
     echo, emuctrl, r#extern,
     fade,
@@ -302,16 +305,7 @@ is_some_cmd!(
     martine, mkdir, mv,
     orgams,
     rasm, rm, rtzx,
-    sjasmplus, sna, sugarbox,
-    song2akm,
-    song2akg,
-    song2aky,
-    song2events,
-    song2raw,
-    song2soundeffects,
-    song2vgm,
-    song2wav,
-    song2ym,
+    sjasmplus, sna, sugarbox, song2akm, song2akg, song2aky, song2events, song2raw, song2soundeffects, song2vgm, song2wav, song2ym,
     z80profiler,
     uz80,
     vasm,
@@ -413,6 +407,10 @@ impl InnerTask {
 
     pub fn with_bndbuild(std: StandardTaskArguments) -> Self {
         Self::BndBuild(std)
+    }
+
+    pub fn with_catalog(std: StandardTaskArguments) -> Self {
+        Self::Catalog(std)
     }
 
     pub fn with_convgeneric(std: StandardTaskArguments) -> Self {
@@ -528,6 +526,9 @@ impl InnerTask {
         }
         else if is_at_cmd(code) {
             Ok(Self::with_tracker(Tracker::new_at3_default(), std))
+        }
+        else if is_catalog_cmd(code) {
+            Ok(Self::with_catalog(std))
         }
         else if is_chipnsfx_cmd(code) {
             Ok(Self::with_tracker(Tracker::new_chipnsfx_default(), std))
@@ -774,6 +775,7 @@ impl InnerTask {
         match self {
             InnerTask::Assembler(_, t)
             | InnerTask::Cdt(_, t)
+            | InnerTask::Catalog(t)
             | InnerTask::YmCruncher(_, t)
             | InnerTask::BasmDoc(t)
             | InnerTask::BndBuild(t)
@@ -818,6 +820,7 @@ impl InnerTask {
             | InnerTask::Disassembler(_, t)
             | InnerTask::Disc(t)
             | InnerTask::Echo(t)
+            | InnerTask::Catalog(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::Extern(t)
             | InnerTask::Grafx2(t)
@@ -858,6 +861,7 @@ impl InnerTask {
             InnerTask::BasmDoc(_) => false,
             InnerTask::Convgeneric(_) => false,
             InnerTask::Cdt(..) => false,
+            InnerTask::Catalog(_) => false,
             InnerTask::Cp(_) => false,
             InnerTask::Mv(_) => false,
             InnerTask::CpcToImg(_) => false,
