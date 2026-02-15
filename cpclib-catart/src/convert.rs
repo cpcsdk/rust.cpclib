@@ -182,29 +182,10 @@ fn consume_print_statement<'b>(
         };
 
         match pair.1 {
-            // String literal - ValueQuotedString token followed by Constant with string content
-            BasicToken::SimpleToken(BasicTokenNoPrefix::ValueQuotedString) => {
-                iter.pop(); // consume the ValueQuotedString marker
-                let mut content = Vec::new();
-                loop {
-                    match iter.last() {
-                        Some((
-                            _,
-                            BasicToken::SimpleToken(BasicTokenNoPrefix::ValueQuotedString)
-                        )) => {
-                            iter.pop(); // consume closing quote
-                            break;
-                        },
-                        Some(_) => {
-                            let (_, t) = iter.pop().unwrap();
-                            if let Some(c) = t.char() {
-                                content.push(c as u8);
-                            }
-                        },
-                        None => break
-                    }
-                }
-                args.push(PrintArgument::String(content));
+            // String literal - CommentOrString token with bytes
+            BasicToken::CommentOrString(BasicTokenNoPrefix::ValueQuotedString, bytes, _) => {
+                iter.pop(); // consume the token
+                args.push(PrintArgument::String(bytes.clone()));
                 has_trailing_semicolon = false; // Reset - only true if semicolon comes after content
             },
             // String literal - match any other Constant with String value (fallback)
@@ -307,7 +288,7 @@ pub fn basic_to_commands<'b>(basic: &'b BasicProgram) -> Result<BasicCommandList
 
     while let Some((line, token)) = line_token_pairs.pop() {
         match token {
-            BasicToken::Comment(..) => {}, // we ignore comments
+            BasicToken::CommentOrString(..) => {}, // we ignore comments
             BasicToken::SimpleToken(BasicTokenNoPrefix::Paper) => {
                 let value = consume_integer_argument(&mut line_token_pairs)?;
                 commands.push(BasicCommand::paper(value));
@@ -417,24 +398,24 @@ mod test {
     #[test]
     fn test_print() {
         let code = r###"10 PRINT "HELLO""###;
-        let basic = BasicProgram::parse(code).expect("Tokenization failed");
-        let result = basic_to_commands(&basic).expect("Conversion failed");
+        let basic = dbg!(BasicProgram::parse(code)).expect("Tokenization failed");
+        let result = dbg!(basic_to_commands(&basic)).expect("Conversion failed");
         assert_eq!(
             result,
             vec![BasicCommand::print_string_crlf(br#"HELLO"#.to_vec())].into()
         );
 
         let code = r###"10 PRINT "HELLO";"###;
-        let basic = BasicProgram::parse(code).expect("Tokenization failed");
-        let result = basic_to_commands(&basic).expect("Conversion failed");
+        let basic = dbg!(BasicProgram::parse(code)).expect("Tokenization failed");
+        let result = dbg!(basic_to_commands(&basic)).expect("Conversion failed");
         assert_eq!(
             result,
             vec![BasicCommand::print_string(br#"HELLO"#.to_vec())].into()
         );
 
         let code = r###"10 PRINT"HELLO""###;
-        let basic = BasicProgram::parse(code).expect("Tokenization failed");
-        let result = basic_to_commands(&basic).expect("Conversion failed");
+        let basic = dbg!(BasicProgram::parse(code)).expect("Tokenization failed");
+        let result = dbg!(basic_to_commands(&basic)).expect("Conversion failed");
         assert_eq!(
             result,
             vec![BasicCommand::print_string_crlf(br#"HELLO"#.to_vec())].into()
