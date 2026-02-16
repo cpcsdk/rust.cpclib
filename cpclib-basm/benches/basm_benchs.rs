@@ -1,6 +1,5 @@
 #![feature(path_file_prefix)]
 
-use fs_err as fs;
 use std::sync::Arc;
 
 use camino_tempfile::NamedUtf8TempFile;
@@ -8,6 +7,7 @@ use cpclib_asm::assemble;
 use cpclib_basm::{build_args_parser, process};
 use cpclib_common::itertools::Itertools;
 use criterion::{Criterion, criterion_group, criterion_main};
+use fs_err as fs;
 use globset::Glob;
 
 #[inline]

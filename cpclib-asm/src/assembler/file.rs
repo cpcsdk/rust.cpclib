@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::VecDeque;
-use fs_err::File;
 use std::io::Read;
 use std::ops::Deref;
 
@@ -10,6 +9,7 @@ use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader, AmsdosManagerNonMut};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::{ExtendedDsk, Head};
 use either::Either;
+use fs_err::File;
 
 use super::Env;
 use super::embedded::EmbeddedFiles;

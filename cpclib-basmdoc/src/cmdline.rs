@@ -86,12 +86,13 @@ pub fn handle_matches(matches: &clap::ArgMatches, _cmd: &clap::Command) -> Resul
     // Build undocumented config from flags
     let undocumented_config = if matches.get_flag("undocumented") {
         UndocumentedConfig::all()
-    } else {
+    }
+    else {
         UndocumentedConfig {
             macros: matches.get_flag("undocumented-macros"),
             functions: matches.get_flag("undocumented-functions"),
             labels: matches.get_flag("undocumented-labels"),
-            equs: matches.get_flag("undocumented-equs"),
+            equs: matches.get_flag("undocumented-equs")
         }
     };
 

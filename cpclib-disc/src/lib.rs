@@ -2,8 +2,6 @@
 
 use std::collections::VecDeque;
 #[cfg(feature = "cmdline")]
-use fs_err::File;
-#[cfg(feature = "cmdline")]
 use std::io::{Read, Write};
 #[cfg(feature = "cmdline")]
 use std::str::FromStr;
@@ -17,6 +15,8 @@ use cpclib_common::clap;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::*;
 use disc::Disc;
+#[cfg(feature = "cmdline")]
+use fs_err::File;
 
 #[cfg(feature = "cmdline")]
 use crate::amsdos::*;
@@ -119,7 +119,11 @@ impl Disc for AnyDisc {
         P: AsRef<Utf8Path>
     {
         let path = path.as_ref();
-        if path.extension().map(|ext| ext.eq_ignore_ascii_case("hfe")).unwrap_or(false) {
+        if path
+            .extension()
+            .map(|ext| ext.eq_ignore_ascii_case("hfe"))
+            .unwrap_or(false)
+        {
             return Err("HFE support is not enabled. Rebuild with --features hfe".to_string());
         }
         ExtendedDsk::open(path).map(|d| d.into())

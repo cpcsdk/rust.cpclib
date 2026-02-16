@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::env;
-use fs_err::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+
+use fs_err::File;
 
 #[allow(dead_code)]
 const UNARY_FUNCTIONS: &[&[u8]] = &[

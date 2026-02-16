@@ -1,7 +1,6 @@
 #![feature(box_patterns)]
 
 use std::fmt::Display;
-use fs_err::File;
 use std::io;
 use std::io::Write;
 use std::ops::Deref;
@@ -28,6 +27,7 @@ use cpclib_disc::open_disc;
 #[cfg(feature = "xferlib")]
 use cpclib_xfer::CpcXfer;
 use file::AnyFileNameOwned;
+use fs_err::File;
 
 use crate::embedded::EmbeddedFiles;
 

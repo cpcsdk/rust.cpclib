@@ -1,5 +1,7 @@
 use cpclib_asm::parse_z80_str;
-use cpclib_basmdoc::{aggregate_documentation_on_tokens, build_documentation_page_from_aggregates, UndocumentedConfig};
+use cpclib_basmdoc::{
+    UndocumentedConfig, aggregate_documentation_on_tokens, build_documentation_page_from_aggregates
+};
 
 const FILENAME: &str = "tests/simple_code.asm";
 
@@ -7,7 +9,10 @@ const FILENAME: &str = "tests/simple_code.asm";
 fn test_simple_aggregate() {
     let code = fs_err::read_to_string(FILENAME).unwrap();
     let tokens = dbg!(parse_z80_str(&code).unwrap());
-    let doc = dbg!(aggregate_documentation_on_tokens(&tokens, UndocumentedConfig::none()));
+    let doc = dbg!(aggregate_documentation_on_tokens(
+        &tokens,
+        UndocumentedConfig::none()
+    ));
 
     assert_eq!(doc.len(), 6);
 

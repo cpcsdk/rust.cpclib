@@ -1,4 +1,3 @@
-use fs_err::File;
 use std::io::Write;
 
 use anyhow::{self, Error};
@@ -21,6 +20,7 @@ use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 use cpclib::{ExtendedDsk, Ink, Pen, sna};
+use fs_err::File;
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 

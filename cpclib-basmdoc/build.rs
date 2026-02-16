@@ -1,10 +1,10 @@
 use std::env;
-use fs_err::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
 use cpclib_asm::parser::instructions::INSTRUCTIONS;
 use cpclib_asm::parser::parser::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
+use fs_err::File;
 
 /// Generate syntax highlighting keyword strings for the template
 fn generate_syntax_highlighting() {

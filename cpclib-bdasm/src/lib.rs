@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use fs_err::File;
 use std::io::Read;
 
 use cpclib_asm::{
@@ -13,6 +12,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::Parser;
 use cpclib_common::winnow::error::ParseError;
 use cpclib_disc::amsdos::AmsdosHeader;
+use fs_err::File;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));

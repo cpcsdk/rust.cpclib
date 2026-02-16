@@ -5,8 +5,8 @@
 
 use cpclib_asm::{ListingElement, MayHaveSpan};
 
-use crate::models::{DocumentedItem, ItemDocumentation, UndocumentedConfig};
 use crate::DocumentationPage;
+use crate::models::{DocumentedItem, ItemDocumentation, UndocumentedConfig};
 
 /// Marker for global documentation comments (file-level or section-level)
 const GLOBAL_DOCUMENTATION_START: &str = ";;;";
@@ -28,17 +28,17 @@ fn collect_all_tokens_including_conditionals<'a, T: ListingElement>(
 ) {
     for token in tokens {
         result.push(token);
-        
+
         // If this is a conditional token, recursively process all branches
         if token.is_if() {
             let nb_tests = token.if_nb_tests();
-            
+
             // Process each condition branch
             for idx in 0..nb_tests {
                 let (_condition, branch_tokens) = token.if_test(idx);
                 collect_all_tokens_including_conditionals(branch_tokens, result);
             }
-            
+
             // Process the else branch if it exists
             if let Some(else_tokens) = token.if_else() {
                 collect_all_tokens_including_conditionals(else_tokens, result);
@@ -89,7 +89,10 @@ fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
 }
 
 /// Check if a token can be documented (is it a label, equ, function, or macro?)
-fn is_documentable<T: ListingElement + ToString>(token: &T, last_global_label: Option<&str>) -> bool {
+fn is_documentable<T: ListingElement + ToString>(
+    token: &T,
+    last_global_label: Option<&str>
+) -> bool {
     documentation_type(token, last_global_label).is_some()
 }
 
@@ -100,17 +103,18 @@ fn documentation_type<T: ListingElement + ToString>(
 ) -> Option<DocumentedItem> {
     if token.is_label() {
         let mut label = token.label_symbol().to_string();
-        
+
         // Handle local labels (starting with .)
         if label.starts_with('.') {
             if let Some(parent) = last_global_label {
                 label = format!("{}{}", parent, label);
-            } else {
+            }
+            else {
                 // Local label without a parent is invalid
                 return None;
             }
         }
-        
+
         Some(DocumentedItem::Label(label))
     }
     else if token.is_equ() {
@@ -223,7 +227,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
     // First, expand all tokens including those in conditional branches
     let mut expanded_tokens = Vec::new();
     collect_all_tokens_including_conditionals(tokens, &mut expanded_tokens);
-    
+
     #[derive(PartialEq, Debug, Default, Clone, Copy)]
     enum CommentKind {
         #[default]
@@ -339,9 +343,12 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
             // Skip local labels without a parent
             let is_local_label = token.is_label() && token.label_symbol().starts_with('.');
             let should_skip = is_local_label && last_global_label.is_none();
-            
+
             if !should_skip {
-                let line_number = token.possible_span().map(|s| s.location_line()).unwrap_or(0) as usize;
+                let line_number = token
+                    .possible_span()
+                    .map(|s| s.location_line())
+                    .unwrap_or(0) as usize;
                 if !in_process_comment.is_unspecified() {
                     // we comment an item if any
                     let documented = if in_process_comment.is_global() {
@@ -352,13 +359,24 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
                         // but we do for a local comment
                         Some(token)
                     };
-                    doc.push((in_process_comment.consume(), documented, last_global_label.clone(), line_number));
+                    doc.push((
+                        in_process_comment.consume(),
+                        documented,
+                        last_global_label.clone(),
+                        line_number
+                    ));
                 }
                 else if is_documentable(token, last_global_label.as_deref()) {
                     // Check if this specific item type should be included when undocumented
-                    if let Some(item_type) = documentation_type(token, last_global_label.as_deref()) {
+                    if let Some(item_type) = documentation_type(token, last_global_label.as_deref())
+                    {
                         if include_undocumented.should_include(&item_type) {
-                            doc.push((String::new(), Some(token), last_global_label.clone(), line_number));
+                            doc.push((
+                                String::new(),
+                                Some(token),
+                                last_global_label.clone(),
+                                line_number
+                            ));
                         }
                     }
                 }

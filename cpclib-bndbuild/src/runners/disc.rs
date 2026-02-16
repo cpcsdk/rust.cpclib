@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+
 use clap::{Arg, ArgAction, FromArgMatches, Parser};
 use cpclib_catalog::cli::CatalogApp;
 use cpclib_common::clap::{self, Command, CommandFactory};
@@ -56,8 +57,6 @@ impl<E: EventObserver> Default for DiscManagerRunner<E> {
     }
 }
 
-
-
 impl<E: EventObserver> Default for CatalogRunner<E> {
     fn default() -> Self {
         let command = cpclib_catalog::cli::CatalogApp::command();
@@ -94,8 +93,6 @@ impl<E: EventObserver> Default for CatalogRunner<E> {
     }
 }
 
-
-
 impl<E: EventObserver> RunnerWithClap for CatalogRunner<E> {
     fn get_clap_command(&self) -> &Command {
         &self.command
@@ -130,12 +127,16 @@ impl<E: EventObserver> Runner for DiscManagerRunner<E> {
     }
 }
 
-
 impl<E: EventObserver> Runner for CatalogRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let app = CatalogApp::try_parse_from(itr.into_iter().map(|s| s.as_ref().to_string())).map_err(|e| e.to_string())?;
+        let app = CatalogApp::try_parse_from(
+            [self.get_command().to_string()]
+                .into_iter()
+                .chain(itr.into_iter().map(|s| s.as_ref().to_string()))
+        )
+        .map_err(|e| e.to_string())?;
         cpclib_catalog::handle_catalog_command(app)
     }
 

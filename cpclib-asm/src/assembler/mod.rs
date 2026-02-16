@@ -3220,7 +3220,7 @@ impl Env {
                 return Err(Box::new(AssemblerError::AssemblingError {
                     msg: "OUTPUT directive expects a string or value for the filename".into()
                 }));
-            },
+            }
         };
 
         // Store the output filename in the environment

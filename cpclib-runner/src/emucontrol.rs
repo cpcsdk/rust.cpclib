@@ -1628,6 +1628,11 @@ pub struct EmuCli {
 
     #[arg(long, action=ArgAction::Append, help="List the ROMS to deactivate")]
     disable_rom: Vec<AmstradRom>,
+ 
+    #[arg(long, action=ArgAction::Append, help="List the ROMS to deactivate")]
+    disable_rom: Vec<AmstradRom>,
+
+
 
     #[command(subcommand)]
     command: Commands

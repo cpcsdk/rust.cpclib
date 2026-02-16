@@ -1,7 +1,8 @@
-use crate::preamble::*;
 use cpclib_tokens::opcode_table::{
-    TABINSTRED, TABINSTR, TABINSTRCB, TABINSTRDD, TABINSTRDDCB, TABINSTRFD, TABINSTRFDCB,
+    TABINSTR, TABINSTRCB, TABINSTRDD, TABINSTRDDCB, TABINSTRED, TABINSTRFD, TABINSTRFDCB
 };
+
+use crate::preamble::*;
 
 /// Generate a listing from the list of bytes. An error is generated if it is impossible to disassemble the flux
 /// TODO really implement it

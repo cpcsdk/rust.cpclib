@@ -1,7 +1,5 @@
 use std::fmt::Display;
 #[cfg(feature = "cmdline")]
-use fs_err::File;
-#[cfg(feature = "cmdline")]
 use std::io::{Read, Write};
 
 #[cfg(feature = "cmdline")]
@@ -14,6 +12,8 @@ use cpclib_common::parse_value;
 use cpclib_common::winnow::Parser;
 #[cfg(feature = "cmdline")]
 use cpclib_common::winnow::error::ContextError;
+#[cfg(feature = "cmdline")]
+use fs_err::File;
 
 #[cfg(feature = "cmdline")]
 use crate::amsdos::{AmsdosFile, AmsdosFileName, AmsdosFileType, AmsdosHeader};

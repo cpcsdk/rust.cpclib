@@ -71,6 +71,14 @@ impl Mode {
         };
         width / self.nb_pixels_per_byte() + extra
     }
+
+    pub fn nb_bytes_for_char(&self) -> usize {
+        match self {
+            Mode::Zero | Mode::Three => 4,
+            Mode::One => 2,
+            Mode::Two => 1
+        }
+    }
 }
 
 /// Conversion rules
@@ -129,9 +137,9 @@ fn encode(pens: &[Vec<Pen>], mode: Mode, missing_pen: Option<Pen>) -> Vec<Vec<u8
             }
             else {
                 match mode {
-                    Mode::Zero => pixels::mode0::pens_to_vec_with_crop(input_row),
-                    Mode::One => pixels::mode1::pens_to_vec_with_crop(input_row),
-                    Mode::Two => pixels::mode2::pens_to_vec_with_crop(input_row),
+                    Mode::Zero => pixels::mode0::pens_to_bytes_with_crop(input_row),
+                    Mode::One => pixels::mode1::pens_to_bytes_with_crop(input_row),
+                    Mode::Two => pixels::mode2::pens_to_bytes_with_crop(input_row),
                     _ => panic!("Unimplemented yet ...")
                 }
             }
@@ -1096,7 +1104,7 @@ impl Sprite {
     pub fn from_pens(pens: &[Vec<Pen>], mode: Mode, palette: Option<Palette>) -> Self {
         let data = pens
             .iter()
-            .map(|line| crate::pixels::pens_to_vec(line, mode))
+            .map(|line| crate::pixels::pens_to_bytes(line, mode))
             .collect();
         Sprite {
             data,

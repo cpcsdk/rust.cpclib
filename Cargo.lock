@@ -2455,6 +2455,7 @@ dependencies = [
  "cfg-if",
  "cpclib-common",
  "cpclib-disc",
+ "cpclib-files",
  "cpclib-sna",
  "either",
  "fs-err",
@@ -2549,6 +2550,7 @@ dependencies = [
  "cpclib-basm",
  "cpclib-basmdoc",
  "cpclib-bdasm",
+ "cpclib-catalog",
  "cpclib-common",
  "cpclib-crunch",
  "cpclib-disc",
@@ -2631,11 +2633,14 @@ dependencies = [
 name = "cpclib-catalog"
 version = "0.11.0"
 dependencies = [
+ "built",
  "clap",
  "cpclib-basic",
  "cpclib-catart",
  "cpclib-common",
  "cpclib-disc",
+ "cpclib-image",
+ "image",
  "log",
  "simple_logger",
 ]

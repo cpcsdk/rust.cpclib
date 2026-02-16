@@ -1,4 +1,3 @@
-use fs_err::File;
 use std::io::prelude::*;
 use std::ops::Deref;
 
@@ -11,6 +10,7 @@ use cpclib_common::riff::{RiffChunk, RiffCode};
 use cpclib_common::winnow::error::ContextError;
 #[cfg(feature = "cmdline")]
 use cpclib_common::winnow::stream::AsBStr;
+use fs_err::File;
 
 mod chunks;
 mod error;

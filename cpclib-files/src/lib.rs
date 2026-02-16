@@ -1,6 +1,8 @@
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::itertools::Itertools;
-use cpclib_disc::amsdos::{AmsdosAddBehavior, AmsdosError, AmsdosFile, AmsdosFileName};
+use cpclib_disc::amsdos::{
+    AmsdosAddBehavior, AmsdosError, AmsdosFile, AmsdosFileName, AmsdosHeader
+};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::Head;
 use cpclib_disc::open_disc;
@@ -49,7 +51,8 @@ impl StorageSupport {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FileAndSupport {
     support: StorageSupport,
-    file: (FileType, Utf8PathBuf)
+    file: (FileType, Utf8PathBuf),
+    content: Option<Vec<u8>>
 }
 
 impl FileAndSupport {
@@ -63,55 +66,104 @@ impl FileAndSupport {
     }
 
     pub fn new(support: StorageSupport, file: (FileType, Utf8PathBuf)) -> Self {
-        Self { support, file }
+        Self {
+            support,
+            file,
+            content: None
+        }
     }
 
     pub fn new_amsdos<P: Into<Utf8PathBuf>>(p: P) -> Self {
         Self {
             support: StorageSupport::Host,
-            file: (FileType::AmsdosBin, p.into())
+            file: (FileType::AmsdosBin, p.into()),
+            content: None
         }
     }
 
     pub fn new_amsdos_in_disc<P: Into<Utf8PathBuf>, F: Into<Utf8PathBuf>>(p: P, f: F) -> Self {
         Self {
             support: StorageSupport::Disc(p.into()),
-            file: (FileType::AmsdosBin, f.into())
+            file: (FileType::AmsdosBin, f.into()),
+            content: None
         }
     }
 
     pub fn new_basic<P: Into<Utf8PathBuf>>(p: P) -> Self {
         Self {
             support: StorageSupport::Host,
-            file: (FileType::AmsdosBas, p.into())
+            file: (FileType::AmsdosBas, p.into()),
+            content: None
         }
     }
 
     pub fn new_basic_in_disc<P: Into<Utf8PathBuf>, F: Into<Utf8PathBuf>>(p: P, f: F) -> Self {
         Self {
             support: StorageSupport::Disc(p.into()),
-            file: (FileType::AmsdosBas, f.into())
+            file: (FileType::AmsdosBas, f.into()),
+            content: None
         }
     }
 
     pub fn new_ascii<P: Into<Utf8PathBuf>>(p: P) -> Self {
         Self {
             support: StorageSupport::Host,
-            file: (FileType::Ascii, p.into())
+            file: (FileType::Ascii, p.into()),
+            content: None
         }
     }
 
     pub fn new_ascii_in_disc<P: Into<Utf8PathBuf>, F: Into<Utf8PathBuf>>(p: P, f: F) -> Self {
         Self {
             support: StorageSupport::Disc(p.into()),
-            file: (FileType::Ascii, f.into())
+            file: (FileType::Ascii, f.into()),
+            content: None
         }
     }
 
     pub fn new_no_header<P: Into<Utf8PathBuf>>(p: P) -> Self {
         Self {
             support: StorageSupport::Host,
-            file: (FileType::NoHeader, p.into())
+            file: (FileType::NoHeader, p.into()),
+            content: None
+        }
+    }
+
+    pub fn build<P: Into<Utf8PathBuf>>(p: P) -> Self {
+        let fname = p.into();
+        let content = std::fs::read(&fname).unwrap();
+        let has_header = content.len() >= AmsdosHeader::HEADER_SIZE
+            && AmsdosHeader::from_buffer(&content).represent_a_valid_file();
+        let mut file = Self::new_auto(fname, has_header);
+
+        match file.file.0 {
+            FileType::AmsdosBin | FileType::AmsdosBas => {
+                if !has_header {
+                    panic!(
+                        "File {} is expected to have an Amsdos header, but it does not have one.",
+                        file.filename()
+                    );
+                }
+                file.content = Some(content[AmsdosHeader::HEADER_SIZE..].to_vec());
+            },
+            FileType::Ascii | FileType::NoHeader => {
+                if has_header {
+                    panic!(
+                        "File {} is not expected to have an Amsdos header, but it has one.",
+                        file.filename()
+                    );
+                }
+                file.content = Some(content);
+            },
+            FileType::Auto => unreachable!()
+        }
+        file
+    }
+
+    pub fn content(&self) -> Vec<u8> {
+        match self.content {
+            Some(ref content) => content.clone(),
+            None => unimplemented!("Content is not loaded for file {:?}", self)
         }
     }
 
@@ -142,7 +194,8 @@ impl FileAndSupport {
                 if is_image {
                     Self {
                         support: StorageSupport::Disc(first.into()),
-                        file: (FileType::Auto, second.into())
+                        file: (FileType::Auto, second.into()),
+                        content: None
                     }
                 }
                 else if header {

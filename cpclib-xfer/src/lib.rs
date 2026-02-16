@@ -1,10 +1,8 @@
-use fs_err as fs;
-
 use cpclib_common::camino::Utf8Path;
 use curl::easy::{Easy, Form};
 use custom_error::custom_error;
 use path_absolutize::*;
-use {cpclib_disc as disc, cpclib_sna as sna};
+use {cpclib_disc as disc, cpclib_sna as sna, fs_err as fs};
 
 use crate::disc::amsdos::AmsdosFileType;
 use crate::sna::{Snapshot, SnapshotVersion};

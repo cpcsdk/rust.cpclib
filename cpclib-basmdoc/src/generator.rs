@@ -8,7 +8,9 @@
 //! 4. Rendering to HTML or Markdown
 
 use std::path::{Path, PathBuf};
+
 use indicatif::{ProgressBar, ProgressStyle};
+
 use crate::{DocumentationPage, UndocumentedConfig};
 
 /// Builder for configuring and generating documentation
@@ -25,7 +27,7 @@ pub struct BasmDocGenerator {
     /// Whether to show progress indicators
     show_progress: bool,
     /// Whether to minify HTML output
-    minify_html: bool,
+    minify_html: bool
 }
 
 impl Default for BasmDocGenerator {
@@ -43,7 +45,7 @@ impl BasmDocGenerator {
             undocumented_config: UndocumentedConfig::default(),
             title: None,
             show_progress: true,
-            minify_html: true,
+            minify_html: true
         }
     }
 
@@ -51,7 +53,7 @@ impl BasmDocGenerator {
     pub fn add_inputs<I, S>(mut self, inputs: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: Into<String>,
+        S: Into<String>
     {
         self.inputs.extend(inputs.into_iter().map(|s| s.into()));
         self
@@ -88,7 +90,7 @@ impl BasmDocGenerator {
     }
 
     /// Resolve input patterns to concrete file paths
-    /// 
+    ///
     /// This handles:
     /// - Wildcard expansion (if enabled)
     /// - Directory traversal (recursively finds .asm files)
@@ -100,7 +102,8 @@ impl BasmDocGenerator {
 
         let resolved = if self.enable_wildcards {
             self.resolve_wildcards()?
-        } else {
+        }
+        else {
             self.resolve_files_and_dirs()?
         };
 
@@ -115,7 +118,9 @@ impl BasmDocGenerator {
     fn resolve_wildcards(&self) -> Result<Vec<String>, String> {
         use cpclib_common::itertools::Itertools;
 
-        let expanded: Vec<String> = self.inputs.iter()
+        let expanded: Vec<String> = self
+            .inputs
+            .iter()
             .flat_map(|input| {
                 glob::glob(input)
                     .map_err(|e| format!("Invalid wildcard pattern {}: {}", input, e))
@@ -152,7 +157,8 @@ impl BasmDocGenerator {
             pb.set_message("Searching for assembly files...");
             pb.enable_steady_tick(std::time::Duration::from_millis(100));
             Some(pb)
-        } else {
+        }
+        else {
             None
         };
 
@@ -161,13 +167,18 @@ impl BasmDocGenerator {
 
             if path.is_dir() {
                 resolved.extend(Self::find_asm_files(path)?);
-            } else if path.is_file() {
+            }
+            else if path.is_file() {
                 resolved.push(input.to_string());
-            } else {
+            }
+            else {
                 if let Some(s) = &spinner {
                     s.finish_and_clear();
                 }
-                return Err(format!("Input '{}' is neither a file nor a directory", input));
+                return Err(format!(
+                    "Input '{}' is neither a file nor a directory",
+                    input
+                ));
             }
         }
 
@@ -191,7 +202,8 @@ impl BasmDocGenerator {
 
             if entry_path.is_dir() {
                 asm_files.extend(Self::find_asm_files(&entry_path)?);
-            } else if entry_path.is_file() {
+            }
+            else if entry_path.is_file() {
                 if let Some(ext) = entry_path.extension() {
                     if ext.eq_ignore_ascii_case("asm") {
                         asm_files.push(entry_path.to_string_lossy().to_string());
@@ -212,10 +224,11 @@ impl BasmDocGenerator {
         if paths.len() == 1 {
             // For a single file, use its parent directory as prefix
             let path = Path::new(&paths[0]);
-            let parent = path.parent()
+            let parent = path
+                .parent()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
-            
+
             // Normalize path separator to forward slash and strip leading slash
             // if the path is not considered absolute by the OS
             let normalized = parent.replace('\\', "/");
@@ -230,17 +243,16 @@ impl BasmDocGenerator {
 
         // Store the prefix component (for Windows drive letters)
         let prefix_component = if all_absolute {
-            Path::new(&paths[0])
-                .components()
-                .next()
-                .and_then(|c| {
-                    if let std::path::Component::Prefix(prefix) = c {
-                        Some(prefix.as_os_str().to_string_lossy().to_string())
-                    } else {
-                        None
-                    }
-                })
-        } else {
+            Path::new(&paths[0]).components().next().and_then(|c| {
+                if let std::path::Component::Prefix(prefix) = c {
+                    Some(prefix.as_os_str().to_string_lossy().to_string())
+                }
+                else {
+                    None
+                }
+            })
+        }
+        else {
             None
         };
 
@@ -253,7 +265,8 @@ impl BasmDocGenerator {
                     .filter_map(|c| {
                         if let std::path::Component::Normal(s) = c {
                             s.to_str()
-                        } else {
+                        }
+                        else {
                             None
                         }
                     })
@@ -268,9 +281,13 @@ impl BasmDocGenerator {
         let mut common = Vec::new();
         for i in 0..min_len {
             let first = path_components[0][i];
-            if path_components.iter().all(|components| components[i] == first) {
+            if path_components
+                .iter()
+                .all(|components| components[i] == first)
+            {
                 common.push(first);
-            } else {
+            }
+            else {
                 break;
             }
         }
@@ -282,14 +299,17 @@ impl BasmDocGenerator {
 
         if common.is_empty() {
             String::new()
-        } else {
+        }
+        else {
             let prefix = common.join("/");
             // Add Windows drive letter or Unix root slash
             if let Some(win_prefix) = prefix_component {
                 format!("{}/{}", win_prefix, prefix)
-            } else if all_absolute {
+            }
+            else if all_absolute {
                 format!("/{}", prefix)
-            } else {
+            }
+            else {
                 prefix
             }
         }
@@ -305,8 +325,8 @@ impl BasmDocGenerator {
 
         // Handle both absolute and relative paths
         let prefix_patterns = vec![
-            format!("/{}/", prefix),  // /prefix/
-            format!("{}/", prefix),   // prefix/
+            format!("/{}/", prefix), // /prefix/
+            format!("{}/", prefix),  // prefix/
         ];
 
         for pattern in &prefix_patterns {
@@ -328,7 +348,7 @@ impl BasmDocGenerator {
     }
 
     /// Generate merged HTML documentation from all inputs
-    /// 
+    ///
     /// This is the main entry point for HTML generation. It:
     /// 1. Resolves input files
     /// 2. Parses all files (collecting both pages and tokens)
@@ -342,30 +362,34 @@ impl BasmDocGenerator {
         // Parse all files with progress tracking
         let pb_parse = if self.show_progress {
             let pb = ProgressBar::new(inputs.len() as u64);
-            pb.set_style(ProgressStyle::default_bar()
-                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
-                .unwrap()
-                .progress_chars("#>-"));
+            pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
+                    .unwrap()
+                    .progress_chars("#>-")
+            );
             pb.set_message("Parsing assembly files");
             Some(pb)
-        } else {
+        }
+        else {
             None
         };
 
-        let pages_and_tokens: Result<Vec<_>, String> = inputs.into_iter()
+        let pages_and_tokens: Result<Vec<_>, String> = inputs
+            .into_iter()
             .map(|input| {
                 let display_name = Self::remove_prefix(&input, &common_prefix);
                 let result = DocumentationPage::for_file_without_refs(
-                    &input, 
-                    &display_name, 
+                    &input,
+                    &display_name,
                     self.undocumented_config
                 )
                 .map(|(page, tokens)| (page, display_name, tokens));
-                
+
                 if let Some(pb) = &pb_parse {
                     pb.inc(1);
                 }
-                
+
                 result
             })
             .collect();
@@ -377,10 +401,12 @@ impl BasmDocGenerator {
         let pages_and_tokens = pages_and_tokens?;
 
         // Separate pages and tokens
-        let pages: Vec<_> = pages_and_tokens.iter()
-            .map(|(page, _, _)| page.clone())
+        let pages: Vec<_> = pages_and_tokens
+            .iter()
+            .map(|(page, ..)| page.clone())
             .collect();
-        let all_tokens: Vec<(String, _)> = pages_and_tokens.into_iter()
+        let all_tokens: Vec<(String, _)> = pages_and_tokens
+            .into_iter()
             .map(|(_, display_name, tokens)| (display_name, tokens))
             .collect();
 
@@ -395,12 +421,13 @@ impl BasmDocGenerator {
             pb.set_message("Merging documentation pages...");
             pb.enable_steady_tick(std::time::Duration::from_millis(100));
             Some(pb)
-        } else {
+        }
+        else {
             None
         };
 
         let merged_page = DocumentationPage::merge(pages);
-        
+
         if let Some(s) = spinner_merge {
             s.finish_with_message("Merge complete");
         }
@@ -419,12 +446,13 @@ impl BasmDocGenerator {
             pb.set_message("Generating HTML documentation...");
             pb.enable_steady_tick(std::time::Duration::from_millis(100));
             Some(pb)
-        } else {
+        }
+        else {
             None
         };
 
         let html = merged_page.to_html(self.title.as_deref());
-        
+
         if let Some(s) = spinner {
             s.finish_with_message("HTML generation complete");
         }
@@ -433,7 +461,7 @@ impl BasmDocGenerator {
     }
 
     /// Generate merged Markdown documentation from all inputs
-    /// 
+    ///
     /// Simpler than HTML generation - just parses files and merges markdown output
     pub fn generate_markdown(&self) -> Result<String, String> {
         let inputs = self.resolve_inputs()?;
@@ -441,27 +469,34 @@ impl BasmDocGenerator {
 
         let pb = if self.show_progress {
             let pb = ProgressBar::new(inputs.len() as u64);
-            pb.set_style(ProgressStyle::default_bar()
-                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
-                .unwrap()
-                .progress_chars("#>-"));
+            pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
+                    .unwrap()
+                    .progress_chars("#>-")
+            );
             pb.set_message("Generating markdown documentation");
             Some(pb)
-        } else {
+        }
+        else {
             None
         };
 
-        let docs: Vec<String> = inputs.into_iter()
+        let docs: Vec<String> = inputs
+            .into_iter()
             .map(|input| {
                 let display_name = Self::remove_prefix(&input, &common_prefix);
-                let result = DocumentationPage::for_file(&input, &display_name, self.undocumented_config)
-                    .map(|page| page.to_markdown())
-                    .unwrap_or_else(|e| format!("**Error generating documentation:**\n\n```\n{}\n```\n", e));
-                
+                let result =
+                    DocumentationPage::for_file(&input, &display_name, self.undocumented_config)
+                        .map(|page| page.to_markdown())
+                        .unwrap_or_else(|e| {
+                            format!("**Error generating documentation:**\n\n```\n{}\n```\n", e)
+                        });
+
                 if let Some(pb) = &pb {
                     pb.inc(1);
                 }
-                
+
                 result
             })
             .collect();
@@ -474,17 +509,20 @@ impl BasmDocGenerator {
     }
 
     /// Save documentation to a file, choosing format based on extension
-    /// 
+    ///
     /// Supported formats:
     /// - `.html` / `.htm` - HTML output
     /// - `.md` - Markdown output
     /// - `.pdf` - PDF output (requires pandoc)
     pub fn save_to_file<P: AsRef<Path>>(&self, output_path: P) -> Result<(), String> {
         let output_path = output_path.as_ref();
-        
-        let ext = output_path.extension()
+
+        let ext = output_path
+            .extension()
             .and_then(|e| e.to_str())
-            .ok_or_else(|| "Output file must have an extension (.html, .md, or .pdf)".to_string())?;
+            .ok_or_else(|| {
+                "Output file must have an extension (.html, .md, or .pdf)".to_string()
+            })?;
 
         let is_md = ext.eq_ignore_ascii_case("md");
         let is_html = ext.eq_ignore_ascii_case("html") || ext.eq_ignore_ascii_case("htm");
@@ -492,27 +530,33 @@ impl BasmDocGenerator {
 
         if is_html {
             let html = self.generate_html().map_err(|e| {
-                format!("<p><strong>Error generating documentation:</strong></p><pre>{}</pre>", e)
+                format!(
+                    "<p><strong>Error generating documentation:</strong></p><pre>{}</pre>",
+                    e
+                )
             })?;
-            
+
             // Minify HTML if requested
             let final_html = if self.minify_html {
                 self.minify_html_content(&html)?
-            } else {
+            }
+            else {
                 html
             };
-            
+
             fs_err::write(output_path, final_html)
                 .map_err(|e| format!("Unable to write {} file. {}", output_path.display(), e))?;
-        } else if is_md {
+        }
+        else if is_md {
             let md = self.generate_markdown()?;
-            
+
             fs_err::write(output_path, md)
                 .map_err(|e| format!("Unable to write {} file. {}", output_path.display(), e))?;
-        } else if is_pdf {
+        }
+        else if is_pdf {
             // Generate markdown first, then convert to PDF using pandoc
             let md = self.generate_markdown()?;
-            
+
             let md_path = output_path.with_extension("md");
             fs_err::write(&md_path, md)
                 .map_err(|e| format!("Unable to write temporary markdown file. {}", e))?;
@@ -522,9 +566,11 @@ impl BasmDocGenerator {
             pandoc.set_output(pandoc::OutputKind::File(output_path.into()));
             pandoc.add_option(pandoc::PandocOption::Standalone);
             pandoc.add_option(pandoc::PandocOption::TableOfContents);
-            pandoc.execute()
+            pandoc
+                .execute()
                 .map_err(|e| format!("Pandoc error: {}", e))?;
-        } else {
+        }
+        else {
             return Err("Output file must have .md, .html, or .pdf extension".to_string());
         }
 
@@ -549,9 +595,9 @@ impl BasmDocGenerator {
             preserve_chevron_percent_template_syntax: false,
             allow_noncompliant_unquoted_attribute_values: false,
             allow_optimal_entities: true,
-            allow_removing_spaces_between_attributes: true,
+            allow_removing_spaces_between_attributes: true
         };
-        
+
         let minified = minify_html::minify(html.as_bytes(), &cfg);
         String::from_utf8(minified)
             .map_err(|e| format!("Failed to convert minified HTML to UTF-8: {}", e))
@@ -574,9 +620,9 @@ mod tests {
         let paths = vec!["/home/user/project/src/main.asm".to_string()];
         #[cfg(not(unix))]
         let paths = vec!["C:\\Users\\user\\project\\src\\main.asm".to_string()];
-        
+
         let prefix = BasmDocGenerator::calculate_common_prefix(&paths);
-        
+
         #[cfg(unix)]
         assert_eq!(prefix, "/home/user/project/src");
         #[cfg(not(unix))]
@@ -597,9 +643,9 @@ mod tests {
             "C:\\Users\\user\\project\\src\\util.asm".to_string(),
             "C:\\Users\\user\\project\\src\\lib\\helper.asm".to_string(),
         ];
-        
+
         let prefix = BasmDocGenerator::calculate_common_prefix(&paths);
-        
+
         #[cfg(unix)]
         assert_eq!(prefix, "/home/user/project/src");
         #[cfg(not(unix))]

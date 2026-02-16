@@ -1,5 +1,4 @@
 use std::convert::{TryFrom, TryInto};
-use fs_err::File;
 use std::io::Read;
 use std::iter::Iterator;
 
@@ -7,6 +6,7 @@ use arrayref::array_ref;
 use cpclib_common::bitfield::Bit;
 use cpclib_common::camino::Utf8Path;
 use delegate::delegate;
+use fs_err::File;
 use thiserror::Error;
 
 use crate::disc::Disc;
@@ -963,6 +963,8 @@ const DIRECTORY_SIZE: usize = 64;
 #[allow(unused)]
 const DATA_SECTORS: [u8; 9] = [0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9];
 #[allow(unused)]
+const SYSTEM_SECTORS: [u8; 9] = [0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49];
+#[allow(unused)]
 const DATA_NB_RECORDS_PER_TRACK: u8 = 36;
 #[allow(unused)]
 const DATA_BLOCK_SHIFT: u8 = 3;
@@ -980,6 +982,8 @@ const DATA_SIZE_OF_CHECKSUM_VECTOR: u8 = 16;
 const DATA_RESERVED_TRACK: u8 = 0;
 #[allow(unused)]
 const DATA_FIRST_SECTOR_NUMBER: u8 = DATA_SECTORS[0];
+#[allow(unused)]
+const SYSTEM_FIRST_SECTOR_NUMBER: u8 = SYSTEM_SECTORS[0];
 #[allow(unused)]
 const DATA_SECTORS_PER_TRACK: u8 = 9;
 #[allow(unused)]
@@ -1344,9 +1348,28 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
     /// Return the raw bytes of the Amsdos catalog (2048 bytes = 64 entries * 32 bytes/entry)
     /// This is useful for tools that need to work with the raw catalog data without parsing
     pub fn catalog_slice(&self) -> Vec<u8> {
+        let (sector_id, track) = if self.is_data() {
+            (DATA_FIRST_SECTOR_NUMBER, 0)
+        }
+        else if self.is_system() {
+            (SYSTEM_FIRST_SECTOR_NUMBER, 2)
+        }
+        else {
+            // thisi s probably a two sided dic ?
+            (DATA_FIRST_SECTOR_NUMBER, 0)
+        };
         self.disc
-            .consecutive_sectors_read_bytes(self.head, 0, DATA_FIRST_SECTOR_NUMBER, 4)
+            .consecutive_sectors_read_bytes(self.head, track, sector_id, 4)
             .unwrap()
+    }
+
+    /// Check if the disc is in DATA format by looking at the first sector of the disc
+    pub fn is_data(&self) -> bool {
+        self.disc.global_min_sector(self.head) == 0xC1
+    }
+
+    pub fn is_system(&self) -> bool {
+        self.disc.global_min_sector(self.head) == 0x41
     }
 
     /// Return the entries of the Amsdos catalog
@@ -1517,9 +1540,12 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
 #[derive(Clone, Copy)]
 #[allow(missing_docs)]
 pub struct AmsdosHeader {
-    content: [u8; 128]
+    content: [u8; Self::HEADER_SIZE]
 }
 
+impl AmsdosHeader {
+    pub const HEADER_SIZE: usize = 128;
+}
 impl std::fmt::Debug for AmsdosHeader {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "File: {:?}", self.amsdos_filename())?;

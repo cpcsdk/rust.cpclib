@@ -175,31 +175,31 @@ where Self: Debug + Sized + Sync
     fn starts_with_label(&self) -> bool {
         self.is_label() || self.is_assign() || self.is_equ() || self.is_set()
     }
-    
+
     /// Returns all symbol names (labels) used in this token's expressions
     fn symbols(&self) -> std::collections::HashSet<String> {
         use std::collections::HashSet;
-        
+
         let mut symbols = HashSet::new();
-        
+
         // Extract from all expression fields - only call methods when appropriate
         // Use is_* checks before accessing fields to avoid panics
-        
+
         if self.is_org() {
             symbols.extend(self.org_first().symbols());
             if let Some(expr) = self.org_second() {
                 symbols.extend(expr.symbols());
             }
         }
-        
+
         if self.is_equ() || self.is_set() {
             symbols.extend(self.equ_value().symbols());
         }
-        
+
         if self.is_assign() {
             symbols.extend(self.assign_value().symbols());
         }
-        
+
         // Only get mnemonic args if this is actually an opcode
         if self.is_opcode() {
             if let Some(arg1) = self.mnemonic_arg1() {
@@ -207,38 +207,38 @@ where Self: Debug + Sized + Sync
                     symbols.extend(expr.symbols());
                 }
             }
-            
+
             if let Some(arg2) = self.mnemonic_arg2() {
                 if let Some(expr) = arg2.get_expression() {
                     symbols.extend(expr.symbols());
                 }
             }
         }
-        
+
         if self.is_while() {
             symbols.extend(self.while_expr().symbols());
         }
-        
+
         if self.is_switch() {
             symbols.extend(self.switch_expr().symbols());
-            for (case_expr, _, _) in self.switch_cases() {
+            for (case_expr, ..) in self.switch_cases() {
                 symbols.extend(case_expr.symbols());
             }
         }
-        
+
         if self.is_iterate() {
             match self.iterate_values() {
                 either::Either::Left(exprs) => {
                     for expr in exprs {
                         symbols.extend(expr.symbols());
                     }
-                }
+                },
                 either::Either::Right(expr) => {
                     symbols.extend(expr.symbols());
                 }
             }
         }
-        
+
         if self.is_for() {
             symbols.extend(self.for_start().symbols());
             symbols.extend(self.for_stop().symbols());
@@ -246,15 +246,15 @@ where Self: Debug + Sized + Sync
                 symbols.extend(step.symbols());
             }
         }
-        
+
         if self.is_repeat_until() {
             symbols.extend(self.repeat_until_condition().symbols());
         }
-        
+
         if self.is_rorg() {
             symbols.extend(self.rorg_expr().symbols());
         }
-        
+
         if self.is_repeat() {
             symbols.extend(self.repeat_count().symbols());
             if let Some(start) = self.repeat_counter_start() {
@@ -264,7 +264,7 @@ where Self: Debug + Sized + Sync
                 symbols.extend(step.symbols());
             }
         }
-        
+
         if self.is_incbin() {
             symbols.extend(self.incbin_fname().symbols());
             if let Some(offset) = self.incbin_offset() {
@@ -274,26 +274,26 @@ where Self: Debug + Sized + Sync
                 symbols.extend(length.symbols());
             }
         }
-        
+
         if self.is_include() {
             symbols.extend(self.include_fname().symbols());
         }
-        
+
         if self.is_db() || self.is_dw() || self.is_str() {
             for expr in self.data_exprs() {
                 symbols.extend(expr.symbols());
             }
         }
-        
+
         if self.is_run() {
             symbols.extend(self.run_expr().symbols());
         }
-        
+
         if self.is_call_macro_or_build_struct() {
             // Macro name is a symbol reference
             symbols.insert(self.macro_call_name().to_string());
         }
-        
+
         symbols
     }
 }

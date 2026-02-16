@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use fs_err::File;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{Read, Write};
 use std::ops::Deref;
@@ -7,6 +6,7 @@ use std::ops::Deref;
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::riff::{RiffChunk, RiffCode, RiffLen};
+use fs_err::File;
 
 const CODE_BANKS: [&str; 32] = [
     "cb00", "cb01", "cb02", "cb03", "cb04", "cb05", "cb06", "cb07", "cb08", "cb09", "cb10", "cb11",

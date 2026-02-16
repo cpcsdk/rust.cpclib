@@ -1,8 +1,6 @@
 // Directives module - contains directive-related constants and parsing functions
 
 // Re-export directive constants from parser module
-pub use super::parser::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
-
 use std::cell::RefCell;
 use std::ops::DerefMut;
 use std::rc::Rc;
@@ -42,6 +40,7 @@ use super::expression::{
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
 use super::orgams::parse_orgams_fail;
+pub use super::parser::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
 use crate::hashed_choice;
 use crate::preamble::*;
 

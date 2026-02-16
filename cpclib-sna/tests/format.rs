@@ -1,7 +1,6 @@
-use fs_err::read;
-
 use camino_tempfile::NamedUtf8TempFile;
 use cpclib_sna::{Snapshot, SnapshotVersion};
+use fs_err::read;
 
 #[test]
 fn sna_loadv3() {

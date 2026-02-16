@@ -97,8 +97,8 @@ fn expect_warning_but_success(real_fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content = fs_err::read_to_string(&real_fname["cpclib-basm/".len()..])
-        .expect("Unable to read_source");
+    let content =
+        fs_err::read_to_string(&real_fname["cpclib-basm/".len()..]).expect("Unable to read_source");
 
     static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r";.*$").unwrap());
     static RE2: LazyLock<Regex> = LazyLock::new(|| Regex::new(r":\s*:").unwrap());
@@ -264,8 +264,8 @@ fn expect_several_empty_lines_success(real_fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content = fs_err::read_to_string(&real_fname["cpclib-basm/".len()..])
-        .expect("Unable to read_source");
+    let content =
+        fs_err::read_to_string(&real_fname["cpclib-basm/".len()..]).expect("Unable to read_source");
 
     static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)([^\\])\n").unwrap());
     static RE2: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)\\\n").unwrap());

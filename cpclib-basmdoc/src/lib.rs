@@ -1,36 +1,34 @@
 //! Documentation generator for Z80 assembly code
-//! 
+//!
 //! This crate provides tools to extract documentation comments from Z80 assembly
 //! source files and generate HTML or Markdown documentation with cross-references.
 
 // Module declarations
-mod models;
 mod assets;
-mod parser;
-mod syntax;
+pub mod cmdline;
 mod cross_refs;
 pub mod generator;
-pub mod cmdline;
+mod models;
+mod parser;
+mod syntax;
 
 // Re-exports for backward compatibility
-pub use models::{DocumentedItem, UndocumentedConfig, ItemDocumentation, SymbolReference, MetaDocumentation};
-pub use parser::{aggregate_documentation_on_tokens, build_documentation_page_from_aggregates};
-pub use generator::BasmDocGenerator;
-
-use pulldown_cmark::{html, Options, Parser, Event, Tag, TagEnd, CodeBlockKind, CowStr};
-use serde::{Deserialize, Serialize};
-
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::borrow::Cow;
 
 use dashmap::DashMap;
+pub use generator::BasmDocGenerator;
 use indicatif::{ProgressBar, ProgressStyle};
-
+use lazy_static::lazy_static;
+pub use models::{
+    DocumentedItem, ItemDocumentation, MetaDocumentation, SymbolReference, UndocumentedConfig
+};
+pub use parser::{aggregate_documentation_on_tokens, build_documentation_page_from_aggregates};
+use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag, TagEnd, html};
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
-
-use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 
 // Polyfill for par_iter when rayon is disabled - makes it behave like regular iter
 #[cfg(not(feature = "rayon"))]
@@ -42,6 +40,7 @@ trait ParallelIteratorShim<'a, T: 'a> {
 #[cfg(not(feature = "rayon"))]
 impl<'a, T: 'a> ParallelIteratorShim<'a, T> for [T] {
     type Iter = std::slice::Iter<'a, T>;
+
     fn par_iter(&'a self) -> Self::Iter {
         self.iter()
     }
@@ -50,12 +49,13 @@ impl<'a, T: 'a> ParallelIteratorShim<'a, T> for [T] {
 #[cfg(not(feature = "rayon"))]
 impl<'a, T: 'a> ParallelIteratorShim<'a, T> for Vec<T> {
     type Iter = std::slice::Iter<'a, T>;
+
     fn par_iter(&'a self) -> Self::Iter {
         self.iter()
     }
 }
 
-use cpclib_asm::{ListingElement, parse_z80_str, LocatedListing};
+use cpclib_asm::{ListingElement, LocatedListing, parse_z80_str};
 use minijinja::value::Object;
 use minijinja::{Environment, ErrorKind, Value, context};
 
@@ -74,7 +74,11 @@ impl Object for ItemDocumentation {
             Some("display_source_file") => Some(Value::from(&self.display_source_file as &str)),
             Some("line_number") => Some(Value::from(self.line_number)),
             Some("references") => {
-                let refs: Vec<Value> = self.references.iter().map(|r| Value::from_serialize(r)).collect();
+                let refs: Vec<Value> = self
+                    .references
+                    .iter()
+                    .map(|r| Value::from_serialize(r))
+                    .collect();
                 Some(Value::from(refs))
             },
             Some("has_references") => Some(Value::from(!self.references.is_empty())),
@@ -88,9 +92,7 @@ impl Object for ItemDocumentation {
                     _ => None
                 }
             },
-            Some("linked_source") => {
-                self.linked_source.as_ref().map(|s| Value::from(s as &str))
-            },
+            Some("linked_source") => self.linked_source.as_ref().map(|s| Value::from(s as &str)),
             Some("source") => {
                 // Expose source for full-file items and for macros/functions.
                 match &self.item {
@@ -98,26 +100,26 @@ impl Object for ItemDocumentation {
                     DocumentedItem::Macro { .. } => {
                         if let Some(ls) = &self.linked_source {
                             Some(Value::from(ls as &str))
-                        } else {
+                        }
+                        else {
                             Some(Value::from(self.macro_source()))
                         }
-                    }
+                    },
                     DocumentedItem::Function { .. } => {
                         if let Some(ls) = &self.linked_source {
                             Some(Value::from(ls as &str))
-                        } else {
+                        }
+                        else {
                             Some(Value::from(self.function_source()))
                         }
-                    }
+                    },
                     _ => None
                 }
-            }
+            },
             None => None,
-            Some(_) => None,
+            Some(_) => None
         }
     }
-
-
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -132,49 +134,63 @@ impl Object for DocumentationPage {
         match name.as_str() {
             Some("file_name") => Some(Value::from(self.fname.clone())),
             Some("file_list") => {
-                let files = self.file_list()
+                let files = self
+                    .file_list()
                     .into_iter()
                     .map(Value::from)
                     .collect::<Vec<_>>();
                 Some(Value::from(files))
             },
             Some("labels") => {
-                let mut labels = self
-                    .label_iter()
-                    .cloned()
+                let mut labels = self.label_iter().cloned().collect::<Vec<_>>();
+                labels.sort_by(|a, b| {
+                    a.item_short_summary()
+                        .to_lowercase()
+                        .cmp(&b.item_short_summary().to_lowercase())
+                });
+                let labels = labels
+                    .into_iter()
+                    .map(Value::from_object)
                     .collect::<Vec<_>>();
-                labels.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-                let labels = labels.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let labels = Value::from_object(labels);
                 Some(labels)
             },
             Some("macros") => {
-                let mut macros = self
-                    .macro_iter()
-                    .cloned()
+                let mut macros = self.macro_iter().cloned().collect::<Vec<_>>();
+                macros.sort_by(|a, b| {
+                    a.item_short_summary()
+                        .to_lowercase()
+                        .cmp(&b.item_short_summary().to_lowercase())
+                });
+                let macros = macros
+                    .into_iter()
+                    .map(Value::from_object)
                     .collect::<Vec<_>>();
-                macros.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-                let macros = macros.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let macros = Value::from_object(macros);
                 Some(macros)
             },
             Some("equs") => {
-                let mut equs = self
-                    .equ_iter()
-                    .cloned()
-                    .collect::<Vec<_>>();
-                equs.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
+                let mut equs = self.equ_iter().cloned().collect::<Vec<_>>();
+                equs.sort_by(|a, b| {
+                    a.item_short_summary()
+                        .to_lowercase()
+                        .cmp(&b.item_short_summary().to_lowercase())
+                });
                 let equs = equs.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let equs = Value::from_object(equs);
                 Some(equs)
             },
             Some("functions") => {
-                let mut functions = self
-                    .function_iter()
-                    .cloned()
+                let mut functions = self.function_iter().cloned().collect::<Vec<_>>();
+                functions.sort_by(|a, b| {
+                    a.item_short_summary()
+                        .to_lowercase()
+                        .cmp(&b.item_short_summary().to_lowercase())
+                });
+                let functions = functions
+                    .into_iter()
+                    .map(Value::from_object)
                     .collect::<Vec<_>>();
-                functions.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-                let functions = functions.into_iter().map(Value::from_object).collect::<Vec<_>>();
                 let functions = Value::from_object(functions);
                 Some(functions)
             },
@@ -188,7 +204,11 @@ impl Object for DocumentationPage {
 
                 if merged.is_empty() {
                     // No merged file docs; enumerate unique source files from content
-                    let mut file_names: Vec<String> = self.content.iter().map(|it| it.source_file.clone()).collect();
+                    let mut file_names: Vec<String> = self
+                        .content
+                        .iter()
+                        .map(|it| it.source_file.clone())
+                        .collect();
                     file_names.sort();
                     file_names.dedup();
 
@@ -196,13 +216,18 @@ impl Object for DocumentationPage {
                         // If a Source item exists for this file, push it first.
                         // Match either exact path or suffix (handles absolute vs workspace-relative).
                         let source_item_opt = self.content.iter().find(|it| {
-                            it.item.is_source() && (it.source_file == fname || it.source_file.ends_with(&fname))
+                            it.item.is_source()
+                                && (it.source_file == fname || it.source_file.ends_with(&fname))
                         });
 
                         if let Some(source_item) = source_item_opt {
                             files_vec.push(Value::from_object(source_item.clone()));
-                        } else {
-                            unreachable!("No explicit source item found for file: {}. This is an impossible case", fname);
+                        }
+                        else {
+                            unreachable!(
+                                "No explicit source item found for file: {}. This is an impossible case",
+                                fname
+                            );
                             // No explicit source item found; try reading file content.
                             // If reading the provided name fails (likely because it's a
                             // workspace-relative path while content stores absolute
@@ -210,8 +235,13 @@ impl Object for DocumentationPage {
                             // existing content entries and read that instead.
                             let mut code = fs_err::read_to_string(&fname).unwrap_or_default();
                             if code.is_empty() {
-                                if let Some(it) = self.content.iter().find(|it| it.source_file.ends_with(&fname)) {
-                                    code = fs_err::read_to_string(&it.source_file).unwrap_or_default();
+                                if let Some(it) = self
+                                    .content
+                                    .iter()
+                                    .find(|it| it.source_file.ends_with(&fname))
+                                {
+                                    code =
+                                        fs_err::read_to_string(&it.source_file).unwrap_or_default();
                                 }
                             }
 
@@ -226,26 +256,39 @@ impl Object for DocumentationPage {
                             }));
                         }
                     }
-                } else {
+                }
+                else {
                     for mf in merged.into_iter() {
                         // Find the corresponding Source item (if any) in the original content
                         // Match source item by exact path or by suffix to handle
                         // absolute vs workspace-relative path differences.
                         let source_item_opt = self.content.iter().find(|it| {
-                            it.item.is_source() && (it.source_file == mf.source_file || it.source_file.ends_with(&mf.source_file))
+                            it.item.is_source()
+                                && (it.source_file == mf.source_file
+                                    || it.source_file.ends_with(&mf.source_file))
                         });
 
                         if let Some(source_item) = source_item_opt {
                             files_vec.push(Value::from_object(source_item.clone()));
-                        } else {
-                            unreachable!("No explicit source item found for merged file: {}. This is an impossible case, we are not supposed to read files at this point", mf.source_file);
+                        }
+                        else {
+                            unreachable!(
+                                "No explicit source item found for merged file: {}. This is an impossible case, we are not supposed to read files at this point",
+                                mf.source_file
+                            );
                             // No source item found for this merged file; try reading
                             // the merge-provided path first, then fallback to any
                             // matching absolute path found in content.
-                            let mut code = fs_err::read_to_string(&mf.source_file).unwrap_or_default();
+                            let mut code =
+                                fs_err::read_to_string(&mf.source_file).unwrap_or_default();
                             if code.is_empty() {
-                                if let Some(it) = self.content.iter().find(|it| it.source_file.ends_with(&mf.source_file)) {
-                                    code = fs_err::read_to_string(&it.source_file).unwrap_or_default();
+                                if let Some(it) = self
+                                    .content
+                                    .iter()
+                                    .find(|it| it.source_file.ends_with(&mf.source_file))
+                                {
+                                    code =
+                                        fs_err::read_to_string(&it.source_file).unwrap_or_default();
                                 }
                             }
 
@@ -268,12 +311,16 @@ impl Object for DocumentationPage {
             },
             Some("symbol_index") => {
                 let index = self.symbol_index();
-                let index_data: Vec<_> = index.into_iter().map(|(letter, items)| {
-                    let items_vec: Vec<_> = items.into_iter()
-                        .map(|item| Value::from_object(item.clone()))
-                        .collect();
-                    minijinja::value::Value::from_serialize(&(letter.to_string(), items_vec))
-                }).collect();
+                let index_data: Vec<_> = index
+                    .into_iter()
+                    .map(|(letter, items)| {
+                        let items_vec: Vec<_> = items
+                            .into_iter()
+                            .map(|item| Value::from_object(item.clone()))
+                            .collect();
+                        minijinja::value::Value::from_serialize(&(letter.to_string(), items_vec))
+                    })
+                    .collect();
                 Some(Value::from(index_data))
             },
             _ => None
@@ -304,114 +351,136 @@ impl Object for DocumentationPage {
 }
 impl DocumentationPage {
     // TODO handle errors
-    pub fn for_file(fname: &str, display_name: &str, include_undocumented: UndocumentedConfig) -> Result<Self, String> {
+    pub fn for_file(
+        fname: &str,
+        display_name: &str,
+        include_undocumented: UndocumentedConfig
+    ) -> Result<Self, String> {
         let code = fs_err::read_to_string(fname)
-            .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;;
-        
+            .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
+
         // Parse the source code, but continue even if there's a parse error
         let parse_result = parse_z80_str(&code);
         let (tokens, parse_error) = match parse_result {
             Ok(tokens) => (tokens, None),
             Err(e) => {
                 // Create empty token list by parsing empty string
-                let empty_tokens = parse_z80_str("").unwrap_or_else(|_| unreachable!("Empty string should always parse"));
+                let empty_tokens = parse_z80_str("")
+                    .unwrap_or_else(|_| unreachable!("Empty string should always parse"));
                 (empty_tokens, Some(format!("Parse error: {}", e)))
             }
         };
-        
+
         let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
         let mut page = build_documentation_page_from_aggregates(fname, doc);
-        
+
         // Add syntax error item if parsing failed
         if let Some(error_msg) = parse_error {
-            page.content.insert(0, ItemDocumentation {
-                item: DocumentedItem::SyntaxError(error_msg),
+            page.content.insert(
+                0,
+                ItemDocumentation {
+                    item: DocumentedItem::SyntaxError(error_msg),
+                    doc: String::new(),
+                    source_file: fname.to_string(),
+                    display_source_file: fname.to_string(),
+                    line_number: 0,
+                    references: Vec::new(),
+                    linked_source: None
+                }
+            );
+        }
+
+        // Always add the source code
+        page.content.insert(
+            0,
+            ItemDocumentation {
+                item: DocumentedItem::Source(code.clone()),
                 doc: String::new(),
                 source_file: fname.to_string(),
                 display_source_file: fname.to_string(),
                 line_number: 0,
                 references: Vec::new(),
                 linked_source: None
-            });
-        }
-        
-        // Always add the source code
-        page.content.insert(0, ItemDocumentation {
-            item: DocumentedItem::Source(code.clone()),
-            doc: String::new(),
-            source_file: fname.to_string(),
-            display_source_file: fname.to_string(),
-            line_number: 0,
-            references: Vec::new(),
-            linked_source: None
-        });
+            }
+        );
         // Set the display name for all items in this page so templates and
         // client-side filtering consistently use workspace-relative paths.
         for it in &mut page.content {
             it.display_source_file = display_name.to_string();
         }
         page.all_files = vec![display_name.to_string()];
-        
+
         // Populate cross-references with symbol links
         let symbols = page.all_symbols();
         page = populate_cross_references(page, &tokens, &symbols);
-        
+
         // Link symbols in source code
         page = page.link_source_symbols();
-        
+
         Ok(page)
     }
 
     /// Parse file without populating cross-references (for later batch processing)
     /// Returns both the documentation page and the parsed tokens
-    pub fn for_file_without_refs(fname: &str, display_name: &str, include_undocumented: UndocumentedConfig) -> Result<(Self, LocatedListing), String> {
+    pub fn for_file_without_refs(
+        fname: &str,
+        display_name: &str,
+        include_undocumented: UndocumentedConfig
+    ) -> Result<(Self, LocatedListing), String> {
         let code = fs_err::read_to_string(fname)
             .map_err(|e| format!("Unable to read {} file. {}", fname, e))?;
-        
+
         // Parse the source code, but continue even if there's a parse error
         let parse_result = parse_z80_str(&code);
         let (tokens, parse_error) = match parse_result {
             Ok(tokens) => (tokens, None),
             Err(e) => {
                 // Create empty token list by parsing empty string
-                let empty_tokens = parse_z80_str("").unwrap_or_else(|_| unreachable!("Empty string should always parse"));
+                let empty_tokens = parse_z80_str("")
+                    .unwrap_or_else(|_| unreachable!("Empty string should always parse"));
                 (empty_tokens, Some(format!("Parse error: {}", e)))
             }
         };
-        
+
         let doc = aggregate_documentation_on_tokens(&tokens, include_undocumented);
         let mut page = build_documentation_page_from_aggregates(fname, doc);
-        
+
         // Add syntax error item if parsing failed
         if let Some(error_msg) = parse_error {
-            page.content.insert(0, ItemDocumentation {
-                item: DocumentedItem::SyntaxError(error_msg),
+            page.content.insert(
+                0,
+                ItemDocumentation {
+                    item: DocumentedItem::SyntaxError(error_msg),
+                    doc: String::new(),
+                    source_file: fname.to_string(),
+                    display_source_file: fname.to_string(),
+                    line_number: 0,
+                    references: Vec::new(),
+                    linked_source: None
+                }
+            );
+        }
+
+        // Always add the source code
+        page.content.insert(
+            0,
+            ItemDocumentation {
+                item: DocumentedItem::Source(code.clone()),
                 doc: String::new(),
                 source_file: fname.to_string(),
                 display_source_file: fname.to_string(),
                 line_number: 0,
                 references: Vec::new(),
                 linked_source: None
-            });
-        }
-        
-        // Always add the source code
-        page.content.insert(0, ItemDocumentation {
-            item: DocumentedItem::Source(code.clone()),
-            doc: String::new(),
-            source_file: fname.to_string(),
-            display_source_file: fname.to_string(),
-            line_number: 0,
-            references: Vec::new(),
-            linked_source: None
-        });
+            }
+        );
         // For the without-refs variant we also set the display name so later
         // processing that renders templates can rely on `display_source_file`.
         for it in &mut page.content {
             it.display_source_file = display_name.to_string();
         }
         page.all_files = vec![display_name.to_string()];
-        
+
         Ok((page, tokens))
     }
 
@@ -429,20 +498,21 @@ impl DocumentationPage {
             return pages.into_iter().next().unwrap();
         }
 
-        let fnames = pages.iter()
+        let fnames = pages
+            .iter()
             .map(|p| p.fname.as_str())
             .collect::<Vec<_>>()
             .join(", ");
 
-        let mut all_files: Vec<String> = pages.iter()
+        let mut all_files: Vec<String> = pages
+            .iter()
             .flat_map(|p| p.all_files.iter().cloned())
             .collect();
         all_files.sort();
         all_files.dedup();
 
-        let mut content: Vec<ItemDocumentation> = pages.into_iter()
-            .flat_map(|p| p.content)
-            .collect();
+        let mut content: Vec<ItemDocumentation> =
+            pages.into_iter().flat_map(|p| p.content).collect();
 
         // Normalize all source_file and display_source_file fields in content to match canonical all_files entries
         let all_files_clone = all_files.clone();
@@ -452,11 +522,11 @@ impl DocumentationPage {
             if let Some(matching) = all_files_clone.iter().find(|f| {
                 let src_normalized = it.source_file.replace('\\', "/");
                 let f_normalized = f.replace('\\', "/");
-                
+
                 if src_normalized == f_normalized {
                     return true;
                 }
-                
+
                 // Check if source_file ends with f at a path boundary
                 if src_normalized.ends_with(&f_normalized) {
                     let prefix_len = src_normalized.len() - f_normalized.len();
@@ -464,7 +534,7 @@ impl DocumentationPage {
                         return true;
                     }
                 }
-                
+
                 false
             }) {
                 it.display_source_file = matching.clone();
@@ -472,8 +542,14 @@ impl DocumentationPage {
                 continue;
             }
             // Fallback: match by basename
-            if let Some(src_basename) = std::path::Path::new(&it.source_file).file_name().and_then(|s| s.to_str()) {
-                if let Some(matching) = all_files_clone.iter().find(|f| std::path::Path::new(f).file_name().and_then(|s| s.to_str()) == Some(src_basename)) {
+            if let Some(src_basename) = std::path::Path::new(&it.source_file)
+                .file_name()
+                .and_then(|s| s.to_str())
+            {
+                if let Some(matching) = all_files_clone.iter().find(|f| {
+                    std::path::Path::new(f).file_name().and_then(|s| s.to_str())
+                        == Some(src_basename)
+                }) {
                     it.display_source_file = matching.clone();
                     it.source_file = matching.clone();
                 }
@@ -484,15 +560,18 @@ impl DocumentationPage {
         for fname in &all_files {
             // Enforce: every file in all_files must have an in-memory Source item, never fallback to disk
             let existing = content.iter().find(|it| {
-                it.item.is_source() &&
-                (it.source_file == *fname ||
-                 it.source_file.ends_with(fname) ||
-                 fname.ends_with(&it.source_file))
+                it.item.is_source()
+                    && (it.source_file == *fname
+                        || it.source_file.ends_with(fname)
+                        || fname.ends_with(&it.source_file))
             });
             if let Some(existing) = existing {
                 // Already present, do nothing (or could move to front if needed)
-            } else {
-                panic!("INVARIANT VIOLATION: No in-memory Source item for file '{fname}'. This must never happen. Check earlier code for lost or mismatched Source items.");
+            }
+            else {
+                panic!(
+                    "INVARIANT VIOLATION: No in-memory Source item for file '{fname}'. This must never happen. Check earlier code for lost or mismatched Source items."
+                );
             }
         }
 
@@ -512,14 +591,23 @@ impl DocumentationPage {
         let all_files_clone = merged.all_files.clone();
         for it in &mut merged.content {
             // If an all_files entry matches the end of the source_file, prefer it
-            if let Some(matching) = all_files_clone.iter().find(|f| it.source_file.ends_with(f.as_str())) {
+            if let Some(matching) = all_files_clone
+                .iter()
+                .find(|f| it.source_file.ends_with(f.as_str()))
+            {
                 it.display_source_file = matching.clone();
                 continue;
             }
 
             // Fallback: match by basename
-            if let Some(src_basename) = std::path::Path::new(&it.source_file).file_name().and_then(|s| s.to_str()) {
-                if let Some(matching) = all_files_clone.iter().find(|f| std::path::Path::new(f).file_name().and_then(|s| s.to_str()) == Some(src_basename)) {
+            if let Some(src_basename) = std::path::Path::new(&it.source_file)
+                .file_name()
+                .and_then(|s| s.to_str())
+            {
+                if let Some(matching) = all_files_clone.iter().find(|f| {
+                    std::path::Path::new(f).file_name().and_then(|s| s.to_str())
+                        == Some(src_basename)
+                }) {
                     it.display_source_file = matching.clone();
                 }
             }
@@ -531,12 +619,13 @@ impl DocumentationPage {
     /// Link symbols in source code for all macros and functions
     pub fn link_source_symbols(mut self) -> Self {
         let symbols = self.all_symbols();
-        
+
         for item in &mut self.content {
             if item.item.is_macro() || item.item.is_function() {
                 let source = if item.item.is_macro() {
                     item.macro_source()
-                } else {
+                }
+                else {
                     item.function_source()
                 };
                 if !source.is_empty() {
@@ -544,13 +633,16 @@ impl DocumentationPage {
                 }
             }
         }
-        
+
         self
     }
-    
+
     /// Populate cross-references for all symbols from all files
     /// This should be called after merging pages to get cross-file references
-    pub fn populate_all_cross_references(mut self, all_tokens: &[(String, LocatedListing)]) -> Self {
+    pub fn populate_all_cross_references(
+        mut self,
+        all_tokens: &[(String, LocatedListing)]
+    ) -> Self {
         let spinner = ProgressBar::new_spinner();
         spinner.set_style(
             ProgressStyle::default_spinner()
@@ -559,148 +651,193 @@ impl DocumentationPage {
         );
         spinner.set_message("Preparing symbol analysis...");
         spinner.enable_steady_tick(std::time::Duration::from_millis(100));
-        
+
         // Collect and sort symbol names once (OPTIMIZATION: sort once, not per macro)
-        let mut symbol_names: Vec<String> = self.content.iter()
+        let mut symbol_names: Vec<String> = self
+            .content
+            .iter()
             .filter(|item| !item.item.is_file())
             .map(|item| item.item_short_summary())
             .collect();
         // Sort by length (longest first) to avoid partial matches in regex
         symbol_names.sort_by(|a: &String, b: &String| b.len().cmp(&a.len()));
-        
+
         // Get all symbols for linking
         let all_symbols = self.all_symbols();
-        
+
         // Create shared cache for ALL operations (MAJOR OPTIMIZATION: shared across all parallel threads)
         let highlight_cache = DashMap::new();
-        
+
         spinner.finish_with_message("Preparation complete");
-        
+
         // Create progress bar for file processing
         let pb = ProgressBar::new(all_tokens.len() as u64);
-        pb.set_style(ProgressStyle::default_bar()
-            .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
-            .unwrap()
-            .progress_chars("#>-"));
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} files ({eta})")
+                .unwrap()
+                .progress_chars("#>-")
+        );
         pb.set_message("Analyzing files");
-        
+
         // Collect all references from all files
         // Only use parallelization if workload is large enough to offset overhead (threshold: 10 files)
         let file_refs: Vec<HashMap<String, Vec<SymbolReference>>> = if all_tokens.len() > 10 {
-            all_tokens.par_iter()
+            all_tokens
+                .par_iter()
                 .map(|(source_file, tokens)| {
                     let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
-                    let result = cross_refs::collect_cross_references(tokens, source_file_arc, &all_symbols, &highlight_cache);
+                    let result = cross_refs::collect_cross_references(
+                        tokens,
+                        source_file_arc,
+                        &all_symbols,
+                        &highlight_cache
+                    );
                     pb.inc(1);
                     result
                 })
                 .collect()
-        } else {
-            all_tokens.iter()
+        }
+        else {
+            all_tokens
+                .iter()
                 .map(|(source_file, tokens)| {
                     let source_file_arc: Arc<str> = Arc::from(source_file.as_str());
-                    let result = cross_refs::collect_cross_references(tokens, source_file_arc, &all_symbols, &highlight_cache);
+                    let result = cross_refs::collect_cross_references(
+                        tokens,
+                        source_file_arc,
+                        &all_symbols,
+                        &highlight_cache
+                    );
                     pb.inc(1);
                     result
                 })
                 .collect()
         };
-        
+
         pb.finish_with_message("File analysis complete");
-        
+
         // Merge all references
         let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
         for refs in file_refs {
             for (symbol, mut symbol_refs) in refs {
-                all_refs.entry(symbol)
+                all_refs
+                    .entry(symbol)
                     .or_insert_with(Vec::new)
                     .append(&mut symbol_refs);
             }
         }
-        
+
         // Also search for symbols inside macro and function content
-        let macro_func_items: Vec<_> = self.content.iter()
+        let macro_func_items: Vec<_> = self
+            .content
+            .iter()
             .filter(|item| item.item.is_macro() || item.item.is_function())
             .collect();
-        
+
         // Create progress bar for macro/function processing
         let pb_macro = ProgressBar::new(macro_func_items.len() as u64);
-        pb_macro.set_style(ProgressStyle::default_bar()
-            .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} items ({eta})")
-            .unwrap()
-            .progress_chars("#>-"));
+        pb_macro.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} items ({eta})")
+                .unwrap()
+                .progress_chars("#>-")
+        );
         pb_macro.set_message("Analyzing macros/functions");
-        
+
         // Only parallelize if workload is large enough (threshold: 20 macros/functions)
-        let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = if macro_func_items.len() > 20 {
-            macro_func_items.par_iter()
+        let macro_refs: Vec<HashMap<String, Vec<SymbolReference>>> = if macro_func_items.len() > 20
+        {
+            macro_func_items
+                .par_iter()
                 .map(|item| {
                     let content = if item.item.is_macro() {
                         item.macro_source()
-                    } else {
+                    }
+                    else {
                         item.function_source()
                     };
-                    
+
                     // Exclude the current item's name from the search to avoid self-references
                     let current_name = item.item_short_summary();
-                    let filtered_symbols: Vec<&str> = symbol_names.iter()
+                    let filtered_symbols: Vec<&str> = symbol_names
+                        .iter()
                         .filter(|name| name.as_str() != current_name.as_str())
                         .map(|s| s.as_str())
                         .collect();
-                    
+
                     let base_line = item.line_number;
                     let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
-                    let result = cross_refs::collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols, &highlight_cache);
+                    let result = cross_refs::collect_references_in_content(
+                        &content,
+                        &filtered_symbols,
+                        source_file_arc,
+                        base_line,
+                        &all_symbols,
+                        &highlight_cache
+                    );
                     pb_macro.inc(1);
                     result
                 })
                 .collect()
-        } else {
-            macro_func_items.iter()
+        }
+        else {
+            macro_func_items
+                .iter()
                 .map(|item| {
                     let content = if item.item.is_macro() {
                         item.macro_source()
-                    } else {
+                    }
+                    else {
                         item.function_source()
                     };
-                    
+
                     // Exclude the current item's name from the search to avoid self-references
                     let current_name = item.item_short_summary();
-                    let filtered_symbols: Vec<&str> = symbol_names.iter()
+                    let filtered_symbols: Vec<&str> = symbol_names
+                        .iter()
                         .filter(|name| name.as_str() != current_name.as_str())
                         .map(|s| s.as_str())
                         .collect();
-                    
+
                     let base_line = item.line_number;
                     let source_file_arc: Arc<str> = Arc::from(item.source_file.as_str());
-                    let result = cross_refs::collect_references_in_content(&content, &filtered_symbols, source_file_arc, base_line, &all_symbols, &highlight_cache);
+                    let result = cross_refs::collect_references_in_content(
+                        &content,
+                        &filtered_symbols,
+                        source_file_arc,
+                        base_line,
+                        &all_symbols,
+                        &highlight_cache
+                    );
                     pb_macro.inc(1);
                     result
                 })
                 .collect()
         };
-        
+
         pb_macro.finish_with_message("Macro/function analysis complete");
-        
+
         // Merge macro/function references
         for refs in macro_refs {
             for (symbol, mut symbol_refs) in refs {
-                all_refs.entry(symbol)
+                all_refs
+                    .entry(symbol)
                     .or_insert_with(Vec::new)
                     .append(&mut symbol_refs);
             }
         }
-        
+
         // Match references to documented items
         for item in &mut self.content {
             let symbol_name = item.item_short_summary();
-            
+
             if let Some(refs) = all_refs.get(&symbol_name) {
                 // Replace existing references with complete set from all files
                 item.references = refs.clone();
             }
         }
-        
+
         // Link symbols in source code
         let spinner = ProgressBar::new_spinner();
         spinner.set_style(
@@ -710,11 +847,11 @@ impl DocumentationPage {
         );
         spinner.set_message("Linking symbols in source code...");
         spinner.enable_steady_tick(std::time::Duration::from_millis(100));
-        
+
         self = self.link_source_symbols();
-        
+
         spinner.finish_with_message("Symbol linking complete");
-        
+
         self
     }
 
@@ -739,14 +876,17 @@ impl DocumentationPage {
     }
 
     pub fn syntax_error_iter(&self) -> impl Iterator<Item = &ItemDocumentation> {
-        self.content.iter().filter(|item| item.item.is_syntax_error())
+        self.content
+            .iter()
+            .filter(|item| item.item.is_syntax_error())
     }
 
     /// Get file documentation items merged by source file
     /// Multiple file-level doc comments from the same file are combined into one item
     pub fn merged_files(&self) -> Vec<ItemDocumentation> {
-        let mut file_docs: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
-        
+        let mut file_docs: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+
         // Group documentation by source file
         for item in self.file_iter() {
             file_docs
@@ -754,7 +894,7 @@ impl DocumentationPage {
                 .or_insert_with(Vec::new)
                 .push(item.doc.clone());
         }
-        
+
         // Create merged ItemDocumentation for each file
         let mut merged: Vec<ItemDocumentation> = file_docs
             .into_iter()
@@ -770,7 +910,7 @@ impl DocumentationPage {
                 }
             })
             .collect();
-        
+
         // Sort by source file name
         merged.sort_by(|a, b| a.source_file.cmp(&b.source_file));
         merged
@@ -781,7 +921,10 @@ impl DocumentationPage {
         let mut symbols = Vec::new();
         for item in &self.content {
             if !item.item.is_file() && !item.item.is_source() {
-                symbols.push((item.item_short_summary(), item.item.item_key(&item.source_file)));
+                symbols.push((
+                    item.item_short_summary(),
+                    item.item.item_key(&item.source_file)
+                ));
             }
         }
         symbols
@@ -790,11 +933,11 @@ impl DocumentationPage {
     /// Get alphabetically grouped symbols for index page
     pub fn symbol_index(&self) -> Vec<(char, Vec<&ItemDocumentation>)> {
         use std::collections::BTreeMap;
-        
+
         let mut index: BTreeMap<char, Vec<&ItemDocumentation>> = BTreeMap::new();
-        
+
         for item in &self.content {
-                if !item.item.is_file() && !item.item.is_source() {
+            if !item.item.is_file() && !item.item.is_source() {
                 let name = item.item_short_summary();
                 if let Some(first_char) = name.chars().next() {
                     let key = first_char.to_ascii_uppercase();
@@ -802,13 +945,16 @@ impl DocumentationPage {
                 }
             }
         }
-        
+
         // Sort items within each letter group case-insensitively
-        index.into_iter()
+        index
+            .into_iter()
             .map(|(letter, mut items)| {
-                items.sort_by(|a, b| 
-                    a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase())
-                );
+                items.sort_by(|a, b| {
+                    a.item_short_summary()
+                        .to_lowercase()
+                        .cmp(&b.item_short_summary().to_lowercase())
+                });
                 (letter, items)
             })
             .collect()
@@ -837,7 +983,11 @@ impl DocumentationPage {
     }
 
     pub fn has_documentation(&self) -> bool {
-        self.content.iter().filter(|d| !d.item.is_source()).next().is_some()
+        self.content
+            .iter()
+            .filter(|d| !d.item.is_source())
+            .next()
+            .is_some()
     }
 
     /// Get a sorted list of unique source files (workspace-relative, normalized)
@@ -863,7 +1013,9 @@ impl DocumentationPage {
 
         let mut env = Environment::new();
         const TMPL_NAME: &str = "markdown_documentation.jinja";
-        let tmpl_src = assets::Templates::get(TMPL_NAME).expect("Template not found").data;
+        let tmpl_src = assets::Templates::get(TMPL_NAME)
+            .expect("Template not found")
+            .data;
         let tmpl_src = std::str::from_utf8(tmpl_src.as_ref()).unwrap();
         env.add_template(TMPL_NAME, tmpl_src).unwrap();
 
@@ -879,7 +1031,8 @@ impl DocumentationPage {
         let page_obj = self;
         let _merged = self.merged_files();
         let mut files_vec: Vec<minijinja::value::Value> = Vec::new();
-        let mut file_source_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let mut file_source_map: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
 
         // Use all_files directly - they should already be normalized workspace-relative paths
         for fname in &self.all_files {
@@ -889,17 +1042,17 @@ impl DocumentationPage {
                 if !it.item.is_source() {
                     return false;
                 }
-                
+
                 // Exact matches
                 if &it.source_file == fname || &it.display_source_file == fname {
                     return true;
                 }
-                
+
                 // Path suffix matching - ensure we match on path component boundaries
                 let fname_normalized = fname.replace('\\', "/");
                 let source_normalized = it.source_file.replace('\\', "/");
                 let display_normalized = it.display_source_file.replace('\\', "/");
-                
+
                 // Check if source_file ends with fname at a path boundary
                 if source_normalized.ends_with(&fname_normalized) {
                     let prefix_len = source_normalized.len() - fname_normalized.len();
@@ -907,7 +1060,7 @@ impl DocumentationPage {
                         return true;
                     }
                 }
-                
+
                 // Check if display_source_file ends with fname at a path boundary
                 if display_normalized.ends_with(&fname_normalized) {
                     let prefix_len = display_normalized.len() - fname_normalized.len();
@@ -915,26 +1068,35 @@ impl DocumentationPage {
                         return true;
                     }
                 }
-                
+
                 false
             });
-            
+
             let source_code: String;
-            
+
             if let Some(source_item) = source_item_opt {
                 // Extract source code from the Source item
                 if let DocumentedItem::Source(ref code) = source_item.item {
                     source_code = code.clone();
-                } else {
+                }
+                else {
                     source_code = String::new();
                 }
-            } else {
+            }
+            else {
                 // Debug: show what Source items exist
-                let source_items: Vec<_> = self.content.iter()
+                let source_items: Vec<_> = self
+                    .content
+                    .iter()
                     .filter(|it| it.item.is_source())
-                    .map(|it| format!("  source_file='{}' display_source_file='{}'", it.source_file, it.display_source_file))
+                    .map(|it| {
+                        format!(
+                            "  source_file='{}' display_source_file='{}'",
+                            it.source_file, it.display_source_file
+                        )
+                    })
                     .collect();
-                
+
                 eprintln!("WARNING: No Source item found for file: {}", fname);
                 eprintln!("Available Source items:");
                 for item in source_items {
@@ -954,38 +1116,50 @@ impl DocumentationPage {
         let mut env = Environment::new();
         let symbols_for_highlight = std::sync::Arc::new(self.all_symbols());
         let symbols_clone = symbols_for_highlight.clone();
-        env.add_filter("highlight_and_link", move |value: String| -> Result<String, minijinja::Error> {
-            let out = syntax::link_symbols_in_source(&value, &symbols_clone);
-            Ok(out)
-        });
-        
-        // Filter to add line numbers to code
-        env.add_filter("add_line_numbers", |value: String, start_line: Option<usize>| -> Result<String, minijinja::Error> {
-            let start = start_line.unwrap_or(1);
-            let lines: Vec<&str> = value.lines().collect();
-            let max_line_number = start + lines.len() - 1;
-            let line_number_width = max_line_number.to_string().len().max(3);
-            
-            let mut result = String::new();
-            result.push_str("<div class=\"code-with-line-numbers\">");
-            
-            for (i, line) in lines.iter().enumerate() {
-                let line_num = start + i;
-                result.push_str("<div class=\"code-line\">");
-                result.push_str(&format!("<span class=\"line-number\" id=\"L{}\">   {:width$}</span>", 
-                    line_num, line_num, width = line_number_width));
-                result.push_str("<span class=\"line-content\">");
-                result.push_str(line);
-                result.push_str("</span>");
-                result.push_str("</div>");
+        env.add_filter(
+            "highlight_and_link",
+            move |value: String| -> Result<String, minijinja::Error> {
+                let out = syntax::link_symbols_in_source(&value, &symbols_clone);
+                Ok(out)
             }
-            
-            result.push_str("</div>");
-            Ok(result)
-        });
-        
+        );
+
+        // Filter to add line numbers to code
+        env.add_filter(
+            "add_line_numbers",
+            |value: String, start_line: Option<usize>| -> Result<String, minijinja::Error> {
+                let start = start_line.unwrap_or(1);
+                let lines: Vec<&str> = value.lines().collect();
+                let max_line_number = start + lines.len() - 1;
+                let line_number_width = max_line_number.to_string().len().max(3);
+
+                let mut result = String::new();
+                result.push_str("<div class=\"code-with-line-numbers\">");
+
+                for (i, line) in lines.iter().enumerate() {
+                    let line_num = start + i;
+                    result.push_str("<div class=\"code-line\">");
+                    result.push_str(&format!(
+                        "<span class=\"line-number\" id=\"L{}\">   {:width$}</span>",
+                        line_num,
+                        line_num,
+                        width = line_number_width
+                    ));
+                    result.push_str("<span class=\"line-content\">");
+                    result.push_str(line);
+                    result.push_str("</span>");
+                    result.push_str("</div>");
+                }
+
+                result.push_str("</div>");
+                Ok(result)
+            }
+        );
+
         const TMPL_NAME: &str = "html_documentation.jinja";
-        let tmpl_src = assets::Templates::get(TMPL_NAME).expect("Template not found").data;
+        let tmpl_src = assets::Templates::get(TMPL_NAME)
+            .expect("Template not found")
+            .data;
         let tmpl_src = std::str::from_utf8(tmpl_src.as_ref()).unwrap();
         env.add_template(TMPL_NAME, tmpl_src).unwrap();
 
@@ -997,115 +1171,107 @@ impl DocumentationPage {
         // Add syntax highlighting keywords
         env.add_global("syntax_instructions", SYNTAX_INSTRUCTIONS);
         env.add_global("syntax_directives", SYNTAX_DIRECTIVES);
-        
+
         // Build compressed code map with unique IDs
         // Instead of embedding base64 in each element's attribute, we store all compressed
         // data in a single JavaScript map and reference by ID (reduces file size by ~33%)
-        let mut compressed_code_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-        
+        let mut compressed_code_map: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+
         // Collect and compress all macro/function source code
         for item in &self.content {
             let (code_opt, id_opt) = match &item.item {
                 DocumentedItem::Macro { content, name, .. } if !content.is_empty() => {
                     let code = if let Some(ref linked) = item.linked_source {
                         format_with_line_numbers(linked, item.line_number)
-                    } else {
-                        let highlighted = syntax::link_symbols_in_source(content, &symbols_for_highlight);
+                    }
+                    else {
+                        let highlighted =
+                            syntax::link_symbols_in_source(content, &symbols_for_highlight);
                         format_with_line_numbers(&highlighted, item.line_number)
                     };
-                    (Some(code), Some(format!("macro_{}", name.replace("::", "_").replace(".", "_"))))
+                    (
+                        Some(code),
+                        Some(format!(
+                            "macro_{}",
+                            name.replace("::", "_").replace(".", "_")
+                        ))
+                    )
                 },
                 DocumentedItem::Function { content, name, .. } if !content.is_empty() => {
                     let code = if let Some(ref linked) = item.linked_source {
                         format_with_line_numbers(linked, item.line_number)
-                    } else {
-                        let highlighted = syntax::link_symbols_in_source(content, &symbols_for_highlight);
+                    }
+                    else {
+                        let highlighted =
+                            syntax::link_symbols_in_source(content, &symbols_for_highlight);
                         format_with_line_numbers(&highlighted, item.line_number)
                     };
-                    (Some(code), Some(format!("func_{}", name.replace("::", "_").replace(".", "_"))))
+                    (
+                        Some(code),
+                        Some(format!(
+                            "func_{}",
+                            name.replace("::", "_").replace(".", "_")
+                        ))
+                    )
                 },
                 _ => (None, None)
             };
-            
+
             if let (Some(code), Some(id)) = (code_opt, id_opt) {
                 if let Ok(compressed) = assets::compress_string(&code) {
                     compressed_code_map.insert(id, compressed);
                 }
             }
         }
-        
-        // Compress all file sources  
+
+        // Compress all file sources
         for fname in &self.all_files {
             if let Some(source_code) = file_source_map.get(fname) {
                 if !source_code.is_empty() {
-                    let highlighted = syntax::link_symbols_in_source(source_code, &symbols_for_highlight);
+                    let highlighted =
+                        syntax::link_symbols_in_source(source_code, &symbols_for_highlight);
                     let with_lines = format_with_line_numbers(&highlighted, 1);
-                    let file_id = format!("file_{}", fname.replace("/", "_").replace(".", "_").replace("\\", "_"));
+                    let file_id = format!(
+                        "file_{}",
+                        fname.replace("/", "_").replace(".", "_").replace("\\", "_")
+                    );
                     if let Ok(compressed) = assets::compress_string(&with_lines) {
                         compressed_code_map.insert(file_id, compressed);
                     }
                 }
             }
         }
-        
+
         // Pass compressed map to template
-        env.add_global("compressed_code_map", Value::from_serialize(&compressed_code_map));
-        
+        env.add_global(
+            "compressed_code_map",
+            Value::from_serialize(&compressed_code_map)
+        );
+
         // Add JSON serialization filter
-        env.add_filter("tojson", |value: Value| -> Result<String, minijinja::Error> {
-            Ok(serde_json::to_string(&value)
-                .map_err(|e| minijinja::Error::new(ErrorKind::InvalidOperation, format!("JSON serialization failed: {}", e)))?)
-        });
+        env.add_filter(
+            "tojson",
+            |value: Value| -> Result<String, minijinja::Error> {
+                Ok(serde_json::to_string(&value).map_err(|e| {
+                    minijinja::Error::new(
+                        ErrorKind::InvalidOperation,
+                        format!("JSON serialization failed: {}", e)
+                    )
+                })?)
+            }
+        );
 
         let tmpl = env.get_template("html_documentation.jinja").unwrap();
         let file_list = page_obj.file_list();
         // Build sidebar lists from iterators, sorted lexicographically (case-insensitive)
         let mut labels: Vec<ItemDocumentation> = self.label_iter().cloned().collect();
-        labels.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-        let labels: Vec<Value> = labels.into_iter()
-            .map(|mut item| {
-                // Convert markdown documentation to HTML with symbol linking in code blocks
-                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
-                Value::from_object(item)
-            })
-            .collect();
-        
-        let mut macros: Vec<ItemDocumentation> = self.macro_iter().cloned().collect();
-        macros.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-        let macros: Vec<Value> = macros.into_iter()
-            .map(|mut item| {
-                // Convert markdown documentation to HTML with symbol linking in code blocks
-                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
-                Value::from_object(item)
-            })
-            .collect();
-        
-        let mut functions: Vec<ItemDocumentation> = self.function_iter().cloned().collect();
-        functions.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-        let functions: Vec<Value> = functions.into_iter()
-            .map(|mut item| {
-                // Convert markdown documentation to HTML with symbol linking in code blocks
-                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
-                Value::from_object(item)
-            })
-            .collect();
-        
-        let mut equs: Vec<ItemDocumentation> = self.equ_iter().cloned().collect();
-        equs.sort_by(|a, b| a.item_short_summary().to_lowercase().cmp(&b.item_short_summary().to_lowercase()));
-        let equs: Vec<Value> = equs.into_iter()
-            .map(|mut item| {
-                // Convert markdown documentation to HTML with symbol linking in code blocks
-                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
-                Value::from_object(item)
-            })
-            .collect();
-        
-        let syntax_errors: Vec<Value> = self.syntax_error_iter()
-            .map(|item| Value::from_object(item.clone()))
-            .collect();
-        
-        // Get merged file-level documentation items and convert markdown to HTML
-        let files_docs: Vec<Value> = self.merged_files()
+        labels.sort_by(|a, b| {
+            a.item_short_summary()
+                .to_lowercase()
+                .cmp(&b.item_short_summary().to_lowercase())
+        });
+        let labels: Vec<Value> = labels
             .into_iter()
             .map(|mut item| {
                 // Convert markdown documentation to HTML with symbol linking in code blocks
@@ -1113,7 +1279,68 @@ impl DocumentationPage {
                 Value::from_object(item)
             })
             .collect();
-        
+
+        let mut macros: Vec<ItemDocumentation> = self.macro_iter().cloned().collect();
+        macros.sort_by(|a, b| {
+            a.item_short_summary()
+                .to_lowercase()
+                .cmp(&b.item_short_summary().to_lowercase())
+        });
+        let macros: Vec<Value> = macros
+            .into_iter()
+            .map(|mut item| {
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
+                Value::from_object(item)
+            })
+            .collect();
+
+        let mut functions: Vec<ItemDocumentation> = self.function_iter().cloned().collect();
+        functions.sort_by(|a, b| {
+            a.item_short_summary()
+                .to_lowercase()
+                .cmp(&b.item_short_summary().to_lowercase())
+        });
+        let functions: Vec<Value> = functions
+            .into_iter()
+            .map(|mut item| {
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
+                Value::from_object(item)
+            })
+            .collect();
+
+        let mut equs: Vec<ItemDocumentation> = self.equ_iter().cloned().collect();
+        equs.sort_by(|a, b| {
+            a.item_short_summary()
+                .to_lowercase()
+                .cmp(&b.item_short_summary().to_lowercase())
+        });
+        let equs: Vec<Value> = equs
+            .into_iter()
+            .map(|mut item| {
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
+                Value::from_object(item)
+            })
+            .collect();
+
+        let syntax_errors: Vec<Value> = self
+            .syntax_error_iter()
+            .map(|item| Value::from_object(item.clone()))
+            .collect();
+
+        // Get merged file-level documentation items and convert markdown to HTML
+        let files_docs: Vec<Value> = self
+            .merged_files()
+            .into_iter()
+            .map(|mut item| {
+                // Convert markdown documentation to HTML with symbol linking in code blocks
+                item.doc = markdown_to_html(&item.doc, &symbols_for_highlight);
+                Value::from_object(item)
+            })
+            .collect();
+
         tmpl.render(context! {
             page => Value::from_object(page_obj.clone()),
             file_list => file_list,
@@ -1133,22 +1360,22 @@ impl DocumentationPage {
 
 /// Convert markdown text to HTML with syntax highlighting for code blocks
 fn markdown_to_html(markdown: &str, symbols: &[(String, String)]) -> String {
-    use pulldown_cmark::{Event, Tag, TagEnd, CodeBlockKind, CowStr};
-    
+    use pulldown_cmark::{CodeBlockKind, CowStr, Event, Tag, TagEnd};
+
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_FOOTNOTES);
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
-    
+
     let parser = Parser::new_ext(markdown, options);
-    
+
     // Process events to handle code blocks specially
     let mut events = Vec::new();
     let mut in_code_block = false;
     let mut code_block_content = String::new();
     let mut code_block_lang: Option<String> = None;
-    
+
     for event in parser {
         match event {
             Event::Start(Tag::CodeBlock(kind)) => {
@@ -1156,53 +1383,57 @@ fn markdown_to_html(markdown: &str, symbols: &[(String, String)]) -> String {
                 code_block_content.clear();
                 code_block_lang = match kind {
                     CodeBlockKind::Fenced(lang) => Some(lang.to_string()),
-                    CodeBlockKind::Indented => None,
+                    CodeBlockKind::Indented => None
                 };
-            }
+            },
             Event::End(TagEnd::CodeBlock) => {
                 if in_code_block {
                     // Check if it's assembly code
-                    let is_asm = code_block_lang.as_ref()
+                    let is_asm = code_block_lang
+                        .as_ref()
                         .map(|lang| {
                             let l = lang.to_lowercase();
                             l.contains("asm") || l.contains("z80") || l.contains("basm")
                         })
                         .unwrap_or(false);
-                    
+
                     if is_asm {
                         // Apply syntax highlighting and symbol linking
-                        let highlighted = syntax::link_symbols_in_source(&code_block_content, symbols);
+                        let highlighted =
+                            syntax::link_symbols_in_source(&code_block_content, symbols);
                         // Emit raw HTML for the highlighted code
                         events.push(Event::Html(CowStr::from(format!(
                             "<pre><code class=\"language-basm\">{}</code></pre>",
                             highlighted
                         ))));
-                    } else {
+                    }
+                    else {
                         // For non-assembly code, use default rendering
                         events.push(Event::Start(Tag::CodeBlock(
-                            code_block_lang.as_ref()
+                            code_block_lang
+                                .as_ref()
                                 .map(|s| CodeBlockKind::Fenced(CowStr::from(s.clone())))
                                 .unwrap_or(CodeBlockKind::Indented)
                         )));
                         events.push(Event::Text(CowStr::from(code_block_content.clone())));
                         events.push(Event::End(TagEnd::CodeBlock));
                     }
-                    
+
                     in_code_block = false;
                     code_block_content.clear();
                 }
-            }
+            },
             Event::Text(text) if in_code_block => {
                 code_block_content.push_str(&text);
-            }
+            },
             _ => {
                 if !in_code_block {
                     events.push(event);
                 }
-            }
+            },
         }
     }
-    
+
     let mut html_output = String::new();
     html::push_html(&mut html_output, events.into_iter());
     html_output
@@ -1213,56 +1444,72 @@ fn format_with_line_numbers(code: &str, start_line: usize) -> String {
     let lines: Vec<&str> = code.lines().collect();
     let max_line_number = start_line + lines.len() - 1;
     let line_number_width = max_line_number.to_string().len().max(3);
-    
+
     let mut result = String::new();
     result.push_str("<div class=\"code-with-line-numbers\">");
-    
+
     for (i, line) in lines.iter().enumerate() {
         let line_num = start_line + i;
         result.push_str("<div class=\"code-line\">");
-        result.push_str(&format!("<span class=\"line-number\" id=\"L{}\">   {:width$}</span>", 
-            line_num, line_num, width = line_number_width));
+        result.push_str(&format!(
+            "<span class=\"line-number\" id=\"L{}\">   {:width$}</span>",
+            line_num,
+            line_num,
+            width = line_number_width
+        ));
         result.push_str("<span class=\"line-content\">");
         result.push_str(line);
         result.push_str("</span>");
         result.push_str("</div>");
     }
-    
+
     result.push_str("</div>");
     result
 }
 
 /// Populate cross-references in documentation page
-fn populate_cross_references<T: ListingElement + std::fmt::Display>(mut page: DocumentationPage, tokens: &[T], all_symbols: &[(String, String)]) -> DocumentationPage {
+fn populate_cross_references<T: ListingElement + std::fmt::Display>(
+    mut page: DocumentationPage,
+    tokens: &[T],
+    all_symbols: &[(String, String)]
+) -> DocumentationPage {
     // Create shared cache for this operation
     let highlight_cache = DashMap::new();
-    
+
     // Collect all references from tokens
     let source_file_arc: Arc<str> = Arc::from(page.fname.as_str());
-    let all_refs = cross_refs::collect_cross_references(tokens, source_file_arc, all_symbols, &highlight_cache);
-    
+    let all_refs = cross_refs::collect_cross_references(
+        tokens,
+        source_file_arc,
+        all_symbols,
+        &highlight_cache
+    );
+
     // Match references to documented items
     for item in &mut page.content {
         let symbol_name = item.item_short_summary();
-        
+
         if let Some(refs) = all_refs.get(&symbol_name) {
             item.references.extend(refs.clone());
         }
     }
-    
+
     page
 }
 
 #[cfg(test)]
 mod test {
-    use cpclib_asm::Token;
+    use std::io::Write;
 
-    use crate::{DocumentationPage, DocumentedItem, UndocumentedConfig, aggregate_documentation_on_tokens, syntax::link_symbols_in_source};
+    use cpclib_asm::Token;
+    use fs_err::File;
+    use tempfile::tempdir;
 
     use super::*;
-    use fs_err::File;
-    use std::io::Write;
-    use tempfile::tempdir;
+    use crate::syntax::link_symbols_in_source;
+    use crate::{
+        DocumentationPage, DocumentedItem, UndocumentedConfig, aggregate_documentation_on_tokens
+    };
 
     /// Helper: create a temp file with given content, return (dir, file_path, content)
     fn create_temp_source_file(content: &str) -> (tempfile::TempDir, String, String) {
@@ -1270,7 +1517,11 @@ mod test {
         let file_path = dir.path().join("test.asm");
         let mut file = File::create(&file_path).expect("create file");
         file.write_all(content.as_bytes()).expect("write");
-        (dir, file_path.to_string_lossy().to_string(), content.to_string())
+        (
+            dir,
+            file_path.to_string_lossy().to_string(),
+            content.to_string()
+        )
     }
 
     #[test]
@@ -1281,25 +1532,37 @@ mod test {
         let display_name = "test.asm";
 
         // 2. Generate DocumentationPage for this file
-        let page = DocumentationPage::for_file(&file_path, display_name, UndocumentedConfig::all()).expect("parse");
+        let page = DocumentationPage::for_file(&file_path, display_name, UndocumentedConfig::all())
+            .expect("parse");
 
         // 3. Check that a Source item exists in page.content and contains the correct code
-        let source_item = page.content.iter().find(|it| it.item.is_source()).expect("Source item present");
+        let source_item = page
+            .content
+            .iter()
+            .find(|it| it.item.is_source())
+            .expect("Source item present");
         match &source_item.item {
             DocumentedItem::Source(src) => {
                 assert_eq!(src, &expected_source, "Source content must match original");
             },
-            _ => panic!("Not a Source variant"),
+            _ => panic!("Not a Source variant")
         }
 
         // 4. Merge with itself (simulate multi-file merge)
         let merged = DocumentationPage::merge(vec![page.clone()]);
-        let merged_source_item = merged.content.iter().find(|it| it.item.is_source()).expect("Merged Source item present");
+        let merged_source_item = merged
+            .content
+            .iter()
+            .find(|it| it.item.is_source())
+            .expect("Merged Source item present");
         match &merged_source_item.item {
             DocumentedItem::Source(src) => {
-                assert_eq!(src, &expected_source, "Merged Source content must match original");
+                assert_eq!(
+                    src, &expected_source,
+                    "Merged Source content must match original"
+                );
             },
-            _ => panic!("Not a Source variant (merged)"),
+            _ => panic!("Not a Source variant (merged)")
         }
 
         // 5. Generate HTML and check that the source code appears in the output
@@ -1307,16 +1570,24 @@ mod test {
         println!("\n--- GENERATED HTML ---\n{}\n--- END HTML ---\n", html);
         // The source is now compressed in COMPRESSED_CODE map and referenced by data-code-id
         // Check that the JavaScript compressed map exists
-        assert!(html.contains("const COMPRESSED_CODE ="), 
-                "HTML output must contain COMPRESSED_CODE map");
-        assert!(html.contains("data-code-id="), 
-                "HTML output must contain data-code-id attributes");
-        assert!(html.contains("code-placeholder"), 
-                "HTML output must contain code placeholder for lazy loading");
+        assert!(
+            html.contains("const COMPRESSED_CODE ="),
+            "HTML output must contain COMPRESSED_CODE map"
+        );
+        assert!(
+            html.contains("data-code-id="),
+            "HTML output must contain data-code-id attributes"
+        );
+        assert!(
+            html.contains("code-placeholder"),
+            "HTML output must contain code placeholder for lazy loading"
+        );
         // Also check that it's not showing the fallback message
-        assert!(!html.contains("(Source not available)"), "HTML output must not show 'Source not available'");
+        assert!(
+            !html.contains("(Source not available)"),
+            "HTML output must not show 'Source not available'"
+        );
     }
-
 
     #[test]
     fn test_aggregate_global_documentation() {
@@ -1395,72 +1666,75 @@ mod test {
     #[test]
     fn test_link_symbols_in_source() {
         use crate::syntax;
-        
+
         let symbols = vec![
             ("my_label".to_string(), "label_my_label".to_string()),
             ("other_func".to_string(), "function_other_func".to_string()),
         ];
-        
+
         let source = "    ld hl, my_label\n    call other_func\n    ret";
         let linked = syntax::link_symbols_in_source(source, &symbols);
-        
+
         println!("Generated output:\n{}", linked);
-        
+
         // Verify that symbols are wrapped in links
         assert!(linked.contains("<a href=\"#label_my_label\" class=\"symbol-link\">my_label</a>"));
-        assert!(linked.contains("<a href=\"#function_other_func\" class=\"symbol-link\">other_func</a>"));
+        assert!(
+            linked
+                .contains("<a href=\"#function_other_func\" class=\"symbol-link\">other_func</a>")
+        );
         // Verify that instructions have syntax highlighting
         assert!(linked.contains("hljs-keyword"));
         // Verify that registers have syntax highlighting
         assert!(linked.contains("hljs-variable"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_instructions() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = "ld a, 10\ncall my_func\nret";
         let highlighted = highlight_z80_syntax(source);
-        
+
         // Should contain highlighted instructions
         assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">call</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">ret</span>"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_directives() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = "macro TEST\n    org $4000\nendm";
         let highlighted = highlight_z80_syntax(source);
-        
+
         // Should contain highlighted directives
         assert!(highlighted.contains("<span class=\"hljs-built_in\">macro</span>"));
         assert!(highlighted.contains("<span class=\"hljs-built_in\">org</span>"));
         assert!(highlighted.contains("<span class=\"hljs-built_in\">endm</span>"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_registers() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = "ld hl, bc\npush af";
         let highlighted = highlight_z80_syntax(source);
-        
+
         // Should contain highlighted registers
         assert!(highlighted.contains("<span class=\"hljs-variable\">hl</span>"));
         assert!(highlighted.contains("<span class=\"hljs-variable\">bc</span>"));
         assert!(highlighted.contains("<span class=\"hljs-variable\">af</span>"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_numbers() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = "db $FF, #1234, 0x10, %10101010, 42";
         let highlighted = highlight_z80_syntax(source);
-        
+
         // Should contain highlighted numbers
         assert!(highlighted.contains("<span class=\"hljs-number\">$FF</span>"));
         assert!(highlighted.contains("<span class=\"hljs-number\">#1234</span>"));
@@ -1468,67 +1742,67 @@ mod test {
         assert!(highlighted.contains("<span class=\"hljs-number\">%10101010</span>"));
         assert!(highlighted.contains("<span class=\"hljs-number\">42</span>"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_strings() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = r#"db "Hello", 'World'"#;
         let highlighted = highlight_z80_syntax(source);
-        
+
         // Should contain highlighted strings
         assert!(highlighted.contains("<span class=\"hljs-string\">\"Hello\"</span>"));
         assert!(highlighted.contains("<span class=\"hljs-string\">'World'</span>"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_single_line_comment() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = "ld a, 10 ; load 10 into A";
         let highlighted = highlight_z80_syntax(source);
-        
+
         // Should contain highlighted comment
         assert!(highlighted.contains("<span class=\"hljs-comment\">"));
         assert!(highlighted.contains("; load 10 into A"));
         // Instruction before comment should still be highlighted
         assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_multiline_comment() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = "ld a, 10 /* comment \n*/ call func";
         let highlighted = dbg!(highlight_z80_syntax(source));
-        
+
         // Should contain highlighted multiline comment
         assert!(highlighted.contains("<span class=\"hljs-comment\">/* comment \n*/</span>"));
         // Instructions around comment should still be highlighted
         assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">call</span>"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_case_insensitive() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = "LD a, 10\nCALL func\nRET";
         let highlighted = highlight_z80_syntax(source);
-        
+
         // Should highlight regardless of case
         assert!(highlighted.contains("<span class=\"hljs-keyword\">LD</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">CALL</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">RET</span>"));
     }
-    
+
     #[test]
     fn test_highlight_z80_syntax_macro_parameters() {
         use crate::syntax::highlight_z80_syntax;
-        
+
         let source = "ld a, {param1}\nadd {value}\nld hl, {address}";
         let highlighted = highlight_z80_syntax(source);
-        
+
         // Macro parameters should be highlighted
         assert!(highlighted.contains("<span class=\"hljs-meta\">{param1}</span>"));
         assert!(highlighted.contains("<span class=\"hljs-meta\">{value}</span>"));
@@ -1537,7 +1811,7 @@ mod test {
         assert!(highlighted.contains("<span class=\"hljs-keyword\">ld</span>"));
         assert!(highlighted.contains("<span class=\"hljs-keyword\">add</span>"));
     }
-    
+
     #[test]
     fn test_conditional_branches_documentation() {
         // Test that documentation is extracted from all conditional branches
@@ -1571,37 +1845,62 @@ start:
             .expect("parse conditional file");
 
         // Extract all label names
-        let label_names: Vec<String> = page.content.iter()
+        let label_names: Vec<String> = page
+            .content
+            .iter()
             .filter_map(|item| {
                 if let DocumentedItem::Label(name) = &item.item {
                     Some(name.clone())
-                } else {
+                }
+                else {
                     None
                 }
             })
             .collect();
 
         // All labels should be documented, regardless of which branch they're in
-        assert!(label_names.contains(&"start".to_string()), 
-            "Should find 'start' label. Found labels: {:?}", label_names);
-        assert!(label_names.contains(&"disabled_label".to_string()), 
-            "Should find 'disabled_label' from IF 0 branch. Found labels: {:?}", label_names);
-        assert!(label_names.contains(&"else_label".to_string()), 
-            "Should find 'else_label' from ELSE branch. Found labels: {:?}", label_names);
-        assert!(label_names.contains(&"enabled_label".to_string()), 
-            "Should find 'enabled_label' from IF 1 branch. Found labels: {:?}", label_names);
-        
+        assert!(
+            label_names.contains(&"start".to_string()),
+            "Should find 'start' label. Found labels: {:?}",
+            label_names
+        );
+        assert!(
+            label_names.contains(&"disabled_label".to_string()),
+            "Should find 'disabled_label' from IF 0 branch. Found labels: {:?}",
+            label_names
+        );
+        assert!(
+            label_names.contains(&"else_label".to_string()),
+            "Should find 'else_label' from ELSE branch. Found labels: {:?}",
+            label_names
+        );
+        assert!(
+            label_names.contains(&"enabled_label".to_string()),
+            "Should find 'enabled_label' from IF 1 branch. Found labels: {:?}",
+            label_names
+        );
+
         // Verify documentation was extracted
-        let disabled_doc = page.content.iter()
-            .find(|item| matches!(&item.item, DocumentedItem::Label(name) if name == "disabled_label"))
+        let disabled_doc = page
+            .content
+            .iter()
+            .find(
+                |item| matches!(&item.item, DocumentedItem::Label(name) if name == "disabled_label")
+            )
             .expect("disabled_label should exist");
-        assert!(disabled_doc.doc.contains("false condition"), 
-            "Documentation should be: 'This label is in a false condition'");
-            
-        let else_doc = page.content.iter()
+        assert!(
+            disabled_doc.doc.contains("false condition"),
+            "Documentation should be: 'This label is in a false condition'"
+        );
+
+        let else_doc = page
+            .content
+            .iter()
             .find(|item| matches!(&item.item, DocumentedItem::Label(name) if name == "else_label"))
             .expect("else_label should exist");
-        assert!(else_doc.doc.contains("else branch"), 
-            "Documentation should be: 'This label is in the else branch'");
+        assert!(
+            else_doc.doc.contains("else branch"),
+            "Documentation should be: 'This label is in the else branch'"
+        );
     }
 }

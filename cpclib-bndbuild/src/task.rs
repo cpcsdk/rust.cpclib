@@ -510,10 +510,7 @@ impl InnerTask {
     }
 
     pub fn with_rtzx(std: StandardTaskArguments) -> Self {
-        Self::Cdt(
-            CdtManager::Rtzx,
-            std
-        )
+        Self::Cdt(CdtManager::Rtzx, std)
     }
 
     /// Create an InnerTask from a command token and its standard arguments.
@@ -744,7 +741,8 @@ impl InnerTask {
         }
         else if is_rm_cmd(code) {
             Ok(Self::with_rm(std))
-        } else if is_rtzx_cmd(code) {
+        }
+        else if is_rtzx_cmd(code) {
             Ok(Self::with_rtzx(std))
         }
         else {

@@ -2,12 +2,12 @@
 
 use std::collections::HashSet;
 use std::fmt::Debug;
-use fs_err::File;
 use std::io::Write;
 
 use cpclib_common::bitfield::{BitRange, BitRangeMut};
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
+use fs_err::File;
 use image as im;
 
 use crate::ga::*;

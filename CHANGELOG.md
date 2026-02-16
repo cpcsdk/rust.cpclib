@@ -11,15 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI/CD workflows for automated testing and quality checks
 - CONTRIBUTING.md with development guidelines and setup instructions
 - Workspace-level version management for consistency across crates
-- Support for AT3 version 3.5 (ArkosTracker)
-- Support for Z80Profiler tool in bndbuild
+- `cpclib-catart`add this crate to handle catalog art
+- `cpclib-csl`add support for CSL file parsing and generation (mainly to check validity of existing ones)
+- `cpclib-basic` add support for binary encoded programs (tokenized BASIC)
+- `cpclib-bndbuild` add support fof Z80Profiler by Targhan/Arkos
+- `cpclib-bndbuild` add support of the catalog command
+- `cpclib-emucontrol` add support to activate roms (it was only possible to dectivate them before)
+- `cpclib-orgams-ascii` add support to ORGAMS files. This crate aims at converting orgams sourceode to ascii and ascii source code to orgams. (in fact utf8, but...)
 
 ### Changed
 - Standardized README filename from `.mkd` to `.md`
 - Improved workspace dependency management
+- `cpclib-basic` better support of string programs
+- `cpclib-catalog` add catalog visualization and catart creation
+- `cpclib-basm` add reorganize the source cdode of the parser
+- `cpclib-emucontrol` add support of CSL for controling emulators (partially possible for those without CSL support)
 
 ### Fixed
-- AT3 version detection and download URLs
+- `cpclib-bndbuild` AT3 version detection and download URLs
+- `cpclib-basm` fix various bugs 
+- `cpclib-catalog` fix various bugs
 
 ## [0.11.0] - 2025-12-15
 

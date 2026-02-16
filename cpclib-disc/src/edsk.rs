@@ -1,6 +1,5 @@
 // http://www.cpcwiki.eu/index.php/Format:DSK_disk_image_file_format
 
-use fs_err::File;
 use std::io::prelude::*;
 use std::iter::zip;
 use std::string::ToString;
@@ -8,6 +7,7 @@ use std::string::ToString;
 use cpclib_common::bitflags::bitflags;
 use cpclib_common::camino::Utf8Path;
 use delegate::delegate;
+use fs_err::File;
 use getset::Getters;
 
 use crate::disc::Disc;
@@ -966,7 +966,6 @@ impl ExtendedDsk {
     pub fn from_buffer(buffer: &[u8]) -> Self {
         assert!(buffer.len() >= 256);
         let disc_info = DiscInformation::from_buffer(&buffer[..256]);
-
 
         let track_list =
             TrackInformationList::from_buffer_and_disc_information(&buffer[256..], &disc_info);

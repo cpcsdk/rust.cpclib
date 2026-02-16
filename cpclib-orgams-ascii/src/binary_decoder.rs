@@ -9,9 +9,7 @@ use std::ops::Deref;
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_common::winnow::combinator::{cut_err, repeat, terminated};
-use cpclib_common::winnow::error::{
-    ContextError, ErrMode, StrContext, StrContextValue
-};
+use cpclib_common::winnow::error::{ContextError, ErrMode, StrContext, StrContextValue};
 use cpclib_common::winnow::stream::Offset;
 use cpclib_common::winnow::{self, LocatingSlice};
 use cpclib_tokens::opcode_table::{
@@ -45,23 +43,10 @@ const fn is_escaped_byte(b: u8) -> bool {
     // and should be treated as commands when following an escape), true otherwise.
     match b {
         // Command opcodes (escaped commands)
-    
-        MARKER_ASSIGN |
-        MARKER_BYTE |
-        MARKER_COMMENT |
-        MARKER_ESCAPE |
-        MARKER_INDENT |
-        MARKER_LABEL_ADDR |
-        MARKER_LOCAL_LABEL |
-        MARKER_MACRO_DEF |
-        MARKER_NEWLINE |
-        MARKER_WORD |
-        MARKER_BYTE |
-        0x52 |
-        0x58 |
-        0x5b
-         => true,
-        _ => false,
+        MARKER_ASSIGN | MARKER_BYTE | MARKER_COMMENT | MARKER_ESCAPE | MARKER_INDENT
+        | MARKER_LABEL_ADDR | MARKER_LOCAL_LABEL | MARKER_MACRO_DEF | MARKER_NEWLINE
+        | MARKER_WORD | MARKER_BYTE | 0x52 | 0x58 | 0x5B => true,
+        _ => false
     }
 }
 
@@ -99,62 +84,74 @@ impl InstructionPrefix {
             (IY_CODE, 0xCB) => InstructionPrefix::FDCB,
             (0xDF, 0xCB) => InstructionPrefix::DFCB,
             (0xFF, 0xCB) => InstructionPrefix::FFCB,
-            _ => unreachable!("Invalid instruction prefix bytes: 0x{:02X} 0x{:02X}", first, second)
+            _ => {
+                unreachable!(
+                    "Invalid instruction prefix bytes: 0x{:02X} 0x{:02X}",
+                    first, second
+                )
+            },
         }
     }
 
     pub fn bytes(&self) -> &[u8] {
-     match self {
-        InstructionPrefix::None => &[],
-        InstructionPrefix::DD => &[IX_CODE],
-        InstructionPrefix::DF => &[0xDF],
-        InstructionPrefix::FD => &[IY_CODE],
-        InstructionPrefix::FF => &[0xFF],
-        InstructionPrefix::DDCB => &[IX_CODE, 0xCB],
-        InstructionPrefix::DFCB => &[0xDF, 0xCB],
-        InstructionPrefix::FDCB => &[IY_CODE, 0xCB],
-        InstructionPrefix::FFCB => &[0xFF, 0xCB],
-        InstructionPrefix::CB => &[0xCB],
-        InstructionPrefix::ED => &[0xED],
-     }   
-   }
+        match self {
+            InstructionPrefix::None => &[],
+            InstructionPrefix::DD => &[IX_CODE],
+            InstructionPrefix::DF => &[0xDF],
+            InstructionPrefix::FD => &[IY_CODE],
+            InstructionPrefix::FF => &[0xFF],
+            InstructionPrefix::DDCB => &[IX_CODE, 0xCB],
+            InstructionPrefix::DFCB => &[0xDF, 0xCB],
+            InstructionPrefix::FDCB => &[IY_CODE, 0xCB],
+            InstructionPrefix::FFCB => &[0xFF, 0xCB],
+            InstructionPrefix::CB => &[0xCB],
+            InstructionPrefix::ED => &[0xED]
+        }
+    }
 
-   pub fn is_prefix(&self) -> bool {
+    pub fn is_prefix(&self) -> bool {
         !matches!(self, InstructionPrefix::None)
-   }
+    }
 
     pub const fn is_valid_prefix(b: u8) -> bool {
-        matches!(b, IX_CODE | IY_CODE | 0xED | 0xCB | MARKER_IX_IND | MARKER_IY_IND)
+        matches!(
+            b,
+            IX_CODE | IY_CODE | 0xED | 0xCB | MARKER_IX_IND | MARKER_IY_IND
+        )
     }
 
     pub const fn disassembler_table(&self) -> &'static [&'static str; 256] {
         match self {
             InstructionPrefix::None => &TABINSTR,
             InstructionPrefix::DD | InstructionPrefix::DF => &TABINSTRDD,
-            InstructionPrefix::FD | InstructionPrefix::FF=> &TABINSTRFD,
+            InstructionPrefix::FD | InstructionPrefix::FF => &TABINSTRFD,
             InstructionPrefix::DDCB | InstructionPrefix::DFCB => &TABINSTRDDCB,
             InstructionPrefix::FDCB | InstructionPrefix::FFCB => &TABINSTRFDCB,
             InstructionPrefix::CB => &TABINSTRCB,
-            InstructionPrefix::ED => &TABINSTRED,
+            InstructionPrefix::ED => &TABINSTRED
         }
     }
 
     pub const fn requires_extra_expression(&self, opcode: u8) -> bool {
         match self {
-            InstructionPrefix::CB | InstructionPrefix::DF | InstructionPrefix::FF => is_cb_opcode_with_extra_expression(opcode),
+            InstructionPrefix::CB | InstructionPrefix::DF | InstructionPrefix::FF => {
+                is_cb_opcode_with_extra_expression(opcode)
+            },
             InstructionPrefix::None => is_standard_opcode_with_extra_expression(opcode),
-            _ => false,
+            _ => false
         }
     }
 
     pub const fn is_orgams_ix_iy_indirect(&self) -> bool {
-        matches!(self, InstructionPrefix::DF | InstructionPrefix::FF | InstructionPrefix::DFCB | InstructionPrefix::FFCB)
+        matches!(
+            self,
+            InstructionPrefix::DF
+                | InstructionPrefix::FF
+                | InstructionPrefix::DFCB
+                | InstructionPrefix::FFCB
+        )
     }
 }
-
-
-
-
 
 const fn is_cb_opcode_with_extra_expression(b: u8) -> bool {
     matches!(b,
@@ -164,9 +161,9 @@ const fn is_cb_opcode_with_extra_expression(b: u8) -> bool {
     )
 }
 
-const fn is_standard_opcode_with_extra_expression(b:u8) -> bool {
-    matches!(b,
-        0xC7 // RST
+const fn is_standard_opcode_with_extra_expression(b: u8) -> bool {
+    matches!(
+        b, 0xC7 // RST
     )
 }
 
@@ -465,9 +462,7 @@ impl Deref for OrgamsEncodedString {
 
 impl Display for OrgamsEncodedString {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let res = encoding_rs::WINDOWS_1252
-            .decode(&self.0)
-            .0;
+        let res = encoding_rs::WINDOWS_1252.decode(&self.0).0;
         res.fmt(f)
     }
 }
@@ -477,8 +472,6 @@ impl OrgamsEncodedString {
         &self.0
     }
 }
-
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SizedString(OrgamsEncodedString);
@@ -540,16 +533,13 @@ impl Item {
         }
     }
 
-
     pub fn display<'i>(&'i self, labels: &StringTable) -> Cow<'i, str> {
         match self {
             Item::Comment(text) => format!(";{}", text.to_string()).into(),
             Item::NewLine => "\n".into(),
             Item::Indent(count) => " ".repeat(count.0 as usize).into(),
             Item::Assign(assign) => {
-                 let label = labels
-                    .label(&assign.label)
-                    .unwrap();
+                let label = labels.label(&assign.label).unwrap();
                 let expr_repr = assign.expression.display(labels);
 
                 // Heuristic: Left padding for short labels
@@ -559,17 +549,12 @@ impl Item {
                 }
                 else {
                     format!("{} = {}", label, expr_repr)
-                }.into()
-            }
-            Item::Label(label) => {
-                label.get(labels).to_string().into()
+                }
+                .into()
             },
-            Item::LocalLabel(label) => {
-                format!(".{}", label.get(labels).to_string()).into()
-            }
-            Item::MacroDef(m) => {
-                m.display(labels).into()
-            },
+            Item::Label(label) => label.get(labels).to_string().into(),
+            Item::LocalLabel(label) => format!(".{}", label.get(labels).to_string()).into(),
+            Item::MacroDef(m) => m.display(labels).into(),
             Item::Statement(s) => s.display(labels)
         }
     }
@@ -594,9 +579,7 @@ impl LabelRef {
     }
 
     pub fn get<'l, 't>(&'l self, table: &'t StringTable) -> &'t OrgamsEncodedString {
-        table
-            .label(self)
-            .unwrap()
+        table.label(self).unwrap()
     }
 
     pub fn bytes(&self, _table: &StringTable) -> Vec<u8> {
@@ -665,7 +648,7 @@ impl StringTable {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     MultiTerm(Vec<ExpressionMember>),
-    SingleTerm(ExpressionMember),
+    SingleTerm(ExpressionMember)
 }
 
 impl Expression {
@@ -687,9 +670,9 @@ impl Expression {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum SizedExpression{
+pub enum SizedExpression {
     Empty,
-    Sized(Expression),
+    Sized(Expression)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -705,7 +688,7 @@ pub enum ExpressionMember {
     UnaryMinus(Box<ExpressionMember>), // '#'
     String(SizedString),
     ParenthesizedExpression(Vec<ExpressionMember>),
-    Iter(u8), // 'I', 'J', 'K'
+    Iter(u8) // 'I', 'J', 'K'
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -940,11 +923,13 @@ impl Expression {
 impl ExpressionMember {
     pub fn display(&self, table: &StringTable) -> Cow<'_, str> {
         match self {
-            ExpressionMember::Iter(n) => match n {
-                1 => "#".into(),
-                2 => "##".into(),
-                3 => "###".into(),
-                _ => unreachable!("Invalid iteration count: {}", n)
+            ExpressionMember::Iter(n) => {
+                match n {
+                    1 => "#".into(),
+                    2 => "##".into(),
+                    3 => "###".into(),
+                    _ => unreachable!("Invalid iteration count: {}", n)
+                }
             },
             ExpressionMember::String(s) => format!("\"{}\"", s.to_string()).into(),
             ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)).into(),
@@ -957,8 +942,15 @@ impl ExpressionMember {
             ExpressionMember::Dollar => "$".into(),
             ExpressionMember::DoubleDollar => "$$".into(),
             ExpressionMember::ParenthesizedExpression(expr) => {
-                format!("[{}]", expr.iter().map(|e| e.display(table)).collect::<Vec<_>>().join("")).into()
-            }
+                format!(
+                    "[{}]",
+                    expr.iter()
+                        .map(|e| e.display(table))
+                        .collect::<Vec<_>>()
+                        .join("")
+                )
+                .into()
+            },
         }
     }
 }
@@ -1111,10 +1103,7 @@ fn bytes_for_word_or_byte(exprs: &[Expression], is_word: bool, table: &StringTab
     let unit_size: usize = if is_word { 2 } else { 1 };
     let unit_marker: u8 = if is_word { MARKER_WORD } else { MARKER_BYTE };
 
-    let directive_len = exprs
-        .iter()
-        .map(|expr| expr.nb_elements())
-        .sum::<usize>() as u8;
+    let directive_len = exprs.iter().map(|expr| expr.nb_elements()).sum::<usize>() as u8;
     let directive_len = directive_len.max(1) * unit_size as u8;
 
     let exprs = exprs
@@ -1137,8 +1126,7 @@ impl Statement {
         let mut bytes = Vec::new();
 
         match self {
-            Statement::StartRepeatBloc(expr) => 
-            {
+            Statement::StartRepeatBloc(expr) => {
                 let expr_bytes = expr.bytes(table);
                 bytes.push(MARKER_ESCAPE);
                 bytes.push(CMD_FACTOR_BLOC);
@@ -1263,9 +1251,7 @@ impl Statement {
 
     pub fn display<'a>(&'a self, table: &StringTable) -> Cow<'a, str> {
         match self {
-            Statement::StartRepeatBloc(expr) => {
-                format!("{} ** [", expr.display(table)).into()
-            },
+            Statement::StartRepeatBloc(expr) => format!("{} ** [", expr.display(table)).into(),
             Statement::StopRepeatBloc => "]".into(),
             Statement::Brk => "BRK".into(),
             Statement::Restore => "RESTORE".into(),
@@ -1290,7 +1276,11 @@ impl Statement {
                     // Start is " + user number
                     // End is A (maybe access rights/encoding ?)
                     let stripped = &s[2..s.len() - 1];
-                    format!("IMPORT \"{}\"", encoding_rs::WINDOWS_1252.decode(stripped).0).into()
+                    format!(
+                        "IMPORT \"{}\"",
+                        encoding_rs::WINDOWS_1252.decode(stripped).0
+                    )
+                    .into()
                 }
                 else {
                     format!("IMPORT \"{}\"", s.to_string()).into()
@@ -1347,16 +1337,16 @@ impl Instruction {
     pub fn bytes(&self, table: &StringTable) -> Vec<u8> {
         let mut bytes = Vec::new();
 
-
         if self.prefix.is_prefix() {
-          // prefixed opcode
+            // prefixed opcode
             let prefix_bytes = self.prefix.bytes();
             bytes.extend_from_slice(&prefix_bytes);
-        } else  {
+        }
+        else {
             if is_escaped_byte(self.opcode) {
                 // escaped opcode
                 bytes.push(MARKER_ESCAPE);
-            } 
+            }
         }
 
         bytes.push(self.opcode);
@@ -1387,11 +1377,12 @@ impl Instruction {
             }
             else {
                 assert_eq!(i, 0);
-                if  self.prefix.requires_extra_expression(self.opcode) {
+                if self.prefix.requires_extra_expression(self.opcode) {
                     result = result
                         .replace("00", "0") // because of RST
                         .replace("0", &self.coded_operands[i].display(table)); //0 may be a rel expression
-                } else {
+                }
+                else {
                     unimplemented!("Too many coded operands for instruction display");
                 }
                 break;
@@ -1399,9 +1390,7 @@ impl Instruction {
         }
 
         if self.prefix.is_orgams_ix_iy_indirect() && self.coded_operands[0].is_empty() {
-            result = result
-                .replace("(ix+0)", "(ix)")
-                .replace("(iy+0)", "(iy)");
+            result = result.replace("(ix+0)", "(ix)").replace("(iy+0)", "(iy)");
         }
         result = result
             .replace("(ix+-", "(ix-")
@@ -1410,7 +1399,7 @@ impl Instruction {
             .replace("sbc a,", "sbc ");
 
         // Clean up offset notation for Orgams IX/IY indirect addressing
-        if self.prefix.is_orgams_ix_iy_indirect(){
+        if self.prefix.is_orgams_ix_iy_indirect() {
             result = result.replace("+nn", "");
         }
 
@@ -1495,7 +1484,6 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         Ok(())
     }
 
-
     fn append_instruction<S: AsRef<str>>(&mut self, s: S) {
         self.append_token_or_instruction_representation(true, s);
     }
@@ -1510,14 +1498,18 @@ impl<'f, 'g> DisplayState<'f, 'g> {
     }
 
     fn append_stop_bloc<S: AsRef<str>>(&mut self, s: S) {
-        if self.line_state != LineState::Empty{
+        if self.line_state != LineState::Empty {
             self.line_state = LineState::AfterRepeatBloc; // we want to avoid :
         }
         self.append_instruction(s);
         self.line_state = LineState::AfterStatement(false);
     }
 
-    fn append_token_or_instruction_representation<S: AsRef<str>>(&mut self, is_instruction: bool, s: S) {
+    fn append_token_or_instruction_representation<S: AsRef<str>>(
+        &mut self,
+        is_instruction: bool,
+        s: S
+    ) {
         let indent_size: usize = if is_instruction {
             TAB_INSTR as _
         }
@@ -1537,7 +1529,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
                     self.current_line.push(' ');
                 }
             },
-            LineState::AfterStatement(_)=> {
+            LineState::AfterStatement(_) => {
                 self.current_line.push(':');
             },
             LineState::AfterRepeatBloc => {
@@ -1551,7 +1543,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
 
     fn append_comment<S: AsRef<str>>(&mut self, c: S) -> std::fmt::Result {
         if self.line_state == LineState::Empty || self.has_only_indents() {
-            //nothing to do   
+            // nothing to do
         }
         else {
             // handle some indentation
@@ -1564,7 +1556,6 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             };
             self.append_string_no_indent(indent);
         }
-
 
         self.append_string_no_indent(c);
         self.emit_line()
@@ -1585,7 +1576,6 @@ impl<'f, 'g> DisplayState<'f, 'g> {
     fn append_string_no_indent(&mut self, s: impl AsRef<str>) {
         self.current_line.push_str(s.as_ref());
     }
-
 
     fn col_number(&self) -> usize {
         self.current_line.len()
@@ -1616,22 +1606,21 @@ impl<'f, 'g> DisplayState<'f, 'g> {
         match item {
             Item::Statement(Statement::StorePcInstr | Statement::StorePcLine) => {
                 // we do stricly nothing
-            }
+            },
             Item::Statement(Statement::StartRepeatBloc(_)) => {
                 self.append_start_bloc(repr);
-            }
+            },
             Item::Statement(Statement::StopRepeatBloc) => {
                 self.append_stop_bloc(repr);
-            }
-            Item::Statement(Statement::Instruction(..)) | Item::Statement(Statement::MacroUse(..)
-            | Statement::RepeatInstruction(..) 
-            ) => {
+            },
+            Item::Statement(Statement::Instruction(..))
+            | Item::Statement(Statement::MacroUse(..) | Statement::RepeatInstruction(..)) => {
                 self.append_instruction(repr);
-            }
+            },
 
             Item::NewLine => {
                 self.emit_line()?;
-            }
+            },
             Item::Comment(..) => {
                 self.append_comment(&repr)?;
             },
@@ -1640,20 +1629,18 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             },
             Item::Assign(..) => {
                 self.append_assign(&repr);
-            }
-             Item::Statement(Statement::RawString(..)) => {
+            },
+            Item::Statement(Statement::RawString(..)) => {
                 self.append_string_no_indent(repr);
-            }
+            },
             Item::Indent(..) => {
                 self.append_string_no_indent(repr);
-            }
+            },
             _ => {
                 self.append_token(repr);
             }
-
-
         }
-        
+
         Ok(())
     }
 }
@@ -1682,80 +1669,102 @@ impl std::fmt::Display for Program {
     }
 }
 
-
-pub fn parse_orgams_file(debug: bool, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> impl FnMut(&mut Input) -> OrgamsParseResult<Program> {
-
+pub fn parse_orgams_file(
+    debug: bool,
+    groundtruth_iter: &mut Option<std::slice::Iter<String>>
+) -> impl FnMut(&mut Input) -> OrgamsParseResult<Program> {
     move |input: &mut Input| {
-
-    if debug {println!("DEBUG: Starting debug_orgams_file");}
-    
-    // 1. Parse Header
-    const ORGA: &[u8] = b"ORGA";
-    const SRCC: &[u8] = b"SRCc";
-    const LBLS: &[u8] = b"LBLs";
-
-    cut_err(literal(ORGA)
-        .context(StrContext::Expected(StrContextValue::StringLiteral("ORGA"))))
-        .parse_next(input)?;
-
-    let _version = cut_err(any.verify(|&b| b==2)
-        .context(StrContext::Expected(StrContextValue::Description("version  expected")))).parse_next(input)?;
-
-    let header_size = any.context(StrContext::Expected(StrContextValue::Description("header size"))).parse_next(input)? as usize;
-
-    // Skip rest of header (0x67 bytes total, already read 4)
-    let _header = take( header_size+1).parse_next(input)?;
-
-
-    cut_err(literal(SRCC).context(StrContext::Expected(StrContextValue::StringLiteral("SRCc"))))
-        .parse_next(input)?;
-
-    let _version = any.verify(|&b| b==2).context(StrContext::Expected(StrContextValue::Description("version 2 expected"))).parse_next(input)?;
-
-    // 2. Mark code start
-    let code_start_checkpoint = input.checkpoint();
-    
-    // 3. Skip chunks to find LBLs
-    if debug { println!("DEBUG: Skipping chunks to find LBLs..."); }
-    let mut chunk_count = 0;
-    loop {
-        let b = peek(any).parse_next(input)?;
-        if b == 0 {
-            // Found terminator
-             break;
+        if debug {
+            println!("DEBUG: Starting debug_orgams_file");
         }
-        let chunk_size = any.verify(|&s| s<=CHUNK_MAX_SIZE).parse_next(input)?;
-        let _ = take(chunk_size as usize).parse_next(input)?;
-        chunk_count += 1;
-    }
-    if debug { println!("DEBUG: Found terminator 0 after {} chunks", chunk_count); }
 
-    // 4. Parse Labels
-    let _null_separator = literal([0x00]).parse_next(input)?;
-    cut_err(literal(LBLS).context(StrContext::Expected(StrContextValue::StringLiteral("LBLs"))))
+        // 1. Parse Header
+        const ORGA: &[u8] = b"ORGA";
+        const SRCC: &[u8] = b"SRCc";
+        const LBLS: &[u8] = b"LBLs";
+
+        cut_err(
+            literal(ORGA).context(StrContext::Expected(StrContextValue::StringLiteral("ORGA")))
+        )
         .parse_next(input)?;
-    let labels = parse_labels_table.parse_next(input)?;
-    if debug { println!("DEBUG: Labels parsed. Count: {}", labels.len()); }
-    
-    // Print labels
-    if debug {
-        for (idx, label) in labels.iter().enumerate() {
-            println!("  Label #{:03}: \"{}\"", idx, label.to_string());
+
+        let _version = cut_err(any.verify(|&b| b == 2).context(StrContext::Expected(
+            StrContextValue::Description("version  expected")
+        )))
+        .parse_next(input)?;
+
+        let header_size = any
+            .context(StrContext::Expected(StrContextValue::Description(
+                "header size"
+            )))
+            .parse_next(input)? as usize;
+
+        // Skip rest of header (0x67 bytes total, already read 4)
+        let _header = take(header_size + 1).parse_next(input)?;
+
+        cut_err(
+            literal(SRCC).context(StrContext::Expected(StrContextValue::StringLiteral("SRCc")))
+        )
+        .parse_next(input)?;
+
+        let _version = any
+            .verify(|&b| b == 2)
+            .context(StrContext::Expected(StrContextValue::Description(
+                "version 2 expected"
+            )))
+            .parse_next(input)?;
+
+        // 2. Mark code start
+        let code_start_checkpoint = input.checkpoint();
+
+        // 3. Skip chunks to find LBLs
+        if debug {
+            println!("DEBUG: Skipping chunks to find LBLs...");
         }
+        let mut chunk_count = 0;
+        loop {
+            let b = peek(any).parse_next(input)?;
+            if b == 0 {
+                // Found terminator
+                break;
+            }
+            let chunk_size = any.verify(|&s| s <= CHUNK_MAX_SIZE).parse_next(input)?;
+            let _ = take(chunk_size as usize).parse_next(input)?;
+            chunk_count += 1;
+        }
+        if debug {
+            println!("DEBUG: Found terminator 0 after {} chunks", chunk_count);
+        }
+
+        // 4. Parse Labels
+        let _null_separator = literal([0x00]).parse_next(input)?;
+        cut_err(
+            literal(LBLS).context(StrContext::Expected(StrContextValue::StringLiteral("LBLs")))
+        )
+        .parse_next(input)?;
+        let labels = parse_labels_table.parse_next(input)?;
+        if debug {
+            println!("DEBUG: Labels parsed. Count: {}", labels.len());
+        }
+
+        // Print labels
+        if debug {
+            for (idx, label) in labels.iter().enumerate() {
+                println!("  Label #{:03}: \"{}\"", idx, label.to_string());
+            }
+        }
+
+        // 5. Rewind to code start
+        input.reset(&code_start_checkpoint);
+
+        // 6. Parse Code with debug
+        if debug {
+            println!("DEBUG: Parsing code with trace...");
+        }
+        let chunks = parse_all_code(debug, &labels, groundtruth_iter).parse_next(input)?;
+        Ok(Program { chunks, labels })
     }
-
-    // 5. Rewind to code start
-    input.reset(&code_start_checkpoint);
-    
-    // 6. Parse Code with debug
-    if debug { println!("DEBUG: Parsing code with trace..."); }
-    let chunks= parse_all_code(debug, &labels, groundtruth_iter).parse_next(input)?;
-    Ok(Program { chunks, labels })
 }
-}
-
-
-
 
 /// Parse complete Orgams file
 pub fn parse_labels_table(input: &mut Input) -> OrgamsParseResult<StringTable> {
@@ -1814,24 +1823,26 @@ fn parse_items_untils_lbls(input: &mut Input) -> OrgamsParseResult<Vec<Item>> {
 
 fn parse_star_repeat_single(input: &mut Input) -> OrgamsParseResult<Item> {
     consume_marker(CMD_REPEAT)(input)?;
-    let expr = cut_err(parse_sized_expression.context(StrContext::Label("Repeat counter"))).parse_next(input)?;
+    let expr = cut_err(parse_sized_expression.context(StrContext::Label("Repeat counter")))
+        .parse_next(input)?;
     let item = cut_err(parse_inner_item.context(StrContext::Label(
         "Failed to parse item after repeat expression"
     )))
     .parse_next(input)?;
 
     // XXX need to be done here ?
-    cut_err(literal([MARKER_ESCAPE, CMD_END_BIS])
-        .context(StrContext::Label("Expected end of repeat block")))
-        .void()
-        .parse_next(input)?;
+    cut_err(
+        literal([MARKER_ESCAPE, CMD_END_BIS])
+            .context(StrContext::Label("Expected end of repeat block"))
+    )
+    .void()
+    .parse_next(input)?;
 
     Ok(Item::Statement(Statement::RepeatInstruction(
         Box::new(expr),
         Box::new(item)
     )))
 }
-
 
 /// Parse single item EXCEPT newline, comments,  indenations, label, macrodref.
 /// assign seems to be prefexid by 7f
@@ -1978,21 +1989,21 @@ fn parse_sized_expression(input: &mut Input) -> OrgamsParseResult<SizedExpressio
     if size == 0 {
         Ok(SizedExpression::Empty)
     }
-               else {
-                    let input_checkpoint = input.checkpoint();
-                    let exp = parse_unsized_expression
-                        .map(SizedExpression::Sized)
-                        .parse_next(input)?;
-                    if input.offset_from(&input_checkpoint) != size {
-                        let mut err = ContextError::new();
-                        err.push(StrContext::Expected(StrContextValue::Description(
-                            "expression of incorrect size"
-                        )));
-                        return Err(ErrMode::Cut(err));
-                    }
-                    else {
-                        Ok(exp)
-                    }
+    else {
+        let input_checkpoint = input.checkpoint();
+        let exp = parse_unsized_expression
+            .map(SizedExpression::Sized)
+            .parse_next(input)?;
+        if input.offset_from(&input_checkpoint) != size {
+            let mut err = ContextError::new();
+            err.push(StrContext::Expected(StrContextValue::Description(
+                "expression of incorrect size"
+            )));
+            return Err(ErrMode::Cut(err));
+        }
+        else {
+            Ok(exp)
+        }
     }
 }
 
@@ -2000,21 +2011,28 @@ fn parse_unsized_expression(input: &mut Input) -> OrgamsParseResult<Expression> 
     let first = peek(any).parse_next(input)?;
 
     if first != EXP_MULTI_TERM_BEGIN {
-        return cut_err(parse_expression_member.context(StrContext::Label("single expression member")))
-            .map(Expression::SingleTerm)
-            .parse_next(input)
+        return cut_err(
+            parse_expression_member.context(StrContext::Label("single expression member"))
+        )
+        .map(Expression::SingleTerm)
+        .parse_next(input);
     }
     else {
-        return cut_err(parse_multi_expression.context(StrContext::Label("multi expression"))).parse_next(input);
+        return cut_err(parse_multi_expression.context(StrContext::Label("multi expression")))
+            .parse_next(input);
     }
 }
 fn parse_multi_expression(input: &mut Input) -> OrgamsParseResult<Expression> {
-    let _ = cut_err(EXP_MULTI_TERM_BEGIN.context(StrContext::Label("multi expression tag"))).parse_next(input)?; // Consume BEGIN
-    let mut members = cut_err(parse_several_expression_member(EXP_MULTI_TERM_END)).parse_next(input)?;
+    let _ = cut_err(EXP_MULTI_TERM_BEGIN.context(StrContext::Label("multi expression tag")))
+        .parse_next(input)?; // Consume BEGIN
+    let mut members =
+        cut_err(parse_several_expression_member(EXP_MULTI_TERM_END)).parse_next(input)?;
     Ok(Expression::MultiTerm(members))
 }
 
-fn parse_several_expression_member(closing: u8) -> impl Fn(&mut Input) -> OrgamsParseResult<Vec<ExpressionMember>> {
+fn parse_several_expression_member(
+    closing: u8
+) -> impl Fn(&mut Input) -> OrgamsParseResult<Vec<ExpressionMember>> {
     move |input: &mut Input| -> OrgamsParseResult<Vec<ExpressionMember>> {
         let mut members = Vec::new();
 
@@ -2040,9 +2058,7 @@ fn parse_parenthesized_expression_inner(input: &mut Input) -> OrgamsParseResult<
     Ok(ExpressionMember::ParenthesizedExpression(members))
 }
 
-
 fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
-
     let b = cut_err(any).parse_next(input)?;
 
     let is_local_label = b == EXP_LOCAL_LABEL;
@@ -2054,9 +2070,7 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
     };
 
     match b {
-        ..=EXP_SHORT_DECIMAL_MAX_VALUE => {
-            Ok(ExpressionMember::ShortDecimal(b))
-        },
+        ..=EXP_SHORT_DECIMAL_MAX_VALUE => Ok(ExpressionMember::ShortDecimal(b)),
         SHORT_LABEL_START..=SHORT_LABEL_END => {
             let label = LabelRef::new_short_from_stream(b);
             if is_local_label {
@@ -2067,7 +2081,7 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
             }
         },
         LONG_LABEL_START.. => {
-        // Long label
+            // Long label
             let second_byte = cut_err(any).parse_next(input)?;
             let label = LabelRef::new_long_from_stream(b, second_byte);
             if is_local_label {
@@ -2076,8 +2090,7 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
             else {
                 Ok(ExpressionMember::LabelRef(label))
             }
-
-        }
+        },
         EXP_OP_PAREN_CLOSE => {
             let mut err = ContextError::new();
             err.push(StrContext::Expected(StrContextValue::Description(
@@ -2086,11 +2099,13 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
             return Err(ErrMode::Backtrack(err));
         },
         EXP_OP_PAREN_OPEN => {
-            cut_err(parse_parenthesized_expression_inner.context(StrContext::Expected(
-                StrContextValue::Description("Parenthesized expression")
-            )))
+            cut_err(
+                parse_parenthesized_expression_inner.context(StrContext::Expected(
+                    StrContextValue::Description("Parenthesized expression")
+                ))
+            )
             .parse_next(input)
-        }
+        },
         EXP_STRING => {
             let s = cut_err(parse_sized_text.context(StrContext::Expected(
                 StrContextValue::Description("String value in expression")
@@ -2195,7 +2210,6 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
                     (ValueBasis::Binary, ValueContent::Custom(bytes))
                 },
 
-
                 _ => {
                     let mut err = ContextError::new();
                     err.push(StrContext::Expected(StrContextValue::Description(
@@ -2209,7 +2223,6 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
         }
     }
 }
-
 
 /// Parse an assignment: 0x64 <label_ref> <expression>
 fn parse_assign(input: &mut Input) -> OrgamsParseResult<Assign> {
@@ -2253,7 +2266,6 @@ fn parse_label_ref_item(input: &mut Input) -> OrgamsParseResult<Item> {
 /// Parse a line according to orgams t_line grammar
 /// Returns Line for the line (may include indent, content, newline)
 pub fn parse_line(input: &mut Input) -> OrgamsParseResult<Line> {
-
     // order is quite important here
     alt((
         parse_line_starting_with_comment.context(StrContext::Label("line starting with comment")),
@@ -2393,133 +2405,193 @@ fn parse_line_starting_with_item(input: &mut Input) -> OrgamsParseResult<Line> {
     Ok(Line { items })
 }
 
-fn parse_all_code(debug: bool, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>) -> impl FnMut(&mut Input) -> OrgamsParseResult<Vec<Chunk>> {
-move |input: &mut Input| {
-    let mut chunks = Vec::new();
-    let mut chunk_idx = 0;
-    let mut start_line = 0;
-    loop {
-        // Peek to check for the terminator (chunk size 0)
-        let b = peek(any).parse_next(input)?;
-        if b == 0 {
-            if debug {
-             println!("DEBUG: End of code segments (byte 0 found).");
+fn parse_all_code(
+    debug: bool,
+    labels: &StringTable,
+    groundtruth_iter: &mut Option<std::slice::Iter<String>>
+) -> impl FnMut(&mut Input) -> OrgamsParseResult<Vec<Chunk>> {
+    move |input: &mut Input| {
+        let mut chunks = Vec::new();
+        let mut chunk_idx = 0;
+        let mut start_line = 0;
+        loop {
+            // Peek to check for the terminator (chunk size 0)
+            let b = peek(any).parse_next(input)?;
+            if b == 0 {
+                if debug {
+                    println!("DEBUG: End of code segments (byte 0 found).");
+                }
+                break;
             }
-             break;
-        }
-        
-        if debug {
-            println!("DEBUG: Parsing Chunk #{}", chunk_idx);
-        }
-        let (line_count, chunk) = parse_chunk( debug, labels, groundtruth_iter, chunk_idx, start_line).parse_next(input)?;
-        start_line += line_count.unwrap_or_default(); // We don't care in no debug
-        chunk_idx += 1;
-        chunks.push(chunk)
-    }
-    Ok(chunks)
 
-}
+            if debug {
+                println!("DEBUG: Parsing Chunk #{}", chunk_idx);
+            }
+            let (line_count, chunk) =
+                parse_chunk(debug, labels, groundtruth_iter, chunk_idx, start_line)
+                    .parse_next(input)?;
+            start_line += line_count.unwrap_or_default(); // We don't care in no debug
+            chunk_idx += 1;
+            chunks.push(chunk)
+        }
+        Ok(chunks)
+    }
 }
 
 /// A chunk is composed of several lines, prefixed by its size in bytesa
 /// TODO retreive the logic of parse_chunk_debug it may not be exactly the same now
-pub fn parse_chunk(debug: bool, labels: &StringTable, groundtruth_iter: &mut Option<std::slice::Iter<String>>, chunk_idx: usize, start_line: usize) -> impl FnMut(&mut Input) -> OrgamsParseResult<(Option<usize>, Chunk)> {
+pub fn parse_chunk(
+    debug: bool,
+    labels: &StringTable,
+    groundtruth_iter: &mut Option<std::slice::Iter<String>>,
+    chunk_idx: usize,
+    start_line: usize
+) -> impl FnMut(&mut Input) -> OrgamsParseResult<(Option<usize>, Chunk)> {
     move |input: &mut Input| {
-    let chunk_size = any.verify(|&s| s<=CHUNK_MAX_SIZE).parse_next(input)? as usize;
-    
-    // Chunk content peek
-    let chunk_content = peek(take(chunk_size)).parse_next(input)?;
-    if debug {
-        println!("DEBUG: Chunk #{} size: {} bytes", chunk_idx, chunk_size);
-        println!("DEBUG: Chunk #{} content bytes: {:02X?}", chunk_idx, chunk_content);
-    }
-    
-    let chunk_start = input.checkpoint();
+        let chunk_size = any.verify(|&s| s <= CHUNK_MAX_SIZE).parse_next(input)? as usize;
 
-	let mut render = if debug { Some(DisplayState::new(None)) } else { None };
-    let mut line_number = 0;    
-	
-    let mut chunk_content = Vec::new();
-    while input.offset_from(&chunk_start) < chunk_size {
-        let line_offset = input.offset_from(&chunk_start);
-        
-        let line_start_check = input.checkpoint();
-        
+        // Chunk content peek
+        let chunk_content = peek(take(chunk_size)).parse_next(input)?;
+        if debug {
+            println!("DEBUG: Chunk #{} size: {} bytes", chunk_idx, chunk_size);
+            println!(
+                "DEBUG: Chunk #{} content bytes: {:02X?}",
+                chunk_idx, chunk_content
+            );
+        }
 
-       // println!("Remaining bytes: [{:02X?}]", &input[.. ]);
+        let chunk_start = input.checkpoint();
 
-        let line = match parse_line.parse_next(input) {
-            Ok(line) => {
-				line_number += 1;
-                 let consumed_len = input.offset_from(&line_start_check);
-
-                  if let Some(render) = render.as_mut() {
-                   // Reconstruct line
-				    render.render_items(line.iter(), labels).unwrap();
-				    let line_text = render.last_line().unwrap().to_string(); // XXX we assume only one line has been generated
-
-                 // Get bytes
-                 input.reset(&line_start_check);
-                 let raw_bytes = take(consumed_len).parse_next(input)?;
-
-                 // Printable bytes
-                 let printable: String = raw_bytes.iter().map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' }).collect();
-                let reconstructed_bytes = line.bytes(&labels);
-				println!("\n Chunk: {}       line: {} (total: {})", chunk_idx, line_number, start_line + line_number);
-                 println!("          Debug:  {:?}", line);
-                 println!("    [{:3}] Bytes:  {:02X?}", line_offset, raw_bytes);
-                 println!("  Reconstructed:  {:02X?} ", reconstructed_bytes);
-                 println!("      Printable:  {}", printable);
-                 println!("           Text:  `{}`", line_text);
-                 let groundtruth = if let Some(iter) = groundtruth_iter {
-                     if let Some(ground) = iter.next() {
-                         println!("         Ground:  `{}`", ground);
-					 	Some(ground.to_owned())
-                     } else {
-                         println!("         Ground:  <End of Stream>");
-						 Some("".to_owned())
-                     }
-                 } else {
-					None
-				 };
-
-				 assert_eq!(raw_bytes, reconstructed_bytes, "Reconstructed bytes do not match original bytes at chunk offset {}", line_offset);
-				 if let Some(groundtruth) = groundtruth {
-					 assert_eq!(groundtruth, line_text, "Groundtruth does not match reconstructed text at chunk offset {}", line_offset);
-				 }
-				 assert_eq!(render.line_number()-1, line_number, "Line number mismatch at chunk offset {}", line_offset);
-                }
-
-                line
-            },
-            Err(e) => {
-                if debug {
-                println!("    ERROR at chunk offset {}: {:?}", line_offset, e);
-                let remainder = &input[..];
-                let context_len = std::cmp::min(100, remainder.len());
-                let context_bytes = &remainder[..context_len];
-                let context_printable: String = context_bytes.iter().map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' }).collect();
-
-                println!("    Context bytes (next {}): {:02X?}", context_len, context_bytes);
-                println!("    Context chars (next {}): {}", context_len, context_printable);
-                }
-                return Err(e);
-            }
+        let mut render = if debug {
+            Some(DisplayState::new(None))
+        }
+        else {
+            None
         };
+        let mut line_number = 0;
 
-        chunk_content.push(line);
-    }
-    
-    if input.offset_from(&chunk_start) != chunk_size {
-        println!("    WARN: Chunk mismatch. Expected {}, got {}", chunk_size, input.offset_from(&chunk_start));
-    }
-    
-    let line = if let Some(render) = render.as_mut() {
-        Some(render.line_number()-1)
-    } else {
-        None
-    };
-    Ok((line, Chunk { lines: chunk_content }) )
+        let mut chunk_content = Vec::new();
+        while input.offset_from(&chunk_start) < chunk_size {
+            let line_offset = input.offset_from(&chunk_start);
+
+            let line_start_check = input.checkpoint();
+
+            // println!("Remaining bytes: [{:02X?}]", &input[.. ]);
+
+            let line = match parse_line.parse_next(input) {
+                Ok(line) => {
+                    line_number += 1;
+                    let consumed_len = input.offset_from(&line_start_check);
+
+                    if let Some(render) = render.as_mut() {
+                        // Reconstruct line
+                        render.render_items(line.iter(), labels).unwrap();
+                        let line_text = render.last_line().unwrap().to_string(); // XXX we assume only one line has been generated
+
+                        // Get bytes
+                        input.reset(&line_start_check);
+                        let raw_bytes = take(consumed_len).parse_next(input)?;
+
+                        // Printable bytes
+                        let printable: String = raw_bytes
+                            .iter()
+                            .map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' })
+                            .collect();
+                        let reconstructed_bytes = line.bytes(&labels);
+                        println!(
+                            "\n Chunk: {}       line: {} (total: {})",
+                            chunk_idx,
+                            line_number,
+                            start_line + line_number
+                        );
+                        println!("          Debug:  {:?}", line);
+                        println!("    [{:3}] Bytes:  {:02X?}", line_offset, raw_bytes);
+                        println!("  Reconstructed:  {:02X?} ", reconstructed_bytes);
+                        println!("      Printable:  {}", printable);
+                        println!("           Text:  `{}`", line_text);
+                        let groundtruth = if let Some(iter) = groundtruth_iter {
+                            if let Some(ground) = iter.next() {
+                                println!("         Ground:  `{}`", ground);
+                                Some(ground.to_owned())
+                            }
+                            else {
+                                println!("         Ground:  <End of Stream>");
+                                Some("".to_owned())
+                            }
+                        }
+                        else {
+                            None
+                        };
+
+                        assert_eq!(
+                            raw_bytes, reconstructed_bytes,
+                            "Reconstructed bytes do not match original bytes at chunk offset {}",
+                            line_offset
+                        );
+                        if let Some(groundtruth) = groundtruth {
+                            assert_eq!(
+                                groundtruth, line_text,
+                                "Groundtruth does not match reconstructed text at chunk offset {}",
+                                line_offset
+                            );
+                        }
+                        assert_eq!(
+                            render.line_number() - 1,
+                            line_number,
+                            "Line number mismatch at chunk offset {}",
+                            line_offset
+                        );
+                    }
+
+                    line
+                },
+                Err(e) => {
+                    if debug {
+                        println!("    ERROR at chunk offset {}: {:?}", line_offset, e);
+                        let remainder = &input[..];
+                        let context_len = std::cmp::min(100, remainder.len());
+                        let context_bytes = &remainder[..context_len];
+                        let context_printable: String = context_bytes
+                            .iter()
+                            .map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' })
+                            .collect();
+
+                        println!(
+                            "    Context bytes (next {}): {:02X?}",
+                            context_len, context_bytes
+                        );
+                        println!(
+                            "    Context chars (next {}): {}",
+                            context_len, context_printable
+                        );
+                    }
+                    return Err(e);
+                }
+            };
+
+            chunk_content.push(line);
+        }
+
+        if input.offset_from(&chunk_start) != chunk_size {
+            println!(
+                "    WARN: Chunk mismatch. Expected {}, got {}",
+                chunk_size,
+                input.offset_from(&chunk_start)
+            );
+        }
+
+        let line = if let Some(render) = render.as_mut() {
+            Some(render.line_number() - 1)
+        }
+        else {
+            None
+        };
+        Ok((
+            line,
+            Chunk {
+                lines: chunk_content
+            }
+        ))
     }
 }
 
@@ -2528,7 +2600,7 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
     consume_marker(MARKER_ESCAPE)(input)?;
 
     // check if it is escaped instruction
-    let first  = peek(any).parse_next(input)?;
+    let first = peek(any).parse_next(input)?;
     if is_escaped_byte(first) {
         return parse_instruction
             .map(|i| Item::Statement(Statement::Instruction(i)))
@@ -2542,16 +2614,13 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
 
     match cmd {
         CMD_FACTOR_BLOC => {
-            let expr = cut_err(parse_sized_expression.context(StrContext::Label("Start repeat bloc expression"))).parse_next(input)?;
-            Ok(
-                Item::Statement(Statement::StartRepeatBloc(expr))
+            let expr = cut_err(
+                parse_sized_expression.context(StrContext::Label("Start repeat bloc expression"))
             )
+            .parse_next(input)?;
+            Ok(Item::Statement(Statement::StartRepeatBloc(expr)))
         },
-        CMD_FACTOR_BLOC_END => {
-            Ok(
-                Item::Statement(Statement::StopRepeatBloc)
-            )          
-        },
+        CMD_FACTOR_BLOC_END => Ok(Item::Statement(Statement::StopRepeatBloc)),
         CMD_IF => {
             cut_err(parse_inner_if.context(StrContext::Label("IF")))
                 .parse_next(input)
@@ -2590,11 +2659,16 @@ fn parse_escaped_7f_item(input: &mut Input) -> OrgamsParseResult<Item> {
             // Raw string: Length + Bytes
             let len = cut_err(any).parse_next(input)? as usize;
             let content = cut_err(take(len)).parse_next(input)?;
-            Ok(Item::Statement(Statement::RawString(
-                OrgamsEncodedString(content.to_vec())
-            )))
+            Ok(Item::Statement(Statement::RawString(OrgamsEncodedString(
+                content.to_vec()
+            ))))
         },
-        CMD_REPEAT => cut_err(parse_star_repeat_single.context(StrContext::Label("REPEAT single instruction"))).parse_next(input),
+        CMD_REPEAT => {
+            cut_err(
+                parse_star_repeat_single.context(StrContext::Label("REPEAT single instruction"))
+            )
+            .parse_next(input)
+        },
         CMD_MACRO_USE => {
             cut_err(parse_macro_use)
                 .parse_next(input)
@@ -2634,33 +2708,39 @@ fn parse_instruction_prefix(input: &mut Input) -> OrgamsParseResult<InstructionP
     let b = cut_err(peek(any)).parse_next(input)?;
     if !InstructionPrefix::is_valid_prefix(b) {
         Ok(InstructionPrefix::None)
-    } else {
+    }
+    else {
         let first = cut_err(any).parse_next(input)?;
         if [0xDD, 0xDF, 0xDF, 0xFF].contains(&first) {
-            let second = peek(opt(0xcb)).parse_next(input)?;
+            let second = peek(opt(0xCB)).parse_next(input)?;
             if let Some(second) = second {
                 let _ = cut_err(any).parse_next(input)?; // consume
                 Ok(InstructionPrefix::from_bytes(first, second))
-            } else {
+            }
+            else {
                 Ok(InstructionPrefix::from_byte(first))
             }
-        } else {
+        }
+        else {
             Ok(InstructionPrefix::from_byte(first))
         }
     }
-
 }
 
 fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
-    let prefix = cut_err(parse_instruction_prefix.context(StrContext::Label("Instruction prefix"))).parse_next(input)?;
+    let prefix = cut_err(parse_instruction_prefix.context(StrContext::Label("Instruction prefix")))
+        .parse_next(input)?;
     let opcode = cut_err(any.context(StrContext::Label("Opcode"))).parse_next(input)?;
     let repr = prefix.disassembler_table()[opcode as usize];
 
     let coded_operands = if prefix.requires_extra_expression(opcode) {
-        let param = cut_err(parse_sized_expression.context(StrContext::Expected(StrContextValue::Description("Expression member for set/res/bit ?; (hl)")))).parse_next(input)?;
+        let param = cut_err(parse_sized_expression.context(StrContext::Expected(
+            StrContextValue::Description("Expression member for set/res/bit ?; (hl)")
+        )))
+        .parse_next(input)?;
         vec![param]
-    } else {
-
+    }
+    else {
         let kinds = z80str_to_expressions_list(repr);
         let mut coded_operands = Vec::with_capacity(kinds.len());
         for _kind in kinds {
@@ -2673,14 +2753,11 @@ fn parse_instruction(input: &mut Input) -> OrgamsParseResult<Instruction> {
         coded_operands
     };
 
-
-
     Ok(Instruction {
         prefix,
         opcode,
         coded_operands
     })
-
 }
 
 /// Parse the arguments of a macro definition.
@@ -2750,27 +2827,23 @@ fn parse_macro_use(input: &mut Input) -> OrgamsParseResult<Statement> {
     let length = cut_err(any).parse_next(input)? as usize;
 
     let input_start = input.checkpoint();
-    let name = 
-        parse_unsized_expression
-            .context(StrContext::Expected(StrContextValue::Description(
-                "Macro name"
-            )))
-            .parse_next(input)
-    ?;
+    let name = parse_unsized_expression
+        .context(StrContext::Expected(StrContextValue::Description(
+            "Macro name"
+        )))
+        .parse_next(input)?;
     let mut args = Vec::new();
     while input.offset_from(&input_start) < length - 1 {
-        let arg = 
-            cut_err(parse_unsized_expression.context(StrContext::Expected(
-                StrContextValue::Description("Macro argument")
-            )))
-            .parse_next(input)
-        ?;
+        let arg = cut_err(parse_unsized_expression.context(StrContext::Expected(
+            StrContextValue::Description("Macro argument")
+        )))
+        .parse_next(input)?;
         args.push(arg);
     }
 
     expect_end_marker(input)?;
     let bytes_consumed = input.offset_from(&input_start);
-        if bytes_consumed != length {
+    if bytes_consumed != length {
         let mut err = ContextError::new();
         err.push(StrContext::Expected(StrContextValue::Description(
             "Wrong macro length consummed"
@@ -2786,9 +2859,7 @@ fn parse_sized_text(input: &mut Input) -> OrgamsParseResult<SizedString> {
     // Read size byte
     let size = any.parse_next(input)? as usize;
     let text_bytes: Vec<u8> = cut_err(take(size)).parse_next(input)?.to_vec();
-    Ok(SizedString(
-        OrgamsEncodedString(text_bytes)
-    ))
+    Ok(SizedString(OrgamsEncodedString(text_bytes)))
 }
 
 fn parse_bit7on_text(input: &mut Input) -> OrgamsParseResult<Bit7OnString> {

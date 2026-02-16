@@ -243,7 +243,7 @@ where T: ExprElement
     fn fix_relative_value(&mut self) {
         self.as_mut().fix_relative_value()
     }
-    
+
     fn symbols(&self) -> std::collections::HashSet<String> {
         self.as_ref().symbols()
     }
@@ -324,7 +324,7 @@ pub trait ExprElement: Sized {
     fn fix_relative_value(&mut self);
 
     fn to_expr(&self) -> Cow<'_, Expr>;
-    
+
     /// Returns all symbol names (labels) used in this expression
     fn symbols(&self) -> std::collections::HashSet<String>;
 }
@@ -812,22 +812,27 @@ impl ExprElement for Expr {
             _ => unreachable!()
         }
     }
-    
+
     fn symbols(&self) -> std::collections::HashSet<String> {
         use std::collections::HashSet;
-        
+
         let mut symbols = HashSet::new();
-        
+
         match self {
             // Base cases: no symbols
-            Self::Value(_) | Self::Float(_) | Self::Char(_) | Self::Bool(_) | 
-            Self::String(_) | Self::RelativeDelta(_) | Self::Rnd => {},
-            
+            Self::Value(_)
+            | Self::Float(_)
+            | Self::Char(_)
+            | Self::Bool(_)
+            | Self::String(_)
+            | Self::RelativeDelta(_)
+            | Self::Rnd => {},
+
             // Label is a symbol
             Self::Label(label) | Self::PrefixedLabel(_, label) => {
                 symbols.insert(label.to_string());
             },
-            
+
             // Recursive cases
             Self::List(exprs) => {
                 for expr in exprs {
@@ -840,7 +845,7 @@ impl ExprElement for Expr {
             Self::UnaryOperation(_, expr) => {
                 symbols.extend(expr.symbols());
             },
-            Self::UnaryTokenOperation(_, _) => {
+            Self::UnaryTokenOperation(..) => {
                 // Token operations don't contain user symbols
             },
             Self::BinaryOperation(_, expr1, expr2) => {
@@ -858,9 +863,9 @@ impl ExprElement for Expr {
                 for arg in args {
                     symbols.extend(arg.symbols());
                 }
-            },
+            }
         }
-        
+
         symbols
     }
 }

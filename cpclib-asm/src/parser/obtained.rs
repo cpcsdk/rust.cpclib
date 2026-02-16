@@ -459,7 +459,7 @@ impl ExprElement for LocatedExpr {
             _ => unreachable!()
         }
     }
-    
+
     fn symbols(&self) -> std::collections::HashSet<String> {
         // Delegate to the Expr implementation after converting
         self.to_expr().symbols()
@@ -1434,16 +1434,16 @@ impl ListingElement for LocatedToken {
     fn assembler_control_get_listing(&self) -> &[Self] {
         self.assembler_control_command().get_listing()
     }
-    
+
     /// Override symbols() to safely extract symbols without going through problematic delegates
     fn symbols(&self) -> std::collections::HashSet<String> {
         use std::collections::HashSet;
-        
+
         // Skip comments and labels - they're definitions, not references
         if self.is_comment() || self.is_label() || self.is_macro_definition() {
             return HashSet::new();
         }
-        
+
         // Extract symbols by pattern matching on the inner token directly
         match &self.inner {
             either::Left(token) => {
@@ -1472,14 +1472,14 @@ impl ListingElement for LocatedTokenInner {
     /// Override symbols() to extract symbols without requiring full to_token() conversion
     fn symbols(&self) -> std::collections::HashSet<String> {
         use std::collections::HashSet;
-        
+
         let mut symbols = HashSet::new();
-        
+
         // Extract symbols based on the variant type directly
         match self {
             // Skip comments and label definitions - they're definitions, not references
             Self::Comment(_) | Self::Label(_) | Self::Macro { .. } => {},
-            
+
             // Expression-based tokens
             Self::Org { val1, val2 } => {
                 symbols.extend(val1.symbols());
@@ -1510,7 +1510,7 @@ impl ListingElement for LocatedTokenInner {
             },
             Self::Switch(expr, cases, _) => {
                 symbols.extend(expr.symbols());
-                for (case_expr, _, _) in cases {
+                for (case_expr, ..) in cases {
                     symbols.extend(case_expr.symbols());
                 }
             },
@@ -1526,7 +1526,9 @@ impl ListingElement for LocatedTokenInner {
                     }
                 }
             },
-            Self::For { start, stop, step, .. } => {
+            Self::For {
+                start, stop, step, ..
+            } => {
                 symbols.extend(start.symbols());
                 symbols.extend(stop.symbols());
                 if let Some(step) = step {
@@ -1548,7 +1550,13 @@ impl ListingElement for LocatedTokenInner {
             Self::Rorg(expr, _) => {
                 symbols.extend(expr.symbols());
             },
-            Self::Incbin { fname, offset, length, extended_offset, .. } => {
+            Self::Incbin {
+                fname,
+                offset,
+                length,
+                extended_offset,
+                ..
+            } => {
                 symbols.extend(fname.symbols());
                 if let Some(offset) = offset {
                     symbols.extend(offset.symbols());
@@ -1560,7 +1568,7 @@ impl ListingElement for LocatedTokenInner {
                     symbols.extend(extended_offset.symbols());
                 }
             },
-            Self::Include(fname, _, _) => {
+            Self::Include(fname, ..) => {
                 symbols.extend(fname.symbols());
             },
             Self::Defb(exprs) | Self::Defw(exprs) => {
@@ -1593,7 +1601,17 @@ impl ListingElement for LocatedTokenInner {
             Self::OutputFile(expr) => {
                 symbols.extend(expr.symbols());
             },
-            Self::Breakpoint { address, mask, size, value, value_mask, condition, name, step, .. } => {
+            Self::Breakpoint {
+                address,
+                mask,
+                size,
+                value,
+                value_mask,
+                condition,
+                name,
+                step,
+                ..
+            } => {
                 if let Some(address) = address {
                     symbols.extend(address.symbols());
                 }
@@ -1622,7 +1640,7 @@ impl ListingElement for LocatedTokenInner {
             // For other tokens, skip - they don't contain symbol references
             _ => {}
         }
-        
+
         symbols
     }
 

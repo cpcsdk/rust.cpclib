@@ -1,5 +1,4 @@
 use std::fmt;
-use fs_err::File;
 use std::io::Read;
 use std::iter::Iterator;
 use std::str::FromStr;
@@ -13,6 +12,7 @@ use cpclib_common::winnow::combinator::{
 use cpclib_common::winnow::{ModalResult, Parser};
 /// Parser of the disc configuraiton used by the Arkos Loader
 use custom_error::custom_error;
+use fs_err::File;
 use itertools::Itertools;
 
 use crate::disc::Disc;

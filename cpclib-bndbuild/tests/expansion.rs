@@ -1,7 +1,6 @@
-use fs_err as fs;
-
 use camino::Utf8Path;
 use cpclib_bndbuild::BndBuilder;
+use fs_err as fs;
 
 #[test]
 fn test_expansion_of_at_in_command() {

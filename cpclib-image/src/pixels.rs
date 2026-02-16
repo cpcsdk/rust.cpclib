@@ -17,11 +17,11 @@ pub fn bytes_to_pens<'bytes>(
     Box::new(bytes.iter().flat_map(move |&byte| byte_to_pens(byte, mode)))
 }
 
-pub fn pens_to_vec(pens: &[Pen], mode: Mode) -> Vec<u8> {
+pub fn pens_to_bytes(pens: &[Pen], mode: Mode) -> Vec<u8> {
     match mode {
-        Mode::Zero => mode0::pens_to_vec_with_crop(pens),
-        Mode::One => mode1::pens_to_vec_with_crop(pens),
-        Mode::Two => mode2::pens_to_vec_with_crop(pens),
+        Mode::Zero => mode0::pens_to_bytes_with_crop(pens),
+        Mode::One => mode1::pens_to_bytes_with_crop(pens),
+        Mode::Two => mode2::pens_to_bytes_with_crop(pens),
         _ => unimplemented!()
     }
 }
@@ -112,7 +112,7 @@ pub mod mode2 {
     }
 
     /// Convert a vector of pens into a vector of bytes
-    pub fn pens_to_vec_with_crop(pens: &[Pen]) -> Vec<u8> {
+    pub fn pens_to_bytes_with_crop(pens: &[Pen]) -> Vec<u8> {
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 8) {
             res.push(pens_to_byte(
@@ -295,7 +295,7 @@ pub mod mode1 {
 
     /// Convert a vector of pens into a vector of bytes.
     /// Crop extra pens that do not enter in a byte
-    pub fn pens_to_vec_with_crop(pens: &[Pen]) -> Vec<u8> {
+    pub fn pens_to_bytes_with_crop(pens: &[Pen]) -> Vec<u8> {
         let mut res = Vec::new();
         for idx in 0..(pens.len() / 4) {
             res.push(pens_to_byte(
@@ -513,7 +513,7 @@ pub mod mode0 {
 
     /// Convert a vector of pens into a vector of bytes.
     /// In case of an odd number of pens, the last one is lost
-    pub fn pens_to_vec_with_crop(pens: &[Pen]) -> Vec<u8> {
+    pub fn pens_to_bytes_with_crop(pens: &[Pen]) -> Vec<u8> {
         let mut res = Vec::with_capacity(pens.len());
         for idx in 0..(pens.len() / 2) {
             res.push(pens_to_byte(pens[idx * 2 + 0], pens[idx * 2 + 1]));

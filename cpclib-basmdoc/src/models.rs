@@ -1,8 +1,9 @@
 //! Data models for documentation generation
 
-use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 
 /// A documented item (symbol, file, macro, function, etc.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,9 +15,17 @@ pub enum DocumentedItem {
     /// A documentation of an EQU symbol
     Equ(String, String),
     /// A documentation of a macro definition
-    Macro { name: String, arguments: Vec<String>, content: String },
+    Macro {
+        name: String,
+        arguments: Vec<String>,
+        content: String
+    },
     /// A documentation of a function definition
-    Function { name: String, arguments: Vec<String>, content: String },
+    Function {
+        name: String,
+        arguments: Vec<String>,
+        content: String
+    },
     /// The full source code of a file
     Source(String),
     /// A syntax error encountered during parsing
@@ -60,7 +69,9 @@ impl DocumentedItem {
             DocumentedItem::Function { name, .. } => format!("function_{}", name),
             DocumentedItem::File(f) => format!("file_{}", f.replace(['/', '\\', '.'], "_")),
             DocumentedItem::Source(_) => format!("source_{}", fname.replace(['/', '\\', '.'], "_")),
-            DocumentedItem::SyntaxError(_) => format!("syntax_error_{}", fname.replace(['/', '\\', '.'], "_")),
+            DocumentedItem::SyntaxError(_) => {
+                format!("syntax_error_{}", fname.replace(['/', '\\', '.'], "_"))
+            },
         }
     }
 }
@@ -71,66 +82,85 @@ pub struct UndocumentedConfig {
     pub macros: bool,
     pub functions: bool,
     pub labels: bool,
-    pub equs: bool,
+    pub equs: bool
 }
 
 impl UndocumentedConfig {
-    pub fn all() -> Self { Self { macros: true, functions: true, labels: true, equs: true } }
-    pub fn none() -> Self { Self { macros: false, functions: false, labels: false, equs: false } }
+    pub fn all() -> Self {
+        Self {
+            macros: true,
+            functions: true,
+            labels: true,
+            equs: true
+        }
+    }
+
+    pub fn none() -> Self {
+        Self {
+            macros: false,
+            functions: false,
+            labels: false,
+            equs: false
+        }
+    }
+
     pub fn should_include(&self, item: &DocumentedItem) -> bool {
         match item {
             DocumentedItem::Macro { .. } => self.macros,
             DocumentedItem::Function { .. } => self.functions,
             DocumentedItem::Label { .. } => self.labels,
             DocumentedItem::Equ { .. } => self.equs,
-            _ => true,
+            _ => true
         }
     }
 }
 
 impl Default for UndocumentedConfig {
-    fn default() -> Self { Self::none() }
+    fn default() -> Self {
+        Self::none()
+    }
 }
 
 /// A reference to where a symbol is used
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SymbolReference {
-    #[serde(serialize_with = "serialize_arc_str", deserialize_with = "deserialize_arc_str")]
+    #[serde(
+        serialize_with = "serialize_arc_str",
+        deserialize_with = "deserialize_arc_str"
+    )]
     pub source_file: Arc<str>,
     pub line_number: usize,
-    #[serde(serialize_with = "serialize_cow_str", deserialize_with = "deserialize_cow_str")]
+    #[serde(
+        serialize_with = "serialize_cow_str",
+        deserialize_with = "deserialize_cow_str"
+    )]
     pub context: Cow<'static, str>,
-    #[serde(serialize_with = "serialize_arc_str", deserialize_with = "deserialize_arc_str")]
+    #[serde(
+        serialize_with = "serialize_arc_str",
+        deserialize_with = "deserialize_arc_str"
+    )]
     pub highlighted_context: Arc<str>
 }
 
 // Helper functions for Arc<str> serialization
 fn serialize_arc_str<S>(arc: &Arc<str>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
+where S: serde::Serializer {
     serializer.serialize_str(arc)
 }
 
 fn deserialize_arc_str<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
+where D: serde::Deserializer<'de> {
     String::deserialize(deserializer).map(|s| Arc::from(s.as_str()))
 }
 
 // Helper functions for Cow<str> serialization
 fn serialize_cow_str<S>(cow: &Cow<'static, str>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
+where S: serde::Serializer {
     serializer.serialize_str(cow)
 }
 
 fn deserialize_cow_str<'de, D>(deserializer: D) -> Result<Cow<'static, str>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
+where D: serde::Deserializer<'de> {
     String::deserialize(deserializer).map(|s| Cow::Owned(s))
 }
 
@@ -160,7 +190,7 @@ impl ItemDocumentation {
         doc: String,
         source_file: String,
         display_source_file: String,
-        line_number: usize,
+        line_number: usize
     ) -> Self {
         Self {
             item,
@@ -180,14 +210,14 @@ impl ItemDocumentation {
     pub fn macro_source(&self) -> String {
         match &self.item {
             DocumentedItem::Macro { content, .. } => content.clone(),
-            _ => String::new(),
+            _ => String::new()
         }
     }
 
     pub fn function_source(&self) -> String {
         match &self.item {
             DocumentedItem::Function { content, .. } => content.clone(),
-            _ => String::new(),
+            _ => String::new()
         }
     }
 
@@ -195,11 +225,15 @@ impl ItemDocumentation {
         match &self.item {
             DocumentedItem::Label(label) => format!("{}", label),
             DocumentedItem::Equ(name, value) => format!("{} EQU {}", name, value),
-            DocumentedItem::Macro { name, arguments, .. } => format!("{}({})", name, arguments.join(", ")),
-            DocumentedItem::Function { name, arguments, .. } => format!("{}({})", name, arguments.join(", ")),
+            DocumentedItem::Macro {
+                name, arguments, ..
+            } => format!("{}({})", name, arguments.join(", ")),
+            DocumentedItem::Function {
+                name, arguments, ..
+            } => format!("{}({})", name, arguments.join(", ")),
             DocumentedItem::File(fname) => format!("{}", fname),
             DocumentedItem::Source(_) => "Source".to_string(),
-            DocumentedItem::SyntaxError(_) => "Syntax Error".to_string(),
+            DocumentedItem::SyntaxError(_) => "Syntax Error".to_string()
         }
     }
 
@@ -211,7 +245,7 @@ impl ItemDocumentation {
             DocumentedItem::Function { name, .. } => name.clone(),
             DocumentedItem::File(content) => content.clone(),
             DocumentedItem::Source(_) => "Source".to_string(),
-            DocumentedItem::SyntaxError(_) => "Syntax Error".to_string(),
+            DocumentedItem::SyntaxError(_) => "Syntax Error".to_string()
         }
     }
 
