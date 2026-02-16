@@ -45,7 +45,7 @@ impl<E: EventObserver> CpRunner<E> {
 impl<E: EventObserver> Runner for CpRunner<E> {
     type EventObserver = E;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], _o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let mut errors = String::new();
 
         let fnames = itr
@@ -57,8 +57,16 @@ impl<E: EventObserver> Runner for CpRunner<E> {
         let dest = files.last();
 
         let copy = |from: &Utf8Path, to: &Utf8Path, error: &mut String| {
+            let to = if to.is_dir() {
+                to.join(from.file_name().unwrap())
+            }
+            else {
+                to.to_path_buf()
+            };
+
             fs_err::copy(from, to)
                 .map_err(|e| error.push_str(&format!("Error when copying {from} to {to}. {e}.\n")))
+                .map(|success| o.emit_stdout(&format!("Copied {from} to {to} ({success} bytes).")))
         };
 
         match files.len() {
