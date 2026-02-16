@@ -302,7 +302,6 @@ fn main() {
 1260 WINDOW 28,35,19,20
         "#
         ),
-
         (
             "CRTC.BAS",
             r#"10 PRINT " ";:BORDER 0, 0:PEN 1:MODE 1
@@ -369,7 +368,7 @@ fn main() {
 620 WINDOW 27, 39, 12, 22
 630 LOCATE 28, 2
 "#
-        )
+        ),
     ];
 
     // --- Original single-demo code ---

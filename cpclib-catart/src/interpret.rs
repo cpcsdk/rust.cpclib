@@ -143,12 +143,13 @@ impl Mode {
         match self {
             Mode::Mode0 => 16, // Mode 0 supports 16 colors (pens 0-15)
             Mode::Mode1 => 4,  // Mode 1 supports 4 colors (pens 0-3)
-            Mode::Mode2 => 2,  // Mode 2 supports 2 colors (pens 0-1)
+            Mode::Mode2 => 2   // Mode 2 supports 2 colors (pens 0-1)
         }
     }
 }
 
 use bon::{self, builder};
+use cpclib_common::smallvec::SmallVec;
 use cpclib_image::ga::{Palette, Pen};
 use cpclib_image::pixels;
 
@@ -235,7 +236,7 @@ impl BasicMemoryScreen {
     fn get_paper_pattern(pen: Pen, mode: cpclib_image::image::Mode) -> u8 {
         // Create a pattern of 8 pixels all with the same pen color
         let pens = vec![pen; 8];
-        let bytes = pixels::pens_to_vec(&pens, mode);
+        let bytes = pixels::pens_to_bytes(&pens, mode);
         bytes[0] // Return first byte (pattern repeats)
     }
 
@@ -288,9 +289,17 @@ impl BasicMemoryScreen {
 
     /// Write a character at the given position (x, y in character coordinates)
     /// If transparent is true, the character is overlaid on existing pixels (transparent mode)
-    pub fn write_char(&mut self, ch: u8, x: u16, y: u16, pen: Pen, paper: Pen, transparent: bool) {
+    pub fn write_char(
+        &mut self,
+        ch: u8,
+        char_x: u16,
+        char_y: u16,
+        pen: Pen,
+        paper: Pen,
+        transparent: bool
+    ) {
         // CPC coordinates are 1-based, so we need to check for valid values
-        if x == 0 || y == 0 {
+        if char_x == 0 || char_y == 0 {
             return; // Invalid coordinates, do nothing
         }
 
@@ -298,80 +307,84 @@ impl BasicMemoryScreen {
         let pen = self.clamp_pen_for_mode(pen);
         let paper = self.clamp_pen_for_mode(paper);
 
+        // Calculate how many bytes we need for this character line
+        let char_width_in_bytes = self.mode.nb_bytes_for_char();
+
         // Get the character bitmap for this locale
-        let bitmap = self.get_char_bitmap(ch);
+        let char_bitmap = self.get_char_bitmap(ch);
+        let char_pens: SmallVec<[[Pen; 8]; 8]> = char_bitmap
+            .iter()
+            .map(|&line| Self::bitmap_to_pens(line, pen, paper))
+            .collect();
 
-        // For each of the 8 lines in the character
-        for line_idx in 0..8 {
-            // Convert bitmap line to pens
-            let char_pens = Self::bitmap_to_pens(bitmap[line_idx], pen, paper);
+        let bloc_x = (char_x - 1) * char_width_in_bytes as u16;
+        let bloc_y = char_y - 1;
 
-            // Calculate memory offset for this line using CRTC R12R13 offset
-            // CPC memory layout: character rows are 80 bytes apart, pixel lines within char are 0x800 bytes apart
-            let pixel_y = (y - 1) * 8 + line_idx as u16; // Convert to pixel row
-            let base_addr = (0x800 * (pixel_y % 8) + 80 * (pixel_y / 8)) as usize;
-            let addr = base_addr;
+        // we treat column per colummn (so 1 byte)
+        for bloc_x_delta in 0 as u16..char_width_in_bytes as u16 {
+            let bloc_addr = self.address_for_byte_bloc(bloc_x_delta + bloc_x, bloc_y) as usize;
+            for line_idx in 0..8 {
+                // Convert bitmap line to pens
+                let char_pens = &char_pens[line_idx];
 
-            // Calculate byte position within the line based on x position and mode
-            let char_x = (x - 1) as usize;
-            // Mode 0 requires special handling: multiply x by 4
-            let byte_offset = match self.mode {
-                cpclib_image::image::Mode::Zero => char_x * 4,
-                _ => char_x * self.bytes_per_char()
-            };
-            // Apply CRTC R12R13 offset: physical_address = (base + offset + 2*R12R13) % 0x4000
-            let final_addr =
-                ((addr + byte_offset) + (2 * self.r12r13 as usize)) % CPC_SCREEN_MEMORY_SIZE;
+                let byte_addr = (bloc_addr + 0x800 * line_idx) as usize;
+                assert!(
+                    byte_addr < CPC_SCREEN_MEMORY_SIZE,
+                    "Calculated byte address out of bounds"
+                );
 
-            // Calculate how many bytes we need for this character line
-            let bytes_needed = match self.mode {
-                cpclib_image::image::Mode::Zero => 4,
-                cpclib_image::image::Mode::One => 2,
-                cpclib_image::image::Mode::Two => 1,
-                _ => 2
-            };
-
-            // Write the bytes to memory
-            if final_addr + bytes_needed <= CPC_SCREEN_MEMORY_SIZE {
-                if transparent {
+                // Write the bytes to memory
+                let screen_byte = if transparent {
                     // Transparent mode: merge with existing pixels
                     // Read existing bytes from memory
-                    let existing_bytes = &self.memory[final_addr..final_addr + bytes_needed];
+                    let existing_byte = self.memory[byte_addr];
 
                     // Convert existing bytes to pens
-                    let existing_pens: Vec<Pen> = pixels::bytes_to_pens(existing_bytes, self.mode)
-                        .take(8)
-                        .collect();
+                    let existing_pens: SmallVec<[Pen; 8]> =
+                        pixels::byte_to_pens(existing_byte, self.mode).collect();
+                    debug_assert_eq!(
+                        existing_pens.len(),
+                        self.mode.nb_pixels_per_byte(),
+                        "Expected exactly {} pens for a character line",
+                        self.mode.nb_pixels_per_byte()
+                    );
 
                     // Merge: for each pixel, use char pen if bitmap bit is set, otherwise keep existing pen
-                    let mut merged_pens = [pen; 8];
-                    for i in 0..8 {
-                        let mask = 1 << (7 - i);
-                        if (bitmap[line_idx] & mask) != 0 {
-                            // Bitmap pixel is set: use character pen
-                            merged_pens[i] = pen;
-                        }
-                        else {
-                            // Bitmap pixel is not set: keep existing pixel (transparent)
-                            merged_pens[i] = existing_pens.get(i).copied().unwrap_or(paper);
-                        }
-                    }
+                    let mut merged_pens: SmallVec<[Pen; 8]> = existing_pens
+                        .iter()
+                        .enumerate()
+                        .map(|(i, current_pen)| {
+                            let mask = 1 << (7 - i);
+                            if (char_bitmap[line_idx] & mask) != 0 {
+                                // Bitmap pixel is set: use character pen
+                                pen
+                            }
+                            else {
+                                // Bitmap pixel is not set: keep existing pixel (transparent)
+                                *current_pen
+                            }
+                        })
+                        .collect();
 
                     // Convert merged pens back to bytes
-                    let merged_bytes = pixels::pens_to_vec(&merged_pens, self.mode);
+                    let merged_bytes: Vec<u8> = pixels::pens_to_bytes(&merged_pens, self.mode);
+                    assert_eq!(merged_bytes.len(), 1, "We treat one byte at a time, expected exactly 1 byte for merged character line");
 
-                    // Write merged bytes
-                    for (i, &byte) in merged_bytes.iter().enumerate().take(bytes_needed) {
-                        self.memory[final_addr + i] = byte;
-                    }
+                    merged_bytes[0]
                 }
                 else {
+                    let bloc_x_delta = bloc_x_delta as usize;
+                    let nb_pix_per_byte = self.mode.nb_pixels_per_byte();
                     // Opaque mode: write character directly with pen/paper
-                    let bytes = pixels::pens_to_vec(&char_pens, self.mode);
-                    for (i, &byte) in bytes.iter().enumerate().take(bytes_needed) {
-                        self.memory[final_addr + i] = byte;
-                    }
-                }
+                    let bytes = pixels::pens_to_bytes(&char_pens[bloc_x_delta*nb_pix_per_byte..((bloc_x_delta+1)*nb_pix_per_byte)], self.mode);
+                    assert_eq!(
+                        bytes.len(),
+                        1,
+                        "We treat one byte at a time, expected exactly 1 byte for character line"
+                    );
+                    bytes[0]
+                };
+                self.memory[byte_addr] = screen_byte;
             }
         }
     }
@@ -541,7 +554,20 @@ impl BasicMemoryScreen {
 
     /// Hardware scroll up: increment R12R13 by 40 (one character line)
     pub fn hardware_scroll_up(&mut self) {
-        self.r12r13 = (self.r12r13 + 40) % (0x4000 / 2); // Wrap at 0x2000 (half of 0x4000 since R12R13 is in words)
+        self.r12r13 = (self.r12r13 + 40) & 0x3FF; // Wrap at 0x2000 (half of 0x4000 since R12R13 is in words)
+    }
+
+    /// A bloc is one byte width and 8 line tall.
+    /// A mode 1 char is made of 2 blocs
+    pub fn address_for_byte_bloc(&self, bloc_x: u16, bloc_y: u16) -> u16 {
+        assert!(
+            bloc_x < 80 && bloc_y < 25,
+            "Character coordinates out of bounds"
+        );
+
+        let delta = bloc_y * 80 + bloc_x;
+        let address = (self.r12r13() * 2 + delta) & 0x7FF;
+        address
     }
 
     /// Clear a specific character line with paper color
@@ -792,12 +818,6 @@ impl Interpreter {
     /// Write a character to both text screen and pixel-accurate memory screen
     /// This centralizes the char writing logic and transparency handling
     fn write_char_to_screens(&mut self, ch: u8, x: u16, y: u16) {
-        if y == 1 || y == 2 {
-            eprintln!(
-                "write_char_to_screens: ch={:?} ({}) at ({}, {})",
-                ch as char, ch, x, y
-            );
-        }
         // Update text screen
         if let Some(cell) = self.screen.cell_mut(x, y) {
             cell.ch = ch;
@@ -1065,7 +1085,7 @@ impl Interpreter {
                 self.pen = Pen::from(*p);
             },
             CharCommand::Paper(p) if self.enable_vdu => {
-                let p = (*p)%self.mode().max_pens() as u8;
+                let p = (*p) % self.mode().max_pens() as u8;
                 self.paper = Pen::from(p);
             },
             CharCommand::Ink(pen, ink1, _ink2) if self.enable_vdu => {

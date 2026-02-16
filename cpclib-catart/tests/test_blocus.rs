@@ -140,7 +140,14 @@ fn test_simple_entries_distribution() {
         .map(|e| e.fname().display_name())
         .collect();
 
-    let expected_sorted = vec!["A       .BAS", "B       .BAS", "C       .BAS", "D       .BAS", "E       .BAS", "F       .BAS"];
+    let expected_sorted = vec![
+        "A       .BAS",
+        "B       .BAS",
+        "C       .BAS",
+        "D       .BAS",
+        "E       .BAS",
+        "F       .BAS",
+    ];
     println!("Sorted entries: {:?}", sorted_names);
     println!("Expected sorted: {:?}", expected_sorted);
 
@@ -156,7 +163,14 @@ fn test_simple_entries_distribution() {
     }
 
     // Now verify the display order matches the vertical fill pattern
-    let expected_display = vec!["A       .BAS", "D       .BAS", "B       .BAS", "E       .BAS", "C       .BAS", "F       .BAS"];
+    let expected_display = vec![
+        "A       .BAS",
+        "D       .BAS",
+        "B       .BAS",
+        "E       .BAS",
+        "C       .BAS",
+        "F       .BAS",
+    ];
     println!("\n=== Verification: Check Display Order (After Vertical Fill) ===");
     println!("Expected display: {:?}", expected_display);
     println!(

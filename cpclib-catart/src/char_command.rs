@@ -87,9 +87,10 @@ impl CharCommandList {
                 Err(missing) => {
                     let mut params = Vec::new();
                     for i in 0..missing {
-                        params.push(data.get(idx + 1 + i)
-                            .cloned()
-                            .unwrap_or_else(|| {eprintln!("missing byte"); 0xff}));
+                        params.push(data.get(idx + 1 + i).cloned().unwrap_or_else(|| {
+                            eprintln!("missing byte");
+                            0xFF
+                        }));
                     }
                     let cmd = match data[idx] {
                         SOH => CharCommand::PrintSymbol(params[0]),
@@ -109,12 +110,7 @@ impl CharCommandList {
                         SUB => CharCommand::Window(params[0], params[1], params[2], params[3]),
                         FS => CharCommand::Ink(params[0], params[1], params[2]),
                         GS => CharCommand::Border(params[0], params[1]),
-                        US => {
-                            CharCommand::Locate(
-                                params[0],
-                                params[1]
-                            )
-                        }, // catalog 1-based → CharCommand 0-based
+                        US => CharCommand::Locate(params[0], params[1]), /* catalog 1-based → CharCommand 0-based */
                         _ => panic!("Logic error in from_bytes for char {}", data[idx])
                     };
                     list.push(cmd);
@@ -547,10 +543,17 @@ impl CharCommand {
             CharCommand::Pen(p) => Some(BasicCommand::Pen(*p)),
             CharCommand::Ink(p, i1, i2) => Some(BasicCommand::Ink(*p, *i1, Some(*i2))),
             CharCommand::Border(i1, i2) => Some(BasicCommand::Border(*i1, Some(*i2))),
-            CharCommand::Locate(c, l) => Some(BasicCommand::Locate(c.wrapping_add(1), l.wrapping_add(1))), /* CharCommand 0-based → BASIC 1-based */
+            CharCommand::Locate(c, l) => {
+                Some(BasicCommand::Locate(c.wrapping_add(1), l.wrapping_add(1)))
+            }, // CharCommand 0-based → BASIC 1-based
             CharCommand::Window(a, b, c, d) => {
-                Some(BasicCommand::Window(a.wrapping_add(1), b.wrapping_add(1), c.wrapping_add(1), d.wrapping_add(1)))
-            }, /* CharCommand 0-based → BASIC 1-based */
+                Some(BasicCommand::Window(
+                    a.wrapping_add(1),
+                    b.wrapping_add(1),
+                    c.wrapping_add(1),
+                    d.wrapping_add(1)
+                ))
+            }, // CharCommand 0-based → BASIC 1-based
             CharCommand::PrintSymbol(c) => {
                 Some(BasicCommand::PrintString(
                     PrintArgument::from(*c),
@@ -637,7 +640,7 @@ impl CharCommand {
                     PrintArgument::from(DC1),
                     PrintTerminator::None
                 ))
-            }
+            },
             _ => unimplemented!("to_basic_command not implemented for command {:?}", self)
         }
     }

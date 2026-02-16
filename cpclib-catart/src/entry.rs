@@ -701,7 +701,7 @@ impl<'cat> EntriesGrid<'cat> {
             };
             commands.extend(cmd);
             commands.add_newlines(2);
-            
+
             commands.extend(CharCommandList::from(
                 format!("Drive {}: user  {}", self.drive, self.user).as_bytes()
             ));
