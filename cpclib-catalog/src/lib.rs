@@ -361,15 +361,16 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
         let fname = entry.fname();
 
         let fname_bytes = [
-                fname.f1, fname.f2, fname.f3, fname.f4, fname.f5, fname.f6, fname.f7, fname.f8,
-                fname.e1, fname.e2, fname.e3
+            fname.f1, fname.f2, fname.f3, fname.f4, fname.f5, fname.f6, fname.f7, fname.f8,
+            fname.e1, fname.e2, fname.e3
         ];
 
         // Skip empty entries
         if fname.is_empty() {
             if let Some(&original_idx) = fname_to_idx.get(&fname_bytes) {
                 println!("Entry {}: (empty)", original_idx);
-            } else {
+            }
+            else {
                 unreachable!("Empty entry not found in original catalog bytes");
             }
             continue;
@@ -378,9 +379,8 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
         let original_idx = fname_to_idx.get(&fname_bytes).copied().unwrap_or(0);
 
         // Get the 8+3 bytes (without dot) as hexadecimal
-        let bytes_without_dot: Vec<String> = fname_bytes.iter()
-            .map(|b| format!("{:02X}", b))
-            .collect();
+        let bytes_without_dot: Vec<String> =
+            fname_bytes.iter().map(|b| format!("{:02X}", b)).collect();
 
         // Get the 8+1+3 bytes (with dot) for BASIC conversion
         let all_bytes = fname.all_generated_bytes();
@@ -400,11 +400,18 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
 
         // Print entry information
         println!("Entry {:<2}: {}", original_idx, bytes_without_dot.join(" "));
-        println!("          {}", std::str::from_utf8(&entry.all_generated_bytes()
-                                .iter().map(|&b| if b>=b' ' && b<=127 {b} else {b'?'})
-                                .collect::<Vec<u8>>()
-                    )        .unwrap_or("Invalid UTF-8"));
-    
+        println!(
+            "          {}",
+            std::str::from_utf8(
+                &entry
+                    .all_generated_bytes()
+                    .iter()
+                    .map(|&b| if b >= b' ' && b <= 127 { b } else { b'?' })
+                    .collect::<Vec<u8>>()
+            )
+            .unwrap_or("Invalid UTF-8")
+        );
+
         println!("          {}", printable_bytes);
 
         // Check if entry is hidden/system

@@ -2555,6 +2555,7 @@ dependencies = [
  "cpclib-crunch",
  "cpclib-disc",
  "cpclib-imgconverter",
+ "cpclib-locomotive",
  "cpclib-runner",
  "cpclib-sna",
  "cpclib-xfertool",
@@ -2822,6 +2823,18 @@ dependencies = [
  "exitcode",
  "fs-err",
  "notify 8.2.0",
+]
+
+[[package]]
+name = "cpclib-locomotive"
+version = "0.11.0"
+dependencies = [
+ "clap",
+ "cpclib-basic",
+ "cpclib-common",
+ "cpclib-disc",
+ "cpclib-files",
+ "fs-err",
 ]
 
 [[package]]

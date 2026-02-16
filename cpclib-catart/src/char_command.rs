@@ -134,7 +134,8 @@ impl CharCommandList {
     }
 
     pub fn to_basic_string(&self) -> String {
-        self.0.iter()
+        self.0
+            .iter()
             .map(|cmd| cmd.to_basic_string())
             .filter(|s| !s.is_empty())
             .join(":")

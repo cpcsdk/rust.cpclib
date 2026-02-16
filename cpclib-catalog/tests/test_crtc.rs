@@ -32,7 +32,7 @@ fn test_crtc_catart() {
 
     let catalog_basic_program = catalog_to_basic_listing(&binary_catalog, catalog_type)
         .expect("Unable to extract BASIC program from catalog");
-    
+
     eprintln!("{}", catalog_basic_program.to_string());
     let catalog_basic_command_list = BasicCommandList::try_from(&catalog_basic_program)
         .expect("Unable to get cat art commands from catalog BASIC");

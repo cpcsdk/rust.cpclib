@@ -24,6 +24,7 @@ members = [
   "cpclib-files",
   "cpclib-image",
   "cpclib-imgconverter",
+  "cpclib-locomotive",
   "cpclib-macros",
   "cpclib-orgams-ascii",
   "cpclib-runner", 
@@ -62,6 +63,7 @@ default-members = [
   "cpclib-files",
   "cpclib-image",
   "cpclib-imgconverter",
+  "cpclib-locomotive",
   "cpclib-macros",
   "cpclib-orgams-ascii",
   "cpclib-runner", 
@@ -108,6 +110,7 @@ cpclib-emucontrol = { version = "0.11.0", path = "cpclib-emucontrol", default-fe
 cpclib-files = { version = "0.11.0", path = "cpclib-files", default-features = false }
 cpclib-image = { version = "0.11.0", path = "cpclib-image", default-features = false }
 cpclib-imgconverter = { version = "0.11.0", path = "cpclib-imgconverter", default-features = false }
+cpclib-locomotive = { version = "0.11.0", path = "cpclib-locomotive", default-features = false }
 cpclib-macros = { version = "0.11.0", path = "cpclib-macros", default-features = false }
 cpclib-orgams-ascii = { version = "0.11.0", path = "cpclib-orgams-ascii", default-features = false }
 cpclib-runner = { version = "0.11.0", path = "cpclib-runner", default-features = false }

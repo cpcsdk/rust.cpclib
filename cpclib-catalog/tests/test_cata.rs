@@ -112,7 +112,8 @@ fn test_cata_catart() {
     );
 
     // Execute catalog BASIC program to generate screen memory
-    let catalog_char_commands = catalog_to_catart_commands(&binary_catalog, CatalogType::Cat).expect("Unable to build the catalog");
+    let catalog_char_commands = catalog_to_catart_commands(&binary_catalog, CatalogType::Cat)
+        .expect("Unable to build the catalog");
 
     eprintln!(
         "Total catalog CharCommands: {}",
@@ -187,7 +188,6 @@ fn test_cata_catart() {
     // Initialize as CPC 6128 with startup message as user requested
     let mut interpreter = Interpreter::new_6128();
 
-    
     interpreter
         .interpret(catalog_char_commands.iter(), true)
         .expect("Failed to interpret catalog BASIC commands");
@@ -216,7 +216,5 @@ fn test_cata_catart() {
         panic!("Screen memory mismatch - see PNG file for visual comparison");
     }
 
-
-    
     eprintln!("\n✅ Test passed - screen memory matches perfectly!");
 }

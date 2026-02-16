@@ -153,7 +153,7 @@ impl Catalog {
         let mut entries = Vec::new();
         for (entry_nb, commands) in grid
             .entries_display_order()
-            .map(|e| e.fname().commands() )// here we want the filename commands not the complete command
+            .map(|e| e.fname().commands()) // here we want the filename commands not the complete command
             .enumerate()
             .peekable()
         {
@@ -210,11 +210,14 @@ impl Catalog {
                 current_file.push(CharCommand::String(current_string.clone()));
             }
             entries.push(current_file);
-        }   
+        }
 
         let basic_str = entries
             .into_iter()
-            .map(|cmds: Vec<CharCommand>| cmds.into_iter().filter(|c| !matches!(c, CharCommand::GraphicsInkMode(b'.')))) // remove dot handling commands as they are not needed in BASIC and just add noise
+            .map(|cmds: Vec<CharCommand>| {
+                cmds.into_iter()
+                    .filter(|c| !matches!(c, CharCommand::GraphicsInkMode(b'.')))
+            }) // remove dot handling commands as they are not needed in BASIC and just add noise
             .map(|cmds| cmds.into_iter().map(|c| c.bytes()).flatten()) // convert to the stream of bytes
             .map(|bytes| CharCommandList::from_bytes(&bytes.collect::<Vec<u8>>())) // convert it back to the stram of command (this allows to merge various stuff)
             .map(|cmds| cmds.to_basic_string())

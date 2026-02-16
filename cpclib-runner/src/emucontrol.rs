@@ -1628,11 +1628,9 @@ pub struct EmuCli {
 
     #[arg(long, action=ArgAction::Append, help="List the ROMS to deactivate")]
     disable_rom: Vec<AmstradRom>,
- 
-    #[arg(long, action=ArgAction::Append, help="List the ROMS to deactivate")]
-    disable_rom: Vec<AmstradRom>,
 
-
+    #[arg(long, action=ArgAction::Append, help="List the ROMS to activate")]
+    enable_rom: Vec<AmstradRom>,
 
     #[command(subcommand)]
     command: Commands
@@ -1825,7 +1823,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             "OS",
             emu.configuration::<E>()
                 .cache_folder()
-                .join("private/firmware/OS6128_FR.rom")
+                .join("private/firmware/OS6128_FR.rom") // TODO handle different languages and versions (at least 6128 vs 464
         );
         ace_conf.set("KTRANS", 1);
         ace_conf.set("KGTRANS", 1);
@@ -1842,11 +1840,31 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             ),
             (AmstradRom::Orgams, &[("Orgams_FF240128.e0f", 15, None)])
         ];
+
+        // ensure we force unidos rom when using alibreo
+        if cli.albireo.is_some() {
+            if cli.disable_rom.contains(&AmstradRom::Unidos) {
+                return Err(
+                    "You cannot disable Unidos when using Albireo as it is required".to_string()
+                );
+            }
+            else if !cli.enable_rom.contains(&AmstradRom::Unidos) {
+                cli.enable_rom.push(AmstradRom::Unidos);
+            }
+        }
+
         // for fname in EmbeddedRoms::iter() {
         // println!("{fname}");
         // }
         for (kind, roms) in extra_roms {
             let remove = cli.disable_rom.contains(kind);
+            let install = cli.enable_rom.contains(kind);
+
+            if remove && install {
+                return Err(format!(
+                    "You cannot both enable and disable the same ROM {kind:?}. Make a choice between --enable-rom and --disable-rom"
+                ));
+            }
 
             // a minimum ammount of memory is required
             if !remove && kind == &AmstradRom::Orgams && cli.memory.is_none() {
@@ -1857,7 +1875,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 let dst = emu.roms_folder().join(rom);
                 let exists = dst.exists();
 
-                if !exists && !remove {
+                if !exists && install {
                     let src = format!("roms://{rom}");
                     println!("Install {src} in {dst}");
                     let data =
@@ -1872,7 +1890,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 if remove {
                     ace_conf.remove(&key);
                 }
-                else {
+                else if install {
                     ace_conf.set(key, dst.to_string());
                     if let Some(plugin) = plugin {
                         ace_conf.enable(*plugin);

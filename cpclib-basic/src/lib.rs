@@ -99,9 +99,13 @@ impl BasicLine {
     }
 
     pub fn complete_bytes_length(&self) -> u16 {
-        let end_marker_size = if self.tokens.last() == Some(&BasicToken::SimpleToken(BasicTokenNoPrefix::EndOfTokenisedLine)) {
+        let end_marker_size = if self.tokens.last()
+            == Some(&BasicToken::SimpleToken(
+                BasicTokenNoPrefix::EndOfTokenisedLine
+            )) {
             0 // EndOfTokenisedLine token already includes the 0x00 byte
-        } else {
+        }
+        else {
             1 // Need to add 0x00 byte
         };
         2 /*line size*/ + 2 /*line number*/ + self.tokens_bytes_length() /* tokens */ + end_marker_size
@@ -139,10 +143,14 @@ impl BasicLine {
             (self.line_number / 256) as u8,
         ];
         content.extend_from_slice(&self.tokens_as_bytes());
-        
+
         // Only add the end-of-line marker if the tokens don't already include it
         // (when parsing from binary, EndOfTokenisedLine is included; from text it's not)
-        if self.tokens.last() != Some(&BasicToken::SimpleToken(BasicTokenNoPrefix::EndOfTokenisedLine)) {
+        if self.tokens.last()
+            != Some(&BasicToken::SimpleToken(
+                BasicTokenNoPrefix::EndOfTokenisedLine
+            ))
+        {
             content.push(0);
         }
 
@@ -369,7 +377,8 @@ impl BasicProgram {
 
     /// remove useless space before/After instructions
     pub fn remove_useless_space(&mut self) {
-        self.lines.iter_mut()
+        self.lines
+            .iter_mut()
             .for_each(|line| line.remove_useless_space());
     }
 }

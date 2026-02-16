@@ -368,7 +368,11 @@ impl BasicMemoryScreen {
 
                     // Convert merged pens back to bytes
                     let merged_bytes: Vec<u8> = pixels::pens_to_bytes(&merged_pens, self.mode);
-                    assert_eq!(merged_bytes.len(), 1, "We treat one byte at a time, expected exactly 1 byte for merged character line");
+                    assert_eq!(
+                        merged_bytes.len(),
+                        1,
+                        "We treat one byte at a time, expected exactly 1 byte for merged character line"
+                    );
 
                     merged_bytes[0]
                 }
@@ -376,7 +380,11 @@ impl BasicMemoryScreen {
                     let bloc_x_delta = bloc_x_delta as usize;
                     let nb_pix_per_byte = self.mode.nb_pixels_per_byte();
                     // Opaque mode: write character directly with pen/paper
-                    let bytes = pixels::pens_to_bytes(&char_pens[bloc_x_delta*nb_pix_per_byte..((bloc_x_delta+1)*nb_pix_per_byte)], self.mode);
+                    let bytes = pixels::pens_to_bytes(
+                        &char_pens[bloc_x_delta * nb_pix_per_byte
+                            ..((bloc_x_delta + 1) * nb_pix_per_byte)],
+                        self.mode
+                    );
                     assert_eq!(
                         bytes.len(),
                         1,

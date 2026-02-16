@@ -89,7 +89,7 @@ impl InstructionPrefix {
                     "Invalid instruction prefix bytes: 0x{:02X} 0x{:02X}",
                     first, second
                 )
-            },
+            }
         }
     }
 

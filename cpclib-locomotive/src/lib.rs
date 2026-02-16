@@ -14,9 +14,9 @@
 
 use std::io::{Read, Write};
 
+pub use clap::{Parser, Subcommand};
 use cpclib_basic::BasicProgram;
 use cpclib_common::camino::Utf8PathBuf;
-pub use clap::{Parser, Subcommand};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
 use cpclib_files::FileAndSupport;
 use fs_err::File;
@@ -28,7 +28,7 @@ use fs_err::File;
 #[command(after_help = "Krusty/Benediction 2019-2026")]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Commands
 }
 
 #[derive(Subcommand, Debug)]
@@ -45,7 +45,7 @@ pub enum Commands {
 
         /// Add Amsdos header to the generated BASIC file
         #[arg(short = 'H', long)]
-        header: bool,
+        header: bool
     },
     /// Decode Amstrad BASIC binary to ASCII file
     Decode {
@@ -55,15 +55,19 @@ pub enum Commands {
 
         /// Output ASCII file (if not specified, prints to stdout)
         #[arg(short, long, value_name = "FILE")]
-        output: Option<Utf8PathBuf>,
-    },
+        output: Option<Utf8PathBuf>
+    }
 }
 
 pub fn handle_locomotive_arguments(cli: Cli) -> std::io::Result<()> {
     match cli.command {
-        Commands::Encode { input, output, header } => {
+        Commands::Encode {
+            input,
+            output,
+            header
+        } => {
             encode_command(&input, &output, header)?;
-        }
+        },
         Commands::Decode { input, output } => {
             decode_command(&input, output.as_ref())?;
         }
@@ -72,7 +76,11 @@ pub fn handle_locomotive_arguments(cli: Cli) -> std::io::Result<()> {
     Ok(())
 }
 
-fn encode_command(input: &Utf8PathBuf, output: &Utf8PathBuf, with_header: bool) -> std::io::Result<()> {
+fn encode_command(
+    input: &Utf8PathBuf,
+    output: &Utf8PathBuf,
+    with_header: bool
+) -> std::io::Result<()> {
     // Read the ASCII source file
     // TODO aad the ability to read files from supports
     let basic_content: String = {
@@ -83,8 +91,12 @@ fn encode_command(input: &Utf8PathBuf, output: &Utf8PathBuf, with_header: bool) 
     };
 
     // Parse the BASIC program
-    let basic_tokens = BasicProgram::parse(basic_content)
-        .map_err(|msg| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Unable to parse BASIC: {msg}")))?;
+    let basic_tokens = BasicProgram::parse(basic_content).map_err(|msg| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Unable to parse BASIC: {msg}")
+        )
+    })?;
 
     // Get the bytes of the BASIC program
     let basic_bytes = basic_tokens.as_bytes();
@@ -112,8 +124,12 @@ fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> std::io:
     let content = file.content();
 
     // Decode the BASIC program
-    let tokens = BasicProgram::decode(content.as_ref())
-        .map_err(|msg| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Error in the BASIC file: {msg}")))?;
+    let tokens = BasicProgram::decode(content.as_ref()).map_err(|msg| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Error in the BASIC file: {msg}")
+        )
+    })?;
 
     // Convert to ASCII representation
     let repr = tokens.to_string();
@@ -122,7 +138,8 @@ fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> std::io:
     if let Some(output_path) = output {
         let mut f = File::create(output_path)?;
         f.write_all(repr.as_bytes())?;
-    } else {
+    }
+    else {
         println!("{}", repr);
     }
 

@@ -71,7 +71,7 @@ impl DocumentedItem {
             DocumentedItem::Source(_) => format!("source_{}", fname.replace(['/', '\\', '.'], "_")),
             DocumentedItem::SyntaxError(_) => {
                 format!("syntax_error_{}", fname.replace(['/', '\\', '.'], "_"))
-            },
+            }
         }
     }
 }

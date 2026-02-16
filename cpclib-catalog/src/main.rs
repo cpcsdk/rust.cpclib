@@ -1,5 +1,6 @@
 use clap::Parser;
-use cpclib_catalog::{cli::CatalogApp, handle_catalog_command};
+use cpclib_catalog::cli::CatalogApp;
+use cpclib_catalog::handle_catalog_command;
 use simple_logger::SimpleLogger;
 
 #[allow(clippy::too_many_lines)]

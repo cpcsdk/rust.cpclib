@@ -24,23 +24,23 @@ use paste::paste;
 macro_rules! define_basic_char {
     ($hex_value:expr, $const_name:ident = $nb:expr, $basic_equiv:ident, $function_doc:expr) => {
         #[doc = concat!(
-                                    "Character code `0x",
-                                    stringify!($hex_value),
-                                    "` - BASIC equivalent: `",
-                                    stringify!($basic_equiv),
-                                    "`\n\n",
-                                    $function_doc
-                                )]
+                                            "Character code `0x",
+                                            stringify!($hex_value),
+                                            "` - BASIC equivalent: `",
+                                            stringify!($basic_equiv),
+                                            "`\n\n",
+                                            $function_doc
+                                        )]
         pub const $const_name: u8 = $hex_value;
 
         #[doc = concat!(
-                                    "Character code `0x",
-                                    stringify!($hex_value),
-                                    "` - BASIC equivalent: `",
-                                    stringify!($basic_equiv),
-                                    "`\n\n",
-                                    $function_doc
-                                )]
+                                            "Character code `0x",
+                                            stringify!($hex_value),
+                                            "` - BASIC equivalent: `",
+                                            stringify!($basic_equiv),
+                                            "`\n\n",
+                                            $function_doc
+                                        )]
         pub const $basic_equiv: u8 = $const_name;
 
         paste::item! {
@@ -58,11 +58,11 @@ macro_rules! define_basic_char {
 
     ($hex_value:expr, $const_name:ident = $nb:expr, $function_doc:expr) => {
         #[doc = concat!(
-                                    "Character code `0x",
-                                    stringify!($hex_value),
-                                    "`\n\n",
-                                    $function_doc
-                                )]
+                                            "Character code `0x",
+                                            stringify!($hex_value),
+                                            "`\n\n",
+                                            $function_doc
+                                        )]
         pub const $const_name: u8 = $hex_value;
 
         paste::item! {
