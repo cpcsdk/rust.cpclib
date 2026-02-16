@@ -12,17 +12,17 @@
 )]
 #![deny(clippy::pedantic)]
 
-use cpclib_common::camino::Utf8PathBuf;
-use cpclib_files::FileAndSupport;
-use fs_err::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use cpclib_basic::BasicProgram;
+use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::clap;
 /// ! Locomotive BASIC manipulation tool.
 use cpclib_common::clap::{Arg, ArgAction, Command};
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
+use cpclib_files::FileAndSupport;
+use fs_err::File;
 
 fn main() -> std::io::Result<()> {
     let matches = Command::new("locomotive")
@@ -102,7 +102,6 @@ fn main() -> std::io::Result<()> {
         let tokens = BasicProgram::decode(content.as_ref()).expect("Error in the basic file");
         let repr = tokens.to_string();
         println!("{}", repr);
-        
     }
     else {
         unreachable!()

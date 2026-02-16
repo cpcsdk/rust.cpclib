@@ -3,7 +3,6 @@
 
 use cpclib_basic::BasicProgram;
 
-
 /// Common test function: parses a BASIC program and checks reconstruction
 /// The `fixed_code` should have OCR errors already corrected by book-specific function
 pub fn test_basic_program(fixed_code: &str, description: &str, test_name: &str) {
@@ -11,17 +10,17 @@ pub fn test_basic_program(fixed_code: &str, description: &str, test_name: &str) 
     let blacklist = [
         // Example: "test_book_example_listing_001",
     ];
-    
+
     if blacklist.contains(&test_name) {
         println!("⊗ Skipped {} (blacklisted due to bad OCR)", test_name);
         return;
     }
-    
+
     match BasicProgram::parse(fixed_code) {
         Ok(parsed) => {
             let reconstructed = parsed.to_string();
             println!("✓ Parsed {}", description);
-        }
+        },
         Err(e) => {
             eprintln!("✗ Failed to parse {}", description);
             eprintln!("Error: {:?}", e);

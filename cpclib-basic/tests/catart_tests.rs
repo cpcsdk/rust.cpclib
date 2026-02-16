@@ -1,11 +1,9 @@
 /// The aim of this file is to test if we can parse/ptokenize
 /// minmal instructions needed for catart
-/// 
-
 
 #[test]
 pub fn test_voxy_hbl_facehug() {
-	let code = r###"10 MODE 2
+    let code = r###"10 MODE 2
 20 PAPER 0
 30 INK 0,0
 40 INK 1,26
@@ -30,16 +28,20 @@ pub fn test_voxy_hbl_facehug() {
 230 PRINT CHR$(34);
 250 WINDOW 37,48,20,21"###;
 
-	let tokens = cpclib_basic::BasicProgram::parse(code).expect("Tokenization failed");
-	let reconstruct = tokens.to_string();
+    let tokens = cpclib_basic::BasicProgram::parse(code).expect("Tokenization failed");
+    let reconstruct = tokens.to_string();
 
-	             for (i, (orig, recon)) in code.lines().zip(reconstruct.lines()).enumerate() {
-                    if orig != recon {
-                        eprintln!("Line {}: ", i+1);
-                        eprintln!("  Original:      {:?}", orig);
-                        eprintln!("  Reconstructed: {:?}", recon);
-                    }
-                }
+    for (i, (orig, recon)) in code.lines().zip(reconstruct.lines()).enumerate() {
+        if orig != recon {
+            eprintln!("Line {}: ", i + 1);
+            eprintln!("  Original:      {:?}", orig);
+            eprintln!("  Reconstructed: {:?}", recon);
+        }
+    }
 
-	assert_eq!(code.trim_ascii_end(), reconstruct.as_str().trim_ascii_end(), "Reconstructed code does not match original");
+    assert_eq!(
+        code.trim_ascii_end(),
+        reconstruct.as_str().trim_ascii_end(),
+        "Reconstructed code does not match original"
+    );
 }

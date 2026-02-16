@@ -51,17 +51,20 @@ fn test_blocus() {
     let content = std::fs::read("tests/TEST-CAT.BAS").unwrap();
     let mut content = &content[128..];
     let binary_tokens = BasicProgram::decode(content).expect("Error in the basic file");
-    
+
     let src_tokens = BasicProgram::parse(source).expect("Error in the basic file");
-    
+
     let bin_str = binary_tokens.to_string();
     let src_str = src_tokens.to_string();
-    
+
     if bin_str != src_str {
         // Find first difference
         for (i, (b, s)) in bin_str.chars().zip(src_str.chars()).enumerate() {
             if b != s {
-                eprintln!("First difference at position {}: binary={:?}, source={:?}", i, b, s);
+                eprintln!(
+                    "First difference at position {}: binary={:?}, source={:?}",
+                    i, b, s
+                );
                 let start = if i > 20 { i - 20 } else { 0 };
                 let end = (i + 50).min(bin_str.len());
                 eprintln!("Binary context: {:?}", &bin_str[start..end]);

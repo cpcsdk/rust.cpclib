@@ -14,6 +14,8 @@ use string_parser::parse_basic_program;
 use thiserror::Error;
 use tokens::BasicToken;
 
+use crate::tokens::BasicTokenNoPrefix;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Basic line index represtation. Can be by line number of position in the list
 pub enum BasicProgramLineIdx {
@@ -139,6 +141,22 @@ impl BasicLine {
 
     pub fn tokens(&self) -> &[BasicToken] {
         &self.tokens
+    }
+
+    pub fn remove_useless_space(&mut self) {
+        let space = Some(&BasicToken::SimpleToken(BasicTokenNoPrefix::CharSpace));
+
+        // Remove space tokens at the beginning of the line
+        while self.tokens.first() == space {
+            self.tokens.remove(0);
+        }
+
+        // Remove space tokens at the end of the line
+        while self.tokens.last() == space {
+            self.tokens.pop();
+        }
+
+        // TODO remove before after : tokens
     }
 }
 
@@ -336,6 +354,12 @@ impl BasicProgram {
         sna.unwrap_memory_chunks();
         sna.add_data(&bytes, 0x170).map_err(|e| format!("{e:?}"))?;
         Ok(sna)
+    }
+
+    /// remove useless space before/After instructions
+    pub fn remove_useless_space(&mut self) {
+        self.lines.iter_mut()
+            .for_each(|line| line.remove_useless_space());
     }
 }
 

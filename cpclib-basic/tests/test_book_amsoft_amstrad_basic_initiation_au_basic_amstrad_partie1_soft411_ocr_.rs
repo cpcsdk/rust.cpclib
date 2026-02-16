@@ -6,8 +6,7 @@ use common_book_tests::test_basic_program;
 
 /// Fix common OCR errors specific to this book
 fn fix_ocr_errors(code: &str) -> String {
-    code
-        .replace("DRAM ", "DRAW ")
+    code.replace("DRAM ", "DRAW ")
         .replace("DRAw ", "DRAW ")
         .replace("oRAw ", "DRAW ")
         .replace("DRAl›l ", "DRAW ")
@@ -43,7 +42,9 @@ macro_rules! basic_test {
 }
 
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_001, r##########"10 REM drawing a house (dessiner une maison)
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_001,
+    r##########"10 REM drawing a house (dessiner une maison)
 20 MODE 0
 30 CLS
 40 REM ** start ** (début)
@@ -105,9 +106,13 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 600 DRAM 320,130
 610 DRAH 380,130
 620 DRAH 380,70
-630 DRAM 320,70 Test Peut-êtresouhaitez-vousreparcourirlechapitre avant de passer le test SAT5. Nous avons vu jusqu'apresentbeaucoupdechosestrèsimpor- tantes en peu de temps, mais Pheure est venue d'aborder la programmation proprement dite."##########, "pages 39, 40, 41");
+630 DRAM 320,70 Test Peut-êtresouhaitez-vousreparcourirlechapitre avant de passer le test SAT5. Nous avons vu jusqu'apresentbeaucoupdechosestrèsimpor- tantes en peu de temps, mais Pheure est venue d'aborder la programmation proprement dite."##########,
+    "pages 39, 40, 41"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_002, r##########"10 Rem 3D Bar Chart (histogramme)
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_002,
+    r##########"10 Rem 3D Bar Chart (histogramme)
 20 REM by Dave Atherton
 30 MODE1
 40 BORDER1¿›:INK 0,14:INK1,0:INK 2,3:INK 3
@@ -145,15 +150,27 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 360 oRAw ×-b,a+55+b:oRAw ×+b,a+55+b
 370 DRM: ×,a+55:oRAu ×-b*2,a+55
 380 Move ×+b,a+b+55;oRAu ×+b, b+55
-390 DRAH ×,55:DRAl›l ×,55+a"##########, "pages 49, 50");
+390 DRAH ×,55:DRAl›l ×,55+a"##########,
+    "pages 49, 50"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_003, r##########"13 il LorsquevousavezrecoursàGOTO,lemot-clé Les machines font des fautes, les hommes -_ *.. --«UH ,_ IF peut vous étre trés utile. Il agit comme un commettent des erreurs. Nous avons déjà dit *In panneau indicateur pour guider le CPC464 que les ordinateurs ne pensent pas et que le lili4-.'ll . sQ r verslapartieduprogrammeparlaquelleildoit programmeurdoitétablirsespropres lignesde ft 1'. poursuivre. A supposer que vous vouliez que pensée; s'il se trompe, et cela peut trés bien ._' .LgI~l':.-'\_ ll. | l'ons'arréted'introduiredesnombressupérieurs arriverauxmeilleursd'entreeux,ilnepeuts'en cf' ,E | IJ'' - 1 1 '§*~*'1r* 3 à 295 dans le programme BARCHART, les rendrecomptequ'unefoisleprogrammepassé lignes suivantes se présenteront de la maniére dans Pappareil. Le CPC464 exécute les ordres ci-dessous: reçus méme si ceux-ci ne constituent pas toujours ce que le programmer avait prévu. 60INFUT "Amount (0290)”;a.
-65 IF aj, 2.90GOTO 60 Le“de-bugging” estleprocessusquiconsisteà parcourir un programme en en corrigeant les _]usqu'àcequ'unnombreinférieurouégalà290 erreurs de logique ou de compréhension. Ne soit introduit, le CPC464 peut se diriger au voussentezpashonteuxsivousintroduisezun mauvais endroit à la moindre erreur de votre programmecontenant des bugs (erreurs sur le part. Nous voici arrivés à point nommé à un ROM).Biensur,lesprogrammeurschevronnés mot classique du jargon-ordinateur: rencontrentmoinssouventdesbugsdansleurs programmes, mais il ne s'agit là que d'une questiondeconnaissancesetdepratique. Vous vous rendrez bientot compte que les bugs se montrentdemoins en moins souventdans vos programmes. 55"##########, "page 57");
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_003,
+    r##########"13 il LorsquevousavezrecoursàGOTO,lemot-clé Les machines font des fautes, les hommes -_ *.. --«UH ,_ IF peut vous étre trés utile. Il agit comme un commettent des erreurs. Nous avons déjà dit *In panneau indicateur pour guider le CPC464 que les ordinateurs ne pensent pas et que le lili4-.'ll . sQ r verslapartieduprogrammeparlaquelleildoit programmeurdoitétablirsespropres lignesde ft 1'. poursuivre. A supposer que vous vouliez que pensée; s'il se trompe, et cela peut trés bien ._' .LgI~l':.-'\_ ll. | l'ons'arréted'introduiredesnombressupérieurs arriverauxmeilleursd'entreeux,ilnepeuts'en cf' ,E | IJ'' - 1 1 '§*~*'1r* 3 à 295 dans le programme BARCHART, les rendrecomptequ'unefoisleprogrammepassé lignes suivantes se présenteront de la maniére dans Pappareil. Le CPC464 exécute les ordres ci-dessous: reçus méme si ceux-ci ne constituent pas toujours ce que le programmer avait prévu. 60INFUT "Amount (0290)”;a.
+65 IF aj, 2.90GOTO 60 Le“de-bugging” estleprocessusquiconsisteà parcourir un programme en en corrigeant les _]usqu'àcequ'unnombreinférieurouégalà290 erreurs de logique ou de compréhension. Ne soit introduit, le CPC464 peut se diriger au voussentezpashonteuxsivousintroduisezun mauvais endroit à la moindre erreur de votre programmecontenant des bugs (erreurs sur le part. Nous voici arrivés à point nommé à un ROM).Biensur,lesprogrammeurschevronnés mot classique du jargon-ordinateur: rencontrentmoinssouventdesbugsdansleurs programmes, mais il ne s'agit là que d'une questiondeconnaissancesetdepratique. Vous vous rendrez bientot compte que les bugs se montrentdemoins en moins souventdans vos programmes. 55"##########,
+    "page 57"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_004, r##########"55 print “Line 55 a= “;a Oui, nous voici de nouveau à la maison. Cette Vous pouvez également avoir recours à la fois-ci, elle aurait bien besoin d'une couche de commande STOP. Par exemple: peinture par-ci par-là. Cherchez la carte des couleursetchargezleprogrammeDECO. Ilne
-55 stop s'agit pas d'un jeu mais plutôt d'une façon Le CPC464 interrompera le cours d'exécution amusanted'utilisertouteslescommandesapp- du programme à ce point et vous pouvez lui risesjusqu'ici. Voussouhaitezpeut-étremodifier ordonnerd'imprimerlavariableoulesvariables votre programme pour lui donner une touche qui vous interessant gràce aux commandes plus personnelle. Il vous suffit pour cela de d'impression directe. On revient au début du mettre en pratique les techniques étudiées en programme en faisant: début de chapitre. cont [ENTER] Sivous rencontrezdesmots-cléinconnusdans le listing du DECO présenté aux prochaines Cela signifie CONTinuer; n'oubliez pas que pages,nevousinquiétezpas: toutvousparaîtra celanemarchepassideslignessontajoutéesou plus clair trés bientôt. effacées aprés l'arrét (STOP) du programme. U ':[ E1 W-_ 57"##########, "page 59");
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_004,
+    r##########"55 print “Line 55 a= “;a Oui, nous voici de nouveau à la maison. Cette Vous pouvez également avoir recours à la fois-ci, elle aurait bien besoin d'une couche de commande STOP. Par exemple: peinture par-ci par-là. Cherchez la carte des couleursetchargezleprogrammeDECO. Ilne
+55 stop s'agit pas d'un jeu mais plutôt d'une façon Le CPC464 interrompera le cours d'exécution amusanted'utilisertouteslescommandesapp- du programme à ce point et vous pouvez lui risesjusqu'ici. Voussouhaitezpeut-étremodifier ordonnerd'imprimerlavariableoulesvariables votre programme pour lui donner une touche qui vous interessant gràce aux commandes plus personnelle. Il vous suffit pour cela de d'impression directe. On revient au début du mettre en pratique les techniques étudiées en programme en faisant: début de chapitre. cont [ENTER] Sivous rencontrezdesmots-cléinconnusdans le listing du DECO présenté aux prochaines Cela signifie CONTinuer; n'oubliez pas que pages,nevousinquiétezpas: toutvousparaîtra celanemarchepassideslignessontajoutéesou plus clair trés bientôt. effacées aprés l'arrét (STOP) du programme. U ':[ E1 W-_ 57"##########,
+    "page 59"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_005, r##########"10 REM deco
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_005,
+    r##########"10 REM deco
 20 MODE 0
 30 CLS
 40 REM ** START **
@@ -252,9 +269,13 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 1000 MOVE 320,i :DRAM 380,i
 1010 NEXT i
 1020 NEXT j
-1030 END Test Passez le SAT7 afin de vérifier votre compré- hension de cechapitre. Ne vous effrayez pas si vous voyez que vous avez besoin de consulter les pages précédentes avant de répondre aux questions. Bonnombredeprogrammeursutili- sant eux-mêmes un manuel de référence."##########, "pages 60, 61, 62, 63");
+1030 END Test Passez le SAT7 afin de vérifier votre compré- hension de cechapitre. Ne vous effrayez pas si vous voyez que vous avez besoin de consulter les pages précédentes avant de répondre aux questions. Bonnombredeprogrammeursutili- sant eux-mêmes un manuel de référence."##########,
+    "pages 60, 61, 62, 63"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_006, r##########"10 REM mansion (maison)
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_006,
+    r##########"10 REM mansion (maison)
 20 MODE 0
 30 CLS
 40 REM ** start ** (debut)
@@ -321,24 +342,48 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 640 REM fence (grille)
 650 FOR F=0 T0 620 STEP 20
 660 MOVE F,0:DRAM F,60,
-670 NEXT F move c,4s=:›RAu 620,45 680"##########, "pages 67, 68, 69");
+670 NEXT F move c,4s=:›RAu 620,45 680"##########,
+    "pages 67, 68, 69"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_007, r##########"71 U size=18 72[1 MOVE '30,78:GOSUB 900 73Cl MOVE 156,78:GOSUB 900 74Cl MOVE 130,103 G05 0090 U1'* 75U MOVE '56,103 GOS 0090 l4ü'?l 76\El MOVE 130,178 GOS-B 900 156,178 77\Tl MOVE GOS08900 78U « *W hi MOVE 130,203 GOS08900 79U MOVE 156,203 GOSlB900 80U MOVE 330,78:GOSUB 90\Pl bb
-81 T4_'?T MOVE 356,78:GOSUB 900 82LT-Tl MOVE 330,103 GOS_.B 9100 83T U 1 MOVE 356,103 GOS-B 900 84\F1 MOVE 330,178 GOSJB 900 85U î MOVE 356,178 GOSlà;B 900"##########, "page 70");
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_007,
+    r##########"71 U size=18 72[1 MOVE '30,78:GOSUB 900 73Cl MOVE 156,78:GOSUB 900 74Cl MOVE 130,103 G05 0090 U1'* 75U MOVE '56,103 GOS 0090 l4ü'?l 76\El MOVE 130,178 GOS-B 900 156,178 77\Tl MOVE GOS08900 78U « *W hi MOVE 130,203 GOS08900 79U MOVE 156,203 GOSlB900 80U MOVE 330,78:GOSUB 90\Pl bb
+81 T4_'?T MOVE 356,78:GOSUB 900 82LT-Tl MOVE 330,103 GOS_.B 9100 83T U 1 MOVE 356,103 GOS-B 900 84\F1 MOVE 330,178 GOSJB 900 85U î MOVE 356,178 GOSlà;B 900"##########,
+    "page 70"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_008, r##########"860 MOVE 330,203 GOSUB 900 87G MOVE 356,203 GOS-B 900 88U END (fin) 89Cl REM subroutine forsquare (sous-programmaticwipourcarre)
-900 DRAMR 0,size,9 L»"##########, "page 70");
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_008,
+    r##########"860 MOVE 330,203 GOSUB 900 87G MOVE 356,203 GOS-B 900 88U END (fin) 89Cl REM subroutine forsquare (sous-programmaticwipourcarre)
+900 DRAMR 0,size,9 L»"##########,
+    "page 70"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_009, r##########"91 iLl-Ill DRAMR size,0
-92 L W i 0RAwR 0,-si ZE 931"* DRAMR -size, -uó 94O RETURN"##########, "page 70");
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_009,
+    r##########"91 iLl-Ill DRAMR size,0
+92 L W i 0RAwR 0,-si ZE 931"* DRAMR -size, -uó 94O RETURN"##########,
+    "page 70"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_010, r##########"74 Franchissez-le Refermez le portail Else (aut rement) autrement dirigez vous vers la Next (suivante) maison suivante."##########, "page 76");
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_010,
+    r##########"74 Franchissez-le Refermez le portail Else (aut rement) autrement dirigez vous vers la Next (suivante) maison suivante."##########,
+    "page 76"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_011, r##########"20 REMEU/Dave Atherton
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_011,
+    r##########"20 REMEU/Dave Atherton
 30 MODE1
-35 INKO U1 MU _0CA" :PRINT"SOUND DEMO" 50\_OCAf PRINT"1. Explosion""##########, "page 90");
+35 INKO U1 MU _0CA" :PRINT"SOUND DEMO" 50\_OCAf PRINT"1. Explosion""##########,
+    "page 90"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_012, r##########"180 IF a=1'HEN GOS..B 280
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_012,
+    r##########"180 IF a=1'HEN GOS..B 280
 190 IF a= 'HEN GOSLB 330
 200 IFa== 'HEN GOS-B 38C
 210 IF a: THEN GOSJB 431:
@@ -380,11 +425,19 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 590 ENV 1,4,30,19
 600 ENT 1,9,49,5,1,-10,26
 610 SOUND 1,136,68,15,1,1,0
-620 RETURN"##########, "pages 90, 91, 92");
+620 RETURN"##########,
+    "pages 90, 91, 92"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_013, r##########"30 15 x6 l°ecran. Cependant ceci n'est pas parfait: quel- 3+2 9 quefoisle résultatd'unesuitedecalculsnesera 24_i_,4x3i 5×(2+s) pas absolument exact. Au lieu de 5,0, il peut Ces regles s'appliquént aux nombres autant vous arriver d'obtenir: qu'aux variables. Passez au programmé suivant 5,!ZI¿ïZï¿I¿IZIÔ1 et changez plusieurs fois la ligne 40 afin de pouvoircalculerlesautresoperationsci-dessus. ou bien: N'oubliezpasleurssymbolesenBasicetplacez les paranthéses au bon endroit. 4,99999999 ' Subtil,n'est-cepas? Heureusement,nousn'avons pas souvent besoin d'une telle precision. En"##########, "page 95");
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_013,
+    r##########"30 15 x6 l°ecran. Cependant ceci n'est pas parfait: quel- 3+2 9 quefoisle résultatd'unesuitedecalculsnesera 24_i_,4x3i 5×(2+s) pas absolument exact. Au lieu de 5,0, il peut Ces regles s'appliquént aux nombres autant vous arriver d'obtenir: qu'aux variables. Passez au programmé suivant 5,!ZI¿ïZï¿I¿IZIÔ1 et changez plusieurs fois la ligne 40 afin de pouvoircalculerlesautresoperationsci-dessus. ou bien: N'oubliezpasleurssymbolesenBasicetplacez les paranthéses au bon endroit. 4,99999999 ' Subtil,n'est-cepas? Heureusement,nousn'avons pas souvent besoin d'une telle precision. En"##########,
+    "page 95"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_014, r##########"10 REM Garden
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_014,
+    r##########"10 REM Garden
 20 MODE 1
 30 INK 0,0:BORDER 0
 40 INK 1,26
@@ -466,9 +519,13 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 900 INPUT ""How many rows do you want to plant' ';rows (combien de rangs souhaitez vous)
 910 testlengthîlength-rows* rowwidth 9201F test Length<0 THEN PR1NT""n0 room' ' :Goto 900
 930 length=testlength
-950 RETURN O0"##########, "pages 99, 100, 101, 102");
+950 RETURN O0"##########,
+    "pages 99, 100, 101, 102"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_015, r##########"10 REM **BLACKJACK**
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_015,
+    r##########"10 REM **BLACKJACK**
 20 REM
 30 REM **STARTUP**
 40 MODE 1:BORDER 4
@@ -555,9 +612,13 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 910 PRINT CHR$(24);" ";CHR$(24)
 920 RETURN
 930 LOCATE1,2¿|›:PRINT SPACE$(¿i0)
-940 LOCATE1,24:RETURN O7"##########, "pages 106, 107, 108, 109");
+940 LOCATE1,24:RETURN O7"##########,
+    "pages 106, 107, 108, 109"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_016, r##########"10 cr$=CHR$(13)
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_016,
+    r##########"10 cr$=CHR$(13)
 20 REM Simon
 30 REM **** 1NsTRucT1oNs ****
 40 MODE 1:BORDER 20:1NK 0,20:INK1,1
@@ -573,9 +634,13 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 140 PRINT "the screen should be indicated by"
 150 PRINT "the up cursor. The cursor keys are"
 160 PRINT "above the numeric key pad, and are"
-170 PRIN' "marked as foLlows:"PRINT i(`.ejeuconsisteaobserverlescerclesclignotentetalesmcmoriser.Alalindelaséquence,vousdciczlesrecopiersurlestouchesducurseur Achaqueloisque vousrcussisscz,lasequenceaugmente.Parexempleuncercleenhautdel`ecrandoitetreindiqueparlecurscursupi:rieur Lestouchesducurseursi:trouvent"##########, "page 110");
+170 PRIN' "marked as foLlows:"PRINT i(`.ejeuconsisteaobserverlescerclesclignotentetalesmcmoriser.Alalindelaséquence,vousdciczlesrecopiersurlestouchesducurseur Achaqueloisque vousrcussisscz,lasequenceaugmente.Parexempleuncercleenhautdel`ecrandoitetreindiqueparlecurscursupi:rieur Lestouchesducurseursi:trouvent"##########,
+    "page 110"
+);
 #[ignore]
-basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_017, r##########"108 au-dessusduclaviernumeriqueetsontsignalccsdelafaçonsuivante'i
+basic_test!(
+    test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft411_ocr__listing_017,
+    r##########"108 au-dessusduclaviernumeriqueetsontsignalccsdelafaçonsuivante'i
 180 PRINT TAB(20);CHR$(240)
 190 PRINT TAB(19);CHR$(242);" ";CHR$(243)
 200 PRINT TAB(20);CHR$(241)
@@ -656,4 +721,6 @@ basic_test!(test_amsoft_amstrad_basic_initiation_au_basic_amstrad_partie1_soft41
 970 h=SQR(r*r-i*i)
 980 MOVE x-h,i+y:DRAH ×+h,i+y,c
 990 NEXT
-1000 RETURN"##########, "pages 110, 111, 112, 113");
+1000 RETURN"##########,
+    "pages 110, 111, 112, 113"
+);

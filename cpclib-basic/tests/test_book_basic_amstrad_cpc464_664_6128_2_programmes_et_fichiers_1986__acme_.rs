@@ -6,8 +6,7 @@ use common_book_tests::test_basic_program;
 
 /// Fix common OCR errors specific to this book
 fn fix_ocr_errors(code: &str) -> String {
-    code
-        .replace("DRAM ", "DRAW ")
+    code.replace("DRAM ", "DRAW ")
         .replace("DRAw ", "DRAW ")
         .replace("oRAw ", "DRAW ")
         .replace("DRAl›l ", "DRAW ")
@@ -42,39 +41,65 @@ macro_rules! basic_test {
     };
 }
 
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_001, r##########"10 INK 1,2 couleur 2(bleu vif) dans case couleur 1
-20 INK 2,6 couleur 6(rouge vif) dans case couleur 2 En MODE 2 seules les cases 0 et 1 sont utilisables. En MODE 1 seules les cases 0,1,2,3 sont utilisables. En MODE 0 les 16 cases sont utilisables. Table de correspondance des couleurs à la mise sous tension : Mode 2 Mode 1 Mode 0 Couleurs"##########, "page 10");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_002, r##########"10 1 20 14 10 turquoise 24 jaune
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_001,
+    r##########"10 INK 1,2 couleur 2(bleu vif) dans case couleur 1
+20 INK 2,6 couleur 6(rouge vif) dans case couleur 2 En MODE 2 seules les cases 0 et 1 sont utilisables. En MODE 1 seules les cases 0,1,2,3 sont utilisables. En MODE 0 les 16 cases sont utilisables. Table de correspondance des couleurs à la mise sous tension : Mode 2 Mode 1 Mode 0 Couleurs"##########,
+    "page 10"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_002,
+    r##########"10 1 20 14 10 turquoise 24 jaune
 11 24 6 16 11 bleu ciel 25 jaune pastel
 12 1 1 18 12 jaune 26 blanc brillant
 13 24 24 22 13 blanc
 14 1 20 1,24
-15 24 6 16,11 En MODE 2 par exemple, si vous changez la couleur de la case 0, la couleur de la case"##########, "page 10");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_003, r##########"10 MODE 1
+15 24 6 16,11 En MODE 2 par exemple, si vous changez la couleur de la case 0, la couleur de la case"##########,
+    "page 10"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_003,
+    r##########"10 MODE 1
 20 INK 0,26 ' blanc dans case 0
 30 INK 1,0 ' noir dans case 1
 40 INK 2,6 ' rouge dans case 2
 50 PLOT 100,100,1 ’ point 100,100 avec stylo l(noir)
-60 PLOT 120,120,2 ' point 120,120 avec stylo 2(rouge) L’origine de l’écran est en bas à gauche. X doit être compris entre 0 et 639. Y doit être compris entre 0 et 399. Les coordonnées spécifiées sont INDÉPENDANTES de la résolution choisie par MODE. Seule la taille du point varie. Y A 399 100___ 100,100"##########, "page 11");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_004, r##########"10 MODE 1
+60 PLOT 120,120,2 ' point 120,120 avec stylo 2(rouge) L’origine de l’écran est en bas à gauche. X doit être compris entre 0 et 639. Y doit être compris entre 0 et 399. Les coordonnées spécifiées sont INDÉPENDANTES de la résolution choisie par MODE. Seule la taille du point varie. Y A 399 100___ 100,100"##########,
+    "page 11"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_004,
+    r##########"10 MODE 1
 20 INK 0,1 bleu dans case 0
 30 INK 1,24 jaune dans case 1
 40 PLOT 100,100,1 point 100,100
-50 DRAW 200,200,1 droite entre 100,100 et 200,200 A Y 200,200 100,100 ► X"##########, "page 11");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_005, r##########"10 I BASIC AMSTRAD PLOTR DX,DY,case couleur DRAWR DX,DY,case couleur Ces instructions spécifient des déplacements relatifs au point courant.
+50 DRAW 200,200,1 droite entre 100,100 et 200,200 A Y 200,200 100,100 ► X"##########,
+    "page 11"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_005,
+    r##########"10 I BASIC AMSTRAD PLOTR DX,DY,case couleur DRAWR DX,DY,case couleur Ces instructions spécifient des déplacements relatifs au point courant.
 10 MODE 1
 20 INK 0 ,26 blanc dans case 0
 30 INK 1 ,0 noir dans case 1
 40 INK 2 rouge dans case 2
 50 PLOT 100,100,1 point 100,100
 60 DRAWR 50,50,1 droite entre 100,100 et 150,150
-70 DRAWR 50,0,2 droite entre 150,150 et 200,150 La première droite est dessinée avec le stylo 1 (noir), et la seconde avec le stylo 2(rouge). Si vous aviez utilisé le stylo numéro 4, les droites n’auraient pas été tracées. En MODE 1, le stylo 4 est en réalité le stylo 0. MOVE X,Y MOVER DX,DY Positionne le curseur graphique sans dessiner. Le CPC 664 dispose du paramètre “stylo”. TAG TAGOFF TAG spécifie que l’écriture du texte doit se faire avec le curseur graphique. TAGOFF annule TAG ; l’affichage du texte se fait avec le curseur texte (positionné par LOCATE X,Y). Pour empêcher l’affichage des caractères CHR$(10) et CHR$(13), l’instruction PRINT doit être suivie d'un point-virgule."##########, "page 12");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_006, r##########"10 MODE 1
+70 DRAWR 50,0,2 droite entre 150,150 et 200,150 La première droite est dessinée avec le stylo 1 (noir), et la seconde avec le stylo 2(rouge). Si vous aviez utilisé le stylo numéro 4, les droites n’auraient pas été tracées. En MODE 1, le stylo 4 est en réalité le stylo 0. MOVE X,Y MOVER DX,DY Positionne le curseur graphique sans dessiner. Le CPC 664 dispose du paramètre “stylo”. TAG TAGOFF TAG spécifie que l’écriture du texte doit se faire avec le curseur graphique. TAGOFF annule TAG ; l’affichage du texte se fait avec le curseur texte (positionné par LOCATE X,Y). Pour empêcher l’affichage des caractères CHR$(10) et CHR$(13), l’instruction PRINT doit être suivie d'un point-virgule."##########,
+    "page 12"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_006,
+    r##########"10 MODE 1
 20 TAG
 30 MOVE 100,100 : PR I NT "AAAAAAA"; affiche en 100,100
 40 TAGOFF
-50 LOCATE 1,1:PRINT "BBBBBBBB" avec curseur texte"##########, "page 12");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_007, r##########"10 ' AFFICHAGE AVEC TAG
+50 LOCATE 1,1:PRINT "BBBBBBBB" avec curseur texte"##########,
+    "page 12"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_007,
+    r##########"10 ' AFFICHAGE AVEC TAG
 20 '
 30 MODE 1
 40 INK 0,26:INK 1,0
@@ -93,22 +118,38 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 170 TAG: PRINT MI DI(Al, I , 1 );
 180 NEXT I
 190 AI = RIGHTI(Al, 1)+LEFTI(Al, LEN ( Al)-1 )
-200 GOTO 150 A M S tr ° I> ORIGIN X,Y, gauche, droite, haut, bas Redéfinit l’origine pour le curseur graphique et une fenêtre graphique si les paramètres “gauche”, “droite”, “haut” et “bas” sont spécifiés."##########, "page 13");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_008, r##########"10 MODE 1
+200 GOTO 150 A M S tr ° I> ORIGIN X,Y, gauche, droite, haut, bas Redéfinit l’origine pour le curseur graphique et une fenêtre graphique si les paramètres “gauche”, “droite”, “haut” et “bas” sont spécifiés."##########,
+    "page 13"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_008,
+    r##########"10 MODE 1
 20 ORIGIN 100,100 ' origine en 100,100
 30 PLOT 1,1,1
-40 DRAW 100,100 ' 100,100 a partir de la nouvelle origine"##########, "page 13");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_009, r##########"10 MODE 1:INK 0,26:INK 1,0: INK 2,2
+40 DRAW 100,100 ' 100,100 a partir de la nouvelle origine"##########,
+    "page 13"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_009,
+    r##########"10 MODE 1:INK 0,26:INK 1,0: INK 2,2
 20 ORIGIN 200,100,200,350,100,250 ' -fenetre graphique
 25 CLG 2
 30 PLOT 1,1,1
-40 DRAW 50,50,1"##########, "page 13");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_010, r##########"10 MODE 1
+40 DRAW 50,50,1"##########,
+    "page 13"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_010,
+    r##########"10 MODE 1
 20 PLOT 100,100,1
 30 PLOT 200,200,2
 40 PRINT TEST(100,100)
-50 PRINT TEST (200,200) RUN 1 2 Le programme ci-dessous recopie un écran sur imprimante EPSON."##########, "page 14");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_011, r##########"2000 --------------- RECOPIE D'ECRAN SUR IMPRIMANTE EPSON (mode 1)
+50 PRINT TEST (200,200) RUN 1 2 Le programme ci-dessous recopie un écran sur imprimante EPSON."##########,
+    "page 14"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_011,
+    r##########"2000 --------------- RECOPIE D'ECRAN SUR IMPRIMANTE EPSON (mode 1)
 2004 WIDTH 255
 2005 PRINT #8,CHR$(27);"3";CHR$(10)
 2010 DEFINT A-Z
@@ -129,8 +170,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 2160 PRINT #8,CHR$(15)
 2170 '-------------------------------------------- pour MODE 2
 2180 ' 2080 IF TEST(x ,LN-P*2)>0 THEN ............
-2190 ' Prevu pour cable AMSTRAD (adapter 2005 pour autres cables) WINDOW #numéro fenêtre,gauche,droite,haut,bas Définit une fenêtre pour le texte. Dans l’exemple ci-dessous, l’écriture du texte dans la fenêtre 1 se fait en blanc sur fond rouge."##########, "page 14");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_012, r##########"20 MODE 1
+2190 ' Prevu pour cable AMSTRAD (adapter 2005 pour autres cables) WINDOW #numéro fenêtre,gauche,droite,haut,bas Définit une fenêtre pour le texte. Dans l’exemple ci-dessous, l’écriture du texte dans la fenêtre 1 se fait en blanc sur fond rouge."##########,
+    "page 14"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_012,
+    r##########"20 MODE 1
 30 INK 0,26
 40 INK 1,0
 50 INK 2,6
@@ -145,16 +190,24 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 140 '---------------fenetre 2 (dans fenetre 1)
 150 WINDOW #2,30,38,6,11
 160 PAPER #2,0:CLS #2
-170 PRINT #7."fenetre 2" Une fenêtre définie à l’intérieur d’une autre n’est pas protégée contre une écriture dans la fenêtre où elle est incluse. La fenêtre par défaut “#0” recouvre tout l’écran. Naturellement, les bornes de cette fenêtre peuvent être changées. INSTRUCTIONS SPÉCIFIQUES AUX CPC 664 ET 6128 Sur CPC 664 et 6128, MOVE possède un paramètre “stylo”. Les instructions PLOT, DRAW et MOVE disposent d'un paramètre “opération” supplé­ mentaire. Ce paramètre égal à 0, 1,2 ou 3 permet de combiner un tracé existant avec un nouveau tracé en utilisant une opération XOR,AND,OR. Par exemple, si vous tracez une droite sur une droite existante avec l’opération XOR(OU exclusif), l'ancien tracé disparaît (0=nul 1=XOR 2=AND 3=OR). PEN possède un paramètre “mode transparent” qui annule l’effet de PAPER."##########, "pages 14, 15");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_013, r##########"10 MODE 1: INK 0,26:INK 1,0:INK 2,6
+170 PRINT #7."fenetre 2" Une fenêtre définie à l’intérieur d’une autre n’est pas protégée contre une écriture dans la fenêtre où elle est incluse. La fenêtre par défaut “#0” recouvre tout l’écran. Naturellement, les bornes de cette fenêtre peuvent être changées. INSTRUCTIONS SPÉCIFIQUES AUX CPC 664 ET 6128 Sur CPC 664 et 6128, MOVE possède un paramètre “stylo”. Les instructions PLOT, DRAW et MOVE disposent d'un paramètre “opération” supplé­ mentaire. Ce paramètre égal à 0, 1,2 ou 3 permet de combiner un tracé existant avec un nouveau tracé en utilisant une opération XOR,AND,OR. Par exemple, si vous tracez une droite sur une droite existante avec l’opération XOR(OU exclusif), l'ancien tracé disparaît (0=nul 1=XOR 2=AND 3=OR). PEN possède un paramètre “mode transparent” qui annule l’effet de PAPER."##########,
+    "pages 14, 15"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_013,
+    r##########"10 MODE 1: INK 0,26:INK 1,0:INK 2,6
 20 PAPER 0:PEN 1
 30 PRINT "AAAAA"
 35 - —
 40 PAPER 2
 50 PEN 1 ' essayer avec PEN 1,1
 60 PRINT "BBBBBB"
-70 PAPER 0 FILL stylo Remplit une figure fermée avec le stylo spécifié. Le curseur doit être positionné avec le stylo qui a servi à tracer la figure. En revanche, le stylo spécifié dans FILL peut être différent."##########, "page 15");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_014, r##########"10 '-----------------FIFLILLL
+70 PAPER 0 FILL stylo Remplit une figure fermée avec le stylo spécifié. Le curseur doit être positionné avec le stylo qui a servi à tracer la figure. En revanche, le stylo spécifié dans FILL peut être différent."##########,
+    "page 15"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_014,
+    r##########"10 '-----------------FIFLILLL
 20 MODE 1
 30 CE=1 ' Couleur écriture
 40 INK 0,26:INK 1,0:INK 2,20
@@ -162,26 +215,42 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 60 DRAWR 50,0,CE
 70 DRAWR 0,50,CE
 80 DRAWR -50,0,CE
-90 DRAWR 0,-50,CE"##########, "page 15");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_015, r##########"14 I BASIC AMSTRAD
+90 DRAWR 0,-50,CE"##########,
+    "page 15"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_015,
+    r##########"14 I BASIC AMSTRAD
 100 '----------------------------------remplissage carre
 110 MOVER 10,10,CE ' Positionnement curseur
 120 C=1 ' Stylo remplissage
 130 FILL C
 140 '
 150 ' La couleur de remplissage peut etre differente de la couleur du contour
-160 ' ex:C=2 MASK masque,premier point Le tracé des droites est effectué avec le pointillé défini en binaire par “masque”. Si “premier point” est égal à 1, celui-ci apparaît."##########, "page 16");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_016, r##########"10 MODE 1
+160 ' ex:C=2 MASK masque,premier point Le tracé des droites est effectué avec le pointillé défini en binaire par “masque”. Si “premier point” est égal à 1, celui-ci apparaît."##########,
+    "page 16"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_016,
+    r##########"10 MODE 1
 20 MASK U10101010
 30 PLOT 100,100
 40 DRAW 200,200,1
 50 MASK &X1111000
-60 DRAW 300,200,1 COPYCHR$ (#no fenêtre) Donne le caractère affiché sous le curseur."##########, "page 16");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_017, r##########"10 MODE 1
+60 DRAW 300,200,1 COPYCHR$ (#no fenêtre) Donne le caractère affiché sous le curseur."##########,
+    "page 16"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_017,
+    r##########"10 MODE 1
 20 LOCATE 10,10:PRINT "ABC"
 30 LOCATE 10, 10:Xt= COPYCHR$(»O)
-40 LOCATE 1,20J PR I NT X$ Sur CPC 464, le programme suivant donne le contenu des 8 octets représentant un caractère."##########, "page 16");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_018, r##########"10 ' COPYCHRt SUR CPC464
+40 LOCATE 1,20J PR I NT X$ Sur CPC 464, le programme suivant donne le contenu des 8 octets représentant un caractère."##########,
+    "page 16"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_018,
+    r##########"10 ' COPYCHRt SUR CPC464
 20 MODE -2
 30 X = 1
 40 Y=1
@@ -190,28 +259,48 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 70 FOR A H = 4 9152 + X -1 + ( Y -1 ) ♦ 80 T0 65534 STEP 2048
 80 M=PEEK(AM)
 90 PRINT BIN*(M,8)
-100 NEXT AM ABCDE 00011000 00111100 01100110 01100110 01111110 01100110 01100110 00000000 Ready"##########, "page 16");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_019, r##########"10 MODE 1
+100 NEXT AM ABCDE 00011000 00111100 01100110 01100110 01111110 01100110 01100110 00000000 Ready"##########,
+    "page 16"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_019,
+    r##########"10 MODE 1
 20 INK 0,26:INK 1,0:INK 2,14
 30 GRAPHICS PAPER 2
 40 MASK &X11110000
-50 PLOT 100,100:DRAW 200,200,1 GRAPHICS PEN stylo,mode transparent Définit le stylo utilisé par défaut pour les instructions graphiques. Si “mode transparent” est égal à 1, l’effet de GRAPHICS PAPER est annulé. FRAME Synchronise l’affichage des points d’un caractère affiché avec TAG. CURSOR mode Lorsque INKEY$ est utilisé, le curseur est apparent pour CURSOR 1 et invisible pour CURSOR 0. EFFACEMENT D’UN DESSIN Pour effacer un dessin il suffit de tracer le même dessin en utilisant le stylo 0."##########, "page 17");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_020, r##########"10 '-------------effacement d'un dessin
+50 PLOT 100,100:DRAW 200,200,1 GRAPHICS PEN stylo,mode transparent Définit le stylo utilisé par défaut pour les instructions graphiques. Si “mode transparent” est égal à 1, l’effet de GRAPHICS PAPER est annulé. FRAME Synchronise l’affichage des points d’un caractère affiché avec TAG. CURSOR mode Lorsque INKEY$ est utilisé, le curseur est apparent pour CURSOR 1 et invisible pour CURSOR 0. EFFACEMENT D’UN DESSIN Pour effacer un dessin il suffit de tracer le même dessin en utilisant le stylo 0."##########,
+    "page 17"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_020,
+    r##########"10 '-------------effacement d'un dessin
 20 MODE 1:PAPER 0:PEN 1
 30 INK 0,26 ' blanc dans case 0
 40 INK 1,0 ' noir dans case 1
 50 '--------- droite noire sur fond blanc
 60 PLOT 100,100,1
-70 DRAW 200,200,1 ' droite avec case 1"##########, "page 17");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_021, r##########"90 FOR TP=1 T0 2000:NEXT TP ' temporisation
+70 DRAW 200,200,1 ' droite avec case 1"##########,
+    "page 17"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_021,
+    r##########"90 FOR TP=1 T0 2000:NEXT TP ' temporisation
 100 '----- effacement
 110 PLOT 100,100,0
-120 DRAW 200,200,0 ' droite avec case 0 CHANGEMENT DE LA COULEUR D’UN DESSIN Pour changer la couleur d’un dessin il suffit de modifier par INK la couleur de la case (stylo) qui a servi à tracer le dessin. On peut également de la même façon faire dispa­ raître momentanément un dessin sans l’effacer."##########, "page 17");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_022, r##########"10 '-------comment changer la couleur d'un dessin
+120 DRAW 200,200,0 ' droite avec case 0 CHANGEMENT DE LA COULEUR D’UN DESSIN Pour changer la couleur d’un dessin il suffit de modifier par INK la couleur de la case (stylo) qui a servi à tracer le dessin. On peut également de la même façon faire dispa­ raître momentanément un dessin sans l’effacer."##########,
+    "page 17"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_022,
+    r##########"10 '-------comment changer la couleur d'un dessin
 20 MODE IsPAPER 0:PEN 1
 30 INK 0,26 ' blanc dans case 0
-40 INK 1,0 ' noir dans case 1 —►"##########, "page 17");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_023, r##########"16 I BASIC AMSTRAD
+40 INK 1,0 ' noir dans case 1 —►"##########,
+    "page 17"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_023,
+    r##########"16 I BASIC AMSTRAD
 50 '------- carre noir sur blanc
 60 PLOT 100,100,1
 70 DRAWR 100,0,1
@@ -227,8 +316,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 170 INK 1,26 ' blanc dans case 1
 180 FOR tp=l TO 2000:NEXT tp
 190 '---------'■-------le revoi 1 a
-200 INK 1,6 ' rouge dans case 1 Pièges : Lorsque vous utilisez un programme la table de correspondance des couleurs est dans l’état où le programme précédent l’a laissée. Il est donc prudent d’initialiser la table des couleurs en début de programme ou bien d’appuyer sur “CTRL /SHIFT/ESC/”. Le programme ci-dessous trace, en MODE 1, trois droites avec les stylos 1,2 et 3. En MODE 2, la seconde droite n’apparaît pas puisque le stylo 2 est en réalité le stylo 0."##########, "page 18");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_024, r##########"10 '-----------PIEGE NO 1
+200 INK 1,6 ' rouge dans case 1 Pièges : Lorsque vous utilisez un programme la table de correspondance des couleurs est dans l’état où le programme précédent l’a laissée. Il est donc prudent d’initialiser la table des couleurs en début de programme ou bien d’appuyer sur “CTRL /SHIFT/ESC/”. Le programme ci-dessous trace, en MODE 1, trois droites avec les stylos 1,2 et 3. En MODE 2, la seconde droite n’apparaît pas puisque le stylo 2 est en réalité le stylo 0."##########,
+    "page 18"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_024,
+    r##########"10 '-----------PIEGE NO 1
 20 MODE 1
 30 INK 0,26 blanc dans case 0
 32 INK 1,0 ' noir dans case 1
@@ -243,8 +336,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 110 '--­
 120 ' essayez ce programme en MODE 2
 130 ' la droite trace avec le stylo 2 n'apparait pas:
-140 ' En mode 2,1e stylo 2 est le meme que 0. Le programme ci-dessous utilise le stylo 2 pour écrire en MODE 1. En passant en MODE 2, le texte n’apparaît plus puisque PEN 2 est équivalent à PEN 0. Il suffit de frapper PEN 1 pour faire apparaître le texte."##########, "page 18");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_025, r##########"10 '------------------- PIEGE N0 2 2.0 MODE 1
+140 ' En mode 2,1e stylo 2 est le meme que 0. Le programme ci-dessous utilise le stylo 2 pour écrire en MODE 1. En passant en MODE 2, le texte n’apparaît plus puisque PEN 2 est équivalent à PEN 0. Il suffit de frapper PEN 1 pour faire apparaître le texte."##########,
+    "page 18"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_025,
+    r##########"10 '------------------- PIEGE N0 2 2.0 MODE 1
 30 INK 0,26:INK 1,0: INK 2,2
 40 PEN 1
 50 PRINT "J ’ECRIS EN NOIR"
@@ -256,8 +353,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 110 FOR TP=1 TO 4000:NEXT TP ' TEMPORISATION
 120 MODE 2
 130 '
-140 ' EN MODE 2 ,'PEN 2' EST EQUIVALENT A 'PEN 0' Ci-dessous, nous plaçons dans la case 1 la couleur de la case O pour rendre invisible une droite ; le texte disparaît en même temps. Pour le faire apparaître à nouveau, frapper INK 1,0."##########, "pages 18, 19");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_026, r##########"10 •-------------PIEGE NO 3
+140 ' EN MODE 2 ,'PEN 2' EST EQUIVALENT A 'PEN 0' Ci-dessous, nous plaçons dans la case 1 la couleur de la case O pour rendre invisible une droite ; le texte disparaît en même temps. Pour le faire apparaître à nouveau, frapper INK 1,0."##########,
+    "pages 18, 19"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_026,
+    r##########"10 •-------------PIEGE NO 3
 20 MODE 1
 30 INK 0,26:INK 1,0
 40 '---------------droite noire sur -fond blanc
@@ -269,8 +370,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 100 '---------------droite invisible
 110 INK 1,26
 120 '
-130 ' -frapper en mode direct: INK 1,0 Nous présentons ici quelques exemples de dessins. Le programme ci-dessous trace un drapeau français. Nous initialisons d’abord la table des couleurs puis nous traçons trois rectangles."##########, "page 19");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_027, r##########"10 ' DRAPEAU FRANÇAIS 20 30
+130 ' -frapper en mode direct: INK 1,0 Nous présentons ici quelques exemples de dessins. Le programme ci-dessous trace un drapeau français. Nous initialisons d’abord la table des couleurs puis nous traçons trois rectangles."##########,
+    "page 19"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_027,
+    r##########"10 ' DRAPEAU FRANÇAIS 20 30
 40 1MODE 1 •
 50 INK 0,21 ' vert dans case 0
 60 INK 1,2 ’ bleu dans case 1
@@ -291,8 +396,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 220 FOR Y = YA TO YA + H
 230 PLOT XA,Y:DRAWR L,O,CE
 240 NEXT Y
-250 RETURN Le dessin de soleil ci-dessous est obtenu en traçant un cercle plein puis des rayons aléatoires."##########, "pages 19, 20");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_028, r##########"10 ------------------------------------SOLEIL
+250 RETURN Le dessin de soleil ci-dessous est obtenu en traçant un cercle plein puis des rayons aléatoires."##########,
+    "pages 19, 20"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_028,
+    r##########"10 ------------------------------------SOLEIL
 20 MODE 1
 30 INK 0,26:INK 1,6:PAPER O:PEN 1
 40 R=40 ' rayon
@@ -312,8 +421,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 180 Y=YC+R*SIN(A)
 190 PLOT XC,YC:DRAW X,Y,1
 200 NEXT A
-210 RETURN Pour tracer des cercles rapidement nous calculons les valeurs des sinus et cosinus dans des tables C() et S()."##########, "page 20");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_029, r##########"10 ’ TRACE DE CERCLE RAPIDE
+210 RETURN Pour tracer des cercles rapidement nous calculons les valeurs des sinus et cosinus dans des tables C() et S()."##########,
+    "page 20"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_029,
+    r##########"10 ’ TRACE DE CERCLE RAPIDE
 20 '
 30 MODE 1
 40 INK 0,26:INK 1,6
@@ -341,22 +454,34 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 260 Y=YC+R*S(A)
 270 DRAW X,Y,CE
 280 NEXT A
-290 RETURN JE CALCULE LES COSTHUS ET SINUS R ead y CARACTÈRES ACCENTUÉS _____________________________ Les caractères accentués ne sont pas prévus sur l’AMSTRAD. Ils peuvent être ajoutés en redéfinissant des caractères avec l’instruction SYMBOL. Si les caractères accentués doivent être édités sur imprimante, il faut utiliser les codes ASCII adaptés à l’imprimante. Par exemple, pour une imprimante DPMI, le code de “à accent” est 64. On redéfinit donc le caractère de code ASCII 64. En revanche, les touches au clavier peuvent être choisies. Ci-dessous nous utilisons la touche “1 ” du clavier numérique pour frapper le “à accent”."##########, "pages 20, 21");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_030, r##########"10 =============================== ACCENTS
+290 RETURN JE CALCULE LES COSTHUS ET SINUS R ead y CARACTÈRES ACCENTUÉS _____________________________ Les caractères accentués ne sont pas prévus sur l’AMSTRAD. Ils peuvent être ajoutés en redéfinissant des caractères avec l’instruction SYMBOL. Si les caractères accentués doivent être édités sur imprimante, il faut utiliser les codes ASCII adaptés à l’imprimante. Par exemple, pour une imprimante DPMI, le code de “à accent” est 64. On redéfinit donc le caractère de code ASCII 64. En revanche, les touches au clavier peuvent être choisies. Ci-dessous nous utilisons la touche “1 ” du clavier numérique pour frapper le “à accent”."##########,
+    "pages 20, 21"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_030,
+    r##########"10 =============================== ACCENTS
 30 ' redefinition du caractère 'A'
 40 ' 1 clavier numérique
 50 '
 55 SYMBOL AFTER 64
 60 SYMBOL 64,96,16,120,12,124,204,118
-70 KEY 129,CHR$(64) Ci-dessous nous utilisons “,CTRUA” pour frapper “à accent”."##########, "page 21");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_031, r##########"10 '=============================== ACCENTS
+70 KEY 129,CHR$(64) Ci-dessous nous utilisons “,CTRUA” pour frapper “à accent”."##########,
+    "page 21"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_031,
+    r##########"10 '=============================== ACCENTS
 30 ' redefinition du caractère 'A'
 40 ' CTRL A --> a accentue
 50 '
 55 SYMBOL AFTER 64
 60 SYMBOL 64,96,16,120,12,124,204,118
-70 KEY DEF 69,1,97,65,64"##########, "page 21");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_032, r##########"10 ==================== accents
+70 KEY DEF 69,1,97,65,64"##########,
+    "page 21"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_032,
+    r##########"10 ==================== accents
 20 SYMBOL AFTER 64
 30 '-----7 e accent grave
 40 SYMBOL 125,96,16,60,102,126,96,60
@@ -369,10 +494,18 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 110 KEY 129,CHR$(64)
 120 '-----4 c cedille
 130 SYMBOL 92,0,0,60,102,96,62,8,24
-140 KEY 132,CHR$(92) L’exemple ci-dessous inverse les caractères “A” et “Q” au clavier."##########, "page 22");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_033, r##########"10 KEY DEF 67,1,97,65
-20 KEY DEF 69,1,113,82 Le programme ci-dessous permet de dessiner un caractère et donne les valeurs déci­ males à spécifier dans l’instruction SYMBOL."##########, "page 22");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_034, r##########"10 -----------------GENERATEUR DE CARACTERES 8X8
+140 KEY 132,CHR$(92) L’exemple ci-dessous inverse les caractères “A” et “Q” au clavier."##########,
+    "page 22"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_033,
+    r##########"10 KEY DEF 67,1,97,65
+20 KEY DEF 69,1,113,82 Le programme ci-dessous permet de dessiner un caractère et donne les valeurs déci­ males à spécifier dans l’instruction SYMBOL."##########,
+    "page 22"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_034,
+    r##########"10 -----------------GENERATEUR DE CARACTERES 8X8
 20 MODE 1:PAPER O:PEN 1 : I NK 0,26:INK 1,0
 30 DIM T(9,9)
 40 SYMBOL AFTER 134
@@ -418,8 +551,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 440 SYMBOL 135 , D ( 1 ) , D ( 2 ) , D ( 3 ) , D ( 4 ) , D ( 5 ) , D ( 6 ) , D ( 7 ) , D ( 8 )
 450 LOCATE 15,2:PRINT CHRI(135)
 460 X=5:Y=5
-470 GOTO 150 F 1 c c li c s pour déplacer A:allurier E : effacer Uivaleurs dec. F : F i iii ANIMATION ___________________________________________ Pour animer des figures on utilise généralement des caractères redéfinis. En affichant un caractère dans différentes positions de l’écran, on obtient un effet d’animation. Pour simuler un vol de papillon nous le représentons alternativement dans deux posi­ tions. Chaque position est représentée par 16x16 points, soit quatre caractères gra­ phiques. CHR$(8), CHR$(10) et CHR$(11 ) permettent de déplacer le curseur à gauche, en bas et vers le haut. Ainsi le papillon est affiché avec une seule instruction PRINT."##########, "pages 22, 23");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_035, r##########"10 ' VOL DE PAPILLON
+470 GOTO 150 F 1 c c li c s pour déplacer A:allurier E : effacer Uivaleurs dec. F : F i iii ANIMATION ___________________________________________ Pour animer des figures on utilise généralement des caractères redéfinis. En affichant un caractère dans différentes positions de l’écran, on obtient un effet d’animation. Pour simuler un vol de papillon nous le représentons alternativement dans deux posi­ tions. Chaque position est représentée par 16x16 points, soit quatre caractères gra­ phiques. CHR$(8), CHR$(10) et CHR$(11 ) permettent de déplacer le curseur à gauche, en bas et vers le haut. Ainsi le papillon est affiché avec une seule instruction PRINT."##########,
+    "pages 22, 23"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_035,
+    r##########"10 ' VOL DE PAPILLON
 20 '
 30 MODE 1:INK 0,26:INK 1,6
 40 C=145 ' 1ER CARACTERE A MODIFIER
@@ -450,8 +587,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 290 NEXT X
 300 LOCATE X ,Y:PRINT EF$;EF$
 310 INK 1 , I NT(RND(1)*16)
-320 GOTO 240 Positionl Voici deux exemples de dessins définis par quatre caractères graphiques (16x16 points)."##########, "page 24");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_036, r##########"10 '-------soleil
+320 GOTO 240 Positionl Voici deux exemples de dessins définis par quatre caractères graphiques (16x16 points)."##########,
+    "page 24"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_036,
+    r##########"10 '-------soleil
 20 '
 30 MODE 1: INK 0,1:INK 1 ,24
 40 C = 1 4 5 ' 1ER CARACTERE A MODIFIER
@@ -461,8 +602,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 80 SYMBOL C+2,15,7,27,34,66,2,2,0
 90 SYMBOL C+3,224,192,160,16,8,0,0,0
 100 LI=CHRI(C)+CHR$(C+l)+CHR*(10)+CHRI(8)+CHR$(8)+CHR*(C+2)+CHR$( C+3)+CHR$(11)
-110 LOCATE 10,2:PRINT L$"##########, "page 24");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_037, r##########"10 '-----------bateau
+110 LOCATE 10,2:PRINT L$"##########,
+    "page 24"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_037,
+    r##########"10 '-----------bateau
 20 '
 30 MODE 1 : INK 0,1:INK 1,24
 40 0=145 ' 1ER CARACTERE A MODIFIER
@@ -472,8 +617,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 80 SYMBOL C + 2,14,30,62,0,255, 127,63,0
 90 SYMBOL C + 3,240,248,252,0,255,254,252,0
 100 L$ = CHR$ (C) +CHRKC+1 ) + CHR$ (10)+CHRI(8)+CHR$(8)+CHRI(C+2)+CHR$( C+3)+ CHR$(11)
-110 LOCATE 10,2:PRINT L$ Pour réaliser une animation sans caractères graphiques nous dessinons une figure dans différentes positions et n’en “démasquons” qu’une seule à la fois."##########, "page 25");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_038, r##########"10 ' ROTATION ROUE 20
+110 LOCATE 10,2:PRINT L$ Pour réaliser une animation sans caractères graphiques nous dessinons une figure dans différentes positions et n’en “démasquons” qu’une seule à la fois."##########,
+    "page 25"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_038,
+    r##########"10 ' ROTATION ROUE 20
 30 On représente successivement une roue
 40 dans 3 positions pour donner une
 50 impression d'animation.
@@ -509,8 +658,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 350 DX = R*COS(A):DY = R*SIN (A)
 360 PLOT XA+DX*O.3,YA+DY*0.3,S:DRAW XA+DX,YA+DY,S
 370 NEXT P
-380 RETURN"##########, "page 25");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_039, r##########"10 ■-----------------------AGRANDISSEMENT D’ UNE FIGURE
+380 RETURN"##########,
+    "page 25"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_039,
+    r##########"10 ■-----------------------AGRANDISSEMENT D’ UNE FIGURE
 20 MODE 1
 30 CF = O ’ -fond
 40 CE = 26 ' écriture
@@ -540,8 +693,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 280 DRAWR 0, R,STYLO
 290 DRAWR -R ,0,STYLO
 300 DRAWR 0, -R,STYLO
-310 RETURN Un éclair est dessiné en mode masque. Nous le démasquons momentanément et en même temps nous changeons la couleur de fond."##########, "page 26");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_040, r##########"10 ' ECLAIR 20
+310 RETURN Un éclair est dessiné en mode masque. Nous le démasquons momentanément et en même temps nous changeons la couleur de fond."##########,
+    "page 26"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_040,
+    r##########"10 ' ECLAIR 20
 30 MODE 1
 40 PAPER 0:PEN 1:BORDER 1
 50 INK 0,1: INK 1,26:INK 2,0:INK 3,0
@@ -580,8 +737,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 400 ■--------------------------- sur écran Vert;
 410 ' 50 ink 0,l:ink 1,26:ink 3,20
 415 ' 130 ink 2,24
-420 ' 150 ink 0,12:border 12 DESSINATEUR _________________________________________ Le dessinateur présenté permet de choisir un caractère parmi ceux affichés en haut de l’écran à l'aide d’un curseur. Lorsque le caractère est choisi vous réalisez un dessin en déplaçant le curseur avec les quatre flèches. “L” permet de se déplacer sans écriture, “E” d’effacer une partie des dessins. Pour dessiner à nouveau, utiliser “B”. Fléchés pour déplacer P :prend B : Jb-a i sser L:leuer E:effacer Coule uic s : 1,2,3 TJ a IN"##########, "pages 26, 27");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_041, r##########"10 '---------DESSIN (CPC464 ET CPC664) 20CE=l:CF=0 ' ecriture/Fond
+420 ' 150 ink 0,12:border 12 DESSINATEUR _________________________________________ Le dessinateur présenté permet de choisir un caractère parmi ceux affichés en haut de l’écran à l'aide d’un curseur. Lorsque le caractère est choisi vous réalisez un dessin en déplaçant le curseur avec les quatre flèches. “L” permet de se déplacer sans écriture, “E” d’effacer une partie des dessins. Pour dessiner à nouveau, utiliser “B”. Fléchés pour déplacer P :prend B : Jb-a i sser L:leuer E:effacer Coule uic s : 1,2,3 TJ a IN"##########,
+    "pages 26, 27"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_041,
+    r##########"10 '---------DESSIN (CPC464 ET CPC664) 20CE=l:CF=0 ' ecriture/Fond
 30 MODE 1
 40 INK 0,26:INK 1,0:INK 2,2:PAPER O:PEN 1
 50 CC=139 ' debut caractères graphiques
@@ -631,8 +792,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 500 ■------------------------------------------------------
 510 ' Pour CPC664:
 520 ' Ajouter : 115 CURSOR 1
-530 ' Supprimer: 230 240 260"##########, "page 28");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_042, r##########"10 '---------SOURIS (CPC664)
+530 ' Supprimer: 230 240 260"##########,
+    "page 28"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_042,
+    r##########"10 '---------SOURIS (CPC664)
 20 CE=1:CF=O ' ecriture/fond
 30 MODE 2
 40 INK 0,26:INK 1,O:PAPER 0:PEN 1
@@ -664,8 +829,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 310 ■-------------------0N p0SE
 320 IF COPYCHR*(#0)<>CHR*(32) THEN RETURN
 330 PRINT CP*
-340 RETURN DEPLACEZ LE EUR AVEC LES FLECHES 'PRENEZ' UNE LETTRE EN APPUYANT SUR 'P' DEPLACEZ LE CURSEUR PUIS 'POSEZ' LA LETTRE EN APPUYANT SUR 'D' C U R S"##########, "page 29");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_043, r##########"10 '---------SOURIS (CP464+CPC664)
+340 RETURN DEPLACEZ LE EUR AVEC LES FLECHES 'PRENEZ' UNE LETTRE EN APPUYANT SUR 'P' DEPLACEZ LE CURSEUR PUIS 'POSEZ' LA LETTRE EN APPUYANT SUR 'D' C U R S"##########,
+    "page 29"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_043,
+    r##########"10 '---------SOURIS (CP464+CPC664)
 20 CE=1:CF=O ' eeccrrii ttuurree//ffond
 30 MODE 2
 40 INK 0,26:INK 1,0:INK 2,2: INK 3,6:PAPER O:PEN 1
@@ -721,8 +890,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 540 FOR A=49152+X-1+(Y-1)*80 TO 65534 STEP 2048
 550 POKE A,X(N):N=N+1
 560 NEXT A
-570 RETURN STOCKAGE D’UN DESSIN DANS UN FICHIER Nous réalisons un dessin à l’aide de segments de droites. Les coordonnées des points sont stockées dans un fichier séquentiel sur cassette ou disquette."##########, "pages 30, 31");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_044, r##########"10 '--------------- STOCKAGE D'UN DESSIN DANS UN FICHIER 20CE=l:CF=0 ' ecriture/fond
+570 RETURN STOCKAGE D’UN DESSIN DANS UN FICHIER Nous réalisons un dessin à l’aide de segments de droites. Les coordonnées des points sont stockées dans un fichier séquentiel sur cassette ou disquette."##########,
+    "pages 30, 31"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_044,
+    r##########"10 '--------------- STOCKAGE D'UN DESSIN DANS UN FICHIER 20CE=l:CF=0 ' ecriture/fond
 30 MODE 1
 40 INK 0,0:INK 1,26:INK 2,2:INK 3,6:PAPER 0:PEN 1
 50 LOCATE l,20:PRINT "PREMIER PO I NT :f1eches puis 'P"’
@@ -757,8 +930,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 340 PRINT #9,Cl
 350 PRINT #9 ,X
 360 PRINT #9,Y
-370 RETURN"##########, "page 31");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_045, r##########"10 ■-----------------LECTURE FICHIER DESSIN
+370 RETURN"##########,
+    "page 31"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_045,
+    r##########"10 ■-----------------LECTURE FICHIER DESSIN
 20 MODE 1
 30 CF=O:CE=1 ' fond/ecriture
 40 INK O,O:INK 1,26:INK 2,2: INK 3,6
@@ -772,8 +949,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 120 IF C*="P" THEN PLOT X,Y,CE
 130 IF C*="D" THEN DRAW X, Y,CE
 140 IF C*>="0" AND C*<="3" THEN CE=VAL(C*)
-150 GOTO 100 DESSINATEUR ET COMPOSITION DE DESSINS Nous reprenons le dessinateur présenté dans le tome 1, page 127, mais cette fois nous enregistrons toutes les commandes et les coordonnées des points dans des tables CM$(),X(),Y() etCE(). CM$() X() Y() CE() P 81 371 1 D 81 315 1 D 47 315 1 D 81 371 1 F 77 343 1 Cette méthode présente plusieurs avantages : □ Elle permet d’exécuter à nouveau un dessin en supprimant une ou plusieurs commandes. □ La sauvegarde du dessin est moins encombrante et plus rapide qu’une sauvegarde binaire. □ Le dessin réalisé peut être agrandi. □ Nous pouvons ajouter plusieurs dessins. Le dessin se fait dans une fenêtre en haut à gauche de l’écran. Par exemple, pour tracer une droite, positionnez le curseur avec les flèches puis frappez “P”. Ensuite déplacez le curseur et frappez “D”. Pour tracer un rectangle, frappez “P” puis déplacez le curseur vers le sommet opposé et frappez “R”. Lorsque le dessin est réalisé, vous le sauvegardez en frappant Vous pouvez ensuite l’appeler avec “$”. Il est affiché dans la fenêtre. Pour l’afficher dans un autre endroit de l’écran, utiliser “%”. Auparavant, positionnez le curseur à l’endroit où doit être affiché le dessin. “+” et permettent d’augmenter et de diminuer la vitesse de déplacement du curseur."##########, "page 32");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_046, r##########"10 ' COMPOSITION DE DESSINS
+150 GOTO 100 DESSINATEUR ET COMPOSITION DE DESSINS Nous reprenons le dessinateur présenté dans le tome 1, page 127, mais cette fois nous enregistrons toutes les commandes et les coordonnées des points dans des tables CM$(),X(),Y() etCE(). CM$() X() Y() CE() P 81 371 1 D 81 315 1 D 47 315 1 D 81 371 1 F 77 343 1 Cette méthode présente plusieurs avantages : □ Elle permet d’exécuter à nouveau un dessin en supprimant une ou plusieurs commandes. □ La sauvegarde du dessin est moins encombrante et plus rapide qu’une sauvegarde binaire. □ Le dessin réalisé peut être agrandi. □ Nous pouvons ajouter plusieurs dessins. Le dessin se fait dans une fenêtre en haut à gauche de l’écran. Par exemple, pour tracer une droite, positionnez le curseur avec les flèches puis frappez “P”. Ensuite déplacez le curseur et frappez “D”. Pour tracer un rectangle, frappez “P” puis déplacez le curseur vers le sommet opposé et frappez “R”. Lorsque le dessin est réalisé, vous le sauvegardez en frappant Vous pouvez ensuite l’appeler avec “$”. Il est affiché dans la fenêtre. Pour l’afficher dans un autre endroit de l’écran, utiliser “%”. Auparavant, positionnez le curseur à l’endroit où doit être affiché le dessin. “+” et permettent d’augmenter et de diminuer la vitesse de déplacement du curseur."##########,
+    "page 32"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_046,
+    r##########"10 ' COMPOSITION DE DESSINS
 20 '
 30 GOSUB 1400 ' Affichage menu
 40 DIM X(200),Y(200),CM$(200),CE(200)
@@ -935,8 +1116,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1600 RETURN
 1610 '----------
 1620 ' Pour disque ajouter: 25 ON ERROR GOTO 1800
-1630 ' 1800 IF DERR=146 THEN RESUME 920"##########, "pages 34, 35, 36");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_047, r##########"10 ' APMOT APPRENTISSAGE DE MOTS 20
+1630 ' 1800 IF DERR=146 THEN RESUME 920"##########,
+    "pages 34, 35, 36"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_047,
+    r##########"10 ' APMOT APPRENTISSAGE DE MOTS 20
 30 1MODE lîINK 0,0: INK 1,26
 40 NM0T =5 ' nombre de mots 50
 60 ------- BOITE
@@ -1021,8 +1206,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 900 IF C$ = MID$(MOT$, J , 1 ) THEN R = R+1:GOTO 920
 910 NEXT J
 920 NEXT K
-930 RETURN COMPOSITION DE PAYSAGE AVEC ANIMATION A l’aide de trois figures de base (arbre, maison, locomotive), vous composez un pay­ sage. Le choix des figures se fait à l’aide d’un curseur que vous déplacez avec les quatre flèches. En frappant “P”, vous “prenez” une des trois figures de base (BEEP signale que la figure a été choisie). “D” permet de “déposer” la figure choisie. La couleur se choisit en frappant 1,2,3. Pour animer une figure, placer le curseur devant elle puis frapper “+” ou (une ou plusieurs fois). Une figure animée peut également être stoppée. S$() contient les dessins. X() et Y() contiennent les coordonnées des dessins. V() contient les vitesses. Exemple : Placez le curseur sur le centre de la locomotive et appuyez sur “P” puis déplacez le curseur et appuyez sur “D”. Pour animer la figure, placez le curseur devant la locomo­ tive et appuyez sur “+” ou Pour “accrocher” une figure derrière une autre, placez le curseur derrière la première figure et appuyez sur “A”. Fie cl» es j? u is Pzprendre I> : cl epo s er A : a c oro + : a van c er — : r e o u 1 er F : F in Couleur-s : 1,2,3"##########, "pages 37, 38, 39");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_048, r##########"10 ■-----------------COMPOSITION DE PAYSAGE AVEC ANIMATION
+930 RETURN COMPOSITION DE PAYSAGE AVEC ANIMATION A l’aide de trois figures de base (arbre, maison, locomotive), vous composez un pay­ sage. Le choix des figures se fait à l’aide d’un curseur que vous déplacez avec les quatre flèches. En frappant “P”, vous “prenez” une des trois figures de base (BEEP signale que la figure a été choisie). “D” permet de “déposer” la figure choisie. La couleur se choisit en frappant 1,2,3. Pour animer une figure, placer le curseur devant elle puis frapper “+” ou (une ou plusieurs fois). Une figure animée peut également être stoppée. S$() contient les dessins. X() et Y() contiennent les coordonnées des dessins. V() contient les vitesses. Exemple : Placez le curseur sur le centre de la locomotive et appuyez sur “P” puis déplacez le curseur et appuyez sur “D”. Pour animer la figure, placez le curseur devant la locomo­ tive et appuyez sur “+” ou Pour “accrocher” une figure derrière une autre, placez le curseur derrière la première figure et appuyez sur “A”. Fie cl» es j? u is Pzprendre I> : cl epo s er A : a c oro + : a van c er — : r e o u 1 er F : F in Couleur-s : 1,2,3"##########,
+    "pages 37, 38, 39"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_048,
+    r##########"10 ■-----------------COMPOSITION DE PAYSAGE AVEC ANIMATION
 20 MODE 1
 30 CE =1 :CF = 0 ' ecriture/fond
 40 PAPER O:PEN 1
@@ -1134,8 +1323,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1110 IF YCOY(S) THEN 1130
 1120 IF XC-2=X(S) THEN S$ (S)=S$(S)+S$(SS): LOCATE XC,YC:PRINT S$(SS): RETURN
 1130 NEXT S
-1140 RETURN MINI INTERPRÉTEUR LOGO La plupart des langages proposent des ordres graphiques où sont spécifiées les coor­ données X et Y des droites à tracer. Le langage LOGO dispose d’ordres graphiques originaux : AVANCE distance Trace une droite d’une longueur égale à la distance spécifiée. ROTATION angle Change la direction du tracé en lui ajoutant l’angle spécifié. Un curseur indique à chaque instant la direction courante. En frappant “ROTATION 90” vous voyez le curseur tourner de 90 degrés. EX : AUANCE 40 ROTAT 90 EINI pour stopper CMDE ? avance 70 CMDE ? rotat 9O CMDE ? avance 70 CMDE ? x-otat 90 CMDE 7 avance 70 CMDE 7 x'otat 90 CMDE o Le tracé de la droite en fonction de l’angle courant se fait ainsi : DX=distanceXCOS(angle) DY=distanceXSI N(angle)"##########, "pages 40, 41, 42");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_049, r##########"10 SIMULATEUR LOGO 20
+1140 RETURN MINI INTERPRÉTEUR LOGO La plupart des langages proposent des ordres graphiques où sont spécifiées les coor­ données X et Y des droites à tracer. Le langage LOGO dispose d’ordres graphiques originaux : AVANCE distance Trace une droite d’une longueur égale à la distance spécifiée. ROTATION angle Change la direction du tracé en lui ajoutant l’angle spécifié. Un curseur indique à chaque instant la direction courante. En frappant “ROTATION 90” vous voyez le curseur tourner de 90 degrés. EX : AUANCE 40 ROTAT 90 EINI pour stopper CMDE ? avance 70 CMDE ? rotat 9O CMDE ? avance 70 CMDE ? x-otat 90 CMDE 7 avance 70 CMDE 7 x'otat 90 CMDE o Le tracé de la droite en fonction de l’angle courant se fait ainsi : DX=distanceXCOS(angle) DY=distanceXSI N(angle)"##########,
+    "pages 40, 41, 42"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_049,
+    r##########"10 SIMULATEUR LOGO 20
 30 MODE 1
 40 INK 0,26:INK 1 ,0: INK 2,2:INK 3,6
 50 DIM GDI(100): X0 = 450 :YC=150: 0X = 1 :CY = 1 : CY = O : DI ST = 20
@@ -1249,15 +1442,23 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1130 '---------------------
 1140 ex: AVANCE 50
 1150 ROTAT 90
-1160 AVANCE 60"##########, "pages 46, 47, 48");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_050, r##########"1180 DEFI CARRE
+1160 AVANCE 60"##########,
+    "pages 46, 47, 48"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_050,
+    r##########"1180 DEFI CARRE
 1190 REPETE 4
 1200 AVANCE 60
 1210 ' ROTAT 90
 1220 ' ENCORE
 1230 ' FINF 1240
-1250 CARRE MUSIQUE ______________________________________________ Sur AMSTRAD la définition des notes se fait en donnant la période associée, ce qui est moins pratique que de définir la note et le niveau d’octave. Ci-dessous, nous indiquons en DATA la correspondance note-période pour le niveau d’octave -1. Pour les autres niveaux d’octave, nous calculons la période nécessaire à l’instruction “SOUND canal,période”."##########, "page 49");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_051, r##########"10 •------------------------------------- MUSIQUE
+1250 CARRE MUSIQUE ______________________________________________ Sur AMSTRAD la définition des notes se fait en donnant la période associée, ce qui est moins pratique que de définir la note et le niveau d’octave. Ci-dessous, nous indiquons en DATA la correspondance note-période pour le niveau d’octave -1. Pour les autres niveaux d’octave, nous calculons la période nécessaire à l’instruction “SOUND canal,période”."##########,
+    "page 49"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_051,
+    r##########"10 •------------------------------------- MUSIQUE
 20 DIM NT$112),PER(12)
 30 VALEURS PERIODES POUR OCTAVE -1
 40 DATA 956,D0
@@ -1300,8 +1501,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 410 IF NT$=NT$(N) THEN SOUND 1 , PER(N)/(2A(OCT+1)),DUR
 420 NEXT N
 430 GOTO 370
-440 '-------------------------------- Mleche haut Le programme ci-dessous décode un morceau défini sous forme de périodes pour donner la note et l’octave."##########, "pages 49, 50");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_052, r##########"10 •------------------------- DECODAGE PERIODE —> NOTE ET OCTAVE
+440 '-------------------------------- Mleche haut Le programme ci-dessous décode un morceau défini sous forme de périodes pour donner la note et l’octave."##########,
+    "pages 49, 50"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_052,
+    r##########"10 •------------------------- DECODAGE PERIODE —> NOTE ET OCTAVE
 20 DIM NT$ ( 12) ,PER <12>
 30 '------- VALEURS POUR OCTAVE -1
 40 DATA 956,DO
@@ -1330,14 +1535,26 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 270 IF PER>R-1 AND PER<R+1 THEN PRINT PER,NT$(N),OCT,DUR
 280 NEXT OCT
 290 NEXT N
-300 GOTO 220 RUN"##########, "page 50");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_053, r##########"71 LA J 20
-80 SOL 2 20"##########, "page 50");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_054, r##########"71 LA 2 50
+300 GOTO 220 RUN"##########,
+    "page 50"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_053,
+    r##########"71 LA J 20
+80 SOL 2 20"##########,
+    "page 50"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_054,
+    r##########"71 LA 2 50
 80 SOL 2 20
 89 FA 2 20
-95 MI 2 20"##########, "page 50");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_055, r##########"10 '---------------ENREGISTREMENT D’UN MORCEAU DANS UN FICHIER
+95 MI 2 20"##########,
+    "page 50"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_055,
+    r##########"10 '---------------ENREGISTREMENT D’UN MORCEAU DANS UN FICHIER
 20 MODE 2:PAPER 0:PEN 1 s I NK 0,26:INK 1,0
 30 '------------------------------------ octave -1
 40 DIM NTI(12),PER(12),CLI(12)
@@ -1374,8 +1591,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 350 PRINT #9,20
 360 LOCATE 20,l:PRINT NTI(N); SPC(2)
 370 SOUND 1 , PER(N)/(2A(0CT+1)),20 ’ Mleche haut
-380 GOTO 240"##########, "page 51");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_056, r##########"10 JOUE UN MORCEAU ENREGISTRE DANS UN FICHIERIPAR 'EMUS')
+380 GOTO 240"##########,
+    "page 51"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_056,
+    r##########"10 JOUE UN MORCEAU ENREGISTRE DANS UN FICHIERIPAR 'EMUS')
 20 MODE 2
 30 DIM NTT( 12) , PER(12)
 40 '--- VALEURS PERIODES POUR OCTAVE -1
@@ -1403,8 +1624,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 260 FOR N=1 TO 12
 270 IF NTT=NTT(N) THEN SOUND 1 , PER(N)/(2A(OCT+1)),DUR
 280 NEXT N
-290 GOTO 230"##########, "page 52");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_057, r##########"10 '----- ---------- morse MORSESO —
+290 GOTO 230"##########,
+    "page 52"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_057,
+    r##########"10 '----- ---------- morse MORSESO —
 20 ' • —
 30 MODE 2:PAPER O:PEN 1 A
 40 DIM M0RSE$(26) B — •••
@@ -1427,8 +1652,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 210 IF MI DS(XS,P,1)=" THEN SOUND l,350,40:F0R TP=1 T0 400:NEXT TP
 220 NEXT P
 230 FOR TP=1 T0 300:NEXT TP
-240 GOTO 130"##########, "page 53");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_058, r##########"10 ' FICHIER D'ADRESSES SIMPLE
+240 GOTO 130"##########,
+    "page 53"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_058,
+    r##########"10 ' FICHIER D'ADRESSES SIMPLE
 20 '
 30 MODE 2:INK 0,0:INK 1,26:PAPER O:PEN 1
 40 DIM NOM*(300),RUE*(300) , V ILLE*(300),CPST*(300)
@@ -1501,11 +1730,19 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 710 PRINT NOMS(F) TAB(13) RUES(F) TAB(40) VILLES(F)
 720 NEXT F
 730 PRINT:INPUT "Appuyer sur ENTER ";XS
-740 RETURN"##########, "pages 56, 57");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_059, r##########"332 FOR RANG=1 TO NFICH
+740 RETURN"##########,
+    "pages 56, 57"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_059,
+    r##########"332 FOR RANG=1 TO NFICH
 333 IF NOM$ = NOM$ (RANG) THEN PRINT "Existe deja":G0T0 310
-334 NEXT RANG Pour procéder à des modifications de fiches, il faut ajouter le sous-programme suivant et prévoir son appel au menu. Nous affichons les anciennes valeurs des zones et si l’opérateur ne désire pas les modifier, il appuie sur ENTER. On s’aperçoit que les modes CREATION et MODIFI­ CATION pourraient être fusionnés. C’est ce que nous ferons dans les programmes suivants. Si un nom a été écrit en majuscules lors de la création il doit être écrit aussi en majus­ cules lors de la recherche. En changeant l’instruction 800, la recherche peut s’effectuer en majuscules ou minuscules :"##########, "page 58");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_060, r##########"750 ========================= MODIFICATION
+334 NEXT RANG Pour procéder à des modifications de fiches, il faut ajouter le sous-programme suivant et prévoir son appel au menu. Nous affichons les anciennes valeurs des zones et si l’opérateur ne désire pas les modifier, il appuie sur ENTER. On s’aperçoit que les modes CREATION et MODIFI­ CATION pourraient être fusionnés. C’est ce que nous ferons dans les programmes suivants. Si un nom a été écrit en majuscules lors de la création il doit être écrit aussi en majus­ cules lors de la recherche. En changeant l’instruction 800, la recherche peut s’effectuer en majuscules ou minuscules :"##########,
+    "page 58"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_060,
+    r##########"750 ========================= MODIFICATION
 760 PRINT:INPUT "Quel nom(ENTER pour fin) ";N0M$
 770 IF LEN(N0M$)=0 THEN RETURN ' fin de mode?
 780 '
@@ -1573,10 +1810,18 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1400 X=INDEX(K): INDEX(K) = INDEX(J): INDEX(J)=X
 1410 NEXT K
 1420 IF IV=1 THEN 1350
-1430 GOTO 1340"##########, "pages 58, 59, 60");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_061, r##########"1440 ============================== ETIQUETTES
-1445 ' A ajouter au programme 'fichier d'adresses'"##########, "page 61");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_062, r##########"1460 INPUT "Quelle ville (ENTER pour toutes) “ ; V$
+1430 GOTO 1340"##########,
+    "pages 58, 59, 60"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_061,
+    r##########"1440 ============================== ETIQUETTES
+1445 ' A ajouter au programme 'fichier d'adresses'"##########,
+    "page 61"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_062,
+    r##########"1460 INPUT "Quelle ville (ENTER pour toutes) “ ; V$
 1470 INPUT "Ecran ou imprimante (E/I) “;R$
 1480 C=0:IF R$="I" THEN C=8 ' canal
 1490 NC=O ' nombre de clés
@@ -1637,8 +1882,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 2040 NEXT K
 2050 PRINT #C
 2060 FOR K=1 TO I VERT-4 : PR I NT #C:NEXT K
-2070 RETURN"##########, "pages 61, 62");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_063, r##########"10 'FICHIER STOCK (PROGRAMME ADAPTABLE A D'AUTRES FICHIERS)
+2070 RETURN"##########,
+    "pages 61, 62"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_063,
+    r##########"10 'FICHIER STOCK (PROGRAMME ADAPTABLE A D'AUTRES FICHIERS)
 20 '
 30 ' FICHK,): table a 2 dimensions contenant les -fiches
 40 ' NFICH: nombre de fiches
@@ -1792,8 +2041,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1540 GOTO 1490
 1550 '
 1560 J = J + 1: IF J>K THEN 1460
-1570 GOTO 1480"##########, "pages 64, 65, 66");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_064, r##########"10 ■ CONVERSION MINUSCULE ---> MAJUSCULE
+1570 GOTO 1480"##########,
+    "pages 64, 65, 66"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_064,
+    r##########"10 ■ CONVERSION MINUSCULE ---> MAJUSCULE
 20 '
 30 MODE 2:PAPER 0:PEN 1
 40 DIM LIGt(lOOO)
@@ -1820,16 +2073,24 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 250 '-------------------------------
 260 ' SUR CPC664,0N PEUT OUVRIR UN FICHIER EN LECTURE
 270 ' ET UN AUTRE EN ECRITURE S IMULTANEMENT(AVEC DES NOMS
-280 ' DIFFERENTS). CHANGEMENT D’UN MOT DANS UN FICHIER SÉQUENTIEL Pour changer un mot dans un fichier séquentiel nous utilisons l'instruction INSTR qui nous donne la position du mot dans chaque ligne. Ce programme peut servir à changer des noms de variables d’un programme sauve­ gardé par “SAVE “XX”,A”."##########, "page 67");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_065, r##########"10 ' CHANGEMENT D'UN MOT DANS UN FICHIER SEQUENTIEL
+280 ' DIFFERENTS). CHANGEMENT D’UN MOT DANS UN FICHIER SÉQUENTIEL Pour changer un mot dans un fichier séquentiel nous utilisons l'instruction INSTR qui nous donne la position du mot dans chaque ligne. Ce programme peut servir à changer des noms de variables d’un programme sauve­ gardé par “SAVE “XX”,A”."##########,
+    "page 67"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_065,
+    r##########"10 ' CHANGEMENT D'UN MOT DANS UN FICHIER SEQUENTIEL
 20 '
 30 MODE 2:PAPER O:PEN 1
 40 DIM TXTK 1000)
 50 '
 60 INPUT "NOM DU FICHIER ";NFJ
 70 OPENIN NF$
-80 INPUT "ANCIEN MOT ";AM$"##########, "page 67");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_066, r##########"66 I BASIC AMSTRAD
+80 INPUT "ANCIEN MOT ";AM$"##########,
+    "page 67"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_066,
+    r##########"66 I BASIC AMSTRAD
 90 INPUT "NOUVEAU MOT ";NMI
 100 '---------------------------------------- LECTURE FICHIER DANS TABLE TXTIO
 110 FOR 1=1 TO 1000
@@ -1855,24 +2116,36 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 310 PRINT-.PRINT "NOUVEAU F I CH I ER :";NFI+"B"
 320 CLOSEOUT
 330 '
-340 'Attention! pour un programme,tai re 'SAVE "XX",A' NOM DU FICHIER ? X ANCIEN MOT ? LIGNE NOUVEAU MOT ? LG"##########, "page 68");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_067, r##########"10 '--------------- COPIE ECRAN(TEXTE)
+340 'Attention! pour un programme,tai re 'SAVE "XX",A' NOM DU FICHIER ? X ANCIEN MOT ? LIGNE NOUVEAU MOT ? LG"##########,
+    "page 68"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_067,
+    r##########"10 '--------------- COPIE ECRAN(TEXTE)
 20 FOR LIGNE=1 TO 24
 30 FOR COL=1 TO 80
 40 LOCATE COL,LIGNE:CI=COPYCHRI(#G)
 50 PRINT #8,Cl;
 60 NEXT COL
 70 PRINT #8
-80 NEXT LIGNE"##########, "page 68");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_068, r##########"10 '--------------- COPIE ECRAN(TEXTE)
+80 NEXT LIGNE"##########,
+    "page 68"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_068,
+    r##########"10 '--------------- COPIE ECRAN(TEXTE)
 20 FOR LG=1 TO 24
 30 FOR COL=1 TO 80
 40 LOCATE COL,LG :CI=COPYCHRI(#0)
 50 PRINT #8,Cl;
 60 NEXT COL
 70 PRINT #8
-80 NEXT LG NOUVEAU FICHIER:XB"##########, "page 68");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_069, r##########"10 ' COMPOSITION DE TEXTES
+80 NEXT LG NOUVEAU FICHIER:XB"##########,
+    "page 68"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_069,
+    r##########"10 ' COMPOSITION DE TEXTES
 20 '
 30 ' Le texte de base et le texte a ajouter doivent exister.
 40 '
@@ -1906,9 +2179,17 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 320 '-------------------Edition
 330 FOR L=1 TO NL
 340 PRINT LIGI(L)
-350 NEXT L"##########, "page 70");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_070, r##########"70 I BASIC AMSTRAD"##########, "pages 71, 72");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_071, r##########"10 BIBLIOTHEQUE 20
+350 NEXT L"##########,
+    "page 70"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_070,
+    r##########"70 I BASIC AMSTRAD"##########,
+    "pages 71, 72"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_071,
+    r##########"10 BIBLIOTHEQUE 20
 30 MODE 2
 40 INK 0,26:INK 1,0:PAPER O:PEN 1
 50 NF$="BIBE" ' nom fichier
@@ -2059,13 +2340,21 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1500 X=INDEX(K): INDEX(K)=INDEX(J): INDEX(J)=X
 1510 NEXT K
 1520 IF 10=1 THEN 1450
-1530 GOTO 1440"##########, "pages 72, 73, 74");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_072, r##########"10 ' DICTIONNAIRE DE SYNONYMES
+1530 GOTO 1440"##########,
+    "pages 72, 73, 74"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_072,
+    r##########"10 ' DICTIONNAIRE DE SYNONYMES
 20 '
 30 MODE 2: INK 0,26: INK 1,O:PAPER O:PEN 1
 40 NFI="SYNO" ' nom fichier
-50 DIM LIGI (200)"##########, "page 75");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_073, r##########"70 INPUT "NOUVEAU FICHIER (0/N) " ; RI
+50 DIM LIGI (200)"##########,
+    "page 75"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_073,
+    r##########"70 INPUT "NOUVEAU FICHIER (0/N) " ; RI
 80 IF RI<>"0" AND RIO"o" THEN GOSUB 470
 90 '
 100 CLS:PRINT “MODES:":PRINT
@@ -2119,14 +2408,30 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 580 PRINT #9,NF
 590 FOR F=1 TO NF:PRINT #9,LIG!(F): NEXT F
 600 CLOSEOUT
-610 RETURN"##########, "pages 75, 76");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_074, r##########"10 JUILLET 1985 /MENU = CAROTTES STEAK SALADE /1 NV ITE = DUPONT
+610 RETURN"##########,
+    "pages 75, 76"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_074,
+    r##########"10 JUILLET 1985 /MENU = CAROTTES STEAK SALADE /1 NV ITE = DUPONT
 12 JUILLET 1985 /MENU=THON COTE DE PORC RIZ AU LAI T/I NV ITE = DUPONT
-16 JUILLET 1985 /MENU=CAROTTES GRATIN DAUPHINOIS RIZ AU LAIT /INVITE=DUPONT MOT CLE ? RIZ AU LAIT"##########, "page 77");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_075, r##########"12 JUILLET 1985 /MENU = THON COTE DE PORC RIZ AU LAI T/I NV ITE = DUPONT
-16 JUILLET 1905 /MENU=CAROTTES GRATIN DAUPHINOIS RIZ AU LAIT /I NV ITE = DUPONT GESTION DE CHÈQUES ________________________________ Des chèques sont stockés dans des tables. Nous éditons la liste des chèques pour la période choisie ainsi que le solde. Les dates doivent être entrées sous la forme “année/ mois/jour” afin de permettre la sélection entre deux dates. Nous avons également prévu une ventilation par catégorie de dépenses. NCHEQSO LIB$() CT$() DT$() MT()"##########, "page 77");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_076, r##########"76 I BASIC AMSTRAD Date debut (AA/MM/J J) (ou ENTER) ? Date Tin (AA/MM/JJ)(ou ENTER) ? No cheque Libelle Credit Debit"##########, "pages 77, 78");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_077, r##########"10 ' GESTION DE CHEQUES
+16 JUILLET 1985 /MENU=CAROTTES GRATIN DAUPHINOIS RIZ AU LAIT /INVITE=DUPONT MOT CLE ? RIZ AU LAIT"##########,
+    "page 77"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_075,
+    r##########"12 JUILLET 1985 /MENU = THON COTE DE PORC RIZ AU LAI T/I NV ITE = DUPONT
+16 JUILLET 1905 /MENU=CAROTTES GRATIN DAUPHINOIS RIZ AU LAIT /I NV ITE = DUPONT GESTION DE CHÈQUES ________________________________ Des chèques sont stockés dans des tables. Nous éditons la liste des chèques pour la période choisie ainsi que le solde. Les dates doivent être entrées sous la forme “année/ mois/jour” afin de permettre la sélection entre deux dates. Nous avons également prévu une ventilation par catégorie de dépenses. NCHEQSO LIB$() CT$() DT$() MT()"##########,
+    "page 77"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_076,
+    r##########"76 I BASIC AMSTRAD Date debut (AA/MM/J J) (ou ENTER) ? Date Tin (AA/MM/JJ)(ou ENTER) ? No cheque Libelle Credit Debit"##########,
+    "pages 77, 78"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_077,
+    r##########"10 ' GESTION DE CHEQUES
 20 '
 30 MODE 2: INK 0,0:INK 1,26:PAPER 0:PEN 1
 40 NCH = O ' nombre de cheques
@@ -2212,8 +2517,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 850 PRINT #9,CTS(F)
 860 NEXT F
 870 CLOSEOUT
-880 RETURN"##########, "pages 79, 80");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_078, r##########"900 OPENIN "CHEQ"
+880 RETURN"##########,
+    "pages 79, 80"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_078,
+    r##########"900 OPENIN "CHEQ"
 910 INPUT #9,NCH
 920 FOR F=1 TO NCH
 930 INPUT #9,NCHEQI(F),DTI(F),LI Bl(F),MT(F),CTI(F)
@@ -2256,8 +2565,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1330 PRINT CI(J) TAB(IO) MC(J)
 1340 NEXT J
 1350 PRINTîINPUT "APPUYER SUR ENTER ";XI
-1360 RETURN"##########, "pages 80, 81");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_079, r##########"10 ' SL SAISIE LETTRE
+1360 RETURN"##########,
+    "pages 80, 81"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_079,
+    r##########"10 ' SL SAISIE LETTRE
 20 '
 30 MODE 2
 40 '
@@ -2267,8 +2580,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 80 LINE INPUT "? ",LIG$
 90 IF LIG$="*" THEN CLOSEOUT:END
 100 PRINT #9,LIG$
-110 GOTO 80 ? LIBERT PIERRE LE 21.7.1985 ? RUE DE PARIS ? 53000 SOUCE 9 9 ? <NOM> ? <RUE> ? <VILLE> Cher <NOM>,veui11ez trouver ci joint ................... 7 ? ? P.LIBERT ? ♦"##########, "page 82");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_080, r##########"10 ' EDLB EDITION LETTRE
+110 GOTO 80 ? LIBERT PIERRE LE 21.7.1985 ? RUE DE PARIS ? 53000 SOUCE 9 9 ? <NOM> ? <RUE> ? <VILLE> Cher <NOM>,veui11ez trouver ci joint ................... 7 ? ? P.LIBERT ? ♦"##########,
+    "page 82"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_080,
+    r##########"10 ' EDLB EDITION LETTRE
 20 '
 30 OPENIN "LETTRE"
 40 '---------------------------------- Lecture lettre standard
@@ -2301,8 +2618,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 310 PRINT "PARAMETRE NON TROUVE":STOP
 320 LI Gt = LEFTt(LI Gt,P1 - 1 )+ Tt(NP)+RIGHTt(LI Gt,LEN(LI Gt)-P2) 330
 340 PRINT LIGt
-350 NEXT LG"##########, "page 83");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_081, r##########"10 ' EDITEUR DE LIGNE
+350 NEXT LG"##########,
+    "page 83"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_081,
+    r##########"10 ' EDITEUR DE LIGNE
 20 '
 30 MODE 2:PAPER O:PEN 1 : I NK 0,26: INK 1,0
 40 C0L=5:LIG=10 ' ligne et colonne
@@ -2337,8 +2658,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 310 LOCATE COL,LIG:PRINT LIG*
 320 '
 330 PC=PC+1
-340 GOTO 100"##########, "page 86");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_082, r##########"10 ' EDITEUR DE TEXTE PLEIN ECRAN
+340 GOTO 100"##########,
+    "page 86"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_082,
+    r##########"10 ' EDITEUR DE TEXTE PLEIN ECRAN
 20 '
 30 MODE 2:PAPER O:PEN 1: INK 0,1:INK 1,24
 40 WINDOW #0,1,80,1,21 ' -fenetre texte
@@ -2435,8 +2760,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 990 PRINT #8,LIG*(L)
 1000 NEXT L
 1010 RETURN
-1020 '-----Les instructions: LIG * = " " ne comportent pas d'espace en"##########, "pages 87, 88");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_083, r##########"10 ' JUSTIFICATION A DROITE D'UNE LIGNE
+1020 '-----Les instructions: LIG * = " " ne comportent pas d'espace en"##########,
+    "pages 87, 88"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_083,
+    r##########"10 ' JUSTIFICATION A DROITE D'UNE LIGNE
 20 '
 30 MODE 2
 40 LL=30 ' longueur maxi
@@ -2460,8 +2789,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 220 LIG$=LEFT$(LI 6$,V-l)+SPACEI(1)+RIGHT$(LIG$,LEN(LIG$)-V +1)
 230 PRINT LIG$
 240 S=V+1
-250 GOTO 90 LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE"##########, "page 89");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_084, r##########"10 ' JUSTIFICATION A DROITE D'UN PARAGRAPHE
+250 GOTO 90 LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE LE PETIT CHAT RONRONNE"##########,
+    "page 89"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_084,
+    r##########"10 ' JUSTIFICATION A DROITE D'UN PARAGRAPHE
 20 '
 30 MODE 2:PAPER O:PEN 1: INK 0,0:1NK 1,26
 40 DIM TXT*(1000)
@@ -2530,8 +2863,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 670 S=V+1
 680 GOTO 520 690
 700 PRINT LIG$
-710 NEXT L Exemple de texte à justifier : L’auteur du “MIGRATEUR” n’a évidemment jamais habité quelque part. Il a pourtant fini par poser ses valises dans l’île d’Houat, en Bretagne. Dans la solitude, il écrit l’his­ toire de sa jeunesse, “sa chute hors du lycée, dans le hasard”. Lire pages 18 à 30. □ Texte normalisé L’auteur du “MIGRATEUR” n’a évidemment jamais habité quelque part. Il a pourtant fini par poser ses valises dans l’île d’Houat, en Bretagne. Dans la solitude, il écrit l’histoire de sa jeunesse, “sa chute hors du lycée, dans le hasard”. Lire pages 18 à 30. □ Texte justifié à droite L’auteur du “MIGRATEUR” n’a évidemment jamais habité quelque part. Il a pourtant fini par poser ses valises dans l’île d’Houat, en Bretagne. Dans la solitude, il écrit l’histoire de sa jeunesse,“sa chute hors du lycée, dans le hasard”. Lire pages 18 à 30."##########, "pages 90, 91");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_085, r##########"10 ' MAILING
+710 NEXT L Exemple de texte à justifier : L’auteur du “MIGRATEUR” n’a évidemment jamais habité quelque part. Il a pourtant fini par poser ses valises dans l’île d’Houat, en Bretagne. Dans la solitude, il écrit l’his­ toire de sa jeunesse, “sa chute hors du lycée, dans le hasard”. Lire pages 18 à 30. □ Texte normalisé L’auteur du “MIGRATEUR” n’a évidemment jamais habité quelque part. Il a pourtant fini par poser ses valises dans l’île d’Houat, en Bretagne. Dans la solitude, il écrit l’histoire de sa jeunesse, “sa chute hors du lycée, dans le hasard”. Lire pages 18 à 30. □ Texte justifié à droite L’auteur du “MIGRATEUR” n’a évidemment jamais habité quelque part. Il a pourtant fini par poser ses valises dans l’île d’Houat, en Bretagne. Dans la solitude, il écrit l’histoire de sa jeunesse,“sa chute hors du lycée, dans le hasard”. Lire pages 18 à 30."##########,
+    "pages 90, 91"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_085,
+    r##########"10 ' MAILING
 20 '
 30 ' Les fichiers lettre et adresses doivent déjà exister
 40 ' Cf programme 'fichier d'adresses' et éditeur de texte.
@@ -2572,8 +2909,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 390 PRINT LIG*(L)
 400 NEXT L
 410 PRINT:INPUT "APPUYER SUR ENTER ";
-420 GOTO 250"##########, "page 93");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_086, r##########"10 ' GESTION DE CLUBS SPORTIFS
+420 GOTO 250"##########,
+    "page 93"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_086,
+    r##########"10 ' GESTION DE CLUBS SPORTIFS
 20 '
 30 MODE 2:PAPER O:PEN 1:INK 0,1:INK 1,24
 40 DIM NOM*(100),CLUB*(100),PO I NT(100)
@@ -2731,8 +3072,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1570 PRINT CLUBS(C),TP(C)
 1580 NEXT C
 1590 PRINT:INPUT "APPUYER SUR ENTER";XS
-1600 RETURN"##########, "pages 95, 96, 97");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_087, r##########"10 'idlv INDEX DE LIVRE
+1600 RETURN"##########,
+    "pages 95, 96, 97"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_087,
+    r##########"10 'idlv INDEX DE LIVRE
 20 '
 25 MODE 2:PAPER 0:PEN 1
 30 DIM CLESI200),PGS(200)
@@ -2767,8 +3112,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 320 '
 330 PRINT #CN,TAB(3) CLES(J) STR INGS(18-LEN(CLES(J) i
 340 PRINT #CN,TAB(22) PGS(J)
-350 NEXT J A ABS.................................. 81 AND.................................. 22 ASC.................................. 59 AUTO................................ 15 B BINS................................ 63 BORDER........................... 28 C CHRS................................ 60 CLEAR............................. 94"##########, "page 98");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_088, r##########"10 ' HISTOGRAMME CIRCULAIRE (CPC664)
+350 NEXT J A ABS.................................. 81 AND.................................. 22 ASC.................................. 59 AUTO................................ 15 B BINS................................ 63 BORDER........................... 28 C CHRS................................ 60 CLEAR............................. 94"##########,
+    "page 98"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_088,
+    r##########"10 ' HISTOGRAMME CIRCULAIRE (CPC664)
 20 '
 30 MODE 1
 40 INK 0,26:INK 1,O:PAPER O:PEN 1
@@ -2809,8 +3158,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 390 Y = YA + R*SIN(A)
 400 DRAW X,Y,CE
 410 NEXT A MSX AMSTRAD
-420 RETURN APPLE fl ATARI IBM"##########, "page 99");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_089, r##########"10 -------------------------HISTOGRAMME DOUBLE
+420 RETURN APPLE fl ATARI IBM"##########,
+    "page 99"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_089,
+    r##########"10 -------------------------HISTOGRAMME DOUBLE
 20 MODE 1
 30 INK 0,26:INK 1,6:INK 2,0:PAPER O:PEN 1
 35 DIM MOIS*(12),VNTE1(12),VNTE2(12)
@@ -2864,8 +3217,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 510 FOR 6=1 TO NG
 520 MOVE 1,YA+G»I6
 530 TAGîPRINT G*PAS;
-540 NEXT G"##########, "page 101");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_090, r##########"10 'MOT MOT LE PLUS LONG
+540 NEXT G"##########,
+    "page 101"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_090,
+    r##########"10 'MOT MOT LE PLUS LONG
 20 '
 30 MODE 1: INK 0,0: INK 1,26:PAPER O-.PEN 1
 40 NM = 6 ' Nombre de lignes
@@ -2948,13 +3305,21 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 820 GOTO 670
 830 ’
 840 LOCATE XS + LG,YS: PR I NT CHR$(32)
-850 RETURN"##########, "pages 104, 105");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_091, r##########"10 LE COMPTE EST BON 20
+850 RETURN"##########,
+    "pages 104, 105"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_091,
+    r##########"10 LE COMPTE EST BON 20
 30 D'apres J.BUISSON (ORDINATEUR INDIVIDUEL 54BI 40
 50 NB ( ) : nombres
 60 RP O : résultats partiels
-70 AD ( ) : pointeurs vers additions"##########, "page 107");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_092, r##########"30 DV ( ) : pointeurs vers divisions
+70 AD ( ) : pointeurs vers additions"##########,
+    "page 107"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_092,
+    r##########"30 DV ( ) : pointeurs vers divisions
 90 OC ( ) : témoin occupation de N B( ) 100
 110 MODE 2:PAPER O:PEN 1 : I NK 0,26:INK 1,0
 120 INPUT "Nombre a trouver “;RP(O) 130
@@ -2991,17 +3356,29 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 530 NEXT J
 540 ---------------------------------P0L)R TEST
 550 PRINT
-560 FOR 1=0 TO NVîPRINT RP ( I) , NB ( AD ( I )) , NB(DV( I )):NEXT I"##########, "page 107");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_093, r##########"106 I BASIC AMSTRAD On pourra effectuer des divisions du type suivant en faisant NB(7)=1 : NCHERCHE+-N Il faut pour cela ajouter au programme précédent :
-155 NB(7)=1"##########, "page 108");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_094, r##########"290 DV(NV)=DV(NV) +1îIF DV(NV)< = 7 THEN 220
+560 FOR 1=0 TO NVîPRINT RP ( I) , NB ( AD ( I )) , NB(DV( I )):NEXT I"##########,
+    "page 107"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_093,
+    r##########"106 I BASIC AMSTRAD On pourra effectuer des divisions du type suivant en faisant NB(7)=1 : NCHERCHE+-N Il faut pour cela ajouter au programme précédent :
+155 NB(7)=1"##########,
+    "page 108"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_094,
+    r##########"290 DV(NV)=DV(NV) +1îIF DV(NV)< = 7 THEN 220
 380 IF DV(NV)=7 AND AD(NV)= 0 THEN 290
 381 IF RP(NV)=1 AND DV(NV)=7 THEN 290
 382 IF NV>4 THEN 340
 385 IF RP(NV)=0 OR RP(NV)=1 THEN 440
 390 IF AD(NV)<>0 THEN 0C(AD(NV))=1
-400 IF DV(NV)<>7 THEN 0C(DV(NV))=1 Le nombre de solutions augmente sensiblement mais le temps de recherche augmente aussi très nettement. Essayez de trouver 876 avec 50,8,7,4,3,25. On obtient : 25-3=22 22*8 = 176 176-7=169"##########, "page 108");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_095, r##########"10 ' JEU DE MARIENBAD
+400 IF DV(NV)<>7 THEN 0C(DV(NV))=1 Le nombre de solutions augmente sensiblement mais le temps de recherche augmente aussi très nettement. Essayez de trouver 876 avec 50,8,7,4,3,25. On obtient : 25-3=22 22*8 = 176 176-7=169"##########,
+    "page 108"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_095,
+    r##########"10 ' JEU DE MARIENBAD
 20 '
 30 '
 40 ' SI VOUS COMMENCE Z,VOUS PERDEZ
@@ -3093,8 +3470,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 940 PRINT STRING!(JEU(L) ,"I")
 950 NEXT L
 960 PRINT:RETURN 97p '-------------- FIN DE partie?
-980 S = O:FOR L=1 TO 4 : S = S +J EU(L): NE XT L:RETURN"##########, "pages 110, 111");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_096, r##########"10 ' APPR JEU DE MARIENBAD PAR APPRENTISSAGE
+980 S = O:FOR L=1 TO 4 : S = S +J EU(L): NE XT L:RETURN"##########,
+    "pages 110, 111"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_096,
+    r##########"10 ' APPR JEU DE MARIENBAD PAR APPRENTISSAGE
 20 '
 30 DIM TJ (300),6(300),J (30),LUI(30)
 40 MODE 2:PAPER O:PEN 1: INK O,O:INK 1,26
@@ -3159,8 +3540,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 640 N=I NT(RND(1)♦JEU(L))+l
 650 GOTO 530
 660 '--------------------------------- DESSIN PARTIE
-670 PRINT"##########, "pages 113, 114");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_097, r##########"600 FOR L = 1 TO 4
+670 PRINT"##########,
+    "pages 113, 114"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_097,
+    r##########"600 FOR L = 1 TO 4
 690 PRINT LjSTRING!(JEU(L)I")
 700 NEXT L
 710 PRINT
@@ -3197,8 +3582,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 1040 IF LUI (K)=l THEN G(J)=G(J)-G
 1050 IF LUI (K)=0 THEN G ( J)=G(J)+G
 1060 NEXT K
-1070 RETURN"##########, "page 114");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_098, r##########"10 ' JEU DE LA VIE NO 1
+1070 RETURN"##########,
+    "page 114"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_098,
+    r##########"10 ' JEU DE LA VIE NO 1
 20 '
 30 DEFINT A,Z
 40 MODE 2:PAPER O:PEN 1;INK O,1:INK 1,24
@@ -3250,8 +3639,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 500 NEXT X
 510 NEXT Y
 520 LOCATE 30,l:PRINT "GENERATION ";GN
-530 RETURN"##########, "page 118");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_099, r##########"10 ' JEU DE LA VIE NO 3
+530 RETURN"##########,
+    "page 118"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_099,
+    r##########"10 ' JEU DE LA VIE NO 3
 20 "
 30 DEF INT A,Z
 40 MODE 2
@@ -3310,8 +3703,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 580 NC=N1
 590 FOR N=1 TO NC:YY(N)=Y1(N): XX(N)=X1(N): NEXT N
 600 LOCATE 30,l:PRINT "GENERATION ";GN
-610 RETURN OBSTACLE ____________________________________________ Un point se déplace à travers des obstacles. Vous devez adapter la direction à l’aide des flèches pour éviter les obstacles."##########, "pages 119, 120");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_100, r##########"10 ' OBSTACLE
+610 RETURN OBSTACLE ____________________________________________ Un point se déplace à travers des obstacles. Vous devez adapter la direction à l’aide des flèches pour éviter les obstacles."##########,
+    "pages 119, 120"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_100,
+    r##########"10 ' OBSTACLE
 20 '
 30 MODE 1
 40 INK 0,0:INK 1,26
@@ -3359,8 +3756,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 470 PRINT CHRK7) ;
 480 LOCATE 1,2:PRINT P;"POINTS"
 490 FOR TP=1 TO 2000:NEXT TP
-500 GOTO 30"##########, "page 121");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_101, r##########"10 ----------------METEORITES
+500 GOTO 30"##########,
+    "page 121"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_101,
+    r##########"10 ----------------METEORITES
 20 MODE 1:PAPER O:PEN 1
 30 INK 0,26: INK 1,0
 40 PRINT "Fléchés < - et -> / ESC 2 -fois pour -fin"
@@ -3382,10 +3783,18 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 210 IF F=1 THEN LOCATE 1,23:PRINT "Sc ore:";L: GOTO 240
 220 NEXT L
 230 '
-240 FOR.TP=1=1 TO 3000:NEXT TP:60T0 60"##########, "page 122");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_102, r##########"59 POINTS
-122 I BASIC AMSTRAD l0 ■------------------- CASSE BRIQUES"##########, "pages 123, 124");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_103, r##########"20 MODE 1:PAPER O:PEN 1
+240 FOR.TP=1=1 TO 3000:NEXT TP:60T0 60"##########,
+    "page 122"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_102,
+    r##########"59 POINTS
+122 I BASIC AMSTRAD l0 ■------------------- CASSE BRIQUES"##########,
+    "pages 123, 124"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_103,
+    r##########"20 MODE 1:PAPER O:PEN 1
 30 INK 0,26:INK 1,0:INK 2,6
 40 INPUT "Niveau (1,2,3) (9 pour fin) " ; NV
 50 IF NV = 9 THEN END
@@ -3433,8 +3842,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 480 '
 490 LOCATE 30,23:PRINT SC;"POINTS"
 500 FOR TP=1 TO 4000:NEXT TP
-510 GOTO 20"##########, "page 124");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_104, r##########"10 ' GLOUTONS
+510 GOTO 20"##########,
+    "page 124"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_104,
+    r##########"10 ' GLOUTONS
 20 '
 30 MODE IzPAPER 0:PEN 1:INK 0,1:INK 1,24
 40 LOCATE 1,25:PRINT "UTILISER LES FLECHES / FIN:ESC 2 FOIS"
@@ -3477,8 +3890,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 410 GOTO 200
 420 '--­
 430 FOR TP=1 TO 3000:NEXT TP
-440 GOTO 30"##########, "page 126");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_105, r##########"10 ' BIORYTHME
+440 GOTO 30"##########,
+    "page 126"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_105,
+    r##########"10 ' BIORYTHME
 20 '
 30 MODE 2:PAPER O:PEN 1:1NK 0,26:INK 1,0
 40 DIM A(12),JM(12)
@@ -3524,8 +3941,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 440 P1 = 100*S IN ( (D + NJOUR)*2*P I/C)
 450 X = 1 0 + D*16 : DRAW X,200+Pl,CL
 460 NEXT D
-470 RETURN"##########, "page 128");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_106, r##########"10 ' COMPLETER UNE PHRASE
+470 RETURN"##########,
+    "page 128"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_106,
+    r##########"10 ' COMPLETER UNE PHRASE
 20 '
 30 MODE 2:PAPER 0:PEN 1 s INK 0,0:INK 1,26
 40 LOCATE 1,20:PRINT "COMPLETER LA PHRASE"
@@ -3552,8 +3973,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 250 LOCATE X A + P-1,YA : PRINT C$
 260 P=P+1
 270 PL=PL+1:IF PLXEN(MOTI) THEN 100
-280 GOTO 190"##########, "page 129");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_107, r##########"10 ' DICTEE 20
+280 GOTO 190"##########,
+    "page 129"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_107,
+    r##########"10 ' DICTEE 20
 30 MODE 1
 40 PAPER 0:PEN 1 : INK 1 ,0:INK 0,26 50
 60 DATA "QU'EST CE QUE SIGHFIE APPRIVOISER" ,N
@@ -3583,12 +4008,20 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 300 IF UPPERS(CS)<>UPPER$ (CS (L)) THEN PRINT CHRS ( 7); : GOTO 290
 310 LOCATE P,L:PRINT 2 S ____________________________
 320 NEXT L
-330 END QU EST CE QUE SIGNIFIE APPRIVOISER DIT LE P»TIT PRINCE C'EST UNE CHOSE TROP OUBLIEE, D*T LE RENARD CA SHNIFIE CREER DES LIENS."##########, "page 130");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_108, r##########"80 NM = 4 ' nombre de mots
+330 END QU EST CE QUE SIGNIFIE APPRIVOISER DIT LE P»TIT PRINCE C'EST UNE CHOSE TROP OUBLIEE, D*T LE RENARD CA SHNIFIE CREER DES LIENS."##########,
+    "page 130"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_108,
+    r##########"80 NM = 4 ' nombre de mots
 81 X = I NT(RND(1)*NM)
 82 RESTOREzFOR J=1 TO X:READ MOTS:NEXT J
-83 READ MOTS"##########, "page 131");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_109, r##########"10 ' MISE EN ORDRE D'UN MOT
+83 READ MOTS"##########,
+    "page 131"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_109,
+    r##########"10 ' MISE EN ORDRE D'UN MOT
 20 '
 30 MODE IsPAPER 0:PEN 1
 40 DIM T(12) ' témoin
@@ -3611,8 +4044,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 210 IF UPPERS (MS)=UPPERS(MOTS) THEN PRINT "BRAVO"
 220 IF UPPERS(MS)<>UPPERS(MOTS) THEN PRINT " NON , C ' EST MOTS
 230 FOR TP=1 TO 2000:NEXT TP
-240 GOTO 80 DTRSAAM MOT? AMSTRAD BRAVO"##########, "page 131");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_110, r##########"10 ’ REMISE EN ORDRE D'UNE PHRASE
+240 GOTO 80 DTRSAAM MOT? AMSTRAD BRAVO"##########,
+    "page 131"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_110,
+    r##########"10 ’ REMISE EN ORDRE D'UNE PHRASE
 20 '
 30 MODE 2
 40 CE=1:CF=O ' écriture et fond
@@ -3643,8 +4080,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 290 '-------
 300 DATA LE PETIT CHAT RONRONNE
 310 DATA JE M'APPELLE AMSTRAD
-320 DATA * PETIT CHAT LE RONRONNE Frappez la phrase en ordre ? LE PETIT CHAT RONRONNE OK"##########, "page 132");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_111, r##########"10 ‘ LISTE A COMPLETER
+320 DATA * PETIT CHAT LE RONRONNE Frappez la phrase en ordre ? LE PETIT CHAT RONRONNE OK"##########,
+    "page 132"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_111,
+    r##########"10 ‘ LISTE A COMPLETER
 20 '
 30 MODE 2.-INK 0,1: INK 1,24:PAPER O:PEN 1
 40 DIM ANS ( 100) ,C$1100)
@@ -3672,8 +4113,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 260 FOR L=1 TO NM
 270 LOCATE 13,L:INPUT LIG$
 280 IF UPPER!(C$(L))<>UPPER$(LIG$) THEN PRINT CHR$(7):G0T0 270
-290 NEXT L LE CHIEN ? ABOIE LE CHAT ? MIAULE LE MOUTON ? BELE LE CHEVAL ?"##########, "page 133");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_112, r##########"10 ' QUESTIONNAIRE
+290 NEXT L LE CHIEN ? ABOIE LE CHAT ? MIAULE LE MOUTON ? BELE LE CHEVAL ?"##########,
+    "page 133"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_112,
+    r##########"10 ' QUESTIONNAIRE
 20 '
 30 MODE 2:PAPER O:PEN 1 40
 50 ' Question Reponses possibles 60
@@ -3688,8 +4133,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 170 INPUT "Votre réponse ";RI
 180 P=INSTR(UPPERI(RP*), UPPERI(RI))
 190 IF POO THEN PRINT: PRINT "OK" ELSE PRINT RP*
-200 GOTO 130 Donnez un synonyme de DELAI Votre réponse ? REPIT 0K"##########, "page 134");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_113, r##########"10 ' QUID
+200 GOTO 130 Donnez un synonyme de DELAI Votre réponse ? REPIT 0K"##########,
+    "page 134"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_113,
+    r##########"10 ' QUID
 20 '
 30 MODE 2: PAPER O:PEN l.-INK 0,0: INK 1,26
 40 '
@@ -3712,8 +4161,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 210 IF LIG!="»" THEN 160
 220 P=INSTR(UPPER! (LI G!) .UPPER!(Ml))
 230 IF P<>0 THEN PRINT LIG!
-240 GOTO 200 Mot cle ? 1980 TOUR DE FRANCE 1980 HINAULT TOUR D'ITALIE 1980 HINAULT CHAMPIONNAT DU MONDE 1980 HINAULT Mot cle ? HINAULT TOUR DE FRANCE 1979 HINAULT TOUR DE FRANCE 1980 HINAULT TOUR D'ITALIE 1980 HINAULT CHAMPIONNAT DU MONDE 1980 HINAULT TOUR DE FRANCE 1981 HINAULT Mot cle ? FRANCE TOUR DE FRANCE 1979 HINAULT TOUR DE FRANCE 1980 HINAULT TOUR DE FRANCE 1981 HINAULT"##########, "page 135");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_114, r##########"10 ' ADDITION EN BASE B
+240 GOTO 200 Mot cle ? 1980 TOUR DE FRANCE 1980 HINAULT TOUR D'ITALIE 1980 HINAULT CHAMPIONNAT DU MONDE 1980 HINAULT Mot cle ? HINAULT TOUR DE FRANCE 1979 HINAULT TOUR DE FRANCE 1980 HINAULT TOUR D'ITALIE 1980 HINAULT CHAMPIONNAT DU MONDE 1980 HINAULT TOUR DE FRANCE 1981 HINAULT Mot cle ? FRANCE TOUR DE FRANCE 1979 HINAULT TOUR DE FRANCE 1980 HINAULT TOUR DE FRANCE 1981 HINAULT"##########,
+    "page 135"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_114,
+    r##########"10 ' ADDITION EN BASE B
 20 '
 30 MODE 1:PAPER 0:PEN 1 : INK 0,26: INK 1,0
 40 B=10 ' base
@@ -3765,10 +4218,18 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 510 GOTO 260
 520 '
 530 FOR TP=1 TO 3000:NEXT TP
-540 GOTO 80 JEU DU PENDU _________________________________________ Vous devez retrouver un mot en proposant des lettres. Vous avez droit à sept erreurs. BCDEFGH . JKL . . OPÛR . TUUJ4 . VZ MAIS .N Quelle lettre"##########, "pages 136, 137");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_115, r##########"125 X = I NT(RND(1)*NM)
-126 REST0RE:F0R J = 1 TO X:READ MOT$;NEXT J"##########, "page 138");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_116, r##########"10 ' JEU DU PENDU
+540 GOTO 80 JEU DU PENDU _________________________________________ Vous devez retrouver un mot en proposant des lettres. Vous avez droit à sept erreurs. BCDEFGH . JKL . . OPÛR . TUUJ4 . VZ MAIS .N Quelle lettre"##########,
+    "pages 136, 137"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_115,
+    r##########"125 X = I NT(RND(1)*NM)
+126 REST0RE:F0R J = 1 TO X:READ MOT$;NEXT J"##########,
+    "page 138"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_116,
+    r##########"10 ' JEU DU PENDU
 20 '
 30 DATA MAISON,SAPIN, VELO,PATIN
 40 DATA AMSTRAD
@@ -3815,8 +4276,12 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 460 PLOT 65,245:DRAWR 20,0:DRAWR 0,-20:DRAWR -20,0:DRAWR 0,20:RET URN
 470 PLOT 75,225:DRAW 75,200
 480 PLOT 60,210:DRAW 90,210 : RETURN
-490 PLOT 75,200:DRAW 60,170:PL0T 75,200:DRAW 90,1 70 : RETURN DICTIONNAIRE FRANÇAIS/ANGLAIS Un dictionnaire français/anglais est stocké dans deux tables FR$() et ANG$(). Les tables sont sauvegardées sur cassette ou disquette. FR$() ANG$() LIVRE —> BOOK CHAT —> CAT CHIEN —> DOG MAISON —> HOUSE Un mode “recherche” donne la traduction d’un mot cherché. Vous pouvez placer dans chaque ligne des tables la liste des synonymes d’un mot. Un mode “interrogation” propose un mot au hasard et demande la traduction. Ce mode pourrait être amélioré en enregistrant dans une table les mots mal connus de l’élève afin de les proposer en priorité. Mode ? L LISTE DES MOTS LIVRE BOOK CHIEN DOG TRAVAIL WORK CHAT CAT BUREAU DESK JAMBE LEG BRAS ARM CALCULATEUR COMPUTER TETE HEAD RECHERCHE SEEK/SEARCH/RESEARCH ARRETER TO STOP/TO TERMINATE CHAMBRE ROOM APPUYER SUR ENTER ? «Break*"##########, "pages 138, 139");
-basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_117, r##########"10 ' DICTIONNAIRE ANGLAI S/FRANCAIS
+490 PLOT 75,200:DRAW 60,170:PL0T 75,200:DRAW 90,1 70 : RETURN DICTIONNAIRE FRANÇAIS/ANGLAIS Un dictionnaire français/anglais est stocké dans deux tables FR$() et ANG$(). Les tables sont sauvegardées sur cassette ou disquette. FR$() ANG$() LIVRE —> BOOK CHAT —> CAT CHIEN —> DOG MAISON —> HOUSE Un mode “recherche” donne la traduction d’un mot cherché. Vous pouvez placer dans chaque ligne des tables la liste des synonymes d’un mot. Un mode “interrogation” propose un mot au hasard et demande la traduction. Ce mode pourrait être amélioré en enregistrant dans une table les mots mal connus de l’élève afin de les proposer en priorité. Mode ? L LISTE DES MOTS LIVRE BOOK CHIEN DOG TRAVAIL WORK CHAT CAT BUREAU DESK JAMBE LEG BRAS ARM CALCULATEUR COMPUTER TETE HEAD RECHERCHE SEEK/SEARCH/RESEARCH ARRETER TO STOP/TO TERMINATE CHAMBRE ROOM APPUYER SUR ENTER ? «Break*"##########,
+    "pages 138, 139"
+);
+basic_test!(
+    test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__acme__listing_117,
+    r##########"10 ' DICTIONNAIRE ANGLAI S/FRANCAIS
 20 '
 30 MODE 2:PAPER 0:PEN 1: INK O,1:INK 1,24
 40 '
@@ -3901,4 +4366,6 @@ basic_test!(test_basic_amstrad_cpc464_664_6128_2_programmes_et_fichiers_1986__ac
 870 290 IF UPPERI(XI)=UPPERI(FRI(RANG)) THEN PRINT "Existe deja":G0T0 260 880
 890 On pourra egalement 'normaliser' les mots
 900 en majuscules avant de les placer dans le fichier:
-910 330 FRI(RANG)=UPPERI(XI)"##########, "pages 140, 141");
+910 330 FRI(RANG)=UPPERI(XI)"##########,
+    "pages 140, 141"
+);

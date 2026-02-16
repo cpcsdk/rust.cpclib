@@ -14,7 +14,7 @@ fn test_basic_line(line: &str) -> Result<String, String> {
 fn test_immediate_statement(statement: &str) -> Result<String, String> {
     let statement_with_newline = format!("{}\n", statement);
     let mut input = statement_with_newline.as_str();
-    
+
     match parse_instruction.parse_next(&mut input) {
         Ok(tokens) => {
             // Check that only whitespace/newline remains
@@ -22,9 +22,10 @@ fn test_immediate_statement(statement: &str) -> Result<String, String> {
             if !remaining.is_empty() {
                 return Err(format!("Unconsumed input after parsing: '{}'", remaining));
             }
-            
+
             // Reconstruct the statement from tokens
-            let reconstructed = tokens.iter()
+            let reconstructed = tokens
+                .iter()
                 .map(|t| t.to_string())
                 .collect::<Vec<_>>()
                 .join("");
@@ -37,13 +38,13 @@ fn test_immediate_statement(statement: &str) -> Result<String, String> {
 /// Helper function to test multiple lines and report failures
 fn test_lines(lines: &[&str]) {
     let mut failed = Vec::new();
-    
+
     for line in lines {
         if let Err(e) = test_basic_line(line) {
             failed.push((line, e));
         }
     }
-    
+
     if !failed.is_empty() {
         let mut msg = format!("Failed to parse {} line(s):\n", failed.len());
         for (line, err) in &failed {
@@ -56,13 +57,13 @@ fn test_lines(lines: &[&str]) {
 /// Helper function to test multiple immediate mode statements and report failures
 fn test_immediate_statements(statements: &[&str]) {
     let mut failed = Vec::new();
-    
+
     for statement in statements {
         if let Err(e) = test_immediate_statement(statement) {
             failed.push((statement, e));
         }
     }
-    
+
     if !failed.is_empty() {
         let mut msg = format!("Failed to parse {} immediate statement(s):\n", failed.len());
         for (statement, err) in &failed {
@@ -131,29 +132,16 @@ basic_test!(
 // Graphics Commands
 // ============================================================================
 
-immediate_test!(
-    test_draw_example,
-    "CLG 2",
-    "DRAW 500,400,0",
-);
+immediate_test!(test_draw_example, "CLG 2", "DRAW 500,400,0",);
 
 basic_test!(
     test_draw_multi_statement,
     "10 MASK 15:MOVE 0,0:DRAW 500,400",
 );
 
-immediate_test!(
-    test_drawr_example,
-    "MOVE 200,200",
-    "DRAWR 100,100,0",
-);
+immediate_test!(test_drawr_example, "MOVE 200,200", "DRAWR 100,100,0",);
 
-basic_test!(
-    test_ink_example,
-    "10 MODE 2",
-    "20 INK 0,3",
-    "30 INK 1,26",
-);
+basic_test!(test_ink_example, "10 MODE 2", "20 INK 0,3", "30 INK 1,26",);
 
 basic_test!(
     test_mask_example,
@@ -173,11 +161,7 @@ immediate_test!(
     "PRINT CHR$(255)",
 );
 
-immediate_test!(
-    test_window_example,
-    "MODE 1",
-    "WINDOW#1,1,40,1,6",
-);
+immediate_test!(test_window_example, "MODE 1", "WINDOW#1,1,40,1,6",);
 
 // ============================================================================
 // Control Flow
@@ -214,11 +198,7 @@ basic_test!(
     r#"100 PRINT "Hello World!""#,
 );
 
-basic_test!(
-    test_goto_endless_loop,
-    r##"10 PRINT "#";"##,
-    "20 GOTO 10",
-);
+basic_test!(test_goto_endless_loop, r##"10 PRINT "#";"##, "20 GOTO 10",);
 
 basic_test!(
     test_goto_with_condition,
@@ -298,11 +278,7 @@ basic_test!(
     "30 PRINT a;b",
 );
 
-basic_test!(
-    test_input_with_channel,
-    "10 INPUT #2,x",
-    "20 PRINT x",
-);
+basic_test!(test_input_with_channel, "10 INPUT #2,x", "20 PRINT x",);
 
 basic_test!(
     test_input_no_carriage_return,
@@ -356,11 +332,7 @@ basic_test!(
 
 immediate_test!(test_int_division, "w=INT(50000)");
 
-basic_test!(
-    test_cint_example,
-    "10 n=1.9999",
-    "20 PRINT CINT(n)",
-);
+basic_test!(test_cint_example, "10 n=1.9999", "20 PRINT CINT(n)",);
 
 basic_test!(
     test_creal_example,
@@ -388,11 +360,7 @@ basic_test!(
     "20 PRINT a$",
 );
 
-basic_test!(
-    test_mid_first,
-    r#"10 a$="Hello""#,
-    "20 PRINT MID$(a$,2,2)",
-);
+basic_test!(test_mid_first, r#"10 a$="Hello""#, "20 PRINT MID$(a$,2,2)",);
 
 basic_test!(
     test_mid_second,
@@ -468,12 +436,7 @@ basic_test!(
 // Program Management
 // ============================================================================
 
-basic_test!(
-    test_renum_before,
-    "10 GOTO 20",
-    "20 GOTO 30",
-    "30 GOTO 10",
-);
+basic_test!(test_renum_before, "10 GOTO 20", "20 GOTO 30", "30 GOTO 10",);
 
 // ============================================================================
 // Formatting and Display
@@ -525,19 +488,16 @@ fn test_all_examples_roundtrip() {
         "AUTO 100,5",
         "CALL 0",
         "CAT",
-        
         // Numeric examples
         "10 n=1.9999",
         "10 gn=9.80665",
         "10 counter=0",
         "10 value1=1",
         "10 figure=123456789",
-        
         // String examples
         r#"10 a$="Hello""#,
         r#"10 LET a$ = "hello world""#,
         r#"20 word$="Hello""#,
-        
         // Control structures
         "10 FOR I=1 TO 10",
         "30 NEXT I",
@@ -545,43 +505,44 @@ fn test_all_examples_roundtrip() {
         "20 GOSUB 100",
         "120 RETURN",
         "40 END",
-        
         // Conditional
         "40 IF I<25 THEN GOTO 20",
         r#"20 IF f=10 THEN PRINT "right": END: ELSE GOTO 10"#,
-        
         // Graphics
         "CLG 2",
         "DRAW 500,400,0",
         "MOVE 200,200",
         "DRAWR 100,100,0",
         "MASK 15",
-        
         // I/O
         "20 PRINT I;",
         r#"10 INPUT "guess a figure:",f"#,
         r#"10 OPENOUT "DUMMY""#,
         "40 CLOSEOUT",
-        
         // Math
         "20 DEF FNgrv=s0+v0*t+0.5*gn*t^2",
         "10 a=PI",
         "20 PRINT CINT(n)",
     ];
-    
+
     let mut failed = Vec::new();
     let mut successful = 0;
-    
+
     for line in &all_lines {
         // Check if line starts with a digit to determine if it's a program line or immediate command
-        let is_program_line = line.trim_start().chars().next().map_or(false, |c| c.is_ascii_digit());
-        
+        let is_program_line = line
+            .trim_start()
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_ascii_digit());
+
         let result = if is_program_line {
             test_basic_line(line)
-        } else {
+        }
+        else {
             test_immediate_statement(line)
         };
-        
+
         match result {
             Ok(reconstructed) => {
                 successful += 1;
@@ -594,7 +555,7 @@ fn test_all_examples_roundtrip() {
             }
         }
     }
-    
+
     if !failed.is_empty() {
         println!("\n=== Failed Lines ===");
         for (line, err) in &failed {
@@ -602,7 +563,10 @@ fn test_all_examples_roundtrip() {
         }
         panic!("{}/{} lines failed to parse", failed.len(), all_lines.len());
     }
-    
+
     println!("\n=== Summary ===");
-    println!("All {} lines parsed and reconstructed successfully!", successful);
+    println!(
+        "All {} lines parsed and reconstructed successfully!",
+        successful
+    );
 }

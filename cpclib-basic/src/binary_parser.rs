@@ -19,7 +19,7 @@ pub fn program(bytes: &mut &[u8]) -> ModalResult<BasicProgram, ContextError<StrC
     let location = bytes.checkpoint();
 
     let mut lines = Vec::new();
-    
+
     while bytes.offset_from(&location) < initial_len {
         let line = dbg!(line_or_end.parse_next(bytes))?;
         lines.push(line);
@@ -28,11 +28,17 @@ pub fn program(bytes: &mut &[u8]) -> ModalResult<BasicProgram, ContextError<StrC
     lines.pop(); // Remove the final None that indicates the end of the program
     let lines = lines.into_iter().flatten().collect_vec();
 
+    eprintln!(
+        "Parsed {} lines, {} bytes remaining",
+        lines.len(),
+        bytes.len()
+    );
 
-    eprintln!("Parsed {} lines, {} bytes remaining", lines.len(), bytes.len());
-    
     if !bytes.is_empty() {
-        eprintln!("WARNING: {} unconsumed bytes remaining after parsing!", bytes.len());
+        eprintln!(
+            "WARNING: {} unconsumed bytes remaining after parsing!",
+            bytes.len()
+        );
         eprintln!("First 20 bytes: {:?}", &bytes[0..bytes.len().min(20)]);
     }
 
@@ -42,30 +48,43 @@ pub fn program(bytes: &mut &[u8]) -> ModalResult<BasicProgram, ContextError<StrC
 // https://www.cpcwiki.eu/index.php?title=Technical_information_about_Locomotive_BASIC&mobileaction=toggle_view_desktop#Structure_of_a_BASIC_program
 // Some(BasicLine) for a Line
 // None for End
-pub fn line_or_end(
-    bytes: &mut &[u8]
-) -> ModalResult<Option<BasicLine>, ContextError<StrContext>> {
-    let length = cut_err(le_u16.context(StrContext::Label("Expecting a line length"))).parse_next(bytes)?;
+pub fn line_or_end(bytes: &mut &[u8]) -> ModalResult<Option<BasicLine>, ContextError<StrContext>> {
+    let length =
+        cut_err(le_u16.context(StrContext::Label("Expecting a line length"))).parse_next(bytes)?;
 
     // leave if it is the end of the program
     if length == 0 {
         return Ok(None);
     }
 
-    let line_number = cut_err(le_u16.context(StrContext::Label("Expecting a line number"))).parse_next(bytes)?;
+    let line_number =
+        cut_err(le_u16.context(StrContext::Label("Expecting a line number"))).parse_next(bytes)?;
 
-    eprintln!("Parsing line {}, declared length: {}, remaining bytes: {}", line_number, length, bytes.len() + 4);
-    
+    eprintln!(
+        "Parsing line {}, declared length: {}, remaining bytes: {}",
+        line_number,
+        length,
+        bytes.len() + 4
+    );
+
     let mut buffer = cut_err(take(length - 4).context(StrContext::Label("Wrong number of bytes")))
         .verify(|buffer: &[u8]| buffer[buffer.len() - 1] == 0)
         .context(StrContext::Label("Last byte should be 0"))
         .parse_next(bytes)?;
 
-    eprintln!("  Buffer for line {} has {} bytes", line_number, buffer.len());
-    
+    eprintln!(
+        "  Buffer for line {} has {} bytes",
+        line_number,
+        buffer.len()
+    );
+
     let tokens = terminated(parse_tokens, eof).parse_next(&mut buffer)?;
-    
-    eprintln!("  Successfully parsed line {} with {} tokens", line_number, tokens.len());
+
+    eprintln!(
+        "  Successfully parsed line {} with {} tokens",
+        line_number,
+        tokens.len()
+    );
 
     let line = BasicLine {
         line_number,
@@ -251,17 +270,20 @@ mod tests {
     fn test_parse_integer_8bits_decimal() {
         let expected_val = 100;
         let data = [
-            BasicTokenNoPrefix::ValueIntegerDecimal8bits as u8, 
+            BasicTokenNoPrefix::ValueIntegerDecimal8bits as u8,
             expected_val
         ];
-        
+
         // Use a slice reference as expected by the parser
         let mut input: &[u8] = &data;
         let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
-        
+
         assert_eq!(res.len(), 1);
         match &res[0] {
-             BasicToken::Constant(BasicTokenNoPrefix::ValueIntegerDecimal8bits, BasicValue::Integer(low, high)) => {
+            BasicToken::Constant(
+                BasicTokenNoPrefix::ValueIntegerDecimal8bits,
+                BasicValue::Integer(low, high)
+            ) => {
                 assert_eq!(*low, expected_val);
                 assert_eq!(*high, 0);
             },
@@ -276,17 +298,20 @@ mod tests {
         let high = (expected_val / 256) as u8;
 
         let data = [
-            BasicTokenNoPrefix::ValueIntegerDecimal16bits as u8, 
+            BasicTokenNoPrefix::ValueIntegerDecimal16bits as u8,
             low,
             high
         ];
 
         let mut input: &[u8] = &data;
         let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
-        
+
         assert_eq!(res.len(), 1);
         match &res[0] {
-             BasicToken::Constant(BasicTokenNoPrefix::ValueIntegerDecimal16bits, BasicValue::Integer(l, h)) => {
+            BasicToken::Constant(
+                BasicTokenNoPrefix::ValueIntegerDecimal16bits,
+                BasicValue::Integer(l, h)
+            ) => {
                 assert_eq!(*l, low);
                 assert_eq!(*h, high);
             },
@@ -297,35 +322,32 @@ mod tests {
     #[test]
     fn test_parse_float() {
         // 0 value in Amstrad Basic Float: 0x00 0x00 0x00 0x00 0x00
-        let data = [
-            BasicTokenNoPrefix::ValueFloatingPoint as u8,
-            0, 0, 0, 0, 0
-        ];
-        
+        let data = [BasicTokenNoPrefix::ValueFloatingPoint as u8, 0, 0, 0, 0, 0];
+
         let mut input: &[u8] = &data;
         let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
-        
+
         assert_eq!(res.len(), 1);
         match &res[0] {
-             BasicToken::Constant(BasicTokenNoPrefix::ValueFloatingPoint, BasicValue::Float(f)) => {
-                 // Check if it corresponds to 0.0
-                 assert_eq!(f.to_f64(), 0.0);
+            BasicToken::Constant(BasicTokenNoPrefix::ValueFloatingPoint, BasicValue::Float(f)) => {
+                // Check if it corresponds to 0.0
+                assert_eq!(f.to_f64(), 0.0);
             },
             _ => panic!("Expected ValueFloatingPoint, got {:?}", res[0])
-        }    
+        }
     }
 
     #[test]
     fn test_parse_prefixed_token() {
-         let data = [
-             BasicTokenNoPrefix::AdditionalTokenMarker as u8,
-             BasicTokenPrefixed::Abs as u8
-         ];
-         let mut input: &[u8] = &data;
-         let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
-         
-         assert_eq!(res.len(), 1);
-         assert_eq!(res[0], BasicToken::PrefixedToken(BasicTokenPrefixed::Abs));
+        let data = [
+            BasicTokenNoPrefix::AdditionalTokenMarker as u8,
+            BasicTokenPrefixed::Abs as u8
+        ];
+        let mut input: &[u8] = &data;
+        let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
+
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0], BasicToken::PrefixedToken(BasicTokenPrefixed::Abs));
     }
 
     #[test]
@@ -333,18 +355,17 @@ mod tests {
         let prefix = BasicTokenNoPrefix::AdditionalTokenMarker as u8;
         let abs = BasicTokenPrefixed::Abs as u8;
         let space = BasicTokenNoPrefix::CharSpace as u8;
-        
-        let data = [
-            space,
-            prefix, abs
-        ];
-        
+
+        let data = [space, prefix, abs];
+
         let mut input: &[u8] = &data;
         let res = parse_tokens.parse_next(&mut input).expect("Parsing failed");
-        
+
         assert_eq!(res.len(), 2);
-        assert_eq!(res[0], BasicToken::SimpleToken(BasicTokenNoPrefix::CharSpace));
+        assert_eq!(
+            res[0],
+            BasicToken::SimpleToken(BasicTokenNoPrefix::CharSpace)
+        );
         assert_eq!(res[1], BasicToken::PrefixedToken(BasicTokenPrefixed::Abs));
     }
 }
-

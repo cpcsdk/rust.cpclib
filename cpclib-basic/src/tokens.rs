@@ -127,12 +127,12 @@ pub enum BasicTokenNoPrefix {
     CharUpperX,
     CharUpperY,
     CharUpperZ,
-    CharOpenSquareBracket,    // [
-    CharBackslash,            // \
-    CharCloseSquareBracket,   // ]
-    CharCaret,                // ^
-    CharUnderscore,           // _
-    CharBacktick,             // `
+    CharOpenSquareBracket,  // [
+    CharBackslash,          // \
+    CharCloseSquareBracket, // ]
+    CharCaret,              // ^
+    CharUnderscore,         // _
+    CharBacktick,           // `
 
     CharLowerA = 97,
     CharLowerB,
@@ -161,10 +161,10 @@ pub enum BasicTokenNoPrefix {
     CharLowerY,
     CharLowerZ,
 
-    CharOpenBrace,     // { (ASCII 123)
-    Pipe = 0x7C,       // | (ASCII 124)
-    CharCloseBrace,    // } (ASCII 125)
-    CharTilde,         // ~ (ASCII 126)
+    CharOpenBrace,  // { (ASCII 123)
+    Pipe = 0x7C,    // | (ASCII 124)
+    CharCloseBrace, // } (ASCII 125)
+    CharTilde,      // ~ (ASCII 126)
     Unused7f = 0x7F,
 
     After = 0x80,
@@ -297,7 +297,6 @@ pub enum BasicTokenNoPrefix {
     AdditionalTokenMarker
 }
 
-
 impl TryInto<char> for BasicTokenNoPrefix {
     type Error = ();
 
@@ -401,7 +400,7 @@ impl TryInto<char> for BasicTokenNoPrefix {
             BasicTokenNoPrefix::CharLowerY => Ok('y'),
             BasicTokenNoPrefix::CharLowerZ => Ok('z'),
 
-            _ => Err(()),
+            _ => Err(())
         }
     }
 }
@@ -623,7 +622,7 @@ impl fmt::Display for BasicTokenNoPrefix {
             Self::Window => write!(f, "WINDOW"),
             Self::Write => write!(f, "WRITE"),
             Self::Zone => write!(f, "ZONE"),
-            
+
             // Operators
             Self::GreaterThan => write!(f, ">"),
             Self::Equal => write!(f, "="),
@@ -647,7 +646,7 @@ impl fmt::Display for BasicTokenNoPrefix {
             Self::StatementSeparator => write!(f, ":"),
 
             Self::EndOfTokenisedLine => Ok(()),
-            
+
             // Constant numbers 0-10
             Self::ConstantNumber0 => write!(f, "0"),
             Self::ConstantNumber1 => write!(f, "1"),
@@ -660,18 +659,18 @@ impl fmt::Display for BasicTokenNoPrefix {
             Self::ConstantNumber8 => write!(f, "8"),
             Self::ConstantNumber9 => write!(f, "9"),
             Self::ConstantNumber10 => write!(f, "10"),
-            
+
             // Value tokens - these should not appear in source reconstruction
             // They contain binary data that needs special handling
             Self::ValueQuotedString => write!(f, "\""),
-            
-            Self::ValueIntegerDecimal8bits |
-            Self::ValueIntegerDecimal16bits |
-            Self::ValueIntegerBinary16bits |
-            Self::ValueIntegerHexadecimal16bits |
-            Self::ValueFloatingPoint |
-            Self::LineMemoryAddressPointer |
-            Self::LineNumber => {
+
+            Self::ValueIntegerDecimal8bits
+            | Self::ValueIntegerDecimal16bits
+            | Self::ValueIntegerBinary16bits
+            | Self::ValueIntegerHexadecimal16bits
+            | Self::ValueFloatingPoint
+            | Self::LineMemoryAddressPointer
+            | Self::LineNumber => {
                 // These tokens should be followed by data bytes that need to be decoded
                 // For now, just indicate their presence
                 write!(f, "<value:{:?}>", self)
@@ -838,7 +837,7 @@ impl fmt::Display for BasicTokenPrefixed {
             Self::Test => "TEST",
             Self::Teststr => "TESTSTR",
             Self::CopycharDollar => "COPYCHR$",
-            Self::Vpos => "VPOS",
+            Self::Vpos => "VPOS"
         };
         write!(f, "{tag}")
     }
@@ -874,54 +873,55 @@ impl BasicFloat {
     pub fn from_bytes(bytes: [u8; 5]) -> Self {
         Self { bytes }
     }
-    
+
     /// Create a BasicFloat from individual byte values
     pub fn new(b0: u8, b1: u8, b2: u8, b3: u8, b4: u8) -> Self {
-        Self { bytes: [b0, b1, b2, b3, b4] }
+        Self {
+            bytes: [b0, b1, b2, b3, b4]
+        }
     }
-    
+
     /// Get the raw bytes
     pub fn as_bytes(&self) -> [u8; 5] {
         self.bytes
     }
-    
+
     /// Convert to f64
     pub fn to_f64(&self) -> f64 {
         let exponent = self.bytes[4];
-        
+
         // Special case: exponent 0 means the number is zero
         if exponent == 0 {
             return 0.0;
         }
-        
+
         // Extract sign from bit 7 of byte 3
         let sign_bit = (self.bytes[3] & 0x80) != 0;
         let sign = if sign_bit { -1.0 } else { 1.0 };
-        
+
         // Extract mantissa (32 bits)
         // The mantissa is normalized, so bit 31 is always 1 (implied/reconstructed)
         // Byte 3 bits 6-0: mantissa bits 30-24 (bit 7 is used for sign, bit 31 is implied 1)
         // Byte 2: mantissa bits 23-16
         // Byte 1: mantissa bits 15-8
         // Byte 0: mantissa bits 7-0
-        let mantissa_bits = 
-            (1u32 << 31) |                            // bit 31 (implied leading 1)
+        let mantissa_bits = (1u32 << 31) |                            // bit 31 (implied leading 1)
             (((self.bytes[3] & 0x7F) as u32) << 24) | // bits 30-24
             ((self.bytes[2] as u32) << 16) |          // bits 23-16
             ((self.bytes[1] as u32) << 8) |           // bits 15-8
-            (self.bytes[0] as u32);                   // bits 7-0
-        
+            (self.bytes[0] as u32); // bits 7-0
+
         // Convert mantissa to floating point
         // The mantissa represents a fraction in the range [0.5, 1.0) after dividing by 2^32
         let mantissa_value = (mantissa_bits as f64) / (1u64 << 32) as f64;
-        
+
         // Calculate the actual exponent (biased by 128)
         let actual_exponent = (exponent as i16) - 128;
-        
+
         // Result = sign × mantissa × 2^exponent
         sign * mantissa_value * 2f64.powi(actual_exponent as i32)
     }
-    
+
     /// Create a BasicFloat from an f64 value
     pub fn from_f64(value: f64) -> Self {
         Self::try_from(value).unwrap_or_else(|_| Self::new(0, 0, 0, 0, 0))
@@ -930,7 +930,7 @@ impl BasicFloat {
 
 impl TryFrom<f64> for BasicFloat {
     type Error = BasicError;
-    
+
     /// Convert f64 to Amstrad BASIC floating-point format
     /// Implementation from https://github.com/EdouardBERGE/rasm/blob/master/rasm.c#L2295
     fn try_from(nb: f64) -> Result<Self, Self::Error> {
@@ -1053,15 +1053,17 @@ impl TryFrom<f64> for BasicFloat {
 
 impl TryFrom<&str> for BasicFloat {
     type Error = BasicError;
-    
+
     /// Parse a decimal string directly to Amstrad BASIC floating-point format
     /// Converts to f64 first for correct algorithm, then uses TryFrom<f64>
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         // Parse the string as f64 to get the correct value
         // This ensures we use the proven conversion algorithm
-        let value = s.trim().parse::<f64>()
+        let value = s
+            .trim()
+            .parse::<f64>()
             .map_err(|_| BasicError::InvalidFloat)?;
-        
+
         // Use the TryFrom<f64> implementation which has the correct algorithm
         BasicFloat::try_from(value)
     }
@@ -1070,20 +1072,18 @@ impl TryFrom<&str> for BasicFloat {
 impl fmt::Display for BasicFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = self.to_f64();
-        
+
         // Special case for zero
         if value == 0.0 {
             return write!(f, "0");
         }
-        
+
         // Format to 9 decimal places
         let formatted = format!("{:.9}", value);
-        
+
         // Remove trailing zeros and unnecessary decimal point
-        let trimmed = formatted
-            .trim_end_matches('0')
-            .trim_end_matches('.');
-        
+        let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+
         write!(f, "{}", trimmed)
     }
 }
@@ -1117,7 +1117,7 @@ impl BasicValue {
     pub fn new_float(value: f64) -> Self {
         BasicValue::Float(BasicFloat::from_f64(value))
     }
-    
+
     pub fn new_float_by_bytes(b0: u8, b1: u8, b2: u8, b3: u8, b4: u8) -> Self {
         BasicValue::Float(BasicFloat::new(b0, b1, b2, b3, b4))
     }
@@ -1137,7 +1137,7 @@ impl BasicValue {
             _ => None
         }
     }
-    
+
     /// Return the float value when it is a float
     pub fn as_float(&self) -> Option<f64> {
         match self {
@@ -1153,17 +1153,18 @@ impl BasicValue {
     pub fn int_decimal_representation(&self) -> Option<String> {
         self.as_integer().map(|i| format!("{i}"))
     }
-    
+
     pub fn int_binary_representation(&self) -> Option<String> {
         self.as_integer().map(|i| format!("&X{i:b}"))
     }
-    
+
     pub fn float_representation(&self) -> Option<String> {
         self.as_float().map(|f| {
             // Format according to BASIC rules
             let basic_float = if let Self::Float(bf) = self {
                 bf.clone()
-            } else {
+            }
+            else {
                 BasicFloat::from_f64(f)
             };
             basic_float.to_string()
@@ -1191,15 +1192,17 @@ pub enum BasicToken {
 impl BasicToken {
     pub fn char(&self) -> Option<char> {
         match self {
-            BasicToken::SimpleToken(tok) => {
-                tok.char()
-            },
+            BasicToken::SimpleToken(tok) => tok.char(),
             _ => None
         }
     }
+
     /// Returns true if the token is a statement separator (:)
     pub fn is_statement_separator(&self) -> bool {
-        matches!(self, BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator))
+        matches!(
+            self,
+            BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator)
+        )
     }
 }
 
@@ -1235,15 +1238,17 @@ impl fmt::Display for BasicToken {
                     BasicTokenNoPrefix::ValueIntegerHexadecimal16bits => {
                         constant.int_hexdecimal_representation().unwrap()
                     },
-                    BasicTokenNoPrefix::ValueIntegerDecimal16bits |
-                    BasicTokenNoPrefix::ValueIntegerDecimal8bits => {
+                    BasicTokenNoPrefix::ValueIntegerDecimal16bits
+                    | BasicTokenNoPrefix::ValueIntegerDecimal8bits => {
                         constant.int_decimal_representation().unwrap()
                     },
                     BasicTokenNoPrefix::ValueIntegerBinary16bits => {
                         constant.int_binary_representation().unwrap()
                     },
                     BasicTokenNoPrefix::ValueFloatingPoint => {
-                        constant.float_representation().unwrap_or_else(|| "<float?>".to_string())
+                        constant
+                            .float_representation()
+                            .unwrap_or_else(|| "<float?>".to_string())
                     },
                     _ => format!("<const:{:?}>", kind)
                 };
@@ -1255,7 +1260,7 @@ impl fmt::Display for BasicToken {
             },
             BasicToken::Rsx(name) => {
                 write!(f, "|{name}")?;
-            },
+            }
         }
 
         Ok(())
