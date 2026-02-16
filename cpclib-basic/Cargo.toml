@@ -38,8 +38,3 @@ built.workspace = true
 [features]
 basic = []
 rayon = ["cpclib-common/rayon"]
-
-[[bin]]
-name = "locomotive"
-path = "src/bin/locomotive.rs"
-required-features = ["basic"]

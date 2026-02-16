@@ -1,0 +1,18 @@
+[package]
+name = "cpclib-locomotive"
+version.workspace = true
+description = "Command line tool for Locomotive BASIC manipulation"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+cpclib-basic.workspace = true
+cpclib-disc.workspace = true
+cpclib-common = {workspace = true, features=["cmdline"]}
+cpclib-files.workspace = true
+fs-err.workspace = true
+clap = {workspace = true, features = ["derive"]}
