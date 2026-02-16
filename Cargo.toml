@@ -250,6 +250,7 @@ cpclib-basmdoc = { path = "./cpclib-basmdoc/" }
 cpclib-bdasm = { path = "./cpclib-bdasm/" }
 cpclib-bndbuild = { path = "./cpclib-bndbuild/" }
 cpclib-bndbuild-tauri = { path = "./cpclib-bndbuild-tauri/src-tauri" }
+cpclib-catalog = { path = "./cpclib-catalog/" }
 cpclib-common = { path = "./cpclib-common/" }
 cpclib-cpr = { path = "./cpclib-cpr/" }
 cpclib-crunch = { path = "./cpclib-crunch/" }
@@ -258,6 +259,7 @@ cpclib-disc = { path = "./cpclib-disc/" }
 cpclib-files = { path = "./cpclib-files/" }
 cpclib-image = { path = "./cpclib-image/" }
 cpclib-imgconverter = { path = "./cpclib-imgconverter/" }
+cpclib-locomotive = { path = "./cpclib-locomotive/" }
 cpclib-macros = { path = "./cpclib-macros/" }
 cpclib-sna = { path = "./cpclib-sna/" }
 cpclib-sprite-compiler = { path = "./cpclib-sprite-compiler/" }
