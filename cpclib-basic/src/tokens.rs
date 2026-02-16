@@ -1293,9 +1293,13 @@ impl BasicToken {
                 data
             },
 
-            BasicToken::CommentOrString(comment_type, comment, _closed) => {
+            BasicToken::CommentOrString(comment_type, comment, closed) => {
                 let mut data = vec![comment_type.value()];
                 data.extend_from_slice(comment);
+                // Add closing quote if the string was closed
+                if *closed {
+                    data.push(0x22); // Closing quote byte
+                }
                 data
             },
 

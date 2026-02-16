@@ -14,33 +14,18 @@ use crate::{BasicLine, BasicProgram};
 
 pub fn program(bytes: &mut &[u8]) -> ModalResult<BasicProgram, ContextError<StrContext>> {
     let initial_len = bytes.len();
-    eprintln!("Starting parse with {} bytes", initial_len);
 
     let location = bytes.checkpoint();
 
     let mut lines = Vec::new();
 
     while bytes.offset_from(&location) < initial_len {
-        let line = dbg!(line_or_end.parse_next(bytes))?;
+        let line = line_or_end.parse_next(bytes)?;
         lines.push(line);
     }
 
     lines.pop(); // Remove the final None that indicates the end of the program
     let lines = lines.into_iter().flatten().collect_vec();
-
-    eprintln!(
-        "Parsed {} lines, {} bytes remaining",
-        lines.len(),
-        bytes.len()
-    );
-
-    if !bytes.is_empty() {
-        eprintln!(
-            "WARNING: {} unconsumed bytes remaining after parsing!",
-            bytes.len()
-        );
-        eprintln!("First 20 bytes: {:?}", &bytes[0..bytes.len().min(20)]);
-    }
 
     Ok(BasicProgram { lines })
 }
@@ -60,31 +45,12 @@ pub fn line_or_end(bytes: &mut &[u8]) -> ModalResult<Option<BasicLine>, ContextE
     let line_number =
         cut_err(le_u16.context(StrContext::Label("Expecting a line number"))).parse_next(bytes)?;
 
-    eprintln!(
-        "Parsing line {}, declared length: {}, remaining bytes: {}",
-        line_number,
-        length,
-        bytes.len() + 4
-    );
-
     let mut buffer = cut_err(take(length - 4).context(StrContext::Label("Wrong number of bytes")))
         .verify(|buffer: &[u8]| buffer[buffer.len() - 1] == 0)
         .context(StrContext::Label("Last byte should be 0"))
         .parse_next(bytes)?;
 
-    eprintln!(
-        "  Buffer for line {} has {} bytes",
-        line_number,
-        buffer.len()
-    );
-
     let tokens = terminated(parse_tokens, eof).parse_next(&mut buffer)?;
-
-    eprintln!(
-        "  Successfully parsed line {} with {} tokens",
-        line_number,
-        tokens.len()
-    );
 
     let line = BasicLine {
         line_number,

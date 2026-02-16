@@ -99,7 +99,12 @@ impl BasicLine {
     }
 
     pub fn complete_bytes_length(&self) -> u16 {
-        2 /*line size*/ + 2 /*line number*/ + self.tokens_bytes_length() /* tokens */ + 1 /* &00 */
+        let end_marker_size = if self.tokens.last() == Some(&BasicToken::SimpleToken(BasicTokenNoPrefix::EndOfTokenisedLine)) {
+            0 // EndOfTokenisedLine token already includes the 0x00 byte
+        } else {
+            1 // Need to add 0x00 byte
+        };
+        2 /*line size*/ + 2 /*line number*/ + self.tokens_bytes_length() /* tokens */ + end_marker_size
     }
 
     /// Returns the number of tokens
@@ -134,7 +139,12 @@ impl BasicLine {
             (self.line_number / 256) as u8,
         ];
         content.extend_from_slice(&self.tokens_as_bytes());
-        content.push(0);
+        
+        // Only add the end-of-line marker if the tokens don't already include it
+        // (when parsing from binary, EndOfTokenisedLine is included; from text it's not)
+        if self.tokens.last() != Some(&BasicToken::SimpleToken(BasicTokenNoPrefix::EndOfTokenisedLine)) {
+            content.push(0);
+        }
 
         content
     }
@@ -344,7 +354,8 @@ impl BasicProgram {
             .iter()
             .flat_map(BasicLine::as_bytes)
             .collect::<Vec<u8>>();
-        bytes.resize(bytes.len() + 3, 0);
+        // Add 2 zero bytes for the program end marker (0x0000)
+        bytes.resize(bytes.len() + 2, 0);
         bytes
     }
 

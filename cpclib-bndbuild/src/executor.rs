@@ -111,6 +111,9 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Catalog(args) => {
             crate::runners::disc::CatalogRunner::<E>::default().run(task.args(), observer)
         },
+        InnerTask::Locomotive(args) => {
+            crate::runners::locomotive::LocomotiveRunner::<E>::default().run(task.args(), observer)
+        },
         InnerTask::Cdt(cdt, args) => {
             match cdt {
                 crate::runners::cdt::CdtManager::Rtzx => {

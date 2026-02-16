@@ -52,6 +52,7 @@ pub enum InnerTask {
     BndBuild(StandardTaskArguments),
     Catalog(StandardTaskArguments),
     Convgeneric(StandardTaskArguments),
+    Locomotive(StandardTaskArguments),
     Cp(StandardTaskArguments),
     CpcToImg(StandardTaskArguments),
     Crunch(StandardTaskArguments),
@@ -199,6 +200,7 @@ pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
 pub const DISC_CMDS: &[&str] = &["dsk", "disc"];
 pub const CATALOG_CMDS: &[&str] = &["catalog", "cat"];
+pub const LOCOMOTIVE_CMDS: &[&str] = &["locomotive", "basic"];
 pub const ECHO_CMDS: &[&str] = &["echo", "print"];
 pub const EXTERN_CMDS: &[&str] = &["extern"];
 
@@ -242,6 +244,7 @@ impl Display for InnerTask {
             Self::BndBuild(s) => (BNDBUILD_CMDS[0], s),
             Self::Convgeneric(s) => (CONVGENERIC_CMDS[0], s),
             Self::Catalog(s) => (CATALOG_CMDS[0], s),
+            Self::Locomotive(s) => (LOCOMOTIVE_CMDS[0], s),
             Self::Cp(s) => (CP_CMDS[0], s),
             Self::Mv(s) => (MV_CMDS[0], s),
             Self::CpcToImg(s) => (CPC2IMG_CMDS[0], s),
@@ -301,6 +304,7 @@ is_some_cmd!(
     grafx2,
     hideur,hspc,
     img2cpc, impdisc,
+    locomotive,
     miny,
     martine, mkdir, mv,
     orgams,
@@ -411,6 +415,10 @@ impl InnerTask {
 
     pub fn with_catalog(std: StandardTaskArguments) -> Self {
         Self::Catalog(std)
+    }
+
+    pub fn with_locomotive(std: StandardTaskArguments) -> Self {
+        Self::Locomotive(std)
     }
 
     pub fn with_convgeneric(std: StandardTaskArguments) -> Self {
@@ -526,6 +534,9 @@ impl InnerTask {
         }
         else if is_catalog_cmd(code) {
             Ok(Self::with_catalog(std))
+        }
+        else if is_locomotive_cmd(code) {
+            Ok(Self::with_locomotive(std))
         }
         else if is_chipnsfx_cmd(code) {
             Ok(Self::with_tracker(Tracker::new_chipnsfx_default(), std))
@@ -774,6 +785,7 @@ impl InnerTask {
             InnerTask::Assembler(_, t)
             | InnerTask::Cdt(_, t)
             | InnerTask::Catalog(t)
+            | InnerTask::Locomotive(t)
             | InnerTask::YmCruncher(_, t)
             | InnerTask::BasmDoc(t)
             | InnerTask::BndBuild(t)
@@ -819,6 +831,7 @@ impl InnerTask {
             | InnerTask::Disc(t)
             | InnerTask::Echo(t)
             | InnerTask::Catalog(t)
+            | InnerTask::Locomotive(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::Extern(t)
             | InnerTask::Grafx2(t)
@@ -860,6 +873,7 @@ impl InnerTask {
             InnerTask::Convgeneric(_) => false,
             InnerTask::Cdt(..) => false,
             InnerTask::Catalog(_) => false,
+            InnerTask::Locomotive(_) => false,
             InnerTask::Cp(_) => false,
             InnerTask::Mv(_) => false,
             InnerTask::CpcToImg(_) => false,

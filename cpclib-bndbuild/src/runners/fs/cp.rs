@@ -64,7 +64,7 @@ impl<E: EventObserver> Runner for CpRunner<E> {
                 to.to_path_buf()
             };
 
-            fs_err::copy(from, to)
+            fs_err::copy(&from, &to)
                 .map_err(|e| error.push_str(&format!("Error when copying {from} to {to}. {e}.\n")))
                 .map(|success| o.emit_stdout(&format!("Copied {from} to {to} ({success} bytes).")))
         };
