@@ -4,7 +4,7 @@ This document provides an overview of the cpclib workspace architecture and how 
 
 ## Workspace Overview
 
-cpclib is a large Cargo workspace containing 30+ crates organized into several functional layers:
+cpclib is a large Cargo workspace containing 40+ crates organized into several functional layers:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -27,103 +27,126 @@ cpclib is a large Cargo workspace containing 30+ crates organized into several f
 
 ### Foundation Layer
 
-- **`cpclib-common`** (v0.10.0)
+- **`cpclib-common`** (v0.11.0)
   - Shared types, utilities, and event system
   - Used by almost all other crates
   - Provides: logging, paths, itertools re-exports
 
-- **`cpclib-macros`** (v0.10.0)
+- **`cpclib-macros`** (v0.11.0)
   - Procedural macros for code generation
   - Derive macros for common patterns
 
-- **`cpclib-tokens`** (v0.10.0)
+- **`cpclib-tokens`** (v0.11.0)
   - Symbol table and token management
   - Expression evaluation
   - Used by assembler and parser
 
 ### File Format Crates
 
-- **`cpclib-sna`** (v0.10.0)
+- **`cpclib-sna`** (v0.11.0)
   - Snapshot (.SNA) file reading/writing
   - Chunk-based format support
   - Memory state serialization
 
-- **`cpclib-disc`** (v0.10.0)
+- **`cpclib-disc`** (v0.11.0)
   - DSK file manipulation
   - Format, read, write operations
   - Compatible with iDSK/dskmanager
 
-- **`cpclib-cpr`** (v0.8.0)
+- **`cpclib-cpr`** (v0.11.0)
   - Cartridge (.CPR) file handling
   - GX4000 cartridge format
 
-- **`cpclib-basic`** (v0.10.0)
+- **`cpclib-cprcli`** (v0.11.0)
+  - Command-line tool for CPR manipulation
+  - Create and inspect cartridge files
+
+- **`cpclib-basic`** (v0.11.0)
   - BASIC tokenization and parsing
   - Source to token conversion
+  - Round-trip encode/decode support
 
-- **`cpclib-files`** (v0.1.0)
+- **`cpclib-locomotive`** (v0.11.0)
+  - Locomotive BASIC manipulation tool
+  - ASCII ↔ binary BASIC conversion
+  - Integrated into bndbuild
+
+- **`cpclib-files`** (v0.11.0)
   - Generic file utilities
 
 ### Assembly & Disassembly
 
-- **`cpclib-asm`** (v0.10.0)
+- **`cpclib-asm`** (v0.11.0)
   - Core assembler engine
   - Z80 instruction set support
   - Expression parser and evaluator
 
-- **`cpclib-basm`** (v0.10.0)
+- **`cpclib-basm`** (v0.11.0)
   - Command-line assembler binary
   - Multiple pass assembly
   - Macro system
   - **Primary assembler for the toolchain**
 
-- **`cpclib-bdasm`** (v0.10.0)
+- **`cpclib-bdasm`** (v0.11.0)
   - Disassembler binary
   - Z80 code to assembly conversion
 
-- **`cpclib-basmdoc`** (v0.10.0)
+- **`cpclib-basmdoc`** (v0.11.0)
   - Documentation generator for assembly source
 
-- **`cpclib-z80emu`** (v0.10.0)
+- **`cpclib-z80emu`** (v0.11.0)
   - Basic Z80 emulator
   - Used for instruction validation
 
+- **`cpclib-orgams-ascii`** (v0.11.0)
+  - Orgams ASCII format support
+  - On-CPC assembler compatibility
+
+- **`cpclib-borgams`** (v0.11.0)
+  - Borgams tool for Orgams integration
+  - Converts between Orgams formats
+
 ### Graphics & Image Processing
 
-- **`cpclib-image`** (v0.10.0)
+- **`cpclib-image`** (v0.11.0)
   - CPC image format representation
   - Mode 0, 1, 2 support
   - Palette management
 
-- **`cpclib-imgconverter`** (v0.10.0)
+- **`cpclib-imgconverter`** (v0.11.0)
   - Image conversion to CPC formats
   - Multiple dithering algorithms
   - Command-line tool
 
-- **`cpclib-sprite-compiler`** (v0.1.0)
+- **`cpclib-sprite-compiler`** (v0.11.0)
   - Sprite data compilation
   - Optimized sprite generation
 
 ### Compression
 
-- **`cpclib-crunch`** (v0.1.0)
+- **`cpclib-crunch`** (v0.11.0)
   - Compression interface
   - Z80-targeted crunchers
 
-- **`cpclib-crunchers`** (v0.10.0)
+- **`cpclib-crunchers`** (v0.11.0)
   - Multiple compression algorithms
   - Exomizer, ZX0, LZSA support
   - Includes native C implementations
 
 ### Build & Automation
 
-- **`cpclib-bndbuild`** (v0.8.0)
+- **`cpclib-bndbuild`** (v0.11.0)
   - Build automation tool (Make alternative)
   - YAML-based project files
   - Task orchestration
   - **Central build system for demo projects**
 
-- **`cpclib-runner`** (v0.8.0)
+- **`cpclib-bndbuild-ratatui`** (v0.11.0)
+  - Terminal UI (TUI) frontend for bndbuild
+  - Interactive build monitoring
+  - Built with ratatui library
+
+- **`cpclib-runner`** (v0.11.0)
   - External tool management
   - Emulator control
   - Download and cache external tools
@@ -131,28 +154,37 @@ cpclib is a large Cargo workspace containing 30+ crates organized into several f
 
 ### Hardware Communication
 
-- **`cpclib-xfer`** (v0.10.0)
+- **`cpclib-xfer`** (v0.11.0)
   - Library for cpcwifi/M4 communication
   - File transfer protocols
 
-- **`cpclib-xfertool`** (v0.10.0)
+- **`cpclib-xfertool`** (v0.11.0)
   - Command-line tool for hardware transfers
   - Interactive REPL mode
 
 ### Emulator Control
 
-- **`cpclib-emucontrol`** (v0.7.0)
+- **`cpclib-emucontrol`** (v0.11.0)
   - Emulator remote control
   - Script automation
 
+- **`cpclib-csl`** (v0.11.0)
+  - CSL (CPC Script Language) parser
+  - Emulator scripting language types
+  - AST and evaluation
+
+- **`cpclib-cslcli`** (v0.11.0)
+  - CSL command-line tool
+  - Execute CSL scripts
+
 ### GUI Applications
 
-- **`cpclib-visual-basm`** (v0.6.0)
+- **`cpclib-visual-basm`** (v0.11.0)
   - GUI frontend for assembler
   - Syntax highlighting
   - Build integration
 
-- **`cpclib-visual-bndbuild`** (v0.6.0)
+- **`cpclib-visual-bndbuild`** (v0.11.0)
   - GUI frontend for build system
   - Project visualization
 
@@ -162,14 +194,26 @@ cpclib is a large Cargo workspace containing 30+ crates organized into several f
 
 ### Language Bindings
 
-- **`cpclib-wasm`** (v0.5.0)
+- **`cpclib-wasm`** (v0.11.0)
   - WebAssembly bindings
   - Browser-based tooling
   - Website at https://cpcsdk.github.io/rust.cpclib/
 
-- **`cpclib-python`** (v0.1.0)
+- **`cpclib-python`** (v0.11.0)
   - Python bindings via PyO3
   - Python API for toolchain
+
+### Demo & Catalog Tools
+
+- **`cpclib-catart`** (v0.11.0)
+  - Catart-related functionality
+  - Demo catalog generation
+  - Amstrad CPC demo scene tools
+
+- **`cpclib-catalog`** (v0.11.0)
+  - Amsdos catalog manipulation
+  - Directory listing utilities
+  - DSK catalog operations
 
 ### Main Integration Crate
 
@@ -227,12 +271,14 @@ cpclib-bndbuild (build tool)
 - Shared metadata in workspace `Cargo.toml`
 - `edition = "2024"` across all crates
 - MIT license throughout
+- Current version: `v0.11.0` for all workspace crates
 
 ## Tool Integration Flow
 
 ```
 User writes:
   - .asm files (assembly source)
+  - .bas files (BASIC source)
   - build.yml (bndbuild config)
   - .png images
 
@@ -240,11 +286,13 @@ User writes:
 
 bndbuild orchestrates:
   1. Image conversion (cpclib-imgconverter)
-  2. Assembly (cpclib-basm)
-  3. Compression (cpclib-crunchers)
-  4. DSK creation (cpclib-disc)
-  5. Emulator launch (cpclib-runner)
-  6. Hardware transfer (cpclib-xfer)
+  2. BASIC conversion (cpclib-locomotive)
+  3. Assembly (cpclib-basm)
+  4. Compression (cpclib-crunchers)
+  5. DSK creation (cpclib-disc)
+  6. Catalog operations (cpclib-catalog)
+  7. Emulator launch (cpclib-runner)
+  8. Hardware transfer (cpclib-xfer)
 
      ↓
 
@@ -252,6 +300,7 @@ Output:
   - .sna snapshots
   - .dsk disk images
   - .bin binaries
+  - .cpr cartridges
 ```
 
 ## Adding a New Crate
@@ -274,9 +323,12 @@ Output:
 The `cpclib-runner` crate manages external tools:
 
 - **Assemblers**: Rasm, Orgams, Sjasmplus, Vasm, uz80
-- **Emulators**: WinAPE, ACE, CPCEC, Sugarbox, AmSpirit
+- **Emulators**: WinAPE, ACE, CPCEC, Sugarbox, AmSpirit, Caprice
 - **Trackers**: ArkosTracker 3, ChipNSFX
-- **Others**: Martine, ImpDSK, Grafx2
+- **Compression**: Exomizer, LZSA, DZ80
+- **Graphics**: Martine, Grafx2, img2cpc
+- **Disk Utils**: ImpDSK, Disark
+- **Others**: Various converters and utilities
 
 Tools are downloaded, cached, and versioned automatically.
 
@@ -308,6 +360,21 @@ Run: `bndbuild` in project directory
 - Generated via `mkdocs` from `docs/` directory
 - API docs: `cargo doc --open`
 
+## Recent Improvements (v0.11.0)
+
+- **BASIC Support**: Added `cpclib-locomotive` for BASIC ↔ binary conversion
+  - Fixed round-trip encoding/decoding bugs in `cpclib-basic`
+  - Properly handles string literals with closing quotes
+  - Integrated into bndbuild workflow
+
+- **Terminal UI**: Added `cpclib-bndbuild-ratatui` for interactive builds
+
+- **Emulator Scripting**: Added `cpclib-csl` and `cpclib-cslcli` for CSL support
+
+- **Catalog Tools**: Enhanced catalog manipulation with `cpclib-catalog` and `cpclib-catart`
+
+- **Orgams Support**: Better on-CPC assembler compatibility via `cpclib-borgams`
+
 ## Future Architecture Goals
 
 - Reduce `.unwrap()` panics throughout codebase
@@ -315,3 +382,4 @@ Run: `bndbuild` in project directory
 - Better error messages with source spans
 - Incremental compilation support
 - Plugin system for custom tasks
+- Improved IDE integration and LSP support
