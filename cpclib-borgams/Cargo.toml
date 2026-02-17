@@ -1,0 +1,22 @@
+[package]
+name = "cpclib-borgams"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+
+[dependencies]
+
+cpclib-common = {workspace = true, features = ["cmdline"]}
+cpclib-files.workspace = true
+cpclib-orgams-ascii.workspace = true
+
+
+[build-dependencies]
+built.workspace = true
+
+[lints]
+workspace = true
