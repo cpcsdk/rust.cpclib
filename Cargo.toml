@@ -246,10 +246,12 @@ cpclib = { path = "./cpclib/" }
 cpclib-asm = { path = "./cpclib-asm/" }
 cpclib-basic = { path = "./cpclib-basic/" }
 cpclib-basm = { path = "./cpclib-basm/" }
+cpclib-borgams = { path = "./cpclib-borgams/" }
 cpclib-basmdoc = { path = "./cpclib-basmdoc/" }
 cpclib-bdasm = { path = "./cpclib-bdasm/" }
 cpclib-bndbuild = { path = "./cpclib-bndbuild/" }
 cpclib-bndbuild-tauri = { path = "./cpclib-bndbuild-tauri/src-tauri" }
+cpclib-catart = { path = "./cpclib-catart/" }
 cpclib-catalog = { path = "./cpclib-catalog/" }
 cpclib-common = { path = "./cpclib-common/" }
 cpclib-cpr = { path = "./cpclib-cpr/" }

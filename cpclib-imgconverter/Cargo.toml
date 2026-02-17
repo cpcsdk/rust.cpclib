@@ -16,6 +16,7 @@ independent = true
 
 [dependencies]
 cpclib = { workspace=true, features = ["cmdline"] }
+cpclib-common = { workspace = true }
 cpclib-image = { workspace = true, optional = true }
 
 anyhow.workspace = true
@@ -33,4 +34,4 @@ built.workspace = true
 default = ["xferlib", "watch", "rayon"]
 xferlib = ["cpclib/xferlib"]
 watch = ["notify", "xferlib"]
-rayon = ["cpclib-image/rayon"]
+rayon = ["cpclib-image/rayon", "cpclib-common/rayon"]
