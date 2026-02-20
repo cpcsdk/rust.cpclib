@@ -195,10 +195,11 @@ For a complete reference of all available commands and their options, see [Comma
 - **Image Conversion**: 
   - [img2cpc](../img2cpc/) (im2cpc) - Benediction image converter
   - `martine` - Impact image converter
-- **File Management**: `cp`, `rm`, `hideur`
+- **File Management**: `cp`, `rm`
 - **Disc Management**: 
-  - `dsk`, `disc` - Benediction DSK manager (embedded-only)
+  - [dskmanager](../dskmanager/) (dsk, disc) - Benediction DSK manager
   - [catalog](../catalog/) (cat) - Catalog listing tool
+  - [hideur](../hideur/) - AMSDOS header management
   - `impdsk` - Impact DSK manager  
 - **Assemblers**: 
   - [BASM](../basm/) - Benediction assembler

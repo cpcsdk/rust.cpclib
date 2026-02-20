@@ -108,10 +108,6 @@ Options:
 Inner command of cpclib-bndbuild 0.11.0
 ```
 
-### File management: Amsdos header management (hideur)
-
-**Standalone:** Available as `hideur` binary. For complete documentation, see [Hideur Documentation](../../hideur).
-
 ### File management: Orgams to text conversion (borgams)
 
 **Standalone:** Available as `borgams` binary. For complete documentation, see [Borgams Documentation](../../borgams).
@@ -154,7 +150,19 @@ HxC Sound Player compiler for CPC music. For complete documentation, see <https:
 
 ### Disc management: Benediction dsk manager (dsk,disc)
 
-Embedded-only command for low-level DSK disc image manipulation (format, add files, catalog operations).
+**Standalone:** Available as `dskmanager` binary. Low-level DSK disc image manipulation tool.
+
+**Features:**
+- Format DSK disc images
+- Add files to DSK images
+- Catalog operations
+- Low-level disc track/sector manipulation
+
+**Note:** Within BndBuild, use the `dsk` or `disc` command. For standalone usage, the binary is called `dskmanager`. For complete documentation, see [DSKManager Documentation](../../dskmanager).
+
+### Disc management: Amsdos header management (hideur)
+
+**Standalone:** Available as `hideur` binary. Manage AMSDOS headers on files for proper CPC disc compatibility. For complete documentation, see [Hideur Documentation](../../hideur).
 
 ### Disc management: Catalog listing (catalog,cat)
 

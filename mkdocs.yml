@@ -1,10 +1,6 @@
 nav:
   - Home: 'index.md'
   - 'File Management':
-    - 'Hideur (AMSDOS Headers)':
-      - Overview: 'hideur/index.md'
-      - Command Line: 'hideur/cmdline.md'
-      - Examples: 'hideur/examples.md'
     - 'Borgams (Orgams Converter)':
       - Overview: 'borgams/index.md'
       - Command Line: 'borgams/cmdline.md'
@@ -27,10 +23,18 @@ nav:
       - Command Line: 'fade/cmdline.md'
       - Examples: 'fade/examples.md'
   - 'Disc Management':
+    - 'DSKManager (DSK Manager)':
+      - Overview: 'dskmanager/index.md'
+      - Command Line: 'dskmanager/cmdline.md'
+      - Examples: 'dskmanager/examples.md'
     - 'Catalog (CatArt Builder)':
       - Overview: 'catalog/index.md'
       - Command Line: 'catalog/cmdline.md'
       - Examples: 'catalog/examples.md'
+    - 'Hideur (AMSDOS Headers)':
+      - Overview: 'hideur/index.md'
+      - Command Line: 'hideur/cmdline.md'
+      - Examples: 'hideur/examples.md'
   - 'Cartridge Management':
     - 'CPRCLI (Cartridges)':
       - Overview: 'cprcli/index.md'

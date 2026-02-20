@@ -147,6 +147,14 @@ Creates a pixel-accurate PNG image showing exactly how the CatArt would appear o
 - Authentic screen modes (0, 1, 2, or 3)
 - Proper font rendering based on locale (English, French, Spanish, German, Danish)
 
+**Example Catalog Rendering (sorted alphabetically):**
+
+![BLOCUS Catalog](blocus_catalog.png)
+
+**Example Directory Listing (unsorted, directory order):**
+
+![BLOCUS Directory](blocus_directory.png)
+
 ## Building CatArt Disks
 
 ### Build from ASCII Source
@@ -198,8 +206,8 @@ CatArt is a technique where the Amstrad CPC file catalog itself contains BASIC c
 2. **File Number Format**: The output format shows:
    - Entry number (e.g., `14.`)
    - User number (e.g., `0:`)
-   - Filename (e.g., `-BLOC.US` where `-` indicates hidden)
-   - Attributes (`[hidden]`)
+   - Filename (e.g., `-BLOC.US`)
+   - Attributes (`[hidden]`, `[system]`, `[readonly]`)
    - Size in KB
    - Block allocation (`[Index(2), Index(3), ...]`)
 
