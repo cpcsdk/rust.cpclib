@@ -51,18 +51,18 @@ impl Cursor {
         }
     }
 
-    pub fn dec_y(&mut self, mode: &Mode) {
+    pub fn dec_y(&mut self, _mode: &Mode) {
         if self.y > 1 {
             self.y -= 1;
         }
     }
 }
 
-use std::fmt::{self, Display, Write};
+use std::fmt::{self, Display};
 
-use crate::basic_chars::{ACK, CURSOR_1};
+use crate::basic_chars::ACK;
 use crate::basic_command::{BasicCommand, BasicCommandList, PrintArgument};
-use crate::char_command::{CharCommand, CharCommandList};
+use crate::char_command::CharCommand;
 
 /// Locale/Language for character font
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,7 +148,7 @@ impl Mode {
     }
 }
 
-use bon::{self, builder};
+use bon;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_image::ga::{Palette, Pen};
 use cpclib_image::pixels;
@@ -224,7 +224,7 @@ impl BasicMemoryScreen {
         self.cls(pen, paper);
     }
 
-    pub fn cls(&mut self, pen: Pen, paper: Pen) {
+    pub fn cls(&mut self, _pen: Pen, paper: Pen) {
         // Clear memory with paper color pattern
         let paper_pattern = Self::get_paper_pattern(paper, self.mode);
         for byte in self.memory.iter_mut() {
@@ -350,7 +350,7 @@ impl BasicMemoryScreen {
                     );
 
                     // Merge: for each pixel, use char pen if bitmap bit is set, otherwise keep existing pen
-                    let mut merged_pens: SmallVec<[Pen; 8]> = existing_pens
+                    let merged_pens: SmallVec<[Pen; 8]> = existing_pens
                         .iter()
                         .enumerate()
                         .map(|(i, current_pen)| {
@@ -763,7 +763,7 @@ impl Interpreter {
 
     pub fn dec_cursor_x(&mut self) {
         let (width, _) = self.screen.resolution();
-        let (left, right, top, bottom) =
+        let (left, right, top, _bottom) =
             self.window
                 .unwrap_or((1, width, 1, self.screen.resolution().1));
         if self.cursor.x > left {
@@ -779,7 +779,7 @@ impl Interpreter {
 
     pub fn inc_cursor_y(&mut self) {
         let (_, height) = self.screen.resolution();
-        let (left, right, top, bottom) =
+        let (_left, _right, _top, bottom) =
             self.window
                 .unwrap_or((1, self.screen.resolution().0, 1, height));
         self.cursor.y += 1;
@@ -792,7 +792,7 @@ impl Interpreter {
 
     pub fn dec_cursor_y(&mut self) {
         let (_, height) = self.screen.resolution();
-        let (left, right, top, bottom) =
+        let (_left, _right, top, _bottom) =
             self.window
                 .unwrap_or((1, self.screen.resolution().0, 1, height));
         if self.cursor.y > top {
@@ -1024,7 +1024,7 @@ impl Interpreter {
             CharCommand::Locate(x, y) if self.enable_vdu => {
                 // Locate coordinates are relative to the window
                 let (width, height) = self.screen.resolution();
-                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                let (left, _right, top, _bottom) = self.window.unwrap_or((1, width, 1, height));
                 // Convert window-relative (1-based) to absolute screen coordinates
                 let abs_x = left + (*x as u16) - 1;
                 let abs_y = top + (*y as u16) - 1;
@@ -1043,7 +1043,7 @@ impl Interpreter {
             },
             CharCommand::Home if self.enable_vdu => {
                 let (width, height) = self.screen.resolution();
-                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                let (left, _right, top, _bottom) = self.window.unwrap_or((1, width, 1, height));
                 self.locate_cursor(left, top);
             },
             CharCommand::Esc if self.enable_vdu => {
@@ -1138,7 +1138,7 @@ impl Interpreter {
             },
             CharCommand::ClearScreenStart if self.enable_vdu => {
                 let (width, height) = self.screen.resolution();
-                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                let (left, right, top, _bottom) = self.window.unwrap_or((1, width, 1, height));
                 let cur_x = self.cursor.x;
                 let cur_y = self.cursor.y;
                 for y in top..=cur_y {
@@ -1150,7 +1150,7 @@ impl Interpreter {
             },
             CharCommand::ClearScreenEnd if self.enable_vdu => {
                 let (width, height) = self.screen.resolution();
-                let (left, right, top, bottom) = self.window.unwrap_or((1, width, 1, height));
+                let (left, right, _top, bottom) = self.window.unwrap_or((1, width, 1, height));
                 let cur_x = self.cursor.x;
                 let cur_y = self.cursor.y;
                 // Fill from cursor to right edge on current line
@@ -1192,7 +1192,7 @@ impl Interpreter {
                 self.cursor.visible = false;
             },
 
-            c if !self.enable_vdu => {
+            _c if !self.enable_vdu => {
                 // When VDU is disabled, ignore all commands except those handled above
             },
 
@@ -1214,13 +1214,11 @@ impl Interpreter {
 
 impl Display for Interpreter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use cpclib_image::ga::Ink;
-        use owo_colors::colors::CustomColor;
         use owo_colors::{DynColors, OwoColorize};
         // Border thickness
         let border = 4;
         let screen_width = self.screen.buffer[0].len();
-        let screen_height = self.screen.buffer.len();
+        let _screen_height = self.screen.buffer.len();
         let border_ink = self.palette.get_border();
         let border_rgb = border_ink.color();
         let border_color = DynColors::Rgb(border_rgb[0], border_rgb[1], border_rgb[2]);
@@ -1303,11 +1301,10 @@ pub fn display_screen_diff(
     screen2: &Screen,
     palette2: &Palette
 ) -> String {
-    use cpclib_image::ga::Ink;
     use owo_colors::{DynColors, OwoColorize};
 
     let border = 2;
-    let height = screen1.buffer.len();
+    let _height = screen1.buffer.len();
     let width = screen1.buffer[0].len();
 
     let mut output = String::new();
@@ -1348,7 +1345,7 @@ pub fn display_screen_diff(
     }
 
     // Screen rows
-    for (row_idx, (row1, row2)) in screen1.buffer.iter().zip(screen2.buffer.iter()).enumerate() {
+    for (_row_idx, (row1, row2)) in screen1.buffer.iter().zip(screen2.buffer.iter()).enumerate() {
         // Left border for screen1
         for _ in 0..border {
             output.push_str(&format!("{}", " ".on_color(border_color1)));
