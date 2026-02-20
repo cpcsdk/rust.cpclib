@@ -49,7 +49,7 @@ jobs:
         toolchain: nightly
         args: --features hfe
     - name: "cleanup after test"
-      run: "cargo clean"
+      run: "cargo +nightly clean"
     - uses: actions-rs/cargo@v1
       with:
         command: build
