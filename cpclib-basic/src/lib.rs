@@ -407,7 +407,7 @@ pub mod test {
         let code = "10 CALL &1234";
         let prog = BasicProgram::parse(code).unwrap();
         let bytes = prog.as_bytes();
-        let expected = [10, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 0, 0, 0];
+        let expected = [10, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 0, 0];
 
         assert_eq!(&bytes, &expected);
 
@@ -416,7 +416,7 @@ pub mod test {
         let bytes = prog.as_bytes();
         let expected = [
             10, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 10, 0, 20, 0, 131, 32, 28, 0x34, 0x12, 0, 0,
-            0, 0
+            0
         ];
 
         assert_eq!(&bytes, &expected);
@@ -428,7 +428,7 @@ pub mod test {
         let mut prog = BasicProgram::parse(code).unwrap();
         prog.hide_line(BasicProgramLineIdx::Number(10)).unwrap();
         let bytes = prog.as_bytes();
-        let expected = vec![10, 0, 0, 0, 131, 32, 28, 0x34, 0x12, 0, 0, 0, 0];
+        let expected = vec![10, 0, 0, 0, 131, 32, 28, 0x34, 0x12, 0, 0, 0];
 
         assert_eq!(bytes, expected);
     }
@@ -476,7 +476,7 @@ pub mod test {
         let bytes = prog.as_bytes();
         let expected = vec![
             20, 0, 10, 0, 131, 32, 28, 0x34, 0x12, 0, 10, 0, 20, 0, 131, 32, 28, 0x34, 0x12, 0, 0,
-            0, 0,
+            0,
         ];
 
         assert_eq!(bytes, expected);
