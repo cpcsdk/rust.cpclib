@@ -350,14 +350,13 @@ impl TrackInformation {
         None
     }
 
-    /// Fail if the track has no sector
-    pub fn min_sector(&self) -> u8 {
+    /// Return the smallest sector id. Returns None if the track has no sector
+    pub fn min_sector(&self) -> Option<u8> {
         self.sector_information_list
             .sectors()
             .iter()
             .map(|s| s.sector_information_bloc.sector_id)
             .min()
-            .unwrap()
     }
 
     /// Compute the sum of data contained by all the sectors.
@@ -1137,11 +1136,13 @@ impl Disc for ExtendedDsk {
             .map_err(|e| e.to_string())
     }
 
-    /// Return the smallest sector id over all tracks
-    fn global_min_sector<S: Into<Head>>(&self, _side: S) -> u8 {
+    /// Return the smallest sector id over all tracks for the given head (ignoring unformatted tracks)
+    fn global_min_sector<S: Into<Head>>(&self, side: S) -> u8 {
+        let head: u8 = side.into().into();
         self.tracks()
             .iter()
-            .map(TrackInformation::min_sector)
+            .filter(|track| track.head_number == head)
+            .filter_map(TrackInformation::min_sector)
             .min()
             .unwrap()
     }
@@ -1178,6 +1179,7 @@ impl Disc for ExtendedDsk {
         self.get_track_information(side, track)
             .unwrap()
             .min_sector()
+            .unwrap()
     }
 
     // We assume we have the same number of tracks per Head.
@@ -1214,7 +1216,7 @@ impl Disc for ExtendedDsk {
         Some((
             *next_track.head_number(), // XXX  logical
             *next_track.track_number(),
-            next_track.min_sector()
+            next_track.min_sector()?
         ))
     }
 }

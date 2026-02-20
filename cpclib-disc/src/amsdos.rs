@@ -1360,16 +1360,16 @@ impl<'dsk, 'mng: 'dsk, D: Disc> AmsdosManagerNonMut<'dsk, D> {
         };
         self.disc
             .consecutive_sectors_read_bytes(self.head, track, sector_id, 4)
-            .unwrap()
+            .expect("Unable to read catalog sectors")
     }
 
-    /// Check if the disc is in DATA format by looking at the first sector of the disc
+    /// Check if the disc is in DATA format by looking at the first sector of track 0
     pub fn is_data(&self) -> bool {
-        self.disc.global_min_sector(self.head) == 0xC1
+        self.disc.track_min_sector(self.head, 0) == 0xC1
     }
 
     pub fn is_system(&self) -> bool {
-        self.disc.global_min_sector(self.head) == 0x41
+        self.disc.track_min_sector(self.head, 0) == 0x41
     }
 
     /// Return the entries of the Amsdos catalog
