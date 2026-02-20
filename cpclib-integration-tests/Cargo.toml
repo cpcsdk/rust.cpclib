@@ -1,0 +1,25 @@
+[package]
+name = "cpclib-integration-tests"
+version = "0.11.0"
+authors = ["Krusty/Benediction <krusty@cpcscene.com>"]
+edition = "2021"
+rust-version = "1.74"
+
+[dependencies]
+# CLI tool libraries
+cpclib-basm = { workspace = true }
+cpclib-bdasm = { workspace = true }
+cpclib-basmdoc = { workspace = true }
+cpclib-borgams = { workspace = true }
+cpclib-catalog = { workspace = true }
+cpclib-locomotive = { workspace = true }
+cpclib-cprcli = { path = "../cpclib-cprcli" }
+cpclib-cslcli = { path = "../cpclib-cslcli" }
+cpclib-xfertool = { workspace = true }
+cpclib-imgconverter = { workspace = true }
+cpclib-bndbuild = { workspace = true }
+cpclib-sna = { workspace = true, features = ["cmdline", "interactive"] }
+
+# For clap Command validation
+clap = { workspace = true }
+regex = { workspace = true }
