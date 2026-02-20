@@ -33,7 +33,7 @@ glob.workspace = true
 tar = "0.4.44"
 rust-ini.workspace = true
 scraper = "0.25.0"
-transparent.workspace = true
+transparent = { workspace = true, optional = true }
 xz2 = "0.1.7"
 wmctrl = "0.1.8"
 zip-extract.workspace = true
@@ -43,4 +43,5 @@ fs_extra = "1.3.0"
 
 [features]
 default = ["fap"]
+transparent-x11 = ["dep:transparent"]
 fap = []

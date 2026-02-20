@@ -9,6 +9,8 @@ use clap::builder::Styles;
 use clap::builder::styling::AnsiColor;
 use clap::{ArgMatches, Command, FromArgMatches, Parser};
 use cpclib_common::itertools::Itertools;
+
+#[cfg(feature = "transparent-x11")]
 use transparent::{CommandExt, TransparentChild, TransparentRunner};
 
 use crate::event::EventObserver;
@@ -132,6 +134,7 @@ impl<E: EventObserver> ExternRunner<E> {
         }
     }
 
+    #[cfg(feature = "transparent-x11")]
     pub fn new_transparent(in_dir: RunInDir) -> Self {
         Self {
             in_dir,
@@ -180,9 +183,11 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
 
         #[derive(Debug)]
         enum MyChild {
+            #[cfg(feature = "transparent-x11")]
             Transparent(TransparentChild),
             Standard(Child)
         }
+        #[cfg(feature = "transparent-x11")]
         impl From<TransparentChild> for MyChild {
             fn from(value: TransparentChild) -> Self {
                 Self::Transparent(value)
@@ -198,6 +203,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
 
             fn deref(&self) -> &Self::Target {
                 match self {
+                    #[cfg(feature = "transparent-x11")]
                     MyChild::Transparent(child) => child.deref(),
                     MyChild::Standard(child) => child
                 }
@@ -206,12 +212,14 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         impl DerefMut for MyChild {
             fn deref_mut(&mut self) -> &mut Self::Target {
                 match self {
+                    #[cfg(feature = "transparent-x11")]
                     MyChild::Transparent(child) => child.deref_mut(),
                     MyChild::Standard(child) => child
                 }
             }
         }
 
+        #[cfg(feature = "transparent-x11")]
         let mut cmd: MyChild = if self.transparent {
             cmd.spawn_transparent(&TransparentRunner::new())
                 .map(|c| c.into())
@@ -219,6 +227,10 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         else {
             cmd.spawn().map(|c| c.into())
         }
+        .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
+        
+        #[cfg(not(feature = "transparent-x11"))]
+        let mut cmd: MyChild = cmd.spawn().map(|c| c.into())
         .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
 
         // the process is running in another thread. We'll collect its outputs in yet other threads

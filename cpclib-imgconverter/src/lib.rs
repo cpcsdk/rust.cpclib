@@ -674,7 +674,10 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
     }
 
     let sub_sna = matches.subcommand_matches("sna");
+    #[cfg(feature = "xferlib")]
     let sub_m4 = matches.subcommand_matches("m4");
+    #[cfg(not(feature = "xferlib"))]
+    let sub_m4: Option<&ArgMatches> = None;
     let sub_dsk = matches.subcommand_matches("dsk");
     let sub_sprite = matches.subcommand_matches("sprite");
     let sub_tile = matches.subcommand_matches("tile");
@@ -1459,12 +1462,15 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
 }
 
 pub fn process_img2cpc(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
-    if matches.get_flag("help") {
-        args.print_long_help()?;
-        return Ok(());
-    }
+    // Note: clap automatically handles --help, no need to check manually
+    // Removed: if matches.get_flag("help") { ... }
 
-    if matches.subcommand_matches("m4").is_none()
+    #[cfg(feature = "xferlib")]
+    let has_m4 = matches.subcommand_matches("m4").is_some();
+    #[cfg(not(feature = "xferlib"))]
+    let has_m4 = false;
+
+    if !has_m4
         && matches.subcommand_matches("dsk").is_none()
         && matches.subcommand_matches("sna").is_none()
         && matches.subcommand_matches("sprite").is_none()
@@ -1478,6 +1484,7 @@ pub fn process_img2cpc(matches: &ArgMatches, mut args: Command) -> anyhow::Resul
 
     convert(matches).expect("Unable to make the conversion");
 
+    #[cfg(feature = "xferlib")]
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
         eprintln!("hmmm seems to not be coded yet");
         #[cfg(feature = "watch")]

@@ -42,6 +42,12 @@ An hello world representative of the functionalities of `BASM` would be:
 
 ## Download last version
 
+## Integration with BndBuild
+
+BASM is available as a standalone `basm` binary but can also be used within [BndBuild](../bndbuild) build scripts using the `basm` or `assemble` command aliases. See [BndBuild Commands](../bndbuild/commands.md#assembler-basm-basmassemble) for integration details.
+
+## Download last version
+
 Prefer to compile yourself `basm`. But you can still download latest versions here:
 
  - [Linux](https://github.com/cpcsdk/rust.cpclib/releases/download/latest/basm) 

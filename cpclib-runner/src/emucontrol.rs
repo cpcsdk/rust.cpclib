@@ -860,26 +860,29 @@ pub fn start_emulator(emu: &Emulator, conf: &EmulatorConf) -> Result<(), String>
     let app = emu.configuration();
 
     let cmd = emu.get_command().into();
+    #[cfg(feature = "transparent-x11")]
     let runner = if conf.transparent {
         DelegatedRunner::new_transparent(app, cmd)
     }
     else {
         DelegatedRunner::new(app, cmd)
     };
+    #[cfg(not(feature = "transparent-x11"))]
+    let runner = DelegatedRunner::new(app, cmd);
 
     runner.inner_run(&args, &())
 }
 
 pub fn get_emulator_window(emu: &Emulator, conf: &EmulatorConf) -> EmuWindow {
-    if !conf.transparent {
-        get_emulator_window_xcap(emu)
+    #[cfg(feature = "transparent-x11")]
+    if conf.transparent {
+        return get_emulator_window_xvfb(emu);
     }
-    else {
-        get_emulator_window_xvfb(emu)
-    }
+    get_emulator_window_xcap(emu)
 }
 
 // XX this code seems buggy ATM it is unable to collect the window, no idea why
+#[cfg(feature = "transparent-x11")]
 fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
     // get the latest x server. Lets' hope it is the virtual one of the transparent emulator
     let display = fs_err::read_dir("/tmp/.X11-unix")

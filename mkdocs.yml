@@ -1,15 +1,94 @@
 nav:
   - Home: 'index.md'
-  - 'BASM':
-    - BASM: 'basm/index.md'
-    - Command line: 'basm/cmdline.md'
-    - Syntax: 'basm/syntax.md'
-    - Directives: 'basm/directives.md'
-    - Functions: 'basm/functions.md'
-    - Expression Types: 'basm/expression-types.md'
-  - BNDBUILD:
-    - BNDBUILD: 'bndbuild/index.md'
-    - Recipes: 'bndbuild/recipes.md'
+  - 'File Management':
+    - 'Hideur (AMSDOS Headers)':
+      - Overview: 'hideur/index.md'
+      - Command Line: 'hideur/cmdline.md'
+      - Examples: 'hideur/examples.md'
+    - 'Borgams (Orgams Converter)':
+      - Overview: 'borgams/index.md'
+      - Command Line: 'borgams/cmdline.md'
+      - Examples: 'borgams/examples.md'
+    - 'Snapshot (SNA Files)':
+      - Overview: 'snapshot/index.md'
+      - Command Line: 'snapshot/cmdline.md'
+      - Examples: 'snapshot/examples.md'
+  - 'Image Processing':
+    - 'img2cpc (Image Converter)':
+      - Overview: 'img2cpc/index.md'
+      - Command Line: 'img2cpc/cmdline.md'
+      - Examples: 'img2cpc/examples.md'
+    - 'cpc2img (Image Extractor)':
+      - Overview: 'cpc2img/index.md'
+      - Command Line: 'cpc2img/cmdline.md'
+      - Examples: 'cpc2img/examples.md'
+    - 'fade (Palette Fade)':
+      - Overview: 'fade/index.md'
+      - Command Line: 'fade/cmdline.md'
+      - Examples: 'fade/examples.md'
+  - 'Disc Management':
+    - 'Catalog (CatArt Builder)':
+      - Overview: 'catalog/index.md'
+      - Command Line: 'catalog/cmdline.md'
+      - Examples: 'catalog/examples.md'
+  - 'Cartridge Management':
+    - 'CPRCLI (Cartridges)':
+      - Overview: 'cprcli/index.md'
+      - Command Line: 'cprcli/cmdline.md'
+      - Examples: 'cprcli/examples.md'
+  - 'Assemblers':
+    - 'BASM (Assembler)':
+      - Overview: 'basm/index.md'
+      - Command Line: 'basm/cmdline.md'
+      - Syntax: 'basm/syntax.md'
+      - Directives: 'basm/directives.md'
+      - Functions: 'basm/functions.md'
+      - Expression Types: 'basm/expression-types.md'
+    - 'Orgams (Native Assembler)':
+      - Overview: 'orgams/index.md'
+      - Command Line: 'orgams/cmdline.md'
+      - Examples: 'orgams/examples.md'
+  - 'Disassemblers':
+    - 'BDASM (Disassembler)':
+      - Overview: 'bdasm/index.md'
+      - Command Line: 'bdasm/cmdline.md'
+      - Examples: 'bdasm/examples.md'
+  - 'Emulators':
+    - 'CPC Runner (Emulator Launcher)':
+      - Overview: 'runner/index.md'
+      - Command Line: 'runner/cmdline.md'
+      - Examples: 'runner/examples.md'
+  - 'Hardware Transfer':
+    - 'XferTool (Hardware Transfer)':
+      - Overview: 'xfertool/index.md'
+      - Command Line: 'xfertool/cmdline.md'
+      - Examples: 'xfertool/examples.md'
+  - 'Build Management':
+    - 'BNDBUILD (Build System)':
+      - Overview: 'bndbuild/index.md'
+      - Commands: 'bndbuild/commands.md'
+      - Recipes: 'bndbuild/recipes.md'
+      - Examples: 'bndbuild/examples.md'
+    - 'Locomotive (BASIC)':
+      - Overview: 'locomotive/index.md'
+      - Command Line: 'locomotive/cmdline.md'
+      - Examples: 'locomotive/examples.md'
+      - File Format: 'locomotive/format.md'
+  - 'Data Compression':
+    - 'Crunch (Data Compression)':
+      - Overview: 'crunch/index.md'
+      - Command Line: 'crunch/cmdline.md'
+      - Examples: 'crunch/examples.md'
+  - 'Development Tools':
+    - 'BASMDOC (Doc Generator)':
+      - Overview: 'basmdoc/index.md'
+      - Command Line: 'basmdoc/cmdline.md'
+      - Examples: 'basmdoc/examples.md'
+    - 'CSLCLI (Script Parser)':
+      - Overview: 'cslcli/index.md'
+      - Command Line: 'cslcli/cmdline.md'
+      - Language Reference: 'cslcli/language.md'
+      - Examples: 'cslcli/examples.md'
 site_name: "Amstrad RUST cpcdemotools"
 markdown_extensions:
   - pymdownx.highlight:

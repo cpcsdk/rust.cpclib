@@ -1,3 +1,8 @@
+!!! warning "Documentation Status"
+    This documentation is **partially AI-generated** and may contain **hallucinations or inaccuracies**. 
+    We are actively working to review and correct these issues. If you encounter incorrect information, 
+    please report it at <https://github.com/cpcsdk/rust.cpclib/issues>.
+
 cpclib is a [rust](https://www.rust-lang.org/) library that aims at helping to develop Amstrad CPC demos. 
 Maybe it could be usefull for other z80 platform or even games. 
 Most functionalities are still in beta state;

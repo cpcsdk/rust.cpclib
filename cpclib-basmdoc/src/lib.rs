@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use dashmap::DashMap;
+pub use cmdline::BasmDocCommand;
 pub use generator::BasmDocGenerator;
 use indicatif::{ProgressBar, ProgressStyle};
 use lazy_static::lazy_static;

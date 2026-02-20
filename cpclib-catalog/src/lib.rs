@@ -1,5 +1,6 @@
 pub mod cli;
 
+use clap::CommandFactory;
 use std::fs::File;
 use std::io::{Read, Write};
 
@@ -23,6 +24,11 @@ use crate::cli::{CatalogApp, CatalogCommand};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
+/// Build the clap Command for testing purposes
+pub fn build_command() -> clap::Command {
+    cli::CatalogApp::command()
 }
 
 pub fn display_catalog_using_catart(
@@ -70,9 +76,6 @@ pub fn catalog_extraction(
         let offset = chunk_idx * 32;
         let entry_bytes = &catalog_bytes[offset..offset + 32];
 
-        if entry_bytes[1] == b'W' {
-            dbg!(&entry_bytes);
-        }
 
         let status = entry_bytes[0];
 

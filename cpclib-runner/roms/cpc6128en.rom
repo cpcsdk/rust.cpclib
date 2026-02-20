@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta http-equiv="content-type" content="charset=iso-8859-1" />
+<meta http-equiv="expires" content="0" />
+<meta http-equiv="pragma" content="no-cache" />
+<meta name="owner" content="CPC-POWER" />
+<meta name="language" content="fr" />
+<meta http-equiv="content-language" content="fr, fr-be, fr-ca, fr-lu, fr-ch" />
+<meta name="description" content="cpcarchives est une base de donnees comprenant des livres, emulateurs, code source, articles pour mieux utiliser son CPC." />
+<meta name="keywords" content="cpc-power, cpcgames, cpcarchives, manuel, articles, amstrad, cpc, amstrad cpc, 464, cpc 464, 664, cpc 664, 6128, cpc 6128, 472, cpc 472, 4000, cpc+, cpcplus, cpc plus, gx4000, gx 4000, cpc464, cpc664, cpc6128, basic, jeu, game, utilitaire" /><meta name="rating" content="general" />
+<meta name="distribution" content="global" />
+<meta name="copyright" content="CPC-POWER" />
+<meta name="revisit-after" content="14 days" />
+<meta name="resource-type" content="document" />
+<meta name="robots" content="all" />
+<meta name="generator" content="Kukulcan PHP" />
+<title>CPC-POWER, CPCArchives</title>
+<link rel="shortcut icon" href="https://www.cpc-power.com/favicon.gif" type="image/gif" />
+<link href="images/archives2014b.css" rel="stylesheet" type="text/css" media="print, projection, screen, tv" /> 
+</head>
+<body class="bodysite">
+<div id="SuperContainer"><div id="Hautdepage">&nbsp;</div><div class="CorpsHaut"><div style="background-color:#000000;color:gray;Font:bold 12px Verdana, Arial, Helvetica, sans-serif;text-align:center;width:720px;margin: 0px auto 5px auto;-webkit-border-radius: 0px 0px 30px 30px;border-radius: 0px 0px 30px 30px;">CPC-POWER : <a href=".."><font color='silver'>CPC-SOFTS</font></a> - <a href="index.php"><font color='white'>CPCArchives</font></a>&nbsp;</div><div class='logocpcarchives'><div id="archivecpcsearch"><form name="affichagestaff" action="index.php?page=articles&onglet=find" method="post"><fieldset><legend> Options de Recherche :</legend><input class='boutonsearch' type="image" src="images/voir.gif" title="search" /> <input class='textesearch' type="text" name="lenom" id="lenom" size="15" maxlength="15" /></fieldset></form></div></div><div class="retour">&nbsp;</div><div class="retour">&nbsp;</div><div id="idnavhautg"><a accesskey="0" href="index.php?page=accueil" class="choix">Accueil</a><a accesskey="1" href="index.php?page=nouveau">Quoi de neuf ?</a><a accesskey="2" href="index.php?page=articles"> 457 Articles</a><a rel="nofollow" accesskey="3" href="index.php?page=download">T&eacute;l&eacute;chargement</a><a rel="nofollow" accesskey="4" href="index.php?page=contact">Contact</a></div><div class="retour">&nbsp;</div></div><div><br /><div class="cartouche970"><div class="cartouche970-haut"></div><div class="cartouche970-milieu"><p class="titrerouge">Accueil</p><h1>Bienvenue dans <B>CPCArchives</B></h1><br />
+<p align='justify'>Cette section de CPC-POWER a pour objectif de collecter et de mettre à disposition tous les documents et outils concernant de près ou de loin l'Amstrad CPC.</p><br />
+<p align='justify'>Par "<em>Documents</em>", j'entends aussi bien le scan des livres, des datasheets des composants ainsi que des bouts de code que les auteurs auront laissé dans le domaine public.</p><br />
+<p align='justify'>Par "<em>Outils</em>", j'entends collecter les différents programmes disponibles, aussi bien sur PC que sur CPC (ou toute autre plateforme d'ailleurs!!) facilitant la relation entre le matériel d'aujourd'hui et nos machines d'hier.</p><br />
+<p align='center'><B>Encore un site de téléchargement, me direz-vous ?</B></p><br />
+<p align='justify'>Je souhaite juste éviter que ces documents aujourd'hui éparpillés sur différents sites disparaissent un jour avec la motivation des webmasters.</p><br />
+<p align='justify'>L'onglet "<B><a href="index.php?page=nouveau">Quoi de neuf ?</a></B>" vous présente la liste des dernières contributions.</p><br />
+<p align='justify'>L'onglet "<B><a href="index.php?page=articles">Articles</a></B>"  vous donne accès à tous les articles, catégorie par catégorie.</p><br />
+<p align='justify'>L'onglet "<B><a href="index.php?page=download">Téléchargement</a></B>" vous donne un accès direct aux fichiers mis à disposition.</p><br />
+<p align='justify'>Maintenant, si vous souhaitez vous aussi apporter votre contribution à cet édifice en construction en publiant un article, donner le scan d'un document ou tout simplement donner votre avis, vous pouvez nous contacter en utilisant le formulaire accessible à partir de l'onglet "<a href="index.php?page=contact">Contact</a>".</p><br />
+<br />
+<h3><U>DROITS D'AUTEURS</U></h3><br />
+<p align='justify'>Ce site a pour objectif de proposer au téléchargement le contenu du plus grand nombre d'ouvrages concernant l'Amstrad CPC. Ces ouvrages sont protégés par des droits d'auteurs qui nous interdisent de les reproduire de cette manière.  La plupart de ces documents ayant plus de 20 ans, ne sont plus édités et ne se trouvent généralement qu'en brocantes ou sur les sites d'enchères entre particuliers.<br />
+Je suis parti du principe, à tord peut-être, que cette diffusion serait désormais tolérée par les ayants droit. Toutefois, si un document présent sur ce site ne devrait pas s'y trouver, merci de me prévenir afin de le retirer dans les plus brefs délais.<br />
+Dans la mesure du possible, je contacte les auteurs afin d'avoir leurs autorisation avant la publication d'un article ou la mise à disposition d'un programme. Si cela n'était pas le cas, je vous prie de m'excuser et de me contacter afin de régulariser la situation au plus vite.</p><br />
+<br />
+<h3><U>COPYRIGHT</U></h3><br />
+<p align='justify'>Aim of this website is to be able to download content of all books ever written for the Amstrad CPC. These books have been protected by copyright that prevent us to distribute them that manner. But most of them are more than 20 years old, no longer published and are only available in yard sales or in any famous bidding websites.<br />
+Hence, I have taken into account that such a spread will now be allowed by any rightful owner. Therefore, if any document available for download into this website should not be there, please advise me in order to remove it as soon as possible.<br />
+I am trying to write to all authors I can in order to get their authorization prior to publish any document or software. I apologize for those I haven't contact yet. Please contact me to solve any problem.</p><br />
+<br />
+<p align='center'>Puissiez-vous toujours trouver ici ce que vous cherchez !<br />
+Et pour ce que vous ne trouvez pas, demandez-le nous quand même, nous l'aurons pour la prochaine fois :)</p><br />
+<p align='center'><B>Souhaitez-vous nous aider dans notre travail de sauvegarde du patrimoine vidéoludique de notre jeunesse ?</B><br />
+<a href="../index.php?page=donations">CLIQUEZ ICI POUR NOUS SUPPORTER !</a></p><br />
+<br />
+<p align="right"><em>Fredouille</em></p></div><div class="cartouche970-bas"></div></div><div class="retour">&nbsp;</div></div><div class="retour"></div><br /><div class="Corps"><div class="retour"></div><div class="paragraphe100"><div class="centrer"><strong>CPC-POWER/CPCArchives</strong>, projet maintenu par <strong>Fredouille</strong>.<br />Programmation par <strong>Kukulcan</strong> &copy; 2007-2026 tous droits r&eacute;serv&eacute;s.<br /><em>Reproduction sans autorisation interdite. Tous les titres utilis&eacute;es appartiennent &agrave; leurs propri&eacute;taires respectifs.</em><br /></div></div><div class="retour"></div></div><div class="retour"></div></div></body>
+</html>

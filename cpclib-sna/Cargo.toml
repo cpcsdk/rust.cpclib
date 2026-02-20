@@ -41,7 +41,3 @@ default = []
 cmdline = ["cpclib-common/cmdline", "comfy-table"]
 interactive = ["rustyline", "minus", "line-span"]
 
-[[bin]]
-name = "snapshot"
-path = "src/bin/snapshot.rs"
-required-features = ["cmdline"]

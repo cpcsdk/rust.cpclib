@@ -14,7 +14,7 @@
 
 use std::io::{Read, Write};
 
-pub use clap::{Parser, Subcommand};
+pub use clap::{CommandFactory, Parser, Subcommand};
 use cpclib_basic::BasicProgram;
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_disc::amsdos::{AmsdosFileName, AmsdosHeader};
@@ -144,4 +144,9 @@ fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> std::io:
     }
 
     Ok(())
+}
+
+/// Build the clap Command for testing purposes
+pub fn build_command() -> clap::Command {
+    Cli::command()
 }

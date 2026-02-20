@@ -575,6 +575,7 @@ impl<E: EventObserver> DelegatedRunner<E> {
         }
     }
 
+    #[cfg(feature = "transparent-x11")]
     pub fn new_transparent(app: DelegateApplicationDescription<E>, cmd: String) -> Self {
         Self {
             app,
@@ -619,12 +620,15 @@ impl<E: EventObserver> Runner for DelegatedRunner<E> {
         }
 
         // Delegate it to the appropriate luncher
+        #[cfg(feature = "transparent-x11")]
         let runner = if self.transparent {
             ExternRunner::<E>::new_transparent(cfg.in_dir)
         }
         else {
             ExternRunner::<E>::new(cfg.in_dir)
         };
+        #[cfg(not(feature = "transparent-x11"))]
+        let runner = ExternRunner::<E>::new(cfg.in_dir);
         runner.inner_run(&command, o)
     }
 

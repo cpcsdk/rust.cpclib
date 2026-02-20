@@ -35,6 +35,7 @@ use crate::runners::hideur::HideurRunner;
 use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::snapshot::SnapshotRunner;
 use crate::runners::xfer::XferRunner;
+use crate::runners::cprcli::CprCliRunner;
 use crate::task::InnerTask;
 
 impl InnerTask {
@@ -215,6 +216,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Mkdir(_) => MkdirRunner::default().run(task.args(), observer),
         InnerTask::Rm(_) => RmRunner::default().run(task.args(), observer),
         InnerTask::Xfer(_) => XferRunner::default().run(task.args(), observer),
+        InnerTask::Cpr(_) => CprCliRunner::default().run(task.args(), observer),
 
         InnerTask::Grafx2(_) => {
             DelegatedRunner::<E>::new(

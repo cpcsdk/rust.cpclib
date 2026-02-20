@@ -1,27 +1,10 @@
 use std::{fs, process};
 
-use cpclib_common::clap::{Arg, ArgAction, Command};
+use cpclib_cslcli::build_command;
 use cpclib_csl::parse_csl_with_rich_errors;
 
 fn main() {
-    let matches = Command::new("cpclib-cslcli")
-        .version(env!("CARGO_PKG_VERSION"))
-        .author("Krusty/Benediction")
-        .about("CSL (CPC Script Language) parser and validator")
-        .arg(
-            Arg::new("file")
-                .help("Path to the CSL file to parse")
-                .required(true)
-                .index(1)
-        )
-        .arg(
-            Arg::new("verbose")
-                .short('v')
-                .long("verbose")
-                .help("Enable verbose output")
-                .action(ArgAction::SetTrue)
-        )
-        .get_matches();
+    let matches = build_command().get_matches();
 
     let file_path = matches.get_one::<String>("file").unwrap();
     let verbose = matches.get_flag("verbose");

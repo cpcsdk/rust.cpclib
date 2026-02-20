@@ -55,6 +55,7 @@ pub enum InnerTask {
     Locomotive(StandardTaskArguments),
     Cp(StandardTaskArguments),
     CpcToImg(StandardTaskArguments),
+    Cpr(StandardTaskArguments),
     Crunch(StandardTaskArguments),
     Disassembler(Disassembler, StandardTaskArguments),
     Disc(StandardTaskArguments),
@@ -219,6 +220,8 @@ pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
 pub const SNA_CMDS: &[&str] = &["sna", "snpashot"];
 pub const XFER_CMDS: &[&str] = &["xfer", "cpcwifi", "m4"];
 
+pub const CPR_CMDS: &[&str] = &["cpr"];
+
 pub const CRUNCH_CMDS: &[&str] = &["crunch", "compress"];
 
 pub const RTZX_CMDS: &[&str] = &["rtzx"];
@@ -248,6 +251,7 @@ impl Display for InnerTask {
             Self::Cp(s) => (CP_CMDS[0], s),
             Self::Mv(s) => (MV_CMDS[0], s),
             Self::CpcToImg(s) => (CPC2IMG_CMDS[0], s),
+            Self::Cpr(s) => (CPR_CMDS[0], s),
             Self::Crunch(s) => (CRUNCH_CMDS[0], s),
             Self::Disassembler(d, s) => (d.get_command(), s),
             Self::Disc(s) => (DISC_CMDS[0], s),
@@ -297,7 +301,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit, at, ayt,
     basm, basmdoc, bdasm, bndbuild,
-    catalog, capriceforever, chipnsfx, convgeneric, crunch, cp, cpcec, cpcemupower, cpc2img,
+    catalog, capriceforever, chipnsfx, convgeneric, cpr, crunch, cp, cpcec, cpcemupower, cpc2img,
     disark, disc,
     echo, emuctrl, r#extern,
     fade,
@@ -431,6 +435,10 @@ impl InnerTask {
 
     pub fn with_cpc_to_img(std: StandardTaskArguments) -> Self {
         Self::CpcToImg(std)
+    }
+
+    pub fn with_cpr(std: StandardTaskArguments) -> Self {
+        Self::Cpr(std)
     }
 
     pub fn with_crunch(std: StandardTaskArguments) -> Self {
@@ -729,6 +737,9 @@ impl InnerTask {
         else if is_cpc2img_cmd(code) {
             Ok(Self::with_cpc_to_img(std))
         }
+        else if is_cpr_cmd(code) {
+            Ok(Self::with_cpr(std))
+        }
         else if is_impdisc_cmd(code) {
             Ok(Self::with_impdsk(std))
         }
@@ -808,6 +819,7 @@ impl InnerTask {
             | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
             | InnerTask::Xfer(t)
+            | InnerTask::Cpr(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
@@ -847,7 +859,8 @@ impl InnerTask {
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
-            | InnerTask::Xfer(t) => t
+            | InnerTask::Xfer(t)
+            | InnerTask::Cpr(t) => t
         }
     }
 
@@ -896,7 +909,8 @@ impl InnerTask {
             InnerTask::Snapshot(_) => false,
             InnerTask::SongConverter(_, _t) => false,
             InnerTask::Tracker(_, _t) => true, // XXX think if false is better
-            InnerTask::Xfer(_) => true
+            InnerTask::Xfer(_) => true,
+            InnerTask::Cpr(_) => false
         }
     }
 }

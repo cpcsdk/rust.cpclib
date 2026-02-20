@@ -1,53 +1,12 @@
 use std::collections::HashSet;
 use std::ops::Sub;
 
-use commands::Command;
+use cpclib_cprcli::{build_command, commands::Command};
 use cpclib_common::camino::Utf8PathBuf;
-use cpclib_common::clap::{self, Arg, ArgAction};
-use cpclib_common::utf8pathbuf_value_parser;
 use cpclib_cpr::Cpr;
 
-mod commands;
-
 fn main() {
-    let cmd = clap::Command::new("cprcli")
-        .about("Command line CPR analysis")
-        .arg(
-            Arg::new("INFO")
-                .help("Show information about the CPR")
-                .long("info")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new("SELECTED_BANKS")
-                .help("Select banks of interest")
-                .long("bank")
-                .action(ArgAction::Append)
-                .value_parser(0..32)
-                .value_delimiter(',')
-        )
-        .arg(
-            Arg::new("DUMP")
-                .help("Get the memory of interest")
-                .long("dump")
-                .action(ArgAction::SetTrue)
-        )
-        .arg(
-            Arg::new("INPUT")
-                .help("The CPR file to read.")
-                .long("cpr1")
-                .required(true)
-                .action(ArgAction::Set)
-                .value_parser(|p: &str| utf8pathbuf_value_parser(true)(p))
-        )
-        .arg(
-            Arg::new("INPUT2")
-                .help("The CPR file to compare with.")
-                .long("cpr2")
-                .required(false)
-                .action(ArgAction::Set)
-                .value_parser(|p: &str| utf8pathbuf_value_parser(true)(p))
-        );
+    let cmd = build_command();
     let args = cmd.get_matches();
 
     let mut cpr = {

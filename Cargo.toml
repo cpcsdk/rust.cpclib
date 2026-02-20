@@ -29,6 +29,7 @@ members = [
   "cpclib-orgams-ascii",
   "cpclib-runner", 
   "cpclib-sna",
+  "cpclib-snacli",
   "cpclib-sprite-compiler", 
   "cpclib-tokens",
   "cpclib-visual-basm",
@@ -37,6 +38,7 @@ members = [
   "cpclib-xfer",
   "cpclib-xfertool",
   "cpclib-z80emu", "cpclib-borgams",
+  "cpclib-integration-tests",
   #"cpclib-bndbuild-ratatui",
   #  "cpclib-xferfs",
 ]
@@ -68,6 +70,7 @@ default-members = [
   "cpclib-orgams-ascii",
   "cpclib-runner", 
   "cpclib-sna",
+  "cpclib-snacli",
   "cpclib-sprite-compiler", 
   "cpclib-tokens",
   "cpclib-wasm", 
@@ -102,6 +105,7 @@ cpclib-catalog = { version = "0.11.0", path = "cpclib-catalog", default-features
 cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
 cpclib-common = { version = "0.11.0", path = "cpclib-common", default-features = false }
 cpclib-cpr = { version = "0.11.0", path = "cpclib-cpr", default-features = false }
+cpclib-cprcli = { version = "0.11.0", path = "cpclib-cprcli", default-features = false }
 cpclib-crunch = { version = "0.11.0", path = "cpclib-crunch", default-features = false }
 cpclib-crunchers = { version = "0.11.0", path = "cpclib-crunchers", default-features = false }
 cpclib-csl = { version = "0.11.0", path = "cpclib-csl", default-features = false }
@@ -115,6 +119,7 @@ cpclib-macros = { version = "0.11.0", path = "cpclib-macros", default-features =
 cpclib-orgams-ascii = { version = "0.11.0", path = "cpclib-orgams-ascii", default-features = false }
 cpclib-runner = { version = "0.11.0", path = "cpclib-runner", default-features = false }
 cpclib-sna = { version = "0.11.0", path = "cpclib-sna", default-features = false }
+cpclib-snacli = { version = "0.11.0", path = "cpclib-snacli", default-features = false }
 cpclib-sprite-compiler = { version = "0.11.0", path = "cpclib-sprite-compiler", default-features = false }
 cpclib-tokens = { version = "0.11.0", path = "cpclib-tokens", default-features = false }
 cpclib-xfer = { version = "0.11.0", path = "cpclib-xfer", default-features = false }

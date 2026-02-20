@@ -2552,6 +2552,8 @@ dependencies = [
  "cpclib-bdasm",
  "cpclib-catalog",
  "cpclib-common",
+ "cpclib-cpr",
+ "cpclib-cprcli",
  "cpclib-crunch",
  "cpclib-disc",
  "cpclib-imgconverter",
@@ -2818,11 +2820,32 @@ dependencies = [
  "built",
  "camino-tempfile",
  "cpclib",
+ "cpclib-common",
  "cpclib-image",
  "crossbeam-channel",
  "exitcode",
  "fs-err",
  "notify 8.2.0",
+]
+
+[[package]]
+name = "cpclib-integration-tests"
+version = "0.11.0"
+dependencies = [
+ "clap",
+ "cpclib-basm",
+ "cpclib-basmdoc",
+ "cpclib-bdasm",
+ "cpclib-bndbuild",
+ "cpclib-borgams",
+ "cpclib-catalog",
+ "cpclib-cprcli",
+ "cpclib-cslcli",
+ "cpclib-imgconverter",
+ "cpclib-locomotive",
+ "cpclib-sna",
+ "cpclib-xfertool",
+ "regex",
 ]
 
 [[package]]
@@ -2936,6 +2959,14 @@ dependencies = [
  "serde",
  "similar-asserts",
  "strum 0.27.2",
+]
+
+[[package]]
+name = "cpclib-snacli"
+version = "0.11.0"
+dependencies = [
+ "cpclib-common",
+ "cpclib-sna",
 ]
 
 [[package]]

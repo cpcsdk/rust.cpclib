@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI/CD workflows for automated testing and quality checks
 - CONTRIBUTING.md with development guidelines and setup instructions
 - Workspace-level version management for consistency across crates
+- Add all executbles in the documentation. They are AI generated. So they may not be perfect, but they should be a good starting point for documentation.
 - `cpclib-catart`add this crate to handle catalog art
 - `cpclib-csl`add support for CSL file parsing and generation (mainly to check validity of existing ones)
 - `cpclib-basic` add support for binary encoded programs (tokenized BASIC)
