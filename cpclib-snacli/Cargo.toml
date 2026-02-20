@@ -1,0 +1,18 @@
+[package]
+name = "cpclib-snacli"
+version.workspace = true
+description = "Command line tool to manipulate Amstrad CPC snapshots"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "snapshot"
+path = "src/main.rs"
+
+[dependencies]
+cpclib-common = { workspace = true, features = ["cmdline"] }
+cpclib-sna = { workspace = true, features = ["cmdline"] }
