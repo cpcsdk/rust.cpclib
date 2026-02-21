@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-basmdoc` add a new crate to handle documetnation of z80 projects
 - `cpclib-bndbuild` add support fof Z80Profiler by Targhan/Arkos
 - `cpclib-bndbuild` add support of the catalog command
+- `cpclib-bndbuild` add support to the hxcfe (inner) command
 - `cpclib-emucontrol` add support to activate roms (it was only possible to dectivate them before)
 - `cpclib-locomotive` new crate to handle the executable for basisc manipulation
 - `cpclib-orgams-ascii` add support to ORGAMS files. This crate aims at converting orgams sourceode to ascii and ascii source code to orgams. (in fact utf8, but...)
@@ -35,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-bndbuild` AT3 version detection and download URLs
 - `cpclib-basm` fix various bugs 
 - `cpclib-catalog` fix various bugs
+- `HFE` files can be manipulated also from the windows platform (we had issues with the  `hxcfe` dependency before)
 
 ## [0.11.0] - 2025-12-15
 

@@ -67,6 +67,7 @@ pub enum InnerTask {
     Grafx2(StandardTaskArguments),
     Hideur(StandardTaskArguments),
     HspCompiler(StandardTaskArguments),
+    Hxcfe(StandardTaskArguments),
     ImgToCpc(StandardTaskArguments),
     ImpDsk(StandardTaskArguments),
     Martine(StandardTaskArguments),
@@ -215,6 +216,7 @@ pub const GRAFX2_CMDS: &[&str] = &[GRAFX2_CMD, "grafx"];
 pub const IMG2CPC_CMDS: &[&str] = &["img2cpc", "imgconverter"];
 pub const CPC2IMG_CMDS: &[&str] = &["cpc2img"];
 pub const HIDEUR_CMDS: &[&str] = &[HIDEUR_CMD];
+pub const HXCFE_CMDS: &[&str] = &["hxcfe"];
 pub const IMPDISC_CMDS: &[&str] = &[IMPDISC_CMD, "impdisc"];
 pub const MARTINE_CMDS: &[&str] = &[MARTINE_CMD];
 pub const SNA_CMDS: &[&str] = &["sna", "snpashot"];
@@ -262,6 +264,7 @@ impl Display for InnerTask {
             Self::Grafx2(s) => (GRAFX2_CMDS[0], s),
             Self::Hideur(s) => (HIDEUR_CMDS[0], s),
             Self::HspCompiler(s) => (HSPC_CMDS[0], s),
+            Self::Hxcfe(s) => (HXCFE_CMDS[0], s),
             Self::ImgToCpc(s) => (IMG2CPC_CMDS[0], s),
             Self::ImpDsk(s) => (IMPDISC_CMDS[0], s),
             Self::Martine(s) => (MARTINE_CMDS[0], s),
@@ -306,7 +309,7 @@ is_some_cmd!(
     echo, emuctrl, r#extern,
     fade,
     grafx2,
-    hideur,hspc,
+    hideur,hspc,hxcfe,
     img2cpc, impdisc,
     locomotive,
     miny,
@@ -475,6 +478,10 @@ impl InnerTask {
 
     pub fn with_hspcompiler(std: StandardTaskArguments) -> Self {
         Self::HspCompiler(std)
+    }
+
+    pub fn with_hxcfe(std: StandardTaskArguments) -> Self {
+        Self::Hxcfe(std)
     }
 
     pub fn with_martine(std: StandardTaskArguments) -> Self {
@@ -746,6 +753,9 @@ impl InnerTask {
         else if is_hspc_cmd(code) {
             Ok(Self::with_hspcompiler(std))
         }
+        else if is_hxcfe_cmd(code) {
+            Ok(Self::with_hxcfe(std))
+        }
         else if is_martine_cmd(code) {
             Ok(Self::with_martine(std))
         }
@@ -814,6 +824,7 @@ impl InnerTask {
             | InnerTask::Grafx2(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
+            | InnerTask::Hxcfe(t)
             | InnerTask::ImgToCpc(t)
             | InnerTask::Martine(t)
             | InnerTask::Mkdir(t)
@@ -850,6 +861,7 @@ impl InnerTask {
             | InnerTask::Fade(t)
             | InnerTask::Hideur(t)
             | InnerTask::HspCompiler(t)
+            | InnerTask::Hxcfe(t)
             | InnerTask::ImgToCpc(t)
             | InnerTask::ImpDsk(t)
             | InnerTask::BndBuild(t)
@@ -901,6 +913,7 @@ impl InnerTask {
             InnerTask::Fade(_) => false,
             InnerTask::Hideur(_) => false,
             InnerTask::HspCompiler(_) => false,
+            InnerTask::Hxcfe(_) => false,
             InnerTask::ImgToCpc(_) => false,
             InnerTask::ImpDsk(_) => false,
             InnerTask::Martine(_t) => false,

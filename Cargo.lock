@@ -1036,29 +1036,6 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.68.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "726e4313eb6ec35d2730258ad4e15b547ee75d6afaa1361a922e78e59b7d8078"
-dependencies = [
- "bitflags 2.10.0",
- "cexpr",
- "clang-sys",
- "lazy_static",
- "lazycell",
- "log",
- "peeking_take_while",
- "prettyplease",
- "proc-macro2 1.0.105",
- "quote 1.0.43",
- "regex",
- "rustc-hash 1.1.0",
- "shlex",
- "syn 2.0.113",
- "which",
-]
-
-[[package]]
-name = "bindgen"
 version = "0.69.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "271383c67ccabffb7381723dea0672a673f292304fcb45c01cc648c7a8d58088"
@@ -1074,6 +1051,26 @@ dependencies = [
  "quote 1.0.43",
  "regex",
  "rustc-hash 1.1.0",
+ "shlex",
+ "syn 2.0.113",
+]
+
+[[package]]
+name = "bindgen"
+version = "0.72.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+dependencies = [
+ "bitflags 2.10.0",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2 1.0.105",
+ "quote 1.0.43",
+ "regex",
+ "rustc-hash 2.1.1",
  "shlex",
  "syn 2.0.113",
 ]
@@ -2569,6 +2566,7 @@ dependencies = [
  "fs-err",
  "globmatch",
  "hostname",
+ "hxcfe_cli",
  "lazy-regex",
  "memchr",
  "minijinja",
@@ -5862,22 +5860,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
-name = "hxcadaptor-sys"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46c61e7f04f83783c1fc61ff2869f25f6426b82e92e4f777d849f94cc4e103c8"
-dependencies = [
- "bindgen 0.68.1",
- "copy_dir",
- "dunce",
- "make-cmd",
-]
-
-[[package]]
 name = "hxcfe"
-version = "0.1.5"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80fd159d8fdbc3548b0201416e6ee57476d2cdfc7de157c806e304c173efb577"
+checksum = "4346b1f07e649a7e867dbf4d583ca8cfe89e00aa3843e4b1900f5433ddf3c2d9"
 dependencies = [
  "enumn",
  "hxcfe-sys",
@@ -5887,15 +5873,30 @@ dependencies = [
 
 [[package]]
 name = "hxcfe-sys"
-version = "0.1.5"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b4711749648193613d92816079f24d9a3c009fe293924862d5f67256c0fd956"
+checksum = "0fc4072e40ee31e3b9e578a1bec4b393331a75ee611efc903ac74db7f660840e"
 dependencies = [
- "bindgen 0.68.1",
+ "bindgen 0.72.1",
+ "cc",
  "copy_dir",
  "dunce",
- "hxcadaptor-sys",
+ "fs-err",
  "make-cmd",
+ "regex",
+ "walkdir",
+]
+
+[[package]]
+name = "hxcfe_cli"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43a3f5ee6fbe28476c0f4f1444d97984a26486c40b9527064ac5ab43753d3f89"
+dependencies = [
+ "anyhow",
+ "clap",
+ "fs-err",
+ "hxcfe",
 ]
 
 [[package]]
@@ -9171,12 +9172,6 @@ dependencies = [
  "password-hash",
  "sha2",
 ]
-
-[[package]]
-name = "peeking_take_while"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 
 [[package]]
 name = "percent-encoding"
@@ -14619,18 +14614,6 @@ dependencies = [
  "log",
  "thiserror 2.0.17",
  "web-sys",
-]
-
-[[package]]
-name = "which"
-version = "4.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87ba24419a2078cd2b0f2ede2691b6c66d8e47836da3b6db8265ebad47afbfc7"
-dependencies = [
- "either",
- "home",
- "once_cell",
- "rustix 0.38.44",
 ]
 
 [[package]]

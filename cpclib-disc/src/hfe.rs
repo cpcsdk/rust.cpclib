@@ -54,8 +54,8 @@ impl Disc for Hfe {
     where P: AsRef<Utf8Path> {
         let path = path.as_ref();
         let format = match path.extension().unwrap().to_lowercase().as_str() {
-            "dsk" | "edsk" => "AMSTRADCPC_DSK",
-            "hfe" => "HXC_HFE",
+            "dsk" | "edsk" => hxcfe::ImageFormat::AmstradcpcDsk,
+            "hfe" => hxcfe::ImageFormat::HxcHfe,
             _ => return Err(format!("i do not know how to save {}", path))
         };
         self.img.save(path, format)
@@ -74,10 +74,10 @@ impl Disc for Hfe {
 
         let sector_access = self.img.sector_access().unwrap();
         let cfg = sector_access.search_sector(
-            head as _,
-            track as _,
-            sector_id as _,
-            TrackEncoding::IsoIbmMfm
+            head.into(),
+            (track as i32).into(),
+            (sector_id as i32).into(),
+            TrackEncoding::IsoibmMfm
         )?;
         let data = cfg.read().to_vec();
 
@@ -92,10 +92,10 @@ impl Disc for Hfe {
         bytes: &[u8]
     ) -> Result<(), String> {
         let head: i32 = head.into().into();
-        let encoding = TrackEncoding::IsoIbmMfm;
+        let encoding = TrackEncoding::IsoibmMfm;
         let sector_access = self.img.sector_access().unwrap();
         let mut cfg = sector_access
-            .search_sector(head as _, track as _, sector_id as _, encoding)
+            .search_sector(head.into(), (track as i32).into(), (sector_id as i32).into(), encoding)
             .ok_or_else(|| "sector not found".to_owned())?;
 
         cfg.write(encoding, bytes); // TODO handle error
@@ -116,22 +116,22 @@ impl Disc for Hfe {
     }
 
     fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8 {
-        let s = side.into().into();
+        let s: i32 = side.into().into();
         let access = self.img.sector_access().unwrap();
-        let sca = access.all_track_sectors(s, track as _, TrackEncoding::IsoIbmMfm);
+        let sca = access.all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmMfm);
         let sca = match sca {
             Some(sca) => sca,
             None => {
                 access
-                    .all_track_sectors(s, track as _, TrackEncoding::IsoIbmFm)
+                    .all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmFm)
                     .unwrap()
             },
         };
 
         (0..sca.nb_sectors())
-            .map(|k| sca.sector_config(k).sector_id())
+            .map(|k| sca.sector_config(k).sector_id().get() as u8)
             .min()
-            .unwrap() as _
+            .unwrap()
     }
 
     fn nb_tracks_per_head(&self) -> u8 {

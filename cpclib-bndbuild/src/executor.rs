@@ -32,6 +32,7 @@ use crate::runners::fs::mkdir::MkdirRunner;
 use crate::runners::fs::mv::MvRunner;
 use crate::runners::fs::rm::RmRunner;
 use crate::runners::hideur::HideurRunner;
+use crate::runners::hxcfe::HxcfeRunner;
 use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::snapshot::SnapshotRunner;
 use crate::runners::xfer::XferRunner;
@@ -189,6 +190,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Extern(_) => ExternRunner::default().run(task.args(), observer),
         InnerTask::Fade(_) => FadeRunner::<E>::default().run(task.args(), observer),
         InnerTask::Hideur(_) => HideurRunner::default().run(task.args(), observer),
+        InnerTask::Hxcfe(_) => HxcfeRunner::default().run(task.args(), observer),
         InnerTask::Snapshot(_) => SnapshotRunner::default().run(task.args(), observer),
         InnerTask::ImgToCpc(_) => ImgToCpcRunner::default().run(task.args(), observer),
         InnerTask::CpcToImg(_) => CpcToImgRunner::default().run(task.args(), observer),

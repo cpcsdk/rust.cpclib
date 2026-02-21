@@ -17,6 +17,8 @@ fn build_others() {
         .file("extra/exomizer.c")
         .opt_level(3)
         .cargo_metadata(true)
+        .flag("-fvisibility=hidden")
+        .define("get_byte", "exomizer_get_byte")
         .compile("exomizer");
 
     // lz4 crunch
