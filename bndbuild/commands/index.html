@@ -1,0 +1,5075 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../recipes/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Commands - Amstrad RUST cpcdemotools</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.bcfcd587.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#bndbuild-commands" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Amstrad RUST cpcdemotools" class="md-header__button md-logo" aria-label="Amstrad RUST cpcdemotools" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Amstrad RUST cpcdemotools
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Commands
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/cpcsdk/rust.cpclib" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../borgams/" class="md-tabs__link">
+          
+  
+  File Management
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../img2cpc/" class="md-tabs__link">
+          
+  
+  Image Processing
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../dskmanager/" class="md-tabs__link">
+          
+  
+  Disc Management
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cprcli/" class="md-tabs__link">
+          
+  
+  Cartridge Management
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../basm/" class="md-tabs__link">
+          
+  
+  Assemblers
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../bdasm/" class="md-tabs__link">
+          
+  
+  Disassemblers
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../runner/" class="md-tabs__link">
+          
+  
+  Emulators
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../xfertool/" class="md-tabs__link">
+          
+  
+  Hardware Transfer
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+    
+  
+  
+    
+    
+      
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  Build Management
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../crunch/" class="md-tabs__link">
+          
+  
+  Data Compression
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+    
+    
+      
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../basmdoc/" class="md-tabs__link">
+          
+  
+  Development Tools
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Amstrad RUST cpcdemotools" class="md-nav__button md-logo" aria-label="Amstrad RUST cpcdemotools" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    Amstrad RUST cpcdemotools
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/cpcsdk/rust.cpclib" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81z"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    File Management
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            File Management
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Borgams (Orgams Converter)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            Borgams (Orgams Converter)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../borgams/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../borgams/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../borgams/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Snapshot (SNA Files)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            Snapshot (SNA Files)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../snapshot/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../snapshot/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../snapshot/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Image Processing
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Image Processing
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    img2cpc (Image Converter)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            img2cpc (Image Converter)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../img2cpc/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../img2cpc/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../img2cpc/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    cpc2img (Image Extractor)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            cpc2img (Image Extractor)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cpc2img/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cpc2img/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cpc2img/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    fade (Palette Fade)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            fade (Palette Fade)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../fade/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../fade/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../fade/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Disc Management
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Disc Management
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    DSKManager (DSK Manager)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_1">
+            <span class="md-nav__icon md-icon"></span>
+            DSKManager (DSK Manager)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dskmanager/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dskmanager/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dskmanager/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Catalog (CatArt Builder)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            Catalog (CatArt Builder)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../catalog/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../catalog/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../catalog/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Hideur (AMSDOS Headers)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
+            <span class="md-nav__icon md-icon"></span>
+            Hideur (AMSDOS Headers)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../hideur/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../hideur/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../hideur/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Cartridge Management
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Cartridge Management
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_1" id="__nav_5_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    CPRCLI (Cartridges)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_1">
+            <span class="md-nav__icon md-icon"></span>
+            CPRCLI (Cartridges)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cprcli/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cprcli/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cprcli/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Assemblers
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Assemblers
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_1" id="__nav_6_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    BASM (Assembler)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_1">
+            <span class="md-nav__icon md-icon"></span>
+            BASM (Assembler)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basm/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basm/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basm/syntax/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Syntax
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basm/directives/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Directives
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basm/functions/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Functions
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basm/expression-types/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Expression Types
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Orgams (Native Assembler)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
+            <span class="md-nav__icon md-icon"></span>
+            Orgams (Native Assembler)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../orgams/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../orgams/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../orgams/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Disassemblers
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            Disassemblers
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_1" id="__nav_7_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    BDASM (Disassembler)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_1">
+            <span class="md-nav__icon md-icon"></span>
+            BDASM (Disassembler)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bdasm/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bdasm/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../bdasm/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Emulators
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            Emulators
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_8_1" id="__nav_8_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    CPC Runner (Emulator Launcher)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_8_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8_1">
+            <span class="md-nav__icon md-icon"></span>
+            CPC Runner (Emulator Launcher)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runner/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runner/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runner/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Hardware Transfer
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            Hardware Transfer
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_9_1" id="__nav_9_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    XferTool (Hardware Transfer)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_9_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9_1">
+            <span class="md-nav__icon md-icon"></span>
+            XferTool (Hardware Transfer)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../xfertool/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../xfertool/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../xfertool/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_10" id="__nav_10_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Build Management
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            Build Management
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_10_1" id="__nav_10_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    BNDBUILD (Build System)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_10_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10_1">
+            <span class="md-nav__icon md-icon"></span>
+            BNDBUILD (Build System)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Commands
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Commands
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#command-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Command Types
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#display" class="md-nav__link">
+    <span class="md-ellipsis">
+      Display
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Display">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#display-management-echo-echoprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      Display management: echo (echo,print)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-programs" class="md-nav__link">
+    <span class="md-ellipsis">
+      External Programs
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="External Programs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#external-program-management-extern-extern" class="md-nav__link">
+    <span class="md-ellipsis">
+      External program management: extern (extern)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      File Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#file-management-cp-cpcopy" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: cp (cp,copy)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-rm-rm-del" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: rm (rm, del)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-mv-mvmoverename" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: mv (mv,move,rename)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-mkdir-mkdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: mkdir (mkdir)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-orgams-to-text-conversion-borgams" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: Orgams to text conversion (borgams)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-snasnapshot-management-snasnpashot" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: SNA/Snapshot management (sna,snpashot)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#image-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Processing
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Image Processing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#image-management-benediction-transfer-tool-img2cpcimgconverter" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Benediction transfer tool (img2cpc,imgconverter)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-cpc-to-image-cpc2img" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: CPC to image (cpc2img)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-impact-transfer-tool-martine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Impact transfer tool (martine)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-grafx2-grafx2grafx" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Grafx2 (grafx2,grafx)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-conversion-convgeneric" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Conversion (convgeneric)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-hsp-compiler-hspcompilerhspc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: HSP Compiler (hspcompiler,hspc)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-fade-fade" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Fade (fade)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disc-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Disc Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#disc-management-benediction-dsk-manager-dskdisc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc management: Benediction dsk manager (dsk,disc)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disc-management-amsdos-header-management-hideur" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc management: Amsdos header management (hideur)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disc-management-catalog-listing-catalogcat" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc management: Catalog listing (catalog,cat)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disc-management-impact-dsk-manager-impdskimpdisc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc management: Impact dsk manager (impdsk,impdisc)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cartridge-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cartridge Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cartridge Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cartridge-management-cpr-analysis-cpr" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cartridge management: CPR analysis (cpr)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#assemblers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assemblers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Assemblers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#assembler-basm-basmassemble" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: BASM (basm,assemble)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-rasm-rasm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: RASM (rasm)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-orgams-orgams" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: Orgams (orgams)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-sjasmplus-sjasmplus" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: Sjasmplus (sjasmplus)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-uz80as-uz80" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: UZ80AS (uz80)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-vasm-z80-oldstyle-vasm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: Vasm z80 oldstyle (vasm)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disassemblers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disassemblers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Disassemblers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#disassembler-bdasm-bdasmdz80" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disassembler: BDASM (bdasm,dz80)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disassembler-disark-disark" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disassembler: DISARK (disark)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emulators" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulators
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Emulators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#emulator-emulator-agnostic-emulation-cpcemuemuctrlemucontrol" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: Emulator-agnostic emulation (cpc,emu,emuctrl,emucontrol)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-ace-dl-aceacedl" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: ACE DL (ace,acedl)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-amspirit-amspirit" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: AMSpiriT (amspirit)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-caprice-forever-caprice" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: Caprice Forever (caprice)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-cpc-emu-power-cpcemupower" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: CPC Emu Power (cpcemupower)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-cpcec-cpcec" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: CPCEC (cpcec)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-sugarboxv2-sugarbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: SugarboxV2 (sugarbox)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-winape-winape" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: Winape (winape)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hardware-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      Hardware Transfer
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hardware Transfer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transfer-m4-support-xfercpcwifim4" class="md-nav__link">
+    <span class="md-ellipsis">
+      Transfer: M4 support (xfer,cpcwifi,m4)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Build Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build-bndbuild-bndbuildbuild" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build: BndBuild (bndbuild,build)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-basiclocomotive-locomotivebasic" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build: BASIC/Locomotive (locomotive,basic)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-compression" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Compression
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Compression">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#compression-crunch-crunchcompress" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compression: Crunch (crunch,compress)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cdt-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      CDT Tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CDT Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cdt-rtzx-rtzx" class="md-nav__link">
+    <span class="md-ellipsis">
+      CDT: RTZX (rtzx)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#audio-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio Tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Audio Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#audio-arkos-tracker-3-at3arkostracker3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Arkos Tracker 3 (at3,ArkosTracker3)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-ay-test-ayt" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: AY Test (ayt)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-chip-and-sfx-chipnsfx" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Chip and SFX (chipnsfx)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-minimiser-miny" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Minimiser (miny)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-akg-songtoakg" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to AKG (SongToAkg)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-akm-songtoakm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to AKM (SongToAkm)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-aky-songtoaky" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to AKY (SongToAky)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-events-songtoevents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to Events (SongToEvents)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-raw-songtoraw" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to Raw (SongToRaw)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-sound-effects-songtosoundeffects" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to Sound Effects (SongToSoundEffects)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-vgm-songtovgm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to VGM (SongToVgm)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-wav-songtowav" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to WAV (SongToWav)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-ym-songtoym" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to YM (SongToYm)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#development-basmdoc-basmdocdoc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development: BASMDOC (basmdoc,doc)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development-z80-profiler-z80profiler" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development: Z80 Profiler (Z80Profiler)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Recipes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_10_2" id="__nav_10_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Locomotive (BASIC)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_10_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10_2">
+            <span class="md-nav__icon md-icon"></span>
+            Locomotive (BASIC)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../locomotive/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../locomotive/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../locomotive/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../locomotive/format/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    File Format
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" >
+        
+          
+          <label class="md-nav__link" for="__nav_11" id="__nav_11_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Data Compression
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            Data Compression
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_11_1" id="__nav_11_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Crunch (Data Compression)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_11_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11_1">
+            <span class="md-nav__icon md-icon"></span>
+            Crunch (Data Compression)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../crunch/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../crunch/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../crunch/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" >
+        
+          
+          <label class="md-nav__link" for="__nav_12" id="__nav_12_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    Development Tools
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            Development Tools
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_12_1" id="__nav_12_1_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    BASMDOC (Doc Generator)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_12_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12_1">
+            <span class="md-nav__icon md-icon"></span>
+            BASMDOC (Doc Generator)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basmdoc/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basmdoc/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../basmdoc/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_12_2" id="__nav_12_2_label" tabindex="0">
+            
+  
+  <span class="md-ellipsis">
+    CSLCLI (Script Parser)
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_12_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12_2">
+            <span class="md-nav__icon md-icon"></span>
+            CSLCLI (Script Parser)
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cslcli/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Overview
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cslcli/cmdline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Command Line
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cslcli/language/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Language Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cslcli/examples/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Examples
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#command-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      Command Types
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#display" class="md-nav__link">
+    <span class="md-ellipsis">
+      Display
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Display">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#display-management-echo-echoprint" class="md-nav__link">
+    <span class="md-ellipsis">
+      Display management: echo (echo,print)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-programs" class="md-nav__link">
+    <span class="md-ellipsis">
+      External Programs
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="External Programs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#external-program-management-extern-extern" class="md-nav__link">
+    <span class="md-ellipsis">
+      External program management: extern (extern)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      File Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#file-management-cp-cpcopy" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: cp (cp,copy)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-rm-rm-del" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: rm (rm, del)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-mv-mvmoverename" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: mv (mv,move,rename)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-mkdir-mkdir" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: mkdir (mkdir)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-orgams-to-text-conversion-borgams" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: Orgams to text conversion (borgams)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#file-management-snasnapshot-management-snasnpashot" class="md-nav__link">
+    <span class="md-ellipsis">
+      File management: SNA/Snapshot management (sna,snpashot)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#image-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Processing
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Image Processing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#image-management-benediction-transfer-tool-img2cpcimgconverter" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Benediction transfer tool (img2cpc,imgconverter)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-cpc-to-image-cpc2img" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: CPC to image (cpc2img)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-impact-transfer-tool-martine" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Impact transfer tool (martine)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-grafx2-grafx2grafx" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Grafx2 (grafx2,grafx)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-conversion-convgeneric" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Conversion (convgeneric)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-hsp-compiler-hspcompilerhspc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: HSP Compiler (hspcompiler,hspc)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-management-fade-fade" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image management: Fade (fade)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disc-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Disc Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#disc-management-benediction-dsk-manager-dskdisc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc management: Benediction dsk manager (dsk,disc)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disc-management-amsdos-header-management-hideur" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc management: Amsdos header management (hideur)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disc-management-catalog-listing-catalogcat" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc management: Catalog listing (catalog,cat)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disc-management-impact-dsk-manager-impdskimpdisc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disc management: Impact dsk manager (impdsk,impdisc)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cartridge-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cartridge Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Cartridge Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cartridge-management-cpr-analysis-cpr" class="md-nav__link">
+    <span class="md-ellipsis">
+      Cartridge management: CPR analysis (cpr)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#assemblers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assemblers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Assemblers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#assembler-basm-basmassemble" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: BASM (basm,assemble)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-rasm-rasm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: RASM (rasm)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-orgams-orgams" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: Orgams (orgams)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-sjasmplus-sjasmplus" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: Sjasmplus (sjasmplus)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-uz80as-uz80" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: UZ80AS (uz80)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#assembler-vasm-z80-oldstyle-vasm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Assembler: Vasm z80 oldstyle (vasm)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disassemblers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disassemblers
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Disassemblers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#disassembler-bdasm-bdasmdz80" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disassembler: BDASM (bdasm,dz80)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#disassembler-disark-disark" class="md-nav__link">
+    <span class="md-ellipsis">
+      Disassembler: DISARK (disark)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emulators" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulators
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Emulators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#emulator-emulator-agnostic-emulation-cpcemuemuctrlemucontrol" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: Emulator-agnostic emulation (cpc,emu,emuctrl,emucontrol)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-ace-dl-aceacedl" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: ACE DL (ace,acedl)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-amspirit-amspirit" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: AMSpiriT (amspirit)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-caprice-forever-caprice" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: Caprice Forever (caprice)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-cpc-emu-power-cpcemupower" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: CPC Emu Power (cpcemupower)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-cpcec-cpcec" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: CPCEC (cpcec)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-sugarboxv2-sugarbox" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: SugarboxV2 (sugarbox)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#emulator-winape-winape" class="md-nav__link">
+    <span class="md-ellipsis">
+      Emulator: Winape (winape)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hardware-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      Hardware Transfer
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Hardware Transfer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transfer-m4-support-xfercpcwifim4" class="md-nav__link">
+    <span class="md-ellipsis">
+      Transfer: M4 support (xfer,cpcwifi,m4)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build Management
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Build Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build-bndbuild-bndbuildbuild" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build: BndBuild (bndbuild,build)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-basiclocomotive-locomotivebasic" class="md-nav__link">
+    <span class="md-ellipsis">
+      Build: BASIC/Locomotive (locomotive,basic)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-compression" class="md-nav__link">
+    <span class="md-ellipsis">
+      Data Compression
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Compression">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#compression-crunch-crunchcompress" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compression: Crunch (crunch,compress)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cdt-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      CDT Tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CDT Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cdt-rtzx-rtzx" class="md-nav__link">
+    <span class="md-ellipsis">
+      CDT: RTZX (rtzx)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#audio-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio Tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Audio Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#audio-arkos-tracker-3-at3arkostracker3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Arkos Tracker 3 (at3,ArkosTracker3)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-ay-test-ayt" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: AY Test (ayt)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-chip-and-sfx-chipnsfx" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Chip and SFX (chipnsfx)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-minimiser-miny" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Minimiser (miny)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-akg-songtoakg" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to AKG (SongToAkg)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-akm-songtoakm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to AKM (SongToAkm)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-aky-songtoaky" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to AKY (SongToAky)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-events-songtoevents" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to Events (SongToEvents)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-raw-songtoraw" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to Raw (SongToRaw)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-sound-effects-songtosoundeffects" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to Sound Effects (SongToSoundEffects)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-vgm-songtovgm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to VGM (SongToVgm)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-wav-songtowav" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to WAV (SongToWav)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#audio-song-to-ym-songtoym" class="md-nav__link">
+    <span class="md-ellipsis">
+      Audio: Song to YM (SongToYm)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development Tools
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#development-basmdoc-basmdocdoc" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development: BASMDOC (basmdoc,doc)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development-z80-profiler-z80profiler" class="md-nav__link">
+    <span class="md-ellipsis">
+      Development: Z80 Profiler (Z80Profiler)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="bndbuild-commands">Bndbuild Commands</h1>
+<p>The <code>--direct -- COMMAND [ARG...]</code> allows to directly launch a command without managing a build file. <code>COMMAND</code> can be any command accepted in <code>cmd</code> key (they are listed in the documentation of <code>--help</code>).</p>
+<h2 id="command-types">Command Types</h2>
+<p>Commands available in bndbuild fall into three categories:</p>
+<ol>
+<li><strong>Embedded-only commands</strong> - Built into bndbuild for convenience (e.g., <code>echo</code>, <code>cp</code>, <code>rm</code>, <code>mv</code>, <code>mkdir</code>, <code>extern</code>)</li>
+<li><strong>Standalone cpclib tools</strong> - Available both as standalone binaries and embedded in bndbuild (e.g., <code>basm</code>, <code>bdasm</code>, <code>img2cpc</code>, <code>catalog</code>, <code>snapshot</code>, <code>fade</code>, etc.). These tools can be run independently outside of bndbuild.</li>
+<li><strong>External tools</strong> - Third-party programs that bndbuild can download and integrate (e.g., <code>rasm</code>, <code>martine</code>, <code>winape</code>, etc.)</li>
+</ol>
+<p>Most cpclib tools documented here exist as <strong>standalone command-line programs</strong> that can be used independently. See their individual documentation pages for standalone usage.</p>
+<p>Several commands need to be downloaded (so internet is required), assembled (so their prerequisites need to be installed).
+There is no (yet) cleanup if download/compilation fail. So think to do <code>bndbuild --clear &lt;cmd&gt;</code> to cleanup manually.</p>
+<h2 id="display">Display</h2>
+<h3 id="display-management-echo-echoprint">Display management: echo (echo,print)</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Print the arguments.
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Usage: echo [arguments]...
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Arguments:
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>  [arguments]...
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>          Words to print
+</span></code></pre></div>
+<h2 id="external-programs">External Programs</h2>
+<h3 id="external-program-management-extern-extern">External program management: extern (extern)</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>Launch an external command.
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>Usage: extern &lt;program&gt; [arguments]...
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>Arguments:
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>  &lt;program&gt;
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>          The program to execute
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>  [arguments]...
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>          The arguments of the program
+</span></code></pre></div>
+<h2 id="file-management">File Management</h2>
+<h3 id="file-management-cp-cpcopy">File management: cp (cp,copy)</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Copy files.
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>Usage: cp [arguments]...
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>Arguments:
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>  [arguments]...
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>          Files to copy. Last one being the destination
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>Inner command of cpclib-bndbuild 0.6.0
+</span></code></pre></div>
+<h3 id="file-management-rm-rm-del">File management: rm (rm, del)</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Delete files.
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>Usage: rm [arguments]...
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>Arguments:
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>  [arguments]...
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>          Files to delete.
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>Inner command of cpclib-bndbuild 0.6.0
+</span></code></pre></div>
+<h3 id="file-management-mv-mvmoverename">File management: mv (mv,move,rename)</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Rename files.
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>Usage: mv [arguments]...
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>Arguments:
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>  [arguments]...
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>          Files to move. With 2 files, first one is renamed as second one. With more than 2 files, last one is the destination directory.
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>Inner command of cpclib-bndbuild 0.11.0
+</span></code></pre></div>
+<h3 id="file-management-mkdir-mkdir">File management: mkdir (mkdir)</h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Create directories.
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>Usage: mkdir [OPTIONS] [arguments]...
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>Arguments:
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>  [arguments]...
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>          Folders to create.
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>Options:
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>  -p, --parents  Set to specify if missing parent directories must be created
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>  -i, --ignore   Set to specify we ignore existing folders
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>Inner command of cpclib-bndbuild 0.11.0
+</span></code></pre></div>
+<h3 id="file-management-orgams-to-text-conversion-borgams">File management: Orgams to text conversion (borgams)</h3>
+<p><strong>Standalone:</strong> Available as <code>borgams</code> binary. For complete documentation, see <a href="../../borgams">Borgams Documentation</a>.</p>
+<h3 id="file-management-snasnapshot-management-snasnpashot">File management: SNA/Snapshot management (sna,snpashot)</h3>
+<p><strong>Standalone:</strong> Available as <code>snapshot</code> binary. Create and manipulate snapshot files. For complete documentation, see <a href="../../snapshot">Snapshot Documentation</a>.</p>
+<h2 id="image-processing">Image Processing</h2>
+<h3 id="image-management-benediction-transfer-tool-img2cpcimgconverter">Image management: Benediction transfer tool (img2cpc,imgconverter)</h3>
+<p><strong>Standalone:</strong> Available as <code>img2cpc</code> binary. For complete documentation, see <a href="../../img2cpc">img2cpc Documentation</a>.</p>
+<h3 id="image-management-cpc-to-image-cpc2img">Image management: CPC to image (cpc2img)</h3>
+<p><strong>Standalone:</strong> Available as <code>cpc2img</code> binary. For complete documentation, see <a href="../../cpc2img">CPC2IMG Documentation</a>.</p>
+<h3 id="image-management-impact-transfer-tool-martine">Image management: Impact transfer tool (martine)</h3>
+<p>For complete documentation and download, see <a href="https://github.com/jeromelesaux/martine">https://github.com/jeromelesaux/martine</a>.</p>
+<h3 id="image-management-grafx2-grafx2grafx">Image management: Grafx2 (grafx2,grafx)</h3>
+<p>Advanced graphics editor. For complete documentation, see <a href="https://gitlab.com/GrafX2/grafX2">https://gitlab.com/GrafX2/grafX2</a>.</p>
+<h3 id="image-management-conversion-convgeneric">Image management: Conversion (convgeneric)</h3>
+<p>Generic file format conversion utility. For complete documentation and download, see <a href="https://github.com/EdouardBERGE/convgeneric">https://github.com/EdouardBERGE/convgeneric</a>.</p>
+<h3 id="image-management-hsp-compiler-hspcompilerhspc">Image management: HSP Compiler (hspcompiler,hspc)</h3>
+<p>HxC Sound Player compiler for CPC music. For complete documentation, see <a href="https://github.com/EdouardBERGE/hspcompiler">https://github.com/EdouardBERGE/hspcompiler</a>.</p>
+<h3 id="image-management-fade-fade">Image management: Fade (fade)</h3>
+<p><strong>Standalone:</strong> Available as <code>fade</code> binary. For complete documentation, see <a href="../../fade">Fade Documentation</a>.</p>
+<h2 id="disc-management">Disc Management</h2>
+<h3 id="disc-management-benediction-dsk-manager-dskdisc">Disc management: Benediction dsk manager (dsk,disc)</h3>
+<p><strong>Standalone:</strong> Available as <code>dskmanager</code> binary. Low-level DSK disc image manipulation tool.</p>
+<p><strong>Features:</strong>
+- Format DSK disc images
+- Add files to DSK images
+- Catalog operations
+- Low-level disc track/sector manipulation</p>
+<p><strong>Note:</strong> Within BndBuild, use the <code>dsk</code> or <code>disc</code> command. For standalone usage, the binary is called <code>dskmanager</code>. For complete documentation, see <a href="../../dskmanager">DSKManager Documentation</a>.</p>
+<h3 id="disc-management-amsdos-header-management-hideur">Disc management: Amsdos header management (hideur)</h3>
+<p><strong>Standalone:</strong> Available as <code>hideur</code> binary. Manage AMSDOS headers on files for proper CPC disc compatibility. For complete documentation, see <a href="../../hideur">Hideur Documentation</a>.</p>
+<h3 id="disc-management-catalog-listing-catalogcat">Disc management: Catalog listing (catalog,cat)</h3>
+<p><strong>Standalone:</strong> Available as <code>catalog</code> binary. List contents of DSK files. For complete documentation, see <a href="../../catalog">Catalog Documentation</a>.</p>
+<h3 id="disc-management-impact-dsk-manager-impdskimpdisc">Disc management: Impact dsk manager (impdsk,impdisc)</h3>
+<p>For complete documentation and download, see <a href="https://github.com/jeromelesaux/dsk">https://github.com/jeromelesaux/dsk</a>.</p>
+<h2 id="cartridge-management">Cartridge Management</h2>
+<h3 id="cartridge-management-cpr-analysis-cpr">Cartridge management: CPR analysis (cpr)</h3>
+<p><strong>Standalone:</strong> Available as <code>cpr</code> binary. Analyze and compare CPR cartridge files. For complete documentation, see <a href="../../cprcli">CPR CLI Documentation</a>.</p>
+<h2 id="assemblers">Assemblers</h2>
+<h3 id="assembler-basm-basmassemble">Assembler: BASM (basm,assemble)</h3>
+<p><strong>Standalone:</strong> Available as <code>basm</code> binary. For complete documentation, see <a href="../../basm">BASM Documentation</a>.</p>
+<h3 id="assembler-rasm-rasm">Assembler: RASM (rasm)</h3>
+<p>For complete documentation, see <a href="http://rasm.wikidot.com/">http://rasm.wikidot.com/</a>.</p>
+<h3 id="assembler-orgams-orgams">Assembler: Orgams (orgams)</h3>
+<p><strong>Standalone:</strong> Available as <code>orgams</code> binary. For complete documentation, see <a href="../../orgams">Orgams Documentation</a>.</p>
+<p>Orgams is a native assembler. So, an emulator is used to assemble source.
+WARNING: it currently does not work properly under windows.</p>
+<h3 id="assembler-sjasmplus-sjasmplus">Assembler: Sjasmplus (sjasmplus)</h3>
+<p>For complete documentation, see <a href="https://z00m128.github.io/sjasmplus/documentation.html">https://z00m128.github.io/sjasmplus/documentation.html</a>.</p>
+<h3 id="assembler-uz80as-uz80">Assembler: UZ80AS (uz80)</h3>
+<p>Universal Z80 assembler. For complete documentation, see <a href="http://cngsoft.no-ip.org/uz80.htm">http://cngsoft.no-ip.org/uz80.htm</a>.</p>
+<h3 id="assembler-vasm-z80-oldstyle-vasm">Assembler: Vasm z80 oldstyle (vasm)</h3>
+<p><a href="http://sun.hasenbraten.de/vasm/release/vasm_6.html">http://sun.hasenbraten.de/vasm/release/vasm_6.html</a></p>
+<h2 id="disassemblers">Disassemblers</h2>
+<h3 id="disassembler-bdasm-bdasmdz80">Disassembler: BDASM (bdasm,dz80)</h3>
+<p><strong>Standalone:</strong> Available as <code>bdasm</code> binary. Z80 disassembler. For complete documentation, see <a href="../../bdasm">BDASM Documentation</a>.</p>
+<h3 id="disassembler-disark-disark">Disassembler: DISARK (disark)</h3>
+<p>Arkos Tracker disassembler utility. For complete documentation, see <a href="https://julien-nevo.com/disark/">https://julien-nevo.com/disark/</a>.</p>
+<h2 id="emulators">Emulators</h2>
+<h3 id="emulator-emulator-agnostic-emulation-cpcemuemuctrlemucontrol">Emulator: Emulator-agnostic emulation (cpc,emu,emuctrl,emucontrol)</h3>
+<p><strong>Standalone:</strong> Available as <code>cpcrunner</code> binary. For complete documentation, see <a href="../../runner">CPC Runner Documentation</a>.</p>
+<h3 id="emulator-ace-dl-aceacedl">Emulator: ACE DL (ace,acedl)</h3>
+<p>ACE emulator with direct loading support. For complete documentation, see <a href="https://roudoudou.com/ACE-DL/">https://roudoudou.com/ACE-DL/</a>.</p>
+<h3 id="emulator-amspirit-amspirit">Emulator: AMSpiriT (amspirit)</h3>
+<p>For complete documentation, see <a href="https://www.amspirit.fr/">https://www.amspirit.fr/</a>.</p>
+<h3 id="emulator-caprice-forever-caprice">Emulator: Caprice Forever (caprice)</h3>
+<p>Classic CPC emulator. For more information, see <a href="http://www.caprice32.org/">http://www.caprice32.org/</a>.</p>
+<h3 id="emulator-cpc-emu-power-cpcemupower">Emulator: CPC Emu Power (cpcemupower)</h3>
+<p>Advanced CPC emulator with debugging features. For complete documentation, see <a href="https://www.cpc-power.com/cpcarchives/index.php?page=articles&amp;num=446">https://www.cpc-power.com/cpcarchives/index.php?page=articles&amp;num=446</a>.</p>
+<h3 id="emulator-cpcec-cpcec">Emulator: CPCEC (cpcec)</h3>
+<p>For complete documentation, see <a href="http://cngsoft.no-ip.org/cpcec.htm">http://cngsoft.no-ip.org/cpcec.htm</a>.</p>
+<h3 id="emulator-sugarboxv2-sugarbox">Emulator: SugarboxV2 (sugarbox)</h3>
+<p>For complete documentation and download, see <a href="https://github.com/Tom1975/SugarboxV2">https://github.com/Tom1975/SugarboxV2</a>.</p>
+<h3 id="emulator-winape-winape">Emulator: Winape (winape)</h3>
+<p>For complete documentation, see <a href="https://www.winape.net/help/">https://www.winape.net/help/</a>.</p>
+<h2 id="hardware-transfer">Hardware Transfer</h2>
+<h3 id="transfer-m4-support-xfercpcwifim4">Transfer: M4 support (xfer,cpcwifi,m4)</h3>
+<p><strong>Standalone:</strong> Available as <code>cpclib-xfertool</code> binary. For complete documentation, see <a href="../../xfertool">XferTool Documentation</a>.</p>
+<h2 id="build-management">Build Management</h2>
+<h3 id="build-bndbuild-bndbuildbuild">Build: BndBuild (bndbuild,build)</h3>
+<p>Recursive bndbuild invocation for nested build configurations. For complete documentation, see <a href="../../bndbuild">BndBuild Documentation</a>.</p>
+<h3 id="build-basiclocomotive-locomotivebasic">Build: BASIC/Locomotive (locomotive,basic)</h3>
+<p><strong>Standalone:</strong> Library-only (no standalone binary). BASIC tokenizer and manager for Locomotive BASIC programs. For complete documentation, see <a href="../../locomotive">Locomotive Documentation</a>.</p>
+<h2 id="data-compression">Data Compression</h2>
+<h3 id="compression-crunch-crunchcompress">Compression: Crunch (crunch,compress)</h3>
+<p><strong>Standalone:</strong> Available as <code>crunch</code> binary. Data compression utility for Z80 programs. For complete documentation, see <a href="../../crunch">Crunch Documentation</a>.</p>
+<h2 id="cdt-tools">CDT Tools</h2>
+<h3 id="cdt-rtzx-rtzx">CDT: RTZX (rtzx)</h3>
+<p>Real-time ZX data compression. For complete documentation, see <a href="https://github.com/LichP/rtzx">https://github.com/LichP/rtzx</a>.</p>
+<h2 id="audio-tools">Audio Tools</h2>
+<h3 id="audio-arkos-tracker-3-at3arkostracker3">Audio: Arkos Tracker 3 (at3,ArkosTracker3)</h3>
+<p>Music tracker for CPC sound chip programming. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-ay-test-ayt">Audio: AY Test (ayt)</h3>
+<p>AY-3-8912 sound chip test utility. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-chip-and-sfx-chipnsfx">Audio: Chip and SFX (chipnsfx)</h3>
+<p>Sound effects and chip music utility. For complete documentation, see <a href="http://cngsoft.no-ip.org/chipnsfx.htm">http://cngsoft.no-ip.org/chipnsfx.htm</a>.</p>
+<h3 id="audio-minimiser-miny">Audio: Minimiser (miny)</h3>
+<p>Music data minimization tool. For complete documentation, see <a href="https://github.com/tattlemuss/minymiser">https://github.com/tattlemuss/minymiser</a>.</p>
+<h3 id="audio-song-to-akg-songtoakg">Audio: Song to AKG (SongToAkg)</h3>
+<p>Convert song data to AKG format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-song-to-akm-songtoakm">Audio: Song to AKM (SongToAkm)</h3>
+<p>Convert song data to AKM format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-song-to-aky-songtoaky">Audio: Song to AKY (SongToAky)</h3>
+<p>Convert song data to AKY format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-song-to-events-songtoevents">Audio: Song to Events (SongToEvents)</h3>
+<p>Convert song data to event stream format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-song-to-raw-songtoraw">Audio: Song to Raw (SongToRaw)</h3>
+<p>Convert song data to raw binary format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-song-to-sound-effects-songtosoundeffects">Audio: Song to Sound Effects (SongToSoundEffects)</h3>
+<p>Convert song data to sound effects format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-song-to-vgm-songtovgm">Audio: Song to VGM (SongToVgm)</h3>
+<p>Convert song data to Video Game Music format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-song-to-wav-songtowav">Audio: Song to WAV (SongToWav)</h3>
+<p>Convert song data to WAV audio format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h3 id="audio-song-to-ym-songtoym">Audio: Song to YM (SongToYm)</h3>
+<p>Convert song data to YM audio format. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+<h2 id="development-tools">Development Tools</h2>
+<h3 id="development-basmdoc-basmdocdoc">Development: BASMDOC (basmdoc,doc)</h3>
+<p><strong>Standalone:</strong> Available as <code>basmdoc</code> binary. Generate documentation from BASM source code. For complete documentation, see <a href="../../basmdoc">BASMDOC Documentation</a>.</p>
+<h3 id="development-z80-profiler-z80profiler">Development: Z80 Profiler (Z80Profiler)</h3>
+<p>Z80 code profiler for performance analysis. For complete documentation, see <a href="https://www.julien-nevo.com/arkostracker/">https://www.julien-nevo.com/arkostracker/</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.instant", "navigation.tabs"], "search": "../../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+    
+  </body>
+</html>
