@@ -131,7 +131,7 @@ impl FileAndSupport {
 
     pub fn build<P: Into<Utf8PathBuf>>(p: P) -> Self {
         let fname = p.into();
-        let content = std::fs::read(&fname).unwrap();
+        let content = fs_err::read(&fname).unwrap();
         let has_header = content.len() >= AmsdosHeader::HEADER_SIZE
             && AmsdosHeader::from_buffer(&content).represent_a_valid_file();
         let mut file = Self::new_auto(fname, has_header);

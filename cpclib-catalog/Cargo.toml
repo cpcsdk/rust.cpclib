@@ -20,6 +20,7 @@ cpclib-basic.workspace = true
 clap = { workspace = true, features = ["derive"] }
 log.workspace = true
 simple_logger.workspace = true
+fs-err.workspace = true
 
 [build-dependencies]
 built.workspace = true

@@ -12,6 +12,7 @@ homepage.workspace = true
 [dependencies]
 cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-csl.workspace = true
+fs-err.workspace = true
 
 [profile.release]
 opt-level = 'z'     # Optimize for size

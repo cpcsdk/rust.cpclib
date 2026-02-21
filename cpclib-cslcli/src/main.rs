@@ -1,4 +1,4 @@
-use std::{fs, process};
+use std::process;
 
 use cpclib_cslcli::build_command;
 use cpclib_csl::parse_csl_with_rich_errors;
@@ -10,7 +10,7 @@ fn main() {
     let verbose = matches.get_flag("verbose");
 
     // Read the file
-    let content = match fs::read_to_string(file_path) {
+    let content = match fs_err::read_to_string(file_path) {
         Ok(content) => content,
         Err(e) => {
             eprintln!("Error reading file '{}': {}", file_path, e);

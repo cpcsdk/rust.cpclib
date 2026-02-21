@@ -1,7 +1,7 @@
 pub mod cli;
 
 use clap::CommandFactory;
-use std::fs::File;
+use fs_err::File;
 use std::io::{Read, Write};
 
 use cpclib_basic::BasicProgram;

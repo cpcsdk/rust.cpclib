@@ -2643,6 +2643,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-disc",
  "cpclib-image",
+ "fs-err",
  "image",
  "log",
  "simple_logger",
@@ -2745,6 +2746,7 @@ version = "0.11.0"
 dependencies = [
  "cpclib-common",
  "cpclib-csl",
+ "fs-err",
 ]
 
 [[package]]
