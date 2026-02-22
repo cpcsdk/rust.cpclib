@@ -1242,6 +1242,21 @@ impl Default for CslScriptBuilder {
     }
 }
 
+impl CslScript {
+    /// Get a minimal version instruction  for scripts that don't specify a version
+    fn minimal_version(&self) -> String {
+        let mut minimal = 0;
+        for instruction in &self.instructions {
+            if instruction.is_v1_2_feature() {
+                minimal = minimal.max(2);
+            } else if instruction.is_v1_1_feature() {
+                minimal = minimal.max(1);
+            }
+        }
+        format!("csl_version 1.{}", minimal)
+    }
+}
+
 impl fmt::Display for CslScript {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Ensure version instruction is output first
@@ -1252,6 +1267,9 @@ impl fmt::Display for CslScript {
 
         if let Some(version) = version_inst {
             writeln!(f, "{}", version)?;
+        } else {
+            // workaround for amspirit that expect a version number
+            writeln!(f, "{}", self.minimal_version())?;
         }
 
         // Output all other instructions (excluding version)
