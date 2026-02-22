@@ -60,7 +60,7 @@ impl<E: EventObserver> RunnerWithClapMatches for LocomotiveRunner<E> {}
 impl<E: EventObserver> Runner for LocomotiveRunner<E> {
     type EventObserver = E;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], _o: &E) -> Result<(), String> {
         let cli = Cli::try_parse_from(
             [self.get_command().to_string()]
                 .into_iter()

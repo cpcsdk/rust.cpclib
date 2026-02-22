@@ -696,7 +696,7 @@ impl BasicTokenNoPrefix {
 
     /// Returns the char representation if any
     pub fn char(&self) -> Option<char> {
-        self.clone().try_into().ok()
+        (*self).try_into().ok()
     }
 }
 

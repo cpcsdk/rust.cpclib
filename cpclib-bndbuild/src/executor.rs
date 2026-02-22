@@ -37,6 +37,7 @@ use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::snapshot::SnapshotRunner;
 use crate::runners::xfer::XferRunner;
 use crate::runners::cprcli::CprCliRunner;
+use crate::runners::csl::CslRunner;
 use crate::task::InnerTask;
 
 impl InnerTask {
@@ -110,13 +111,13 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 },
             }
         },
-        InnerTask::Catalog(args) => {
+        InnerTask::Catalog(_args) => {
             crate::runners::disc::CatalogRunner::<E>::default().run(task.args(), observer)
         },
-        InnerTask::Locomotive(args) => {
+        InnerTask::Locomotive(_args) => {
             crate::runners::locomotive::LocomotiveRunner::<E>::default().run(task.args(), observer)
         },
-        InnerTask::Cdt(cdt, args) => {
+        InnerTask::Cdt(cdt, _args) => {
             match cdt {
                 crate::runners::cdt::CdtManager::Rtzx => {
                     crate::runners::cdt::RtzxRunner::<E>::default().run(task.args(), observer)
@@ -219,6 +220,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Rm(_) => RmRunner::default().run(task.args(), observer),
         InnerTask::Xfer(_) => XferRunner::default().run(task.args(), observer),
         InnerTask::Cpr(_) => CprCliRunner::default().run(task.args(), observer),
+        InnerTask::Csl(_) => CslRunner::default().run(task.args(), observer),
 
         InnerTask::Grafx2(_) => {
             DelegatedRunner::<E>::new(

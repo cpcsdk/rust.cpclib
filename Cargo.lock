@@ -2552,6 +2552,7 @@ dependencies = [
  "cpclib-cpr",
  "cpclib-cprcli",
  "cpclib-crunch",
+ "cpclib-cslcli",
  "cpclib-disc",
  "cpclib-imgconverter",
  "cpclib-locomotive",
@@ -2742,7 +2743,8 @@ dependencies = [
 name = "cpclib-cslcli"
 version = "0.11.0"
 dependencies = [
- "cpclib-common",
+ "anyhow",
+ "clap",
  "cpclib-csl",
  "fs-err",
 ]
@@ -2920,6 +2922,7 @@ dependencies = [
  "cpclib-asm",
  "cpclib-common",
  "cpclib-csl",
+ "cpclib-disc",
  "delegate",
  "directories",
  "enigo",

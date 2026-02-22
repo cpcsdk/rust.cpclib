@@ -10,7 +10,8 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-cpclib-common = { workspace = true, features = ["cmdline"] }
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
 cpclib-csl.workspace = true
 fs-err.workspace = true
 

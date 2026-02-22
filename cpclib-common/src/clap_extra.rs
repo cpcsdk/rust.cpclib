@@ -24,8 +24,8 @@ pub const fn utf8pathbuf_value_parser(
     }
 }
 
-pub fn existing_utf8pathbuf_value_parser<'a>(p: &'a str) -> Result<Utf8PathBuf, String> {
-    let mut must_exist = true;
+pub fn existing_utf8pathbuf_value_parser(p: &str) -> Result<Utf8PathBuf, String> {
+    let must_exist = true;
     match Utf8PathBuf::from_str(p) {
         Ok(p) => {
             if !must_exist || p.exists() {

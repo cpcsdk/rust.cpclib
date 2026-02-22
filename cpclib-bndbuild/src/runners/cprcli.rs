@@ -68,7 +68,7 @@ impl<E: EventObserver> Runner for CprCliRunner<E> {
         // Load the optional second CPR file
         let mut cpr2 = args
             .get_one::<Utf8PathBuf>("INPUT2")
-            .map(|cpr_fname2| Cpr::load(cpr_fname2))
+            .map(Cpr::load)
             .transpose()
             .map_err(|e| format!("Failed to load second CPR: {e:?}"))?;
 

@@ -14,6 +14,7 @@ description = "Dependency for various cpclib crates to help running external app
 cpclib-common = {workspace=true, features=["network"]}
 cpclib-asm.workspace=true
 cpclib-csl.workspace=true
+cpclib-disc = {workspace=true, optional=true}
 
 camino-tempfile.workspace = true
 clap = {workspace=true, features=["derive"]}
@@ -45,3 +46,4 @@ fs_extra = "1.3.0"
 default = ["fap"]
 transparent-x11 = ["dep:transparent"]
 fap = []
+hfe = ["dep:cpclib-disc", "cpclib-disc/hfe"]

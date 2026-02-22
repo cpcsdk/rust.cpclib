@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use clap::{Arg, ArgAction, FromArgMatches, Parser};
+use clap::{Arg, ArgAction, Parser};
 use cpclib_catalog::cli::CatalogApp;
 use cpclib_common::clap::{self, Command, CommandFactory};
 use cpclib_disc::dsk_manager_build_arg_parser;
@@ -130,11 +130,11 @@ impl<E: EventObserver> Runner for DiscManagerRunner<E> {
 impl<E: EventObserver> Runner for CatalogRunner<E> {
     type EventObserver = E;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], _o: &E) -> Result<(), String> {
         let app = CatalogApp::try_parse_from(
             [self.get_command().to_string()]
                 .into_iter()
-                .chain(itr.into_iter().map(|s| s.as_ref().to_string()))
+                .chain(itr.iter().map(|s| s.as_ref().to_string()))
         )
         .map_err(|e| e.to_string())?;
         cpclib_catalog::handle_catalog_command(app)

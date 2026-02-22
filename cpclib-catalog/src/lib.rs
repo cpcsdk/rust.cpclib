@@ -409,7 +409,7 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
                 &entry
                     .all_generated_bytes()
                     .iter()
-                    .map(|&b| if b >= b' ' && b <= 127 { b } else { b'?' })
+                    .map(|&b| if (b' '..=127).contains(&b) { b } else { b'?' })
                     .collect::<Vec<u8>>()
             )
             .unwrap_or("Invalid UTF-8")

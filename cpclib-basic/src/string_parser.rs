@@ -74,7 +74,7 @@ fn append_optional_pair(
 
 /// Helper function for the common peek pattern checking for space/tab/colon/newline/eof
 #[inline]
-fn peek_keyword_end<'src>(input: &mut &'src str) -> ModalResult<(), ContextError<StrContext>> {
+fn peek_keyword_end(input: &mut &str) -> ModalResult<(), ContextError<StrContext>> {
     peek(alt((
         ' '.void(),
         '\t'.void(),
@@ -845,7 +845,7 @@ pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     let _ = Caseless("PRINT").parse_next(input)?;
 
     // Ensure PRINT is followed by space, colon, end-of-line, or special chars (not part of a longer identifier)
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -898,7 +898,7 @@ pub fn parse_run<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 
 pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("INPUT").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -1552,7 +1552,7 @@ simple_keyword_parser!(parse_wend, "WEND", Wend);
 /// DRAW x, y [, [ink] [, mode]]
 pub fn parse_draw<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DRAW").parse_next(input)?;
-    let _ = peek_keyword_end(input)?;
+    peek_keyword_end(input)?;
 
     let (space_a, x, comma1, y, opt_params) = (
         parse_basic_space0,
@@ -1604,7 +1604,7 @@ pub fn parse_draw<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 /// DRAWR xr, yr [, [ink] [, mode]]
 pub fn parse_drawr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DRAWR").parse_next(input)?;
-    let _ = peek_keyword_end(input)?;
+    peek_keyword_end(input)?;
 
     let (space_a, x, comma1, y, opt_params) = (
         parse_basic_space0,
@@ -1656,7 +1656,7 @@ pub fn parse_drawr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// MOVE x, y [, [ink] [, mode]]
 pub fn parse_move<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("MOVE").parse_next(input)?;
-    let _ = peek_keyword_end(input)?;
+    peek_keyword_end(input)?;
 
     let (space_a, x, comma1, y, opt_params) = (
         parse_basic_space0,
@@ -1856,7 +1856,7 @@ pub fn parse_plotr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// DATA value1 [, value2, ...]
 pub fn parse_data<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DATA").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -1947,7 +1947,7 @@ pub fn parse_restore<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
 /// DIM array(size) [, array(size), ...]
 pub fn parse_dim<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DIM").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -2160,7 +2160,7 @@ pub fn parse_randomize<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<
 /// SOUND channel, period, duration [, volume [, envelope [, ...]]]
 pub fn parse_sound<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("SOUND").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -2454,7 +2454,7 @@ simple_keyword_parser!(parse_cont, "CONT", Cont);
 /// Optional timer number (0-3, default 0)
 pub fn parse_every<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("EVERY").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -2511,7 +2511,7 @@ pub fn parse_every<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// Optional timer number (0-3, default 0)
 pub fn parse_after<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("AFTER").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -2626,7 +2626,7 @@ pub fn parse_renum<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// AUTO [start [, increment]]
 pub fn parse_auto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("AUTO").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -2673,7 +2673,7 @@ pub fn parse_auto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 /// Define a user function
 pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DEF").parse_next(input)?;
-    let _ = peek(alt((' '.void(), '\t'.void()))).parse_next(input)?;
+    peek(alt((' '.void(), '\t'.void()))).parse_next(input)?;
 
     let (space1, _, space2) = (
         parse_basic_space1,
@@ -2779,7 +2779,7 @@ pub fn parse_edit<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 /// ERASE array [, array, ...]
 pub fn parse_erase<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("ERASE").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -2838,7 +2838,7 @@ pub fn parse_swap<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 /// DEFINT letter [-letter] [, ...]
 pub fn parse_defint<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DEFINT").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -2891,7 +2891,7 @@ pub fn parse_defint<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 /// DEFREAL letter [-letter] [, ...]
 pub fn parse_defreal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DEFREAL").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -2944,7 +2944,7 @@ pub fn parse_defreal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
 /// DEFSTR letter [-letter] [, ...]
 pub fn parse_defstr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("DEFSTR").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -3000,7 +3000,7 @@ simple_keyword_parser!(parse_troff, "TROFF", Troff);
 /// SYMBOL character, row1, row2, ... row8
 pub fn parse_symbol<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("SYMBOL").parse_next(input)?;
-    let _ = peek_keyword_end(input)?;
+    peek_keyword_end(input)?;
 
     let (space_a, char_code) = (
         parse_basic_space0,
@@ -3082,7 +3082,7 @@ pub fn parse_memory<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 /// CURSOR [column] or CURSOR [column,row]
 pub fn parse_cursor<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("CURSOR").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -3182,7 +3182,7 @@ pub fn parse_wait<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
 /// WINDOW [#stream,] left, right, top, bottom
 pub fn parse_window<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("WINDOW").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         '#'.void(), // Allow WINDOW#channel format
@@ -3321,7 +3321,7 @@ pub fn parse_graphics_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensRe
 /// ORIGIN x, y [, left, right, top, bottom]
 pub fn parse_origin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("ORIGIN").parse_next(input)?;
-    let _ = peek_keyword_end(input)?;
+    peek_keyword_end(input)?;
 
     let (space_a, x, comma1, y, opt_bounds) = (
         parse_basic_space0,
@@ -3372,7 +3372,7 @@ pub fn parse_origin<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 /// CLG [ink]
 pub fn parse_clg<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("CLG").parse_next(input)?;
-    let _ = peek_keyword_end(input)?;
+    peek_keyword_end(input)?;
 
     let (space, opt_ink) = (
         parse_basic_space0,
@@ -3392,7 +3392,7 @@ pub fn parse_clg<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 /// MASK [ink1] [, ink2]
 pub fn parse_mask<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("MASK").parse_next(input)?;
-    let _ = peek_keyword_end(input)?;
+    peek_keyword_end(input)?;
 
     let (space, opt_ink1, opt_ink2) = (
         parse_basic_space0,
@@ -3494,7 +3494,7 @@ simple_keyword_parser!(parse_closeout, "CLOSEOUT", Closeout);
 /// LINE INPUT [#stream,] [;] ["prompt";] variable
 pub fn parse_line_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("LINE").parse_next(input)?;
-    let _ = peek(alt((' '.void(), '\t'.void()))).parse_next(input)?;
+    peek(alt((' '.void(), '\t'.void()))).parse_next(input)?;
 
     let (space_a, _, space_b, canal, space_c, sep, space_d, string, space_e, comma, space_f, var) =
         (
@@ -3536,7 +3536,7 @@ pub fn parse_line_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
 /// ENT tone_envelope, section1_steps [, section2_steps, ...]
 pub fn parse_ent<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("ENT").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -3580,7 +3580,7 @@ pub fn parse_ent<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 /// ENV volume_envelope, section1_steps [, section2_steps, ...]
 pub fn parse_env<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("ENV").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -3624,7 +3624,7 @@ pub fn parse_env<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
 /// RELEASE channel
 pub fn parse_release<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("RELEASE").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         ':'.void(),
@@ -3749,7 +3749,7 @@ pub fn parse_width<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 /// WRITE [#stream,] expression [, expression, ...]
 pub fn parse_write<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("WRITE").parse_next(input)?;
-    let _ = peek(alt((
+    peek(alt((
         ' '.void(),
         '\t'.void(),
         '#'.void(),
@@ -3805,7 +3805,7 @@ simple_keyword_parser!(parse_di, "DI", Di);
 /// String assignment that modifies part of a string in place
 pub fn parse_mid_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let _ = Caseless("MID$").parse_next(input)?;
-    let _ = peek(alt((' '.void(), '\t'.void(), '('.void()))).parse_next(input)?;
+    peek(alt((' '.void(), '\t'.void(), '('.void()))).parse_next(input)?;
 
     let (space1, open) = (
         parse_basic_space0,
@@ -4214,8 +4214,8 @@ pub enum NumericExpressionConstraint {
 }
 
 /// Parse an optional unary +/- operator
-fn parse_unary_operator<'src>(
-    input: &mut &'src str
+fn parse_unary_operator(
+    input: &mut &str
 ) -> ModalResult<Option<BasicToken>, ContextError<StrContext>> {
     opt(alt((
         (Caseless("NOT"), alt((' ', '\t', '(')))

@@ -7,7 +7,7 @@
 //! 3. Cross-reference collection  
 //! 4. Rendering to HTML or Markdown
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -203,13 +203,11 @@ impl BasmDocGenerator {
             if entry_path.is_dir() {
                 asm_files.extend(Self::find_asm_files(&entry_path)?);
             }
-            else if entry_path.is_file() {
-                if let Some(ext) = entry_path.extension() {
-                    if ext.eq_ignore_ascii_case("asm") {
+            else if entry_path.is_file()
+                && let Some(ext) = entry_path.extension()
+                    && ext.eq_ignore_ascii_case("asm") {
                         asm_files.push(entry_path.to_string_lossy().to_string());
                     }
-                }
-            }
         }
 
         Ok(asm_files)

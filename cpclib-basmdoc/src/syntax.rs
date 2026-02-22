@@ -7,7 +7,6 @@
 //! - Symbol linking for cross-references
 
 use lazy_static::lazy_static;
-use regex;
 
 /// Apply syntax highlighting to Z80/BASM code using highlight.js compatible CSS classes
 pub(crate) fn highlight_z80_syntax(source: &str) -> String {
@@ -84,13 +83,12 @@ pub(crate) fn highlight_z80_syntax(source: &str) -> String {
     // Merge overlapping comment ranges to find non-comment regions
     let mut comment_ranges: Vec<(usize, usize)> = Vec::new();
     for (start, end, _) in &matches {
-        if let Some(last) = comment_ranges.last_mut() {
-            if *start <= last.1 {
+        if let Some(last) = comment_ranges.last_mut()
+            && *start <= last.1 {
                 // Overlapping or adjacent - merge
                 last.1 = (*end).max(last.1);
                 continue;
             }
-        }
         comment_ranges.push((*start, *end));
     }
 

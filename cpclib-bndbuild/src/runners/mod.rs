@@ -7,6 +7,7 @@ pub mod bndbuild;
 pub mod cdt;
 pub mod cpc2img;
 pub mod cprcli;
+pub mod csl;
 pub mod crunch;
 pub mod disassembler;
 pub mod disc;

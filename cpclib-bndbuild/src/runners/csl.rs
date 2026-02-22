@@ -1,24 +1,24 @@
 use std::marker::PhantomData;
 
-use clap::{Arg, ArgAction, CommandFactory};
+use clap::{Arg, ArgAction, CommandFactory, Parser};
+use cpclib_cslcli::CslCliArgs;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapDerive;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
-use hxcfe_cli::HxcfeCli;
 
 use crate::built_info;
-use crate::task::HXCFE_CMDS;
+use crate::task::CSL_CMDS;
 
-pub struct HxcfeRunner<E: EventObserver> {
+pub struct CslRunner<E: EventObserver> {
     command: clap::Command,
     _phantom: PhantomData<E>
 }
 
-impl<E: EventObserver> Default for HxcfeRunner<E> {
+impl<E: EventObserver> Default for CslRunner<E> {
     fn default() -> Self {
-        let command = HxcfeCli::command()
+        let command = CslCliArgs::command()
             .no_binary_name(true)
-            .bin_name(HXCFE_CMDS[0])
+            .bin_name(CSL_CMDS[0])
             .disable_help_flag(true)
             .disable_version_flag(true)
             .arg(
@@ -37,7 +37,7 @@ impl<E: EventObserver> Default for HxcfeRunner<E> {
                     .exclusive(true)
             )
             .after_help(format!(
-                "hxcfe_cli {} embedded by {} {}",
+                "cpclib-cslcli {} embedded by {} {}",
                 env!("CARGO_PKG_VERSION"),
                 built_info::PKG_NAME,
                 built_info::PKG_VERSION
@@ -49,17 +49,17 @@ impl<E: EventObserver> Default for HxcfeRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClap for HxcfeRunner<E> {
+impl<E: EventObserver> RunnerWithClap for CslRunner<E> {
     fn get_clap_command(&self) -> &clap::Command {
         &self.command
     }
 }
 
-impl<E: EventObserver> RunnerWithClapDerive for HxcfeRunner<E> {
-    type Args = HxcfeCli;
+impl<E: EventObserver> RunnerWithClapDerive for CslRunner<E> {
+    type Args = CslCliArgs;
 }
 
-impl<E: EventObserver> Runner for HxcfeRunner<E> {
+impl<E: EventObserver> Runner for CslRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -69,10 +69,10 @@ impl<E: EventObserver> Runner for HxcfeRunner<E> {
         }
         let cli = cli.unwrap();
 
-        hxcfe_cli::run(&cli).map_err(|e| e.to_string())
+        cpclib_cslcli::run(&cli).map_err(|e| e.to_string())
     }
 
     fn get_command(&self) -> &str {
-        HXCFE_CMDS[0]
+        CSL_CMDS[0]
     }
 }

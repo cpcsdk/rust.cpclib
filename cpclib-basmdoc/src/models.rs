@@ -161,7 +161,7 @@ where S: serde::Serializer {
 
 fn deserialize_cow_str<'de, D>(deserializer: D) -> Result<Cow<'static, str>, D::Error>
 where D: serde::Deserializer<'de> {
-    String::deserialize(deserializer).map(|s| Cow::Owned(s))
+    String::deserialize(deserializer).map(Cow::Owned)
 }
 
 /// Metadata for documentation (author, date, etc.)
@@ -223,7 +223,7 @@ impl ItemDocumentation {
 
     pub fn item_long_summary(&self) -> String {
         match &self.item {
-            DocumentedItem::Label(label) => format!("{}", label),
+            DocumentedItem::Label(label) => label.to_string(),
             DocumentedItem::Equ(name, value) => format!("{} EQU {}", name, value),
             DocumentedItem::Macro {
                 name, arguments, ..
@@ -231,7 +231,7 @@ impl ItemDocumentation {
             DocumentedItem::Function {
                 name, arguments, ..
             } => format!("{}({})", name, arguments.join(", ")),
-            DocumentedItem::File(fname) => format!("{}", fname),
+            DocumentedItem::File(fname) => fname.to_string(),
             DocumentedItem::Source(_) => "Source".to_string(),
             DocumentedItem::SyntaxError(_) => "Syntax Error".to_string()
         }

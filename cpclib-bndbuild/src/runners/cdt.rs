@@ -18,7 +18,7 @@ pub enum CdtManager {
 impl CdtManager {
     pub fn get_command(&self) -> &str {
         match self {
-            CdtManager::Rtzx => &RTZX_CMDS[0]
+            CdtManager::Rtzx => RTZX_CMDS[0]
         }
     }
 }
@@ -84,7 +84,7 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
     }
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let args: Vec<String> = itr.iter().map(|s| s.as_ref().to_string()).collect();
+        let _args: Vec<String> = itr.iter().map(|s| s.as_ref().to_string()).collect();
         let cli = self.get_matches(itr, o)?;
         if cli.is_none() {
             return Ok(());
@@ -108,18 +108,17 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
 
         let config = &cli
             .command
-            .as_ref()
-            .and_then(|cmd| Some(cmd.config()))
+            .as_ref().map(|cmd| cmd.config())
             .unwrap();
 
         let tzx_data = TzxData::parse_from(file);
 
         match &cli.command {
             Some(Commands::Inspect(args)) => {
-                run_inspect(file_name, &config, args.waveforms, &tzx_data)
+                run_inspect(file_name, config, args.waveforms, &tzx_data)
             },
-            Some(Commands::Convert(args)) => run_convert(&args, &config, &tzx_data),
-            Some(Commands::Play(_)) => run_play(file_name, &config, &tzx_data),
+            Some(Commands::Convert(args)) => run_convert(args, config, &tzx_data),
+            Some(Commands::Play(_)) => run_play(file_name, config, &tzx_data),
             None => Ok(())
         }
         .map_err(|e| e.to_string())

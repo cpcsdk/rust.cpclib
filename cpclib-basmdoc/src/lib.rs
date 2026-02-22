@@ -13,7 +13,6 @@ mod parser;
 mod syntax;
 
 // Re-exports for backward compatibility
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -21,12 +20,11 @@ use dashmap::DashMap;
 pub use cmdline::BasmDocCommand;
 pub use generator::BasmDocGenerator;
 use indicatif::{ProgressBar, ProgressStyle};
-use lazy_static::lazy_static;
 pub use models::{
     DocumentedItem, ItemDocumentation, MetaDocumentation, SymbolReference, UndocumentedConfig
 };
 pub use parser::{aggregate_documentation_on_tokens, build_documentation_page_from_aggregates};
-use pulldown_cmark::{CodeBlockKind, CowStr, Event, Options, Parser, Tag, TagEnd, html};
+use pulldown_cmark::{Options, Parser, html};
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -78,7 +76,7 @@ impl Object for ItemDocumentation {
                 let refs: Vec<Value> = self
                     .references
                     .iter()
-                    .map(|r| Value::from_serialize(r))
+                    .map(Value::from_serialize)
                     .collect();
                 Some(Value::from(refs))
             },
@@ -137,7 +135,7 @@ impl Object for DocumentationPage {
             Some("file_list") => {
                 let files = self
                     .file_list()
-                    .into_iter()
+                    .iter()
                     .map(Value::from)
                     .collect::<Vec<_>>();
                 Some(Value::from(files))
@@ -235,8 +233,8 @@ impl Object for DocumentationPage {
                             // paths), attempt to locate the absolute path from
                             // existing content entries and read that instead.
                             let mut code = fs_err::read_to_string(&fname).unwrap_or_default();
-                            if code.is_empty() {
-                                if let Some(it) = self
+                            if code.is_empty()
+                                && let Some(it) = self
                                     .content
                                     .iter()
                                     .find(|it| it.source_file.ends_with(&fname))
@@ -244,7 +242,6 @@ impl Object for DocumentationPage {
                                     code =
                                         fs_err::read_to_string(&it.source_file).unwrap_or_default();
                                 }
-                            }
 
                             files_vec.push(Value::from_object(ItemDocumentation {
                                 item: DocumentedItem::Source(code),
@@ -282,8 +279,8 @@ impl Object for DocumentationPage {
                             // matching absolute path found in content.
                             let mut code =
                                 fs_err::read_to_string(&mf.source_file).unwrap_or_default();
-                            if code.is_empty() {
-                                if let Some(it) = self
+                            if code.is_empty()
+                                && let Some(it) = self
                                     .content
                                     .iter()
                                     .find(|it| it.source_file.ends_with(&mf.source_file))
@@ -291,7 +288,6 @@ impl Object for DocumentationPage {
                                     code =
                                         fs_err::read_to_string(&it.source_file).unwrap_or_default();
                                 }
-                            }
 
                             files_vec.push(Value::from_object(ItemDocumentation {
                                 item: DocumentedItem::Source(code),
@@ -546,15 +542,13 @@ impl DocumentationPage {
             if let Some(src_basename) = std::path::Path::new(&it.source_file)
                 .file_name()
                 .and_then(|s| s.to_str())
-            {
-                if let Some(matching) = all_files_clone.iter().find(|f| {
+                && let Some(matching) = all_files_clone.iter().find(|f| {
                     std::path::Path::new(f).file_name().and_then(|s| s.to_str())
                         == Some(src_basename)
                 }) {
                     it.display_source_file = matching.clone();
                     it.source_file = matching.clone();
                 }
-            }
         }
 
         // Guarantee a Source item for every file in all_files
@@ -566,7 +560,7 @@ impl DocumentationPage {
                         || it.source_file.ends_with(fname)
                         || fname.ends_with(&it.source_file))
             });
-            if let Some(existing) = existing {
+            if let Some(_existing) = existing {
                 // Already present, do nothing (or could move to front if needed)
             }
             else {
@@ -604,14 +598,12 @@ impl DocumentationPage {
             if let Some(src_basename) = std::path::Path::new(&it.source_file)
                 .file_name()
                 .and_then(|s| s.to_str())
-            {
-                if let Some(matching) = all_files_clone.iter().find(|f| {
+                && let Some(matching) = all_files_clone.iter().find(|f| {
                     std::path::Path::new(f).file_name().and_then(|s| s.to_str())
                         == Some(src_basename)
                 }) {
                     it.display_source_file = matching.clone();
                 }
-            }
         }
 
         merged
@@ -724,7 +716,7 @@ impl DocumentationPage {
             for (symbol, mut symbol_refs) in refs {
                 all_refs
                     .entry(symbol)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .append(&mut symbol_refs);
             }
         }
@@ -824,7 +816,7 @@ impl DocumentationPage {
             for (symbol, mut symbol_refs) in refs {
                 all_refs
                     .entry(symbol)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .append(&mut symbol_refs);
             }
         }
@@ -892,7 +884,7 @@ impl DocumentationPage {
         for item in self.file_iter() {
             file_docs
                 .entry(item.source_file.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(item.doc.clone());
         }
 
@@ -942,7 +934,7 @@ impl DocumentationPage {
                 let name = item.item_short_summary();
                 if let Some(first_char) = name.chars().next() {
                     let key = first_char.to_ascii_uppercase();
-                    index.entry(key).or_insert_with(Vec::new).push(item);
+                    index.entry(key).or_default().push(item);
                 }
             }
         }
@@ -985,9 +977,7 @@ impl DocumentationPage {
 
     pub fn has_documentation(&self) -> bool {
         self.content
-            .iter()
-            .filter(|d| !d.item.is_source())
-            .next()
+            .iter().find(|d| !d.item.is_source())
             .is_some()
     }
 
@@ -1000,11 +990,10 @@ impl DocumentationPage {
     fn normalize_path(path: &str) -> String {
         let p = std::path::Path::new(path);
         // If absolute, strip to file name (simulate workspace-relative)
-        if p.is_absolute() {
-            if let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
+        if p.is_absolute()
+            && let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
                 return fname.replace('\\', "/");
             }
-        }
         path.replace('\\', "/")
     }
 
@@ -1031,7 +1020,7 @@ impl DocumentationPage {
     pub fn to_html(&self, title: Option<&str>) -> String {
         let page_obj = self;
         let _merged = self.merged_files();
-        let mut files_vec: Vec<minijinja::value::Value> = Vec::new();
+        let files_vec: Vec<minijinja::value::Value> = Vec::new();
         let mut file_source_map: std::collections::HashMap<String, String> =
             std::collections::HashMap::new();
 
@@ -1219,17 +1208,16 @@ impl DocumentationPage {
                 _ => (None, None)
             };
 
-            if let (Some(code), Some(id)) = (code_opt, id_opt) {
-                if let Ok(compressed) = assets::compress_string(&code) {
+            if let (Some(code), Some(id)) = (code_opt, id_opt)
+                && let Ok(compressed) = assets::compress_string(&code) {
                     compressed_code_map.insert(id, compressed);
                 }
-            }
         }
 
         // Compress all file sources
         for fname in &self.all_files {
-            if let Some(source_code) = file_source_map.get(fname) {
-                if !source_code.is_empty() {
+            if let Some(source_code) = file_source_map.get(fname)
+                && !source_code.is_empty() {
                     let highlighted =
                         syntax::link_symbols_in_source(source_code, &symbols_for_highlight);
                     let with_lines = format_with_line_numbers(&highlighted, 1);
@@ -1241,7 +1229,6 @@ impl DocumentationPage {
                         compressed_code_map.insert(file_id, compressed);
                     }
                 }
-            }
         }
 
         // Pass compressed map to template
@@ -1254,12 +1241,12 @@ impl DocumentationPage {
         env.add_filter(
             "tojson",
             |value: Value| -> Result<String, minijinja::Error> {
-                Ok(serde_json::to_string(&value).map_err(|e| {
+                serde_json::to_string(&value).map_err(|e| {
                     minijinja::Error::new(
                         ErrorKind::InvalidOperation,
                         format!("JSON serialization failed: {}", e)
                     )
-                })?)
+                })
             }
         );
 

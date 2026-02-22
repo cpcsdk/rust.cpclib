@@ -1461,7 +1461,7 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
     Ok(())
 }
 
-pub fn process_img2cpc(matches: &ArgMatches, mut args: Command) -> anyhow::Result<()> {
+pub fn process_img2cpc(matches: &ArgMatches, _args: Command) -> anyhow::Result<()> {
     // Note: clap automatically handles --help, no need to check manually
     // Removed: if matches.get_flag("help") { ... }
 

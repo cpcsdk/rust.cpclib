@@ -140,13 +140,14 @@ fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> std::io:
         f.write_all(repr.as_bytes())?;
     }
     else {
-        println!("{}", repr);
+        println!("{repr}");
     }
 
     Ok(())
 }
 
 /// Build the clap Command for testing purposes
+#[must_use] 
 pub fn build_command() -> clap::Command {
     Cli::command()
 }

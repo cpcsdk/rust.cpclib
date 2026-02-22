@@ -202,17 +202,15 @@ where Self: Debug + Sized + Sync
 
         // Only get mnemonic args if this is actually an opcode
         if self.is_opcode() {
-            if let Some(arg1) = self.mnemonic_arg1() {
-                if let Some(expr) = arg1.get_expression() {
+            if let Some(arg1) = self.mnemonic_arg1()
+                && let Some(expr) = arg1.get_expression() {
                     symbols.extend(expr.symbols());
                 }
-            }
 
-            if let Some(arg2) = self.mnemonic_arg2() {
-                if let Some(expr) = arg2.get_expression() {
+            if let Some(arg2) = self.mnemonic_arg2()
+                && let Some(expr) = arg2.get_expression() {
                     symbols.extend(expr.symbols());
                 }
-            }
         }
 
         if self.is_while() {

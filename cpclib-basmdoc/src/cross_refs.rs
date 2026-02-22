@@ -77,7 +77,7 @@ pub(crate) fn collect_references_in_content(
 
                 references
                     .entry(symbol.to_string())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(SymbolReference {
                         source_file: Arc::clone(&source_file),
                         line_number,
@@ -125,7 +125,7 @@ pub(crate) fn collect_cross_references<T: ListingElement + std::fmt::Display>(
 
             references
                 .entry(symbol)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(SymbolReference {
                     source_file: Arc::clone(&source_file),
                     line_number: line_num + 1, // 1-indexed for display

@@ -7,9 +7,20 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
     definitions: &[(S1, S2)]
 ) -> Environment<'_> {
     let mut env = Environment::new();
+
+
     fn error(error: String) -> Result<String, Error> {
         Err(Error::new(ErrorKind::InvalidOperation, error))
     }
+
+    fn assert(condition: bool, error: String) -> Result<(), Error> {
+        if condition {
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::InvalidOperation, error))
+        }
+    }
+
     #[cfg(target_os = "linux")]
     fn basm_escape_path(path: String) -> Result<String, Error> {
         Ok(path)
@@ -41,6 +52,7 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
 
     env.set_loader(path_loader(std::env::current_dir().unwrap()));
     env.add_function("fail", error);
+    env.add_function("assert", assert);
     env.add_function("basm_escape_path", basm_escape_path);
     env.add_filter("basm_escape_path", basm_escape_path);
 

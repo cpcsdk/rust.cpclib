@@ -35,6 +35,7 @@ cpclib-cprcli.workspace = true
 fs-err.workspace = true
 cpclib-imgconverter = { workspace = true, features = ["xferlib"] }
 cpclib-xfertool.workspace = true
+cpclib-cslcli.workspace = true
 hxcfe_cli.workspace = true
 
 anstyle = "1.0.13"
@@ -82,10 +83,10 @@ path = "src/main.rs"
 
 [features]
 
-default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon"]
+default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe"]
 colored_errors = ["cpclib-basm/colored_errors"]
 fap = ["cpclib-runner/fap"]
-hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe"]
+hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe", "cpclib-runner/hfe"]
 indicatif = ["cpclib-basm/indicatif"]
 rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon", "cpclib-imgconverter/rayon"]
 sna-interactive = ["cpclib-sna/interactive"]

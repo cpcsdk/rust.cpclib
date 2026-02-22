@@ -527,6 +527,56 @@ pub struct EmulatorConf {
 }
 
 impl EmulatorConf {
+    /// Convert HFE drive to DSK if needed for emulators that don't support HFE
+    #[cfg(feature = "hfe")]
+    fn convert_drive_if_needed(
+        drive: &Option<Utf8PathBuf>,
+        emu: &Emulator
+    ) -> Result<Option<Utf8PathBuf>, String> {
+        if let Some(drive_path) = drive {
+            if drive_path.extension().map(|ext| ext.eq_ignore_ascii_case("hfe")).unwrap_or(false) 
+                && !emu.accept_hfe() 
+            {
+                // Convert HFE to temporary DSK
+                let tempfile = camino_tempfile::Builder::new()
+                    .suffix(".dsk")
+                    .tempfile()
+                    .map_err(|e| format!("Failed to create temporary DSK file: {}", e))?;
+                
+                let dsk_path = tempfile.into_temp_path();
+                
+                // Keep the temporary file and get the path as Utf8PathBuf
+                let dsk_path_utf8 = dsk_path.keep()
+                    .map_err(|e| format!("Failed to keep temporary DSK file: {}", e))?;
+                
+                cpclib_disc::convert_hfe_to_dsk(drive_path, &dsk_path_utf8)?;
+                
+                Ok(Some(dsk_path_utf8))
+            } else {
+                Ok(Some(drive_path.clone()))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Check if drive uses HFE format when feature is not enabled
+    #[cfg(not(feature = "hfe"))]
+    fn check_hfe_not_supported(drive: &Option<Utf8PathBuf>) -> Result<Option<Utf8PathBuf>, String> {
+        if let Some(drive_path) = drive {
+            if drive_path.extension().map(|ext| ext.eq_ignore_ascii_case("hfe")).unwrap_or(false) {
+                return Err(format!(
+                    "HFE format is not supported. File '{}' requires the 'hfe' feature. \
+                    Please rebuild with --features hfe or use a DSK file instead.",
+                    drive_path
+                ));
+            }
+            Ok(Some(drive_path.clone()))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Generate the args for the corresponding emulator
     pub fn args_for_emu(&self, emu: &Emulator) -> Result<Vec<String>, String> {
         // Use CSL script for Amspirit emulator
@@ -534,9 +584,22 @@ impl EmulatorConf {
             return self.args_for_emu_amspirit_with_csl(emu);
         }
 
+        // Convert HFE to DSK if needed
+        #[cfg(feature = "hfe")]
+        let drive_a = Self::convert_drive_if_needed(&self.drive_a, emu)?;
+        
+        #[cfg(not(feature = "hfe"))]
+        let drive_a = Self::check_hfe_not_supported(&self.drive_a)?;
+
+        #[cfg(feature = "hfe")]
+        let drive_b = Self::convert_drive_if_needed(&self.drive_b, emu)?;
+        
+        #[cfg(not(feature = "hfe"))]
+        let drive_b = Self::check_hfe_not_supported(&self.drive_b)?;
+
         let mut args = Vec::default();
 
-        if let Some(drive_a) = &self.drive_a {
+        if let Some(drive_a) = &drive_a {
             match emu {
                 Emulator::Ace(_) | Emulator::Cpcec(_) => args.push(drive_a.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
@@ -552,7 +615,7 @@ impl EmulatorConf {
             }
         }
 
-        if let Some(drive_b) = &self.drive_b {
+        if let Some(drive_b) = &drive_b {
             match emu {
                 Emulator::Ace(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),

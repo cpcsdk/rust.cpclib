@@ -13,6 +13,7 @@ pub const AMSPIRIT_CMD: &str = "amspirit";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum AmspiritVersion {
     #[default]
+    V2_04b,
     V2_03b,
     V2RC2,
     V2RC1,
@@ -27,7 +28,8 @@ impl ExecutableInformation for AmspiritVersion {
             Self::V2RC2 => "CPC_AMSpiriT_v2.01b_Win_x64",
             Self::V2RC1 => "CPC_AMSpiriT_v2.00b_Win_x64",
             Self::Rc1_01 => "CPC_AMSpiriT_RC_v1.01_Win_x64",
-            Self::V2_03b => "CPC_AMSpiriT_v2.03b_Win_x64"
+            Self::V2_03b => "CPC_AMSpiriT_v2.03b_Win_x64",
+            Self::V2_04b => "CPC_AMSpiriT_v2.04b_Win_x64"
         }
     }
 
@@ -36,7 +38,8 @@ impl ExecutableInformation for AmspiritVersion {
             Self::V2RC2 => "CPC_AMSpiriT_v2.01b_Win_x64\\Amspirit v2.01b_x64.exe",
             Self::V2RC1 => "CPC_AMSpiriT_v2.00b_Win_x64\\Amspirit v2.00b_x64.exe",
             Self::Rc1_01 => "CPC_AMSpiriT_RC_v1.01_Win_x64\\Amspirit_v1.01_RC_x64.exe",
-            Self::V2_03b => "CPC_AMSpiriT_v2.03b_Win_x64\\Amspirit v2.03b_x64.exe"
+            Self::V2_03b => "CPC_AMSpiriT_v2.03b_Win_x64\\Amspirit v2.03b_x64.exe",
+            Self::V2_04b => "CPC_AMSpiriT_v2.04b_Win_x64\\Amspirit v2.04b_x64.exe"
         }
     }
 
@@ -63,6 +66,10 @@ impl StaticInformation for AmspiritVersion {
             Self::V2_03b => {
                 static URLS3: OnceLock<MutiplatformUrls> = OnceLock::new();
                 URLS3.get_or_init(|| MutiplatformUrls::unique_url("https://www.amspirit.fr/content/files/2025/10/CPC_AMSpiriT_v2.03b_Win_x64.7z"))
+            },
+            Self::V2_04b => {
+                static URLS4: OnceLock<MutiplatformUrls> = OnceLock::new();
+                URLS4.get_or_init(|| MutiplatformUrls::unique_url("https://www.amspirit.fr/content/files/2026/01/CPC_AMSpiriT_v2.04b_Win_x64.7z"))
             }
         }
     }

@@ -42,8 +42,8 @@ pub enum ResetType {
 impl fmt::Display for ResetType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Soft => write!(f, "S"),
-            Self::Hard => write!(f, "H")
+            Self::Soft => write!(f, "soft"),
+            Self::Hard => write!(f, "hard")
         }
     }
 }
