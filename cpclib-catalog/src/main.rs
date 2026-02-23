@@ -32,5 +32,5 @@ fn main() -> Result<(), String> {
     log::set_boxed_logger(Box::new(logger)).unwrap();
 
     let cli = CatalogApp::parse();
-    cpclib_catalog::handle_catalog_command(cli).map_err(|e| e.to_string())
+    cpclib_catalog::handle_catalog_command(cli).map_err(|e| e.clone())
 }

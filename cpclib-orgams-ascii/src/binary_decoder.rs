@@ -339,9 +339,9 @@ impl Program {
     pub fn bytes(&self) -> Vec<u8> {
         self.header_bytes()
             .into_iter()
-            .chain(self.src_bytes().into_iter())
-            .chain(self.labels_bytes().into_iter())
-            .chain(self.checksum_bytes().into_iter())
+            .chain(self.src_bytes())
+            .chain(self.labels_bytes())
+            .chain(self.checksum_bytes())
             .collect()
     }
 
@@ -350,7 +350,7 @@ impl Program {
         self.chunks
             .iter()
             .flat_map(|chunk| chunk.bytes(&self.labels).into_iter())
-            .chain(vec![0u8].into_iter()) // null terminator
+            .chain(vec![0u8]) // null terminator
             .collect()
     }
 
@@ -485,13 +485,13 @@ impl Deref for SizedString {
 
 impl PartialEq<str> for Bit7OnString {
     fn eq(&self, other: &str) -> bool {
-        &self.0.to_string() == other
+        self.0.to_string() == other
     }
 }
 
 impl PartialEq<&str> for Bit7OnString {
     fn eq(&self, other: &&str) -> bool {
-        &self.0.to_string() == *other
+        self.0.to_string() == *other
     }
 }
 
@@ -535,7 +535,7 @@ impl Item {
 
     pub fn display<'i>(&'i self, labels: &StringTable) -> Cow<'i, str> {
         match self {
-            Item::Comment(text) => format!(";{}", text.to_string()).into(),
+            Item::Comment(text) => format!(";{}", ***text).into(),
             Item::NewLine => "\n".into(),
             Item::Indent(count) => " ".repeat(count.0 as usize).into(),
             Item::Assign(assign) => {
@@ -553,7 +553,7 @@ impl Item {
                 .into()
             },
             Item::Label(label) => label.get(labels).to_string().into(),
-            Item::LocalLabel(label) => format!(".{}", label.get(labels).to_string()).into(),
+            Item::LocalLabel(label) => format!(".{}", label.get(labels)).into(),
             Item::MacroDef(m) => m.display(labels).into(),
             Item::Statement(s) => s.display(labels)
         }
@@ -578,7 +578,7 @@ impl LabelRef {
         LabelRef::Long(long, byte)
     }
 
-    pub fn get<'l, 't>(&'l self, table: &'t StringTable) -> &'t OrgamsEncodedString {
+    pub fn get<'t>(&self, table: &'t StringTable) -> &'t OrgamsEncodedString {
         table.label(self).unwrap()
     }
 
@@ -636,8 +636,8 @@ impl StringTable {
                 // 0xE0 corresponds to the start of long labels.
                 // 0x60 - 0xDF are short labels (indices 0 - 127)
                 // So index starts at 128
-                let idx = 128 + (((*long as usize) << 8) | (*byte as usize)) - 0xE000;
-                idx
+                
+                128 + (((*long as usize) << 8) | (*byte as usize)) - 0xE000
             }
         };
         self.get(index).map(|s| s.deref())
@@ -817,7 +817,7 @@ impl ExpressionMember {
             ExpressionMember::DoubleDollar => vec![0x44],
             ExpressionMember::ParenthesizedExpression(expr) => {
                 let mut bytes = vec![EXP_OP_PAREN_OPEN];
-                let expr = expr.iter().map(|e| e.bytes(table)).flatten();
+                let expr = expr.iter().flat_map(|e| e.bytes(table));
                 bytes.extend(expr);
                 bytes.push(EXP_OP_PAREN_CLOSE);
                 bytes
@@ -852,7 +852,7 @@ impl SizedExpression {
         match self {
             SizedExpression::Empty => vec![0],
             SizedExpression::Sized(expr) => {
-                let mut result = expr.bytes(table);
+                let result = expr.bytes(table);
                 // Prepend size byte
                 let size = result.len() as u8;
                 let mut with_size = vec![size];
@@ -898,7 +898,7 @@ impl Assign {
                 self.label
                     .bytes(table)
                     .into_iter()
-                    .chain(self.expression.bytes(table).into_iter())
+                    .chain(self.expression.bytes(table))
             )
             .collect()
     }
@@ -931,7 +931,7 @@ impl ExpressionMember {
                     _ => unreachable!("Invalid iteration count: {}", n)
                 }
             },
-            ExpressionMember::String(s) => format!("\"{}\"", s.to_string()).into(),
+            ExpressionMember::String(s) => format!("\"{}\"", **s).into(),
             ExpressionMember::UnaryMinus(inner) => format!("-{}", inner.display(table)).into(),
             ExpressionMember::ShortDecimal(v) => format!("{}", v).into(),
             ExpressionMember::Value(v) => v.display().into(),
@@ -1059,7 +1059,7 @@ impl MacroDef {
             format!("MACRO {}", name)
         }
         else {
-            let mut params = String::new();
+            let _params = String::new();
             let params = self
                 .params
                 .iter()
@@ -1272,7 +1272,7 @@ impl Statement {
                 .into()
             },
             Statement::Import(s) => {
-                if s.starts_with(&[b'"']) && s.len() >= 3 {
+                if s.starts_with(b"\"") && s.len() >= 3 {
                     // Start is " + user number
                     // End is A (maybe access rights/encoding ?)
                     let stripped = &s[2..s.len() - 1];
@@ -1283,7 +1283,7 @@ impl Statement {
                     .into()
                 }
                 else {
-                    format!("IMPORT \"{}\"", s.to_string()).into()
+                    format!("IMPORT \"{}\"", **s).into()
                 }
             },
             Statement::RawString(s) => s.to_string().into(),
@@ -1340,7 +1340,7 @@ impl Instruction {
         if self.prefix.is_prefix() {
             // prefixed opcode
             let prefix_bytes = self.prefix.bytes();
-            bytes.extend_from_slice(&prefix_bytes);
+            bytes.extend_from_slice(prefix_bytes);
         }
         else {
             if is_escaped_byte(self.opcode) {
@@ -1549,7 +1549,7 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             // handle some indentation
             let current_line_len = self.col_number();
             let indent = if current_line_len < TAB_COMMENT as usize {
-                format!("{}", " ".repeat(TAB_COMMENT as usize - current_line_len))
+                " ".repeat(TAB_COMMENT as usize - current_line_len).to_string()
             }
             else {
                 " ".into()
@@ -1655,9 +1655,9 @@ impl<'f, 'g> Drop for DisplayState<'f, 'g> {
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let mut iter = self.chunks.iter().flat_map(|c| c.items()).peekable();
+        let _iter = self.chunks.iter().flat_map(|c| c.items()).peekable();
 
-        let mut state = DisplayState {
+        let _state = DisplayState {
             f: Some(f),
             current_line: String::new(),
             line_number: 1,
@@ -1750,7 +1750,7 @@ pub fn parse_orgams_file(
         // Print labels
         if debug {
             for (idx, label) in labels.iter().enumerate() {
-                println!("  Label #{:03}: \"{}\"", idx, label.to_string());
+                println!("  Label #{:03}: \"{}\"", idx, **label);
             }
         }
 
@@ -1905,7 +1905,7 @@ fn parse_word_or_byte(is_word: bool) -> impl Fn(&mut Input) -> OrgamsParseResult
         consume_marker(marker)(input)?;
 
         let expression_length = cut_err(any).parse_next(input)? as usize;
-        let directive_length = cut_err(any).parse_next(input)?;
+        let _directive_length = cut_err(any).parse_next(input)?;
         let before_expressions = input.checkpoint();
         let mut exprs = Vec::new();
         while input.offset_from(&before_expressions) < expression_length - 2 {
@@ -1943,7 +1943,7 @@ fn parse_item_with_endline(input: &mut Input) -> OrgamsParseResult<Item> {
 fn parse_indent(input: &mut Input) -> OrgamsParseResult<Indent> {
     consume_marker(MARKER_INDENT)(input)?;
     // Read the space count byte
-    any.parse_next(input).map(|i| Indent(i))
+    any.parse_next(input).map(Indent)
 }
 
 /// Parse a comment: 0x43 followed by text until newline (newline not consumed)
@@ -1999,7 +1999,7 @@ fn parse_sized_expression(input: &mut Input) -> OrgamsParseResult<SizedExpressio
             err.push(StrContext::Expected(StrContextValue::Description(
                 "expression of incorrect size"
             )));
-            return Err(ErrMode::Cut(err));
+            Err(ErrMode::Cut(err))
         }
         else {
             Ok(exp)
@@ -2025,7 +2025,7 @@ fn parse_unsized_expression(input: &mut Input) -> OrgamsParseResult<Expression> 
 fn parse_multi_expression(input: &mut Input) -> OrgamsParseResult<Expression> {
     let _ = cut_err(EXP_MULTI_TERM_BEGIN.context(StrContext::Label("multi expression tag")))
         .parse_next(input)?; // Consume BEGIN
-    let mut members =
+    let members =
         cut_err(parse_several_expression_member(EXP_MULTI_TERM_END)).parse_next(input)?;
     Ok(Expression::MultiTerm(members))
 }
@@ -2054,7 +2054,7 @@ fn parse_several_expression_member(
 }
 
 fn parse_parenthesized_expression_inner(input: &mut Input) -> OrgamsParseResult<ExpressionMember> {
-    let mut members = parse_several_expression_member(b')').parse_next(input)?;
+    let members = parse_several_expression_member(b')').parse_next(input)?;
     Ok(ExpressionMember::ParenthesizedExpression(members))
 }
 
@@ -2096,7 +2096,7 @@ fn parse_expression_member(input: &mut Input) -> OrgamsParseResult<ExpressionMem
             err.push(StrContext::Expected(StrContextValue::Description(
                 "Use of ')' without matching '(' in expression"
             )));
-            return Err(ErrMode::Backtrack(err));
+            Err(ErrMode::Backtrack(err))
         },
         EXP_OP_PAREN_OPEN => {
             cut_err(
@@ -2301,7 +2301,7 @@ fn parse_line_starting_with_label(input: &mut Input) -> OrgamsParseResult<Line> 
     };
 
     let nl_or_comment = opt(parse_nl_or_comment).parse_next(input)?;
-    let (mut items, nl_or_comment) = if let Some(nl_or_comment) = nl_or_comment {
+    let (items, nl_or_comment) = if let Some(nl_or_comment) = nl_or_comment {
         (None, nl_or_comment)
     }
     else {
@@ -2495,9 +2495,9 @@ pub fn parse_chunk(
                         // Printable bytes
                         let printable: String = raw_bytes
                             .iter()
-                            .map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' })
+                            .map(|&b| if (32..=126).contains(&b) { b as char } else { '.' })
                             .collect();
-                        let reconstructed_bytes = line.bytes(&labels);
+                        let reconstructed_bytes = line.bytes(labels);
                         println!(
                             "\n Chunk: {}       line: {} (total: {})",
                             chunk_idx,
@@ -2553,7 +2553,7 @@ pub fn parse_chunk(
                         let context_bytes = &remainder[..context_len];
                         let context_printable: String = context_bytes
                             .iter()
-                            .map(|&b| if b >= 32 && b <= 126 { b as char } else { '.' })
+                            .map(|&b| if (32..=126).contains(&b) { b as char } else { '.' })
                             .collect();
 
                         println!(
@@ -2580,12 +2580,7 @@ pub fn parse_chunk(
             );
         }
 
-        let line = if let Some(render) = render.as_mut() {
-            Some(render.line_number() - 1)
-        }
-        else {
-            None
-        };
+        let line = render.as_mut().map(|render| render.line_number() - 1);
         Ok((
             line,
             Chunk {

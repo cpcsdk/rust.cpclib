@@ -936,7 +936,7 @@ pub fn start_emulator(emu: &Emulator, conf: &EmulatorConf) -> Result<(), String>
     runner.inner_run(&args, &())
 }
 
-pub fn get_emulator_window(emu: &Emulator, conf: &EmulatorConf) -> EmuWindow {
+pub fn get_emulator_window(emu: &Emulator, _conf: &EmulatorConf) -> EmuWindow {
     #[cfg(feature = "transparent-x11")]
     if conf.transparent {
         return get_emulator_window_xvfb(emu);

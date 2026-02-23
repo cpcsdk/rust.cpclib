@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use clap::{Arg, ArgAction, CommandFactory, Parser};
+use clap::{Arg, ArgAction, CommandFactory};
 use cpclib_cslcli::CslCliArgs;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapDerive;

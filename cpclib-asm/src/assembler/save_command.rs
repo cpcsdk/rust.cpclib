@@ -1,5 +1,3 @@
-#[cfg(feature = "hfe")]
-use cpclib_disc::hfe::Hfe;
 use cpclib_files::*;
 
 use super::Env;
