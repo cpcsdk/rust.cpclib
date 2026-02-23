@@ -1323,11 +1323,11 @@ mod tests {
     fn test_display_reset() {
         assert_eq!(
             CslInstruction::Reset(ResetType::Soft).to_string(),
-            "reset S"
+            "reset soft"
         );
         assert_eq!(
             CslInstruction::Reset(ResetType::Hard).to_string(),
-            "reset H"
+            "reset hard"
         );
     }
 
@@ -1387,10 +1387,12 @@ mod tests {
             let script1 = format!("{}\n", case);
             let parsed1 = parse_csl_with_rich_errors(&script1, None)
                 .expect(&format!("Failed to parse: {}", case));
-            let generated = parsed1.to_string();
-            let parsed2 = parse_csl_with_rich_errors(&generated, None)
-                .expect(&format!("Failed to parse generated: {}", generated));
-            assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
+            let generated1 = parsed1.to_string();
+            let parsed2 = parse_csl_with_rich_errors(&generated1, None)
+                .expect(&format!("Failed to parse generated: {}", generated1));
+            let generated2 = parsed2.to_string();
+            // Compare generated strings since to_string() adds csl_version instruction
+            assert_eq!(generated1, generated2, "Roundtrip failed for: {}", case);
         }
     }
 
@@ -1456,10 +1458,12 @@ mod tests {
             let script1 = format!("{}\n", case);
             let parsed1 = parse_csl_with_rich_errors(&script1, None)
                 .expect(&format!("Failed to parse: {}", case));
-            let generated = parsed1.to_string();
-            let parsed2 = parse_csl_with_rich_errors(&generated, None)
-                .expect(&format!("Failed to parse generated: {}", generated));
-            assert_eq!(parsed1, parsed2, "Roundtrip failed for: {}", case);
+            let generated1 = parsed1.to_string();
+            let parsed2 = parse_csl_with_rich_errors(&generated1, None)
+                .expect(&format!("Failed to parse generated: {}", generated1));
+            let generated2 = parsed2.to_string();
+            // Compare generated strings since to_string() adds csl_version instruction
+            assert_eq!(generated1, generated2, "Roundtrip failed for: {}", case);
         }
     }
 
@@ -1469,10 +1473,12 @@ mod tests {
 
         let script1 = "wait 800000 ; fin affichage\n";
         let parsed1 = parse_csl_with_rich_errors(script1, None).expect("Failed to parse");
-        let generated = parsed1.to_string();
+        let generated1 = parsed1.to_string();
         let parsed2 =
-            parse_csl_with_rich_errors(&generated, None).expect("Failed to parse generated");
-        assert_eq!(parsed1, parsed2, "Roundtrip failed with comments");
+            parse_csl_with_rich_errors(&generated1, None).expect("Failed to parse generated");
+        let generated2 = parsed2.to_string();
+        // Compare the generated strings since to_string() adds csl_version instruction
+        assert_eq!(generated1, generated2, "Roundtrip failed with comments");
     }
 
     #[test]
@@ -1688,18 +1694,18 @@ mod tests {
         }
 
         // Test Display implementation
-        let output = parsed.to_string();
-        assert_eq!(
-            output,
-            "keyboard_write 255,255,255,255,255,255,239,255,255,255\n"
-        );
+        let generated1 = parsed.to_string();
+        // Check that keyboard_write line is present (version line is added by to_string)
+        assert!(generated1.contains("keyboard_write 255,255,255,255,255,255,239,255,255,255\n"));
 
         // Test roundtrip
         let parsed2 =
-            parse_csl_with_rich_errors(&output, None).expect("Failed to parse generated output");
+            parse_csl_with_rich_errors(&generated1, None).expect("Failed to parse generated output");
+        let generated2 = parsed2.to_string();
+        // Compare generated strings since to_string() adds csl_version instruction
         assert_eq!(
-            parsed.len(),
-            parsed2.len(),
+            generated1,
+            generated2,
             "Roundtrip failed for keyboard_write"
         );
     }
