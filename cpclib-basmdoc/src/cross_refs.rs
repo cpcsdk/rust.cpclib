@@ -123,15 +123,12 @@ pub(crate) fn collect_cross_references<T: ListingElement + std::fmt::Display>(
                 })
                 .clone();
 
-            references
-                .entry(symbol)
-                .or_default()
-                .push(SymbolReference {
-                    source_file: Arc::clone(&source_file),
-                    line_number: line_num + 1, // 1-indexed for display
-                    context: context.clone(),
-                    highlighted_context: highlighted
-                });
+            references.entry(symbol).or_default().push(SymbolReference {
+                source_file: Arc::clone(&source_file),
+                line_number: line_num + 1, // 1-indexed for display
+                context: context.clone(),
+                highlighted_context: highlighted
+            });
         }
     }
 

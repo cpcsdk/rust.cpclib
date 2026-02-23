@@ -135,7 +135,10 @@ impl Emulator {
     }
 
     pub fn accept_hfe(&self) -> bool {
-        matches!(self, Emulator::Ace(_) | Emulator::SugarBoxV2(_) | Emulator::Amspirit(_))
+        matches!(
+            self,
+            Emulator::Ace(_) | Emulator::SugarBoxV2(_) | Emulator::Amspirit(_)
+        )
     }
 }
 

@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use std::ops::Sub;
 
 use cpclib_common::camino::Utf8PathBuf;
-use cpclib_cprcli::commands::Command;
 use cpclib_cpr::Cpr;
+use cpclib_cprcli::commands::Command;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapMatches;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
@@ -22,15 +22,12 @@ pub struct CprCliRunner<E: EventObserver> {
 impl<E: EventObserver> Default for CprCliRunner<E> {
     fn default() -> Self {
         let command = cpclib_cprcli::build_command();
-        let command = command
-            .name("cpr")
-            .no_binary_name(true)
-            .after_help(format!(
-                "cpr {} embedded by {} {}",
-                env!("CARGO_PKG_VERSION"),
-                built_info::PKG_NAME,
-                built_info::PKG_VERSION
-            ));
+        let command = command.name("cpr").no_binary_name(true).after_help(format!(
+            "cpr {} embedded by {} {}",
+            env!("CARGO_PKG_VERSION"),
+            built_info::PKG_NAME,
+            built_info::PKG_VERSION
+        ));
         Self {
             command,
             _phantom: Default::default()

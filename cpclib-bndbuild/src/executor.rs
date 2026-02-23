@@ -22,7 +22,9 @@ use crate::runners::ay::YmCruncher;
 use crate::runners::basmdoc::BasmDocRunner;
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cpc2img::CpcToImgRunner;
+use crate::runners::cprcli::CprCliRunner;
 use crate::runners::crunch::CrunchRunner;
+use crate::runners::csl::CslRunner;
 use crate::runners::disassembler::{BdasmRunner, Disassembler};
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
@@ -36,8 +38,6 @@ use crate::runners::hxcfe::HxcfeRunner;
 use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::snapshot::SnapshotRunner;
 use crate::runners::xfer::XferRunner;
-use crate::runners::cprcli::CprCliRunner;
-use crate::runners::csl::CslRunner;
 use crate::task::InnerTask;
 
 impl InnerTask {

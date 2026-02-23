@@ -285,8 +285,6 @@ impl BndBuilder {
         let layers = self.get_layered_dependencies_for(&p);
 
         #[cfg(feature = "rayon")]
-        
-
         #[cfg(not(feature = "rayon"))]
         let mut state;
 

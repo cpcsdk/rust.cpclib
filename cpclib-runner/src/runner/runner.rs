@@ -9,7 +9,6 @@ use clap::builder::Styles;
 use clap::builder::styling::AnsiColor;
 use clap::{ArgMatches, Command, FromArgMatches, Parser};
 use cpclib_common::itertools::Itertools;
-
 #[cfg(feature = "transparent-x11")]
 use transparent::{CommandExt, TransparentChild, TransparentRunner};
 
@@ -228,10 +227,12 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             cmd.spawn().map(|c| c.into())
         }
         .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
-        
+
         #[cfg(not(feature = "transparent-x11"))]
-        let mut cmd: MyChild = cmd.spawn().map(|c| c.into())
-        .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
+        let mut cmd: MyChild = cmd
+            .spawn()
+            .map(|c| c.into())
+            .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
 
         // the process is running in another thread. We'll collect its outputs in yet other threads
         let child_stdout = cmd

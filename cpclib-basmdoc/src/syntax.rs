@@ -84,11 +84,12 @@ pub(crate) fn highlight_z80_syntax(source: &str) -> String {
     let mut comment_ranges: Vec<(usize, usize)> = Vec::new();
     for (start, end, _) in &matches {
         if let Some(last) = comment_ranges.last_mut()
-            && *start <= last.1 {
-                // Overlapping or adjacent - merge
-                last.1 = (*end).max(last.1);
-                continue;
-            }
+            && *start <= last.1
+        {
+            // Overlapping or adjacent - merge
+            last.1 = (*end).max(last.1);
+            continue;
+        }
         comment_ranges.push((*start, *end));
     }
 

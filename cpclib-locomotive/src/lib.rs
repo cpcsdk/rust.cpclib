@@ -147,7 +147,7 @@ fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> std::io:
 }
 
 /// Build the clap Command for testing purposes
-#[must_use] 
+#[must_use]
 pub fn build_command() -> clap::Command {
     Cli::command()
 }

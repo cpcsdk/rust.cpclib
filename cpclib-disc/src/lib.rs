@@ -38,13 +38,13 @@ pub mod hideur;
 pub mod hfe;
 
 use custom_error::custom_error;
+#[cfg(feature = "hfe")]
+use hxcfe::{Hxcfe, ImageFormat};
 
 use crate::amsdos::AmsdosHeader;
 use crate::edsk::ExtendedDsk;
 #[cfg(feature = "hfe")]
 use crate::hfe::Hfe;
-#[cfg(feature = "hfe")]
-use hxcfe::{Hxcfe, ImageFormat};
 
 pub enum AnyDisc {
     Edsk(ExtendedDsk),
@@ -628,21 +628,27 @@ pub fn split_header<D: Into<VecDeque<u8>>>(data: D) -> (VecDeque<u8>, Option<Ams
     (data, header)
 }
 
-
 #[cfg(feature = "hfe")]
 pub fn convert_dsk_to_hfe<P: AsRef<Utf8Path>>(dsk_path: P, hfe_path: P) -> Result<(), String> {
     let hxc = Hxcfe::get();
     let format = ImageFormat::from_str("HFE").expect("HFE format should be supported");
-    let img = hxc.load(dsk_path.as_ref()).map_err(|e| format!("Error loading DSK: {e}"))?;
-    img.save(hfe_path.as_ref(), format).map_err(|e| format!("Error saving HFE: {e}"))?;
+    let img = hxc
+        .load(dsk_path.as_ref())
+        .map_err(|e| format!("Error loading DSK: {e}"))?;
+    img.save(hfe_path.as_ref(), format)
+        .map_err(|e| format!("Error saving HFE: {e}"))?;
     Ok(())
 }
 
 #[cfg(feature = "hfe")]
 pub fn convert_hfe_to_dsk<P: AsRef<Utf8Path>>(hfe_path: P, dsk_path: P) -> Result<(), String> {
     let hxc = Hxcfe::get();
-    let format = ImageFormat::from_str("AMSTRADCPC_DSK").expect("AMSTRADCPC_DSK format should be supported");
-    let img = hxc.load(hfe_path.as_ref()).map_err(|e| format!("Error loading HFE: {e}"))?;
-    img.save(dsk_path.as_ref(), format).map_err(|e| format!("Error saving DSK: {e}"))?;
+    let format =
+        ImageFormat::from_str("AMSTRADCPC_DSK").expect("AMSTRADCPC_DSK format should be supported");
+    let img = hxc
+        .load(hfe_path.as_ref())
+        .map_err(|e| format!("Error loading HFE: {e}"))?;
+    img.save(dsk_path.as_ref(), format)
+        .map_err(|e| format!("Error saving DSK: {e}"))?;
     Ok(())
 }

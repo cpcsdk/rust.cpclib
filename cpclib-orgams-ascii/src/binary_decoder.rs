@@ -636,7 +636,7 @@ impl StringTable {
                 // 0xE0 corresponds to the start of long labels.
                 // 0x60 - 0xDF are short labels (indices 0 - 127)
                 // So index starts at 128
-                
+
                 128 + (((*long as usize) << 8) | (*byte as usize)) - 0xE000
             }
         };
@@ -1549,7 +1549,8 @@ impl<'f, 'g> DisplayState<'f, 'g> {
             // handle some indentation
             let current_line_len = self.col_number();
             let indent = if current_line_len < TAB_COMMENT as usize {
-                " ".repeat(TAB_COMMENT as usize - current_line_len).to_string()
+                " ".repeat(TAB_COMMENT as usize - current_line_len)
+                    .to_string()
             }
             else {
                 " ".into()
@@ -2025,8 +2026,7 @@ fn parse_unsized_expression(input: &mut Input) -> OrgamsParseResult<Expression> 
 fn parse_multi_expression(input: &mut Input) -> OrgamsParseResult<Expression> {
     let _ = cut_err(EXP_MULTI_TERM_BEGIN.context(StrContext::Label("multi expression tag")))
         .parse_next(input)?; // Consume BEGIN
-    let members =
-        cut_err(parse_several_expression_member(EXP_MULTI_TERM_END)).parse_next(input)?;
+    let members = cut_err(parse_several_expression_member(EXP_MULTI_TERM_END)).parse_next(input)?;
     Ok(Expression::MultiTerm(members))
 }
 
@@ -2495,7 +2495,14 @@ pub fn parse_chunk(
                         // Printable bytes
                         let printable: String = raw_bytes
                             .iter()
-                            .map(|&b| if (32..=126).contains(&b) { b as char } else { '.' })
+                            .map(|&b| {
+                                if (32..=126).contains(&b) {
+                                    b as char
+                                }
+                                else {
+                                    '.'
+                                }
+                            })
                             .collect();
                         let reconstructed_bytes = line.bytes(labels);
                         println!(
@@ -2553,7 +2560,14 @@ pub fn parse_chunk(
                         let context_bytes = &remainder[..context_len];
                         let context_printable: String = context_bytes
                             .iter()
-                            .map(|&b| if (32..=126).contains(&b) { b as char } else { '.' })
+                            .map(|&b| {
+                                if (32..=126).contains(&b) {
+                                    b as char
+                                }
+                                else {
+                                    '.'
+                                }
+                            })
                             .collect();
 
                         println!(

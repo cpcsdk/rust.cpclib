@@ -369,14 +369,15 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
                 else if is_documentable(token, last_global_label.as_deref()) {
                     // Check if this specific item type should be included when undocumented
                     if let Some(item_type) = documentation_type(token, last_global_label.as_deref())
-                        && include_undocumented.should_include(&item_type) {
-                            doc.push((
-                                String::new(),
-                                Some(token),
-                                last_global_label.clone(),
-                                line_number
-                            ));
-                        }
+                        && include_undocumented.should_include(&item_type)
+                    {
+                        doc.push((
+                            String::new(),
+                            Some(token),
+                            last_global_label.clone(),
+                            line_number
+                        ));
+                    }
                 }
                 else {
                     // we add no comment, so we do nothing

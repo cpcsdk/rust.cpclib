@@ -1495,13 +1495,15 @@ impl ListingElement for LocatedTokenInner {
             },
             Self::OpCode(_, arg1, arg2, _) => {
                 if let Some(arg1) = arg1
-                    && let Some(expr) = arg1.get_expression() {
-                        symbols.extend(expr.symbols());
-                    }
+                    && let Some(expr) = arg1.get_expression()
+                {
+                    symbols.extend(expr.symbols());
+                }
                 if let Some(arg2) = arg2
-                    && let Some(expr) = arg2.get_expression() {
-                        symbols.extend(expr.symbols());
-                    }
+                    && let Some(expr) = arg2.get_expression()
+                {
+                    symbols.extend(expr.symbols());
+                }
             },
             Self::While(expr, _) => {
                 symbols.extend(expr.symbols());

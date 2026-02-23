@@ -95,7 +95,12 @@ impl Disc for Hfe {
         let encoding = TrackEncoding::IsoibmMfm;
         let sector_access = self.img.sector_access().unwrap();
         let mut cfg = sector_access
-            .search_sector(head.into(), (track as i32).into(), (sector_id as i32).into(), encoding)
+            .search_sector(
+                head.into(),
+                (track as i32).into(),
+                (sector_id as i32).into(),
+                encoding
+            )
             .ok_or_else(|| "sector not found".to_owned())?;
 
         cfg.write(encoding, bytes); // TODO handle error
@@ -118,7 +123,8 @@ impl Disc for Hfe {
     fn track_min_sector<S: Into<Head>>(&self, side: S, track: u8) -> u8 {
         let s: i32 = side.into().into();
         let access = self.img.sector_access().unwrap();
-        let sca = access.all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmMfm);
+        let sca =
+            access.all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmMfm);
         let sca = match sca {
             Some(sca) => sca,
             None => {

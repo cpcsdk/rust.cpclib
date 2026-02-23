@@ -1,9 +1,8 @@
 pub mod cli;
 
-use clap::CommandFactory;
-use fs_err::File;
 use std::io::{Read, Write};
 
+use clap::CommandFactory;
 use cpclib_basic::BasicProgram;
 use cpclib_catart::Locale;
 use cpclib_catart::basic_command::BasicCommandList;
@@ -18,6 +17,7 @@ use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManagerNonMut, BlocIdx};
 use cpclib_disc::disc::Disc;
 use cpclib_disc::edsk::Head;
 use cpclib_disc::{AnyDisc, open_disc};
+use fs_err::File;
 use log::{error, info};
 
 use crate::cli::{CatalogApp, CatalogCommand};
@@ -75,7 +75,6 @@ pub fn catalog_extraction(
     for chunk_idx in 0..64 {
         let offset = chunk_idx * 32;
         let entry_bytes = &catalog_bytes[offset..offset + 32];
-
 
         let status = entry_bytes[0];
 

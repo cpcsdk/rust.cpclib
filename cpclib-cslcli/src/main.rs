@@ -1,7 +1,7 @@
 use std::process;
 
 use clap::Parser;
-use cpclib_cslcli::{run, CslCliArgs};
+use cpclib_cslcli::{CslCliArgs, run};
 
 fn main() {
     let args = CslCliArgs::parse();

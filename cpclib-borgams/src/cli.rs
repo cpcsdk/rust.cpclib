@@ -16,15 +16,12 @@ struct BndOrgams {
 
     /// Output file (disc or tape image)
     #[arg(short, long, value_parser, help = "Output ascii file")]
-    pub output: String,
-
-
-    //pub cmd: Cat
+    pub output: String
+    // pub cmd: Cat
 }
 
 #[derive(Parser)]
 pub struct Cat {}
-
 
 pub fn build_cli() -> Command {
     BndOrgams::command()

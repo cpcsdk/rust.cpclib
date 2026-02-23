@@ -1249,7 +1249,8 @@ impl CslScript {
         for instruction in &self.instructions {
             if instruction.is_v1_2_feature() {
                 minimal = minimal.max(2);
-            } else if instruction.is_v1_1_feature() {
+            }
+            else if instruction.is_v1_1_feature() {
                 minimal = minimal.max(1);
             }
         }
@@ -1267,7 +1268,8 @@ impl fmt::Display for CslScript {
 
         if let Some(version) = version_inst {
             writeln!(f, "{}", version)?;
-        } else {
+        }
+        else {
             // workaround for amspirit that expect a version number
             writeln!(f, "{}", self.minimal_version())?;
         }
@@ -1699,13 +1701,12 @@ mod tests {
         assert!(generated1.contains("keyboard_write 255,255,255,255,255,255,239,255,255,255\n"));
 
         // Test roundtrip
-        let parsed2 =
-            parse_csl_with_rich_errors(&generated1, None).expect("Failed to parse generated output");
+        let parsed2 = parse_csl_with_rich_errors(&generated1, None)
+            .expect("Failed to parse generated output");
         let generated2 = parsed2.to_string();
         // Compare generated strings since to_string() adds csl_version instruction
         assert_eq!(
-            generated1,
-            generated2,
+            generated1, generated2,
             "Roundtrip failed for keyboard_write"
         );
     }

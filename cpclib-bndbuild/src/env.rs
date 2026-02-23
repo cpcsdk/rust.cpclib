@@ -8,7 +8,6 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
 ) -> Environment<'_> {
     let mut env = Environment::new();
 
-
     fn error(error: String) -> Result<String, Error> {
         Err(Error::new(ErrorKind::InvalidOperation, error))
     }
@@ -16,7 +15,8 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
     fn assert(condition: bool, error: String) -> Result<(), Error> {
         if condition {
             Ok(())
-        } else {
+        }
+        else {
             Err(Error::new(ErrorKind::InvalidOperation, error))
         }
     }

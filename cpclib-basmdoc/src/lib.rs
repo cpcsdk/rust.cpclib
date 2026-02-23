@@ -16,8 +16,8 @@ mod syntax;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use dashmap::DashMap;
 pub use cmdline::BasmDocCommand;
+use dashmap::DashMap;
 pub use generator::BasmDocGenerator;
 use indicatif::{ProgressBar, ProgressStyle};
 pub use models::{
@@ -73,11 +73,7 @@ impl Object for ItemDocumentation {
             Some("display_source_file") => Some(Value::from(&self.display_source_file as &str)),
             Some("line_number") => Some(Value::from(self.line_number)),
             Some("references") => {
-                let refs: Vec<Value> = self
-                    .references
-                    .iter()
-                    .map(Value::from_serialize)
-                    .collect();
+                let refs: Vec<Value> = self.references.iter().map(Value::from_serialize).collect();
                 Some(Value::from(refs))
             },
             Some("has_references") => Some(Value::from(!self.references.is_empty())),
@@ -133,11 +129,7 @@ impl Object for DocumentationPage {
         match name.as_str() {
             Some("file_name") => Some(Value::from(self.fname.clone())),
             Some("file_list") => {
-                let files = self
-                    .file_list()
-                    .iter()
-                    .map(Value::from)
-                    .collect::<Vec<_>>();
+                let files = self.file_list().iter().map(Value::from).collect::<Vec<_>>();
                 Some(Value::from(files))
             },
             Some("labels") => {
@@ -238,10 +230,9 @@ impl Object for DocumentationPage {
                                     .content
                                     .iter()
                                     .find(|it| it.source_file.ends_with(&fname))
-                                {
-                                    code =
-                                        fs_err::read_to_string(&it.source_file).unwrap_or_default();
-                                }
+                            {
+                                code = fs_err::read_to_string(&it.source_file).unwrap_or_default();
+                            }
 
                             files_vec.push(Value::from_object(ItemDocumentation {
                                 item: DocumentedItem::Source(code),
@@ -284,10 +275,9 @@ impl Object for DocumentationPage {
                                     .content
                                     .iter()
                                     .find(|it| it.source_file.ends_with(&mf.source_file))
-                                {
-                                    code =
-                                        fs_err::read_to_string(&it.source_file).unwrap_or_default();
-                                }
+                            {
+                                code = fs_err::read_to_string(&it.source_file).unwrap_or_default();
+                            }
 
                             files_vec.push(Value::from_object(ItemDocumentation {
                                 item: DocumentedItem::Source(code),
@@ -545,10 +535,11 @@ impl DocumentationPage {
                 && let Some(matching) = all_files_clone.iter().find(|f| {
                     std::path::Path::new(f).file_name().and_then(|s| s.to_str())
                         == Some(src_basename)
-                }) {
-                    it.display_source_file = matching.clone();
-                    it.source_file = matching.clone();
-                }
+                })
+            {
+                it.display_source_file = matching.clone();
+                it.source_file = matching.clone();
+            }
         }
 
         // Guarantee a Source item for every file in all_files
@@ -601,9 +592,10 @@ impl DocumentationPage {
                 && let Some(matching) = all_files_clone.iter().find(|f| {
                     std::path::Path::new(f).file_name().and_then(|s| s.to_str())
                         == Some(src_basename)
-                }) {
-                    it.display_source_file = matching.clone();
-                }
+                })
+            {
+                it.display_source_file = matching.clone();
+            }
         }
 
         merged
@@ -714,10 +706,7 @@ impl DocumentationPage {
         let mut all_refs: HashMap<String, Vec<SymbolReference>> = HashMap::new();
         for refs in file_refs {
             for (symbol, mut symbol_refs) in refs {
-                all_refs
-                    .entry(symbol)
-                    .or_default()
-                    .append(&mut symbol_refs);
+                all_refs.entry(symbol).or_default().append(&mut symbol_refs);
             }
         }
 
@@ -814,10 +803,7 @@ impl DocumentationPage {
         // Merge macro/function references
         for refs in macro_refs {
             for (symbol, mut symbol_refs) in refs {
-                all_refs
-                    .entry(symbol)
-                    .or_default()
-                    .append(&mut symbol_refs);
+                all_refs.entry(symbol).or_default().append(&mut symbol_refs);
             }
         }
 
@@ -976,9 +962,7 @@ impl DocumentationPage {
     }
 
     pub fn has_documentation(&self) -> bool {
-        self.content
-            .iter().find(|d| !d.item.is_source())
-            .is_some()
+        self.content.iter().find(|d| !d.item.is_source()).is_some()
     }
 
     /// Get a sorted list of unique source files (workspace-relative, normalized)
@@ -991,9 +975,10 @@ impl DocumentationPage {
         let p = std::path::Path::new(path);
         // If absolute, strip to file name (simulate workspace-relative)
         if p.is_absolute()
-            && let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
-                return fname.replace('\\', "/");
-            }
+            && let Some(fname) = p.file_name().and_then(|s| s.to_str())
+        {
+            return fname.replace('\\', "/");
+        }
         path.replace('\\', "/")
     }
 
@@ -1209,26 +1194,28 @@ impl DocumentationPage {
             };
 
             if let (Some(code), Some(id)) = (code_opt, id_opt)
-                && let Ok(compressed) = assets::compress_string(&code) {
-                    compressed_code_map.insert(id, compressed);
-                }
+                && let Ok(compressed) = assets::compress_string(&code)
+            {
+                compressed_code_map.insert(id, compressed);
+            }
         }
 
         // Compress all file sources
         for fname in &self.all_files {
             if let Some(source_code) = file_source_map.get(fname)
-                && !source_code.is_empty() {
-                    let highlighted =
-                        syntax::link_symbols_in_source(source_code, &symbols_for_highlight);
-                    let with_lines = format_with_line_numbers(&highlighted, 1);
-                    let file_id = format!(
-                        "file_{}",
-                        fname.replace("/", "_").replace(".", "_").replace("\\", "_")
-                    );
-                    if let Ok(compressed) = assets::compress_string(&with_lines) {
-                        compressed_code_map.insert(file_id, compressed);
-                    }
+                && !source_code.is_empty()
+            {
+                let highlighted =
+                    syntax::link_symbols_in_source(source_code, &symbols_for_highlight);
+                let with_lines = format_with_line_numbers(&highlighted, 1);
+                let file_id = format!(
+                    "file_{}",
+                    fname.replace("/", "_").replace(".", "_").replace("\\", "_")
+                );
+                if let Ok(compressed) = assets::compress_string(&with_lines) {
+                    compressed_code_map.insert(file_id, compressed);
                 }
+            }
         }
 
         // Pass compressed map to template

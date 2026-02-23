@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 use std::ops::Sub;
 
-use cpclib_cprcli::{build_command, commands::Command};
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_cpr::Cpr;
+use cpclib_cprcli::build_command;
+use cpclib_cprcli::commands::Command;
 
 fn main() {
     let cmd = build_command();

@@ -15,7 +15,7 @@ pub struct CslCliArgs {
 
     /// Enable verbose output
     #[arg(short, long)]
-    pub verbose: bool,
+    pub verbose: bool
 }
 
 /// Run the CSL CLI with the provided arguments

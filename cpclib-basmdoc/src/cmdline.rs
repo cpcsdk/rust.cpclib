@@ -5,7 +5,10 @@ use crate::{BasmDocGenerator, UndocumentedConfig};
 /// Generates assembly documentation in markdown format
 #[derive(Parser, Debug)]
 #[command(name = "basmdoc")]
-#[command(about = "Generates assembly documentation in markdown format", author = "Krusty/Benediction")]
+#[command(
+    about = "Generates assembly documentation in markdown format",
+    author = "Krusty/Benediction"
+)]
 pub struct BasmDocCommand {
     /// Input assembly file(s) or folder(s) (recursively searches for .asm files in folders)
     #[arg(required = true)]
@@ -45,7 +48,7 @@ pub struct BasmDocCommand {
 
     /// Disable HTML minification (enabled by default)
     #[arg(long = "no-minify")]
-    pub no_minify: bool,
+    pub no_minify: bool
 }
 
 impl BasmDocCommand {
@@ -54,12 +57,13 @@ impl BasmDocCommand {
         // Build undocumented config from flags
         let undocumented_config = if self.undocumented {
             UndocumentedConfig::all()
-        } else {
+        }
+        else {
             UndocumentedConfig {
                 macros: self.undocumented_macros,
                 functions: self.undocumented_functions,
                 labels: self.undocumented_labels,
-                equs: self.undocumented_equs,
+                equs: self.undocumented_equs
             }
         };
 
@@ -97,7 +101,10 @@ pub fn handle_matches(matches: &clap::ArgMatches, _cmd: &clap::Command) -> Resul
         .expect("required")
         .cloned()
         .collect();
-    let output = matches.get_one::<String>("output").expect("required").clone();
+    let output = matches
+        .get_one::<String>("output")
+        .expect("required")
+        .clone();
     let enable_wildcards = matches.get_flag("wildcards");
     let title = matches.get_one::<String>("title").cloned();
     let minify = !matches.get_flag("no-minify");
@@ -105,12 +112,13 @@ pub fn handle_matches(matches: &clap::ArgMatches, _cmd: &clap::Command) -> Resul
     // Build undocumented config from flags
     let undocumented_config = if matches.get_flag("undocumented") {
         UndocumentedConfig::all()
-    } else {
+    }
+    else {
         UndocumentedConfig {
             macros: matches.get_flag("undocumented-macros"),
             functions: matches.get_flag("undocumented-functions"),
             labels: matches.get_flag("undocumented-labels"),
-            equs: matches.get_flag("undocumented-equs"),
+            equs: matches.get_flag("undocumented-equs")
         }
     };
 

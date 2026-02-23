@@ -534,28 +534,34 @@ impl EmulatorConf {
         emu: &Emulator
     ) -> Result<Option<Utf8PathBuf>, String> {
         if let Some(drive_path) = drive {
-            if drive_path.extension().map(|ext| ext.eq_ignore_ascii_case("hfe")).unwrap_or(false) 
-                && !emu.accept_hfe() 
+            if drive_path
+                .extension()
+                .map(|ext| ext.eq_ignore_ascii_case("hfe"))
+                .unwrap_or(false)
+                && !emu.accept_hfe()
             {
                 // Convert HFE to temporary DSK
                 let tempfile = camino_tempfile::Builder::new()
                     .suffix(".dsk")
                     .tempfile()
                     .map_err(|e| format!("Failed to create temporary DSK file: {}", e))?;
-                
+
                 let dsk_path = tempfile.into_temp_path();
-                
+
                 // Keep the temporary file and get the path as Utf8PathBuf
-                let dsk_path_utf8 = dsk_path.keep()
+                let dsk_path_utf8 = dsk_path
+                    .keep()
                     .map_err(|e| format!("Failed to keep temporary DSK file: {}", e))?;
-                
+
                 cpclib_disc::convert_hfe_to_dsk(drive_path, &dsk_path_utf8)?;
-                
+
                 Ok(Some(dsk_path_utf8))
-            } else {
+            }
+            else {
                 Ok(Some(drive_path.clone()))
             }
-        } else {
+        }
+        else {
             Ok(None)
         }
     }
@@ -564,7 +570,11 @@ impl EmulatorConf {
     #[cfg(not(feature = "hfe"))]
     fn check_hfe_not_supported(drive: &Option<Utf8PathBuf>) -> Result<Option<Utf8PathBuf>, String> {
         if let Some(drive_path) = drive {
-            if drive_path.extension().map(|ext| ext.eq_ignore_ascii_case("hfe")).unwrap_or(false) {
+            if drive_path
+                .extension()
+                .map(|ext| ext.eq_ignore_ascii_case("hfe"))
+                .unwrap_or(false)
+            {
                 return Err(format!(
                     "HFE format is not supported. File '{}' requires the 'hfe' feature. \
                     Please rebuild with --features hfe or use a DSK file instead.",
@@ -572,7 +582,8 @@ impl EmulatorConf {
                 ));
             }
             Ok(Some(drive_path.clone()))
-        } else {
+        }
+        else {
             Ok(None)
         }
     }
@@ -587,13 +598,13 @@ impl EmulatorConf {
         // Convert HFE to DSK if needed
         #[cfg(feature = "hfe")]
         let drive_a = Self::convert_drive_if_needed(&self.drive_a, emu)?;
-        
+
         #[cfg(not(feature = "hfe"))]
         let drive_a = Self::check_hfe_not_supported(&self.drive_a)?;
 
         #[cfg(feature = "hfe")]
         let drive_b = Self::convert_drive_if_needed(&self.drive_b, emu)?;
-        
+
         #[cfg(not(feature = "hfe"))]
         let drive_b = Self::check_hfe_not_supported(&self.drive_b)?;
 

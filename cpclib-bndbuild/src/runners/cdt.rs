@@ -106,10 +106,7 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
             Ok(file) => file
         };
 
-        let config = &cli
-            .command
-            .as_ref().map(|cmd| cmd.config())
-            .unwrap();
+        let config = &cli.command.as_ref().map(|cmd| cmd.config()).unwrap();
 
         let tzx_data = TzxData::parse_from(file);
 

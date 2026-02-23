@@ -205,9 +205,10 @@ impl BasmDocGenerator {
             }
             else if entry_path.is_file()
                 && let Some(ext) = entry_path.extension()
-                    && ext.eq_ignore_ascii_case("asm") {
-                        asm_files.push(entry_path.to_string_lossy().to_string());
-                    }
+                && ext.eq_ignore_ascii_case("asm")
+            {
+                asm_files.push(entry_path.to_string_lossy().to_string());
+            }
         }
 
         Ok(asm_files)

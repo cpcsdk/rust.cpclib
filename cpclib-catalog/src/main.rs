@@ -16,7 +16,6 @@ use clap::Parser;
 use cpclib_catalog::cli::CatalogApp;
 use simple_logger::SimpleLogger;
 
-
 fn main() -> Result<(), String> {
     // XXX this has been disabled for compatbility reasons with gpu
     // XXX as this software has been used since ages, I have no idea if this is an issue or not
