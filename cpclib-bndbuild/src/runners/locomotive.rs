@@ -1,18 +1,17 @@
-use std::marker::PhantomData;
-
-use clap::{Arg, ArgAction, CommandFactory, Parser};
+use clap::{Arg, ArgAction, CommandFactory};
 use cpclib_common::clap::Command;
 use cpclib_locomotive::Cli;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
-use crate::built_info;
 use crate::task::LOCOMOTIVE_CMDS;
 
+// Note: LocomotiveRunner needs manual implementation because it uses
+// Cli::try_parse_from with special argument chaining, which the macro doesn't support
 pub struct LocomotiveRunner<E: EventObserver> {
     command: Command,
-    _phantom: PhantomData<E>
+    _phantom: std::marker::PhantomData<E>
 }
 
 impl<E: EventObserver> Default for LocomotiveRunner<E> {
@@ -39,8 +38,8 @@ impl<E: EventObserver> Default for LocomotiveRunner<E> {
             .no_binary_name(true)
             .after_help(format!(
                 "cpclib-locomotive embedded by {} {}",
-                built_info::PKG_NAME,
-                built_info::PKG_VERSION
+                crate::built_info::PKG_NAME,
+                crate::built_info::PKG_VERSION
             ));
         Self {
             command,

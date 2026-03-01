@@ -1,60 +1,27 @@
-use std::marker::PhantomData;
-
 use clap::{Arg, ArgAction, Parser};
 use cpclib_catalog::cli::CatalogApp;
 use cpclib_common::clap::{self, Command, CommandFactory};
-use cpclib_disc::dsk_manager_build_arg_parser;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
-use crate::built_info;
 use crate::task::{CATALOG_CMDS, DISC_CMDS};
 
-pub struct DiscManagerRunner<E: EventObserver> {
-    command: clap::Command,
-    _phantom: PhantomData<E>
+// Using the macro to generate DiscManagerRunner
+crate::define_custom_builder_runner_simple! {
+    DiscManagerRunner,
+    cpclib_disc::dsk_manager_build_arg_parser(),
+    DISC_CMDS[0],
+    cpclib_disc::built_info::PKG_NAME,
+    cpclib_disc::built_info::PKG_VERSION,
+    |matches| cpclib_disc::dsk_manager_handle(&matches).map_err(|e| e.to_string())
 }
 
+// Note: CatalogRunner needs manual implementation because it uses
+// CatalogApp::try_parse_from with special argument chaining
 pub struct CatalogRunner<E: EventObserver> {
     command: clap::Command,
-    _phantom: PhantomData<E>
-}
-
-impl<E: EventObserver> Default for DiscManagerRunner<E> {
-    fn default() -> Self {
-        let command = dsk_manager_build_arg_parser();
-        let command = command
-            .disable_help_flag(true)
-            .disable_version_flag(true)
-            .arg(
-                Arg::new("help")
-                    .long("help")
-                    .short('h')
-                    .action(ArgAction::SetTrue)
-                    .exclusive(true) // does not seem to work
-            )
-            .arg(
-                Arg::new("version")
-                    .long("version")
-                    .short('V')
-                    .help("Print version")
-                    .action(ArgAction::SetTrue)
-                    .exclusive(true)
-            )
-            .no_binary_name(true)
-            .after_help(format!(
-                "{} {} embedded by {} {}",
-                cpclib_disc::built_info::PKG_NAME,
-                cpclib_disc::built_info::PKG_VERSION,
-                built_info::PKG_NAME,
-                built_info::PKG_VERSION
-            ));
-        Self {
-            command,
-            _phantom: Default::default()
-        }
-    }
+    _phantom: std::marker::PhantomData<E>
 }
 
 impl<E: EventObserver> Default for CatalogRunner<E> {
@@ -68,7 +35,7 @@ impl<E: EventObserver> Default for CatalogRunner<E> {
                     .long("help")
                     .short('h')
                     .action(ArgAction::SetTrue)
-                    .exclusive(true) // does not seem to work
+                    .exclusive(true)
             )
             .arg(
                 Arg::new("version")
@@ -83,8 +50,8 @@ impl<E: EventObserver> Default for CatalogRunner<E> {
                 "{} {} embedded by {} {}",
                 cpclib_catalog::built_info::PKG_NAME,
                 cpclib_catalog::built_info::PKG_VERSION,
-                built_info::PKG_NAME,
-                built_info::PKG_VERSION
+                crate::built_info::PKG_NAME,
+                crate::built_info::PKG_VERSION
             ));
         Self {
             command,
@@ -99,33 +66,7 @@ impl<E: EventObserver> RunnerWithClap for CatalogRunner<E> {
     }
 }
 
-impl<E: EventObserver> RunnerWithClapMatches for DiscManagerRunner<E> {}
-
-impl<E: EventObserver> RunnerWithClap for DiscManagerRunner<E> {
-    fn get_clap_command(&self) -> &Command {
-        &self.command
-    }
-}
-
 impl<E: EventObserver> RunnerWithClapMatches for CatalogRunner<E> {}
-
-impl<E: EventObserver> Runner for DiscManagerRunner<E> {
-    type EventObserver = E;
-
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let matches = self.get_matches(itr, o)?;
-        if matches.is_none() {
-            return Ok(());
-        }
-        let matches = matches.unwrap();
-
-        cpclib_disc::dsk_manager_handle(&matches).map_err(|e| e.to_string())
-    }
-
-    fn get_command(&self) -> &str {
-        DISC_CMDS[0]
-    }
-}
 
 impl<E: EventObserver> Runner for CatalogRunner<E> {
     type EventObserver = E;

@@ -1,5 +1,9 @@
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
+// Macros for generating runner boilerplate
+#[macro_use]
+pub mod macros;
+
 pub mod assembler;
 pub mod ay;
 pub mod basmdoc;
