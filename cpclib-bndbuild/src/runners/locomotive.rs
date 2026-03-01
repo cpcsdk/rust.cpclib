@@ -1,4 +1,4 @@
-use clap::{Arg, ArgAction, CommandFactory};
+use clap::{Arg, ArgAction, CommandFactory, Parser};
 use cpclib_common::clap::Command;
 use cpclib_locomotive::Cli;
 use cpclib_runner::event::EventObserver;

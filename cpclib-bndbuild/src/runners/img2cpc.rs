@@ -11,6 +11,6 @@ crate::define_custom_builder_runner! {
     IMG2CPC_CMDS[0],
     cpclib_imgconverter::built_info::PKG_NAME,
     cpclib_imgconverter::built_info::PKG_VERSION,
-    |matches, command| cpclib_imgconverter::process_img2cpc(&matches, command.clone())
+    |matches, command: &clap::Command| cpclib_imgconverter::process_img2cpc(&matches, command.clone())
         .map_err(|e| e.to_string())
 }
