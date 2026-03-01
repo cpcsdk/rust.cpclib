@@ -7,7 +7,7 @@ use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, line_ending};
 use cpclib_common::winnow::combinator::{
     alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
-use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext};
+use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext, StrContextValue};
 use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
 use cpclib_common::winnow::token::{none_of, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
@@ -179,7 +179,7 @@ pub fn parse_expr_bracketed_list(
     let list = delimited(
         ("[", (my_space0, opt((line_ending, my_space0)))),
         separated(0.., located_expr, parse_comma_multiline),
-        ((my_space0, opt((line_ending, my_space0))), "]")
+        ((my_space0, opt((line_ending, my_space0))), not(b',').context(StrContext::Expected(StrContextValue::CharLiteral(']'))), "]")
     )
     .parse_next(input)?;
 
@@ -1320,4 +1320,38 @@ pub fn expr_list(input: &mut InnerZ80Span) -> ModalResult<Vec<LocatedExpr>, Z80P
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn string_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     parse_string.map(LocatedExpr::String).parse_next(input)
+}
+
+
+#[cfg(test)]
+pub mod test {
+    use crate::{parse_expr_bracketed_list, parser::parser::test::parse_test};
+
+    #[test]
+    pub fn test_list_parse() {
+        let exprs = [
+            "[0,1,2,3]",
+            "[0  ,  1,  2  ,  3]",
+            "[   0,1,2,3]",
+            "[0  ,  
+            1,  2  ,  3]",
+            "[
+               0,1,2,3]",
+        ];
+        for list in exprs {
+            assert!(parse_test(parse_expr_bracketed_list, dbg!(list)).is_ok());
+            dbg!(parse_test(parse_expr_bracketed_list, list).as_ref().unwrap());
+        }
+
+
+        let exprs = [
+            "[0,1,2,3,]",
+            "[0,1,2,
+                3,]",
+        ];
+        for list in exprs {
+            assert!(parse_test(parse_expr_bracketed_list, dbg!(list)).is_err());
+            dbg!(parse_test(parse_expr_bracketed_list, list).as_ref().unwrap_err());
+        }
+    }
 }
