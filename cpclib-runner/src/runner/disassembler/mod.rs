@@ -22,6 +22,11 @@ impl ExternDisassembler {
             ExternDisassembler::Disark(v) => v.configuration()
         }
     }
+
+    /// Returns all ExternDisassembler variants for testing
+    pub fn all() -> impl Iterator<Item = Self> {
+        [Self::Disark(Default::default())].into_iter()
+    }
 }
 
 #[cfg(test)]

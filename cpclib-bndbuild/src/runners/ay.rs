@@ -15,4 +15,15 @@ impl YmCruncher {
             YmCruncher::Miny => cpclib_runner::runner::ay::minimiser::MINIMISER_CMD
         }
     }
+
+    /// Returns all YmCruncher variants for testing
+    pub fn all() -> impl Iterator<Item = Self> {
+        [
+            #[cfg(feature = "fap")]
+            Self::Fap,
+            Self::Ayt,
+            Self::Miny,
+        ]
+        .into_iter()
+    }
 }

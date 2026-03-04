@@ -61,4 +61,19 @@ impl Emulator {
     pub fn new_facade() -> Self {
         Self::EmulatorFacade
     }
+
+    /// Returns all emulator variants for testing
+    pub fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::new_ace_default(),
+            Self::new_winape_default(),
+            Self::new_cpcec_default(),
+            Self::new_amspirit_default(),
+            Self::new_sugarbox_default(),
+            Self::new_cpcemupower_default(),
+            Self::new_capriceforever_default(),
+            Self::new_facade(),
+        ]
+        .into_iter()
+    }
 }

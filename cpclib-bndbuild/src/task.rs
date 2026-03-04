@@ -45,6 +45,17 @@ use crate::runners::fade::FADE_CMD;
 use crate::runners::hideur::HIDEUR_CMD;
 use crate::runners::tracker::{SongConverter, Tracker};
 
+/// Represents the kind of task based on how it's implemented
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TaskKind {
+    /// Task implemented directly in bndbuild (e.g., via macros)
+    Embedded,
+    /// Task that delegates to an external program that must be installed
+    Delegated,
+    /// Task that runs through an emulator
+    Emulated,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InnerTask {
     Assembler(Assembler, StandardTaskArguments),
@@ -884,7 +895,6 @@ impl InnerTask {
             | InnerTask::Tracker(_, t)
             | InnerTask::Xfer(t)
             | InnerTask::Cpr(t)
-            | InnerTask::Csl(t)
             | InnerTask::Csl(t) => t
         }
     }
@@ -939,6 +949,131 @@ impl InnerTask {
             InnerTask::Cpr(_) => false,
             InnerTask::Csl(_) => false
         }
+    }
+
+    /// Returns the kind of task based on its implementation
+    pub fn kind(&self) -> TaskKind {
+        match self {
+            // Embedded tasks - implemented directly in bndbuild
+            InnerTask::Assembler(Assembler::Basm, _) => TaskKind::Embedded,
+            InnerTask::BasmDoc(_) => TaskKind::Embedded,
+            InnerTask::BndBuild(_) => TaskKind::Embedded,
+            InnerTask::Catalog(_) => TaskKind::Embedded,
+            InnerTask::CpcToImg(_) => TaskKind::Embedded,
+            InnerTask::Cpr(_) => TaskKind::Embedded,
+            InnerTask::Csl(_) => TaskKind::Embedded,
+            InnerTask::Crunch(_) => TaskKind::Embedded,
+            InnerTask::Disassembler(Disassembler::Bdasm, _) => TaskKind::Embedded,
+            InnerTask::Disc(_) => TaskKind::Embedded,
+            InnerTask::Fade(_) => TaskKind::Embedded,
+            InnerTask::Hideur(_) => TaskKind::Embedded,
+            InnerTask::Hxcfe(_) => TaskKind::Embedded,
+            InnerTask::ImgToCpc(_) => TaskKind::Embedded,
+            InnerTask::Locomotive(_) => TaskKind::Embedded,
+            InnerTask::Snapshot(_) => TaskKind::Embedded,
+            InnerTask::Xfer(_) => TaskKind::Embedded,
+            InnerTask::Cdt(..) => TaskKind::Embedded,
+
+            // Emulated tasks - run through an emulator
+            InnerTask::Assembler(Assembler::Orgams, _) => TaskKind::Emulated,
+
+            // Delegated tasks - external programs that need to be installed
+            InnerTask::Assembler(Assembler::Extern(_), _) => TaskKind::Delegated,
+            InnerTask::Convgeneric(_) => TaskKind::Delegated,
+            InnerTask::Disassembler(Disassembler::Extern(_), _) => TaskKind::Delegated,
+            InnerTask::Emulator(..) => TaskKind::Delegated,
+            InnerTask::Grafx2(_) => TaskKind::Delegated,
+            InnerTask::HspCompiler(_) => TaskKind::Delegated,
+            InnerTask::ImpDsk(_) => TaskKind::Delegated,
+            InnerTask::Martine(_) => TaskKind::Delegated,
+            InnerTask::SongConverter(_, _) => TaskKind::Delegated,
+            InnerTask::Tracker(_, _) => TaskKind::Delegated,
+            InnerTask::YmCruncher(_, _) => TaskKind::Delegated,
+
+            // File system operations - could be considered embedded
+            InnerTask::Cp(_) | InnerTask::Mv(_) | InnerTask::Mkdir(_) | InnerTask::Rm(_) => {
+                TaskKind::Embedded
+            }
+
+            // Utilities
+            InnerTask::Echo(_) => TaskKind::Embedded,
+            InnerTask::Extern(_) => TaskKind::Delegated,
+        }
+    }
+
+    /// Returns an iterator over all possible InnerTask variants for testing
+    pub fn all() -> impl Iterator<Item = Self> {
+        let empty_args = StandardTaskArguments::new("");
+
+        // Collect all tasks into a vec
+        let mut tasks = Vec::new();
+
+        // Add all assemblers (including external ones)
+        for assembler in Assembler::all() {
+            tasks.push(Self::Assembler(assembler, empty_args.clone()));
+        }
+
+        // Add all disassemblers (including external ones)
+        for disassembler in Disassembler::all() {
+            tasks.push(Self::Disassembler(disassembler, empty_args.clone()));
+        }
+
+        // Add all emulators
+        for emulator in Emulator::all() {
+            tasks.push(Self::Emulator(emulator, empty_args.clone()));
+        }
+
+        // Add all CDT managers
+        for cdt in CdtManager::all() {
+            tasks.push(Self::Cdt(cdt, empty_args.clone()));
+        }
+
+        // Add all trackers
+        for tracker in Tracker::all() {
+            tasks.push(Self::Tracker(tracker, empty_args.clone()));
+        }
+
+        // Add all song converters
+        for converter in SongConverter::all() {
+            tasks.push(Self::SongConverter(converter, empty_args.clone()));
+        }
+
+        // Add all YM crunchers
+        for cruncher in YmCruncher::all() {
+            tasks.push(Self::YmCruncher(cruncher, empty_args.clone()));
+        }
+
+        // Add simple tasks (no enum variants)
+        tasks.extend(vec![
+            Self::BasmDoc(empty_args.clone()),
+            Self::BndBuild(empty_args.clone()),
+            Self::Catalog(empty_args.clone()),
+            Self::Convgeneric(empty_args.clone()),
+            Self::Cp(empty_args.clone()),
+            Self::CpcToImg(empty_args.clone()),
+            Self::Cpr(empty_args.clone()),
+            Self::Csl(empty_args.clone()),
+            Self::Crunch(empty_args.clone()),
+            Self::Disc(empty_args.clone()),
+            Self::Echo(empty_args.clone()),
+            Self::Extern(empty_args.clone()),
+            Self::Fade(empty_args.clone()),
+            Self::Grafx2(empty_args.clone()),
+            Self::Hideur(empty_args.clone()),
+            Self::HspCompiler(empty_args.clone()),
+            Self::Hxcfe(empty_args.clone()),
+            Self::ImgToCpc(empty_args.clone()),
+            Self::ImpDsk(empty_args.clone()),
+            Self::Locomotive(empty_args.clone()),
+            Self::Martine(empty_args.clone()),
+            Self::Mkdir(empty_args.clone()),
+            Self::Mv(empty_args.clone()),
+            Self::Rm(empty_args.clone()),
+            Self::Snapshot(empty_args.clone()),
+            Self::Xfer(empty_args.clone()),
+        ]);
+
+        tasks.into_iter()
     }
 }
 

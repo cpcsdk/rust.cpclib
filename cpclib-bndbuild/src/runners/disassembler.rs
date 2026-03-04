@@ -21,6 +21,17 @@ impl Disassembler {
             Disassembler::Extern(d) => d.get_command()
         }
     }
+
+    /// Returns all embedded disassembler variants (excludes Extern)
+    pub fn all_embedded() -> impl Iterator<Item = Self> {
+        [Self::Bdasm].into_iter()
+    }
+
+    /// Returns all disassembler variants including external ones
+    pub fn all() -> impl Iterator<Item = Self> {
+        Self::all_embedded()
+            .chain(ExternDisassembler::all().map(Self::Extern))
+    }
 }
 
 // Using the macro to generate all the boilerplate

@@ -21,6 +21,11 @@ impl CdtManager {
             CdtManager::Rtzx => RTZX_CMDS[0]
         }
     }
+
+    /// Returns all CdtManager variants for testing
+    pub fn all() -> impl Iterator<Item = Self> {
+        [Self::Rtzx].into_iter()
+    }
 }
 
 #[derive(Clone, Debug)]

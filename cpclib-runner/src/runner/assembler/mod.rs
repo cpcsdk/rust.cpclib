@@ -39,6 +39,17 @@ impl ExternAssembler {
             ExternAssembler::Vasm(r) => r.configuration()
         }
     }
+
+    /// Returns all ExternAssembler variants for testing
+    pub fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::Rasm(Default::default()),
+            Self::Sjasmplus(Default::default()),
+            Self::Uz80(Default::default()),
+            Self::Vasm(Default::default()),
+        ]
+        .into_iter()
+    }
 }
 #[cfg(test)]
 mod test {

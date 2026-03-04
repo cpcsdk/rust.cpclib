@@ -25,6 +25,11 @@ impl Tracker {
             Default::default()
         ))
     }
+
+    /// Returns all Tracker variants for testing
+    pub fn all() -> impl Iterator<Item = Self> {
+        [Self::new_at3_default(), Self::new_chipnsfx_default()].into_iter()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -60,5 +65,22 @@ impl SongConverter {
         SongToWav, new_song_to_wav_default
         SongToYm, new_song_to_ym_default
         Z80Profiler, new_z80profiler_default
+    }
+
+    /// Returns all SongConverter variants for testing
+    pub fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::new_song_to_akm_default(),
+            Self::new_song_to_akg_default(),
+            Self::new_song_to_aky_default(),
+            Self::new_song_to_events_default(),
+            Self::new_song_to_raw_default(),
+            Self::new_song_to_sound_effects_default(),
+            Self::new_song_to_vgm_default(),
+            Self::new_song_to_wav_default(),
+            Self::new_song_to_ym_default(),
+            Self::new_z80profiler_default(), // TODO move it elswhere as it is not a song stuff... it is just distributed with them
+        ]
+        .into_iter()
     }
 }

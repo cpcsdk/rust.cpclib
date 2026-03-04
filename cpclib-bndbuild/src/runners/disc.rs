@@ -30,6 +30,7 @@ impl<E: EventObserver> Default for CatalogRunner<E> {
         let command = command
             .disable_help_flag(true)
             .disable_version_flag(true)
+            .subcommand_required(false)  // Allow --help without subcommand
             .arg(
                 Arg::new("help")
                     .long("help")
@@ -71,7 +72,14 @@ impl<E: EventObserver> RunnerWithClapMatches for CatalogRunner<E> {}
 impl<E: EventObserver> Runner for CatalogRunner<E> {
     type EventObserver = E;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], _o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+        // Check for help and version flags first, using get_matches
+        let matches = self.get_matches(itr, o)?;
+        if matches.is_none() {
+            return Ok(());
+        }
+        
+        // Process the actual command
         let app = CatalogApp::try_parse_from(
             [self.get_command().to_string()]
                 .into_iter()

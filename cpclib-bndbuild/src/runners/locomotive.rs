@@ -20,6 +20,7 @@ impl<E: EventObserver> Default for LocomotiveRunner<E> {
         let command = command
             .disable_help_flag(true)
             .disable_version_flag(true)
+            .subcommand_required(false)  // Allow --help without subcommand
             .arg(
                 Arg::new("help")
                     .long("help")
@@ -59,7 +60,13 @@ impl<E: EventObserver> RunnerWithClapMatches for LocomotiveRunner<E> {}
 impl<E: EventObserver> Runner for LocomotiveRunner<E> {
     type EventObserver = E;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], _o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+        // Check for help and version flags first, using get_matches
+        let matches = self.get_matches(itr, o)?;
+        if matches.is_none() {
+            return Ok(());
+        }
+        
         let cli = Cli::try_parse_from(
             [self.get_command().to_string()]
                 .into_iter()

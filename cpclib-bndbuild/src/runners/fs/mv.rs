@@ -1,57 +1,41 @@
-use std::marker::PhantomData;
-
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::clap::{self, Arg, ArgAction};
+use cpclib_common::clap::{self, CommandFactory, FromArgMatches, Parser};
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::RunnerWithClap;
 
 use crate::runners::Runner;
 use crate::task::MV_CMDS;
-use crate::{built_info, expand_glob};
+use crate::expand_glob;
 
-pub struct MvRunner<E: EventObserver> {
-    _phantom: PhantomData<E>
+#[derive(Parser, Debug)]
+#[command(
+    name = "mv",
+    about = "Rename files."
+)]
+struct MvArgs {
+    /// Files to move. With 2 files, first one is renamed as second one. With more than 2 files, last one is the destination directory.
+    #[arg(required = true, num_args = 2.., help = "Files to move. Last one is the destination")]
+    files: Vec<String>,
 }
 
-impl<E: EventObserver> Default for MvRunner<E> {
-    fn default() -> Self {
-        Self {
-            _phantom: PhantomData::<E>
-        }
-    }
-}
-
-impl<E: EventObserver> MvRunner<E> {
-    pub fn render_help() -> String {
-        clap::Command::new("mv")
-            .before_help("Rename files.")
-            .disable_help_flag(true)
-            .after_help(format!(
-                "Inner command of {} {}",
-                built_info::PKG_NAME,
-                built_info::PKG_VERSION
-            ))
-            .arg(
-                Arg::new("arguments")
-                    .action(ArgAction::Append)
-                    .help("Files to move. With 2 files, first one is renamed as second one. With more than 2 files, last one is the destination directory.")
-					.num_args(2..)
-            )
-            .render_long_help()
-            .to_string()
-    }
-}
+crate::define_fs_runner_struct!(MvRunner, MvArgs);
 
 impl<E: EventObserver> Runner for MvRunner<E> {
     type EventObserver = E;
 
-    fn inner_run<S: AsRef<str>>(&self, itr: &[S], _o: &E) -> Result<(), String> {
+    fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+        let Some(matches) = self.get_matches(itr, o)? else {
+            return Ok(());
+        };
+        let args = MvArgs::from_arg_matches(&matches)
+            .map_err(|e| e.to_string())?;
+        
         let mut errors = String::new();
 
-        let fnames = itr
+        let fnames = args.files
             .iter()
-            .map(|s| s.as_ref())
-            .flat_map(expand_glob)
+            .flat_map(|s| expand_glob(s.as_str()))
             .collect_vec();
         let mut files = fnames.iter().map(Utf8Path::new).collect_vec();
         let nb_args = files.len();
@@ -101,7 +85,6 @@ mod test {
     use crate::runners::fs::mv::MvRunner;
 
     #[test]
-
     fn test_move_1file_successful() {
         // prepare the files for the test
         let mut src = camino_tempfile::NamedUtf8TempFile::new().unwrap();
@@ -122,5 +105,146 @@ mod test {
             .unwrap();
         assert!(dst.exists());
         assert!(!src.exists());
+    }
+
+    #[test]
+    fn test_mv_rename_file() {
+        // Create a temporary file
+        let mut temp = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        temp.as_file_mut().write_all(b"test content").unwrap();
+        let src_path = temp.into_temp_path();
+        
+        // Create destination path in same directory
+        let dst_path = src_path.parent().unwrap().join("renamed.txt");
+        
+        assert!(src_path.exists());
+        assert!(!dst_path.exists());
+
+        // Run mv command
+        let mv = MvRunner::default();
+        mv.inner_run(&[src_path.to_string(), dst_path.to_string()], &()).unwrap();
+        
+        // File should be renamed
+        assert!(!src_path.exists());
+        assert!(dst_path.exists());
+        
+        // Cleanup
+        let _ = fs_err::remove_file(dst_path);
+    }
+
+    #[test]
+    fn test_mv_multiple_files_to_directory() {
+        // Create temporary files
+        let mut temp1 = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let mut temp2 = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        temp1.as_file_mut().write_all(b"test1").unwrap();
+        temp2.as_file_mut().write_all(b"test2").unwrap();
+        
+        let path1 = temp1.into_temp_path();
+        let path2 = temp2.into_temp_path();
+        
+        // Create destination directory
+        let dest_dir = camino_tempfile::tempdir().unwrap();
+        let dest_path = dest_dir.path().to_path_buf();
+        
+        assert!(path1.exists());
+        assert!(path2.exists());
+        assert!(dest_path.exists());
+        assert!(dest_path.is_dir());
+
+        // Run mv command with multiple files
+        let mv = MvRunner::default();
+        mv.inner_run(
+            &[path1.to_string(), path2.to_string(), dest_path.to_string()], 
+            &()
+        ).unwrap();
+        
+        // Files should be moved to directory
+        assert!(!path1.exists());
+        assert!(!path2.exists());
+        assert!(dest_path.join(path1.file_name().unwrap()).exists());
+        assert!(dest_path.join(path2.file_name().unwrap()).exists());
+    }
+
+    #[test]
+    fn test_mv_file_to_directory() {
+        // Create a temporary file
+        let mut temp = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        temp.as_file_mut().write_all(b"test").unwrap();
+        let file_path = temp.into_temp_path();
+        
+        // Create destination directory
+        let dest_dir = camino_tempfile::tempdir().unwrap();
+        let dest_path = dest_dir.path().to_path_buf();
+        
+        assert!(file_path.exists());
+        assert!(dest_path.is_dir());
+
+        // Run mv command
+        let mv = MvRunner::default();
+        mv.inner_run(&[file_path.to_string(), dest_path.to_string()], &()).unwrap();
+        
+        // File should be moved into directory
+        assert!(!file_path.exists());
+        assert!(dest_path.join(file_path.file_name().unwrap()).exists());
+    }
+
+    #[test]
+    fn test_mv_multiple_files_to_non_directory_fails() {
+        // Create temporary files
+        let mut temp1 = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let mut temp2 = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        let mut dest_file = camino_tempfile::NamedUtf8TempFile::new().unwrap();
+        
+        temp1.as_file_mut().write_all(b"test1").unwrap();
+        temp2.as_file_mut().write_all(b"test2").unwrap();
+        dest_file.as_file_mut().write_all(b"dest").unwrap();
+        
+        let path1 = temp1.into_temp_path();
+        let path2 = temp2.into_temp_path();
+        let dest_path = dest_file.into_temp_path();
+        
+        // Run mv command - should fail because dest is not a directory
+        let mv = MvRunner::default();
+        let result = mv.inner_run(
+            &[path1.to_string(), path2.to_string(), dest_path.to_string()], 
+            &()
+        );
+        
+        // Should return an error
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("must be a directory"));
+    }
+
+    #[test]
+    fn test_mv_nonexistent_file() {
+        let temp_dir = camino_tempfile::tempdir().unwrap();
+        let dest = temp_dir.path().join("dest.txt");
+        
+        // Try to move a file that doesn't exist
+        let mv = MvRunner::default();
+        let result = mv.inner_run(&["/nonexistent/file.txt", dest.as_str()], &());
+        
+        // Should return an error
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Error when moving"));
+    }
+
+    #[test]
+    fn test_mv_help_flag() {
+        let mv = MvRunner::default();
+        let result = mv.inner_run(&["--help"], &());
+        
+        // Should succeed (help is printed via emit_stdout)
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_mv_version_flag() {
+        let mv = MvRunner::default();
+        let result = mv.inner_run(&["--version"], &());
+        
+        // Should succeed (version is printed via emit_stdout)
+        assert!(result.is_ok());
     }
 }

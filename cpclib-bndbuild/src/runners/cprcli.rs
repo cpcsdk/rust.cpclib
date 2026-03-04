@@ -22,12 +22,32 @@ pub struct CprCliRunner<E: EventObserver> {
 impl<E: EventObserver> Default for CprCliRunner<E> {
     fn default() -> Self {
         let command = cpclib_cprcli::build_command();
-        let command = command.name("cpr").no_binary_name(true).after_help(format!(
-            "cpr {} embedded by {} {}",
-            env!("CARGO_PKG_VERSION"),
-            built_info::PKG_NAME,
-            built_info::PKG_VERSION
-        ));
+        let command = command
+            .name("cpr")
+            .no_binary_name(true)
+            .disable_help_flag(true)
+            .disable_version_flag(true)
+            .arg(
+                clap::Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(clap::ArgAction::SetTrue)
+                    .exclusive(true)
+            )
+            .arg(
+                clap::Arg::new("version")
+                    .long("version")
+                    .short('V')
+                    .help("Print version")
+                    .action(clap::ArgAction::SetTrue)
+                    .exclusive(true)
+            )
+            .after_help(format!(
+                "cpr {} embedded by {} {}",
+                env!("CARGO_PKG_VERSION"),
+                built_info::PKG_NAME,
+                built_info::PKG_VERSION
+            ));
         Self {
             command,
             _phantom: Default::default()

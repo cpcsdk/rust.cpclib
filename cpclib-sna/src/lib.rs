@@ -18,8 +18,12 @@ pub mod flags;
 mod memory;
 pub mod parse;
 
+// Import clap for derive macro (used even with cmdline feature)
 #[cfg(feature = "cmdline")]
-use cpclib_common::clap::{Arg, ArgAction, ArgMatches, Command};
+use cpclib_common::clap;
+
+#[cfg(feature = "cmdline")]
+use cpclib_common::clap::{ArgMatches, Command, CommandFactory, Parser};
 
 #[cfg(feature = "interactive")]
 pub mod cli;
@@ -1005,7 +1009,7 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
 
     let fname = matches.get_one::<String>("OUTPUT").unwrap();
     let version = matches
-        .get_one::<String>("version")
+        .get_one::<String>("sna-version")
         .unwrap()
         .parse::<u8>()
         .unwrap()
@@ -1018,6 +1022,73 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
 }
 
 #[cfg(feature = "cmdline")]
+/// Amstrad CPC snapshot manipulation
+#[cfg(feature = "cmdline")]
+#[derive(Parser, Debug)]
+#[command(
+    name = "createSnapshot",
+    version = built_info::PKG_VERSION,
+    author = "Krusty/Benediction",
+    about = "Amstrad CPC snapshot manipulation",
+    after_help = "This tool tries to be similar than Ramlaid's one",
+    disable_version_flag = true
+)]
+pub struct SnapshotCli {
+    /// Display informations on the loaded snapshot
+    #[arg(long, requires = "in_snapshot")]
+    pub info: bool,
+
+    /// Display debugging information while manipulating the snapshot
+    #[arg(long)]
+    pub debug: bool,
+
+    /// Sets the output file to generate
+    #[arg(
+        conflicts_with = "flags",
+        conflicts_with = "info",
+        conflicts_with = "get_token",
+        required = true,
+        last = true
+    )]
+    pub output: Option<String>,
+
+    /// Load <INFILE> snapshot file
+    #[arg(short = 'i', long = "inSnapshot", value_name = "INFILE")]
+    pub in_snapshot: Option<String>,
+
+    /// Specify a file to include. -l fname address
+    #[arg(short = 'l', long, value_names = ["FILE", "ADDRESS"])]
+    pub load: Vec<String>,
+
+    /// Display the value of a snapshot token
+    #[arg(short = 'g', long = "getToken", requires = "in_snapshot")]
+    pub get_token: Vec<String>,
+
+    /// Set snapshot token <$1> to value <$2>
+    /// Use <$1>:<val> to set array value
+    /// ex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20
+    #[arg(short = 's', long = "setToken", value_names = ["TOKEN", "VALUE"])]
+    pub set_token: Vec<String>,
+
+    /// Put <$2> byte at <$1> address in snapshot memory
+    #[arg(short = 'p', long = "putData", value_names = ["ADDRESS", "BYTE"])]
+    pub put_data: Vec<String>,
+
+    /// Version of the saved snapshot
+    #[arg(long = "sna-version", value_parser = ["1", "2", "3"], default_value = "3")]
+    pub sna_version: String,
+
+    /// List the flags and exit
+    #[arg(long)]
+    pub flags: bool,
+
+    /// Run the CLI interface for an interactive manipulation of snapshot
+    #[cfg(feature = "interactive")]
+    #[arg(long, requires = "in_snapshot", conflicts_with = "output")]
+    pub cli: bool,
+}
+
+#[cfg(feature = "cmdline")]
 pub fn build_arg_parser() -> Command {
     let desc_before = format!(
         "Profile {} compiled: {}",
@@ -1025,91 +1096,7 @@ pub fn build_arg_parser() -> Command {
         built_info::BUILT_TIME_UTC
     );
 
-    let cmd = Command::new("createSnapshot")
-                          .version(built_info::PKG_VERSION)
-                          .disable_version_flag(true)
-                          .author("Krusty/Benediction")
-                          .about("Amstrad CPC snapshot manipulation")
-                          .before_help(desc_before)
-                          .after_help("This tool tries to be similar than Ramlaid's one")
-                          .arg(Arg::new("info")
-                               .help("Display informations on the loaded snapshot")
-                               .long("info")
-                               .requires("inSnapshot")
-                               .action(ArgAction::SetTrue)
-                           )
-                          .arg(Arg::new("debug")
-                            .help("Display debugging information while manipulating the snapshot")
-                            .long("debug")
-                            .action(ArgAction::SetTrue)
-                          )
-                          .arg(Arg::new("OUTPUT")
-                               .help("Sets the output file to generate")
-                               .conflicts_with("flags")
-                               .conflicts_with("info")
-                               .conflicts_with("getToken")
-                               .last(true)
-                               .required(true))
-                          .arg(Arg::new("inSnapshot")
-                               .short('i')
-                               .long("inSnapshot")
-                               .value_name("INFILE")
-                               .number_of_values(1)
-                               .help("Load <INFILE> snapshot file")
-                               )
-                          .arg(Arg::new("load")
-                               .short('l')
-                               .long("load")
-                               .action(ArgAction::Append)
-                               .number_of_values(2)
-                               .help("Specify a file to include. -l fname address"))
-                          .arg(Arg::new("getToken")
-                               .short('g')
-                               .long("getToken")
-                               .action(ArgAction::Append)
-                               .number_of_values(1)
-                               .help("Display the value of a snapshot token")
-                               .requires("inSnapshot")
-                           )
-                          .arg(Arg::new("setToken")
-                               .short('s')
-                               .long("setToken")
-                               .action(ArgAction::Append)
-                               .number_of_values(2)
-                               .help("Set snapshot token <$1> to value <$2>\nUse <$1>:<val> to set array value\n\t\tex '-s CRTC_REG:6 20' : Set CRTC register 6 to 20"))
-                          .arg(Arg::new("putData")
-                               .short('p')
-                               .long("putData")
-                               .action(ArgAction::Append)
-                               .number_of_values(2)
-                               .help("Put <$2> byte at <$1> address in snapshot memory")
-
-                            )
-                          .arg(Arg::new("version")
-                                .short('v')
-                                .long("version")
-                                .number_of_values(1)
-                                .value_parser(["1", "2", "3"])
-                                .help("Version of the saved snapshot.")
-                                .default_value("3")
-                           )
-                          .arg(Arg::new("flags")
-                                .help("List the flags and exit")
-                               .long("flags")
-                               .action(ArgAction::SetTrue)
-                        );
-
-    #[cfg(feature = "interactive")]
-    let cmd = cmd.arg(
-        Arg::new("cli")
-            .help("Run the CLI interface for an interactive manipulation of snapshot")
-            .long("cli")
-            .requires("inSnapshot")
-            .conflicts_with("OUTPUT")
-            .action(ArgAction::SetTrue)
-    );
-
-    cmd
+    SnapshotCli::command().before_help(desc_before)
 }
 
 #[cfg(test)]

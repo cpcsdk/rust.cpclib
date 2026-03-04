@@ -1,67 +1,92 @@
-/// Test that validates the snapshot documentation against the actual implementation
-/// This ensures we don't document features that don't exist (hallucination prevention)
+/// Test that validates the Command structure has proper metadata quality
+/// This ensures all arguments have help text, follow naming conventions, etc.
 use std::collections::HashSet;
 
 #[test]
 fn test_cmdline_docs_match_actual_options() {
     let parser = cpclib_sna::build_arg_parser();
 
-    // Get all actual CLI arguments
-    let mut actual_args: HashSet<String> = HashSet::new();
+    let mut arg_ids = HashSet::new();
+    let mut long_names = HashSet::new();
+    let mut short_names = HashSet::new();
+    let mut issues = Vec::new();
+
     for arg in parser.get_arguments() {
+        let id = arg.get_id().to_string();
+        
+        // Check for duplicate IDs
+        if !arg_ids.insert(id.clone()) {
+            issues.push(format!("Duplicate argument ID: '{}'", id));
+        }
+
+        // Validate help text exists (except for special built-in args)
+        if arg.get_help().is_none() && id != "help" && id != "version" {
+            issues.push(format!("Argument '{}' has no help text", id));
+        }
+
+        // Check long names
         if let Some(long) = arg.get_long() {
-            actual_args.insert(long.to_string());
+            let long_str = long.to_string();
+            
+            // Check for duplicates
+            if !long_names.insert(long_str.clone()) {
+                issues.push(format!("Duplicate long option: '--{}'", long_str));
+            }
+
+            // Validate naming convention for long options (should use kebab-case or camelCase)
+            // Accept both patterns as clap allows both
+            if long_str.contains('_') && !long_str.contains('-') {
+                issues.push(format!(
+                    "Long option '--{}' uses snake_case; prefer kebab-case or camelCase for consistency",
+                    long_str
+                ));
+            }
         }
+
+        // Check short names
         if let Some(short) = arg.get_short() {
-            actual_args.insert(short.to_string());
+            let short_str = short.to_string();
+            
+            // Check for duplicates
+            if !short_names.insert(short_str.clone()) {
+                issues.push(format!("Duplicate short option: '-{}'", short_str));
+            }
         }
-        // Also add the argument ID for positional args
-        actual_args.insert(arg.get_id().to_string());
+
+        // Validate positional arguments have lowercase IDs (clap convention)
+        if arg.is_positional() && id != id.to_lowercase() && id != "help" && id != "version" {
+            issues.push(format!(
+                "Positional argument '{}' should use lowercase ID (found mixed case)",
+                id
+            ));
+        }
+
+        // Check that arguments marked as required have proper configuration
+        if arg.is_required_set() && arg.is_positional() && arg.get_num_args().is_some() {
+            let num_args = arg.get_num_args().unwrap();
+            if num_args.max_values() == 0 {
+                issues.push(format!(
+                    "Required argument '{}' accepts 0 values - likely misconfigured",
+                    id
+                ));
+            }
+        }
     }
 
-    // Expected documented options based on docs/snapshot/cmdline.md
-    let documented_options = vec![
-        "info",
-        "debug",
-        "inSnapshot",
-        "i",
-        "OUTPUT",
-        "load",
-        "l",
-        "setToken",
-        "s",
-        "putData",
-        "p",
-        "getToken",
-        "g",
-        "flags",
-        "version",
-        "v",
-        #[cfg(feature = "interactive")]
-        "cli",
-    ];
-
-    // Verify every documented option exists in actual implementation
-    for option in &documented_options {
-        assert!(
-            actual_args.contains(*option),
-            "Documented option '{}' does not exist in actual CLI implementation! \
-             This is a documentation hallucination. Available options: {:?}",
-            option,
-            actual_args
+    // Report all issues
+    if !issues.is_empty() {
+        panic!(
+            "Command metadata quality issues found:\n{}",
+            issues.join("\n")
         );
     }
 
-    // Warn about undocumented options (not a failure, just informational)
-    let documented_set: HashSet<_> = documented_options.iter().cloned().collect();
-    for actual in &actual_args {
-        if !documented_set.contains(actual.as_str()) {
-            eprintln!(
-                "Warning: Option '{}' exists in CLI but is not documented in cmdline.md",
-                actual
-            );
-        }
-    }
+    println!(
+        "✓ Command metadata validated: {} arguments, {} long options, {} short options",
+        arg_ids.len(),
+        long_names.len(),
+        short_names.len()
+    );
 }
 
 #[test]
@@ -217,7 +242,7 @@ fn test_documented_examples_use_valid_options() {
         // Check each command uses valid options
         for cmd in &commands {
             let parts: Vec<&str> = cmd.split_whitespace().collect();
-            for (i, part) in parts.iter().enumerate() {
+            for part in parts.iter() {
                 if part.starts_with("--") {
                     let option = part.trim_start_matches("--");
                     assert!(

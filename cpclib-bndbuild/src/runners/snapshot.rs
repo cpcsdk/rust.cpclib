@@ -63,7 +63,7 @@ impl<E: EventObserver> Runner for SnapshotRunner<E> {
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
         let matches = self.get_matches(itr, o)?;
-
+        
         if matches.is_none() {
             return Ok(());
         }

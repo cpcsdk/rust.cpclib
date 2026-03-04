@@ -1,57 +1,42 @@
-use std::marker::PhantomData;
-
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::clap::{self, Arg, ArgAction};
+use cpclib_common::clap::{self, CommandFactory, FromArgMatches, Parser};
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::event::EventObserver;
+use cpclib_runner::runner::RunnerWithClap;
 
 use crate::runners::Runner;
 use crate::task::CP_CMDS;
-use crate::{built_info, expand_glob};
+use crate::expand_glob;
 
-pub struct CpRunner<E: EventObserver> {
-    _phantom: PhantomData<E>
+#[derive(Parser, Debug)]
+#[command(
+    name = "cp",
+    about = "Copy files."
+)]
+struct CpArgs {
+    /// Files to copy. Last one being the destination
+    #[arg(required = true, num_args = 2.., help = "Files to copy. Last one being the destination")]
+    files: Vec<String>,
 }
 
-impl<E: EventObserver> Default for CpRunner<E> {
-    fn default() -> Self {
-        Self {
-            _phantom: PhantomData::<E>
-        }
-    }
-}
-
-impl<E: EventObserver> CpRunner<E> {
-    pub fn render_help() -> String {
-        clap::Command::new("cp")
-            .before_help("Copy files.")
-            .disable_help_flag(true)
-            .after_help(format!(
-                "Inner command of {} {}",
-                built_info::PKG_NAME,
-                built_info::PKG_VERSION
-            ))
-            .arg(
-                Arg::new("arguments")
-                    .action(ArgAction::Append)
-                    .num_args(2..)
-                    .help("Files to copy. Last one being the destination")
-            )
-            .render_long_help()
-            .to_string()
-    }
-}
+crate::define_fs_runner_struct!(CpRunner, CpArgs);
 
 impl<E: EventObserver> Runner for CpRunner<E> {
     type EventObserver = E;
 
+    
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+        let Some(matches) = self.get_matches(itr, o)? else {
+            return Ok(());
+        };
+        let args = CpArgs::from_arg_matches(&matches)
+            .map_err(|e| e.to_string())?;
+        
         let mut errors = String::new();
 
-        let fnames = itr
+        let fnames = args.files
             .iter()
-            .map(|s| s.as_ref())
-            .flat_map(expand_glob)
+            .flat_map(|s| expand_glob(s.as_str()))
             .collect_vec();
         let files = fnames.iter().map(Utf8Path::new).collect_vec();
         let dest = files.last();

@@ -31,6 +31,17 @@ impl Assembler {
             Assembler::Extern(a) => a.get_command()
         }
     }
+
+    /// Returns all embedded assembler variants (excludes Extern)
+    pub fn all_embedded() -> impl Iterator<Item = Self> {
+        [Self::Basm, Self::Orgams].into_iter()
+    }
+
+    /// Returns all assembler variants including external ones
+    pub fn all() -> impl Iterator<Item = Self> {
+        Self::all_embedded()
+            .chain(ExternAssembler::all().map(Self::Extern))
+    }
 }
 
 #[derive(Parser, Debug)]
