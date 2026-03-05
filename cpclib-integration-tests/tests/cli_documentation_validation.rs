@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use clap::Command;
+use clap::{Command, CommandFactory};
 use regex::Regex;
 
 /// All CLI tools we want to validate in documentation
@@ -130,7 +130,7 @@ fn get_command_for_tool(tool: &str) -> Option<Command> {
         "catalog" => Some(cpclib_catalog::build_command()),
         "locomotive" => Some(cpclib_locomotive::build_command()),
         "cprcli" | "cpclib-cprcli" => Some(cpclib_cprcli::build_command()),
-        "cslcli" | "cpclib-cslcli" => Some(cpclib_cslcli::build_command()),
+        "cslcli" | "cpclib-cslcli" => Some(cpclib_cslcli::CslCliArgs::command()),
         "snapshot" => Some(cpclib_sna::build_arg_parser()),
         "cpclib-xfertool" => Some(cpclib_xfertool::build_args_parser()),
         "img2cpc" => Some(cpclib_imgconverter::build_img2cpc_args_parser()),

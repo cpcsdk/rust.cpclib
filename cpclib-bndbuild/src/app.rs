@@ -419,7 +419,10 @@ impl BndBuilderCommand {
     ) -> Result<(), BndBuilderError> {
         let targets = [add];
         let builder = builder.add_default_rule(&targets, &dependencies, &kind);
-        builder.save(fname).expect("Error when saving the file");
+        builder.save(&fname).map_err(|e| BndBuilderError::WorkingDirectoryError {
+            fname: fname.to_string(),
+            error: e
+        })?;
         Ok(())
     }
 
