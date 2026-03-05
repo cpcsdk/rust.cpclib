@@ -154,7 +154,15 @@ impl BndBuilder {
             }
         })?;
 
-        let path = Utf8Path::new(fname).parent().unwrap();
+        let path = Utf8Path::new(fname).parent().ok_or_else(|| {
+            BndBuilderError::InputFileError {
+                fname: fname.to_string(),
+                error: std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "File path has no parent directory"
+                )
+            }
+        })?;
         let working_directory = if path.is_dir() { Some(path) } else { None };
 
         let rdr = BufReader::new(file);

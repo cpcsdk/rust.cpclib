@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use camino::Utf8Path;
 use cpclib_runner::runner::tracker::at3::At3Version;
 use minijinja::{Environment, Error, ErrorKind};
@@ -50,7 +51,8 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
         }
     }
 
-    env.set_loader(path_loader(std::env::current_dir().unwrap()));
+    let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    env.set_loader(path_loader(current_dir));
     env.add_function("fail", error);
     env.add_function("assert", assert);
     env.add_function("basm_escape_path", basm_escape_path);

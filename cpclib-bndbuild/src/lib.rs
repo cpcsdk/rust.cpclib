@@ -326,7 +326,12 @@ pub fn build_args_parser() -> clap::Command {
 pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {
     let path = path
         .map(|p| p.to_owned())
-        .unwrap_or_else(|| Utf8PathBuf::from_path_buf(current_dir().unwrap()).unwrap());
+        .unwrap_or_else(|| {
+            current_dir()
+                .ok()
+                .and_then(|p| Utf8PathBuf::from_path_buf(p).ok())
+                .unwrap_or_else(|| Utf8PathBuf::from("."))
+        });
 
     if !path.is_dir() {
         return Err(BndBuilderError::AnyError(format!(
@@ -392,14 +397,18 @@ fn expand_glob(p: &str) -> Vec<String> {
                     for entry in builder {
                         match entry {
                             Ok(path) => {
-                                let s = Utf8PathBuf::from_path_buf(path).unwrap().to_string();
-                                if s.starts_with(".\\") {
-                                    results.push(s[2..].to_owned());
+                                // Skip paths with invalid UTF-8 instead of failing
+                                if let Ok(utf8_path) = Utf8PathBuf::from_path_buf(path) {
+                                    let s = utf8_path.to_string();
+                                    if s.starts_with(".\\") {
+                                        results.push(s[2..].to_owned());
+                                    }
+                                    else {
+                                        results.push(s);
+                                    }
+                                    found = true;
                                 }
-                                else {
-                                    results.push(s);
-                                }
-                                found = true;
+                                // Silently skip non-UTF8 paths
                             },
                             Err(_) => results.push(pat.clone())
                         }
