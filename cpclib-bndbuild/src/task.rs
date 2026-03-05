@@ -53,7 +53,7 @@ pub enum TaskKind {
     /// Task that delegates to an external program that must be installed
     Delegated,
     /// Task that runs through an emulator
-    Emulated,
+    Emulated
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -986,18 +986,18 @@ impl InnerTask {
             InnerTask::HspCompiler(_) => TaskKind::Delegated,
             InnerTask::ImpDsk(_) => TaskKind::Delegated,
             InnerTask::Martine(_) => TaskKind::Delegated,
-            InnerTask::SongConverter(_, _) => TaskKind::Delegated,
-            InnerTask::Tracker(_, _) => TaskKind::Delegated,
-            InnerTask::YmCruncher(_, _) => TaskKind::Delegated,
+            InnerTask::SongConverter(..) => TaskKind::Delegated,
+            InnerTask::Tracker(..) => TaskKind::Delegated,
+            InnerTask::YmCruncher(..) => TaskKind::Delegated,
 
             // File system operations - could be considered embedded
             InnerTask::Cp(_) | InnerTask::Mv(_) | InnerTask::Mkdir(_) | InnerTask::Rm(_) => {
                 TaskKind::Embedded
-            }
+            },
 
             // Utilities
             InnerTask::Echo(_) => TaskKind::Embedded,
-            InnerTask::Extern(_) => TaskKind::Delegated,
+            InnerTask::Extern(_) => TaskKind::Delegated
         }
     }
 

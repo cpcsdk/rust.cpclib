@@ -46,7 +46,7 @@ impl ExternAssembler {
             Self::Rasm(Default::default()),
             Self::Sjasmplus(Default::default()),
             Self::Uz80(Default::default()),
-            Self::Vasm(Default::default()),
+            Self::Vasm(Default::default())
         ]
         .into_iter()
     }

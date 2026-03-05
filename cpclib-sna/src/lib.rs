@@ -21,7 +21,6 @@ pub mod parse;
 // Import clap for derive macro (used even with cmdline feature)
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap;
-
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::{ArgMatches, Command, CommandFactory, Parser};
 
@@ -1085,7 +1084,7 @@ pub struct SnapshotCli {
     /// Run the CLI interface for an interactive manipulation of snapshot
     #[cfg(feature = "interactive")]
     #[arg(long, requires = "in_snapshot", conflicts_with = "output")]
-    pub cli: bool,
+    pub cli: bool
 }
 
 #[cfg(feature = "cmdline")]

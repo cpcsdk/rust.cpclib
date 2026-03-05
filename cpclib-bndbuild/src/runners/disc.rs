@@ -30,7 +30,7 @@ impl<E: EventObserver> Default for CatalogRunner<E> {
         let command = command
             .disable_help_flag(true)
             .disable_version_flag(true)
-            .subcommand_required(false)  // Allow --help without subcommand
+            .subcommand_required(false) // Allow --help without subcommand
             .arg(
                 Arg::new("help")
                     .long("help")
@@ -78,7 +78,7 @@ impl<E: EventObserver> Runner for CatalogRunner<E> {
         if matches.is_none() {
             return Ok(());
         }
-        
+
         // Process the actual command
         let app = CatalogApp::try_parse_from(
             [self.get_command().to_string()]

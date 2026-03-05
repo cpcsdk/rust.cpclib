@@ -4,19 +4,16 @@ use cpclib_common::itertools::Itertools;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::RunnerWithClap;
 
+use crate::expand_glob;
 use crate::runners::Runner;
 use crate::task::MV_CMDS;
-use crate::expand_glob;
 
 #[derive(Parser, Debug)]
-#[command(
-    name = "mv",
-    about = "Rename files."
-)]
+#[command(name = "mv", about = "Rename files.")]
 struct MvArgs {
     /// Files to move. With 2 files, first one is renamed as second one. With more than 2 files, last one is the destination directory.
     #[arg(required = true, num_args = 2.., help = "Files to move. Last one is the destination")]
-    files: Vec<String>,
+    files: Vec<String>
 }
 
 crate::define_fs_runner_struct!(MvRunner, MvArgs);
@@ -25,15 +22,16 @@ impl<E: EventObserver> Runner for MvRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let Some(matches) = self.get_matches(itr, o)? else {
+        let Some(matches) = self.get_matches(itr, o)?
+        else {
             return Ok(());
         };
-        let args = MvArgs::from_arg_matches(&matches)
-            .map_err(|e| e.to_string())?;
-        
+        let args = MvArgs::from_arg_matches(&matches).map_err(|e| e.to_string())?;
+
         let mut errors = String::new();
 
-        let fnames = args.files
+        let fnames = args
+            .files
             .iter()
             .flat_map(|s| expand_glob(s.as_str()))
             .collect_vec();
@@ -113,21 +111,22 @@ mod test {
         let mut temp = camino_tempfile::NamedUtf8TempFile::new().unwrap();
         temp.as_file_mut().write_all(b"test content").unwrap();
         let src_path = temp.into_temp_path();
-        
+
         // Create destination path in same directory
         let dst_path = src_path.parent().unwrap().join("renamed.txt");
-        
+
         assert!(src_path.exists());
         assert!(!dst_path.exists());
 
         // Run mv command
         let mv = MvRunner::default();
-        mv.inner_run(&[src_path.to_string(), dst_path.to_string()], &()).unwrap();
-        
+        mv.inner_run(&[src_path.to_string(), dst_path.to_string()], &())
+            .unwrap();
+
         // File should be renamed
         assert!(!src_path.exists());
         assert!(dst_path.exists());
-        
+
         // Cleanup
         let _ = fs_err::remove_file(dst_path);
     }
@@ -139,14 +138,14 @@ mod test {
         let mut temp2 = camino_tempfile::NamedUtf8TempFile::new().unwrap();
         temp1.as_file_mut().write_all(b"test1").unwrap();
         temp2.as_file_mut().write_all(b"test2").unwrap();
-        
+
         let path1 = temp1.into_temp_path();
         let path2 = temp2.into_temp_path();
-        
+
         // Create destination directory
         let dest_dir = camino_tempfile::tempdir().unwrap();
         let dest_path = dest_dir.path().to_path_buf();
-        
+
         assert!(path1.exists());
         assert!(path2.exists());
         assert!(dest_path.exists());
@@ -155,10 +154,11 @@ mod test {
         // Run mv command with multiple files
         let mv = MvRunner::default();
         mv.inner_run(
-            &[path1.to_string(), path2.to_string(), dest_path.to_string()], 
+            &[path1.to_string(), path2.to_string(), dest_path.to_string()],
             &()
-        ).unwrap();
-        
+        )
+        .unwrap();
+
         // Files should be moved to directory
         assert!(!path1.exists());
         assert!(!path2.exists());
@@ -172,18 +172,19 @@ mod test {
         let mut temp = camino_tempfile::NamedUtf8TempFile::new().unwrap();
         temp.as_file_mut().write_all(b"test").unwrap();
         let file_path = temp.into_temp_path();
-        
+
         // Create destination directory
         let dest_dir = camino_tempfile::tempdir().unwrap();
         let dest_path = dest_dir.path().to_path_buf();
-        
+
         assert!(file_path.exists());
         assert!(dest_path.is_dir());
 
         // Run mv command
         let mv = MvRunner::default();
-        mv.inner_run(&[file_path.to_string(), dest_path.to_string()], &()).unwrap();
-        
+        mv.inner_run(&[file_path.to_string(), dest_path.to_string()], &())
+            .unwrap();
+
         // File should be moved into directory
         assert!(!file_path.exists());
         assert!(dest_path.join(file_path.file_name().unwrap()).exists());
@@ -195,22 +196,22 @@ mod test {
         let mut temp1 = camino_tempfile::NamedUtf8TempFile::new().unwrap();
         let mut temp2 = camino_tempfile::NamedUtf8TempFile::new().unwrap();
         let mut dest_file = camino_tempfile::NamedUtf8TempFile::new().unwrap();
-        
+
         temp1.as_file_mut().write_all(b"test1").unwrap();
         temp2.as_file_mut().write_all(b"test2").unwrap();
         dest_file.as_file_mut().write_all(b"dest").unwrap();
-        
+
         let path1 = temp1.into_temp_path();
         let path2 = temp2.into_temp_path();
         let dest_path = dest_file.into_temp_path();
-        
+
         // Run mv command - should fail because dest is not a directory
         let mv = MvRunner::default();
         let result = mv.inner_run(
-            &[path1.to_string(), path2.to_string(), dest_path.to_string()], 
+            &[path1.to_string(), path2.to_string(), dest_path.to_string()],
             &()
         );
-        
+
         // Should return an error
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("must be a directory"));
@@ -220,11 +221,11 @@ mod test {
     fn test_mv_nonexistent_file() {
         let temp_dir = camino_tempfile::tempdir().unwrap();
         let dest = temp_dir.path().join("dest.txt");
-        
+
         // Try to move a file that doesn't exist
         let mv = MvRunner::default();
         let result = mv.inner_run(&["/nonexistent/file.txt", dest.as_str()], &());
-        
+
         // Should return an error
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Error when moving"));
@@ -234,7 +235,7 @@ mod test {
     fn test_mv_help_flag() {
         let mv = MvRunner::default();
         let result = mv.inner_run(&["--help"], &());
-        
+
         // Should succeed (help is printed via emit_stdout)
         assert!(result.is_ok());
     }
@@ -243,7 +244,7 @@ mod test {
     fn test_mv_version_flag() {
         let mv = MvRunner::default();
         let result = mv.inner_run(&["--version"], &());
-        
+
         // Should succeed (version is printed via emit_stdout)
         assert!(result.is_ok());
     }

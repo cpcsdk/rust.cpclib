@@ -39,8 +39,7 @@ impl Assembler {
 
     /// Returns all assembler variants including external ones
     pub fn all() -> impl Iterator<Item = Self> {
-        Self::all_embedded()
-            .chain(ExternAssembler::all().map(Self::Extern))
+        Self::all_embedded().chain(ExternAssembler::all().map(Self::Extern))
     }
 }
 

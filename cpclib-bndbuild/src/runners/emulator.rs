@@ -72,7 +72,7 @@ impl Emulator {
             Self::new_sugarbox_default(),
             Self::new_cpcemupower_default(),
             Self::new_capriceforever_default(),
-            Self::new_facade(),
+            Self::new_facade()
         ]
         .into_iter()
     }

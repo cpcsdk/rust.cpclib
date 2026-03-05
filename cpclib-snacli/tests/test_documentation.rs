@@ -13,7 +13,7 @@ fn test_cmdline_docs_match_actual_options() {
 
     for arg in parser.get_arguments() {
         let id = arg.get_id().to_string();
-        
+
         // Check for duplicate IDs
         if !arg_ids.insert(id.clone()) {
             issues.push(format!("Duplicate argument ID: '{}'", id));
@@ -27,7 +27,7 @@ fn test_cmdline_docs_match_actual_options() {
         // Check long names
         if let Some(long) = arg.get_long() {
             let long_str = long.to_string();
-            
+
             // Check for duplicates
             if !long_names.insert(long_str.clone()) {
                 issues.push(format!("Duplicate long option: '--{}'", long_str));
@@ -46,7 +46,7 @@ fn test_cmdline_docs_match_actual_options() {
         // Check short names
         if let Some(short) = arg.get_short() {
             let short_str = short.to_string();
-            
+
             // Check for duplicates
             if !short_names.insert(short_str.clone()) {
                 issues.push(format!("Duplicate short option: '-{}'", short_str));

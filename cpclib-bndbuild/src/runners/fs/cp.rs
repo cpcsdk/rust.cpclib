@@ -4,19 +4,16 @@ use cpclib_common::itertools::Itertools;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::RunnerWithClap;
 
+use crate::expand_glob;
 use crate::runners::Runner;
 use crate::task::CP_CMDS;
-use crate::expand_glob;
 
 #[derive(Parser, Debug)]
-#[command(
-    name = "cp",
-    about = "Copy files."
-)]
+#[command(name = "cp", about = "Copy files.")]
 struct CpArgs {
     /// Files to copy. Last one being the destination
     #[arg(required = true, num_args = 2.., help = "Files to copy. Last one being the destination")]
-    files: Vec<String>,
+    files: Vec<String>
 }
 
 crate::define_fs_runner_struct!(CpRunner, CpArgs);
@@ -24,17 +21,17 @@ crate::define_fs_runner_struct!(CpRunner, CpArgs);
 impl<E: EventObserver> Runner for CpRunner<E> {
     type EventObserver = E;
 
-    
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-        let Some(matches) = self.get_matches(itr, o)? else {
+        let Some(matches) = self.get_matches(itr, o)?
+        else {
             return Ok(());
         };
-        let args = CpArgs::from_arg_matches(&matches)
-            .map_err(|e| e.to_string())?;
-        
+        let args = CpArgs::from_arg_matches(&matches).map_err(|e| e.to_string())?;
+
         let mut errors = String::new();
 
-        let fnames = args.files
+        let fnames = args
+            .files
             .iter()
             .flat_map(|s| expand_glob(s.as_str()))
             .collect_vec();

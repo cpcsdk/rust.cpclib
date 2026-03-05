@@ -1,5 +1,5 @@
 /// Internal macro to generate the command builder with help/version flags
-/// 
+///
 /// This is used internally by other macros to avoid code duplication.
 #[doc(hidden)]
 #[macro_export]
@@ -28,35 +28,33 @@ macro_rules! __define_runner_command_builder {
             .after_help($after_help)
     };
     // Variant for custom builder function
-    (builder: $builder_fn:expr, $after_help:expr) => {
-        {
-            let command = $builder_fn;
-            command
-                .no_binary_name(true)
-                .disable_help_flag(true)
-                .disable_version_flag(true)
-                .arg(
-                    clap::Arg::new("help")
-                        .long("help")
-                        .short('h')
-                        .action(clap::ArgAction::SetTrue)
-                        .exclusive(true)
-                )
-                .arg(
-                    clap::Arg::new("version")
-                        .long("version")
-                        .short('V')
-                        .help("Print version")
-                        .action(clap::ArgAction::SetTrue)
-                        .exclusive(true)
-                )
-                .after_help($after_help)
-        }
-    };
+    (builder: $builder_fn:expr, $after_help:expr) => {{
+        let command = $builder_fn;
+        command
+            .no_binary_name(true)
+            .disable_help_flag(true)
+            .disable_version_flag(true)
+            .arg(
+                clap::Arg::new("help")
+                    .long("help")
+                    .short('h')
+                    .action(clap::ArgAction::SetTrue)
+                    .exclusive(true)
+            )
+            .arg(
+                clap::Arg::new("version")
+                    .long("version")
+                    .short('V')
+                    .help("Print version")
+                    .action(clap::ArgAction::SetTrue)
+                    .exclusive(true)
+            )
+            .after_help($after_help)
+    }};
 }
 
 /// Internal macro to generate struct and basic impls
-/// 
+///
 /// This is used internally by other macros to avoid code duplication.
 #[doc(hidden)]
 #[macro_export]
@@ -85,7 +83,7 @@ macro_rules! __define_runner_struct_and_impls {
 }
 
 /// Internal macro to generate the Runner impl
-/// 
+///
 /// This is used internally by other macros to avoid code duplication.
 #[doc(hidden)]
 #[macro_export]
@@ -96,7 +94,8 @@ macro_rules! __define_runner_impl {
             type EventObserver = E;
 
             fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-                let Some(cli) = self.get_args(itr, o)? else {
+                let Some(cli) = self.get_args(itr, o)?
+                else {
                     return Ok(());
                 };
                 $process_fn(cli)
@@ -113,7 +112,8 @@ macro_rules! __define_runner_impl {
             type EventObserver = E;
 
             fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-                let Some(matches) = self.get_matches(itr, o)? else {
+                let Some(matches) = self.get_matches(itr, o)?
+                else {
                     return Ok(());
                 };
                 $process_fn(matches, &self.command)
@@ -130,7 +130,8 @@ macro_rules! __define_runner_impl {
             type EventObserver = E;
 
             fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
-                let Some(matches) = self.get_matches(itr, o)? else {
+                let Some(matches) = self.get_matches(itr, o)?
+                else {
                     return Ok(());
                 };
                 $process_fn(matches)
@@ -144,9 +145,9 @@ macro_rules! __define_runner_impl {
 }
 
 /// Macro to define a runner based on clap_derive Args
-/// 
+///
 /// This macro generates the boilerplate for runners that use `#[derive(Parser)]` Args.
-/// 
+///
 /// # Example
 /// ```ignore
 /// define_clap_derive_runner! {
@@ -188,14 +189,14 @@ macro_rules! define_clap_derive_runner {
 }
 
 /// Macro to define a runner based on a custom clap Command builder function
-/// 
+///
 /// This macro generates the boilerplate for runners that use a function to build
 /// a clap::Command (like `build_args_parser()`).
-/// 
+///
 /// Supports two variants:
 /// - With command reference: process function takes (matches, command)
 /// - Without command reference: process function takes (matches) only
-/// 
+///
 /// # Examples
 /// ```ignore
 /// // With command reference (2-arg closure)
@@ -207,7 +208,7 @@ macro_rules! define_clap_derive_runner {
 ///     cpclib_basmdoc::built_info::PKG_VERSION,
 ///     |matches, command| cpclib_basmdoc::cmdline::handle_matches(&matches, command).map_err(|e| e.to_string())
 /// }
-/// 
+///
 /// // Without command reference (1-arg closure) - use 'simple' variant
 /// define_custom_builder_runner! {
 ///     simple:
@@ -279,11 +280,14 @@ macro_rules! define_custom_builder_runner {
 }
 
 /// Simplified variant when the process function doesn't need the command reference
-/// 
+///
 /// **Deprecated**: Use `define_custom_builder_runner!` with the `simple:` prefix instead.
 /// This macro is kept for backward compatibility.
 #[macro_export]
-#[deprecated(since = "0.11.0", note = "Use `define_custom_builder_runner! { simple: ... }` instead")]
+#[deprecated(
+    since = "0.11.0",
+    note = "Use `define_custom_builder_runner! { simple: ... }` instead"
+)]
 macro_rules! define_custom_builder_runner_simple {
     (
         $runner_name:ident,
@@ -306,18 +310,18 @@ macro_rules! define_custom_builder_runner_simple {
 }
 
 /// Macro to define the boilerplate for file system runners using clap derive
-/// 
-/// This macro generates the struct and standard impls, but leaves `inner_run` 
-/// and `get_command` for manual implementation since file system operations 
+///
+/// This macro generates the struct and standard impls, but leaves `inner_run`
+/// and `get_command` for manual implementation since file system operations
 /// have custom logic that varies per runner.
-/// 
+///
 /// # Example
 /// ```ignore
 /// define_fs_runner_struct! {
 ///     CpRunner,     // Runner struct name
 ///     CpArgs        // Args type (must impl CommandFactory)
 /// }
-/// 
+///
 /// // Then manually implement Runner with custom inner_run logic
 /// impl<E: EventObserver> Runner for CpRunner<E> {
 ///     type EventObserver = E;

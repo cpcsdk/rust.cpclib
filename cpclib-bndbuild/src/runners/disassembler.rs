@@ -29,8 +29,7 @@ impl Disassembler {
 
     /// Returns all disassembler variants including external ones
     pub fn all() -> impl Iterator<Item = Self> {
-        Self::all_embedded()
-            .chain(ExternDisassembler::all().map(Self::Extern))
+        Self::all_embedded().chain(ExternDisassembler::all().map(Self::Extern))
     }
 }
 

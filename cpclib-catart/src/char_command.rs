@@ -651,7 +651,7 @@ impl CharCommand {
                     PrintArgument::from(ETX),
                     PrintTerminator::None
                 ))
-            }
+            },
             _ => unimplemented!("to_basic_command not implemented for command {:?}", self)
         }
     }

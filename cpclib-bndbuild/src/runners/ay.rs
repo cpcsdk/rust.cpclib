@@ -22,7 +22,7 @@ impl YmCruncher {
             #[cfg(feature = "fap")]
             Self::Fap,
             Self::Ayt,
-            Self::Miny,
+            Self::Miny
         ]
         .into_iter()
     }
