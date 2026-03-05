@@ -299,8 +299,10 @@ impl BndBuilder {
         let state = Arc::new(RwLock::new(state));
 
         #[cfg(not(feature = "rayon"))]
-        let mut state = &mut state;
-
+        let mut state = state;
+        #[cfg(not(feature = "rayon"))]
+        let state = &mut state;
+        
         if nb_deps == 0 {
             if self.has_rule(p) {
                 self.do_run_tasks();
