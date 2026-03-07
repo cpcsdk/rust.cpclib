@@ -50,6 +50,8 @@ pub trait ExprEvaluationExt: Display {
 
     /// Get all the symbols used
     fn symbols_used(&self) -> Vec<&str>;
+
+    fn r#type(&self) -> &str;
 }
 
 impl<T> ExprEvaluationExt for Box<T>
@@ -61,6 +63,10 @@ where T: ExprEvaluationExt + ?Sized
 
     fn symbols_used(&self) -> Vec<&str> {
         (**self).symbols_used()
+    }
+
+    fn r#type(&self) -> &str {
+        (**self).r#type()
     }
 }
 
@@ -325,5 +331,25 @@ impl ExprEvaluationExt for Expr {
 
     fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>> {
         resolve_impl!(self, env)
+    }
+
+    fn r#type(&self) -> &str {
+        match self {
+            Expr::RelativeDelta(_) => "relative_delta",
+            Expr::Value(_) => "value",
+            Expr::Char(_) => "char",
+            Expr::Bool(_) => "bool",
+            Expr::String(_) => "string",
+            Expr::Float(_) => "float",
+            Expr::Label(_) => "label",
+            Expr::PrefixedLabel(_, _) => "prefixed_label",
+            Expr::Paren(_) => "paren",
+            Expr::UnaryOperation(_, _) => "unary_operation",
+            Expr::BinaryOperation(_, _, _) => "binary_operation",
+            Expr::AnyFunction(name, _) => name.as_str(),
+            Expr::List(_) => "list",
+            Expr::Rnd => "rnd",
+            _ => "unknown"
+        }
     }
 }

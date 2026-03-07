@@ -515,6 +515,23 @@ impl ExprEvaluationExt for LocatedExpr {
             },
         }
     }
+
+    fn r#type(&self) -> &str {
+        match self {
+            LocatedExpr::RelativeDelta(..) | LocatedExpr::Value(..) => "value",
+            LocatedExpr::Float(..) => "float",
+            LocatedExpr::Char(..) => "char",
+            LocatedExpr::Bool(..) => "bool",
+            LocatedExpr::String(..) => "string",
+            LocatedExpr::Label(..) | LocatedExpr::PrefixedLabel(..) => "label",
+            LocatedExpr::List(..) => "list",
+            LocatedExpr::Paren(..) | LocatedExpr::UnaryOperation(..) | LocatedExpr::BinaryOperation(..)
+            | LocatedExpr::Ternary(..) => "expression",
+            LocatedExpr::AnyFunction(..) => "function",
+            LocatedExpr::UnaryTokenOperation(..) => "token_operation",
+            LocatedExpr::Rnd(_) => "rnd"
+        }
+    }
 }
 
 impl MayHaveSpan for LocatedExpr {
