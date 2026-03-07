@@ -182,7 +182,7 @@ impl<'de> Deserialize<'de> for Rule {
         let d: DeserializedRule = DeserializedRule::deserialize(deserializer)?;
         let mut r: Rule = d.into();
         r.replace_automatic_variables()
-            .map_err(|e| serde::de::Error::custom(format!("Failed to replace automatic variables: {}", e)))?;
+            .expect("Failed to replace automatic variables"); // Handle properly by returing error
         Ok(r)
     }
 }
