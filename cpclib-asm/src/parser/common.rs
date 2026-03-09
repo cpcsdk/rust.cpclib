@@ -999,7 +999,7 @@ pub fn parse_comma_multiline(
     input: &mut InnerZ80Span
 ) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
-    (parse_comma, opt((newline, my_space0)))
+    (parse_comma, opt((line_ending, my_space0)))
         .take()
         .map(|s| cloned.update_slice(s))
         .parse_next(input)

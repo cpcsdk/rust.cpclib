@@ -1340,7 +1340,8 @@ pub mod test {
             "[0  ,  
             1,  2  ,  3]",
             "[
-               0,1,2,3]"
+               0,1,2,3]",
+            "[\r\n0,1,2,3]",
         ];
         for list in exprs {
             assert!(parse_test(parse_expr_bracketed_list, dbg!(list)).is_ok());
@@ -1354,7 +1355,8 @@ pub mod test {
         let exprs = [
             "[0,1,2,3,]",
             "[0,1,2,
-                3,]"
+                3,]",
+            "[0,1,2,\r\n3,]",
         ];
         for list in exprs {
             assert!(parse_test(parse_expr_bracketed_list, dbg!(list)).is_err());
