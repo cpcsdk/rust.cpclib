@@ -20,6 +20,7 @@ cpclib-asm.workspace = true
 cpclib-disc.workspace = true
 fs-err.workspace = true
 const_format.workspace = true
+thiserror.workspace = true
 time = "0.3.44"
 
 [features]

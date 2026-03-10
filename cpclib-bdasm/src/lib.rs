@@ -18,16 +18,46 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum BdAsmError {
+    #[error("Expression evaluation failed: {0}")]
+    ExprEvaluation(String),
+    
+    #[error("Invalid address value: expected integer")]
+    InvalidAddress,
+    
+    #[error("Unable to determine assembling address for instruction with {0} bytes")]
+    UnknownAssemblerAddress(usize),
+    
+    #[error("Failed to assemble listing: {0}")]
+    AssemblyFailed(String),
+    
+    #[error("Invalid data bloc format: {0}")]
+    InvalidDataBloc(String),
+    
+    #[error("Value type not supported for address resolution: {0}")]
+    UnsupportedValueType(String),
+    
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    
+    #[error("Parse error: {0}")]
+    ParseInt(#[from] std::num::ParseIntError),
+}
+
+type Result<T> = std::result::Result<T, BdAsmError>;
+
 static DESC_BEFORE: &str = const_format::formatc!(
     "Profile {} compiled: {}",
     built_info::PROFILE,
     built_info::BUILT_TIME_UTC
 );
 
-/// Several expressions can refere to addresses
-/// TODO move it in a public library
-/// TODO refactor with inject_labels_into_expressions to share common patterns
-fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
+/// Several expressions can refer to addresses.
+/// Collects all address references from jump/load instructions.
+/// TODO: move it in a public library
+/// TODO: refactor with inject_labels_into_expressions to share common patterns
+fn collect_addresses_from_expressions(listing: &Listing) -> Result<Vec<u16>> {
     let mut labels: Vec<u16> = Default::default();
 
     let mut current_address: Option<u16> = None;
@@ -39,11 +69,20 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
             let address = if let Expr::Label(l) = e
                 && l == "$"
             {
-                current_address.unwrap() // address before instruction
+                current_address.ok_or_else(|| 
+                    BdAsmError::UnknownAssemblerAddress(0)
+                )?
             }
             else {
-                let delta = e.eval().unwrap().int().unwrap() + 2;
-                (*current_address.as_ref().unwrap() as i32 + delta) as _
+                let value = e.eval()
+                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+                    .int()
+                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
+                let delta = value + 2;
+                let base_addr = current_address.ok_or_else(|| 
+                    BdAsmError::UnknownAssemblerAddress(0)
+                )? as i32;
+                (base_addr + delta) as u16
             };
             labels.push(address);
         }
@@ -51,21 +90,29 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
         | Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) =
             current_instruction
         {
-            let address = e.eval().unwrap().int().unwrap();
+            let address = e.eval()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+                .int()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
             labels.push(address as u16);
         }
 
         let next_address = if let Token::Org { val1: address, .. } = current_instruction {
-            current_address = Some(address.eval().unwrap().int().unwrap() as u16);
+            let addr = address.eval()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+                .int()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))? as u16;
+            current_address = Some(addr);
             current_address
         }
         else {
-            let nb_bytes = current_instruction.number_of_bytes().unwrap();
+            let nb_bytes = current_instruction.number_of_bytes()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
             match current_address {
                 Some(address) => Some(address + nb_bytes as u16),
                 None => {
                     if nb_bytes != 0 {
-                        panic!("Unable to run if assembling address is unknown")
+                        return Err(BdAsmError::UnknownAssemblerAddress(nb_bytes));
                     }
                     else {
                         None
@@ -77,13 +124,14 @@ fn collect_addresses_from_expressions(listing: &Listing) -> Vec<u16> {
         current_address = next_address;
     }
 
-    labels
+    Ok(labels)
 }
 
-/// TODO refactor with collect_addresses_from_expressions to share common patterns
-fn inject_labels_into_expressions(listing: &mut Listing) {
+/// Injects label names into expressions where possible.
+/// TODO: refactor with collect_addresses_from_expressions to share common patterns
+fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
     let (_bytes, table) = cpclib_asm::assemble_tokens_with_options(listing, Default::default())
-        .expect("Impossible to assemble the listing, there is an error somewhere");
+        .map_err(|e| BdAsmError::AssemblyFailed(e.to_string()))?;
 
     let address_to_label = {
         let mut address_to_label = HashMap::<u16, &str>::default();
@@ -95,16 +143,19 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
             match v.value() {
                 Value::Expr(expr) => {
                     if expr.is_int() {
-                        address_to_label.insert(v.integer().unwrap() as u16, s.value());
+                        if let Some(int_val) = v.integer() {
+                            address_to_label.insert(int_val as u16, s.value());
+                        }
                     }
                 },
                 Value::String(_) => {},
                 Value::Address(a) => {
                     address_to_label.insert(a.address(), s.value());
                 },
-                Value::Macro(_) => todo!(),
-                Value::Struct(_) => todo!(),
-                Value::Counter(_) => todo!()
+                // Skip unsupported types rather than panicking
+                Value::Macro(_) | Value::Struct(_) | Value::Counter(_) => {
+                    eprintln!("Warning: Skipping label '{}' with unsupported value type", s.value());
+                }
             }
         }
         address_to_label
@@ -119,16 +170,21 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
     let mut current_address: Option<u16> = None;
     for current_instruction in listing.iter_mut() {
         let next_address = if let Token::Org { val1: address, .. } = current_instruction {
-            current_address = Some(address.eval().unwrap().int().unwrap() as u16);
+            let addr = address.eval()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+                .int()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))? as u16;
+            current_address = Some(addr);
             current_address
         }
         else {
-            let nb_bytes = current_instruction.number_of_bytes().unwrap();
+            let nb_bytes = current_instruction.number_of_bytes()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
             match current_address {
                 Some(address) => Some(address + nb_bytes as u16),
                 None => {
                     if nb_bytes != 0 {
-                        panic!("Unable to run if assembling address is unknown")
+                        return Err(BdAsmError::UnknownAssemblerAddress(nb_bytes));
                     }
                     else {
                         None
@@ -144,11 +200,20 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
             let address = if let Expr::Label(l) = e
                 && l == "$"
             {
-                current_address.unwrap() // address before instruction
+                current_address.ok_or_else(|| 
+                    BdAsmError::UnknownAssemblerAddress(0)
+                )?
             }
             else {
-                let delta = e.eval().unwrap().int().unwrap() + 2;
-                (*current_address.as_ref().unwrap() as i32 + delta) as _
+                let value = e.eval()
+                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+                    .int()
+                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
+                let delta = value + 2;
+                let base_addr = current_address.ok_or_else(|| 
+                    BdAsmError::UnknownAssemblerAddress(0)
+                )? as i32;
+                (base_addr + delta) as u16
             };
 
             update_expr_address(e, address);
@@ -157,21 +222,44 @@ fn inject_labels_into_expressions(listing: &mut Listing) {
         | Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) =
             current_instruction
         {
-            let address = e.eval().unwrap().int().unwrap() as u16;
+            let address = e.eval()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+                .int()
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))? as u16;
             update_expr_address(e, address);
         }
 
         current_address = next_address;
     }
+    
+    Ok(())
 }
 
-pub fn process(matches: &ArgMatches) {
+/// Parse data bloc specification into (start_index, length)
+fn parse_data_bloc(bloc: &str) -> Result<(usize, Option<usize>)> {
+    let split = bloc.split('-').collect::<Vec<_>>();
+    if split.len() != 2 {
+        return Err(BdAsmError::InvalidDataBloc(
+            format!("Expected format START-LENGTH, got: {}", bloc)
+        ));
+    }
+    
+    let start = usize::from_str_radix(split[0], 16)
+        .map_err(|_| BdAsmError::InvalidDataBloc(
+            format!("Invalid hexadecimal start address: {}", split[0])
+        ))?;
+    let length = usize::from_str_radix(split[1], 10).ok();
+    
+    Ok((start, length))
+}
+
+pub fn process(matches: &ArgMatches) -> Result<()> {
     // Get the bytes to disassemble
-    let input_filename: &Utf8PathBuf = matches.get_one("INPUT").unwrap();
+    let input_filename: &Utf8PathBuf = matches.get_one("INPUT")
+        .ok_or_else(|| BdAsmError::InvalidDataBloc("Missing INPUT argument".to_string()))?;
     let mut input_bytes = Vec::new();
-    let mut file = File::open(input_filename).expect("Unable to open file");
-    file.read_to_end(&mut input_bytes)
-        .expect("Unable to read file");
+    let mut file = File::open(input_filename)?;
+    file.read_to_end(&mut input_bytes)?;
 
     // check if there is an amsdos header and remove it if any
     let (input_bytes, amsdos_load) = if input_bytes.len() > 128 {
@@ -200,27 +288,22 @@ pub fn process(matches: &ArgMatches) {
     // Disassemble
     eprintln!("; 0x{:x} bytes to disassemble", input_bytes.len());
 
-    // Retreive the listing
-    // TODO move that in its own function
+    // Retrieve the listing
     let mut listing: Listing = if matches.contains_id("DATA_BLOC") {
-        // retreive the blocs and parse them
+        // Retrieve and parse the blocs
         let mut blocs = matches
             .get_many::<String>("DATA_BLOC")
-            .unwrap()
-            .map(|bloc| {
-                let split = bloc.split('-').collect::<Vec<_>>();
-                let start = usize::from_str_radix(split[0], 16).unwrap();
-                let length = usize::from_str_radix(split[1], 10).ok();
-                (start, length)
-            })
-            .collect::<Vec<_>>();
+            .ok_or_else(|| BdAsmError::InvalidDataBloc("Failed to get DATA_BLOC values".to_string()))?
+            .map(|bloc| parse_data_bloc(bloc))
+            .collect::<Result<Vec<_>>>()?;
         blocs.sort();
 
-        // make the listing for each of the blocs
+        // Make the listing for each of the blocs
         let mut listings: Vec<Listing> = Vec::new();
         let mut current_idx = 0;
         while !blocs.is_empty() {
-            let &(bloc_idx, bloc_length) = blocs.first().unwrap();
+            let &(bloc_idx, bloc_length) = blocs.first()
+                .ok_or_else(|| BdAsmError::InvalidDataBloc("Empty blocs list".to_string()))?;
             if current_idx < bloc_idx {
                 listings.push(cpclib_asm::disass::disassemble(
                     &input_bytes[current_idx..(bloc_idx - current_idx)]
@@ -260,43 +343,49 @@ pub fn process(matches: &ArgMatches) {
         cpclib_asm::disass::disassemble(input_bytes)
     };
 
-    // add origin if any
+    // Add origin if any
     if let Some(address) = matches.get_one::<String>("ORIGIN") {
         let address = address.as_bytes();
-        let origin: Result<u32, ParseError<_, ()>> = cpclib_common::parse_value.parse(address);
-        let origin = origin.expect("Unable to parse origin") as u16;
+        let origin: std::result::Result<u32, ParseError<_, ()>> = cpclib_common::parse_value.parse(address);
+        let origin = origin
+            .map_err(|_| BdAsmError::InvalidDataBloc("Invalid origin address format".to_string()))? as u16;
         listing.insert(0, org(origin));
     }
     else if let Some(origin) = amsdos_load {
         listing.insert(0, org(origin));
     }
 
-    // add labels
-    let mut labels = if let Some(labels) = matches.get_many::<String>("LABEL") {
-        labels
+    // Add labels
+    let mut labels = if let Some(label_values) = matches.get_many::<String>("LABEL") {
+        label_values
             .map(|label| {
                 let split = label.split('=').collect::<Vec<_>>();
-                assert_eq!(2, split.len());
-                let label = split[0];
+                if split.len() != 2 {
+                    return Err(BdAsmError::InvalidDataBloc(
+                        format!("Invalid label format '{}', expected LABEL=ADDRESS", label)
+                    ));
+                }
+                let label_name = split[0];
                 let address = split[1].as_bytes();
-                let address: Result<u32, ParseError<_, ()>> =
+                let address: std::result::Result<u32, ParseError<_, ()>> =
                     cpclib_common::parse_value.parse(address);
-                let address = address.expect("Unable to parse label value") as u16;
-                (address, Cow::Borrowed(label))
+                let address = address
+                    .map_err(|_| BdAsmError::InvalidDataBloc("Invalid label address format".to_string()))? as u16;
+                Ok((address, Cow::Borrowed(label_name)))
             })
-            .collect::<HashMap<u16, Cow<str>>>()
+            .collect::<Result<HashMap<u16, Cow<str>>>>()?              
     }
     else {
         Default::default()
     };
 
-    // get extra labels
-    for address in collect_addresses_from_expressions(&listing) {
+    // Get extra labels from expressions
+    for address in collect_addresses_from_expressions(&listing)? {
         let entry = labels.entry(address);
         entry.or_insert(Cow::Owned(format!("label_{address:.4x}")));
     }
     listing.inject_labels(labels);
-    inject_labels_into_expressions(&mut listing);
+    inject_labels_into_expressions(&mut listing)?;
 
     if matches.get_flag("COMPRESS") {
         println!("{}", listing.to_string());
@@ -304,8 +393,11 @@ pub fn process(matches: &ArgMatches) {
     else {
         let mut options = EnvOptions::default();
         options.write_listing_output(std::io::stdout());
-        cpclib_asm::assemble_with_options(&listing.to_string(), options).unwrap();
+        cpclib_asm::assemble_with_options(&listing.to_string(), options)
+            .map_err(|e| BdAsmError::AssemblyFailed(e.to_string()))?;
     }
+    
+    Ok(())
 }
 
 pub fn build_args_parser() -> Command {

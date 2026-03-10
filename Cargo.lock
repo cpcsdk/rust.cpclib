@@ -2526,6 +2526,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-disc",
  "fs-err",
+ "thiserror 2.0.17",
  "time",
 ]
 
