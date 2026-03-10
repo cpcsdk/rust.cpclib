@@ -12,7 +12,7 @@ use crate::delegated::{
 
 pub const ACE_CMD: &str = "ace";
 
-const ACE_URL: &str = "http://www.roudoudou.com/ACE-DL";
+const ACE_URL: &str = "https://roudoudou.com/ACE-DL";
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum AceVersion {
@@ -71,25 +71,25 @@ impl DynamicUrlInformation for AceVersion {
             },
             AceVersion::Bnd4 => {
                 Ok(MutiplatformUrls {
-                    linux: Some("http://www.roudoudou.com/ACE-DL/BZen.tar.gz".to_string()),
-                    windows: Some("http://www.roudoudou.com/ACE-DL/W64bnd4.zip".to_string()),
+                    linux: Some("https://roudoudou.com/ACE-DL/BZen.tar.gz".to_string()),
+                    windows: Some("https://roudoudou.com/ACE-DL/W64bnd4.zip".to_string()),
                     macos: None
                 })
             },
             AceVersion::ZenSummer => {
                 Ok(MutiplatformUrls {
                     linux: Some(
-                        "http://www.roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz".to_string()
+                        "https://roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz".to_string()
                     ),
-                    windows: Some("http://www.roudoudou.com/ACE-DL/Win64Summer.zip".to_string()),
+                    windows: Some("https://roudoudou.com/ACE-DL/Win64Summer.zip".to_string()),
                     macos: None
                 })
             },
             AceVersion::WakePoint => {
                 Ok(MutiplatformUrls {
-                    linux: Some("http://www.roudoudou.com/ACE-DL/BZen.tar.gz".to_string()),
-                    windows: Some("http://www.roudoudou.com/ACE-DL/BWIN64.zip".to_string()),
-                    macos: Some("http://www.roudoudou.com/ACE-DL/BMAC.zip".to_string())
+                    linux: Some("https://roudoudou.com/ACE-DL/BZen.tar.gz".to_string()),
+                    windows: Some("https://roudoudou.com/ACE-DL/BWIN64.zip".to_string()),
+                    macos: Some("https://roudoudou.com/ACE-DL/BMAC.zip".to_string())
                 })
             },
         }
