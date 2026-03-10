@@ -419,7 +419,10 @@ impl BndBuilderCommand {
     ) -> Result<(), BndBuilderError> {
         let targets = [add];
         let builder = builder.add_default_rule(&targets, &dependencies, &kind);
-        builder.save(fname).expect("Error when saving the file");
+        builder.save(&fname).map_err(|e| BndBuilderError::WorkingDirectoryError {
+            fname: fname.to_string(),
+            error: e
+        })?;
         Ok(())
     }
 
@@ -554,8 +557,9 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
 
     fn execute_version(observers: &dyn BndBuilderObserver) {
         observers.emit_stdout(&format!(
-            "{}\n{}\n{}\n{}",
-            build_args_parser().clone().render_long_version(),
+            "bndbuilder {}\nCompiled: {}\n\n{}\n\n{}\n\n{}",
+            crate::built_info::PKG_VERSION,
+            crate::built_info::BUILT_TIME_UTC,
             BasmRunner::<()>::default()
                 .get_clap_command()
                 .render_long_version(),
@@ -734,8 +738,10 @@ impl BndBuilderApp {
             Result::Ok(matches) => Ok(Some(Self::from_matches(matches))),
             Result::Err(e) => {
                 match e.kind() {
-                    clap::error::ErrorKind::DisplayHelp
-                    | clap::error::ErrorKind::DisplayVersion => Ok(None),
+                    clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
+                        e.print().ok();
+                        Ok(None)
+                    },
                     _ => Err(e)
                 }
             },

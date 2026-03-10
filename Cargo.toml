@@ -29,6 +29,7 @@ members = [
   "cpclib-orgams-ascii",
   "cpclib-runner", 
   "cpclib-sna",
+  "cpclib-build-argv-derive",
   "cpclib-snacli",
   "cpclib-sprite-compiler", 
   "cpclib-tokens",

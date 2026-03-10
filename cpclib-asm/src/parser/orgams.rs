@@ -1,7 +1,7 @@
 use cpclib_common::smol_str::SmolStr;
 use cpclib_common::winnow::combinator::{alt, cut_err, delimited, not, opt, terminated};
 use cpclib_common::winnow::stream::{AsBStr, Stream, UpdateSlice};
-use cpclib_common::winnow::token::take_until;
+use cpclib_common::winnow::token::take_till;
 use cpclib_common::winnow::{ModalResult, Parser};
 use cpclib_tokens::{BinaryOperation, Expr};
 
@@ -21,7 +21,7 @@ pub fn parse_orgams_fail(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
 
     "!!".parse_next(input)?;
 
-    let content = take_until(0.., "\n").parse_next(input)?;
+    let content = take_till(1.., |c| c == b'\r' || c == b'\n').parse_next(input)?;
     let txt = String::from_utf8_lossy(content);
     let exp = Expr::String(SmolStr::new(txt));
     let fmtexp = cpclib_tokens::FormattedExpr::Raw(exp);

@@ -2632,6 +2632,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-build-argv-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2 1.0.105",
+ "quote 1.0.43",
+ "syn 2.0.113",
+]
+
+[[package]]
 name = "cpclib-catalog"
 version = "0.11.0"
 dependencies = [
@@ -2888,6 +2897,7 @@ dependencies = [
 name = "cpclib-python"
 version = "0.11.0"
 dependencies = [
+ "bon",
  "cpclib-asm",
  "cpclib-basic",
  "cpclib-basm",
@@ -2896,6 +2906,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-cpr",
  "cpclib-crunchers",
+ "cpclib-sna",
  "pyo3",
 ]
 
@@ -2952,6 +2963,7 @@ dependencies = [
  "camino-tempfile",
  "cfg-if",
  "comfy-table",
+ "cpclib-build-argv-derive",
  "cpclib-common",
  "delegate",
  "fs-err",

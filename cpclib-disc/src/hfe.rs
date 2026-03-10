@@ -113,8 +113,15 @@ impl Disc for Hfe {
         let mut min_sector = u8::MAX;
         for t in 0..(self.img.nb_tracks()) {
             for s in 0..self.img.nb_sides() {
-                min_sector = self.track_min_sector(s as u8, t as _);
+                min_sector = min_sector.min(self.track_min_sector(s as u8, t as _));
             }
+        }
+
+        if min_sector == u8::MAX {
+            panic!(
+                "HFE image has no formatted tracks. \
+                 Unable to determine minimum sector ID."
+            );
         }
 
         min_sector as _
@@ -128,16 +135,24 @@ impl Disc for Hfe {
         let sca = match sca {
             Some(sca) => sca,
             None => {
-                access
-                    .all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmFm)
-                    .unwrap()
+                // Try FM encoding if MFM fails
+                access.all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmFm)
+                    .unwrap_or_else(|| panic!(
+                        "HFE image has unformatted track: side={}, track={}. \
+                         The track contains no sectors in either MFM or FM encoding.",
+                        s, track
+                    ))
             },
         };
 
         (0..sca.nb_sectors())
             .map(|k| sca.sector_config(k).sector_id().get() as u8)
             .min()
-            .unwrap()
+            .unwrap_or_else(|| panic!(
+                "HFE track has no sector IDs: side={}, track={}. \
+                 Track exists but contains no valid sectors.",
+                s, track
+            ))
     }
 
     fn nb_tracks_per_head(&self) -> u8 {

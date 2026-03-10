@@ -146,11 +146,19 @@ pub fn build_args_parser() -> clap::Command {
     let (commands_list, clearable_list) = commands_list();
     let updatable_list = clearable_list;
 
+    let after_help_text = format!("Compilation timestamp: {}", built_info::BUILT_TIME_UTC);
+    let version_text = Box::leak(
+        format!("{}\nCompiled: {}", built_info::PKG_VERSION, built_info::BUILT_TIME_UTC)
+            .into_boxed_str()
+    ) as &'static str;
+
     let cmd = Command::new("bndbuilder")
         .about("Benediction CPC demo project builder")
         .before_help("Can be used as a project builder similar to Make, but using a yaml project description, or can be used as any Benediction crossdev tool (basm, img2cpc, xfer, disc). This way only bndbuild needs to be installed.")
+        .after_help(after_help_text)
         .author("Krusty/Benediction")
         .version(built_info::PKG_VERSION)
+        .long_version(version_text)
         .disable_help_flag(true)
         .disable_version_flag(true)
         ;

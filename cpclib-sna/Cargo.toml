@@ -24,6 +24,7 @@ line-span = { version = "0.1.5", optional = true }
 nutype.workspace = true
 serde.workspace = true
 strum.workspace = true
+cpclib-build-argv-derive = { path = "../cpclib-build-argv-derive", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rustyline = { workspace = true, optional = true }
@@ -38,6 +39,6 @@ built.workspace = true
 
 [features]
 default = []
-cmdline = ["cpclib-common/cmdline", "comfy-table"]
+cmdline = ["cpclib-common/cmdline", "comfy-table", "cpclib-build-argv-derive"]
 interactive = ["rustyline", "minus", "line-span"]
 

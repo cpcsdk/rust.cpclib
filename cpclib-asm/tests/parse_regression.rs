@@ -491,3 +491,325 @@ ds_m4_rom_byte_storage equ $
     );
     assert!(dbg!(inner_code_with_state(ParsingState::Standard, false).parse(input.into())).is_ok());
 }
+
+#[test]
+fn test_nested_array_assignment() {
+    let code = r#"
+        GRAY_CODE_ACTION_SET = 1
+        GRAY_CODE_ACTION_RESET = 0
+        
+        GRAY_CODE_ACTION_ORDER = [ 
+            [GRAY_CODE_ACTION_SET, 0+11],
+            [GRAY_CODE_ACTION_SET, 1+11],
+            [GRAY_CODE_ACTION_RESET, 0+11],
+            [GRAY_CODE_ACTION_SET, 2+11],
+            [GRAY_CODE_ACTION_SET, 0+11],
+            [GRAY_CODE_ACTION_RESET, 1+11],
+            [GRAY_CODE_ACTION_RESET, 0+11],
+            [GRAY_CODE_ACTION_RESET, 2+11]
+        ]
+    "#;
+    
+    let result = parse_z80_str(code);
+    assert!(result.is_ok(), "Nested array assignment should parse correctly: {:?}", result);
+    
+    let listing = result.unwrap();
+    assert!(listing.len() >= 3, "Should parse at least 3 statements (2 constants + 1 array assignment)");
+}
+
+#[test]
+fn test_conditional_with_nested_array() {
+    let code = r#"
+VUMETER_HORIZONTAL equ 1
+VUMETER_VERTICAL equ 2
+
+VUMETER_KIND equ VUMETER_HORIZONTAL
+
+	if VUMETER_KIND == VUMETER_HORIZONTAL
+
+   ; Backward decompression -- get and put bytes backward
+VUMETER1_START_ADDRESS equ 0xc800 + (80-15)/2 
+VUMETER2_START_ADDRESS equ VUMETER1_START_ADDRESS + 0x1000
+VUMETER3_START_ADDRESS equ VUMETER2_START_ADDRESS + 0x1000
+
+VUMETER1_PENS = [6,8]
+VUMETER2_PENS = [5,10]
+VUMETER3_PENS = [13,14]
+
+	else
+VUMETER1_START_ADDRESS equ 0xc000
+VUMETER2_START_ADDRESS equ VUMETER1_START_ADDRESS + 2
+VUMETER3_START_ADDRESS equ VUMETER2_START_ADDRESS + 2
+
+		GRAY_CODE_ACTION_SET equ 0
+		GRAY_CODE_ACTION_RESET equ 1
+		GRAY_CODE_ACTION_ORDER = [ 
+			[GRAY_CODE_ACTION_SET, 0+11],
+			[GRAY_CODE_ACTION_SET, 1+11],
+			[GRAY_CODE_ACTION_RESET, 0+11],
+			[GRAY_CODE_ACTION_SET, 2+11],
+			[GRAY_CODE_ACTION_SET, 0+11],
+			[GRAY_CODE_ACTION_RESET, 1+11],
+			[GRAY_CODE_ACTION_RESET, 0+11],
+			[GRAY_CODE_ACTION_RESET, 2+11]
+		]
+
+	endif
+    "#;
+    
+    let result = parse_z80_str(code);
+    assert!(result.is_ok(), "Conditional with nested array should parse correctly: {:?}", result);
+    
+    let listing = result.unwrap();
+    // Should have parsed the horizontal branch with simple array assignments
+    assert!(listing.len() > 0, "Should parse at least some statements");
+}
+
+#[test]
+fn test_complete_vumeter_file() {
+    // Test complete vumeter code with complex features:
+    // - Multiple nested IF/ELSE blocks
+    // - Nested arrays with expressions
+    // - Multiple nested repeat macros with iterators
+    // - list_get function calls within conditionals
+    // - Complex arithmetic in nested arrays
+    // - Variable interpolation {{channel}}, {{flipping}}, etc.
+    let code = r#"
+VUMETER_HORIZONTAL equ 1
+VUMETER_VERTICAL equ 2
+
+VUMETER_KIND equ VUMETER_HORIZONTAL
+
+	if VUMETER_KIND == VUMETER_HORIZONTAL
+
+VUMETER1_START_ADDRESS equ 0xc800 + (80-15)/2 
+VUMETER2_START_ADDRESS equ VUMETER1_START_ADDRESS + 0x1000
+VUMETER3_START_ADDRESS equ VUMETER2_START_ADDRESS + 0x1000
+
+VUMETER1_PENS = [6,8]
+VUMETER2_PENS = [5,10]
+VUMETER3_PENS = [13,14]
+
+	else
+VUMETER1_START_ADDRESS equ 0xc000
+VUMETER2_START_ADDRESS equ VUMETER1_START_ADDRESS + 2
+VUMETER3_START_ADDRESS equ VUMETER2_START_ADDRESS + 2
+
+		GRAY_CODE_ACTION_SET equ 0
+		GRAY_CODE_ACTION_RESET equ 1
+		GRAY_CODE_ACTION_ORDER = [ 
+			[GRAY_CODE_ACTION_SET, 0+11],
+			[GRAY_CODE_ACTION_SET, 1+11],
+			[GRAY_CODE_ACTION_RESET, 0+11],
+			[GRAY_CODE_ACTION_SET, 2+11],
+			[GRAY_CODE_ACTION_SET, 0+11],
+			[GRAY_CODE_ACTION_RESET, 1+11],
+			[GRAY_CODE_ACTION_RESET, 0+11],
+			[GRAY_CODE_ACTION_RESET, 2+11]
+		]
+
+	endif
+
+
+animate_vumeter
+	ret
+	ld bc, 0x7fc7 
+	out (c),c
+
+	ld a, 0
+	inc a 
+	and 1 
+	jr z, .vol1_2
+
+	repeat 2, flipping
+
+.vol1_{{flipping}}
+	ld a, 11
+	ld de, VUMETER1_START_ADDRESS 
+	ld hl, .volume_table_1_{{flipping}}
+
+.vol2_{{flipping}}
+	ld de, VUMETER2_START_ADDRESS 
+	ld hl, .volume_table_2_{{flipping}}
+
+.vol3_{{flipping}}
+	ld de, VUMETER3_START_ADDRESS 
+	ld hl, .volume_table_3_{{flipping}}
+	jr .end
+	endrepeat
+
+.end
+	ld bc, 0x7fc0 
+	out (c),c
+	ret
+
+	repeat 2, flipping
+	repeat 3, channel
+
+		if VUMETER_KIND == VUMETER_HORIZONTAL
+			.channel_pens = VUMETER{{channel}}_PENS
+
+			if {flipping} % 2 == 0
+				.pen1 = list_get(.channel_pens, 0)
+				.pen2 = list_get(.channel_pens, 1)
+			else
+				.pen1 = list_get(.channel_pens, 1)
+				.pen2 = list_get(.channel_pens, 0)
+			endif
+
+			repeat 16, vol, 0
+				.volume_{{channel}}_{{vol}}_{{flipping}}
+					repeat 16, current_pixel, 0
+						.expect_pixel_vumeter = {vol} > 15-{current_pixel}
+						if {current_pixel} % 2 == 0
+							.current_screen_byte = 0
+							.right_pen = 1
+							.left_pen = 0
+
+							if .expect_pixel_vumeter
+								.left_pen = .pen1
+							endif
+						else
+							if .expect_pixel_vumeter
+								.right_pen = .pen2
+							endif
+
+							db 0
+						endif
+					endr
+
+					repeat 16, current_pixel, 0
+						.expect_pixel_vumeter = {vol} > {current_pixel}
+						if {current_pixel} % 2 == 0
+							.current_screen_byte = 0
+							.right_pen = 1
+							.left_pen = 0
+
+							if .expect_pixel_vumeter
+								.left_pen = .pen1
+							endif
+						else
+							if .expect_pixel_vumeter
+								.right_pen = .pen2
+							endif
+
+							db 0
+						endif
+					endr
+			endrepeat
+		else
+			repeat 16, vol , 0
+			.current_screen_address = VUMETER{{channel}}_START_ADDRESS
+			.current_delta = 0
+			.volume_{{channel}}_{{vol}}
+
+			repeat 15, pos, 0
+				.current_screen_value = 0
+					
+				if false
+					db 0b01010101
+				else
+					db .current_screen_value
+				endif
+
+				current_gray_code_action = list_get(GRAY_CODE_ACTION_ORDER, {pos}%8)
+
+				if list_get(current_gray_code_action, 0) == GRAY_CODE_ACTION_SET
+					.current_delta = .current_delta + (1 << (list_get(current_gray_code_action, 1)-11))
+					.current_screen_address = .current_screen_address + (1 << (list_get(current_gray_code_action, 1)-11))
+				else
+					.current_delta = .current_delta & ~(1 << (list_get(current_gray_code_action, 1)-11))
+					.current_screen_address = .current_screen_address & ~(1 << (list_get(current_gray_code_action, 1)-11))
+				endif
+
+				if {pos}%8 == 7
+					.current_screen_address = .current_screen_address + 80
+				endif
+			endr
+
+			endrepeat
+		endif
+
+	.volume_table_{{channel}}_{{flipping}}
+			repeat 16, vol, 0
+				dw .volume_{{channel}}_{{vol}}_{{flipping}}
+			endrepeat
+
+	endrepeat
+	endrepeat
+
+lectpsg    
+	LD B,0xF4
+	OUT (C),A
+	LD BC,0xF6C0
+	OUT (C),C
+	xor a
+	out (c),a
+	LD BC,0xF792
+	OUT (C),C
+	LD BC,0xF640
+	OUT (C),C
+	LD B,0xF4
+	IN A,(C)
+	LD BC,0xF782
+	OUT (C),C
+	dec b
+	ld c,0
+	out (c),c
+	RET
+    "#;
+
+    let res = parse_z80_str(code);
+    assert!(res.is_ok(), "Failed to parse complete vumeter file (HORIZONTAL): {:?}", res.err());
+
+    let listing = res.unwrap();
+    assert!(listing.len() > 0, "Should parse at least some statements from complete vumeter file");
+}
+
+#[test]
+fn test_vumeter_vertical_with_gray_code_array() {
+    // Test the ELSE branch with VUMETER_VERTICAL which contains the nested GRAY_CODE_ACTION_ORDER array
+    // This is what's failing in the real code!
+    let code = r#"
+VUMETER_HORIZONTAL equ 1
+VUMETER_VERTICAL equ 2
+
+VUMETER_KIND equ VUMETER_VERTICAL
+
+	if VUMETER_KIND == VUMETER_HORIZONTAL
+
+VUMETER1_START_ADDRESS equ 0xc800 + (80-15)/2 
+VUMETER1_PENS = [6,8]
+
+	else
+
+VUMETER1_START_ADDRESS equ 0xc000
+VUMETER2_START_ADDRESS equ VUMETER1_START_ADDRESS + 2
+VUMETER3_START_ADDRESS equ VUMETER2_START_ADDRESS + 2
+
+		GRAY_CODE_ACTION_SET equ 0
+		GRAY_CODE_ACTION_RESET equ 1
+		GRAY_CODE_ACTION_ORDER = [ 
+			[GRAY_CODE_ACTION_SET, 0+11],
+			[GRAY_CODE_ACTION_SET, 1+11],
+			[GRAY_CODE_ACTION_RESET, 0+11],
+			[GRAY_CODE_ACTION_SET, 2+11],
+			[GRAY_CODE_ACTION_SET, 0+11],
+			[GRAY_CODE_ACTION_RESET, 1+11],
+			[GRAY_CODE_ACTION_RESET, 0+11],
+			[GRAY_CODE_ACTION_RESET, 2+11]
+		]
+
+	endif
+
+test_label
+	ld a, 1
+	ret
+    "#;
+
+    let res = parse_z80_str(code);
+    assert!(res.is_ok(), "Failed to parse VERTICAL mode with GRAY_CODE_ACTION_ORDER: {:?}", res.err());
+
+    let listing = res.unwrap();
+    assert!(listing.len() > 0, "Should parse VERTICAL mode statements");
+}

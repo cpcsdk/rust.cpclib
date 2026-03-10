@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use cpclib_common::smallvec::SmallVec;
-use cpclib_common::winnow::ascii::{Caseless, alpha1, line_ending, newline, space0};
+use cpclib_common::winnow::ascii::{Caseless, alpha1, line_ending, space0};
 use cpclib_common::winnow::combinator::{
     alt, cut_err, delimited, eof, not, opt, peek, preceded, terminated
 };

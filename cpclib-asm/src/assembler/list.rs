@@ -173,10 +173,8 @@ pub fn list_extend(
     match list1 {
         ExprResult::List(mut l) => {
             match list2 {
-                ExprResult::List(l2) => {
-                    for item in l2 {
-                        l.push(item);
-                    }
+                ExprResult::List(mut l2) => {
+                    l.append(&mut l2);
                     Ok(ExprResult::List(l))
                 },
                 _ => {

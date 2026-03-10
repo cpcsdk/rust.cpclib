@@ -44,6 +44,7 @@ use crate::runners::emulator::Emulator;
 use crate::runners::fade::FADE_CMD;
 use crate::runners::hideur::HIDEUR_CMD;
 use crate::runners::tracker::{SongConverter, Tracker};
+use cpclib_common::clap::ArgMatches;
 
 /// Represents the kind of task based on how it's implemented
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1139,6 +1140,117 @@ impl StandardTaskArguments {
     }
 }
 
+impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArguments {
+    fn from((cmd, matches): (&cpclib_common::clap::Command, &ArgMatches)) -> Self {
+        // Helper that finds the declared token for an argument id using the
+        // provided `Command` metadata. Prefer short (`-x`) when available,
+        // then long (`--name`), otherwise fall back to canonical `--{id}`.
+        fn declared_token_for(cmd: &cpclib_common::clap::Command, id: &str) -> Option<String> {
+            for a in cmd.get_arguments() {
+                if a.get_id().as_str() == id {
+                    // Positional arguments should not be prefixed.
+                    if a.get_index().is_some() {
+                        return None;
+                    }
+
+                    // Prefer short form if available.
+                    if let Some(s) = a.get_short() {
+                        return Some(format!("-{}", s));
+                    }
+
+                    // Prefer a visible alias if any (this matches how some
+                    // basm options expose alternate long names such as
+                    // `--ace` for `REMU_OUTPUT`). If no visible alias is
+                    // present, prefer any declared alias (hidden or not),
+                    // then fall back to the main long name.
+                    if let Some(aliases) = a.get_visible_aliases() {
+                        if let Some(first) = aliases.iter().next() {
+                            return Some(format!("--{}", first));
+                        }
+                    }
+
+                    if let Some(all_aliases) = a.get_all_aliases() {
+                        if let Some(first) = all_aliases.iter().next() {
+                            return Some(format!("--{}", first));
+                        }
+                    }
+
+                    // Fallback to the main long name.
+                    if let Some(l) = a.get_long() {
+                        return Some(format!("--{}", l));
+                    }
+                }
+            }
+            // If we couldn't find a declared token (no short/long/alias),
+            // treat the argument as positional and return None so the
+            // value is emitted without a preceding token.
+            None
+        }
+
+        fn collect(cmd: &cpclib_common::clap::Command, matches: &ArgMatches, out: &mut Vec<String>) {
+            for id in matches.ids() {
+                let id_str = id.as_str();
+
+                // Attempt multi-value first.
+                if let Ok(Some(values)) = matches.try_get_many::<String>(id_str) {
+                    if let Some(cpclib_common::clap::parser::ValueSource::CommandLine) =
+                        matches.value_source(id_str)
+                    {
+                        if let Some(token) = declared_token_for(cmd, id_str) {
+                            out.push(token);
+                        }
+                        for v in values {
+                            out.push(v.clone());
+                        }
+                    }
+                    continue;
+                }
+
+                if let Ok(Some(v)) = matches.try_get_one::<String>(id_str) {
+                    if let Some(cpclib_common::clap::parser::ValueSource::CommandLine) =
+                        matches.value_source(id_str)
+                    {
+                        if let Some(token) = declared_token_for(cmd, id_str) {
+                            out.push(token);
+                        }
+                        out.push(v.clone());
+                    }
+                    continue;
+                }
+
+                if let Ok(Some(b)) = matches.try_get_one::<bool>(id_str) {
+                    if *b {
+                        if let Some(cpclib_common::clap::parser::ValueSource::CommandLine) =
+                            matches.value_source(id_str)
+                        {
+                            if let Some(token) = declared_token_for(cmd, id_str) {
+                                out.push(token);
+                            }
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            if let Some((sub_name, sub_matches)) = matches.subcommand() {
+                out.push(sub_name.to_string());
+                // Find the subcommand `Command` metadata to continue mapping
+                // declared tokens correctly. If not found, fall back to the
+                // parent command (we can't map more precisely).
+                if let Some(sub_cmd) = cmd.get_subcommands().find(|s| s.get_name() == sub_name) {
+                    collect(sub_cmd, sub_matches, out);
+                } else {
+                    collect(cmd, sub_matches, out);
+                }
+            }
+        }
+
+        let mut parts = Vec::new();
+        collect(cmd, matches, &mut parts);
+        StandardTaskArguments::new(parts.join(" "))
+    }
+}
+
 impl StandardTaskArguments {
     /// Public accessor for the raw args string.
     pub fn args(&self) -> &str {
@@ -1155,6 +1267,7 @@ impl StandardTaskArguments {
 mod test {
     use super::InnerTask;
     use crate::task::StandardTaskArguments;
+    use cpclib_common::clap::{Command, Arg, ArgAction};
 
     #[test]
     fn test_automatic_arguments() {
@@ -1304,5 +1417,95 @@ mod test {
         let std = StandardTaskArguments::new("file1.txt");
         let t = InnerTask::from_command_and_arguments("rm", std.clone()).unwrap();
         assert_eq!(t, InnerTask::Rm(std));
+    }
+
+    #[test]
+    fn test_from_argmatches_simple() {
+        // Build a command with a couple of options, a flag and a subcommand
+        let cmd = Command::new("prog")
+            .arg(Arg::new("input").long("input").num_args(1))
+            .arg(Arg::new("opt").long("opt").num_args(1))
+            .arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue))
+            .subcommand(
+                Command::new("sub").arg(Arg::new("subarg").long("subarg").num_args(1)),
+            );
+
+        let argv = [
+            "prog",
+            "--input",
+            "a.bin",
+            "--opt",
+            "x",
+            "--flag",
+            "sub",
+            "--subarg",
+            "y",
+        ];
+
+        let matches = cmd.clone().get_matches_from(&argv);
+
+        let std = StandardTaskArguments::from((&cmd, &matches));
+        let expected = argv[1..].join(" ");
+        assert_eq!(std.args(), expected.as_str());
+    }
+
+    #[test]
+    fn test_from_argmatches_multiple_values() {
+        // repeated occurrences should be collected in order
+        let cmd = Command::new("p").arg(Arg::new("list").long("list").num_args(1..));
+        // provide two values in a single occurrence: `--list a b`
+        let argv = ["p", "--list", "a", "b"];
+        let matches = cmd.clone().get_matches_from(&argv);
+        let std = StandardTaskArguments::from((&cmd, &matches));
+        let expected = argv[1..].join(" ");
+        assert_eq!(std.args(), expected.as_str());
+    }
+
+    #[test]
+    fn test_from_argmatches_basm_command() {
+        // Use the real basm command parser to ensure we don't reinvent the wheel.
+        let cmd = cpclib_basm::build_args_parser();
+
+        let argv = [
+            "basm",
+            "src/demosystem/private.asm",
+            "-o",
+            "demosystem.o",
+            "--sym",
+            "demosystem.sym",
+            "--ace",
+            "demosystem.rasm",
+            "--lst",
+            "demosystem.lst",
+        ];
+
+        let matches = cmd.clone().get_matches_from(&argv);
+        let std = StandardTaskArguments::from((&cmd, &matches));
+        let expected = argv[1..].join(" ");
+        assert_eq!(std.args(), expected.as_str());
+    }
+
+    #[test]
+    fn test_from_argmatches_filename() {
+        // Ensure a filename argument is preserved
+        let cmd = Command::new("prog").arg(Arg::new("file").long("file").num_args(1));
+        let argv = ["prog", "--file", "path/to/some-file.txt"];
+        let matches = cmd.clone().get_matches_from(&argv);
+        let std = StandardTaskArguments::from((&cmd, &matches));
+        let expected = argv[1..].join(" ");
+        assert_eq!(std.args(), expected.as_str());
+    }
+
+    #[test]
+    fn test_from_argmatches_nested_subcommand() {
+        // Nested subcommands should be collected in order: outer inner <args>
+        let inner = Command::new("inner").arg(Arg::new("msg").long("msg").num_args(1));
+        let outer = Command::new("prog").subcommand(Command::new("outer").subcommand(inner));
+
+        let argv = ["prog", "outer", "inner", "--msg", "hello"];
+        let matches = outer.clone().get_matches_from(&argv);
+        let std = StandardTaskArguments::from((&outer, &matches));
+        let expected = argv[1..].join(" ");
+        assert_eq!(std.args(), expected.as_str());
     }
 }

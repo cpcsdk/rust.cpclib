@@ -107,7 +107,8 @@ pub trait RunnerWithClapDerive: RunnerWithClap {
             return Ok(None);
         }
         let matches = matches.unwrap();
-        let args: Self::Args = Self::Args::from_arg_matches(&matches).expect("BUG");
+        let args: Self::Args = Self::Args::from_arg_matches(&matches)
+            .map_err(|e| format!("Failed to parse arguments: {}", e))?;
         Ok(Some(args))
     }
 }

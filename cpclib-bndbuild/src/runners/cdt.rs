@@ -102,7 +102,7 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
             .command
             .as_ref()
             .and_then(|cmd| cmd.file_name())
-            .expect("Filename not supplied");
+            .ok_or_else(|| "Filename not supplied".to_string())?;
         let display = file_name.display();
 
         // Open the path in read-only mode, returns `io::Result<File>`

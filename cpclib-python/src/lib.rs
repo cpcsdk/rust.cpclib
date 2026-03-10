@@ -3,6 +3,7 @@ use pyo3::types::PyDict;
 
 mod basm;
 mod bndbuild;
+mod builders;
 
 // Lightweight placeholders for crate-specific wrappers.
 // These functions are intentionally minimal so the crate builds
@@ -79,6 +80,13 @@ fn cpclib_python(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     bndbuild_mod.add_function(wrap_pyfunction!(bndbuild_info, &bndbuild_mod)?)?;
     // expose the `PyBndTask` class (use the constructor from Python)
     bndbuild_mod.add_class::<bndbuild::PyBndTask>()?;
+    // expose the builder classes
+    bndbuild_mod.add_class::<builders::PySnapshotBuilder>()?;
+    bndbuild_mod.add_class::<builders::PyArkosTracker3Builder>()?;
+    bndbuild_mod.add_class::<builders::PyChipnsfxBuilder>()?;
+    bndbuild_mod.add_class::<builders::PyMinyBuilder>()?;
+    bndbuild_mod.add_class::<builders::PyAytBuilder>()?;
+    bndbuild_mod.add_class::<builders::PySongConverterBuilder>()?;
     m.add_submodule(&bndbuild_mod)?;
 
     let cpr_mod = PyModule::new(py, "cpr")?;

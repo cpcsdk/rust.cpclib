@@ -2484,7 +2484,7 @@ pub fn parse_macro_or_struct_call_inner(
         let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
             eof.value(()),
             parse_comment.value(()),
-            '\n'.value(()),
+            line_ending.value(()),
             ':'.value(())
         )))
         .parse_next(input)

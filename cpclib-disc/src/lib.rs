@@ -151,7 +151,20 @@ impl From<AmsdosError> for DskManagerError {
 }
 
 #[inline]
-pub fn new_disc<P: AsRef<Utf8Path>>(_path: Option<P>) -> AnyDisc {
+pub fn new_disc<P: AsRef<Utf8Path>>(path: Option<P>) -> AnyDisc {
+    // Check the file extension to determine which format to use
+    if let Some(_p) = path {
+        #[cfg(feature = "hfe")]
+        {
+            let path_str = _p.as_ref().as_str().to_lowercase();
+            if path_str.ends_with(".hfe") {
+                return Hfe::default().into();
+            }
+        }
+        // Default to EDSK for .dsk, .edsk, or if no extension matches
+        return ExtendedDsk::default().into();
+    }
+    // If no path provided, use default behavior
     AnyDisc::default()
 }
 

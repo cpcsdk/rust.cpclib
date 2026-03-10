@@ -148,6 +148,22 @@ impl PyBndTask {
         })
         .map_err(pyo3::exceptions::PyRuntimeError::new_err)
     }
+
+    /// Helper to create PyBndTask from a string (for builders)
+    pub(crate) fn new_from_string(py: Python, task_str: &str) -> PyResult<Py<PyBndTask>> {
+        let t = Task::from_str(task_str).map_err(pyo3::exceptions::PyValueError::new_err)?;
+        Self::new_from_task(py, t)
+    }
+
+    /// Helper to create PyBndTask from a Task instance (for builders)
+    pub(crate) fn new_from_task(py: Python, task: Task) -> PyResult<Py<PyBndTask>> {
+        Py::new(
+            py,
+            PyBndTask {
+                inner: Mutex::new(task)
+            }
+        )
+    }
 }
 
 /// Factory function to create a `PyBndTask` from a task string.
