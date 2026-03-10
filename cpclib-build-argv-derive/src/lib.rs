@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Data, DataStruct, Fields, Type};
+use syn::{Data, DataStruct, DeriveInput, Fields, Type};
 
 #[proc_macro_derive(BuildArgv, attributes(arg))]
 pub fn build_argv_derive(input: TokenStream) -> TokenStream {
@@ -8,11 +8,17 @@ pub fn build_argv_derive(input: TokenStream) -> TokenStream {
     let name = input.ident;
 
     let fields = match input.data {
-        Data::Struct(DataStruct { fields: Fields::Named(ref f), .. }) => &f.named,
+        Data::Struct(DataStruct {
+            fields: Fields::Named(ref f),
+            ..
+        }) => &f.named,
         _ => {
-            return syn::Error::new_spanned(name, "BuildArgv only supports structs with named fields")
-                .to_compile_error()
-                .into();
+            return syn::Error::new_spanned(
+                name,
+                "BuildArgv only supports structs with named fields"
+            )
+            .to_compile_error()
+            .into();
         }
     };
 
@@ -41,7 +47,8 @@ pub fn build_argv_derive(input: TokenStream) -> TokenStream {
                             if ch_pos + 2 < chars.len() {
                                 short = Some(chars[ch_pos + 1]);
                             }
-                        } else if let Some(dq_pos) = rest.find('"') {
+                        }
+                        else if let Some(dq_pos) = rest.find('"') {
                             // short may be given as string
                             let chars: Vec<char> = rest.chars().collect();
                             if dq_pos + 1 < chars.len() {
@@ -71,9 +78,11 @@ pub fn build_argv_derive(input: TokenStream) -> TokenStream {
         let token = if let Some(c) = short {
             let s = c.to_string();
             quote! { format!("-{}", #s) }
-        } else if let Some(l) = long.clone() {
+        }
+        else if let Some(l) = long.clone() {
             quote! { format!("--{}", #l) }
-        } else {
+        }
+        else {
             // fallback uses field name as long form
             quote! { format!("--{}", #fname) }
         };
@@ -105,7 +114,8 @@ pub fn build_argv_derive(input: TokenStream) -> TokenStream {
             // Vec<T>
             if seg == "Vec" {
                 // detect pair semantics (value_names or common names)
-                let is_pair = has_value_names || ["load", "set_token", "put_data"].contains(&fname.as_str());
+                let is_pair =
+                    has_value_names || ["load", "set_token", "put_data"].contains(&fname.as_str());
                 if is_pair {
                     stmts.push(quote! {
                         for chunk in self.#ident.chunks(2) {
@@ -116,7 +126,8 @@ pub fn build_argv_derive(input: TokenStream) -> TokenStream {
                             }
                         }
                     });
-                } else {
+                }
+                else {
                     stmts.push(quote! {
                         for v in &self.#ident {
                             argv.push(#token);
@@ -157,4 +168,3 @@ pub fn build_argv_derive(input: TokenStream) -> TokenStream {
 
     gen.into()
 }
-

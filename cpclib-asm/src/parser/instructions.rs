@@ -926,11 +926,12 @@ pub fn parse_call_jp_or_jr(
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
 
-        let flag_test =
-            opt(parse_flag_test.with_taken()).parse_next(input)?;
+        let flag_test = opt(parse_flag_test.with_taken()).parse_next(input)?;
 
         if flag_test.is_some() {
-            let _ = cut_err(parse_comma.context(StrContext::Expected(StrContextValue::CharLiteral(','))))
+            let _ = cut_err(
+                parse_comma.context(StrContext::Expected(StrContextValue::CharLiteral(',')))
+            )
             .parse_next(input)?;
         }
 

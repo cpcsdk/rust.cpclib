@@ -136,23 +136,28 @@ impl Disc for Hfe {
             Some(sca) => sca,
             None => {
                 // Try FM encoding if MFM fails
-                access.all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmFm)
-                    .unwrap_or_else(|| panic!(
-                        "HFE image has unformatted track: side={}, track={}. \
+                access
+                    .all_track_sectors(s.into(), (track as i32).into(), TrackEncoding::IsoibmFm)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "HFE image has unformatted track: side={}, track={}. \
                          The track contains no sectors in either MFM or FM encoding.",
-                        s, track
-                    ))
-            },
+                            s, track
+                        )
+                    })
+            }
         };
 
         (0..sca.nb_sectors())
             .map(|k| sca.sector_config(k).sector_id().get() as u8)
             .min()
-            .unwrap_or_else(|| panic!(
-                "HFE track has no sector IDs: side={}, track={}. \
+            .unwrap_or_else(|| {
+                panic!(
+                    "HFE track has no sector IDs: side={}, track={}. \
                  Track exists but contains no valid sectors.",
-                s, track
-            ))
+                    s, track
+                )
+            })
     }
 
     fn nb_tracks_per_head(&self) -> u8 {

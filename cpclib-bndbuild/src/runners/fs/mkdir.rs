@@ -1,9 +1,9 @@
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::clap::{self, CommandFactory, FromArgMatches, Parser};
-use cpclib_common::itertools::Itertools;
+use cpclib_common::clap::{self, FromArgMatches, Parser};
 use cpclib_runner::event::EventObserver;
 
 use crate::expand_glob;
+#[allow(unused_imports)]
 use crate::runners::{Runner, RunnerWithClap};
 use crate::task::MKDIR_CMDS;
 

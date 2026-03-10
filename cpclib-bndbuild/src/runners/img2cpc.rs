@@ -1,6 +1,6 @@
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
+#[allow(unused_imports)]
 use super::{Runner, RunnerWithClap};
 use crate::task::IMG2CPC_CMDS;
 

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use cpclib_bdasm::process;
 use cpclib_common::event::EventObserver;
 use cpclib_runner::runner::disassembler::ExternDisassembler;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+#[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::task::BDASM_CMDS;

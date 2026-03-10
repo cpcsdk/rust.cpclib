@@ -9,7 +9,6 @@ use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{ArgMatches, parser};
 use clap_complete::{Shell, generate};
-use cpclib_basm::build_args_parser;
 use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::delegated::base_cache_folder;

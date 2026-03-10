@@ -1,11 +1,11 @@
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::clap::{self, CommandFactory, FromArgMatches, Parser};
+use cpclib_common::clap::{self, FromArgMatches, Parser};
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::RunnerWithClap;
+#[allow(unused_imports)]
+use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::expand_glob;
-use crate::runners::Runner;
 use crate::task::MV_CMDS;
 
 #[derive(Parser, Debug)]

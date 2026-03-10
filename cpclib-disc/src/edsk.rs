@@ -1144,11 +1144,13 @@ impl Disc for ExtendedDsk {
             .filter(|track| track.head_number == head)
             .filter_map(TrackInformation::min_sector)
             .min()
-            .unwrap_or_else(|| panic!(
-                "DSK image has no formatted tracks on side {}. \
+            .unwrap_or_else(|| {
+                panic!(
+                    "DSK image has no formatted tracks on side {}. \
                  Cannot determine minimum sector ID.",
-                head
-            ))
+                    head
+                )
+            })
     }
 
     fn sector_read_bytes<S: Into<Head>>(
@@ -1183,11 +1185,13 @@ impl Disc for ExtendedDsk {
         let side_val: u8 = side.into().into();
         self.get_track_information(side_val, track)
             .and_then(|track_info| track_info.min_sector())
-            .unwrap_or_else(|| panic!(
-                "DSK image has unformatted or missing track: side={}, track={}. \
+            .unwrap_or_else(|| {
+                panic!(
+                    "DSK image has unformatted or missing track: side={}, track={}. \
                  Cannot determine minimum sector ID.",
-                side_val, track
-            ))
+                    side_val, track
+                )
+            })
     }
 
     // We assume we have the same number of tracks per Head.

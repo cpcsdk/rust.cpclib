@@ -1,7 +1,7 @@
 pub const BASMDOC_CMD: &str = "basmdoc";
 
 use cpclib_common::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+#[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 // Using the macro to generate all the boilerplate

@@ -1,7 +1,8 @@
 use cpclib_cslcli::CslCliArgs;
 use cpclib_runner::event::EventObserver;
 use cpclib_runner::runner::runner::RunnerWithClapDerive;
-use cpclib_runner::runner::{Runner, RunnerWithClap};
+#[allow(unused_imports)]
+use cpclib_runner::runner::Runner;
 
 use crate::task::CSL_CMDS;
 

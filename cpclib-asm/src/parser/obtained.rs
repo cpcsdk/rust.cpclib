@@ -525,7 +525,9 @@ impl ExprEvaluationExt for LocatedExpr {
             LocatedExpr::String(..) => "string",
             LocatedExpr::Label(..) | LocatedExpr::PrefixedLabel(..) => "label",
             LocatedExpr::List(..) => "list",
-            LocatedExpr::Paren(..) | LocatedExpr::UnaryOperation(..) | LocatedExpr::BinaryOperation(..)
+            LocatedExpr::Paren(..)
+            | LocatedExpr::UnaryOperation(..)
+            | LocatedExpr::BinaryOperation(..)
             | LocatedExpr::Ternary(..) => "expression",
             LocatedExpr::AnyFunction(..) => "function",
             LocatedExpr::UnaryTokenOperation(..) => "token_operation",

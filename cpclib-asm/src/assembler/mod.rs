@@ -4245,7 +4245,9 @@ impl Env {
                     _ => {
                         let kind = values.r#type();
                         return Err(Box::new(AssemblerError::AssemblingError {
-                            msg: format!("REPEAT issue: {values} is not a list or a matrix but a {kind}")
+                            msg: format!(
+                                "REPEAT issue: {values} is not a list or a matrix but a {kind}"
+                            )
                         }));
                     }
                 }

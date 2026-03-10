@@ -509,12 +509,19 @@ fn test_nested_array_assignment() {
             [GRAY_CODE_ACTION_RESET, 2+11]
         ]
     "#;
-    
+
     let result = parse_z80_str(code);
-    assert!(result.is_ok(), "Nested array assignment should parse correctly: {:?}", result);
-    
+    assert!(
+        result.is_ok(),
+        "Nested array assignment should parse correctly: {:?}",
+        result
+    );
+
     let listing = result.unwrap();
-    assert!(listing.len() >= 3, "Should parse at least 3 statements (2 constants + 1 array assignment)");
+    assert!(
+        listing.len() >= 3,
+        "Should parse at least 3 statements (2 constants + 1 array assignment)"
+    );
 }
 
 #[test]
@@ -556,10 +563,14 @@ VUMETER3_START_ADDRESS equ VUMETER2_START_ADDRESS + 2
 
 	endif
     "#;
-    
+
     let result = parse_z80_str(code);
-    assert!(result.is_ok(), "Conditional with nested array should parse correctly: {:?}", result);
-    
+    assert!(
+        result.is_ok(),
+        "Conditional with nested array should parse correctly: {:?}",
+        result
+    );
+
     let listing = result.unwrap();
     // Should have parsed the horizontal branch with simple array assignments
     assert!(listing.len() > 0, "Should parse at least some statements");
@@ -760,10 +771,17 @@ lectpsg
     "#;
 
     let res = parse_z80_str(code);
-    assert!(res.is_ok(), "Failed to parse complete vumeter file (HORIZONTAL): {:?}", res.err());
+    assert!(
+        res.is_ok(),
+        "Failed to parse complete vumeter file (HORIZONTAL): {:?}",
+        res.err()
+    );
 
     let listing = res.unwrap();
-    assert!(listing.len() > 0, "Should parse at least some statements from complete vumeter file");
+    assert!(
+        listing.len() > 0,
+        "Should parse at least some statements from complete vumeter file"
+    );
 }
 
 #[test]
@@ -808,7 +826,11 @@ test_label
     "#;
 
     let res = parse_z80_str(code);
-    assert!(res.is_ok(), "Failed to parse VERTICAL mode with GRAY_CODE_ACTION_ORDER: {:?}", res.err());
+    assert!(
+        res.is_ok(),
+        "Failed to parse VERTICAL mode with GRAY_CODE_ACTION_ORDER: {:?}",
+        res.err()
+    );
 
     let listing = res.unwrap();
     assert!(listing.len() > 0, "Should parse VERTICAL mode statements");

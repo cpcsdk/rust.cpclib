@@ -1,10 +1,10 @@
 use cpclib_common::camino::Utf8Path;
-use cpclib_common::clap::{self, CommandFactory, FromArgMatches, Parser};
+use cpclib_common::clap::{self, FromArgMatches, Parser};
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::RunnerWithClap;
+#[allow(unused_imports)]
+use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::expand_glob;
-use crate::runners::Runner;
 
 #[derive(Parser, Debug)]
 #[command(name = "rm", about = "Delete files.")]

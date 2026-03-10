@@ -1,6 +1,6 @@
 use cpclib_common::event::EventObserver;
 use cpclib_imgconverter::{fade_build_args, fade_handle_matches};
-use cpclib_runner::runner::runner::RunnerWithClapMatches;
+#[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
 use crate::task::FADE_CMDS;

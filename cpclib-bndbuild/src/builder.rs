@@ -415,8 +415,7 @@ impl BndBuilder {
                     .filter_map(Result::err)
                     .collect::<Vec<BndBuilderError>>()
             };
-        };
-
+        }
         // Serial tasks: always sequential
         let serial_errs = launch_tasks!(serial_tasks.values());
 
