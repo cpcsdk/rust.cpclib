@@ -94,6 +94,10 @@ pub enum InnerTask {
     YmCruncher(YmCruncher, StandardTaskArguments)
 }
 
+/// Represents a build task with a unique identifier.
+/// 
+/// Tasks encapsulate various build operations (assembly, compilation, 
+/// image conversion, etc.) and track dependencies between build steps.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Task {
     pub(crate) inner: InnerTask,
@@ -365,6 +369,7 @@ impl<'de> Deserialize<'de> for InnerTask {
                 };
                 let std = StandardTaskArguments {
                     args: next.to_owned(),
+                    original_args: None,
                     ignore_error: ignore
                 };
                 match InnerTask::from_command_and_arguments(code, std) {
@@ -694,7 +699,7 @@ impl InnerTask {
             let res = Ok(Self::with_ym_cruncher(YmCruncher::Fap, std));
 
             #[cfg(not(feature = "fap"))]
-            let res = unreachable!();
+            let res = Err("FAP command requires the 'fap' feature to be enabled".to_string());
 
             res
         }
@@ -912,42 +917,18 @@ impl InnerTask {
         self
     }
 
-    // TODO deeply check the arguments of the commands because here we may be wrong ...
+    /// Returns true if the task is "phony" (doesn't produce a file output).
+    /// Phony tasks include: Echo, Emulator, Grafx2, Tracker, Xfer
     pub fn is_phony(&self) -> bool {
         match self {
-            InnerTask::Assembler(..) => false, // wrong when displaying stuff
-            InnerTask::BndBuild(_) => false,
-            InnerTask::BasmDoc(_) => false,
-            InnerTask::Convgeneric(_) => false,
-            InnerTask::Cdt(..) => false,
-            InnerTask::Catalog(_) => false,
-            InnerTask::Locomotive(_) => false,
-            InnerTask::Cp(_) => false,
-            InnerTask::Mv(_) => false,
-            InnerTask::CpcToImg(_) => false,
-            InnerTask::Crunch(_) => false,
-            InnerTask::Disassembler(..) => false,
-            InnerTask::Disc(_) => false,
+            // Explicitly phony tasks (don't produce files)
             InnerTask::Echo(_) => true,
             InnerTask::Emulator(..) => true,
-            InnerTask::Extern(_) => false,
             InnerTask::Grafx2(_) => true,
-            InnerTask::YmCruncher(..) => false,
-            InnerTask::Fade(_) => false,
-            InnerTask::Hideur(_) => false,
-            InnerTask::HspCompiler(_) => false,
-            InnerTask::Hxcfe(_) => false,
-            InnerTask::ImgToCpc(_) => false,
-            InnerTask::ImpDsk(_) => false,
-            InnerTask::Martine(_t) => false,
-            InnerTask::Mkdir(_) => false,
-            InnerTask::Rm(_s) => false, // wrong when downloading files
-            InnerTask::Snapshot(_) => false,
-            InnerTask::SongConverter(_, _t) => false,
-            InnerTask::Tracker(_, _t) => true, // XXX think if false is better
+            InnerTask::Tracker(_, _) => true,
             InnerTask::Xfer(_) => true,
-            InnerTask::Cpr(_) => false,
-            InnerTask::Csl(_) => false
+            // All other tasks produce files
+            _ => false
         }
     }
 
@@ -1080,6 +1061,8 @@ impl InnerTask {
 #[derive(Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 pub struct StandardTaskArguments {
     pub(crate) args: String,
+    #[serde(skip)]
+    original_args: Option<String>,
     ignore_error: bool
 }
 
@@ -1087,22 +1070,31 @@ impl StandardTaskArguments {
     pub fn new<S: Into<String>>(args: S) -> Self {
         Self {
             args: args.into(),
+            original_args: None,
             ignore_error: false
         }
     }
 
+    /// Get the original arguments before variable replacement, if available
+    pub fn original_args(&self) -> Option<&str> {
+        self.original_args.as_deref()
+    }
+
     /// This method modify the args to replace automatic variables by the expected values
-    /// TODO keep the original argument for display and error purposes ?
     pub fn replace_automatic_variables(
         &mut self,
         first_dep: Option<&Utf8Path>,
         first_tgt: Option<&Utf8Path>
     ) -> Result<(), String> {
         static RE_FIRST_DEP: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"\${1}(?!\$)<").unwrap()); // 1 repetition does not seem to work :(
+            LazyLock::new(|| Regex::new(r"\${1}(?!\$)<").expect("Valid regex pattern for first dependency")); // 1 repetition does not seem to work :(
         static RE_FIRST_TGT: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"\${1}(?!\$)@").unwrap());
+            LazyLock::new(|| Regex::new(r"\${1}(?!\$)@").expect("Valid regex pattern for first target"));
 
+        // Store original args before modification
+        if self.original_args.is_none() {
+            self.original_args = Some(self.args.clone());
+        }
         let initial = self.args.clone();
 
         if let Some(first_dep) = first_dep {
@@ -1112,7 +1104,7 @@ impl StandardTaskArguments {
             let first_dep = first_dep.as_str().replace("\\", "\\\\");
             self.args = RE_FIRST_DEP.replace_all(&self.args, first_dep).into_owned();
         }
-        else if RE_FIRST_DEP.is_match(&self.args).unwrap() {
+        else if RE_FIRST_DEP.is_match(&self.args).unwrap_or(false) {
             self.args = initial;
             return Err(format!(
                 "{} contains $<, but there are no available dependencies.",
@@ -1128,7 +1120,7 @@ impl StandardTaskArguments {
 
             self.args = RE_FIRST_TGT.replace_all(&self.args, first_tgt).into_owned();
         }
-        else if RE_FIRST_TGT.is_match(&self.args).unwrap() {
+        else if RE_FIRST_TGT.is_match(&self.args).unwrap_or(false) {
             self.args = initial;
             return Err(format!(
                 "{} contains $@, but there are no available targets.",
@@ -1381,6 +1373,7 @@ mod test {
                 crate::runners::assembler::Assembler::Basm,
                 StandardTaskArguments {
                     args: "toto.asm -o toto.o".to_owned(),
+                    original_args: None,
                     ignore_error: false
                 }
             )
@@ -1394,6 +1387,7 @@ mod test {
                 crate::runners::assembler::Assembler::Basm,
                 StandardTaskArguments {
                     args: "toto.asm -o toto.o".to_owned(),
+                    original_args: None,
                     ignore_error: true
                 }
             )

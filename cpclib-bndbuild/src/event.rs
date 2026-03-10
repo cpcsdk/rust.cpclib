@@ -12,6 +12,7 @@ use memchr::memchr;
 
 use crate::task::Task;
 
+/// Represents different states of the build process.
 #[derive(Clone, Debug)]
 pub enum BndBuilderState<'a> {
     ComputeDependencies(&'a Utf8Path),
@@ -19,6 +20,10 @@ pub enum BndBuilderState<'a> {
     Finish
 }
 
+/// Events emitted during the build process for observer notification.
+/// 
+/// These events allow observers to track build progress, state changes,
+/// and capture stdout/stderr from executed tasks.
 #[derive(Clone, Debug)]
 pub enum BndBuilderEvent<'a> {
     ChangeState(BndBuilderState<'a>),
@@ -37,6 +42,10 @@ pub enum BndBuilderEvent<'a> {
     Stderr(&'a str)
 }
 
+/// Observer trait for receiving build events.
+/// 
+/// Implement this trait to create custom observers that react to
+/// build state changes, task execution, and output streams.
 pub trait BndBuilderObserver: EventObserver + EnvEventObserver {
     fn update(&mut self, event: BndBuilderEvent);
 }
@@ -49,10 +58,16 @@ impl<T: BndBuilderObserver> BndBuilderObserver for Box<T> {
 
 impl<T: BndBuilderObserver> BndBuilderObserver for Arc<T> {
     fn update(&mut self, event: BndBuilderEvent) {
-        Arc::<T>::get_mut(self).unwrap().update(event)
+        Arc::<T>::get_mut(self)
+            .expect("Failed to get mutable reference to observer (multiple Arc references exist)")
+            .update(event)
     }
 }
 
+/// Trait for objects that can be observed during the build process.
+/// 
+/// Implementors can emit events to registered observers and manage
+/// a list of observers for notifications.
 pub trait BndBuilderObserved: Debug + Sync + Send {
     #[inline]
     fn emit_stdout<S: AsRef<str>>(&self, s: S) {
@@ -137,7 +152,11 @@ impl BndBuilderObserverRc {
     }
 
     pub fn update(&self, event: BndBuilderEvent) {
-        self.0.deref().write().unwrap().deref_mut().update(event);
+        self.0.deref()
+            .write()
+            .expect("Failed to acquire write lock on observer")
+            .deref_mut()
+            .update(event);
     }
 }
 
@@ -215,13 +234,19 @@ impl Default for ListOfBndBuilderObserverRc {
 impl EventObserver for ListOfBndBuilderObserverRc {
     fn emit_stdout(&self, s: &str) {
         for observer in self.0.clone().into_iter() {
-            observer.0.deref().read().unwrap().emit_stdout(s);
+            observer.0.deref()
+                .read()
+                .expect("Failed to acquire read lock on observer")
+                .emit_stdout(s);
         }
     }
 
     fn emit_stderr(&self, s: &str) {
         for observer in self.0.clone().into_iter() {
-            observer.0.deref().read().unwrap().emit_stderr(s);
+            observer.0.deref()
+                .read()
+                .expect("Failed to acquire read lock on observer")
+                .emit_stderr(s);
         }
     }
 }
@@ -229,7 +254,9 @@ impl EventObserver for ListOfBndBuilderObserverRc {
 impl BndBuilderObserver for ListOfBndBuilderObserverRc {
     fn update(&mut self, event: BndBuilderEvent) {
         for observer in self.0.clone().into_iter() {
-            let mut observer = observer.0.deref().write().unwrap();
+            let mut observer = observer.0.deref()
+                .write()
+                .expect("Failed to acquire write lock on observer");
             observer.update(event.clone());
         }
     }
@@ -380,7 +407,9 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
                 println!("[{nb}/{out_of}] Handle {rule}")
             },
             BndBuilderEvent::StopRule(_) => {},
-            BndBuilderEvent::FailedRule(_) => todo!(),
+            BndBuilderEvent::FailedRule(rule) => {
+                eprintln!("[FAIL] {rule}");
+            },
             BndBuilderEvent::StartTask(_r, t) => {
                 println!("\t$ {t}");
             },

@@ -49,6 +49,17 @@ self_cell::self_cell! {
     }
 }
 
+/// Core build engine that manages rules, dependencies, and task execution.
+/// 
+/// BndBuilder is the central component responsible for:
+/// - Loading and validating build rules
+/// - Computing dependency graphs
+/// - Executing tasks in the correct order
+/// - Managing build observers for progress tracking
+/// 
+/// # Thread Safety
+/// This struct is designed for both serial and parallel execution modes
+/// when the `rayon` feature is enabled.
 pub struct BndBuilder {
     inner: BndBuilderInner,
     observers: Arc<ListOfBndBuilderObserverRc>,
@@ -82,7 +93,12 @@ impl BndBuilder {
         Arc::new(Box::new(RuleTaskEventDispatcher::new(self, rule, task)))
     }
 
-    pub fn add_default_rule<S1, S2>(self, targets: &[S1], dependencies: &[S2], kind: &str) -> Self
+    pub fn add_default_rule<S1, S2>(
+        self,
+        targets: &[S1],
+        dependencies: &[S2],
+        kind: &str
+    ) -> Result<Self, BndBuilderError>
     where
         S1: AsRef<str>,
         S2: AsRef<str>
@@ -91,13 +107,14 @@ impl BndBuilder {
         let mut rules = self.inner.into_owner();
         rules.add(rule);
 
-        let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps()).unwrap();
-        BndBuilder {
+        let inner = BndBuilderInner::try_new(rules, |rules| rules.to_deps())
+            .map_err(|e| BndBuilderError::DependencyError(e.to_string()))?;
+        Ok(BndBuilder {
             inner,
             observers: Default::default(),
             #[cfg(feature = "rayon")]
             force_serial: self.force_serial
-        }
+        })
     }
 
     pub fn from_path<P: AsRef<Utf8Path>>(
@@ -316,7 +333,7 @@ impl BndBuilder {
                 self.do_run_tasks();
                 {
                     #[cfg(feature = "rayon")]
-                    let mut state = state.write().unwrap();
+                    let mut state = state.write().expect("Failed to acquire write lock on state");
                     state.nb_deps = 1;
                 }
                 self.execute_rule(p, state)?;
@@ -384,7 +401,7 @@ impl BndBuilder {
         // count the files that are not produced
         for targets in without_rule.into_iter() {
             #[cfg(feature = "rayon")]
-            let mut state = state.write().unwrap();
+            let mut state = state.write().expect("Failed to acquire write lock on state");
 
             for p in targets.targets.iter() {
                 state.task_count += 1;
@@ -462,7 +479,7 @@ impl BndBuilder {
         if let Some(ps) = other_paths.as_ref() {
             ps.iter().for_each(|p| {
                 #[cfg(feature = "rayon")]
-                let mut state = state.write().unwrap();
+                let mut state = state.write().expect("Failed to acquire write lock on state");
                 state.task_count += 1;
                 self.start_rule(*p, state.task_count, state.nb_deps);
             });
@@ -489,7 +506,7 @@ impl BndBuilder {
 
         {
             #[cfg(feature = "rayon")]
-            let mut state = state.write().unwrap();
+            let mut state = state.write().expect("Failed to acquire write lock on state");
             state.task_count += 1;
             self.start_rule(p, state.task_count, state.nb_deps);
         }
@@ -612,7 +629,7 @@ impl BndBuilderObserved for BndBuilder {
 
     fn add_observer(&mut self, observer: BndBuilderObserverRc) {
         Arc::get_mut(&mut self.observers)
-            .unwrap()
+            .expect("Failed to get mutable reference to observers")
             .add_observer(observer);
     }
 
@@ -686,7 +703,7 @@ impl BndBuilderObserved for BndBuilder {
 
     fn notify(&self, event: crate::event::BndBuilderEvent<'_>) {
         for observer in self.observers.iter() {
-            observer.write().unwrap().update(event.clone());
+            observer.write().expect("Failed to acquire write lock on observer").update(event.clone());
         }
     }
 }

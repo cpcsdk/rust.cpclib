@@ -36,6 +36,10 @@ use crate::{
     ALL_APPLICATIONS, BndBuilder, BndBuilderError, EXPECTED_FILENAMES, execute, init_project
 };
 
+/// Main application structure that manages bndbuild commands and execution.
+/// 
+/// This struct encapsulates the command-line interface and coordinates
+/// the execution of build commands, targets, and related operations.
 pub struct BndBuilderApp {
     matches: clap::ArgMatches,
     observers: Arc<ListOfBndBuilderObserverRc>,
@@ -104,7 +108,7 @@ pub enum BndBuilderCommandInner {
         builder: BndBuilder
     },
     /// Generate the graphviz file on stdout
-    Dot(BndBuilder, Option<String>),
+    Dot(BndBuilder, Option<String>, bool),
     /// Update the executable from github artifact or the command if specified
     Update(Option<String>)
 }
@@ -137,7 +141,7 @@ impl BndBuilderObserved for BndBuilderCommand {
 
     fn add_observer(&mut self, observer: BndBuilderObserverRc) {
         Arc::get_mut(&mut self.observers)
-            .unwrap()
+            .expect("Failed to get mutable reference to observers (multiple Arc references exist)")
             .add_observer(observer);
     }
 }
@@ -164,9 +168,17 @@ impl BndBuilderCommand {
     pub fn execute(self) -> Result<(), BndBuilderError> {
         let mut step = Some(self);
         while let Some(inner) = step {
-            let previous_dir = std::env::current_dir().unwrap();
+            let previous_dir = std::env::current_dir()
+                .map_err(|e| BndBuilderError::WorkingDirectoryError {
+                    fname: "<current>".to_owned(),
+                    error: e
+                })?;
             let res = inner.execute_one_step();
-            std::env::set_current_dir(previous_dir).unwrap();
+            std::env::set_current_dir(previous_dir)
+                .map_err(|e| BndBuilderError::WorkingDirectoryError {
+                    fname: "<previous>".to_owned(),
+                    error: e
+                })?;
             step = res?;
         }
 
@@ -232,8 +244,8 @@ impl BndBuilderCommand {
                 current_step,
                 builder
             } => Self::execute_build(targets, watch, current_step, builder, observers),
-            BndBuilderCommandInner::Dot(builder, g) => {
-                Self::execute_dot(builder, g.as_deref(), &observers)?;
+            BndBuilderCommandInner::Dot(builder, g, details) => {
+                Self::execute_dot(builder, g.as_deref(), details, &observers)?;
                 Ok(None)
             }
         }
@@ -306,8 +318,11 @@ impl BndBuilderCommand {
                     watch: WatchState::WatchNextRounds {
                         last_build: last_build.unwrap_or_else(|| {
                             watch.last_build().cloned().unwrap_or_else(|| {
-                                // if it fails it is because the file exists
-                                tgt.metadata().unwrap().modified().unwrap()
+                                // Fallback to current time if metadata is unavailable
+                                tgt.metadata()
+                                    .ok()
+                                    .and_then(|m| m.modified().ok())
+                                    .unwrap_or_else(std::time::SystemTime::now)
                             })
                         })
                     },
@@ -322,9 +337,10 @@ impl BndBuilderCommand {
     fn execute_dot<O: BndBuilderObserver>(
         builder: BndBuilder,
         g: Option<&str>,
+        details: bool,
         _observers: &O
     ) -> Result<(), BndBuilderError> {
-        let dot = builder.to_dot(false); // TODO use an argument for that
+        let dot = builder.to_dot(details);
 
         if let Some(g) = g {
             let path: &Utf8Path = Utf8Path::new(g);
@@ -341,7 +357,7 @@ impl BndBuilderCommand {
                     child
                         .stdin
                         .take()
-                        .unwrap()
+                        .expect("Failed to take stdin from child process")
                         .write_all(dot.as_bytes())
                         .map_err(|e| {
                             BndBuilderError::AnyError(format!(
@@ -417,7 +433,7 @@ impl BndBuilderCommand {
         _observers: O
     ) -> Result<(), BndBuilderError> {
         let targets = [add];
-        let builder = builder.add_default_rule(&targets, &dependencies, &kind);
+        let builder = builder.add_default_rule(&targets, &dependencies, &kind)?;
         builder.save(&fname).map_err(|e| BndBuilderError::WorkingDirectoryError {
             fname: fname.to_string(),
             error: e
@@ -445,8 +461,13 @@ impl BndBuilderCommand {
             cmd.to_string()
         };
 
-        let task: Task = serde_yaml::from_str(&cmd)
-            .map_err(|e| BndBuilderError::from((e, "<direct>".into(), cmd.as_str())))?; // TODO generate the appropriate error message
+        let task: Task = serde_yaml::from_str(&cmd).map_err(|e| {
+            BndBuilderError::from((
+                e,
+                if with_expansion { "<direct:expanded>" } else { "<direct>" }.into(),
+                cmd.as_str()
+            ))
+        })?;
 
         execute(&task, observers).map_err(BndBuilderError::AnyError)
     }
@@ -546,9 +567,15 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             XferRunner::<()>::render_help()
         }
         else {
-            let task = Task::from_str(&format!("{runner} --help")).unwrap();
-            let _ = execute(&task, observers); // we ignore potential error
-            "TODO / handle string collect instead of stdout output".into()
+            match Task::from_str(&format!("{runner} --help")) {
+                Ok(task) => {
+                    let _ = execute(&task, observers); // we ignore potential error
+                    "TODO / handle string collect instead of stdout output".into()
+                },
+                Err(e) => {
+                    format!("Failed to create help task: {e}")
+                }
+            }
         };
 
         observers.emit_stdout(&format!("{help}\n"));
@@ -620,7 +647,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                 )
             }
             else {
-                unimplemented!()
+                return Err(BndBuilderError::AnyError("Self-update is not supported on this platform".to_string()));
             };
             let mut tmp_exec_path = camino_tempfile::Builder::new()
                 .prefix("self_update")
@@ -629,7 +656,8 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             let tmp_exec = tmp_exec_path.as_file_mut();
 
             self_update::Download::from_url(asset_url).download_to(tmp_exec)?;
-            self_update::self_replace::self_replace(tmp_exec_path).unwrap();
+            self_update::self_replace::self_replace(tmp_exec_path)
+                .map_err(|e| BndBuilderError::UpdateError(format!("Failed to replace binary: {e}")))?;
             Ok(())
         };
 
@@ -675,7 +703,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
                 #[cfg(feature = "self-update")]
                 "self" => update_self(),
                 #[cfg(not(feature = "self-update"))]
-                "self" => unimplemented!("This feature has not been activated"),
+                "self" => Err(BndBuilderError::AnyError("Self-update feature is not enabled in this build".to_string())),
                 "all" => update_all(true),
                 "installed" => update_all(false),
                 cmd => update_command(cmd, true)
@@ -685,7 +713,7 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             #[cfg(feature = "self-update")]
             let res = update_self();
             #[cfg(not(feature = "self-update"))]
-            let res = unimplemented!("This feature has not been activated");
+            let res = Err(BndBuilderError::AnyError("Self-update feature is not enabled in this build".to_string()));
             res
         }
     }
@@ -787,7 +815,7 @@ impl BndBuilderApp {
 
     pub fn add_observer<O: Into<BndBuilderObserverRc>>(&mut self, o: O) {
         Arc::get_mut(&mut self.observers)
-            .unwrap()
+            .expect("Failed to get mutable reference to observers (multiple Arc references exist)")
             .add_observer(o.into());
     }
 
@@ -829,7 +857,9 @@ impl BndBuilderApp {
             // handle the real behavior of commands that bypass bndbuild
             if matches.value_source("help") == Some(parser::ValueSource::CommandLine) {
                 return Ok(BndBuilderCommandInner::InnerHelp(
-                    matches.get_one::<String>("help").unwrap().clone()
+                    matches.get_one::<String>("help")
+                        .expect("'help' argument is required by clap configuration")
+                        .clone()
                 ));
             }
             else if matches.get_flag("version") {
@@ -869,6 +899,28 @@ impl BndBuilderApp {
             }
             else if let Some(generator) = matches.get_one::<Shell>("completion").copied() {
                 return Ok(BndBuilderCommandInner::GenerateCompletion(generator));
+            }
+            else if matches.contains_id("completion") {
+                // Shell not specified, auto-detect using query-shell
+                let detected_shell = query_shell::Shell::get()
+                    .map_err(|e| BndBuilderError::AnyError(
+                        format!("Failed to detect shell: {}", e)
+                    ))?;
+                
+                let shell = match detected_shell {
+                    query_shell::Shell::Bash => Shell::Bash,
+                    query_shell::Shell::Zsh => Shell::Zsh,
+                    query_shell::Shell::Fish => Shell::Fish,
+                    query_shell::Shell::Powershell => Shell::PowerShell,
+                    query_shell::Shell::Elvish => Shell::Elvish,
+                    _ => {
+                        return Err(BndBuilderError::AnyError(
+                            format!("Detected shell {:?} is not supported for completion generation", detected_shell)
+                        ));
+                    }
+                };
+                
+                return Ok(BndBuilderCommandInner::GenerateCompletion(shell));
             }
 
             // Search for the file to handle
@@ -951,7 +1003,8 @@ impl BndBuilderApp {
                     .map(|l| l.cloned().collect_vec())
                     .unwrap_or_default();
 
-                let kind = matches.get_one::<String>("kind").unwrap();
+                let kind = matches.get_one::<String>("kind")
+                    .expect("'kind' argument is required by clap configuration");
                 return Ok(BndBuilderCommandInner::AddTask {
                     task: add.to_owned(),
                     dependencies,
@@ -966,11 +1019,12 @@ impl BndBuilderApp {
             }
 
             if matches.contains_id("dot") {
+                let graph_details = matches.get_flag("graph_details");
                 if let Some(g) = matches.get_one::<String>("dot") {
-                    Ok(BndBuilderCommandInner::Dot(builder, Some(g.to_owned())))
+                    Ok(BndBuilderCommandInner::Dot(builder, Some(g.to_owned()), graph_details))
                 }
                 else {
-                    Ok(BndBuilderCommandInner::Dot(builder, None))
+                    Ok(BndBuilderCommandInner::Dot(builder, None, graph_details))
                 }
             }
             else {
@@ -980,7 +1034,8 @@ impl BndBuilderApp {
                     .map(|targets_provided| {
                         targets_provided
                             .cloned()
-                            .map(|s| Utf8PathBuf::from_str(&s).unwrap())
+                            .map(|s| Utf8PathBuf::from_str(&s)
+                                .expect("Clap-provided strings should be valid UTF-8 paths"))
                             .collect::<Vec<Utf8PathBuf>>()
                     });
 

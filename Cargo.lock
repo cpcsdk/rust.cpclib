@@ -2572,6 +2572,7 @@ dependencies = [
  "memchr",
  "minijinja",
  "paste",
+ "query-shell",
  "rtzx",
  "self_cell",
  "self_update",
@@ -7710,6 +7711,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ntapi"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3b335231dfd352ffb0f8017f3b6027a4917f7df785ea2143d8af2adc66980ae"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "ntest"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10003,6 +10013,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "query-shell"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "300d1c86e9638eceb24568649d5ad0f31b949ff11ff1ffbacbe3e382a4dfee25"
+dependencies = [
+ "sysinfo",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12241,6 +12261,20 @@ dependencies = [
  "proc-macro2 1.0.105",
  "quote 1.0.43",
  "syn 2.0.113",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.27.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a902e9050fca0a5d6877550b769abd2bd1ce8c04634b941dbe2809735e1a1e33"
+dependencies = [
+ "cfg-if",
+ "core-foundation-sys",
+ "libc",
+ "ntapi",
+ "once_cell",
+ "winapi",
 ]
 
 [[package]]

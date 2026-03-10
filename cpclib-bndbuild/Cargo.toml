@@ -63,6 +63,7 @@ shlex.workspace = true
 thiserror = "2.0"
 topologic = "1.1.0"
 clap_complete = "4.5.64"
+query-shell = "0.3.0"
 utf8-chars = "3.0.6"
 fancy-regex = "0.17.0"
 

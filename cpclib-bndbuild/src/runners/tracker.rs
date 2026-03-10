@@ -64,6 +64,8 @@ impl SongConverter {
         SongToVgm, new_song_to_vgm_default
         SongToWav, new_song_to_wav_default
         SongToYm, new_song_to_ym_default
+        // Note: Z80Profiler is not a song converter, but is included here because
+        // it's distributed with the music tools and shares the same download/update infrastructure
         Z80Profiler, new_z80profiler_default
     }
 
@@ -79,7 +81,7 @@ impl SongConverter {
             Self::new_song_to_vgm_default(),
             Self::new_song_to_wav_default(),
             Self::new_song_to_ym_default(),
-            Self::new_z80profiler_default(), // TODO move it elswhere as it is not a song stuff... it is just distributed with them
+            Self::new_z80profiler_default(), // Kept here for distribution convenience
         ]
         .into_iter()
     }

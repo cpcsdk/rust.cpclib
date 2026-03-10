@@ -24,12 +24,15 @@ commands:
 
         assert_eq!(rule.targets().len(), 2);
         assert_eq!(rule.dependencies().len(), 1);
+        // After deserialization, original_args is set by replace_automatic_variables()
+        let mut expected = Task::new_basm(
+            "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
+        );
+        // Simulate the effect of replace_automatic_variables during deserialization
+        expected.replace_automatic_variables(Some("samourai.asm".into()), Some("samourai.sna".into())).unwrap();
         assert_eq!(
             rule.command(0).deref(),
-            Task::new_basm(
-                "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
-            )
-            .deref()
+            expected.deref()
         );
     }
 
@@ -42,12 +45,15 @@ commands: basm samourai.asm --progress --snapshot -o samourai.sna -Idata --sym s
 
         assert_eq!(rule.targets().len(), 2);
         assert_eq!(rule.dependencies().len(), 1);
+        // After deserialization, original_args is set by replace_automatic_variables()
+        let mut expected = Task::new_basm(
+            "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
+        );
+        // Simulate the effect of replace_automatic_variables during deserialization
+        expected.replace_automatic_variables(Some("samourai.asm".into()), Some("samourai.sna".into())).unwrap();
         assert_eq!(
             rule.command(0).deref(),
-            Task::new_basm(
-                "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
-            )
-            .deref()
+            expected.deref()
         );
     }
 

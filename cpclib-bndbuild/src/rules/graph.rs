@@ -259,7 +259,7 @@ impl<'r> Graph<'r> {
                         false
                     }
                 },
-                _ => todo!()
+                Err(e) => return Err(e)
             };
             if res {
                 return Ok(true);
