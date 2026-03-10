@@ -8,8 +8,8 @@ use crate::task::FADE_CMDS;
 pub const FADE_CMD: &str = "fade";
 
 // Using the macro to generate all the boilerplate
-crate::define_custom_builder_runner_simple! {
-    FadeRunner,
+crate::define_custom_builder_runner! {
+    simple: FadeRunner,
     fade_build_args(),
     FADE_CMDS[0],
     cpclib_imgconverter::built_info::PKG_NAME,

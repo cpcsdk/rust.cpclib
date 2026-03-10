@@ -142,7 +142,6 @@ pub fn commands_list() -> &'static (Vec<&'static str>, Vec<&'static str>) {
 }
 
 pub fn build_args_parser() -> clap::Command {
-    static COMMANDS_LIST: OnceLock<(Vec<&str>, Vec<&str>)> = OnceLock::new();
     let (commands_list, clearable_list) = commands_list();
     let updatable_list = clearable_list;
 
@@ -452,7 +451,7 @@ impl From<(serde_yaml::Error, &Utf8Path, &str)> for BndBuilderError {
         let diagnostic = Diagnostic::error()
             .with_message("bndbuild parse error")
             .with_labels(vec![Label::primary((), range).with_message(message)]);
-        let mut rendered = Vec::new();
+        let rendered;
         {
             let (mut config, mut buffer) = if cfg!(feature = "colored_errors") {
                 (codespan_reporting::term::Config::default(), Buffer::ansi())

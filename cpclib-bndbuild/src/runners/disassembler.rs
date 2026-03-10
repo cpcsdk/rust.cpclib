@@ -34,8 +34,8 @@ impl Disassembler {
 }
 
 // Using the macro to generate all the boilerplate
-crate::define_custom_builder_runner_simple! {
-    BdasmRunner,
+crate::define_custom_builder_runner! {
+    simple: BdasmRunner,
     cpclib_bdasm::build_args_parser(),
     BDASM_CMDS[0],
     cpclib_bdasm::built_info::PKG_NAME,

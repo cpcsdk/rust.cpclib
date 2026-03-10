@@ -215,7 +215,7 @@ impl BndBuilder {
             let diagnostic = Diagnostic::error()
                 .with_message(e.kind().to_string())
                 .with_labels(vec![Label::primary((), range).with_message(message)]);
-            let mut rendered = Vec::new();
+            let rendered;
             {
                 let (config, mut buffer) = if cfg!(feature = "colored_errors") {
                     (codespan_reporting::term::Config::default(), Buffer::ansi())

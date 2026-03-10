@@ -8,8 +8,8 @@ use super::{Runner, RunnerWithClap};
 use crate::task::{CATALOG_CMDS, DISC_CMDS};
 
 // Using the macro to generate DiscManagerRunner
-crate::define_custom_builder_runner_simple! {
-    DiscManagerRunner,
+crate::define_custom_builder_runner! {
+    simple: DiscManagerRunner,
     cpclib_disc::dsk_manager_build_arg_parser(),
     DISC_CMDS[0],
     cpclib_disc::built_info::PKG_NAME,

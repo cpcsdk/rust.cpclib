@@ -132,7 +132,7 @@ impl Task {
     fn next_id() -> usize {
         static COUNTER: AtomicUsize = AtomicUsize::new(1);
 
-        unsafe { COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) }
+        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn id(&self) -> usize {
@@ -887,7 +887,6 @@ impl InnerTask {
             | InnerTask::Hxcfe(t)
             | InnerTask::ImgToCpc(t)
             | InnerTask::ImpDsk(t)
-            | InnerTask::BndBuild(t)
             | InnerTask::Martine(t)
             | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
