@@ -532,6 +532,11 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
     if env.origin.is_none() {
         env.origin = amsdos_load;
     }
+    
+    // If still no origin, default to address 0
+    if env.origin.is_none() {
+        env.origin = Some(0);
+    }
 
     // Create the listing and inject labels
     let mut listing = env.create_listing(input_bytes)?;

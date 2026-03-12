@@ -65,11 +65,16 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
         // Generic handling: check all expressions in any OpCode for potential addresses
         else if let Token::OpCode(_, arg1, arg2, _) = current_instruction {
             // Helper closure to extract and check an expression
-            let mut check_expression = |expr: &Expr| {
+            let mut check_expression = |expr: &Expr, is_memory: bool| {
                 if let Ok(value) = expr.eval() {
                     if let Ok(address) = value.int() {
                         let address = address as u16;
-                        if valid_range.as_ref().map_or(true, |r| r.contains(&address)) {
+                        // Always label memory references (they're 16-bit addresses)
+                        // For direct expressions, only label values >= 256 (likely 16-bit addresses)
+                        // Values < 256 are likely 8-bit immediate values, not addresses
+                        let should_label = is_memory || address >= 256;
+                        
+                        if should_label && valid_range.as_ref().map_or(true, |r| r.contains(&address)) {
                             labels.push(address);
                         }
                     }
@@ -79,7 +84,8 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
             // Check first argument
             if let Some(arg) = arg1 {
                 match arg {
-                    DataAccess::Expression(e) | DataAccess::Memory(e) => check_expression(e),
+                    DataAccess::Expression(e) => check_expression(e, false),
+                    DataAccess::Memory(e) => check_expression(e, true),
                     _ => {}
                 }
             }
@@ -87,7 +93,8 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
             // Check second argument
             if let Some(arg) = arg2 {
                 match arg {
-                    DataAccess::Expression(e) | DataAccess::Memory(e) => check_expression(e),
+                    DataAccess::Expression(e) => check_expression(e, false),
+                    DataAccess::Memory(e) => check_expression(e, true),
                     _ => {}
                 }
             }
