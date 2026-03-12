@@ -24,7 +24,9 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
     let mut labels: Vec<u16> = Default::default();
 
     let mut current_address: Option<u16> = None;
+    let mut has_overflowed = false;
     for current_instruction in listing.iter() {
+        assert!(!has_overflowed, "Address overflow occurred while processing instruction: {:?}", current_instruction);
         // Special handling for JR/DJNZ: they use PC-relative addressing
         if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
         | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
@@ -102,8 +104,8 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
         else {
             let nb_bytes = current_instruction.number_of_bytes()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-            match current_address {
-                Some(address) => Some(address + nb_bytes as u16),
+            let res = match current_address {
+                Some(address) => Some(address.overflowing_add(nb_bytes as u16)),
                 None => {
                     if nb_bytes != 0 {
                         return Err(BdAsmError::UnknownAssemblerAddress {
@@ -115,6 +117,14 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
                         None
                     }
                 },
+            };
+            if let Some((next_addr, overflowed)) = res {
+                if overflowed {
+                    has_overflowed = true;
+                }
+                Some(next_addr)
+            } else {
+                None
             }
         };
 
@@ -172,7 +182,7 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
             let nb_bytes = current_instruction.number_of_bytes()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
             match current_address {
-                Some(address) => Some(address + nb_bytes as u16),
+                Some(address) => Some(address.wrapping_add(nb_bytes as u16)),
                 None => {
                     if nb_bytes != 0 {
                         return Err(BdAsmError::UnknownAssemblerAddress {
@@ -291,7 +301,7 @@ pub fn generate_xref(listing: &Listing) -> HashMap<String, Vec<u16>> {
         
         if let Ok(nb) = token.number_of_bytes() {
             if let Some(addr) = current_address {
-                current_address = Some(addr + nb as u16);
+                current_address = Some(addr.wrapping_add(nb as u16));
             }
         }
     }

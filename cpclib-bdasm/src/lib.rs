@@ -6,6 +6,7 @@ use clap::Parser;
 use cpclib_asm::{Listing, ListingExt, defb_elements, org};
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_disc::amsdos::AmsdosHeader;
+use cpclib_sna::Snapshot;
 
 mod error;
 mod analysis;
@@ -152,6 +153,7 @@ impl DataBloc {
 #[derive(Debug)]
 struct BdAsmEnv {
     origin: Option<u16>,
+    length: Option<u16>,
     address2label: HashMap<u16, String>,
     label2address: HashMap<String, u16>,
     blocs: Vec<DataBloc>,
@@ -198,6 +200,7 @@ impl BdAsmEnv {
         
         Ok(BdAsmEnv {
             origin,
+            length: None,
             address2label,
             label2address,
             blocs,
@@ -371,6 +374,10 @@ pub struct BdAsmCli {
     #[arg(short = 's', long = "skip", value_parser = parse_u16_value)]
     pub skip: Option<u16>,
 
+    /// Number of bytes to disassemble (supports hex, decimal, binary, octal)
+    #[arg(short = 'n', long = "length", value_parser = parse_u16_value)]
+    pub length: Option<u16>,
+
     /// Output a simple listing that only contains the opcodes
     #[arg(short = 'c', long = "compressed")]
     pub compress: bool,
@@ -394,6 +401,76 @@ pub struct BdAsmCli {
     /// Verbose output
     #[arg(short = 'v', long = "verbose")]
     pub verbose: bool,
+}
+
+/// Load bytes to disassemble from either a SNA file or raw binary
+/// 
+/// For SNA files: extracts memory starting at the specified origin address
+/// For raw binary: reads entire file and optionally strips AMSDOS header
+/// 
+/// Returns: (bytes to disassemble, optional AMSDOS loading address)
+fn load_input_bytes(
+    filename: &Utf8PathBuf,
+    origin: Option<u16>,
+) -> Result<(Vec<u8>, Option<u16>)> {
+    // Check if this is a SNA file by extension
+    let is_sna = filename
+        .extension()
+        .map(|ext| ext.eq_ignore_ascii_case("sna"))
+        .unwrap_or(false);
+
+    if is_sna {
+        // Load SNA snapshot
+        let snapshot = Snapshot::load(filename)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        
+        // Get the full memory from snapshot (includes both hardcoded memory and chunks)
+        // Truncate to Z80 address space (64KB = 0x10000 bytes)
+        let memory = snapshot.memory_dump();
+        let memory = &memory[..memory.len().min(0x10000)];
+        
+        // If origin is specified, extract memory starting from that address
+        // Otherwise, extract all available memory
+        let bytes = if let Some(origin_addr) = origin {
+            let start = origin_addr as usize;
+            if start >= memory.len() {
+                return Err(BdAsmError::InvalidAddressRange(format!(
+                    "Origin address 0x{:04x} is beyond snapshot memory size (0x{:04x})",
+                    origin_addr,
+                    memory.len()
+                )));
+            }
+            memory[start..].to_vec()
+        } else {
+            memory.to_vec()
+        };
+        
+        println!("Loaded {} bytes from SNA snapshot", bytes.len());
+        if let Some(addr) = origin {
+            println!("Starting at address 0x{:04x}", addr);
+        }
+        
+        // For SNA files, return the origin as the load address (no separate AMSDOS header)
+        Ok((bytes, origin))
+    } else {
+        // Load raw binary file
+        let input_bytes = std::fs::read(filename)?;
+        
+        // Check if there is an amsdos header and remove it if any
+        let (bytes, amsdos_load) = if input_bytes.len() > 128 {
+            let header = AmsdosHeader::from_buffer(&input_bytes);
+            if header.is_checksum_valid() {
+                println!("Amsdos header detected and removed");
+                (input_bytes[128..].to_vec(), Some(header.loading_address()))
+            } else {
+                (input_bytes, None)
+            }
+        } else {
+            (input_bytes, None)
+        };
+        
+        Ok((bytes, amsdos_load))
+    }
 }
 
 pub fn process(cli: &BdAsmCli) -> Result<()> {
@@ -420,32 +497,33 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
     // Get skip bytes value for later use
     let skip_bytes = control_file.get_skip();
     
-    // Get the bytes to disassemble
-    let input_bytes = std::fs::read(input_filename)?;
+    // Load the input bytes from either SNA or raw binary file
+    // Pass the origin from control_file to help with SNA extraction
+    let (input_bytes, amsdos_load) = load_input_bytes(&input_filename, control_file.get_origin())?;
     
-    // Check if there is an amsdos header and remove it if any
-    let (input_bytes, amsdos_load) = if input_bytes.len() > 128 {
-        let header = AmsdosHeader::from_buffer(&input_bytes);
-        if header.is_checksum_valid() {
-            println!("Amsdos header detected and removed");
-            (&input_bytes[128..], Some(header.loading_address()))
-        } else {
-            (input_bytes.as_ref(), None)
-        }
+    // Check if first bytes need to be removed (skip directive)
+    let input_bytes: &[u8] = if skip_bytes > 0 {
+        eprintln!(" Skip {skip_bytes} bytes");
+        &input_bytes[skip_bytes..]
     } else {
-        (input_bytes.as_ref(), None)
+        &input_bytes
     };
 
-    // Check if first bytes need to be removed
-    let input_bytes = if skip_bytes > 0 {
-        eprintln!("; Skip {skip_bytes} bytes");
-        &input_bytes[skip_bytes..]
+    // Apply length limit if specified
+    let input_bytes: &[u8] = if let Some(length) = control_file.get_length() {
+        let length = length as usize;
+        if length < input_bytes.len() {
+            eprintln!(" Limiting to {} bytes", length);
+            &input_bytes[..length]
+        } else {
+            input_bytes
+        }
     } else {
         input_bytes
     };
 
     // Disassemble
-    eprintln!("; 0x{:x} bytes to disassemble", input_bytes.len());
+    eprintln!(" 0x{:x} bytes to disassemble", input_bytes.len());
 
     // Convert control file to BdAsmEnv
     let mut env = BdAsmEnv::from_control_file(&control_file)?;

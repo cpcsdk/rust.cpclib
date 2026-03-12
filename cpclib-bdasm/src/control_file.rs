@@ -9,6 +9,7 @@ use crate::{Result, DataBlocString};
 pub enum ControlDirective {
     Origin(u16),
     Skip(usize),
+    Length(u16),
     DataBloc(DataBlocString),
     Label { name: String, address: u16 },
     CpcString(DataBlocString),
@@ -22,6 +23,9 @@ impl fmt::Display for ControlDirective {
             },
             ControlDirective::Skip(count) => {
                 write!(f, "skip {}", count)
+            },
+            ControlDirective::Length(len) => {
+                write!(f, "length 0x{:04x}", len)
             },
             ControlDirective::DataBloc(spec) => {
                 write!(f, "data {}", spec)
@@ -46,7 +50,7 @@ impl fmt::Display for ControlFile {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "; Control file for bdasm disassembler")?;
         writeln!(f, "; Format: <directive> <parameters>")?;
-        writeln!(f, "; Directives: origin, skip, data, label, cpcstring")?;
+        writeln!(f, "; Directives: origin, skip, length, data, label, cpcstring")?;
         writeln!(f)?;
         
         for directive in &self.directives {
@@ -73,6 +77,13 @@ impl ControlFile {
             // Remove existing skip directives
             self.directives.retain(|d| !matches!(d, ControlDirective::Skip(_)));
             self.directives.insert(0, ControlDirective::Skip(skip as usize));
+        }
+        
+        // Add length if provided in CLI (overrides control file)
+        if let Some(length) = cli.length {
+            // Remove existing length directives
+            self.directives.retain(|d| !matches!(d, ControlDirective::Length(_)));
+            self.directives.insert(0, ControlDirective::Length(length));
         }
         
         // Add labels from CLI
@@ -107,6 +118,32 @@ impl ControlFile {
                 }
             })
             .unwrap_or(0)
+    }
+    
+    /// Get the length value from the control file
+    pub fn get_length(&self) -> Option<u16> {
+        self.directives
+            .iter()
+            .find_map(|d| {
+                if let ControlDirective::Length(len) = d {
+                    Some(*len)
+                } else {
+                    None
+                }
+            })
+    }
+    
+    /// Get the origin value from the control file
+    pub fn get_origin(&self) -> Option<u16> {
+        self.directives
+            .iter()
+            .find_map(|d| {
+                if let ControlDirective::Origin(addr) = d {
+                    Some(*addr)
+                } else {
+                    None
+                }
+            })
     }
 }
 

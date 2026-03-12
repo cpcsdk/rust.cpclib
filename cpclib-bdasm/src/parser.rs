@@ -129,6 +129,14 @@ fn skip_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirect
     Ok(ControlDirective::Skip(count))
 }
 
+/// Parse length directive: length <bytes> | len <bytes> | n <bytes>
+fn length_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
+    alt((Caseless("length"), Caseless("len"), Caseless("n"))).parse_next(input)?;
+    space1.parse_next(input)?;
+    let length = parse_value::<_, ContextError>.parse_next(input)? as u16;
+    Ok(ControlDirective::Length(length))
+}
+
 /// Parse data directive: data <spec>
 fn data_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
     preceded(
@@ -172,6 +180,7 @@ fn directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, 
         alt((
             origin_directive,
             skip_directive,
+            length_directive,
             data_directive,
             label_directive,
             cpcstring_directive,
