@@ -1,0 +1,8 @@
+﻿cargo : error: manifest path `cpclib-bdasm\Cargo.toml` does not exist
+Au caractère Ligne:1 : 1
++ cargo run --bin test_disasm_debug --manifest-path cpclib-bdasm\Cargo. ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (error: manifest... does not exist: 
+   String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

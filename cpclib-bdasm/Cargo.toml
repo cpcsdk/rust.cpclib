@@ -15,19 +15,29 @@ independent = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cpclib-common.workspace = true
+cpclib-common = {workspace = true, features=["cmdline"]}
 cpclib-asm.workspace = true
 cpclib-disc.workspace = true
+clap = {workspace = true, features = ["derive"]}
 fs-err.workspace = true
 const_format.workspace = true
 thiserror.workspace = true
-time = "0.3.44"
+time.workspace = true
 
 [features]
 hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
 
 [build-dependencies]
-built = { version = "0.8.0", features = ["chrono"] }
+built.workspace = true
+
+[dev-dependencies]
+escargot = "0.5"
+predicates = "3.1"
+fs-err.workspace = true
+tempfile = "3.13"
+
+[target.'cfg(unix)'.dev-dependencies]
+rexpect = "0.5"
 
 [[bin]]
 name = "bdasm"

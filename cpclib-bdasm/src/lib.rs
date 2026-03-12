@@ -1,454 +1,506 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::io::Read;
+use std::ops::RangeInclusive;
 
-use cpclib_asm::{
-    DataAccess, EnvOptions, Expr, ExprEvaluationExt, Listing, ListingExt, Mnemonic,
-    SymbolsTableTrait, Token, TokenExt, Value, defb_elements, org
-};
+use clap::Parser;
+use cpclib_asm::{Listing, ListingExt, defb_elements, org};
 use cpclib_common::camino::Utf8PathBuf;
-use cpclib_common::clap::{self, Arg, ArgAction, ArgMatches, Command};
-use cpclib_common::smol_str::SmolStr;
-use cpclib_common::winnow::Parser;
-use cpclib_common::winnow::error::ParseError;
 use cpclib_disc::amsdos::AmsdosHeader;
-use fs_err::File;
+
+mod error;
+mod analysis;
+mod control_file;
+mod parser;
+
+use error::{BdAsmError, Result};
+use analysis::{collect_addresses_from_expressions, inject_labels_into_expressions};
+use control_file::{ControlFile, save_control_file};
+use parser::{parse_u16_value, parse_value_or_label, parse_data_bloc_string, load_control_file};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum BdAsmError {
-    #[error("Expression evaluation failed: {0}")]
-    ExprEvaluation(String),
-    
-    #[error("Invalid address value: expected integer")]
-    InvalidAddress,
-    
-    #[error("Unable to determine assembling address for instruction with {0} bytes")]
-    UnknownAssemblerAddress(usize),
-    
-    #[error("Failed to assemble listing: {0}")]
-    AssemblyFailed(String),
-    
-    #[error("Invalid data bloc format: {0}")]
-    InvalidDataBloc(String),
-    
-    #[error("Value type not supported for address resolution: {0}")]
-    UnsupportedValueType(String),
-    
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-    
-    #[error("Parse error: {0}")]
-    ParseInt(#[from] std::num::ParseIntError),
+/// Maximum number of elements in a single DB directive for readability
+const MAX_DB_ELEMENTS: usize = 8;
+
+/// Data bloc specification with string values (before label resolution)
+#[derive(Debug, Clone)]
+pub enum DataBlocString {
+    /// START-LENGTH syntax: (start_str, length_str)
+    Sized(String, String),
+    /// START..END syntax: (start_str, end_str) - exclusive end
+    Range(String, String),
+    /// START..=END syntax: (start_str, end_str) - inclusive end
+    InclusiveRange(String, String),
 }
 
-type Result<T> = std::result::Result<T, BdAsmError>;
+impl std::fmt::Display for DataBlocString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataBlocString::Sized(start, length) => {
+                write!(f, "{}-{}", start, length)
+            },
+            DataBlocString::Range(start, end) => {
+                write!(f, "{}..{}", start, end)
+            },
+            DataBlocString::InclusiveRange(start, end) => {
+                write!(f, "{}..={}", start, end)
+            },
+        }
+    }
+}
 
-static DESC_BEFORE: &str = const_format::formatc!(
-    "Profile {} compiled: {}",
-    built_info::PROFILE,
-    built_info::BUILT_TIME_UTC
-);
+/// Data bloc specification with resolved u16 values
+#[derive(Debug, Clone)]
+pub enum DataBloc {
+    /// START-LENGTH: (start, length)
+    Sized(u16, u16),
+    /// START..END: (start, end) - exclusive end
+    Range(u16, u16),
+    /// START..=END: (start, end) - inclusive end
+    InclusiveRange(u16, u16),
+}
 
-/// Several expressions can refer to addresses.
-/// Collects all address references from jump/load instructions.
-/// TODO: move it in a public library
-/// TODO: refactor with inject_labels_into_expressions to share common patterns
-fn collect_addresses_from_expressions(listing: &Listing) -> Result<Vec<u16>> {
-    let mut labels: Vec<u16> = Default::default();
+impl std::str::FromStr for DataBlocString {
+    type Err = BdAsmError;
 
-    let mut current_address: Option<u16> = None;
-    for current_instruction in listing.iter() {
-        if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
-        | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
-            current_instruction
-        {
-            let address = if let Expr::Label(l) = e
-                && l == "$"
-            {
-                current_address.ok_or_else(|| 
-                    BdAsmError::UnknownAssemblerAddress(0)
-                )?
+    fn from_str(spec: &str) -> Result<Self> {
+        let bytes = spec.as_bytes();
+        let mut input: &[u8] = bytes;
+        
+        parse_data_bloc_string(&mut input)
+            .map_err(|e| BdAsmError::InvalidDataBloc(
+                format!("Invalid data bloc format '{}': {}", spec, e)
+            ))
+    }
+}
+
+impl DataBlocString {
+    /// Convert this DataBlocString to a DataBloc by resolving labels
+    pub fn to_data_bloc(&self, labels: &HashMap<u16, Cow<str>>) -> Result<DataBloc> {
+        match self {
+            DataBlocString::Sized(start_str, length_str) => {
+                let start = parse_value_or_label(start_str, labels)
+                    .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid start: {}", e)))?;
+                let length = parse_value_or_label(length_str, labels)
+                    .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid length: {}", e)))?;
+                Ok(DataBloc::Sized(start, length))
             }
-            else {
-                let value = e.eval()
-                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                    .int()
-                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-                let delta = value + 2;
-                let base_addr = current_address.ok_or_else(|| 
-                    BdAsmError::UnknownAssemblerAddress(0)
-                )? as i32;
-                (base_addr + delta) as u16
-            };
-            labels.push(address);
-        }
-        else if let Token::OpCode(Mnemonic::Ld, Some(DataAccess::Memory(e)), ..)
-        | Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) =
-            current_instruction
-        {
-            let address = e.eval()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                .int()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-            labels.push(address as u16);
-        }
-
-        let next_address = if let Token::Org { val1: address, .. } = current_instruction {
-            let addr = address.eval()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                .int()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))? as u16;
-            current_address = Some(addr);
-            current_address
-        }
-        else {
-            let nb_bytes = current_instruction.number_of_bytes()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-            match current_address {
-                Some(address) => Some(address + nb_bytes as u16),
-                None => {
-                    if nb_bytes != 0 {
-                        return Err(BdAsmError::UnknownAssemblerAddress(nb_bytes));
-                    }
-                    else {
-                        None
-                    }
-                },
+            DataBlocString::Range(start_str, end_str) => {
+                let start = parse_value_or_label(start_str, labels)
+                    .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid start: {}", e)))?;
+                let end = parse_value_or_label(end_str, labels)
+                    .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid end: {}", e)))?;
+                Ok(DataBloc::Range(start, end))
             }
-        };
+            DataBlocString::InclusiveRange(start_str, end_str) => {
+                let start = parse_value_or_label(start_str, labels)
+                    .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid start: {}", e)))?;
+                let end = parse_value_or_label(end_str, labels)
+                    .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid end: {}", e)))?;
+                Ok(DataBloc::InclusiveRange(start, end))
+            }
+        }
+    }
+}
 
-        current_address = next_address;
+impl DataBloc {
+    /// Convert DataBloc to RangeInclusive<u16>
+    pub fn to_range_inclusive(&self) -> std::result::Result<RangeInclusive<u16>, BdAsmError> {
+        match self {
+            DataBloc::Sized(start, length) => {
+                if *length == 0 {
+                    return Err(BdAsmError::InvalidDataBloc(
+                        "Length must be at least 1".to_string()
+                    ));
+                }
+                let end = start.checked_add(length - 1)
+                    .ok_or_else(|| BdAsmError::InvalidDataBloc(
+                        format!("Data bloc range overflow: {} + {}", start, length - 1)
+                    ))?;
+                Ok(*start..=end)
+            }
+            DataBloc::Range(start, end) => {
+                if start >= end {
+                    return Err(BdAsmError::InvalidDataBloc(
+                        format!("Invalid range: start ({}) must be less than end ({})", start, end)
+                    ));
+                }
+                // END is exclusive, so inclusive range is start..=(end-1)
+                Ok(*start..=(end - 1))
+            }
+            DataBloc::InclusiveRange(start, end) => {
+                if start > end {
+                    return Err(BdAsmError::InvalidDataBloc(
+                        format!("Invalid range: start ({}) must be less than or equal to end ({})", start, end)
+                    ));
+                }
+                Ok(*start..=*end)
+            }
+        }
     }
 
-    Ok(labels)
+    /// Resolve a DataBlocString to a DataBloc using the label map
+    /// Delegates to DataBlocString::to_data_bloc
+    pub fn from_string(spec: &DataBlocString, labels: &HashMap<u16, Cow<str>>) -> Result<Self> {
+        spec.to_data_bloc(labels)
+    }
 }
 
-/// Injects label names into expressions where possible.
-/// TODO: refactor with collect_addresses_from_expressions to share common patterns
-fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
-    let (_bytes, table) = cpclib_asm::assemble_tokens_with_options(listing, Default::default())
-        .map_err(|e| BdAsmError::AssemblyFailed(e.to_string()))?;
+/// Environment for disassembly containing all resolved configuration
+#[derive(Debug)]
+struct BdAsmEnv {
+    origin: Option<u16>,
+    address2label: HashMap<u16, String>,
+    label2address: HashMap<String, u16>,
+    blocs: Vec<DataBloc>,
+}
 
-    let address_to_label = {
-        let mut address_to_label = HashMap::<u16, &str>::default();
-        for (s, v) in table.expression_symbol() {
-            if s.value() == "$" || s.value() == "$$" {
-                continue;
+impl BdAsmEnv {
+    /// Create a BdAsmEnv from a ControlFile
+    /// Two-pass approach: first collect all labels, then resolve data blocs
+    fn from_control_file(control: &ControlFile) -> Result<Self> {
+        let mut origin = None;
+        let mut address2label = HashMap::new();
+        let mut label2address = HashMap::new();
+        let mut data_bloc_specs = Vec::new();
+        
+        // First pass: collect origin and all labels
+        for directive in &control.directives {
+            match directive {
+                control_file::ControlDirective::Origin(addr) => {
+                    origin = Some(*addr);
+                }
+                control_file::ControlDirective::Label { name, address } => {
+                    address2label.insert(*address, name.clone());
+                    label2address.insert(name.clone(), *address);
+                }
+                control_file::ControlDirective::DataBloc(spec) => {
+                    // Store for later resolution
+                    data_bloc_specs.push(spec);
+                }
+                _ => {} // Skip other directives (e.g., Skip is handled separately)
             }
+        }
+        
+        // Second pass: resolve data blocs now that all labels are collected
+        let label_map_cow: HashMap<u16, Cow<str>> = address2label
+            .iter()
+            .map(|(addr, name)| (*addr, Cow::Borrowed(name.as_str())))
+            .collect();
+        
+        let mut blocs = Vec::new();
+        for spec in data_bloc_specs {
+            let bloc = spec.to_data_bloc(&label_map_cow)?;
+            blocs.push(bloc);
+        }
+        
+        Ok(BdAsmEnv {
+            origin,
+            address2label,
+            label2address,
+            blocs,
+        })
+    }
+    
+    /// Calculate the valid address range for label generation (origin to origin + binary size)
+    fn valid_range(&self, binary_size: usize) -> Option<RangeInclusive<u16>> {
+        self.origin.map(|start| {
+            let end = start.saturating_add(binary_size as u16);
+            start..=end
+        })
+    }
+    
+    /// Convert data bloc addresses to file offsets by subtracting origin
+    /// Returns the data blocs as file offsets, with a warning if origin is not set
+    fn data_blocs_offsets(&self) -> Result<Vec<RangeInclusive<u16>>> {
+        let mut data_blocs: Vec<RangeInclusive<u16>> = Vec::new();
+        for bloc in &self.blocs {
+            data_blocs.push(bloc.to_range_inclusive()?);
+        }
+        
+        if let Some(origin_value) = self.origin {
+            Ok(data_blocs
+                .iter()
+                .map(|range| {
+                    let start_offset = range.start().saturating_sub(origin_value);
+                    let end_offset = range.end().saturating_sub(origin_value);
+                    start_offset..=end_offset
+                })
+                .collect())
+        } else {
+            // No origin, use addresses as-is (assume they are offsets)
+            if !data_blocs.is_empty() {
+                eprintln!("; Warning: --data specified without --origin; treating addresses as file offsets");
+            }
+            Ok(data_blocs)
+        }
+    }
+    
+    /// Create a listing from the input bytes, handling data blocs
+    fn create_listing(&self, input_bytes: &[u8]) -> Result<Listing> {
+        // Convert data bloc addresses to file offsets
+        let data_blocs_offsets = self.data_blocs_offsets()?;
+        
+        // Retrieve the listing
+        let mut listing: Listing = if !data_blocs_offsets.is_empty() {
+            let mut data_blocs_mut = data_blocs_offsets.clone();
+            data_blocs_mut.sort_by_key(|range| *range.start());
 
-            match v.value() {
-                Value::Expr(expr) => {
-                    if expr.is_int() {
-                        if let Some(int_val) = v.integer() {
-                            address_to_label.insert(int_val as u16, s.value());
-                        }
-                    }
-                },
-                Value::String(_) => {},
-                Value::Address(a) => {
-                    address_to_label.insert(a.address(), s.value());
-                },
-                // Skip unsupported types rather than panicking
-                Value::Macro(_) | Value::Struct(_) | Value::Counter(_) => {
-                    eprintln!("Warning: Skipping label '{}' with unsupported value type", s.value());
+            // Make the listing for each of the blocs
+            let mut listings: Vec<Listing> = Vec::new();
+            let mut current_idx: usize = 0;
+            while !data_blocs_mut.is_empty() {
+                let bloc_range = data_blocs_mut
+                    .first()
+                    .ok_or_else(|| BdAsmError::InvalidDataBloc("Empty blocs list".to_string()))?
+                    .clone();
+                let bloc_idx = *bloc_range.start() as usize;
+                let bloc_end = (*bloc_range.end() as usize).min(input_bytes.len() - 1);
+
+                if current_idx < bloc_idx {
+                    listings.push(cpclib_asm::disass::disassemble(
+                        &input_bytes[current_idx..bloc_idx],
+                    ));
+                    current_idx = bloc_idx;
+                } else {
+                    assert_eq!(current_idx, bloc_idx);
+                    listings.push(defb_elements_chunked(&input_bytes[bloc_idx..=bloc_end]));
+                    data_blocs_mut.remove(0);
+                    current_idx = bloc_end + 1;
                 }
             }
-        }
-        address_to_label
-    };
-
-    let update_expr_address = move |e: &mut Expr, value: u16| {
-        if let Some(label) = address_to_label.get(&value) {
-            *e = Expr::Label(SmolStr::from(*label));
-        }
-    };
-
-    let mut current_address: Option<u16> = None;
-    for current_instruction in listing.iter_mut() {
-        let next_address = if let Token::Org { val1: address, .. } = current_instruction {
-            let addr = address.eval()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                .int()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))? as u16;
-            current_address = Some(addr);
-            current_address
-        }
-        else {
-            let nb_bytes = current_instruction.number_of_bytes()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-            match current_address {
-                Some(address) => Some(address + nb_bytes as u16),
-                None => {
-                    if nb_bytes != 0 {
-                        return Err(BdAsmError::UnknownAssemblerAddress(nb_bytes));
-                    }
-                    else {
-                        None
-                    }
-                },
+            if current_idx < input_bytes.len() {
+                listings.push(cpclib_asm::disass::disassemble(&input_bytes[current_idx..]));
             }
+
+            // Merge the blocs
+            listings
+                .into_iter()
+                .fold(Listing::new(), |mut lst, current| {
+                    lst.inject_listing(&current);
+                    lst
+                })
+        } else {
+            // No blocs, easy disassembling
+            cpclib_asm::disass::disassemble(input_bytes)
         };
-
-        if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
-        | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
-            current_instruction
-        {
-            let address = if let Expr::Label(l) = e
-                && l == "$"
-            {
-                current_address.ok_or_else(|| 
-                    BdAsmError::UnknownAssemblerAddress(0)
-                )?
-            }
-            else {
-                let value = e.eval()
-                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                    .int()
-                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-                let delta = value + 2;
-                let base_addr = current_address.ok_or_else(|| 
-                    BdAsmError::UnknownAssemblerAddress(0)
-                )? as i32;
-                (base_addr + delta) as u16
-            };
-
-            update_expr_address(e, address);
+        
+        // Add origin to the listing
+        if let Some(origin) = self.origin {
+            listing.insert(0, org(origin));
         }
-        else if let Token::OpCode(Mnemonic::Ld, Some(DataAccess::Memory(e)), ..)
-        | Token::OpCode(Mnemonic::Ld, _, Some(DataAccess::Memory(e)), _) =
-            current_instruction
-        {
-            let address = e.eval()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                .int()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))? as u16;
-            update_expr_address(e, address);
-        }
-
-        current_address = next_address;
+        
+        Ok(listing)
     }
     
-    Ok(())
+    /// Inject labels into the listing
+    /// Collects addresses from expressions and injects all labels
+    fn inject_labels(&mut self, listing: &mut Listing, binary_size: usize) -> Result<()> {
+        // Calculate the valid address range for label generation
+        let valid_range = self.valid_range(binary_size);
+
+        // Get extra labels from expressions (only within valid range)
+        for address in collect_addresses_from_expressions(listing, valid_range)? {
+            self.address2label
+                .entry(address)
+                .or_insert(format!("label_{address:.4x}"));
+            self.label2address
+                .entry(format!("label_{address:.4x}"))
+                .or_insert(address);
+        }
+        
+        // Convert to Cow<str> for compatibility with listing.inject_labels
+        let labels_cow: HashMap<u16, Cow<str>> = self
+            .address2label
+            .iter()
+            .map(|(addr, name)| (*addr, Cow::Borrowed(name.as_str())))
+            .collect();
+        
+        listing.inject_labels(labels_cow.clone());
+        inject_labels_into_expressions(listing)?;
+        
+        Ok(())
+    }
 }
 
-/// Parse data bloc specification into (start_index, length)
-fn parse_data_bloc(bloc: &str) -> Result<(usize, Option<usize>)> {
-    let split = bloc.split('-').collect::<Vec<_>>();
-    if split.len() != 2 {
-        return Err(BdAsmError::InvalidDataBloc(
-            format!("Expected format START-LENGTH, got: {}", bloc)
-        ));
+/// Generate defb directives from a slice of bytes, chunking into multiple directives
+/// if the data is longer than MAX_DB_ELEMENTS for better readability
+fn defb_elements_chunked(bytes: &[u8]) -> Listing {
+    let mut listing = Listing::new();
+    
+    for chunk in bytes.chunks(MAX_DB_ELEMENTS) {
+        listing.push(defb_elements(chunk));
     }
     
-    let start = usize::from_str_radix(split[0], 16)
-        .map_err(|_| BdAsmError::InvalidDataBloc(
-            format!("Invalid hexadecimal start address: {}", split[0])
-        ))?;
-    let length = usize::from_str_radix(split[1], 10).ok();
-    
-    Ok((start, length))
+    listing
 }
 
-pub fn process(matches: &ArgMatches) -> Result<()> {
+/// Parse a data bloc specification supporting two syntaxes:
+/// - START-LENGTH: where START is address and LENGTH is size
+/// - START..END: where both are addresses (END is exclusive)
+/// Each component can be a numeric value or a label name
+/// Benediction disassembler
+#[derive(Parser, Debug)]
+#[command(name = "bdasm")]
+#[command(version = built_info::PKG_VERSION)]
+#[command(author = "Krusty/Benediction")]
+#[command(about = "Benediction disassembler", long_about = None)]
+pub struct BdAsmCli {
+    /// Input binary file to disassemble
+    pub input: Utf8PathBuf,
+
+    /// Disassembling origin (supports hex, decimal, binary, octal)
+    #[arg(short = 'o', long, value_parser = parse_u16_value)]
+    pub origin: Option<u16>,
+
+    /// Data bloc specification. Three syntaxes supported:
+    /// - START-LENGTH: address and size (e.g., 0x1211-7 or message-7)
+    /// - START..END: address range with exclusive end (e.g., 0x1211..0x1222 or message..new_line)
+    /// - START..=END: address range with inclusive end (e.g., 0x1211..=0x1218 or message..=end_label)
+    /// Addresses are in assembly space. START, LENGTH, and END can be numeric values or label names.
+    #[arg(short = 'd', long = "data")]
+    pub data_bloc: Vec<DataBlocString>,
+
+    /// Set a label at the given address. Format LABEL=ADDRESS
+    #[arg(short = 'l', long = "label")]
+    pub label: Vec<String>,
+
+    /// Skip the first <SKIP> bytes (supports hex, decimal, binary, octal)
+    #[arg(short = 's', long = "skip", value_parser = parse_u16_value)]
+    pub skip: Option<u16>,
+
+    /// Output a simple listing that only contains the opcodes
+    #[arg(short = 'c', long = "compressed")]
+    pub compress: bool,
+
+    /// Output file (if not specified, output to stdout)
+    #[arg(short = 'O', long = "output")]
+    pub output: Option<Utf8PathBuf>,
+
+    /// Save control file with disassembly directives
+    #[arg(long = "save-control")]
+    pub save_control: Option<Utf8PathBuf>,
+
+    /// Load control file with disassembly directives
+    #[arg(long = "control")]
+    pub control: Option<Utf8PathBuf>,
+
+    /// Automatically detect CPC strings in the binary
+    #[arg(long = "detect-cpc-strings")]
+    pub detect_cpc_strings: bool,
+
+    /// Verbose output
+    #[arg(short = 'v', long = "verbose")]
+    pub verbose: bool,
+}
+
+pub fn process(cli: &BdAsmCli) -> Result<()> {
+    // Extract fields we'll need after shadowing cli
+    let input_filename = cli.input.clone();
+    let output_file = cli.output.clone();
+    let save_control_path = cli.save_control.clone();
+
+    // build the control file merging CLI arguments and loaded control file (if any)
+    let control_file = {
+        let mut control_file = if let Some(ref control_path) = cli.control {
+            load_control_file(control_path)?
+        } else {
+            ControlFile::default()
+        };
+        
+        // Step 2: Merge CLI arguments into control file
+        control_file.merge_cli(cli);
+        control_file
+    };
+
+    let cli = (); // We won't use CLI directly anymore, all info is now in control_file
+    
+    // Get skip bytes value for later use
+    let skip_bytes = control_file.get_skip();
+    
     // Get the bytes to disassemble
-    let input_filename: &Utf8PathBuf = matches.get_one("INPUT")
-        .ok_or_else(|| BdAsmError::InvalidDataBloc("Missing INPUT argument".to_string()))?;
-    let mut input_bytes = Vec::new();
-    let mut file = File::open(input_filename)?;
-    file.read_to_end(&mut input_bytes)?;
-
-    // check if there is an amsdos header and remove it if any
+    let input_bytes = std::fs::read(input_filename)?;
+    
+    // Check if there is an amsdos header and remove it if any
     let (input_bytes, amsdos_load) = if input_bytes.len() > 128 {
         let header = AmsdosHeader::from_buffer(&input_bytes);
         if header.is_checksum_valid() {
             println!("Amsdos header detected and removed");
             (&input_bytes[128..], Some(header.loading_address()))
-        }
-        else {
+        } else {
             (input_bytes.as_ref(), None)
         }
-    }
-    else {
+    } else {
         (input_bytes.as_ref(), None)
     };
 
-    // check if first bytes need to be removed
-    let input_bytes = if let Some(skip) = matches.get_one::<usize>("SKIP") {
-        eprintln!("; Skip {skip} bytes");
-        &input_bytes[*skip..]
-    }
-    else {
+    // Check if first bytes need to be removed
+    let input_bytes = if skip_bytes > 0 {
+        eprintln!("; Skip {skip_bytes} bytes");
+        &input_bytes[skip_bytes..]
+    } else {
         input_bytes
     };
 
     // Disassemble
     eprintln!("; 0x{:x} bytes to disassemble", input_bytes.len());
 
-    // Retrieve the listing
-    let mut listing: Listing = if matches.contains_id("DATA_BLOC") {
-        // Retrieve and parse the blocs
-        let mut blocs = matches
-            .get_many::<String>("DATA_BLOC")
-            .ok_or_else(|| BdAsmError::InvalidDataBloc("Failed to get DATA_BLOC values".to_string()))?
-            .map(|bloc| parse_data_bloc(bloc))
-            .collect::<Result<Vec<_>>>()?;
-        blocs.sort();
-
-        // Make the listing for each of the blocs
-        let mut listings: Vec<Listing> = Vec::new();
-        let mut current_idx = 0;
-        while !blocs.is_empty() {
-            let &(bloc_idx, bloc_length) = blocs.first()
-                .ok_or_else(|| BdAsmError::InvalidDataBloc("Empty blocs list".to_string()))?;
-            if current_idx < bloc_idx {
-                listings.push(cpclib_asm::disass::disassemble(
-                    &input_bytes[current_idx..(bloc_idx - current_idx)]
-                ));
-                current_idx = bloc_idx;
-            }
-            else {
-                assert_eq!(current_idx, bloc_idx);
-                listings.push(
-                    defb_elements(match bloc_length {
-                        Some(l) => &input_bytes[current_idx..(current_idx + l)],
-                        None => &input_bytes[current_idx..]
-                    })
-                    .into()
-                );
-                blocs.remove(0);
-                current_idx += match bloc_length {
-                    Some(l) => l,
-                    None => input_bytes.len() - current_idx
-                };
-            }
-        }
-        if current_idx < input_bytes.len() {
-            listings.push(cpclib_asm::disass::disassemble(&input_bytes[current_idx..]));
-        }
-
-        // merge the blocs
-        listings
-            .into_iter()
-            .fold(Listing::new(), |mut lst, current| {
-                lst.inject_listing(&current);
-                lst
-            })
-    }
-    else {
-        // no blocs
-        cpclib_asm::disass::disassemble(input_bytes)
-    };
-
-    // Add origin if any
-    if let Some(address) = matches.get_one::<String>("ORIGIN") {
-        let address = address.as_bytes();
-        let origin: std::result::Result<u32, ParseError<_, ()>> = cpclib_common::parse_value.parse(address);
-        let origin = origin
-            .map_err(|_| BdAsmError::InvalidDataBloc("Invalid origin address format".to_string()))? as u16;
-        listing.insert(0, org(origin));
-    }
-    else if let Some(origin) = amsdos_load {
-        listing.insert(0, org(origin));
-    }
-
-    // Add labels
-    let mut labels = if let Some(label_values) = matches.get_many::<String>("LABEL") {
-        label_values
-            .map(|label| {
-                let split = label.split('=').collect::<Vec<_>>();
-                if split.len() != 2 {
-                    return Err(BdAsmError::InvalidDataBloc(
-                        format!("Invalid label format '{}', expected LABEL=ADDRESS", label)
-                    ));
-                }
-                let label_name = split[0];
-                let address = split[1].as_bytes();
-                let address: std::result::Result<u32, ParseError<_, ()>> =
-                    cpclib_common::parse_value.parse(address);
-                let address = address
-                    .map_err(|_| BdAsmError::InvalidDataBloc("Invalid label address format".to_string()))? as u16;
-                Ok((address, Cow::Borrowed(label_name)))
-            })
-            .collect::<Result<HashMap<u16, Cow<str>>>>()?              
-    }
-    else {
-        Default::default()
-    };
-
-    // Get extra labels from expressions
-    for address in collect_addresses_from_expressions(&listing)? {
-        let entry = labels.entry(address);
-        entry.or_insert(Cow::Owned(format!("label_{address:.4x}")));
-    }
-    listing.inject_labels(labels);
-    inject_labels_into_expressions(&mut listing)?;
-
-    if matches.get_flag("COMPRESS") {
-        println!("{}", listing.to_string());
-    }
-    else {
-        let mut options = EnvOptions::default();
-        options.write_listing_output(std::io::stdout());
-        cpclib_asm::assemble_with_options(&listing.to_string(), options)
-            .map_err(|e| BdAsmError::AssemblyFailed(e.to_string()))?;
-    }
+    // Convert control file to BdAsmEnv
+    let mut env = BdAsmEnv::from_control_file(&control_file)?;
     
+    // Override origin with amsdos header if not set
+    if env.origin.is_none() {
+        env.origin = amsdos_load;
+    }
+
+    // Create the listing and inject labels
+    let mut listing = env.create_listing(input_bytes)?;
+    env.inject_labels(&mut listing, input_bytes.len())?;
+
+    // Generate output
+    let output_content = listing.to_string();
+
+    // Write output to file or stdout
+    if let Some(ref output_file) = output_file {
+        std::fs::write(output_file, output_content)?;
+    } else {
+        print!("{}", output_content);
+    }
+
+    // Save control file if requested
+    if let Some(ref control_path) = save_control_path {
+        let mut control = ControlFile {
+            directives: Vec::new(),
+        };
+
+        // Add origin if present
+        if let Some(origin) = env.origin {
+            control
+                .directives
+                .push(control_file::ControlDirective::Origin(origin));
+        }
+
+        // Add skip directive if present
+        if skip_bytes > 0 {
+            control
+                .directives
+                .push(control_file::ControlDirective::Skip(skip_bytes));
+        }
+
+        // Add labels
+        for (address, label) in env.address2label.iter() {
+            control
+                .directives
+                .push(control_file::ControlDirective::Label {
+                    name: label.to_string(),
+                    address: *address,
+                });
+        }
+
+        save_control_file(control_path, &control)?;
+    }
+
     Ok(())
-}
-
-pub fn build_args_parser() -> Command {
-    Command::new("bdasm")
-		.version(built_info::PKG_VERSION)
-		.author("Krusty/Benediction")
-		.about("Benediction disassembler")
-		.before_help(DESC_BEFORE)
-		.arg(
-			Arg::new("INPUT")
-				.help("Input binary file to disassemble.")
-				.action(ArgAction::Set)
-				.value_parser(clap::value_parser!(Utf8PathBuf))
-				.required(true)
-		)
-		.arg(
-			Arg::new("ORIGIN")
-				.help("Disassembling origin")
-				.short('o')
-				.long("origin")
-				.action(ArgAction::Set)
-				.required(false)
-
-		)
-		.arg(
-			Arg::new("DATA_BLOC")
-			.help("Relative position that contains data for a given size. Format: RELATIVE_START(in hexadecimal)-SIZE(in decimal)")
-			.short('d')
-			.long("data")
-			.action(ArgAction::Append)
-		)
-		.arg(
-			Arg::new("LABEL")
-			.help("Set a label at the given address. Format LABEL=ADDRESS")
-			.short('l')
-			.long("label")
-			.action(ArgAction::Append)
-		)
-		.arg(
-			Arg::new("SKIP")
-			.help("Skip the first <SKIP> bytes")
-			.short('s')
-			.long("SKIP")
-			.action(ArgAction::Set)
-			.value_parser(clap::value_parser!(usize))
-		)
-		.arg(
-			Arg::new("COMPRESS")
-			.help("Output a simple listing that only contains the opcodes")
-			.short('c')
-			.long("compressed")
-			.action(ArgAction::SetTrue)
-		)
 }

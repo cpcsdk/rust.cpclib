@@ -1,8 +1,9 @@
-use cpclib_bdasm::{build_args_parser, process};
+use clap::Parser;
+use cpclib_bdasm::{BdAsmCli, process};
 
 fn main() {
-    let matches = build_args_parser().get_matches();
-    if let Err(e) = process(&matches) {
+    let cli = BdAsmCli::parse();
+    if let Err(e) = process(&cli) {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }

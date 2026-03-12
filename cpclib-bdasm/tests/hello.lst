@@ -1,0 +1,22 @@
+Context: hello_world.asm
+0000                                    1 ; Z80 Hello World for Amstrad CPC
+0000                                    2 ; This program prints "Hello World 323!" to the screen
+BB5A ????? PrintChar                    4     PrintChar     equ &BB5A   
+1200                                    6     org &1200
+1203        21 11 12                    9     ld hl,Message            ;Address of string
+1206        CD 07 12                   10     Call PrintString        ;Show String to screen
+1207        C9                         12     ret                ;Finished Hello World
+1207 01207 PrintString                 14 PrintString:
+1208        7E                         15     ld a,(hl)    ;Print a '255' terminated string
+1208        FE FF                      16     cp 255
+120A        C8                         17     ret z
+120B        23                         18     inc hl
+120C        CD 5A BB                   19     call PrintChar
+120F        18 F6                      20     jr PrintString
+1211 01211 Message                     22 Message: db 'Hello World 323!',255
+1211        48 65 6C 6C 6F 20 57 6F    22 Message: db 'Hello World 323!',255
+            72 6C 64 20 33 32 33 21       
+            FF                            
+1222 01222 NewLine                     24 NewLine:
+1224        3E 0D                      25     ld a,13        ;Carriage return
+1224        CD 5A BB                   26     call PrintChar

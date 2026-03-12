@@ -1,0 +1,4 @@
+Message equ #1211
+NewLine equ #1222
+PrintChar equ #BB5A
+PrintString equ #1207
