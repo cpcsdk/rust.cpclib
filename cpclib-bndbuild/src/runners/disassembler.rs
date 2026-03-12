@@ -1,8 +1,9 @@
 use std::fmt::Debug;
 
-use cpclib_bdasm::process;
+use cpclib_bdasm::{BdAsmCli, process};
 use cpclib_common::event::EventObserver;
 use cpclib_runner::runner::disassembler::ExternDisassembler;
+use cpclib_runner::runner::runner::RunnerWithClapDerive;
 #[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
@@ -34,11 +35,10 @@ impl Disassembler {
 }
 
 // Using the macro to generate all the boilerplate
-crate::define_custom_builder_runner! {
-    simple: BdasmRunner,
-    cpclib_bdasm::build_args_parser(),
+crate::define_clap_derive_runner! {
+    BdasmRunner,
+    BdAsmCli,
     BDASM_CMDS[0],
-    cpclib_bdasm::built_info::PKG_NAME,
     cpclib_bdasm::built_info::PKG_VERSION,
-    |matches| { process(&matches); Ok(()) }
+    |cli: BdAsmCli| { process(&cli).map_err(|e| e.to_string()) }
 }
