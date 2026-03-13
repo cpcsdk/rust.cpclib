@@ -3942,6 +3942,12 @@ macro_rules! visit_token_impl {
             $cls::Defs(l) => $env.visit_defs(l),
 
             $cls::End => $env.visit_end(),
+            $cls::Enum {
+                prefix,
+                start,
+                step,
+                fields
+            } => $env.visit_enum(prefix.as_ref(), start.as_ref(), step.as_ref(), fields.as_slice()),
             $cls::Export(labels) => $env.visit_export(labels.as_slice()),
             $cls::Equ { label, expr } => $env.visit_equ(&label, expr),
             $cls::Even => $env.visit_even(),
@@ -4955,6 +4961,52 @@ impl Env {
         // EVEN is shorthand for ALIGN 2
         let boundary = Expr::Value(2);
         self.visit_align(&boundary, None)
+    }
+
+    /// Assign sequentially increasing values to each label in an ENUM block.
+    /// prefix:  optional prefix prepended to each label name (with underscore separator)
+    /// start:   optional starting value expression (defaults to 0)
+    /// step:    optional increment expression (defaults to 1)
+    /// fields:  list of (label_name, optional_override_value)
+    pub fn visit_enum<
+        S: SourceString,
+        E: ExprEvaluationExt + ExprElement + Debug,
+        L: SourceString,
+        V: ExprEvaluationExt + ExprElement + Debug
+    >(
+        &mut self,
+        prefix: Option<&S>,
+        start: Option<&E>,
+        step: Option<&E>,
+        fields: &[(L, Option<V>)]
+    ) -> Result<(), Box<AssemblerError>> {
+        let mut counter: i32 = if let Some(s) = start {
+            self.resolve_expr_must_never_fail(s)?.int()?
+        }
+        else {
+            0
+        };
+        let step_val: i32 = if let Some(s) = step {
+            self.resolve_expr_must_never_fail(s)?.int()?
+        }
+        else {
+            1
+        };
+        for (label, override_val) in fields {
+            if let Some(ov) = override_val {
+                counter = self.resolve_expr_must_never_fail(ov)?.int()?;
+            }
+            let symbol_name: String = if let Some(p) = prefix {
+                format!("{}_{}", p.as_str(), label.as_str())
+            }
+            else {
+                label.as_str().to_owned()
+            };
+            let value: ExprResult = counter.into();
+            self.add_symbol_to_symbol_table(&symbol_name, value, None)?;
+            counter = counter.wrapping_add(step_val);
+        }
+        Ok(())
     }
 
     fn visit_field<

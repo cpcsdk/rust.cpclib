@@ -995,6 +995,13 @@ pub enum LocatedTokenInner {
     Defs(Vec<(LocatedExpr, Option<LocatedExpr>)>),
     Defw(Vec<LocatedExpr>),
     End,
+    /// Enum block: assigns increasing values to labels.
+    Enum {
+        prefix: Option<Z80Span>,
+        start: Option<LocatedExpr>,
+        step: Option<LocatedExpr>,
+        fields: Vec<(Z80Span, Option<LocatedExpr>)>
+    },
     Equ {
         label: Z80Span,
         expr: LocatedExpr
@@ -1821,7 +1828,27 @@ impl ListingElement for LocatedTokenInner {
                     expr: expr.to_expr().into_owned()
                 })
             },
-            Self::Even => Cow::Borrowed(&Token::Even),
+            Self::Enum {
+                prefix,
+                start,
+                step,
+                fields
+            } => {
+                Cow::Owned(Token::Enum {
+                    prefix: prefix.as_ref().map(|p| p.as_str().into()),
+                    start: start.as_ref().map(|e| e.to_expr().into_owned()),
+                    step: step.as_ref().map(|e| e.to_expr().into_owned()),
+                    fields: fields
+                        .iter()
+                        .map(|(l, e)| {
+                            (
+                                l.as_str().into(),
+                                e.as_ref().map(|e| e.to_expr().into_owned())
+                            )
+                        })
+                        .collect_vec()
+                })
+            },
             Self::SetN {
                 label: _,
                 source: _,

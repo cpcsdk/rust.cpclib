@@ -118,6 +118,7 @@ const STAND_ALONE_DIRECTIVE: &[&[u8]] = &[
 const START_DIRECTIVE: &[&[u8]] = &[
     b"ASMCONTROLENV",
     b"CONFINED",
+    b"ENUM",
     b"FUNCTION",
     b"FOR",
     b"IF",
@@ -169,6 +170,7 @@ const END_DIRECTIVE: &[&[u8]] = &[
     b"ELSEIFUSED",
     b"ENDC",
     b"ENDCONFINED",
+    b"ENDENUM",
     b"ENDF",
     b"ENDFOR",
     b"ENDFUNCTION",

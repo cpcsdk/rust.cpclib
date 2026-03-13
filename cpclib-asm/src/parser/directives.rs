@@ -1232,6 +1232,119 @@ pub fn parse_snainit(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner,
     Ok(LocatedTokenInner::SnaInit(fname))
 }
 
+/// Parse the body of an ENUM block: zero or more `label [= expr]` lines,
+/// stopping when ENDENUM or MEND is encountered (without consuming it).
+/// Parse a single ENUM field entry: `label [= expr]`.
+/// Returns `None` if the next token is an end keyword (ENDENUM/MEND), causing
+/// the caller's repeat to stop via `verify_map`.
+fn parse_enum_field(
+    input: &mut InnerZ80Span
+) -> ModalResult<Option<(Z80Span, Option<LocatedExpr>)>, Z80ParserError> {
+    opt((
+        parse_label(false)
+            /*.verify(|l: &InnerZ80Span| {
+                !l.eq_ignore_ascii_case(b"endenum")
+                    && !l.eq_ignore_ascii_case(b"mend")
+                    && !l.eq_ignore_ascii_case(b"endm")
+            })*/
+            .context(StrContext::Label("ENUM: label name"))
+            .map(Z80Span::from),
+        opt(preceded(
+            (my_space0, one_of('='), my_space0),
+            cut_err(located_expr.context(StrContext::Label("ENUM: value expression")))
+        ))
+    ))
+    .parse_next(input)
+}
+
+/// Parse all ENUM field entries until ENDENUM/MEND is encountered.
+fn parse_enum_fields(
+    input: &mut InnerZ80Span
+) -> ModalResult<Vec<(Z80Span, Option<LocatedExpr>)>, Z80ParserError> {
+    cut_err(repeat(
+        0..,
+        delimited(
+            repeat::<_, _, (), _, _>(
+                0..,
+                alt((
+                    my_space1.value(()),
+                    parse_comment.value(()),
+                    line_ending.value(()),
+                    ':'.value(())
+                ))
+            ),
+            parse_enum_field,
+            repeat::<_, _, (), _, _>(
+                0..,
+                alt((
+                    my_space1.value(()),
+                    parse_comment.value(()),
+                    line_ending.value(()),
+                ))
+            )
+        )
+        .verify_map(|x| x)
+    ))
+    .context(StrContext::Label("ENUM: error in fields"))
+    .parse_next(input)
+}
+
+/// Parse an ENUM block.
+/// Called AFTER the "ENUM" keyword has already been consumed by parse_directive_new.
+/// Syntax: ENUM [prefix [, start [, step]]]
+///           label_name [= expr]
+///           ...
+///         ENDENUM  (or MEND)
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_enum(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    // Optional prefix (an identifier)
+    let prefix: Option<Z80Span> = opt(parse_label(false))
+        .parse_next(input)?
+        .map(Z80Span::from);
+
+    // Optional start value (only after a comma)
+    let start: Option<LocatedExpr> = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
+
+    // Optional step value (only after another comma, and only if start was provided)
+    let step: Option<LocatedExpr> = if start.is_some() {
+        opt(preceded(parse_comma, located_expr)).parse_next(input)?
+    }
+    else {
+        None
+    };
+
+    let fields = parse_enum_fields(input)?;
+
+    // End keyword: skip any trailing whitespace/comments/newlines/colons first.
+    // The ':' is needed for inline (one-line) form where statements are joined with ':'.
+    let _ = cut_err(preceded(
+        repeat::<_, _, (), _, _>(
+            0..,
+            alt((
+                my_space1.value(()),
+                parse_comment.value(()),
+                line_ending.value(()),
+                ':'.value(())
+            ))
+        ),
+        alt((
+            parse_directive_word(b"ENDENUM"),
+            parse_directive_word(b"MEND"),
+            parse_directive_word(b"ENDM")
+        ))
+    ))
+    .context(StrContext::Label("ENUM: not closed (expected ENDENUM, MEND, or ENDM)"))
+    .parse_next(input)?;
+
+    Ok(LocatedTokenInner::Enum {
+        prefix,
+        start,
+        step,
+        fields
+    })
+}
+
 pub fn parse_struct_directive(
     input: &mut InnerZ80Span
 ) -> ModalResult<LocatedToken, Z80ParserError> {
@@ -1673,6 +1786,7 @@ fn parse_directive_of_size_4(
 
         h if hashed_choice!(h, word, b"BANK") => parse_bank.parse_next(input),
         h if hashed_choice!(h, word, b"EVEN") => parse_even.parse_next(input),
+        h if hashed_choice!(h, word, b"ENUM") => parse_enum(input),
         h if hashed_choice!(h, word, b"FAIL") => parse_fail(true).parse_next(input),
         h if hashed_choice!(h, word, b"LIST") => Ok(LocatedTokenInner::List),
         h if hashed_choice!(h, word, b"READ") => parse_include.parse_next(input),

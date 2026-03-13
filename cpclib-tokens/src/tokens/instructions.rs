@@ -645,6 +645,17 @@ pub enum Token {
     Defw(Vec<Expr>),
 
     End,
+    /// Enum block: assigns sequentially increasing values to labels.
+    /// prefix: optional name prefix for generated labels
+    /// start: optional starting value (default 0)
+    /// step: optional increment per entry (default 1)
+    /// fields: list of (label, optional_override_value)
+    Enum {
+        prefix: Option<SmolStr>,
+        start: Option<Expr>,
+        step: Option<Expr>,
+        fields: Vec<(SmolStr, Option<Expr>)>
+    },
     Equ {
         label: SmolStr,
         expr: Expr
@@ -1035,6 +1046,27 @@ impl fmt::Display for Token {
 
             Token::Defw( exprs)
                  => write!(f, "DW {}", expr_list_to_string(exprs)),
+            Token::Enum { prefix, start, step, fields } => {
+                write!(f, "ENUM")?;
+                if let Some(p) = prefix {
+                    write!(f, " {p}")?;
+                    if let Some(s) = start {
+                        write!(f, ", {}", s.to_simplified_string())?;
+                        if let Some(st) = step {
+                            write!(f, ", {}", st.to_simplified_string())?;
+                        }
+                    }
+                }
+                writeln!(f)?;
+                for (label, val) in fields {
+                    if let Some(v) = val {
+                        writeln!(f, "\t{label} = {}", v.to_simplified_string())?;
+                    } else {
+                        writeln!(f, "\t{label}")?;
+                    }
+                }
+                write!(f, "ENDENUM")
+            },
             Token::Equ{label, expr}
                  => write!(f, "{} EQU {}", label, expr.to_simplified_string()),
 
