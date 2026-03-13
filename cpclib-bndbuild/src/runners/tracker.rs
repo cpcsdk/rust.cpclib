@@ -81,7 +81,7 @@ impl SongConverter {
             Self::new_song_to_vgm_default(),
             Self::new_song_to_wav_default(),
             Self::new_song_to_ym_default(),
-            Self::new_z80profiler_default(), // Kept here for distribution convenience
+            Self::new_z80profiler_default() // Kept here for distribution convenience
         ]
         .into_iter()
     }

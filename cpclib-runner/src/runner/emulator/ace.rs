@@ -78,9 +78,7 @@ impl DynamicUrlInformation for AceVersion {
             },
             AceVersion::ZenSummer => {
                 Ok(MutiplatformUrls {
-                    linux: Some(
-                        "https://roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz".to_string()
-                    ),
+                    linux: Some("https://roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz".to_string()),
                     windows: Some("https://roudoudou.com/ACE-DL/Win64Summer.zip".to_string()),
                     macos: None
                 })

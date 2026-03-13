@@ -1,6 +1,7 @@
 #![feature(cfg_select)]
 
-pub use {enigo, xcap};
+pub use enigo;
+pub use xcap;
 
 pub mod ace_config;
 pub mod delegated;

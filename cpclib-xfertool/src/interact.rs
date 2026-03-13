@@ -4,11 +4,11 @@ use cpclib_xfer::CpcXfer;
 use rustyline::completion::{Completer, FilenameCompleter, Pair, extract_word};
 use rustyline::error::ReadlineError;
 use rustyline::hint::{Hinter, HistoryHinter};
-use rustyline::{CompletionType, Config, Context, EditMode, Editor};
+use rustyline::{self, CompletionType, Config, Context, EditMode, Editor};
 use rustyline_derive::{Helper, Highlighter, Validator};
 use subprocess::Exec;
 use term_grid::{Direction, Filling, Grid, GridOptions};
-use {rustyline, termize};
+use termize;
 
 use crate::parser::{XferCommand, parse_command};
 

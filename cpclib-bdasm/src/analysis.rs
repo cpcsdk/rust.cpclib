@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+
 use cpclib_asm::{
-    DataAccess, Expr, ExprEvaluationExt, Listing, Mnemonic,
-    SymbolsTableTrait, Token, TokenExt, Value
+    DataAccess, Expr, ExprEvaluationExt, Listing, Mnemonic, SymbolsTableTrait, Token, TokenExt,
+    Value
 };
 use cpclib_common::smol_str::SmolStr;
+
 use crate::error::{BdAsmError, Result};
 
 /// Statistics about a disassembly
@@ -13,26 +15,38 @@ pub struct DisassemblyStats {
     pub code_bytes: usize,
     pub data_bytes: usize,
     pub instructions: usize,
-    pub labels_generated: usize,
+    pub labels_generated: usize
 }
 
 /// Resolves the absolute target address of a JR or DJNZ instruction.
 ///
 /// The disassembler writes the offset already adjusted (+2 bias removed), so target = PC + offset.
-fn resolve_jr_djnz_target(offset_expr: &Expr, current_address: Option<u16>, instruction: &Token) -> Result<u16> {
-    if let Expr::Label(l) = offset_expr && l == "$" {
-        current_address.ok_or_else(|| BdAsmError::UnknownAssemblerAddress {
-            instruction: instruction.clone(),
-            bytes: 0,
+fn resolve_jr_djnz_target(
+    offset_expr: &Expr,
+    current_address: Option<u16>,
+    instruction: &Token
+) -> Result<u16> {
+    if let Expr::Label(l) = offset_expr
+        && l == "$"
+    {
+        current_address.ok_or_else(|| {
+            BdAsmError::UnknownAssemblerAddress {
+                instruction: instruction.clone(),
+                bytes: 0
+            }
         })
-    } else {
-        let value = offset_expr.eval()
+    }
+    else {
+        let value = offset_expr
+            .eval()
             .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
             .int()
             .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-        let base_addr = current_address.ok_or_else(|| BdAsmError::UnknownAssemblerAddress {
-            instruction: instruction.clone(),
-            bytes: 0,
+        let base_addr = current_address.ok_or_else(|| {
+            BdAsmError::UnknownAssemblerAddress {
+                instruction: instruction.clone(),
+                bytes: 0
+            }
         })? as i32;
         Ok((base_addr + value) as u16)
     }
@@ -41,13 +55,20 @@ fn resolve_jr_djnz_target(offset_expr: &Expr, current_address: Option<u16>, inst
 /// Collects all address references from jump/load instructions.
 /// Only collects addresses within the valid_range (if provided) to avoid labeling external addresses like firmware routines.
 /// TODO: move it in a public library
-pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option<std::ops::RangeInclusive<u16>>) -> Result<Vec<u16>> {
+pub fn collect_addresses_from_expressions(
+    listing: &Listing,
+    valid_range: Option<std::ops::RangeInclusive<u16>>
+) -> Result<Vec<u16>> {
     let mut labels: Vec<u16> = Default::default();
 
     let mut current_address: Option<u16> = None;
     let mut has_overflowed = false;
     for current_instruction in listing.iter() {
-        assert!(!has_overflowed, "Address overflow occurred while processing instruction: {:?}", current_instruction);
+        assert!(
+            !has_overflowed,
+            "Address overflow occurred while processing instruction: {:?}",
+            current_instruction
+        );
         // Special handling for JR/DJNZ: they use PC-relative addressing
         if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
         | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
@@ -64,19 +85,20 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
             // Helper closure to extract and check an expression
             let mut check_expression = |expr: &Expr, is_memory: bool| {
                 if let Ok(value) = expr.eval()
-                    && let Ok(address) = value.int() {
-                        let address = address as u16;
-                        // Always label memory references (they're 16-bit addresses)
-                        // For direct expressions, only label values >= 256 (likely 16-bit addresses)
-                        // Values < 256 are likely 8-bit immediate values, not addresses
-                        let should_label = is_memory || address >= 256;
-                        
-                        if should_label && valid_range.as_ref().is_none_or(|r| r.contains(&address)) {
-                            labels.push(address);
-                        }
+                    && let Ok(address) = value.int()
+                {
+                    let address = address as u16;
+                    // Always label memory references (they're 16-bit addresses)
+                    // For direct expressions, only label values >= 256 (likely 16-bit addresses)
+                    // Values < 256 are likely 8-bit immediate values, not addresses
+                    let should_label = is_memory || address >= 256;
+
+                    if should_label && valid_range.as_ref().is_none_or(|r| r.contains(&address)) {
+                        labels.push(address);
                     }
+                }
             };
-            
+
             // Check first argument
             if let Some(arg) = arg1 {
                 match arg {
@@ -85,7 +107,7 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
                     _ => {}
                 }
             }
-            
+
             // Check second argument
             if let Some(arg) = arg2 {
                 match arg {
@@ -97,15 +119,18 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
         }
 
         let next_address = if let Token::Org { val1: address, .. } = current_instruction {
-            let addr = address.eval()
+            let addr = address
+                .eval()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
                 .int()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))? as u16;
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+                as u16;
             current_address = Some(addr);
             current_address
         }
         else {
-            let nb_bytes = current_instruction.number_of_bytes()
+            let nb_bytes = current_instruction
+                .number_of_bytes()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
             let res = match current_address {
                 Some(address) => Some(address.overflowing_add(nb_bytes as u16)),
@@ -113,7 +138,7 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
                     if nb_bytes != 0 {
                         return Err(BdAsmError::UnknownAssemblerAddress {
                             instruction: current_instruction.clone(),
-                            bytes: nb_bytes,
+                            bytes: nb_bytes
                         });
                     }
                     else {
@@ -126,7 +151,8 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
                     has_overflowed = true;
                 }
                 Some(next_addr)
-            } else {
+            }
+            else {
                 None
             }
         };
@@ -152,9 +178,10 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
             match v.value() {
                 Value::Expr(expr) => {
                     if expr.is_int()
-                        && let Some(int_val) = v.integer() {
-                            address_to_label.insert(int_val as u16, s.value());
-                        }
+                        && let Some(int_val) = v.integer()
+                    {
+                        address_to_label.insert(int_val as u16, s.value());
+                    }
                 },
                 Value::String(_) => {},
                 Value::Address(a) => {
@@ -162,7 +189,10 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
                 },
                 // Skip unsupported types rather than panicking
                 Value::Macro(_) | Value::Struct(_) | Value::Counter(_) => {
-                    eprintln!("Warning: Skipping label '{}' with unsupported value type", s.value());
+                    eprintln!(
+                        "Warning: Skipping label '{}' with unsupported value type",
+                        s.value()
+                    );
                 }
             }
         }
@@ -172,15 +202,18 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
     let mut current_address: Option<u16> = None;
     for current_instruction in listing.iter_mut() {
         let next_address = if let Token::Org { val1: address, .. } = current_instruction {
-            let addr = address.eval()
+            let addr = address
+                .eval()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
                 .int()
-                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))? as u16;
+                .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+                as u16;
             current_address = Some(addr);
             current_address
         }
         else {
-            let nb_bytes = current_instruction.number_of_bytes()
+            let nb_bytes = current_instruction
+                .number_of_bytes()
                 .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
             match current_address {
                 Some(address) => Some(address.wrapping_add(nb_bytes as u16)),
@@ -188,7 +221,7 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
                     if nb_bytes != 0 {
                         return Err(BdAsmError::UnknownAssemblerAddress {
                             instruction: current_instruction.clone(),
-                            bytes: nb_bytes,
+                            bytes: nb_bytes
                         });
                     }
                     else {
@@ -217,14 +250,15 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
             // Helper closure to replace an expression with a label if it matches
             let replace_if_label = |expr: &mut Expr| {
                 if let Ok(value) = expr.eval()
-                    && let Ok(address) = value.int() {
-                        let address = address as u16;
-                        if let Some(label) = address_to_label.get(&address) {
-                            *expr = Expr::Label(SmolStr::from(*label));
-                        }
+                    && let Ok(address) = value.int()
+                {
+                    let address = address as u16;
+                    if let Some(label) = address_to_label.get(&address) {
+                        *expr = Expr::Label(SmolStr::from(*label));
                     }
+                }
             };
-            
+
             // Check and replace first argument
             if let Some(arg) = arg1 {
                 match arg {
@@ -232,7 +266,7 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
                     _ => {}
                 }
             }
-            
+
             // Check and replace second argument
             if let Some(arg) = arg2 {
                 match arg {
@@ -244,7 +278,7 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
 
         current_address = next_address;
     }
-    
+
     Ok(())
 }
 
@@ -252,53 +286,59 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
 pub fn generate_xref(listing: &Listing) -> HashMap<String, Vec<u16>> {
     let mut xref: HashMap<String, Vec<u16>> = HashMap::new();
     let mut current_address: Option<u16> = None;
-    
+
     for token in listing.iter() {
         if let Token::Org { val1: address, .. } = token
-            && let Some(addr) = address.eval().ok().and_then(|v| v.int().ok()) {
-                current_address = Some(addr as u16);
-            }
-        
+            && let Some(addr) = address.eval().ok().and_then(|v| v.int().ok())
+        {
+            current_address = Some(addr as u16);
+        }
+
         // Scan for label references in expressions
         if let Some(addr) = current_address {
             match token {
-                Token::OpCode(_, Some(DataAccess::Expression(e)), ..) 
+                Token::OpCode(_, Some(DataAccess::Expression(e)), ..)
                 | Token::OpCode(_, _, Some(DataAccess::Expression(e)), _) => {
                     if let Expr::Label(label) = e {
-                        xref.entry(label.to_string())
-                            .or_default()
-                            .push(addr);
+                        xref.entry(label.to_string()).or_default().push(addr);
                     }
                 },
                 _ => {}
             }
         }
-        
+
         if let Ok(nb) = token.number_of_bytes()
-            && let Some(addr) = current_address {
-                current_address = Some(addr.wrapping_add(nb as u16));
-            }
+            && let Some(addr) = current_address
+        {
+            current_address = Some(addr.wrapping_add(nb as u16));
+        }
     }
-    
+
     xref
 }
 
 /// Calculate statistics about the disassembly
-pub fn calculate_stats(listing: &Listing, input_bytes_len: usize, labels_count: usize) -> DisassemblyStats {
+pub fn calculate_stats(
+    listing: &Listing,
+    input_bytes_len: usize,
+    labels_count: usize
+) -> DisassemblyStats {
     let mut stats = DisassemblyStats {
         total_bytes: input_bytes_len,
         labels_generated: labels_count,
         ..Default::default()
     };
-    
+
     for token in listing.iter() {
-        if let Token::OpCode(..) = token { stats.instructions += 1 }
-        
+        if let Token::OpCode(..) = token {
+            stats.instructions += 1
+        }
+
         if let Ok(nb) = token.number_of_bytes() {
             stats.code_bytes += nb;
         }
     }
-    
+
     stats.data_bytes = stats.total_bytes.saturating_sub(stats.code_bytes);
     stats
 }

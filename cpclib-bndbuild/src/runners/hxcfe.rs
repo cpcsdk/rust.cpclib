@@ -1,7 +1,7 @@
 use cpclib_runner::event::EventObserver;
-use cpclib_runner::runner::runner::RunnerWithClapDerive;
 #[allow(unused_imports)]
 use cpclib_runner::runner::Runner;
+use cpclib_runner::runner::runner::RunnerWithClapDerive;
 use hxcfe_cli::HxcfeCli;
 
 use crate::task::HXCFE_CMDS;

@@ -17,6 +17,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use cpclib_common::clap::{self, ArgAction, Command};
+use cpclib_disc as disc;
+use cpclib_sna as sna;
+use cpclib_xfer as xfer;
 use cpclib_xfertool::{build_args_parser, built_info, process};
 #[cfg(feature = "watch")]
 use crossbeam_channel::unbounded;
@@ -24,7 +27,6 @@ use crossbeam_channel::unbounded;
 use hotwatch::{Event, Hotwatch};
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use {cpclib_disc as disc, cpclib_sna as sna, cpclib_xfer as xfer};
 
 fn main() -> anyhow::Result<()> {
     let desc_before = format!(

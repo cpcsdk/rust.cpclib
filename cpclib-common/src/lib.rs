@@ -8,18 +8,25 @@ pub mod riff;
 
 #[cfg(feature = "cmdline")]
 pub use ::clap;
+pub use bitfield;
+pub use bitflags;
+pub use bitvec;
+pub use camino;
 pub use clap_extra::*;
+pub use itertools;
+pub use num;
 pub use parse::*;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 pub use rayon;
+pub use resolve_path;
 #[cfg(feature = "cmdline")]
 pub use semver;
+pub use smallvec;
+pub use smol_str;
+pub use strsim;
 #[cfg(feature = "cmdline")]
 pub use time;
-pub use {
-    bitfield, bitflags, bitvec, camino, itertools, num, resolve_path, smallvec, smol_str, strsim,
-    winnow
-};
+pub use winnow;
 
 #[cfg(test)]
 mod tests {

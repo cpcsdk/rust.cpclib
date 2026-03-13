@@ -8,17 +8,17 @@ use cpclib_common::camino::Utf8PathBuf;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_sna::Snapshot;
 
-mod error;
 mod analysis;
 mod control_file;
-mod parser;
 mod cpc_strings;
+mod error;
 mod formatting;
+mod parser;
 
-use error::{BdAsmError, Result};
 use analysis::{collect_addresses_from_expressions, inject_labels_into_expressions};
 use control_file::{ControlFile, save_control_file};
-use parser::{parse_u16_value, parse_value_or_label, parse_data_bloc_string, load_control_file};
+use error::{BdAsmError, Result};
+use parser::{load_control_file, parse_data_bloc_string, parse_u16_value, parse_value_or_label};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -35,7 +35,7 @@ pub enum DataBlocString {
     /// START..END syntax: (start_str, end_str) - exclusive end
     Range(String, String),
     /// START..=END syntax: (start_str, end_str) - inclusive end
-    InclusiveRange(String, String),
+    InclusiveRange(String, String)
 }
 
 impl std::fmt::Display for DataBlocString {
@@ -49,7 +49,7 @@ impl std::fmt::Display for DataBlocString {
             },
             DataBlocString::InclusiveRange(start, end) => {
                 write!(f, "{}..={}", start, end)
-            },
+            }
         }
     }
 }
@@ -62,7 +62,7 @@ pub enum DataBloc {
     /// START..END: (start, end) - exclusive end
     Range(u16, u16),
     /// START..=END: (start, end) - inclusive end
-    InclusiveRange(u16, u16),
+    InclusiveRange(u16, u16)
 }
 
 impl std::str::FromStr for DataBlocString {
@@ -71,11 +71,10 @@ impl std::str::FromStr for DataBlocString {
     fn from_str(spec: &str) -> Result<Self> {
         let bytes = spec.as_bytes();
         let mut input: &[u8] = bytes;
-        
-        parse_data_bloc_string(&mut input)
-            .map_err(|e| BdAsmError::InvalidDataBloc(
-                format!("Invalid data bloc format '{}': {}", spec, e)
-            ))
+
+        parse_data_bloc_string(&mut input).map_err(|e| {
+            BdAsmError::InvalidDataBloc(format!("Invalid data bloc format '{}': {}", spec, e))
+        })
     }
 }
 
@@ -89,14 +88,14 @@ impl DataBlocString {
                 let length = parse_value_or_label(length_str, labels)
                     .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid length: {}", e)))?;
                 Ok(DataBloc::Sized(start, length))
-            }
+            },
             DataBlocString::Range(start_str, end_str) => {
                 let start = parse_value_or_label(start_str, labels)
                     .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid start: {}", e)))?;
                 let end = parse_value_or_label(end_str, labels)
                     .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid end: {}", e)))?;
                 Ok(DataBloc::Range(start, end))
-            }
+            },
             DataBlocString::InclusiveRange(start_str, end_str) => {
                 let start = parse_value_or_label(start_str, labels)
                     .map_err(|e| BdAsmError::InvalidDataBloc(format!("Invalid start: {}", e)))?;
@@ -118,32 +117,36 @@ impl DataBloc {
                         "Length must be at least 1".to_string()
                     ));
                 }
-                let end = start.checked_add(length - 1)
-                    .ok_or_else(|| BdAsmError::InvalidDataBloc(
-                        format!("Data bloc range overflow: {} + {}", start, length - 1)
-                    ))?;
+                let end = start.checked_add(length - 1).ok_or_else(|| {
+                    BdAsmError::InvalidDataBloc(format!(
+                        "Data bloc range overflow: {} + {}",
+                        start,
+                        length - 1
+                    ))
+                })?;
                 Ok(*start..=end)
-            }
+            },
             DataBloc::Range(start, end) => {
                 if start >= end {
-                    return Err(BdAsmError::InvalidDataBloc(
-                        format!("Invalid range: start ({}) must be less than end ({})", start, end)
-                    ));
+                    return Err(BdAsmError::InvalidDataBloc(format!(
+                        "Invalid range: start ({}) must be less than end ({})",
+                        start, end
+                    )));
                 }
                 // END is exclusive, so inclusive range is start..=(end-1)
                 Ok(*start..=(end - 1))
-            }
+            },
             DataBloc::InclusiveRange(start, end) => {
                 if start > end {
-                    return Err(BdAsmError::InvalidDataBloc(
-                        format!("Invalid range: start ({}) must be less than or equal to end ({})", start, end)
-                    ));
+                    return Err(BdAsmError::InvalidDataBloc(format!(
+                        "Invalid range: start ({}) must be less than or equal to end ({})",
+                        start, end
+                    )));
                 }
                 Ok(*start..=*end)
             }
         }
     }
-
 }
 
 /// Environment for disassembly containing all resolved configuration
@@ -152,7 +155,7 @@ struct BdAsmEnv {
     origin: Option<u16>,
     length: Option<u16>,
     address2label: HashMap<u16, String>,
-    blocs: Vec<DataBloc>,
+    blocs: Vec<DataBloc>
 }
 
 impl BdAsmEnv {
@@ -162,44 +165,44 @@ impl BdAsmEnv {
         let mut origin = None;
         let mut address2label = HashMap::new();
         let mut data_bloc_specs = Vec::new();
-        
+
         // First pass: collect origin and all labels
         for directive in &control.directives {
             match directive {
                 control_file::ControlDirective::Origin(addr) => {
                     origin = Some(*addr);
-                }
+                },
                 control_file::ControlDirective::Label { name, address } => {
                     address2label.insert(*address, name.clone());
-                }
+                },
                 control_file::ControlDirective::DataBloc(spec) => {
                     // Store for later resolution
                     data_bloc_specs.push(spec);
-                }
+                },
                 _ => {} // Skip other directives (e.g., Skip is handled separately)
             }
         }
-        
+
         // Second pass: resolve data blocs now that all labels are collected
         let label_map_cow: HashMap<u16, Cow<str>> = address2label
             .iter()
             .map(|(addr, name)| (*addr, Cow::Borrowed(name.as_str())))
             .collect();
-        
+
         let mut blocs = Vec::new();
         for spec in data_bloc_specs {
             let bloc = spec.to_data_bloc(&label_map_cow)?;
             blocs.push(bloc);
         }
-        
+
         Ok(BdAsmEnv {
             origin,
             length: None,
             address2label,
-            blocs,
+            blocs
         })
     }
-    
+
     /// Calculate the valid address range for label generation (origin to origin + binary size)
     fn valid_range(&self, binary_size: usize) -> Option<RangeInclusive<u16>> {
         self.origin.map(|start| {
@@ -207,7 +210,7 @@ impl BdAsmEnv {
             start..=end
         })
     }
-    
+
     /// Convert data bloc addresses to file offsets by subtracting origin
     /// Returns the data blocs as file offsets, with a warning if origin is not set
     fn data_blocs_offsets(&self) -> Result<Vec<RangeInclusive<u16>>> {
@@ -215,7 +218,7 @@ impl BdAsmEnv {
         for bloc in &self.blocs {
             data_blocs.push(bloc.to_range_inclusive()?);
         }
-        
+
         if let Some(origin_value) = self.origin {
             Ok(data_blocs
                 .iter()
@@ -225,20 +228,23 @@ impl BdAsmEnv {
                     start_offset..=end_offset
                 })
                 .collect())
-        } else {
+        }
+        else {
             // No origin, use addresses as-is (assume they are offsets)
             if !data_blocs.is_empty() {
-                eprintln!("; Warning: --data specified without --origin; treating addresses as file offsets");
+                eprintln!(
+                    "; Warning: --data specified without --origin; treating addresses as file offsets"
+                );
             }
             Ok(data_blocs)
         }
     }
-    
+
     /// Create a listing from the input bytes, handling data blocs
     fn create_listing(&self, input_bytes: &[u8]) -> Result<Listing> {
         // Convert data bloc addresses to file offsets
         let data_blocs_offsets = self.data_blocs_offsets()?;
-        
+
         // Retrieve the listing
         let mut listing: Listing = if !data_blocs_offsets.is_empty() {
             let mut data_blocs_mut = data_blocs_offsets.clone();
@@ -257,10 +263,11 @@ impl BdAsmEnv {
 
                 if current_idx < bloc_idx {
                     listings.push(cpclib_asm::disass::disassemble(
-                        &input_bytes[current_idx..bloc_idx],
+                        &input_bytes[current_idx..bloc_idx]
                     ));
                     current_idx = bloc_idx;
-                } else {
+                }
+                else {
                     assert_eq!(current_idx, bloc_idx);
                     listings.push(defb_elements_chunked(&input_bytes[bloc_idx..=bloc_end]));
                     data_blocs_mut.remove(0);
@@ -278,19 +285,20 @@ impl BdAsmEnv {
                     lst.inject_listing(&current);
                     lst
                 })
-        } else {
+        }
+        else {
             // No blocs, easy disassembling
             cpclib_asm::disass::disassemble(input_bytes)
         };
-        
+
         // Add origin to the listing
         if let Some(origin) = self.origin {
             listing.insert(0, org(origin));
         }
-        
+
         Ok(listing)
     }
-    
+
     /// Inject labels into the listing
     /// Collects addresses from expressions and injects all labels
     fn inject_labels(&mut self, listing: &mut Listing, binary_size: usize) -> Result<()> {
@@ -303,17 +311,17 @@ impl BdAsmEnv {
                 .entry(address)
                 .or_insert_with(|| format!("label_{address:04x}"));
         }
-        
+
         // Convert to Cow<str> for compatibility with listing.inject_labels
         let labels_cow: HashMap<u16, Cow<str>> = self
             .address2label
             .iter()
             .map(|(addr, name)| (*addr, Cow::Borrowed(name.as_str())))
             .collect();
-        
+
         listing.inject_labels(labels_cow);
         inject_labels_into_expressions(listing)?;
-        
+
         Ok(())
     }
 }
@@ -322,11 +330,11 @@ impl BdAsmEnv {
 /// if the data is longer than MAX_DB_ELEMENTS for better readability
 fn defb_elements_chunked(bytes: &[u8]) -> Listing {
     let mut listing = Listing::new();
-    
+
     for chunk in bytes.chunks(MAX_DB_ELEMENTS) {
         listing.push(defb_elements(chunk));
     }
-    
+
     listing
 }
 
@@ -390,19 +398,16 @@ pub struct BdAsmCli {
 
     /// Verbose output
     #[arg(short = 'v', long = "verbose")]
-    pub verbose: bool,
+    pub verbose: bool
 }
 
 /// Load bytes to disassemble from either a SNA file or raw binary
-/// 
+///
 /// For SNA files: extracts memory starting at the specified origin address
 /// For raw binary: reads entire file and optionally strips AMSDOS header
-/// 
+///
 /// Returns: (bytes to disassemble, optional AMSDOS loading address)
-fn load_input_bytes(
-    filename: &Utf8PathBuf,
-    origin: Option<u16>,
-) -> Result<(Vec<u8>, Option<u16>)> {
+fn load_input_bytes(filename: &Utf8PathBuf, origin: Option<u16>) -> Result<(Vec<u8>, Option<u16>)> {
     // Check if this is a SNA file by extension
     let is_sna = filename
         .extension()
@@ -411,14 +416,13 @@ fn load_input_bytes(
 
     if is_sna {
         // Load SNA snapshot
-        let snapshot = Snapshot::load(filename)
-            .map_err(|e| std::io::Error::other(e))?;
-        
+        let snapshot = Snapshot::load(filename).map_err(|e| std::io::Error::other(e))?;
+
         // Get the full memory from snapshot (includes both hardcoded memory and chunks)
         // Truncate to Z80 address space (64KB = 0x10000 bytes)
         let memory = snapshot.memory_dump();
         let memory = &memory[..memory.len().min(0x10000)];
-        
+
         // If origin is specified, extract memory starting from that address
         // Otherwise, extract all available memory
         let bytes = if let Some(origin_addr) = origin {
@@ -431,34 +435,38 @@ fn load_input_bytes(
                 )));
             }
             memory[start..].to_vec()
-        } else {
+        }
+        else {
             memory.to_vec()
         };
-        
+
         eprintln!("Loaded {} bytes from SNA snapshot", bytes.len());
         if let Some(addr) = origin {
             eprintln!("Starting at address 0x{:04x}", addr);
         }
-        
+
         // For SNA files, return the origin as the load address (no separate AMSDOS header)
         Ok((bytes, origin))
-    } else {
+    }
+    else {
         // Load raw binary file
         let input_bytes = fs_err::read(filename)?;
-        
+
         // Check if there is an amsdos header and remove it if any
         let (bytes, amsdos_load) = if input_bytes.len() > 128 {
             let header = AmsdosHeader::from_buffer(&input_bytes);
             if header.is_checksum_valid() {
                 println!("Amsdos header detected and removed");
                 (input_bytes[128..].to_vec(), Some(header.loading_address()))
-            } else {
+            }
+            else {
                 (input_bytes, None)
             }
-        } else {
+        }
+        else {
             (input_bytes, None)
         };
-        
+
         Ok((bytes, amsdos_load))
     }
 }
@@ -473,10 +481,11 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
     let control_file = {
         let mut control_file = if let Some(ref control_path) = cli.control {
             load_control_file(control_path)?
-        } else {
+        }
+        else {
             ControlFile::default()
         };
-        
+
         // Step 2: Merge CLI arguments into control file
         control_file.merge_cli(cli);
         control_file
@@ -484,16 +493,17 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
 
     // Get skip bytes value for later use
     let skip_bytes = control_file.get_skip();
-    
+
     // Load the input bytes from either SNA or raw binary file
     // Pass the origin from control_file to help with SNA extraction
     let (input_bytes, amsdos_load) = load_input_bytes(&input_filename, control_file.get_origin())?;
-    
+
     // Check if first bytes need to be removed (skip directive)
     let input_bytes: &[u8] = if skip_bytes > 0 {
         eprintln!(" Skip {skip_bytes} bytes");
         &input_bytes[skip_bytes..]
-    } else {
+    }
+    else {
         &input_bytes
     };
 
@@ -503,10 +513,12 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
         if length < input_bytes.len() {
             eprintln!(" Limiting to {} bytes", length);
             &input_bytes[..length]
-        } else {
+        }
+        else {
             input_bytes
         }
-    } else {
+    }
+    else {
         input_bytes
     };
 
@@ -515,12 +527,12 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
 
     // Convert control file to BdAsmEnv
     let mut env = BdAsmEnv::from_control_file(&control_file)?;
-    
+
     // Override origin with amsdos header if not set
     if env.origin.is_none() {
         env.origin = amsdos_load;
     }
-    
+
     // If still no origin, default to address 0
     if env.origin.is_none() {
         env.origin = Some(0);
@@ -536,14 +548,15 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
     // Write output to file or stdout
     if let Some(ref output_file) = output_file {
         fs_err::write(output_file, output_content)?;
-    } else {
+    }
+    else {
         print!("{}", output_content);
     }
 
     // Save control file if requested
     if let Some(ref control_path) = save_control_path {
         let mut control = ControlFile {
-            directives: Vec::new(),
+            directives: Vec::new()
         };
 
         // Add origin if present
@@ -566,7 +579,7 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
                 .directives
                 .push(control_file::ControlDirective::Label {
                     name: label.to_string(),
-                    address: *address,
+                    address: *address
                 });
         }
 

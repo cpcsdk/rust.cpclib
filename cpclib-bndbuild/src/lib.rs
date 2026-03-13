@@ -54,12 +54,12 @@ pub mod built_info {
 }
 
 /// Processes command-line argument matches and executes the corresponding command.
-/// 
+///
 /// This is the main entry point for processing commands without custom observers.
-/// 
+///
 /// # Arguments
 /// * `matches` - Parsed command-line arguments from clap
-/// 
+///
 /// # Returns
 /// * `Ok(())` if the command executed successfully
 /// * `Err(BndBuilderError)` if any error occurred during execution
@@ -69,13 +69,13 @@ pub fn process_matches(matches: &ArgMatches) -> Result<(), BndBuilderError> {
 }
 
 /// Processes command-line arguments with a custom observer for event handling.
-/// 
+///
 /// Allows injection of custom observers to monitor build progress, errors, and events.
-/// 
+///
 /// # Arguments
 /// * `matches` - Parsed command-line arguments from clap
 /// * `o` - Custom observer to receive build events
-/// 
+///
 /// # Returns
 /// * `Ok(())` if the command executed successfully
 /// * `Err(BndBuilderError)` if any error occurred during execution
@@ -170,8 +170,12 @@ pub fn build_args_parser() -> clap::Command {
 
     let after_help_text = format!("Compilation timestamp: {}", built_info::BUILT_TIME_UTC);
     let version_text = Box::leak(
-        format!("{}\nCompiled: {}", built_info::PKG_VERSION, built_info::BUILT_TIME_UTC)
-            .into_boxed_str()
+        format!(
+            "{}\nCompiled: {}",
+            built_info::PKG_VERSION,
+            built_info::BUILT_TIME_UTC
+        )
+        .into_boxed_str()
     ) as &'static str;
 
     let cmd = Command::new("bndbuilder")
@@ -360,14 +364,12 @@ pub fn build_args_parser() -> clap::Command {
 }
 
 pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {
-    let path = path
-        .map(|p| p.to_owned())
-        .unwrap_or_else(|| {
-            current_dir()
-                .ok()
-                .and_then(|p| Utf8PathBuf::from_path_buf(p).ok())
-                .unwrap_or_else(|| Utf8PathBuf::from("."))
-        });
+    let path = path.map(|p| p.to_owned()).unwrap_or_else(|| {
+        current_dir()
+            .ok()
+            .and_then(|p| Utf8PathBuf::from_path_buf(p).ok())
+            .unwrap_or_else(|| Utf8PathBuf::from("."))
+    });
 
     if !path.is_dir() {
         return Err(BndBuilderError::AnyError(format!(
@@ -502,7 +504,7 @@ impl From<(serde_yaml::Error, &Utf8Path, &str)> for BndBuilderError {
 }
 
 /// Error types that can occur during bndbuild operations.
-/// 
+///
 /// Covers various failure modes including file I/O, template rendering,
 /// dependency resolution, and build execution errors.
 #[derive(Error, Debug)]

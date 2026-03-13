@@ -29,11 +29,10 @@ commands:
             "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
         );
         // Simulate the effect of replace_automatic_variables during deserialization
-        expected.replace_automatic_variables(Some("samourai.asm".into()), Some("samourai.sna".into())).unwrap();
-        assert_eq!(
-            rule.command(0).deref(),
-            expected.deref()
-        );
+        expected
+            .replace_automatic_variables(Some("samourai.asm".into()), Some("samourai.sna".into()))
+            .unwrap();
+        assert_eq!(rule.command(0).deref(), expected.deref());
     }
 
     #[test]
@@ -50,11 +49,10 @@ commands: basm samourai.asm --progress --snapshot -o samourai.sna -Idata --sym s
             "samourai.asm --progress --snapshot -o samourai.sna -Idata --sym samourai.sym"
         );
         // Simulate the effect of replace_automatic_variables during deserialization
-        expected.replace_automatic_variables(Some("samourai.asm".into()), Some("samourai.sna".into())).unwrap();
-        assert_eq!(
-            rule.command(0).deref(),
-            expected.deref()
-        );
+        expected
+            .replace_automatic_variables(Some("samourai.asm".into()), Some("samourai.sna".into()))
+            .unwrap();
+        assert_eq!(rule.command(0).deref(), expected.deref());
     }
 
     #[test]

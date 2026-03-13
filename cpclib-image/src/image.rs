@@ -2,12 +2,12 @@
 
 use std::collections::HashSet;
 
-use anyhow::Context;
+use anyhow::{self, Context};
 use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use {anyhow, image as im};
+use image as im;
 
 use crate::ga::*;
 use crate::pixels;

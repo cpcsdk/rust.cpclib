@@ -21,7 +21,7 @@ pub enum BndBuilderState<'a> {
 }
 
 /// Events emitted during the build process for observer notification.
-/// 
+///
 /// These events allow observers to track build progress, state changes,
 /// and capture stdout/stderr from executed tasks.
 #[derive(Clone, Debug)]
@@ -43,7 +43,7 @@ pub enum BndBuilderEvent<'a> {
 }
 
 /// Observer trait for receiving build events.
-/// 
+///
 /// Implement this trait to create custom observers that react to
 /// build state changes, task execution, and output streams.
 pub trait BndBuilderObserver: EventObserver + EnvEventObserver {
@@ -65,7 +65,7 @@ impl<T: BndBuilderObserver> BndBuilderObserver for Arc<T> {
 }
 
 /// Trait for objects that can be observed during the build process.
-/// 
+///
 /// Implementors can emit events to registered observers and manage
 /// a list of observers for notifications.
 pub trait BndBuilderObserved: Debug + Sync + Send {
@@ -152,7 +152,8 @@ impl BndBuilderObserverRc {
     }
 
     pub fn update(&self, event: BndBuilderEvent) {
-        self.0.deref()
+        self.0
+            .deref()
             .write()
             .expect("Failed to acquire write lock on observer")
             .deref_mut()
@@ -234,7 +235,9 @@ impl Default for ListOfBndBuilderObserverRc {
 impl EventObserver for ListOfBndBuilderObserverRc {
     fn emit_stdout(&self, s: &str) {
         for observer in self.0.clone().into_iter() {
-            observer.0.deref()
+            observer
+                .0
+                .deref()
                 .read()
                 .expect("Failed to acquire read lock on observer")
                 .emit_stdout(s);
@@ -243,7 +246,9 @@ impl EventObserver for ListOfBndBuilderObserverRc {
 
     fn emit_stderr(&self, s: &str) {
         for observer in self.0.clone().into_iter() {
-            observer.0.deref()
+            observer
+                .0
+                .deref()
                 .read()
                 .expect("Failed to acquire read lock on observer")
                 .emit_stderr(s);
@@ -254,7 +259,9 @@ impl EventObserver for ListOfBndBuilderObserverRc {
 impl BndBuilderObserver for ListOfBndBuilderObserverRc {
     fn update(&mut self, event: BndBuilderEvent) {
         for observer in self.0.clone().into_iter() {
-            let mut observer = observer.0.deref()
+            let mut observer = observer
+                .0
+                .deref()
                 .write()
                 .expect("Failed to acquire write lock on observer");
             observer.update(event.clone());
