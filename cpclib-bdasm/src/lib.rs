@@ -12,6 +12,8 @@ mod error;
 mod analysis;
 mod control_file;
 mod parser;
+mod cpc_strings;
+mod formatting;
 
 use error::{BdAsmError, Result};
 use analysis::{collect_addresses_from_expressions, inject_labels_into_expressions};
@@ -142,11 +144,6 @@ impl DataBloc {
         }
     }
 
-    /// Resolve a DataBlocString to a DataBloc using the label map
-    /// Delegates to DataBlocString::to_data_bloc
-    pub fn from_string(spec: &DataBlocString, labels: &HashMap<u16, Cow<str>>) -> Result<Self> {
-        spec.to_data_bloc(labels)
-    }
 }
 
 /// Environment for disassembly containing all resolved configuration
@@ -445,9 +442,9 @@ fn load_input_bytes(
             memory.to_vec()
         };
         
-        println!("Loaded {} bytes from SNA snapshot", bytes.len());
+        eprintln!("Loaded {} bytes from SNA snapshot", bytes.len());
         if let Some(addr) = origin {
-            println!("Starting at address 0x{:04x}", addr);
+            eprintln!("Starting at address 0x{:04x}", addr);
         }
         
         // For SNA files, return the origin as the load address (no separate AMSDOS header)

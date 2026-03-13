@@ -16,10 +16,31 @@ pub struct DisassemblyStats {
     pub labels_generated: usize,
 }
 
+/// Resolves the absolute target address of a JR or DJNZ instruction.
+///
+/// The disassembler writes the offset already adjusted (+2 bias removed), so target = PC + offset.
+fn resolve_jr_djnz_target(offset_expr: &Expr, current_address: Option<u16>, instruction: &Token) -> Result<u16> {
+    if let Expr::Label(l) = offset_expr && l == "$" {
+        current_address.ok_or_else(|| BdAsmError::UnknownAssemblerAddress {
+            instruction: instruction.clone(),
+            bytes: 0,
+        })
+    } else {
+        let value = offset_expr.eval()
+            .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
+            .int()
+            .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
+        let base_addr = current_address.ok_or_else(|| BdAsmError::UnknownAssemblerAddress {
+            instruction: instruction.clone(),
+            bytes: 0,
+        })? as i32;
+        Ok((base_addr + value) as u16)
+    }
+}
+
 /// Collects all address references from jump/load instructions.
 /// Only collects addresses within the valid_range (if provided) to avoid labeling external addresses like firmware routines.
 /// TODO: move it in a public library
-/// TODO: refactor with inject_labels_into_expressions to share common patterns
 pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option<std::ops::RangeInclusive<u16>>) -> Result<Vec<u16>> {
     let mut labels: Vec<u16> = Default::default();
 
@@ -32,31 +53,7 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
         | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
             current_instruction
         {
-            let address = if let Expr::Label(l) = e
-                && l == "$"
-            {
-                current_address.ok_or_else(|| 
-                    BdAsmError::UnknownAssemblerAddress {
-                        instruction: current_instruction.clone(),
-                        bytes: 0,
-                    }
-                )?
-            }
-            else {
-                let value = e.eval()
-                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                    .int()
-                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-                // The disassembler already adjusted the offset by +2, so use it directly
-                let base_addr = current_address.ok_or_else(|| 
-                    BdAsmError::UnknownAssemblerAddress {
-                        instruction: current_instruction.clone(),
-                        bytes: 0,
-                    }
-                )? as i32;
-                let target = (base_addr + value) as u16;
-                target
-            };
+            let address = resolve_jr_djnz_target(e, current_address, current_instruction)?;
             // Only add label if it's within the valid range
             if valid_range.as_ref().map_or(true, |r| r.contains(&address)) {
                 labels.push(address);
@@ -142,7 +139,6 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
 }
 
 /// Injects label names into expressions where possible.
-/// TODO: refactor with collect_addresses_from_expressions to share common patterns
 pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
     let (_bytes, table) = cpclib_asm::assemble_tokens_with_options(listing, Default::default())
         .map_err(|e| BdAsmError::AssemblyFailed(e.to_string()))?;
@@ -204,39 +200,15 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
             }
         };
 
-        // Clone instruction for potential error reporting (before mutable borrow)
-        let instruction_for_error = current_instruction.clone();
+        // Clone before the mutable pattern match (borrow checker requirement)
+        let instruction_snapshot = current_instruction.clone();
 
         // Special handling for JR/DJNZ: they use PC-relative addressing
         if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
         | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
             current_instruction
         {
-            let address = if let Expr::Label(l) = e
-                && l == "$"
-            {
-                current_address.ok_or_else(|| 
-                    BdAsmError::UnknownAssemblerAddress {
-                        instruction: instruction_for_error.clone(),
-                        bytes: 0,
-                    }
-                )?
-            }
-            else {
-                let value = e.eval()
-                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-                    .int()
-                    .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-                // The disassembler already adjusted the offset by +2, so use it directly
-                let base_addr = current_address.ok_or_else(|| 
-                    BdAsmError::UnknownAssemblerAddress {
-                        instruction: instruction_for_error.clone(),
-                        bytes: 0,
-                    }
-                )? as i32;
-                (base_addr + value) as u16
-            };
-
+            let address = resolve_jr_djnz_target(e, current_address, &instruction_snapshot)?;
             // Directly replace the expression with a label if one exists
             if let Some(label) = address_to_label.get(&address) {
                 *e = Expr::Label(SmolStr::from(*label));
