@@ -152,7 +152,6 @@ struct BdAsmEnv {
     origin: Option<u16>,
     length: Option<u16>,
     address2label: HashMap<u16, String>,
-    label2address: HashMap<String, u16>,
     blocs: Vec<DataBloc>,
 }
 
@@ -162,7 +161,6 @@ impl BdAsmEnv {
     fn from_control_file(control: &ControlFile) -> Result<Self> {
         let mut origin = None;
         let mut address2label = HashMap::new();
-        let mut label2address = HashMap::new();
         let mut data_bloc_specs = Vec::new();
         
         // First pass: collect origin and all labels
@@ -173,7 +171,6 @@ impl BdAsmEnv {
                 }
                 control_file::ControlDirective::Label { name, address } => {
                     address2label.insert(*address, name.clone());
-                    label2address.insert(name.clone(), *address);
                 }
                 control_file::ControlDirective::DataBloc(spec) => {
                     // Store for later resolution
@@ -199,7 +196,6 @@ impl BdAsmEnv {
             origin,
             length: None,
             address2label,
-            label2address,
             blocs,
         })
     }
@@ -305,10 +301,7 @@ impl BdAsmEnv {
         for address in collect_addresses_from_expressions(listing, valid_range)? {
             self.address2label
                 .entry(address)
-                .or_insert(format!("label_{address:.4x}"));
-            self.label2address
-                .entry(format!("label_{address:.4x}"))
-                .or_insert(address);
+                .or_insert_with(|| format!("label_{address:04x}"));
         }
         
         // Convert to Cow<str> for compatibility with listing.inject_labels
@@ -318,7 +311,7 @@ impl BdAsmEnv {
             .map(|(addr, name)| (*addr, Cow::Borrowed(name.as_str())))
             .collect();
         
-        listing.inject_labels(labels_cow.clone());
+        listing.inject_labels(labels_cow);
         inject_labels_into_expressions(listing)?;
         
         Ok(())
@@ -489,8 +482,6 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
         control_file
     };
 
-    let cli = (); // We won't use CLI directly anymore, all info is now in control_file
-    
     // Get skip bytes value for later use
     let skip_bytes = control_file.get_skip();
     

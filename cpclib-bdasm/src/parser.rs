@@ -143,7 +143,7 @@ fn data_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirect
         (alt((Caseless("data"), Caseless("d"))), space1),
         parse_data_bloc_string
     )
-    .map(|spec| ControlDirective::DataBloc(spec))
+    .map(ControlDirective::DataBloc)
     .parse_next(input)
 }
 
@@ -169,7 +169,7 @@ fn cpcstring_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlD
         (alt((Caseless("cpcstring"), Caseless("cs"))), space1),
         parse_data_bloc_string
     )
-    .map(|spec| ControlDirective::CpcString(spec))
+    .map(ControlDirective::CpcString)
     .parse_next(input)
 }
 
