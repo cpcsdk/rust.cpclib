@@ -5,7 +5,7 @@ use cpclib_common::parse_value;
 use cpclib_common::winnow::{
     Parser,
     combinator::{alt, preceded, separated},
-    token::{take_till, take_while},
+    token::{literal, take_till, take_while},
     ascii::{space0, space1, line_ending, Caseless},
     error::ErrMode,
 };
@@ -39,12 +39,14 @@ pub fn parse_value_or_label(s: &str, labels: &HashMap<u16, Cow<str>>) -> std::re
 
 // Winnow parsers for data bloc specifications
 
+/// Convert a byte slice (guaranteed ASCII from the parser) to a String.
+#[inline]
+fn bytes_to_string(b: &[u8]) -> String {
+    String::from_utf8_lossy(b).into_owned()
+}
+
 /// Parse a value or label name (alphanumeric/hex/etc or identifier)
 fn parse_value_or_label_string<'i>(input: &mut &'i [u8]) -> std::result::Result<&'i [u8], ErrMode<ContextError>> {
-    use cpclib_common::winnow::Parser;
-    use cpclib_common::winnow::token::take_while;
-    
-    // Match either a numeric value (with optional 0x prefix) or a label name
     take_while(1.., |c: u8| {
         c.is_ascii_alphanumeric() || c == b'_' || c == b'x' || c == b'X'
     }).parse_next(input)
@@ -52,47 +54,25 @@ fn parse_value_or_label_string<'i>(input: &mut &'i [u8]) -> std::result::Result<
 
 /// Winnow parser for DataBlocString
 pub fn parse_data_bloc_string<'i>(input: &mut &'i [u8]) -> std::result::Result<DataBlocString, ErrMode<ContextError>> {
-    use cpclib_common::winnow::Parser;
-    use cpclib_common::winnow::combinator::alt;
-    use cpclib_common::winnow::token::literal;
-    
-    // Try START..=END syntax first (inclusive range)
     let inclusive_range = (
         parse_value_or_label_string,
         literal("..="),
-        parse_value_or_label_string
-    ).map(|(start, _, end)| {
-        DataBlocString::InclusiveRange(
-            String::from_utf8_lossy(start).to_string(),
-            String::from_utf8_lossy(end).to_string()
-        )
-    });
-    
-    // Try START..END syntax (exclusive range)
+        parse_value_or_label_string,
+    ).map(|(s, _, e)| DataBlocString::InclusiveRange(bytes_to_string(s), bytes_to_string(e)));
+
     let exclusive_range = (
         parse_value_or_label_string,
         literal(".."),
-        parse_value_or_label_string
-    ).map(|(start, _, end)| {
-        DataBlocString::Range(
-            String::from_utf8_lossy(start).to_string(),
-            String::from_utf8_lossy(end).to_string()
-        )
-    });
-    
-    // Try START-LENGTH syntax
+        parse_value_or_label_string,
+    ).map(|(s, _, e)| DataBlocString::Range(bytes_to_string(s), bytes_to_string(e)));
+
     let sized = (
         parse_value_or_label_string,
         literal("-"),
-        parse_value_or_label_string
-    ).map(|(start, _, length)| {
-        DataBlocString::Sized(
-            String::from_utf8_lossy(start).to_string(),
-            String::from_utf8_lossy(length).to_string()
-        )
-    });
-    
-    // Try in order: inclusive range, exclusive range, sized
+        parse_value_or_label_string,
+    ).map(|(s, _, n)| DataBlocString::Sized(bytes_to_string(s), bytes_to_string(n)));
+
+    // inclusive range must be tried before exclusive ("..=" vs "..")
     alt((inclusive_range, exclusive_range, sized)).parse_next(input)
 }
 
@@ -193,8 +173,8 @@ fn directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, 
 fn control_line<'i>(input: &mut &'i [u8]) -> std::result::Result<Option<ControlDirective>, ErrMode<ContextError>> {
     alt((
         directive.map(Some),
-        comment_line.map(|_| None),
-        empty_line.map(|_| None),
+        comment_line.map(|()| None),
+        empty_line.map(|()| None),
     ))
     .parse_next(input)
 }
@@ -208,8 +188,7 @@ pub fn parse_control_file<'i>(input: &mut &'i [u8]) -> std::result::Result<Vec<C
 /// Load control file from disk
 pub fn load_control_file(path: &Utf8PathBuf) -> Result<ControlFile> {
     let contents = std::fs::read_to_string(path)?;
-    let bytes = contents.as_bytes();
-    let mut input: &[u8] = bytes;
+    let mut input: &[u8] = contents.as_bytes();
     
     let directives = parse_control_file(&mut input)
         .map_err(|e| BdAsmError::ControlFile(
