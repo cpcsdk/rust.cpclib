@@ -1154,17 +1154,15 @@ impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArgument
                     // `--ace` for `REMU_OUTPUT`). If no visible alias is
                     // present, prefer any declared alias (hidden or not),
                     // then fall back to the main long name.
-                    if let Some(aliases) = a.get_visible_aliases() {
-                        if let Some(first) = aliases.iter().next() {
+                    if let Some(aliases) = a.get_visible_aliases()
+                        && let Some(first) = aliases.first() {
                             return Some(format!("--{}", first));
                         }
-                    }
 
-                    if let Some(all_aliases) = a.get_all_aliases() {
-                        if let Some(first) = all_aliases.iter().next() {
+                    if let Some(all_aliases) = a.get_all_aliases()
+                        && let Some(first) = all_aliases.first() {
                             return Some(format!("--{}", first));
                         }
-                    }
 
                     // Fallback to the main long name.
                     if let Some(l) = a.get_long() {
@@ -1210,15 +1208,12 @@ impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArgument
                 }
 
                 if let Ok(Some(b)) = matches.try_get_one::<bool>(id_str) {
-                    if *b {
-                        if let Some(cpclib_common::clap::parser::ValueSource::CommandLine) =
+                    if *b
+                        && let Some(cpclib_common::clap::parser::ValueSource::CommandLine) =
                             matches.value_source(id_str)
-                        {
-                            if let Some(token) = declared_token_for(cmd, id_str) {
+                            && let Some(token) = declared_token_for(cmd, id_str) {
                                 out.push(token);
                             }
-                        }
-                    }
                     continue;
                 }
             }

@@ -12,5 +12,5 @@ crate::define_clap_derive_runner! {
     CrunchArgs,
     CRUNCH_CMDS[0],
     concat!("cpclib-crunch ", env!("CARGO_PKG_VERSION")),
-    |matches| cpclib_crunch::process(matches)
+    cpclib_crunch::process
 }

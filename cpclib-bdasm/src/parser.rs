@@ -53,7 +53,7 @@ fn parse_value_or_label_string<'i>(input: &mut &'i [u8]) -> std::result::Result<
 }
 
 /// Winnow parser for DataBlocString
-pub fn parse_data_bloc_string<'i>(input: &mut &'i [u8]) -> std::result::Result<DataBlocString, ErrMode<ContextError>> {
+pub fn parse_data_bloc_string(input: &mut &[u8]) -> std::result::Result<DataBlocString, ErrMode<ContextError>> {
     let inclusive_range = (
         parse_value_or_label_string,
         literal("..="),
@@ -79,12 +79,12 @@ pub fn parse_data_bloc_string<'i>(input: &mut &'i [u8]) -> std::result::Result<D
 // Winnow parsers for control file format
 
 /// Parse a comment line (starts with ; or #)
-fn comment_line<'i>(input: &mut &'i [u8]) -> std::result::Result<(), ErrMode<ContextError>> {
+fn comment_line(input: &mut &[u8]) -> std::result::Result<(), ErrMode<ContextError>> {
     (space0, alt((b';', b'#')), take_till(0.., |c| c == b'\n')).void().parse_next(input)
 }
 
 /// Parse empty line
-fn empty_line<'i>(input: &mut &'i [u8]) -> std::result::Result<(), ErrMode<ContextError>> {
+fn empty_line(input: &mut &[u8]) -> std::result::Result<(), ErrMode<ContextError>> {
     space0.void().parse_next(input)
 }
 
@@ -94,7 +94,7 @@ fn label_name<'i>(input: &mut &'i [u8]) -> std::result::Result<&'i [u8], ErrMode
 }
 
 /// Parse origin directive: origin <address> | o <address>
-fn origin_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
+fn origin_directive(input: &mut &[u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
     alt((Caseless("origin"), Caseless("o"))).parse_next(input)?;
     space1.parse_next(input)?;
     let addr = parse_value::<_, ContextError>.parse_next(input)? as u16;
@@ -102,7 +102,7 @@ fn origin_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDire
 }
 
 /// Parse skip directive: skip <count> | s <count>
-fn skip_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
+fn skip_directive(input: &mut &[u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
     alt((Caseless("skip"), Caseless("s"))).parse_next(input)?;
     space1.parse_next(input)?;
     let count = parse_value::<_, ContextError>.parse_next(input)? as usize;
@@ -110,7 +110,7 @@ fn skip_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirect
 }
 
 /// Parse length directive: length <bytes> | len <bytes> | n <bytes>
-fn length_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
+fn length_directive(input: &mut &[u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
     alt((Caseless("length"), Caseless("len"), Caseless("n"))).parse_next(input)?;
     space1.parse_next(input)?;
     let length = parse_value::<_, ContextError>.parse_next(input)? as u16;
@@ -118,7 +118,7 @@ fn length_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDire
 }
 
 /// Parse data directive: data <spec>
-fn data_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
+fn data_directive(input: &mut &[u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
     preceded(
         (alt((Caseless("data"), Caseless("d"))), space1),
         parse_data_bloc_string
@@ -128,7 +128,7 @@ fn data_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirect
 }
 
 /// Parse label directive: label <name>=<address> | l <name>=<address>
-fn label_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
+fn label_directive(input: &mut &[u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
     alt((Caseless("label"), Caseless("l"))).parse_next(input)?;
     space1.parse_next(input)?;
     
@@ -144,7 +144,7 @@ fn label_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirec
 }
 
 /// Parse cpcstring directive: cpcstring <spec> | cs <spec>
-fn cpcstring_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
+fn cpcstring_directive(input: &mut &[u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
     preceded(
         (alt((Caseless("cpcstring"), Caseless("cs"))), space1),
         parse_data_bloc_string
@@ -154,7 +154,7 @@ fn cpcstring_directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlD
 }
 
 /// Parse any directive
-fn directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
+fn directive(input: &mut &[u8]) -> std::result::Result<ControlDirective, ErrMode<ContextError>> {
     preceded(
         space0,
         alt((
@@ -170,7 +170,7 @@ fn directive<'i>(input: &mut &'i [u8]) -> std::result::Result<ControlDirective, 
 }
 
 /// Parse a single line (directive, comment, or empty)
-fn control_line<'i>(input: &mut &'i [u8]) -> std::result::Result<Option<ControlDirective>, ErrMode<ContextError>> {
+fn control_line(input: &mut &[u8]) -> std::result::Result<Option<ControlDirective>, ErrMode<ContextError>> {
     alt((
         directive.map(Some),
         comment_line.map(|()| None),
@@ -180,14 +180,14 @@ fn control_line<'i>(input: &mut &'i [u8]) -> std::result::Result<Option<ControlD
 }
 
 /// Parse entire control file
-pub fn parse_control_file<'i>(input: &mut &'i [u8]) -> std::result::Result<Vec<ControlDirective>, ErrMode<ContextError>> {
+pub fn parse_control_file(input: &mut &[u8]) -> std::result::Result<Vec<ControlDirective>, ErrMode<ContextError>> {
     let lines: Vec<Option<ControlDirective>> = separated(0.., control_line, line_ending).parse_next(input)?;
     Ok(lines.into_iter().flatten().collect())
 }
 
 /// Load control file from disk
 pub fn load_control_file(path: &Utf8PathBuf) -> Result<ControlFile> {
-    let contents = std::fs::read_to_string(path)?;
+    let contents = fs_err::read_to_string(path)?;
     let mut input: &[u8] = contents.as_bytes();
     
     let directives = parse_control_file(&mut input)

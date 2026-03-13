@@ -11,7 +11,7 @@ pub fn format_hex_comment(address: u16, bytes: &[u8]) -> String {
         .to_string();
     
     let ascii_part: String = bytes.iter()
-        .map(|&b| if b >= 0x20 && b < 0x7F { b as char } else { '.' })
+        .map(|&b| if (0x20..0x7F).contains(&b) { b as char } else { '.' })
         .collect();
     
     format!("; {:04X} {} {}", address, hex_part, ascii_part)

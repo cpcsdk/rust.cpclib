@@ -10,7 +10,7 @@ pub fn detect_cpc_strings(bytes: &[u8], min_length: usize) -> Vec<(usize, usize)
     let mut length = 0;
     
     for (i, &byte) in bytes.iter().enumerate() {
-        if byte >= 0x20 && byte < 0x80 {
+        if (0x20..0x80).contains(&byte) {
             // Valid 7-bit printable character
             if start.is_none() {
                 start = Some(i);
@@ -18,7 +18,7 @@ pub fn detect_cpc_strings(bytes: &[u8], min_length: usize) -> Vec<(usize, usize)
             } else {
                 length += 1;
             }
-        } else if byte >= 0xA0 && byte < 0xFF {
+        } else if (0xA0..0xFF).contains(&byte) {
             // Character with bit 7 set (potential end marker)
             if start.is_some() {
                 length += 1;

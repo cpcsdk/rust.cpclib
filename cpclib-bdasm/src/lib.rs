@@ -412,7 +412,7 @@ fn load_input_bytes(
     if is_sna {
         // Load SNA snapshot
         let snapshot = Snapshot::load(filename)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(|e| std::io::Error::other(e))?;
         
         // Get the full memory from snapshot (includes both hardcoded memory and chunks)
         // Truncate to Z80 address space (64KB = 0x10000 bytes)
@@ -444,7 +444,7 @@ fn load_input_bytes(
         Ok((bytes, origin))
     } else {
         // Load raw binary file
-        let input_bytes = std::fs::read(filename)?;
+        let input_bytes = fs_err::read(filename)?;
         
         // Check if there is an amsdos header and remove it if any
         let (bytes, amsdos_load) = if input_bytes.len() > 128 {
@@ -535,7 +535,7 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
 
     // Write output to file or stdout
     if let Some(ref output_file) = output_file {
-        std::fs::write(output_file, output_content)?;
+        fs_err::write(output_file, output_content)?;
     } else {
         print!("{}", output_content);
     }

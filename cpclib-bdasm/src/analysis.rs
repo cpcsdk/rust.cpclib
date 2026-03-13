@@ -55,7 +55,7 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
         {
             let address = resolve_jr_djnz_target(e, current_address, current_instruction)?;
             // Only add label if it's within the valid range
-            if valid_range.as_ref().map_or(true, |r| r.contains(&address)) {
+            if valid_range.as_ref().is_none_or(|r| r.contains(&address)) {
                 labels.push(address);
             }
         }
@@ -63,19 +63,18 @@ pub fn collect_addresses_from_expressions(listing: &Listing, valid_range: Option
         else if let Token::OpCode(_, arg1, arg2, _) = current_instruction {
             // Helper closure to extract and check an expression
             let mut check_expression = |expr: &Expr, is_memory: bool| {
-                if let Ok(value) = expr.eval() {
-                    if let Ok(address) = value.int() {
+                if let Ok(value) = expr.eval()
+                    && let Ok(address) = value.int() {
                         let address = address as u16;
                         // Always label memory references (they're 16-bit addresses)
                         // For direct expressions, only label values >= 256 (likely 16-bit addresses)
                         // Values < 256 are likely 8-bit immediate values, not addresses
                         let should_label = is_memory || address >= 256;
                         
-                        if should_label && valid_range.as_ref().map_or(true, |r| r.contains(&address)) {
+                        if should_label && valid_range.as_ref().is_none_or(|r| r.contains(&address)) {
                             labels.push(address);
                         }
                     }
-                }
             };
             
             // Check first argument
@@ -152,11 +151,10 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
 
             match v.value() {
                 Value::Expr(expr) => {
-                    if expr.is_int() {
-                        if let Some(int_val) = v.integer() {
+                    if expr.is_int()
+                        && let Some(int_val) = v.integer() {
                             address_to_label.insert(int_val as u16, s.value());
                         }
-                    }
                 },
                 Value::String(_) => {},
                 Value::Address(a) => {
@@ -218,14 +216,13 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
         else if let Token::OpCode(_, arg1, arg2, _) = current_instruction {
             // Helper closure to replace an expression with a label if it matches
             let replace_if_label = |expr: &mut Expr| {
-                if let Ok(value) = expr.eval() {
-                    if let Ok(address) = value.int() {
+                if let Ok(value) = expr.eval()
+                    && let Ok(address) = value.int() {
                         let address = address as u16;
                         if let Some(label) = address_to_label.get(&address) {
                             *expr = Expr::Label(SmolStr::from(*label));
                         }
                     }
-                }
             };
             
             // Check and replace first argument
@@ -257,11 +254,10 @@ pub fn generate_xref(listing: &Listing) -> HashMap<String, Vec<u16>> {
     let mut current_address: Option<u16> = None;
     
     for token in listing.iter() {
-        if let Token::Org { val1: address, .. } = token {
-            if let Some(addr) = address.eval().ok().and_then(|v| v.int().ok()) {
+        if let Token::Org { val1: address, .. } = token
+            && let Some(addr) = address.eval().ok().and_then(|v| v.int().ok()) {
                 current_address = Some(addr as u16);
             }
-        }
         
         // Scan for label references in expressions
         if let Some(addr) = current_address {
@@ -278,11 +274,10 @@ pub fn generate_xref(listing: &Listing) -> HashMap<String, Vec<u16>> {
             }
         }
         
-        if let Ok(nb) = token.number_of_bytes() {
-            if let Some(addr) = current_address {
+        if let Ok(nb) = token.number_of_bytes()
+            && let Some(addr) = current_address {
                 current_address = Some(addr.wrapping_add(nb as u16));
             }
-        }
     }
     
     xref
@@ -297,10 +292,7 @@ pub fn calculate_stats(listing: &Listing, input_bytes_len: usize, labels_count: 
     };
     
     for token in listing.iter() {
-        match token {
-            Token::OpCode(..) => stats.instructions += 1,
-            _ => {}
-        }
+        if let Token::OpCode(..) = token { stats.instructions += 1 }
         
         if let Ok(nb) = token.number_of_bytes() {
             stats.code_bytes += nb;
