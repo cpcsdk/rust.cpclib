@@ -22,7 +22,6 @@ use cpclib_runner::runner::emulator::{
 };
 use cpclib_runner::runner::grafx2::GRAFX2_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
-use cpclib_runner::runner::twocdt::TWO_CDT_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
 use cpclib_runner::runner::tracker::at3::AT_CMD;
@@ -31,6 +30,7 @@ use cpclib_runner::runner::tracker::at3::extra::{
     SongToWav, SongToYm, Z80Profiler
 };
 use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
+use cpclib_runner::runner::twocdt::TWO_CDT_CMD;
 use fancy_regex::Regex;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer};

@@ -12,9 +12,9 @@ use cpclib_runner::runner::ay::minimiser::MinimiserVersion;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 use cpclib_runner::runner::grafx2::Grafx2Version;
 use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
-use cpclib_runner::runner::twocdt::TwoCdtVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
+use cpclib_runner::runner::twocdt::TwoCdtVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
 
 use crate::event::BndBuilderObserver;

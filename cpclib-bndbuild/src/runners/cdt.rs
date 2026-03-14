@@ -128,5 +128,3 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
         .map_err(|e| e.to_string())
     }
 }
-
-
