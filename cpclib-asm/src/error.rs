@@ -363,6 +363,10 @@ impl AssemblerError {
             AssemblerError::RelocatedError{..} |
             AssemblerError::RelocatedWarning{..} /*|
             AssemblerError::SyntaxError{..} */ => true, // we need to exclude syntax error to add the location from the assembler when using macros
+            // AlreadyRenderedError already has correct location baked into its string;
+            // re-wrapping it with an outer span (e.g. the IF token's line) would
+            // produce a misleading second location in the error output.
+            AssemblerError::AlreadyRenderedError(_) => true,
             _ => false
         }
     }

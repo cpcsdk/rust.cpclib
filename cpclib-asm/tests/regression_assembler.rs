@@ -1,5 +1,27 @@
 use cpclib_asm::assemble;
 
+/// Regression test for https://github.com/cpcsdk/rust.cpclib/issues/60
+/// Errors inside IF/ELSE blocks must report the line of the *failing instruction*,
+/// not the line of the surrounding IF directive.
+#[test]
+fn error_line_inside_if_block() {
+    // Line 1: if
+    // Line 2: the failing instruction (unknown symbol)
+    // Line 3: endif
+    let code = "if 1\n  db UNDEFINED_LABEL_ISSUE60\nendif\n";
+    let err = assemble(code).unwrap_err();
+    let err_str = err.to_string();
+    // The error must point to line 2 (the db), not line 1 (the if)
+    assert!(
+        err_str.contains(":2:"),
+        "Expected error on line 2 (the failing db), got:\n{err_str}"
+    );
+    assert!(
+        !err_str.contains(":1:"),
+        "Error must NOT point to line 1 (the IF directive), got:\n{err_str}"
+    );
+}
+
 #[test]
 pub fn assemble_ld_ix_bc() {
     let code = "
