@@ -12,6 +12,7 @@ use cpclib_runner::runner::ay::minimiser::MinimiserVersion;
 use cpclib_runner::runner::convgeneric::ConvGenericVersion;
 use cpclib_runner::runner::grafx2::Grafx2Version;
 use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
+use cpclib_runner::runner::twocdt::TwoCdtVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
 use cpclib_runner::runner::{ExternRunner, Runner};
@@ -83,6 +84,9 @@ impl InnerTask {
 
             InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),
             InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
+            InnerTask::Cdt(crate::runners::cdt::CdtManager::TwoCdt, _) => {
+                Some(TwoCdtVersion::default().configuration())
+            },
             InnerTask::Martine(_) => Some(MartineVersion::default().configuration()),
             InnerTask::Tracker(t, _) => Some(t.configuration()),
 
@@ -121,6 +125,13 @@ pub fn execute<E: BndBuilderObserver + 'static>(
             match cdt {
                 crate::runners::cdt::CdtManager::Rtzx => {
                     crate::runners::cdt::RtzxRunner::<E>::default().run(task.args(), observer)
+                },
+                crate::runners::cdt::CdtManager::TwoCdt => {
+                    DelegatedRunner::<E>::new(
+                        task.configuration::<E>().unwrap(),
+                        TwoCdtVersion::default().get_command().to_owned()
+                    )
+                    .run(task.args(), observer)
                 },
             }
         },

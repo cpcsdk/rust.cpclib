@@ -22,6 +22,7 @@ use cpclib_runner::runner::emulator::{
 };
 use cpclib_runner::runner::grafx2::GRAFX2_CMD;
 use cpclib_runner::runner::hspcompiler::HSPC_CMD;
+use cpclib_runner::runner::twocdt::TWO_CDT_CMD;
 use cpclib_runner::runner::impdisc::IMPDISC_CMD;
 use cpclib_runner::runner::martine::MARTINE_CMD;
 use cpclib_runner::runner::tracker::at3::AT_CMD;
@@ -245,6 +246,7 @@ pub const CSL_CMDS: &[&str] = &["csl"];
 pub const CRUNCH_CMDS: &[&str] = &["crunch", "compress"];
 
 pub const RTZX_CMDS: &[&str] = &["rtzx"];
+pub const TWO_CDT_CMDS: &[&str] = &[TWO_CDT_CMD];
 
 pub const SONG2AKM_CMDS: &[&str] = &[SongToAkm::CMD];
 pub const SONG2AKG_CMDS: &[&str] = &[SongToAkg::CMD];
@@ -334,7 +336,7 @@ is_some_cmd!(
     miny,
     martine, mkdir, mv,
     orgams,
-    rasm, rm, rtzx,
+    rasm, rm, rtzx, two_cdt,
     sjasmplus, sna, sugarbox, song2akm, song2akg, song2aky, song2events, song2raw, song2soundeffects, song2vgm, song2wav, song2ym,
     z80profiler,
     uz80,
@@ -558,6 +560,10 @@ impl InnerTask {
 
     pub fn with_rtzx(std: StandardTaskArguments) -> Self {
         Self::Cdt(CdtManager::Rtzx, std)
+    }
+
+    pub fn with_two_cdt(std: StandardTaskArguments) -> Self {
+        Self::Cdt(CdtManager::TwoCdt, std)
     }
 
     /// Create an InnerTask from a command token and its standard arguments.
@@ -804,6 +810,9 @@ impl InnerTask {
         else if is_rtzx_cmd(code) {
             Ok(Self::with_rtzx(std))
         }
+        else if is_two_cdt_cmd(code) {
+            Ok(Self::with_two_cdt(std))
+        }
         else {
             Err(format!("{code} is an invalid command"))
         }
@@ -953,7 +962,8 @@ impl InnerTask {
             InnerTask::Locomotive(_) => TaskKind::Embedded,
             InnerTask::Snapshot(_) => TaskKind::Embedded,
             InnerTask::Xfer(_) => TaskKind::Embedded,
-            InnerTask::Cdt(..) => TaskKind::Embedded,
+            InnerTask::Cdt(crate::runners::cdt::CdtManager::Rtzx, _) => TaskKind::Embedded,
+            InnerTask::Cdt(crate::runners::cdt::CdtManager::TwoCdt, _) => TaskKind::Delegated,
 
             // Emulated tasks - run through an emulator
             InnerTask::Assembler(Assembler::Orgams, _) => TaskKind::Emulated,

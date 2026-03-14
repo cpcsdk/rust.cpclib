@@ -8,23 +8,25 @@ use fs_err::File;
 use rtzx::ui::commands::{Commands, run_convert, run_inspect, run_play};
 use rtzx::{self, TzxData};
 
-use crate::task::RTZX_CMDS;
+use crate::task::{RTZX_CMDS, TWO_CDT_CMDS};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CdtManager {
-    Rtzx
+    Rtzx,
+    TwoCdt
 }
 
 impl CdtManager {
     pub fn get_command(&self) -> &str {
         match self {
-            CdtManager::Rtzx => RTZX_CMDS[0]
+            CdtManager::Rtzx => RTZX_CMDS[0],
+            CdtManager::TwoCdt => TWO_CDT_CMDS[0]
         }
     }
 
     /// Returns all CdtManager variants for testing
     pub fn all() -> impl Iterator<Item = Self> {
-        [Self::Rtzx].into_iter()
+        [Self::Rtzx, Self::TwoCdt].into_iter()
     }
 }
 
@@ -126,3 +128,5 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
         .map_err(|e| e.to_string())
     }
 }
+
+

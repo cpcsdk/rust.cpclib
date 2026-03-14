@@ -32,7 +32,8 @@ pub use crate::BndBuilder;
 use crate::event::BndBuilderObserverRc;
 use crate::executor::*;
 use crate::task::{
-    BASMDOC_CMDS, CATALOG_CMDS, CPC2IMG_CMDS, GRAFX2_CMDS, LOCOMOTIVE_CMDS, MINY_CMDS, RTZX_CMDS
+    BASMDOC_CMDS, CATALOG_CMDS, CPC2IMG_CMDS, GRAFX2_CMDS, LOCOMOTIVE_CMDS, MINY_CMDS,
+    RTZX_CMDS, TWO_CDT_CMDS
 };
 
 pub mod app;
@@ -128,6 +129,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (RASM_CMDS, true),
     (RM_CMDS, false),
     (RTZX_CMDS, true),
+    (TWO_CDT_CMDS, true),
     (SJASMPLUS_CMDS, true),
     (SONG2AKM_CMDS, true),
     (Z80PROFILER_CMDS, true),

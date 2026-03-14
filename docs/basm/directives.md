@@ -868,6 +868,27 @@ Example:
 --8<-- "cpclib-basm/tests/asm/good_document_struct.asm"
 ```
 
+### ENUM
+
+Synopsis:
+
+```
+ENUM [prefix[, start[, step]]]
+  FIELD1
+  FIELD2[= value]
+  ...
+MEND|ENDM|ENDENUM
+```
+
+Description:
+Define a set of named integer constants with automatically incremented values. Each field gets the value of the previous field plus `step` (default: 1), starting from `start` (default: 0). An optional `prefix` causes each symbol to be named `prefix_FIELD` instead of `FIELD`. Individual field values can be overridden with `= value`; subsequent fields then continue incrementing from that value. The block is closed with `MEND`, `ENDM`, or `ENDENUM`.
+
+Example:
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_document_enum.asm"
+```
+
 ## Data loading and transformation directives
 
 Filenames are stored in a string.

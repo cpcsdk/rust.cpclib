@@ -275,6 +275,42 @@ Recursive bndbuild invocation for nested build configurations. For complete docu
 
 ## CDT Tools
 
+### CDT: 2cdt (2cdt)
+
+Convert binary or BASIC files to CDT tape images. 
+
+On Windows the prebuilt executable is downloaded automatically from the upstream zip. On Linux, the C source from the same zip is compiled locally using `gcc` (ensure `gcc` is installed).
+
+For complete documentation, see <https://cpctech.cpcwiki.de/docs/2cdt.html>.
+
+
+```
+2CDT will transfer files into a .CDT/.TZX tape image, in Amstrad CPC/CPC+
+KC Compact form.
+
+Usage: 2CDT [arguments] <input filename> <.cdt image>
+
+-n              - Blank CDT file before use
+-b <number>         - Specify Baud rate (default 2000)
+-s <0 or 1>     - Specify 'Speed Write'.
+                  0 = 1000 baud, 1 = 2000 baud (default)
+-t <method>     - TZX Block Write Method.
+                  0 = Pure Data, 1 = Turbo Loading (default)
+-m <method>     - Data method
+                  0 = blocks (default)
+                  1 = headerless (Firmware function: CAS READ - &BCA1)
+                  2 = spectrum
+                  3 = Two blocks. First block of 2K, second block has remainder
+-H <number>     = Headerless sync byte (default &16)
+-X <number>     = Define or override execution address (default is &1000 if no header)
+-L <number>     = Define or override load address (default is &1000 if no header)
+-F <number>     = Define or override file type (0=BASIC, 2=Binary (default if no header), 22=ASCII) etc. Applies to Data method 0
+-p <number>     = Set initial pause in milliseconds (default 3000ms)
+-P                              = Add a 1ms pause for buggy emulators that ignore first block
+-r <tape filename>
+                - Add <input filename> as <tape filename> to CDT (rename file)
+```
+
 ### CDT: RTZX (rtzx)
 
 Real-time ZX data compression. For complete documentation, see <https://github.com/LichP/rtzx>.

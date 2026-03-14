@@ -29,8 +29,8 @@ use crate::runners::img2cpc::ImgToCpcRunner;
 use crate::runners::xfer::XferRunner;
 use crate::task::{
     Task, is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd,
-    is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rm_cmd, is_winape_cmd,
-    is_xfer_cmd
+    is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rm_cmd, is_two_cdt_cmd,
+    is_winape_cmd, is_xfer_cmd
 };
 use crate::{
     ALL_APPLICATIONS, BndBuilder, BndBuilderError, EXPECTED_FILENAMES, execute, init_project
@@ -575,6 +575,33 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
         }
         else if is_xfer_cmd(runner) {
             XferRunner::<()>::render_help()
+        }
+        else if is_two_cdt_cmd(runner) {
+            r"2CDT will transfer files into a .CDT/.TZX tape image, in Amstrad CPC/CPC+
+KC Compact form.
+
+Usage: 2CDT [arguments] <input filename> <.cdt image>
+
+-n              - Blank CDT file before use
+-b <number>         - Specify Baud rate (default 2000)
+-s <0 or 1>     - Specify 'Speed Write'.
+                  0 = 1000 baud, 1 = 2000 baud (default)
+-t <method>     - TZX Block Write Method.
+                  0 = Pure Data, 1 = Turbo Loading (default)
+-m <method>     - Data method
+                  0 = blocks (default)
+                  1 = headerless (Firmware function: CAS READ - &BCA1)
+                  2 = spectrum
+                  3 = Two blocks. First block of 2K, second block has remainder
+-H <number>     = Headerless sync byte (default &16)
+-X <number>     = Define or override execution address (default is &1000 if no header)
+-L <number>     = Define or override load address (default is &1000 if no header)
+-F <number>     = Define or override file type (0=BASIC, 2=Binary (default if no header), 22=ASCII) etc. Applies to Data method 0
+-p <number>     = Set initial pause in milliseconds (default 3000ms)
+-P              = Add a 1ms pause for buggy emulators that ignore first block
+-r <tape filename>
+                - Add <input filename> as <tape filename> to CDT (rename file)
+".to_owned()
         }
         else {
             match Task::from_str(&format!("{runner} --help")) {
