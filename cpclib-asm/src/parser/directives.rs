@@ -1232,60 +1232,72 @@ pub fn parse_snainit(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner,
     Ok(LocatedTokenInner::SnaInit(fname))
 }
 
-/// Parse a label specifically for use as an ENUM field name.
+/// Parse a label for use as an ENUM field name.
 ///
-/// Unlike `parse_label`, this allows directive/instruction names (e.g. `LZ4`,
-/// `APLIB`, `NOP`) because ENUM fields are always rendered with the enum's
-/// prefix (e.g. `CRUNCHER_LZ4`) and therefore cannot clash with directives.
+/// When `allow_directives` is `true` (the enum has a prefix), directive/instruction
+/// names (e.g. `LZ4`, `APLIB`, `NOP`) are accepted because the assembler always
+/// renders them with the enum prefix (e.g. `CRUNCHER_LZ4`) so they cannot clash.
+/// When `false` (no prefix), falls back to `parse_label(false)` which rejects
+/// directive and instruction names.
 fn parse_enum_entry_label(
-    input: &mut InnerZ80Span
-) -> ModalResult<InnerZ80Span, Z80ParserError> {
-    let label: &[u8] = (
-        one_of((b'a'..=b'z', b'A'..=b'Z', b'_')).value(()),
-        repeat::<_, _, (), _, _>(
-            0..,
-            take_while(1.., (b'a'..=b'z', b'A'..=b'Z', b'0'..=b'9', b'_')).value(())
-        )
-    )
-        .take()
-        .parse_next(input)?;
-    Ok((*input).update_slice(label))
+    allow_directives: bool
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+    move |input: &mut InnerZ80Span| {
+        if allow_directives {
+            let label: &[u8] = (
+                one_of((b'a'..=b'z', b'A'..=b'Z', b'_')).value(()),
+                repeat::<_, _, (), _, _>(
+                    0..,
+                    take_while(1.., (b'a'..=b'z', b'A'..=b'Z', b'0'..=b'9', b'_')).value(())
+                )
+            )
+                .take()
+                .parse_next(input)?;
+            Ok((*input).update_slice(label))
+        }
+        else {
+            parse_label(false).parse_next(input)
+        }
+    }
 }
 
 /// Parse a single ENUM field entry: `label [= expr]`.
 /// Returns `None` if the next token is a block-end keyword (ENDENUM/MEND/ENDM),
 /// causing the caller's `repeat` to stop via `verify_map`.
-/// Unlike `parse_label`, directive/instruction names are accepted as field
-/// identifiers because they will always be prefixed by the enum name.
+/// When `allow_directives` is `true` (enum has a prefix), directive/instruction names
+/// are accepted as field identifiers because they will always be rendered with the prefix.
 fn parse_enum_field(
-    input: &mut InnerZ80Span
-) -> ModalResult<Option<(Z80Span, Option<LocatedExpr>)>, Z80ParserError> {
-    // If we're sitting on a block terminator, signal end of fields without consuming.
-    if peek(alt((
-        parse_directive_word(b"ENDENUM"),
-        parse_directive_word(b"MEND"),
-        parse_directive_word(b"ENDM"),
-    )))
-    .parse_next(input)
-    .is_ok()
-    {
-        return Ok(None);
-    }
+    allow_directives: bool
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<Option<(Z80Span, Option<LocatedExpr>)>, Z80ParserError> {
+    move |input: &mut InnerZ80Span| {
+        // If we're sitting on a block terminator, signal end of fields without consuming.
+        if peek(alt((
+            parse_directive_word(b"ENDENUM"),
+            parse_directive_word(b"MEND"),
+            parse_directive_word(b"ENDM"),
+        )))
+        .parse_next(input)
+        .is_ok()
+        {
+            return Ok(None);
+        }
 
-    opt((
-        parse_enum_entry_label
-            .context(StrContext::Label("ENUM: label name"))
-            .map(Z80Span::from),
-        opt(preceded(
-            (my_space0, one_of('='), my_space0),
-            cut_err(located_expr.context(StrContext::Label("ENUM: value expression")))
+        opt((
+            parse_enum_entry_label(allow_directives)
+                .context(StrContext::Label("ENUM: label name"))
+                .map(Z80Span::from),
+            opt(preceded(
+                (my_space0, one_of('='), my_space0),
+                cut_err(located_expr.context(StrContext::Label("ENUM: value expression")))
+            ))
         ))
-    ))
-    .parse_next(input)
+        .parse_next(input)
+    }
 }
 
 /// Parse all ENUM field entries until ENDENUM/MEND is encountered.
 fn parse_enum_fields(
+    allow_directives: bool,
     input: &mut InnerZ80Span
 ) -> ModalResult<Vec<(Z80Span, Option<LocatedExpr>)>, Z80ParserError> {
     cut_err(repeat(
@@ -1300,7 +1312,7 @@ fn parse_enum_fields(
                     ':'.value(())
                 ))
             ),
-            parse_enum_field,
+            parse_enum_field(allow_directives),
             repeat::<_, _, (), _, _>(
                 0..,
                 alt((
@@ -1341,7 +1353,7 @@ pub fn parse_enum(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z8
         None
     };
 
-    let fields = parse_enum_fields(input)?;
+    let fields = parse_enum_fields(prefix.is_some(), input)?;
 
     // End keyword: skip any trailing whitespace/comments/newlines/colons first.
     // The ':' is needed for inline (one-line) form where statements are joined with ':'.
