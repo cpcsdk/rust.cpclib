@@ -191,6 +191,7 @@ const END_DIRECTIVE: &[&[u8]] = &[
     b"FEND",
     b"IEND",
     b"LZCLOSE",
+    b"MEND",
     b"REND", // rorg directive
     b"UNTIL",
     b"WEND"
