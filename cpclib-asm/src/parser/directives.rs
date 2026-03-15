@@ -1232,21 +1232,48 @@ pub fn parse_snainit(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner,
     Ok(LocatedTokenInner::SnaInit(fname))
 }
 
-/// Parse the body of an ENUM block: zero or more `label [= expr]` lines,
-/// stopping when ENDENUM or MEND is encountered (without consuming it).
+/// Parse a label specifically for use as an ENUM field name.
+///
+/// Unlike `parse_label`, this allows directive/instruction names (e.g. `LZ4`,
+/// `APLIB`, `NOP`) because ENUM fields are always rendered with the enum's
+/// prefix (e.g. `CRUNCHER_LZ4`) and therefore cannot clash with directives.
+fn parse_enum_entry_label(
+    input: &mut InnerZ80Span
+) -> ModalResult<InnerZ80Span, Z80ParserError> {
+    let label: &[u8] = (
+        one_of((b'a'..=b'z', b'A'..=b'Z', b'_')).value(()),
+        repeat::<_, _, (), _, _>(
+            0..,
+            take_while(1.., (b'a'..=b'z', b'A'..=b'Z', b'0'..=b'9', b'_')).value(())
+        )
+    )
+        .take()
+        .parse_next(input)?;
+    Ok((*input).update_slice(label))
+}
+
 /// Parse a single ENUM field entry: `label [= expr]`.
-/// Returns `None` if the next token is an end keyword (ENDENUM/MEND), causing
-/// the caller's repeat to stop via `verify_map`.
+/// Returns `None` if the next token is a block-end keyword (ENDENUM/MEND/ENDM),
+/// causing the caller's `repeat` to stop via `verify_map`.
+/// Unlike `parse_label`, directive/instruction names are accepted as field
+/// identifiers because they will always be prefixed by the enum name.
 fn parse_enum_field(
     input: &mut InnerZ80Span
 ) -> ModalResult<Option<(Z80Span, Option<LocatedExpr>)>, Z80ParserError> {
+    // If we're sitting on a block terminator, signal end of fields without consuming.
+    if peek(alt((
+        parse_directive_word(b"ENDENUM"),
+        parse_directive_word(b"MEND"),
+        parse_directive_word(b"ENDM"),
+    )))
+    .parse_next(input)
+    .is_ok()
+    {
+        return Ok(None);
+    }
+
     opt((
-        parse_label(false)
-            /*.verify(|l: &InnerZ80Span| {
-                !l.eq_ignore_ascii_case(b"endenum")
-                    && !l.eq_ignore_ascii_case(b"mend")
-                    && !l.eq_ignore_ascii_case(b"endm")
-            })*/
+        parse_enum_entry_label
             .context(StrContext::Label("ENUM: label name"))
             .map(Z80Span::from),
         opt(preceded(
