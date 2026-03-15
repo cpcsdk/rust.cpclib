@@ -5,7 +5,7 @@ use std::ops::Deref;
 
 use cpclib_common::winnow::ascii::{Caseless, alphanumeric1, line_ending};
 use cpclib_common::winnow::combinator::{
-    alt, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
+    alt, cut_err, delimited, eof, not, opt, peek, preceded, repeat, separated, terminated
 };
 use cpclib_common::winnow::error::{AddContext, ErrMode, ParserError, StrContext, StrContextValue};
 use cpclib_common::winnow::stream::{Accumulate, AsBStr, AsBytes, AsChar, Stream, UpdateSlice};
@@ -176,15 +176,25 @@ pub fn parse_expr_bracketed_list(
     let input_start = input.checkpoint();
     let input_offset = input.eof_offset();
 
-    let list = delimited(
-        ("[", (my_space0, opt((line_ending, my_space0)))),
-        separated(0.., located_expr, parse_comma_multiline),
+    // '[' is the gate — backtrackable so alt() can try other alternatives when
+    // the input does not start with '['.
+    "[".parse_next(input)?;
+
+    // From here we are committed to parsing a bracketed list.  Any failure
+    // becomes a Cut error with an actionable context message so that the error
+    // renderer (and tests) can reliably identify this as the source.
+    let list = cut_err(terminated(
+        preceded(
+            (my_space0, opt((line_ending, my_space0))),
+            separated(0.., located_expr, parse_comma_multiline)
+        ),
         (
             (my_space0, opt((line_ending, my_space0))),
             not(b',').context(StrContext::Expected(StrContextValue::CharLiteral(']'))),
             "]"
         )
-    )
+    ))
+    .context(StrContext::Label("syntax error in list"))
     .parse_next(input)?;
 
     let span = build_span(input_offset, &input_start, *input);

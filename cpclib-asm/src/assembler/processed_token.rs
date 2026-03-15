@@ -1292,7 +1292,19 @@ where
                         let listing = if_state.choose_listing_to_assemble(env)?;
 
                         if let Some(listing) = listing {
-                            visit_processed_tokens(listing, env)?;
+                            // Wrap inner errors with IfIssue so the full block span
+                            // (from `if` to `endif`) appears as context in the output.
+                            visit_processed_tokens(listing, env).map_err(|e| {
+                                if let Some(span) = possible_span {
+                                    Box::new(AssemblerError::IfIssue {
+                                        error: e,
+                                        span: span.clone()
+                                    })
+                                }
+                                else {
+                                    e
+                                }
+                            })?;
                         }
 
                         Ok(())

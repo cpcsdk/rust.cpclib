@@ -1,8 +1,40 @@
 use cpclib_asm::assemble;
 
 /// Regression test for https://github.com/cpcsdk/rust.cpclib/issues/60
-/// Errors inside IF/ELSE blocks must report the line of the *failing instruction*,
-/// not the line of the surrounding IF directive.
+/// Parse errors inside an IF/ELSE block must carry two context levels:
+///   1. "syntax error in list" from parse_expr_bracketed_list.
+///   2. The surrounding conditional-block context from parse_conditional.
+#[test]
+fn inspect_issue60_real_world_error() {
+    let code = concat!(
+        "VUMETER_KIND equ 1\n",
+        "\tif VUMETER_KIND == 1\n",
+        "VUMETER1_PENS = [7,8]\n",
+        "\telse\n",
+        "\t\tGRAY_CODE_ACTION_ORDER = [\n",
+        "\t\t\t[0, 0+11],\n",
+        "\t\t\t[0, 1+11],a\n",  // stray 'a' — the error is HERE (line 7)
+        "\t\t\t[1, 0+11]\n",
+        "\t\t]\n",
+        "\tendif\n"
+    );
+    let err = assemble(code).unwrap_err();
+    let err_str = err.to_string();
+	eprintln!("Error message:\n{err_str}");
+    assert!(
+        err_str.contains("syntax error in list"),
+        "Expected bracketed-list error context, got:\n{err_str}"
+    );
+    assert!(
+        err_str.contains("syntax error in conditionnal code"),
+        "Expected conditional-block error context, got:\n{err_str}"
+    );
+}
+
+/// Regression test for https://github.com/cpcsdk/rust.cpclib/issues/60
+/// Errors inside IF/ELSE blocks must:
+///   1. Report the line of the *failing instruction* (inner error at correct line).
+///   2. Also show the full conditional block span as outer context.
 #[test]
 fn error_line_inside_if_block() {
     // Line 1: if
@@ -11,14 +43,15 @@ fn error_line_inside_if_block() {
     let code = "if 1\n  db UNDEFINED_LABEL_ISSUE60\nendif\n";
     let err = assemble(code).unwrap_err();
     let err_str = err.to_string();
-    // The error must point to line 2 (the db), not line 1 (the if)
+    // The inner error must point to line 2 (the db instruction)
     assert!(
         err_str.contains(":2:"),
-        "Expected error on line 2 (the failing db), got:\n{err_str}"
+        "Expected inner error on line 2 (the failing db), got:\n{err_str}"
     );
+    // The outer context must point to line 1 (start of the IF block)
     assert!(
-        !err_str.contains(":1:"),
-        "Error must NOT point to line 1 (the IF directive), got:\n{err_str}"
+        err_str.contains(":1:"),
+        "Expected IF block context at line 1 (the IF directive), got:\n{err_str}"
     );
 }
 

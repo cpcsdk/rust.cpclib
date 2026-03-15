@@ -20,8 +20,7 @@ impl From<BasicError> for Box<AssemblerError> {
         })
     }
 }
-use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::LazyLock;
@@ -261,6 +260,12 @@ pub enum AssemblerError {
         span: Option<Z80Span>
     },
 
+    IfIssue {
+        error: Box<AssemblerError>,
+        /// The span covering the full conditional block (from `if` to `endif`)
+        span: Z80Span
+    },
+
     MMRError {
         value: i32
     },
@@ -367,6 +372,8 @@ impl AssemblerError {
             // re-wrapping it with an outer span (e.g. the IF token's line) would
             // produce a misleading second location in the error output.
             AssemblerError::AlreadyRenderedError(_) => true,
+            // IfIssue already carries the full IF block span; no need to re-wrap
+            AssemblerError::IfIssue { .. } => true,
             _ => false
         }
     }
@@ -443,99 +450,78 @@ impl AssemblerError {
         match self {
             AssemblerError::SyntaxError { error } => {
                 let mut source_files = SimpleFiles::new();
-                let mut fname_to_id = std::collections::BTreeMap::new();
+                let mut fname_to_id = BTreeMap::new();
 
-                let str = error
-                    .errors()
+                let errors = error.errors();
+                // Collect offsets that already have a meaningful (non-Winnow) entry so we
+                // can suppress redundant "Unknown error" labels at those positions.
+                let offsets_with_label: HashSet<usize> = errors
                     .iter()
-                    .filter(|e| {
-                        match e.1 {
-                            Z80ParserErrorKind::Context(ctx) => {
-                                !ctx.to_string().starts_with("[DBG]")
-                            },
-                            //  Z80ParserErrorKind::Nom(ErrorKind::Eof) => true,
-                            _ => true
-                        }
+                    .filter(|e| !matches!(e.1, Z80ParserErrorKind::Winnow))
+                    .map(|e| Z80Span::from(*e.0).offset_from_start())
+                    .collect();
+                let str = errors
+                    .iter()
+                    .filter(|e| match e.1 {
+                        Z80ParserErrorKind::Winnow => {
+                            !offsets_with_label.contains(&Z80Span::from(*e.0).offset_from_start())
+                        },
+                        kind => !kind.is_dbg(),
                     })
                     .map(|e| {
-                        match e.1 {
-                            Z80ParserErrorKind::Context(_)
-                            | Z80ParserErrorKind::Winnow
-                            | Z80ParserErrorKind::Char(_) => {
-                                // Get the real are build the context
-                                let ctx: std::borrow::Cow<str> = match e.1 {
-                                    Z80ParserErrorKind::Context(ctx) => Cow::Owned(ctx.to_string()),
-                                    Z80ParserErrorKind::Winnow => "Unknown error".into(),
-                                    Z80ParserErrorKind::Char(c) => {
-                                        format!("Error with char '{c}'").into()
-                                    },
-                                    _ => unreachable!()
-                                };
-                                let ctx = ctx.deref();
+                        let ctx = e.1.display_label();
 
-                                let span = &e.0;
+                        let filename = e.0.state
+                            .filename()
+                            .map(|p| p.as_os_str().to_str().unwrap())
+                            .unwrap_or_else(|| e.0.state.context_name().unwrap_or("no file"))
+                            .to_owned();
 
-                                // Add filename to database if needed
-                                let filename =
-                                    e.0.state
-                                        .filename()
-                                        .map(|p| p.as_os_str().to_str().unwrap());
+                        let source = e.0.state.complete_source();
+                        let file_id = match fname_to_id.get(&filename) {
+                            Some(&id) => id,
+                            None => {
+                                let id = source_files.add(filename.clone(), source);
+                                fname_to_id.insert(filename.clone(), id);
+                                id
+                            }
+                        };
 
-                                let filename = filename.unwrap_or_else(|| {
-                                    e.0.state.context_name().unwrap_or("no file")
-                                });
-                                let filename = Box::new(filename.to_owned());
-
-                                let source = e.0.state.complete_source();
-                                let file_id = match fname_to_id.get(filename.deref()) {
-                                    Some(&id) => id,
-                                    None => {
-                                        let id =
-                                            source_files.add(filename.deref().to_owned(), source);
-                                        fname_to_id.insert(filename.deref().to_owned(), id);
-                                        id
-                                    }
-                                };
-
-                                let offset = Z80Span::from(**span).offset_from_start();
-                                let sample_range = std::ops::Range {
-                                    start: offset,
-                                    end: guess_error_end(
-                                        source_files.get(file_id).unwrap().source(),
-                                        offset,
-                                        ctx
-                                    )
-                                };
-                                let mut diagnostic = Diagnostic::error()
-                                    .with_message("Syntax error")
-                                    .with_labels(vec![
-                                        Label::new(
-                                            codespan_reporting::diagnostic::LabelStyle::Primary,
-                                            file_id,
-                                            sample_range
-                                        )
-                                        .with_message(ctx),
-                                    ]);
-
-                                if let Some(notes) = get_additional_notes(ctx) {
-                                    diagnostic = diagnostic.with_notes(notes);
-                                }
-
-                                let mut writer = buffer();
-                                let config = config();
-                                term::emit_to_write_style(
-                                    &mut writer,
-                                    &config,
-                                    &source_files,
-                                    &diagnostic
-                                )
-                                .unwrap();
-
-                                std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
-                            },
-
-                            _ => unreachable!("{:?}", e.1)
+                        let offset = Z80Span::from(*e.0).offset_from_start();
+                        let end = if let Z80ParserErrorKind::ContextWithEnd { end_offset, .. } =
+                            e.1
+                        {
+                            *end_offset
                         }
+                        else {
+                            guess_error_end(
+                                source_files.get(file_id).unwrap().source(),
+                                offset,
+                                &ctx
+                            )
+                        };
+
+                        let mut diagnostic = Diagnostic::error()
+                            .with_message("Syntax error")
+                            .with_labels(vec![
+                                Label::new(
+                                    codespan_reporting::diagnostic::LabelStyle::Primary,
+                                    file_id,
+                                    offset..end
+                                )
+                                .with_message(&ctx),
+                            ]);
+
+                        if let Some(notes) = get_additional_notes(&ctx) {
+                            diagnostic = diagnostic.with_notes(notes);
+                        }
+
+                        let mut writer = buffer();
+                        let config = config();
+                        term::emit_to_write_style(&mut writer, &config, &source_files, &diagnostic)
+                            .unwrap();
+
+                        std::str::from_utf8(writer.as_slice()).unwrap().to_owned()
                     })
                     .unique()
                     .join("\n");
@@ -641,17 +627,18 @@ impl AssemblerError {
 
             AssemblerError::ExpressionTypeError(e) => write!(f, "{e}"),
 
-            AssemblerError::EmptyBinaryFile(_) => todo!(),
+            AssemblerError::EmptyBinaryFile(name) => {
+                write!(f, "Binary file is empty: {name}")
+            },
             AssemblerError::AmsdosError { error: e } => {
                 write!(f, "AMSDOS error: {e}")
             },
             AssemblerError::BugInAssembler { file, line, msg } => {
                 write!(f, "BUG in assembler {file}:{line} {msg}")
             },
-            AssemblerError::BugInParser {
-                error: _,
-                context: _
-            } => todo!(),
+            AssemblerError::BugInParser { error, context } => {
+                write!(f, "Parser bug: {error} (context: {context:?})")
+            },
 
             AssemblerError::BasicError { error } => write!(f, "{error}"),
             AssemblerError::AssemblingError { msg } => write!(f, "{msg}"),
@@ -695,10 +682,15 @@ impl AssemblerError {
                 )
             },
             AssemblerError::WrongNumberOfParameters {
-                symbol: _,
-                nb_paramers: _,
-                nb_arguments: _
-            } => todo!(),
+                symbol,
+                nb_paramers,
+                nb_arguments
+            } => {
+                write!(
+                    f,
+                    "Macro `{symbol}` expects {nb_arguments} argument(s), {nb_paramers} provided"
+                )
+            },
             AssemblerError::MacroError {
                 name,
                 location,
@@ -723,8 +715,12 @@ impl AssemblerError {
             AssemblerError::IOError { msg } => {
                 write!(f, "IO Error: {msg}")
             },
-            AssemblerError::UnknownAssemblingAddress => todo!(),
-            AssemblerError::ExpressionUnresolvable { expression: _ } => todo!(),
+            AssemblerError::UnknownAssemblingAddress => {
+                write!(f, "Current assembling address is unknown")
+            },
+            AssemblerError::ExpressionUnresolvable { expression } => {
+                write!(f, "Unable to resolve expression: {expression}")
+            },
             AssemblerError::RelativeAddressUncomputable {
                 address: _,
                 pass: _,
@@ -853,13 +849,13 @@ impl AssemblerError {
                 span,
                 repetition
             } => {
-                if span.is_some() {
-                    let msg = build_simple_error_message(
+                if let Some(span) = span {
+                    let msg = build_simple_error_message_with_notes(
                         &format!("REPEAT: error in loop {repetition}"),
-                        span.as_ref().unwrap(),
-                        Severity::Error
+                        vec![error.to_string()],
+                        span
                     );
-                    write!(f, "{msg}\n{error}")
+                    write!(f, "{msg}")
                 }
                 else {
                     write!(f, "Repeat issue\n{error}")
@@ -867,13 +863,13 @@ impl AssemblerError {
             },
 
             AssemblerError::ForIssue { error, span } => {
-                if span.is_some() {
-                    let msg = build_simple_error_message(
+                if let Some(span) = span {
+                    let msg = build_simple_error_message_with_notes(
                         "FOR: error in loop",
-                        span.as_ref().unwrap(),
-                        Severity::Error
+                        vec![error.to_string()],
+                        span
                     );
-                    write!(f, "{msg}\n{error}")
+                    write!(f, "{msg}")
                 }
                 else {
                     write!(f, "FOR issue\n{error}")
@@ -881,17 +877,26 @@ impl AssemblerError {
             },
 
             AssemblerError::WhileIssue { error, span } => {
-                if span.is_some() {
-                    let msg = build_simple_error_message(
+                if let Some(span) = span {
+                    let msg = build_simple_error_message_with_notes(
                         "WHILE: error in loop",
-                        span.as_ref().unwrap(),
-                        Severity::Error
+                        vec![error.to_string()],
+                        span
                     );
-                    write!(f, "{msg}\n{error}")
+                    write!(f, "{msg}")
                 }
                 else {
                     write!(f, "WHILE issue\n{error}")
                 }
+            },
+
+            AssemblerError::IfIssue { error, span } => {
+                let msg = build_simple_error_message_with_notes(
+                    "IF: error in conditional block",
+                    vec![error.to_string()],
+                    span
+                );
+                write!(f, "{msg}")
             },
 
             AssemblerError::OutputProtected { area, address } => {
@@ -943,14 +948,18 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
 
-    let sample_range = std::ops::Range {
-        start: offset,
-        end: guess_error_end(
+    let span_len = span.as_str().len();
+    let end = if span_len > 1 {
+        offset + span_len
+    }
+    else {
+        guess_error_end(
             source_files.get(file).unwrap().source(),
             offset,
             JP_WRONG_PARAM // fake value
         )
     };
+    let sample_range = std::ops::Range { start: offset, end };
 
     let diagnostic = Diagnostic::error().with_message(title).with_labels(vec![
         Label::new(
@@ -983,11 +992,19 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
         span.as_str().chars().count() + offset + 1
     }
     else {
-        guess_error_end(
-            source_files.get(file).unwrap().source(),
-            offset,
-            JP_WRONG_PARAM // fake value
-        )
+        let span_len = span.as_str().len();
+        if span_len > 1 {
+            // Use the span's actual byte extent so multi-line blocks (IF/REPEAT/…)
+            // are highlighted from their opening keyword to their closing directive.
+            offset + span_len
+        }
+        else {
+            guess_error_end(
+                source_files.get(file).unwrap().source(),
+                offset,
+                JP_WRONG_PARAM // fake value
+            )
+        }
     };
 
     let sample_range = std::ops::Range { start: offset, end };
@@ -1027,14 +1044,18 @@ fn build_simple_error_message_with_notes(
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
 
-    let sample_range = std::ops::Range {
-        start: offset,
-        end: guess_error_end(
+    let span_len = span.as_str().len();
+    let end = if span_len > 1 {
+        offset + span_len
+    }
+    else {
+        guess_error_end(
             source_files.get(file).unwrap().source(),
             offset,
             JP_WRONG_PARAM // fake value
         )
     };
+    let sample_range = std::ops::Range { start: offset, end };
 
     let diagnostic = Diagnostic::error()
         .with_message(title)
@@ -1067,7 +1088,6 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                     for current in code[offset..].chars() {
                         if current == ':'
                             || current == '\n'
-                            || current == ':'
                             || current == ';'
                             || offset == code.len()
                         {
@@ -1083,7 +1103,6 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                         if current == ','
                             || current == ':'
                             || current == '\n'
-                            || current == ':'
                             || current == ';'
                             || offset == code.len()
                         {
