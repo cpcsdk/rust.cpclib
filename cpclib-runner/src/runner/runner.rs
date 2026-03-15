@@ -41,17 +41,25 @@ pub trait RunnerWithClap: Runner + Default {
     fn get_clap_command(&self) -> &Command;
 
     /// Return the match objectthat encodes the corresponding options.
-    /// If version or help is requested, output them and consumes the args
+    /// If version or help is requested, output them and consumes the args.
+    /// Clap argument errors are emitted through `e.emit_stderr` before
+    /// returning `Err`, so they are captured by any observer under test.
     fn get_matches<S: AsRef<str>>(
         &self,
         itr: &[S],
         e: &dyn EventObserver
     ) -> Result<Option<ArgMatches>, String> {
-        let args = self
+        let args = match self
             .get_clap_command()
             .clone()
             .try_get_matches_from(itr.iter().map(|s| s.as_ref()))
-            .map_err(|e| e.to_string())?;
+        {
+            Ok(args) => args,
+            Err(err) => {
+                e.emit_stderr(&err.to_string());
+                return Err(String::from("Argument parsing failed"));
+            }
+        };
 
         if args.get_flag("version") {
             self.emit_version(e);
@@ -108,7 +116,11 @@ pub trait RunnerWithClapDerive: RunnerWithClap {
         }
         let matches = matches.unwrap();
         let args: Self::Args = Self::Args::from_arg_matches(&matches)
-            .map_err(|e| format!("Failed to parse arguments: {}", e))?;
+            .map_err(|err| {
+                let msg = format!("Failed to parse arguments: {err}");
+                e.emit_stderr(&msg);
+                msg
+            })?;
         Ok(Some(args))
     }
 }

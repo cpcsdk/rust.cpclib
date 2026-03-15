@@ -6,7 +6,6 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use camino::Utf8Path;
-use cpclib_asm::EnvEventObserver;
 use cpclib_runner::event::EventObserver;
 use memchr::memchr;
 
@@ -46,7 +45,7 @@ pub enum BndBuilderEvent<'a> {
 ///
 /// Implement this trait to create custom observers that react to
 /// build state changes, task execution, and output streams.
-pub trait BndBuilderObserver: EventObserver + EnvEventObserver {
+pub trait BndBuilderObserver: EventObserver {
     fn update(&mut self, event: BndBuilderEvent);
 }
 

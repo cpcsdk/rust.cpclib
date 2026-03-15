@@ -2,6 +2,7 @@ use clap::{Parser, ValueEnum};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::clap;
 use cpclib_common::clap::CommandFactory;
+use cpclib_common::event::EventObserver;
 use cpclib_crunchers::CompressMethod;
 use cpclib_crunchers::lzsa::LzsaVersion;
 use cpclib_disc::amsdos::AmsdosAddBehavior;
@@ -94,7 +95,7 @@ pub fn command() -> clap::Command {
     CrunchArgs::command()
 }
 
-pub fn process(args: CrunchArgs) -> Result<(), String> {
+pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
     if args.z80 {
         let fname = args.cruncher.z80();
         let content = cpclib_asm::file::load_file(fname, &Default::default())
@@ -102,7 +103,7 @@ pub fn process(args: CrunchArgs) -> Result<(), String> {
             .0;
         let content = Vec::from(content);
         let content = String::from_utf8(content).unwrap();
-        println!("; Import \"{fname}\" in basm or include the following content:\n{content}");
+        o.emit_stdout(&format!("; Import \"{fname}\" in basm or include the following content:\n{content}"));
         return Ok(());
     }
 
@@ -127,7 +128,7 @@ pub fn process(args: CrunchArgs) -> Result<(), String> {
             header
         }
         else {
-            eprintln!("There is no header in the input file");
+            o.emit_stderr("There is no header in the input file");
             data.into()
         }
     }

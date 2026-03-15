@@ -15,6 +15,7 @@
 
 use std::sync::Arc;
 
+use cpclib_asm::EnvEventObserver;
 use cpclib_basm::{build_args_parser, process};
 
 static DESC_BEFORE: &str = const_format::formatc!(
@@ -24,23 +25,37 @@ static DESC_BEFORE: &str = const_format::formatc!(
 );
 
 fn basm() -> i32 {
-    let matches = build_args_parser().before_help(DESC_BEFORE).get_matches();
-
     let start = std::time::Instant::now();
-    let o = Arc::new(());
-    match process(&matches, o) {
+    let o: Arc<dyn EnvEventObserver> = Arc::new(());
+
+    let parser = build_args_parser().before_help(DESC_BEFORE);
+    let args: Vec<String> = std::env::args().collect();
+    let matches = match parser.try_get_matches_from(args) {
+        Ok(m) => m,
+        Err(e) if e.kind() == cpclib_common::clap::error::ErrorKind::DisplayHelp
+               || e.kind() == cpclib_common::clap::error::ErrorKind::DisplayVersion => {
+            o.emit_stdout(&e.to_string());
+            return 0;
+        },
+        Err(e) => {
+            o.emit_stderr(&e.to_string());
+            return -1;
+        }
+    };
+
+    match process(&matches, o.clone()) {
         Ok((env, warnings)) => {
             for warning in warnings {
-                eprintln!("{warning}");
+                o.emit_stderr(&format!("{warning}"));
             }
 
             let report = env.report(&start);
-            println!("{report}");
+            o.emit_stdout(&report.to_string());
 
             0
         },
         Err(e) => {
-            eprintln!("Error while assembling.\n{e}");
+            o.emit_stderr(&format!("Error while assembling.\n{e}"));
             -1
         }
     }

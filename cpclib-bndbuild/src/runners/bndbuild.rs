@@ -40,13 +40,42 @@ impl<E: EventObserver> RunnerWithClap for BndBuildRunner<E> {
     fn get_matches<S: AsRef<str>>(
         &self,
         itr: &[S],
-        _e: &dyn EventObserver
+        e: &dyn EventObserver
     ) -> Result<Option<ArgMatches>, String> {
-        let args = self
+        let args = match self
             .get_clap_command()
             .clone()
             .try_get_matches_from(itr.iter().map(|s| s.as_ref()))
-            .map_err(|e| e.to_string())?;
+        {
+            Ok(args) => args,
+            Err(err)
+                if err.kind() == clap::error::ErrorKind::DisplayHelp
+                    || err.kind() == clap::error::ErrorKind::DisplayVersion =>
+            {
+                // Standard clap help/version (shouldn't happen since flags are disabled,
+                // but kept as a safety net)
+                e.emit_stdout(&err.to_string());
+                return Ok(None);
+            },
+            Err(err) => {
+                e.emit_stderr(&err.to_string());
+                return Err(String::from("Argument parsing failed"));
+            }
+        };
+
+        // The bndbuild --help is a custom value-taking arg (for sub-command help).
+        // When explicitly passed on the command line, intercept it and emit via observer.
+        if args.value_source("version") == Some(clap::parser::ValueSource::CommandLine)
+            && args.get_flag("version")
+        {
+            self.emit_version(e);
+            return Ok(None);
+        }
+
+        if args.value_source("help") == Some(clap::parser::ValueSource::CommandLine) {
+            self.emit_help(e);
+            return Ok(None);
+        }
 
         Ok(Some(args))
     }
@@ -79,5 +108,41 @@ impl<E: EventObserver> Runner for BndBuildRunner<E> {
 
     fn get_command(&self) -> &str {
         BNDBUILD_CMDS[0]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use cpclib_common::event::CapturingObserver;
+    use cpclib_runner::runner::Runner;
+
+    #[test]
+    fn test_bndbuild_help_flag_captured() {
+        let runner = super::BndBuildRunner::default();
+        let obs = CapturingObserver::new();
+        let result = runner.inner_run(&["--help"], &obs);
+        assert!(result.is_ok(), "help should succeed");
+        assert!(!obs.stdout_joined().is_empty(), "help text should appear in observer stdout");
+        assert!(obs.get_stderr().is_empty(), "help should not emit to stderr");
+    }
+
+    #[test]
+    fn test_bndbuild_version_flag_captured() {
+        let runner = super::BndBuildRunner::default();
+        let obs = CapturingObserver::new();
+        let result = runner.inner_run(&["--version"], &obs);
+        assert!(result.is_ok(), "version should succeed");
+        assert!(!obs.stdout_joined().is_empty(), "version string should appear in observer stdout");
+        assert!(obs.get_stderr().is_empty(), "version should not emit to stderr");
+    }
+
+    #[test]
+    fn test_bndbuild_invalid_arg_captured() {
+        let runner = super::BndBuildRunner::default();
+        let obs = CapturingObserver::new();
+        let result = runner.inner_run(&["--not-a-valid-flag"], &obs);
+        assert!(result.is_err(), "invalid argument should fail");
+        assert!(!obs.get_stderr().is_empty(), "clap error should be emitted to observer stderr");
+        assert!(obs.get_stdout().is_empty(), "no stdout on arg error");
     }
 }

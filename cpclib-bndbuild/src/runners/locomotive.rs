@@ -81,3 +81,39 @@ impl<E: EventObserver> Runner for LocomotiveRunner<E> {
         LOCOMOTIVE_CMDS[0]
     }
 }
+
+#[cfg(test)]
+mod test {
+    use cpclib_common::event::CapturingObserver;
+    use cpclib_runner::runner::Runner;
+
+    #[test]
+    fn test_locomotive_help_flag_captured() {
+        let runner = super::LocomotiveRunner::default();
+        let obs = CapturingObserver::new();
+        let result = runner.inner_run(&["--help"], &obs);
+        assert!(result.is_ok(), "help should succeed");
+        assert!(!obs.stdout_joined().is_empty(), "help text should appear in observer stdout");
+        assert!(obs.get_stderr().is_empty(), "help should not emit to stderr");
+    }
+
+    #[test]
+    fn test_locomotive_version_flag_captured() {
+        let runner = super::LocomotiveRunner::default();
+        let obs = CapturingObserver::new();
+        let result = runner.inner_run(&["--version"], &obs);
+        assert!(result.is_ok(), "version should succeed");
+        assert!(!obs.stdout_joined().is_empty(), "version string should appear in observer stdout");
+        assert!(obs.get_stderr().is_empty(), "version should not emit to stderr");
+    }
+
+    #[test]
+    fn test_locomotive_invalid_arg_captured() {
+        let runner = super::LocomotiveRunner::default();
+        let obs = CapturingObserver::new();
+        let result = runner.inner_run(&["--not-a-valid-flag"], &obs);
+        assert!(result.is_err(), "invalid argument should fail");
+        assert!(!obs.get_stderr().is_empty(), "clap error should be emitted to observer stderr");
+        assert!(obs.get_stdout().is_empty(), "no stdout on arg error");
+    }
+}

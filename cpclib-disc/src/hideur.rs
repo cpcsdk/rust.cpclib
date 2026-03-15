@@ -7,6 +7,8 @@ use cpclib_common::camino::Utf8Path;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 #[cfg(feature = "cmdline")]
+use cpclib_common::event::EventObserver;
+#[cfg(feature = "cmdline")]
 use cpclib_common::parse_value;
 #[cfg(feature = "cmdline")]
 use cpclib_common::winnow::Parser;
@@ -107,7 +109,7 @@ pub fn hideur_build_arg_parser() -> Command {
 }
 
 #[cfg(feature = "cmdline")]
-pub fn hideur_handle(matches: &ArgMatches) -> Result<(), HideurError> {
+pub fn hideur_handle(matches: &ArgMatches, o: &dyn EventObserver) -> Result<(), HideurError> {
     // Read the input file
     let complete_filename = Utf8Path::new(matches.get_one::<String>("INPUT").unwrap());
 
@@ -132,7 +134,7 @@ pub fn hideur_handle(matches: &ArgMatches) -> Result<(), HideurError> {
                 1 => (parts[0].to_owned(), String::new()),
                 2 => (parts[0].to_owned(), parts[1].to_owned()),
                 _n => {
-                    eprintln!(
+                    o.emit_stderr(
                         "[Warning] Filename contains several `.`. They have been all removed."
                     );
                     (

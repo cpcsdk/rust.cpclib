@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use cpclib_common::event::EventObserver;
 use cpclib_csl::parse_csl_with_rich_errors;
 
 /// CSL (CPC Script Language) parser and validator
@@ -19,7 +20,7 @@ pub struct CslCliArgs {
 }
 
 /// Run the CSL CLI with the provided arguments
-pub fn run(args: &CslCliArgs) -> Result<()> {
+pub fn run<O: EventObserver>(args: &CslCliArgs, o: &O) -> Result<()> {
     // Read the file
     let content = fs_err::read_to_string(&args.file)
         .context(format!("Failed to read file '{}'", args.file))?;
@@ -29,11 +30,11 @@ pub fn run(args: &CslCliArgs) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     if args.verbose {
-        eprintln!("Successfully parsed {} instructions", script.len());
+        o.emit_stderr(&format!("Successfully parsed {} instructions", script.len()));
     }
 
     // Output the parsed script to stdout
-    print!("{}", script);
+    o.emit_stdout(&script.to_string());
 
     Ok(())
 }

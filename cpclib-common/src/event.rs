@@ -60,3 +60,60 @@ impl<T: EventObserver> EventObserver for Arc<T> {
         self.deref().emit_stderr(s)
     }
 }
+
+/// An [`EventObserver`] that captures all output into in-memory buffers.
+///
+/// Intended for use in tests to verify that stdout/stderr is properly routed
+/// through the observer instead of leaking to the process standard streams.
+///
+/// # Example
+/// ```
+/// use cpclib_common::event::{CapturingObserver, EventObserver};
+///
+/// let obs = CapturingObserver::new();
+/// obs.emit_stdout("hello");
+/// obs.emit_stderr("oops");
+/// assert_eq!(obs.stdout_joined(), "hello");
+/// assert_eq!(obs.stderr_joined(), "oops");
+/// ```
+#[derive(Debug, Default)]
+pub struct CapturingObserver {
+    pub stdout: std::sync::Mutex<Vec<String>>,
+    pub stderr: std::sync::Mutex<Vec<String>>
+}
+
+impl CapturingObserver {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Returns a clone of all captured stdout entries.
+    pub fn get_stdout(&self) -> Vec<String> {
+        self.stdout.lock().unwrap().clone()
+    }
+
+    /// Returns a clone of all captured stderr entries.
+    pub fn get_stderr(&self) -> Vec<String> {
+        self.stderr.lock().unwrap().clone()
+    }
+
+    /// Concatenates all captured stdout entries into a single string.
+    pub fn stdout_joined(&self) -> String {
+        self.stdout.lock().unwrap().join("")
+    }
+
+    /// Concatenates all captured stderr entries into a single string.
+    pub fn stderr_joined(&self) -> String {
+        self.stderr.lock().unwrap().join("")
+    }
+}
+
+impl EventObserver for CapturingObserver {
+    fn emit_stdout(&self, s: &str) {
+        self.stdout.lock().unwrap().push(s.to_owned());
+    }
+
+    fn emit_stderr(&self, s: &str) {
+        self.stderr.lock().unwrap().push(s.to_owned());
+    }
+}

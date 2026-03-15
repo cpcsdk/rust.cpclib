@@ -142,6 +142,60 @@ macro_rules! __define_runner_impl {
             }
         }
     };
+    // Observer-forwarding variant for clap derive runners
+    (derive_o: $runner_name:ident, $command_name:expr, $process_fn:expr) => {
+        impl<E: EventObserver> cpclib_runner::runner::Runner for $runner_name<E> {
+            type EventObserver = E;
+
+            fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+                let Some(cli) = self.get_args(itr, o)?
+                else {
+                    return Ok(());
+                };
+                $process_fn(cli, o)
+            }
+
+            fn get_command(&self) -> &str {
+                $command_name
+            }
+        }
+    };
+    // Observer-forwarding variant for custom builder runners with command reference
+    (matches_with_cmd_o: $runner_name:ident, $command_name:expr, $process_fn:expr) => {
+        impl<E: EventObserver> cpclib_runner::runner::Runner for $runner_name<E> {
+            type EventObserver = E;
+
+            fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+                let Some(matches) = self.get_matches(itr, o)?
+                else {
+                    return Ok(());
+                };
+                $process_fn(matches, &self.command, o)
+            }
+
+            fn get_command(&self) -> &str {
+                $command_name
+            }
+        }
+    };
+    // Observer-forwarding variant for custom builder runners without command reference
+    (matches_o: $runner_name:ident, $command_name:expr, $process_fn:expr) => {
+        impl<E: EventObserver> cpclib_runner::runner::Runner for $runner_name<E> {
+            type EventObserver = E;
+
+            fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
+                let Some(matches) = self.get_matches(itr, o)?
+                else {
+                    return Ok(());
+                };
+                $process_fn(matches, o)
+            }
+
+            fn get_command(&self) -> &str {
+                $command_name
+            }
+        }
+    };
 }
 
 /// Macro to define a runner based on clap_derive Args
@@ -160,6 +214,35 @@ macro_rules! __define_runner_impl {
 /// ```
 #[macro_export]
 macro_rules! define_clap_derive_runner {
+    // Observer-forwarding variant: process function receives (cli, observer)
+    (
+        o:
+        $runner_name:ident,
+        $args_type:ty,
+        $command_name:expr,
+        $pkg_version:expr,
+        $process_fn:expr
+    ) => {
+        $crate::__define_runner_struct_and_impls!(
+            $runner_name,
+            $crate::__define_runner_command_builder!(
+                derive: $args_type,
+                format!(
+                    "{} embedded by {} {}",
+                    $pkg_version,
+                    $crate::built_info::PKG_NAME,
+                    $crate::built_info::PKG_VERSION
+                )
+            ).bin_name($command_name)
+        );
+
+        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapDerive for $runner_name<E> {
+            type Args = $args_type;
+        }
+
+        $crate::__define_runner_impl!(derive_o: $runner_name, $command_name, $process_fn);
+    };
+    // Standard variant: process function receives (cli) only
     (
         $runner_name:ident,
         $args_type:ty,
@@ -222,7 +305,63 @@ macro_rules! define_clap_derive_runner {
 /// ```
 #[macro_export]
 macro_rules! define_custom_builder_runner {
-    // Variant without command reference (simple)
+    // Observer-forwarding, without command reference
+    (
+        o: simple:
+        $runner_name:ident,
+        $builder_fn:expr,
+        $command_name:expr,
+        $pkg_name:expr,
+        $pkg_version:expr,
+        $process_fn:expr
+    ) => {
+        $crate::__define_runner_struct_and_impls!(
+            $runner_name,
+            $crate::__define_runner_command_builder!(
+                builder: $builder_fn,
+                format!(
+                    "{} {} embedded by {} {}",
+                    $pkg_name,
+                    $pkg_version,
+                    $crate::built_info::PKG_NAME,
+                    $crate::built_info::PKG_VERSION
+                )
+            )
+        );
+
+        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapMatches for $runner_name<E> {}
+
+        $crate::__define_runner_impl!(matches_o: $runner_name, $command_name, $process_fn);
+    };
+    // Observer-forwarding, with command reference
+    (
+        o:
+        $runner_name:ident,
+        $builder_fn:expr,
+        $command_name:expr,
+        $pkg_name:expr,
+        $pkg_version:expr,
+        $process_fn:expr
+    ) => {
+        $crate::__define_runner_struct_and_impls!(
+            $runner_name,
+            $crate::__define_runner_command_builder!(
+                builder: $builder_fn,
+                format!(
+                    "{} {} embedded by {} {}",
+                    $pkg_name,
+                    $pkg_version,
+                    $crate::built_info::PKG_NAME,
+                    $crate::built_info::PKG_VERSION
+                )
+            )
+        );
+
+        impl<E: EventObserver> cpclib_runner::runner::runner::RunnerWithClapMatches for $runner_name<E> {}
+
+        $crate::__define_runner_impl!(matches_with_cmd_o: $runner_name, $command_name, $process_fn);
+    };
+    // Standard variant without command reference (simple)
     (
         simple:
         $runner_name:ident,

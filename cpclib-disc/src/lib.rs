@@ -14,6 +14,8 @@ use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::clap;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::*;
+#[cfg(feature = "cmdline")]
+use cpclib_common::event::EventObserver;
 use disc::Disc;
 #[cfg(feature = "cmdline")]
 use fs_err::File;
@@ -184,7 +186,7 @@ pub fn open_disc<P: AsRef<Utf8Path>>(path: P, fail_if_missing: bool) -> Result<A
 }
 
 #[cfg(feature = "cmdline")]
-pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
+pub fn dsk_manager_handle(matches: &ArgMatches, o: &dyn EventObserver) -> Result<(), DskManagerError> {
     use cpclib_common::camino::Utf8Path;
 
     let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
@@ -194,7 +196,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
     if let Some(sub) = matches.subcommand_matches("catalog") {
         let mut dsk = open_disc(dsk_fname, true)
             .unwrap_or_else(|_| panic!("Unable to open the file {dsk_fname}"));
-        eprintln!("WIP - We assume head 0 is chosen");
+        o.emit_stderr("WIP - We assume head 0 is chosen");
 
         // Import the catalog from one file in one existing disc
         if let Some(fname) = sub.get_one::<String>("IMPORT") {
@@ -203,11 +205,11 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             let size = f.read_to_end(&mut bytes)?;
 
             if size != 64 * 32 {
-                eprintln!(
+                o.emit_stderr(&format!(
                     "Catalog size uses {} bytes whereas it should be {}",
                     size,
                     64 * 32
-                );
+                ));
             }
 
             for idx in 0..4 {
@@ -241,7 +243,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
         }
         // Export the catalog of an existing disc in a file
         else if let Some(fname) = sub.get_one::<String>("EXPORT") {
-            eprintln!("WIP - We assume the format of the Track 0 is similar to Amsdos one");
+            o.emit_stderr("WIP - We assume the format of the Track 0 is similar to Amsdos one");
 
             let manager = AmsdosManagerNonMut::new_from_disc(&dsk, 0);
             let bytes = manager.catalog().as_bytes();
@@ -252,9 +254,9 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             let catalog = manager.catalog();
             let entries = catalog.visible_entries().collect::<Vec<_>>();
             // TODO manage files instead of entries
-            println!("Dsk {} -- {} files", dsk_fname, entries.len());
+            o.emit_stdout(&format!("Dsk {} -- {} files", dsk_fname, entries.len()));
             for entry in &entries {
-                println!("{entry}");
+                o.emit_stdout(&format!("{entry}"));
             }
         } else {
             panic!("Error - missing argument");
@@ -356,7 +358,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                         if amsdos_fname.is_err() || !amsdos_fname.unwrap().is_valid() {
                             // the amsdos header is crappy and does not handle properly the name. Probably because it comes from orgams ;)
                             // then we try to replace it by the file name
-                            eprintln!("AMSDOS filename is invalid. We try to use the PC filename");
+                            o.emit_stderr("AMSDOS filename is invalid. We try to use the PC filename");
 
                             let pc_fname = fname.file_name().unwrap().to_ascii_uppercase();
                             let mut pc_fname = pc_fname.split(".");
@@ -381,7 +383,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
                             "Invalid amsdos filename ! {:?}",
                             ams_file.amsdos_filename().unwrap()
                         );
-                        println!("{:?} added", ams_file.amsdos_filename());
+                        o.emit_stdout(&format!("{:?} added", ams_file.amsdos_filename()));
                         ams_file
                     },
                     Err(e) => {
@@ -424,7 +426,7 @@ pub fn dsk_manager_handle(matches: &ArgMatches) -> Result<(), DskManagerError> {
             .map_err(|e| DskManagerError::AnyError { msg: e })?;
     }
     else {
-        eprintln!("Missing command\n");
+        o.emit_stderr("Missing command\n");
     }
 
     Ok(())

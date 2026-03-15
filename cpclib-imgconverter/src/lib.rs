@@ -6,6 +6,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use cpclib::asm::preamble::defb_elements;
 use cpclib::asm::{ListingExt, assemble, assemble_to_amsdos_file};
 use cpclib::common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib::common::event::EventObserver;
 use cpclib::common::itertools::Itertools;
 use cpclib::common::winnow::{BStr, Parser};
 use cpclib::common::{clap, clap_parse_any_positive_number};
@@ -1461,7 +1462,7 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
     Ok(())
 }
 
-pub fn process_img2cpc(matches: &ArgMatches, _args: Command) -> anyhow::Result<()> {
+pub fn process_img2cpc(matches: &ArgMatches, _args: Command, o: &dyn EventObserver) -> anyhow::Result<()> {
     // Note: clap automatically handles --help, no need to check manually
     // Removed: if matches.get_flag("help") { ... }
 
@@ -1478,7 +1479,7 @@ pub fn process_img2cpc(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
         && matches.subcommand_matches("exec").is_none()
         && matches.subcommand_matches("scr").is_none()
     {
-        eprintln!("[ERROR] you have not specified any action to do.");
+        o.emit_stderr("[ERROR] you have not specified any action to do.");
         std::process::exit(exitcode::USAGE);
     }
 
@@ -1486,7 +1487,7 @@ pub fn process_img2cpc(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
 
     #[cfg(feature = "xferlib")]
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
-        eprintln!("hmmm seems to not be coded yet");
+        o.emit_stderr("hmmm seems to not be coded yet");
         #[cfg(feature = "watch")]
         if sub_m4.contains_id("WATCH") {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -1582,7 +1583,7 @@ fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
         .join("\n")
 }
 
-pub fn fade_handle_matches(matches: &ArgMatches) -> Result<(), String> {
+pub fn fade_handle_matches(matches: &ArgMatches, o: &dyn EventObserver) -> Result<(), String> {
     let palette = get_requested_palette(matches).map_err(|e| e.to_string())?;
 
     let fades = if let Some(_rgb) = matches.subcommand_matches("rgb") {
@@ -1603,7 +1604,7 @@ pub fn fade_handle_matches(matches: &ArgMatches) -> Result<(), String> {
         fs_err::write(fname, content).expect("Error while saving file");
     }
     else {
-        println!("{content}");
+        o.emit_stdout(&content);
     }
 
     Ok(())

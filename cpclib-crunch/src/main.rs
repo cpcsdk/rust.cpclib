@@ -3,5 +3,5 @@ use cpclib_crunch::CrunchArgs;
 
 fn main() -> Result<(), String> {
     let args = CrunchArgs::parse();
-    cpclib_crunch::process(args)
+    cpclib_crunch::process(args, &())
 }

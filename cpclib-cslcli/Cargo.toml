@@ -12,6 +12,7 @@ homepage.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
+cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-csl.workspace = true
 fs-err.workspace = true
 

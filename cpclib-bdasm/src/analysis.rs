@@ -4,6 +4,7 @@ use cpclib_asm::{
     DataAccess, Expr, ExprEvaluationExt, Listing, Mnemonic, SymbolsTableTrait, Token, TokenExt,
     Value
 };
+use cpclib_common::event::EventObserver;
 use cpclib_common::smol_str::SmolStr;
 
 use crate::error::{BdAsmError, Result};
@@ -164,7 +165,7 @@ pub fn collect_addresses_from_expressions(
 }
 
 /// Injects label names into expressions where possible.
-pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
+pub fn inject_labels_into_expressions<O: EventObserver>(listing: &mut Listing, o: &O) -> Result<()> {
     let (_bytes, table) = cpclib_asm::assemble_tokens_with_options(listing, Default::default())
         .map_err(|e| BdAsmError::AssemblyFailed(e.to_string()))?;
 
@@ -189,10 +190,10 @@ pub fn inject_labels_into_expressions(listing: &mut Listing) -> Result<()> {
                 },
                 // Skip unsupported types rather than panicking
                 Value::Macro(_) | Value::Struct(_) | Value::Counter(_) => {
-                    eprintln!(
+                    o.emit_stderr(&format!(
                         "Warning: Skipping label '{}' with unsupported value type",
                         s.value()
-                    );
+                    ));
                 }
             }
         }

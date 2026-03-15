@@ -5,6 +5,7 @@ use std::ops::RangeInclusive;
 use clap::Parser;
 use cpclib_asm::{Listing, ListingExt, defb_elements, org};
 use cpclib_common::camino::Utf8PathBuf;
+use cpclib_common::event::EventObserver;
 use cpclib_disc::amsdos::AmsdosHeader;
 use cpclib_sna::Snapshot;
 
@@ -301,7 +302,7 @@ impl BdAsmEnv {
 
     /// Inject labels into the listing
     /// Collects addresses from expressions and injects all labels
-    fn inject_labels(&mut self, listing: &mut Listing, binary_size: usize) -> Result<()> {
+    fn inject_labels<O: EventObserver>(&mut self, listing: &mut Listing, binary_size: usize, o: &O) -> Result<()> {
         // Calculate the valid address range for label generation
         let valid_range = self.valid_range(binary_size);
 
@@ -320,7 +321,7 @@ impl BdAsmEnv {
             .collect();
 
         listing.inject_labels(labels_cow);
-        inject_labels_into_expressions(listing)?;
+        inject_labels_into_expressions(listing, o)?;
 
         Ok(())
     }
@@ -407,7 +408,7 @@ pub struct BdAsmCli {
 /// For raw binary: reads entire file and optionally strips AMSDOS header
 ///
 /// Returns: (bytes to disassemble, optional AMSDOS loading address)
-fn load_input_bytes(filename: &Utf8PathBuf, origin: Option<u16>) -> Result<(Vec<u8>, Option<u16>)> {
+fn load_input_bytes<O: EventObserver>(filename: &Utf8PathBuf, origin: Option<u16>, o: &O) -> Result<(Vec<u8>, Option<u16>)> {
     // Check if this is a SNA file by extension
     let is_sna = filename
         .extension()
@@ -440,9 +441,9 @@ fn load_input_bytes(filename: &Utf8PathBuf, origin: Option<u16>) -> Result<(Vec<
             memory.to_vec()
         };
 
-        eprintln!("Loaded {} bytes from SNA snapshot", bytes.len());
+        o.emit_stderr(&format!("Loaded {} bytes from SNA snapshot", bytes.len()));
         if let Some(addr) = origin {
-            eprintln!("Starting at address 0x{:04x}", addr);
+            o.emit_stderr(&format!("Starting at address 0x{:04x}", addr));
         }
 
         // For SNA files, return the origin as the load address (no separate AMSDOS header)
@@ -456,7 +457,7 @@ fn load_input_bytes(filename: &Utf8PathBuf, origin: Option<u16>) -> Result<(Vec<
         let (bytes, amsdos_load) = if input_bytes.len() > 128 {
             let header = AmsdosHeader::from_buffer(&input_bytes);
             if header.is_checksum_valid() {
-                println!("Amsdos header detected and removed");
+                o.emit_stdout("Amsdos header detected and removed");
                 (input_bytes[128..].to_vec(), Some(header.loading_address()))
             }
             else {
@@ -471,7 +472,7 @@ fn load_input_bytes(filename: &Utf8PathBuf, origin: Option<u16>) -> Result<(Vec<
     }
 }
 
-pub fn process(cli: &BdAsmCli) -> Result<()> {
+pub fn process<O: EventObserver>(cli: &BdAsmCli, o: &O) -> Result<()> {
     // Extract fields we'll need after shadowing cli
     let input_filename = cli.input.clone();
     let output_file = cli.output.clone();
@@ -496,11 +497,11 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
 
     // Load the input bytes from either SNA or raw binary file
     // Pass the origin from control_file to help with SNA extraction
-    let (input_bytes, amsdos_load) = load_input_bytes(&input_filename, control_file.get_origin())?;
+    let (input_bytes, amsdos_load) = load_input_bytes(&input_filename, control_file.get_origin(), o)?;
 
     // Check if first bytes need to be removed (skip directive)
     let input_bytes: &[u8] = if skip_bytes > 0 {
-        eprintln!(" Skip {skip_bytes} bytes");
+        o.emit_stderr(&format!(" Skip {skip_bytes} bytes"));
         &input_bytes[skip_bytes..]
     }
     else {
@@ -511,7 +512,7 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
     let input_bytes: &[u8] = if let Some(length) = control_file.get_length() {
         let length = length as usize;
         if length < input_bytes.len() {
-            eprintln!(" Limiting to {} bytes", length);
+            o.emit_stderr(&format!(" Limiting to {} bytes", length));
             &input_bytes[..length]
         }
         else {
@@ -523,7 +524,7 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
     };
 
     // Disassemble
-    eprintln!(" 0x{:x} bytes to disassemble", input_bytes.len());
+    o.emit_stderr(&format!(" 0x{:x} bytes to disassemble", input_bytes.len()));
 
     // Convert control file to BdAsmEnv
     let mut env = BdAsmEnv::from_control_file(&control_file)?;
@@ -540,7 +541,7 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
 
     // Create the listing and inject labels
     let mut listing = env.create_listing(input_bytes)?;
-    env.inject_labels(&mut listing, input_bytes.len())?;
+    env.inject_labels(&mut listing, input_bytes.len(), o)?;
 
     // Generate output
     let output_content = listing.to_string();
@@ -550,7 +551,7 @@ pub fn process(cli: &BdAsmCli) -> Result<()> {
         fs_err::write(output_file, output_content)?;
     }
     else {
-        print!("{}", output_content);
+        o.emit_stdout(&output_content);
     }
 
     // Save control file if requested
