@@ -61,6 +61,18 @@ impl<T: EventObserver> EventObserver for Arc<T> {
     }
 }
 
+/// An [`EventObserver`] that silently discards all output.
+///
+/// Use this instead of `()` when you want to suppress output without printing
+/// to the process stdout/stderr (which `()` does).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DiscardObserver;
+
+impl EventObserver for DiscardObserver {
+    fn emit_stdout(&self, _s: &str) {}
+    fn emit_stderr(&self, _s: &str) {}
+}
+
 /// An [`EventObserver`] that captures all output into in-memory buffers.
 ///
 /// Intended for use in tests to verify that stdout/stderr is properly routed
@@ -80,6 +92,15 @@ impl<T: EventObserver> EventObserver for Arc<T> {
 pub struct CapturingObserver {
     pub stdout: std::sync::Mutex<Vec<String>>,
     pub stderr: std::sync::Mutex<Vec<String>>
+}
+
+impl Clone for CapturingObserver {
+    fn clone(&self) -> Self {
+        CapturingObserver {
+            stdout: std::sync::Mutex::new(self.stdout.lock().unwrap().clone()),
+            stderr: std::sync::Mutex::new(self.stderr.lock().unwrap().clone())
+        }
+    }
 }
 
 impl CapturingObserver {

@@ -198,19 +198,7 @@ impl CountedProgress {
     }
 
     fn really_show(&self) {
-        let content = self.current_items.iter().join(", ");
-        let other_content = &content[..70.min(content.len())];
-        let extra = if other_content.len() != content.len() {
-            "..."
-        }
-        else {
-            ""
-        };
-
-        println!(
-            "{} [{}/{}] {}{}",
-            self.prefix, self.nb_done, self.nb_expected, other_content, extra
-        );
+        // Suppressed: direct println! would bypass the observer/TUI channel.
     }
 }
 

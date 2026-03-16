@@ -19,6 +19,14 @@ impl<'a> From<BndBuilderEvent<'a>> for RatatuiEvent {
                     out_of
                 }
             },
+            BndBuilderEvent::StartRuleAlias { alias, representative, nb, out_of } => {
+                RatatuiEvent::StartRuleAlias {
+                    alias: alias.to_string(),
+                    representative: representative.to_string(),
+                    nb,
+                    out_of
+                }
+            },
             BndBuilderEvent::StopRule(rule) => RatatuiEvent::StopRule(rule.to_string()),
             BndBuilderEvent::FailedRule(rule) => RatatuiEvent::FailedRule(rule.to_string()),
             BndBuilderEvent::StartTask(rule, task) => {
@@ -58,6 +66,12 @@ pub enum RatatuiEvent {
     ChangeState(RatatuiState),
     StartRule {
         rule: String,
+        nb: usize,
+        out_of: usize
+    },
+    StartRuleAlias {
+        alias: String,
+        representative: String,
         nb: usize,
         out_of: usize
     },

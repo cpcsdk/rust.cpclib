@@ -57,6 +57,29 @@ impl BndBuilderObserver for TauriBndBuilderObserver {
                     )
                     .unwrap();
             },
+            cpclib_bndbuild::event::BndBuilderEvent::StartRuleAlias {
+                alias,
+                representative: _,
+                nb,
+                out_of
+            } => {
+                #[derive(Serialize, Clone)]
+                struct StartRule<'a> {
+                    rule: &'a str,
+                    nb: usize,
+                    out_of: usize
+                }
+                self.app_handle
+                    .emit(
+                        "event-start_rule",
+                        StartRule {
+                            rule: alias.as_str(),
+                            nb,
+                            out_of
+                        }
+                    )
+                    .unwrap();
+            },
             cpclib_bndbuild::event::BndBuilderEvent::StopRule(rule) => {
                 self.app_handle
                     .emit("event-stop_rule", rule.as_str())

@@ -12,6 +12,7 @@ use cpclib_common::itertools::Itertools;
 #[cfg(feature = "transparent-x11")]
 use transparent::{CommandExt, TransparentChild, TransparentRunner};
 
+use crate::child_registry::{deregister_child_pid, register_child_pid};
 use crate::event::EventObserver;
 use crate::runner::arguments::get_all_args;
 
@@ -247,6 +248,9 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
             .map(|c| c.into())
             .map_err(|e| format!("Error while launching {}. {}", &itr[0], e))?;
 
+        let child_pid = cmd.id();
+        register_child_pid(child_pid);
+
         // the process is running in another thread. We'll collect its outputs in yet other threads
         let child_stdout = cmd
             .stdout
@@ -300,6 +304,8 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         let status = cmd
             .wait()
             .map_err(|e| format!("Error while executing {}. {}", &itr[0], e))?;
+
+        deregister_child_pid(child_pid);
 
         if !status.success() {
             return Err("Error while launching the command.".to_owned());

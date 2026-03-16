@@ -738,7 +738,7 @@ impl EmulatorConf {
         if let Some(ftype) = &self.auto_type {
             match emu {
                 Emulator::Ace(_) => {
-                    if let Some(ext) = dbg!(ftype.extension())
+                    if let Some(ext) = ftype.extension()
                         && ext == "txt"
                     {
                         args.push(ftype.as_str().to_string());
@@ -779,7 +779,6 @@ impl EmulatorConf {
             }
         }
 
-        dbg!(&args);
         Ok(args)
     }
 
@@ -825,7 +824,7 @@ impl EmulatorConf {
         let csl_path = emu.wine_compatible_fname(&absolute_path)?;
 
         // Return args with CSL file using absolute path
-        dbg!(Ok(vec![format!("--csl={}", csl_path)]))
+        Ok(vec![format!("--csl={}", csl_path)])
     }
 }
 
@@ -929,7 +928,11 @@ impl From<EmulatorConf> for cpclib_csl::CslScript {
     }
 }
 
-pub fn start_emulator(emu: &Emulator, conf: &EmulatorConf) -> Result<(), String> {
+pub fn start_emulator<E: EventObserver>(
+    emu: &Emulator,
+    conf: &EmulatorConf,
+    o: &E
+) -> Result<(), String> {
     let args = conf.args_for_emu(emu)?;
     let app = emu.configuration();
 
@@ -944,7 +947,7 @@ pub fn start_emulator(emu: &Emulator, conf: &EmulatorConf) -> Result<(), String>
     #[cfg(not(feature = "transparent-x11"))]
     let runner = DelegatedRunner::new(app, cmd);
 
-    runner.inner_run(&args, &())
+    runner.inner_run(&args, o)
 }
 
 pub fn get_emulator_window(emu: &Emulator, _conf: &EmulatorConf) -> EmuWindow {
@@ -982,7 +985,7 @@ fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
 
     let mut windows = windows
         .into_iter()
-        .filter(|win| emu.window_name_corresponds(dbg!(win.title())))
+        .filter(|win| emu.window_name_corresponds(win.title()))
         .collect_vec();
 
     let window = match windows.len() {
@@ -1289,7 +1292,8 @@ impl Robot {
                 &mut self,
                 drivea: Option<&str>,
                 albireo: Option<&str>,
-                action: OrgamsRobotAction<'_, '_>
+                action: OrgamsRobotAction<'_, '_>,
+                o: &dyn EventObserver
             ) -> Result<(), String>;
             fn type_text(&mut self, s: &str);
             fn close(&mut self);
@@ -1365,7 +1369,8 @@ impl<E: UsedEmulator> RobotImpl<E> {
         &mut self,
         drivea: Option<&str>,
         albireo: Option<&str>,
-        action: OrgamsRobotAction<'_, '_>
+        action: OrgamsRobotAction<'_, '_>,
+        o: &dyn EventObserver
     ) -> Result<(), String> {
         // we assume that we do not need to select the window as well launched it. it is already selected
 
@@ -1376,11 +1381,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
         let src = action.src();
         res = if src.ends_with('o') || src.ends_with('O') {
             // here we directly load an orgams file
-            self.orgams_load(src)
+            self.orgams_load(src, o)
         }
         else {
             // here we need to import
-            self.orgams_import(src)
+            self.orgams_import(src, o)
         }
         .map_err(|screen| (format!("Error while loading {src}"), screen));
 
@@ -1389,25 +1394,21 @@ impl<E: UsedEmulator> RobotImpl<E> {
             // need to update res
             res = {
                 if action.edit() {
-                    dbg!("edit requested");
                     // No need to do more when we want to edit a file
                     Ok(())
                 }
-                else if let Some(dst) = dbg!(action.save_orgams_binary_source()) {
-                    self.orgams_save_source(dst)
+                else if let Some(dst) = action.save_orgams_binary_source() {
+                    self.orgams_save_source(dst, o)
                         .map_err(|screen| ("Error while saving sources".to_string(), screen))
                 }
-                else if let Some(dst) = dbg!(action.save_orgams_ascii_source()) {
-                    dbg!("export file");
-
-                    self.orgams_export_source(dst).map_err(|screen| {
+                else if let Some(dst) = action.save_orgams_ascii_source() {
+                    self.orgams_export_source(dst, o).map_err(|screen| {
                         (format!("Error while exporting source to {dst}"), screen)
                     })
                 }
                 else {
-                    dbg!("Assemble file");
                     // we want to assemble the file
-                    self.orgams_assemble(src)
+                    self.orgams_assemble(src, o)
                         .map_err(|screen| ("Error while assembling".to_string(), screen))
                         .and_then(|_| {
                             if action.jump() {
@@ -1415,7 +1416,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
                                     .map_err(|screen| ("Error while jumping".to_string(), screen))
                             }
                             else {
-                                self.orgams_save(action.dst()).map_err(|screen| {
+                                self.orgams_save(action.dst(), o).map_err(|screen| {
                                     ("Error while saving binary".to_string(), screen)
                                 })
                             }
@@ -1445,11 +1446,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
         Ok(())
     }
 
-    fn orgams_wait_import(&mut self) -> Result<(), Screenshot> {
-        self.orgams_wait_save()
+    fn orgams_wait_import(&mut self, o: &dyn EventObserver) -> Result<(), Screenshot> {
+        self.orgams_wait_save(o)
     }
 
-    fn orgams_wait_save(&mut self) -> Result<(), Screenshot> {
+    fn orgams_wait_save(&mut self, o: &dyn EventObserver) -> Result<(), Screenshot> {
         loop {
             let screen = self.screenshot();
             let coord_of_interest = (0, 48);
@@ -1458,7 +1459,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
             if !(pix_of_interest == &Rgba([1, 1, 1, 255])
                 || pix_of_interest == &Rgba([1, 2, 1, 255]))
             {
-                println!("  done.");
+                o.emit_stdout("  done.\n");
                 return Ok(()); // success
             }
 
@@ -1472,18 +1473,16 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
     }
 
-    fn orgams_save_source(&mut self, dst: &str) -> Result<(), Screenshot> {
-        dbg!("Tentative to save {dst}");
+    fn orgams_save_source(&mut self, dst: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
         self.ctrl_char('s');
         self.type_text(dst);
         self.r#return();
 
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
-        self.orgams_wait_save()
+        self.orgams_wait_save(o)
     }
 
-    fn orgams_export_source(&mut self, dst: &str) -> Result<(), Screenshot> {
-        dbg!("Tentative to export {dst}");
+    fn orgams_export_source(&mut self, dst: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
         self.ctrl_char('e');
         self.type_text(dst);
         self.r#return();
@@ -1492,11 +1491,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.type_char('W');
 
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
-        self.orgams_wait_save()
+        self.orgams_wait_save(o)
     }
 
-    fn orgams_save(&mut self, dst: Option<&str>) -> Result<(), Screenshot> {
-        println!("> Save result");
+    fn orgams_save(&mut self, dst: Option<&str>, o: &dyn EventObserver) -> Result<(), Screenshot> {
+        o.emit_stdout("> Save result\n");
         // handle saving
         self.type_char('b');
         std::thread::sleep(Duration::from_millis(2000));
@@ -1509,14 +1508,14 @@ impl<E: UsedEmulator> RobotImpl<E> {
             std::thread::sleep(Duration::from_millis(1000));
             self.r#return();
         }
-        println!("  Filename provided.");
+        o.emit_stdout("  Filename provided.\n");
 
         // wait save is done
         std::thread::sleep(Duration::from_millis(3000 / 2)); // we consider it takes at minimum to assemble a file
-        self.orgams_wait_save()
+        self.orgams_wait_save(o)
     }
 
-    fn orgams_import(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    fn orgams_import(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         self.type_text("ùo");
         self.r#return();
 
@@ -1528,12 +1527,12 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.type_text(src);
         self.r#return();
 
-        self.orgams_wait_import()
+        self.orgams_wait_import(o)
     }
 
-    fn orgams_load(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    fn orgams_load(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         // Open orgams
-        println!("> Launch orgams and open file \"{src}\"");
+        o.emit_stdout(&format!("> Launch orgams and open file \"{src}\"\n"));
 
         // French setup ?
         let chars = "ùo,\"".to_owned() + src + "\"";
@@ -1541,17 +1540,17 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.r#return();
 
         let res = self.wait_orgams_loading();
-        println!("  done.");
+        o.emit_stdout("  done.\n");
 
         res
     }
 
-    fn orgams_assemble(&mut self, src: &str) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
-        println!("> Assemble {src}");
+    fn orgams_assemble(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+        o.emit_stdout(&format!("> Assemble {src}\n"));
         self.ctrl_char('1');
 
         self.wait_orgams_assembling();
-        println!("  done.");
+        o.emit_stdout("  done.\n");
 
         let result: ImageBuffer<Rgba<u8>, Vec<u8>> = self.window.capture_image();
 
@@ -1688,6 +1687,14 @@ pub struct EmuCli {
     #[arg(short='C', long, action = ArgAction::SetTrue, help = "Clear the cache folder")]
     clear_cache: bool,
 
+    #[arg(
+        short = 'B',
+        long,
+        action = ArgAction::SetTrue,
+        help = "Do not wait for the emulator window to close after the task completes (fire and forget)"
+    )]
+    background: bool,
+
     #[arg(short, long, action = ArgAction::Append, help = "rasm-compatible debug file (for ace ATM)")]
     debug: Vec<Utf8PathBuf>,
 
@@ -1814,7 +1821,7 @@ impl<E: EventObserver> Default for EmulatorFacadeRunner<E> {
     }
 }
 
-impl<E: EventObserver> Runner for EmulatorFacadeRunner<E> {
+impl<E: EventObserver + Clone + 'static> Runner for EmulatorFacadeRunner<E> {
     type EventObserver = E;
 
     fn inner_run<S: AsRef<str>>(&self, itr: &[S], o: &E) -> Result<(), String> {
@@ -1830,15 +1837,13 @@ impl<E: EventObserver> Runner for EmulatorFacadeRunner<E> {
     }
 }
 
-impl<E: EventObserver + 'static> RunnerWithClap for EmulatorFacadeRunner<E> {
+impl<E: EventObserver + Clone + 'static> RunnerWithClap for EmulatorFacadeRunner<E> {
     fn get_clap_command(&self) -> &clap::Command {
         &self.command
     }
 }
 
-pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), String> {
-    dbg!(&cli);
-
+pub fn handle_arguments<E: EventObserver + Clone + 'static>(mut cli: EmuCli, o: &E) -> Result<(), String> {
     if cli.clear_cache {
         clear_base_cache_folder().map_err(|e| format!("Unable to clear the cache folder. {e}"))?;
     }
@@ -1954,7 +1959,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
                 if !exists && install {
                     let src = format!("roms://{rom}");
-                    println!("Install {src} in {dst}");
+                    o.emit_stdout(&format!("Install {src} in {dst}\n"));
                     let data =
                         EmbeddedRoms::get(&src).unwrap_or_else(|| panic!("{src} not embedded"));
                     fs_err::write(&dst, data.data).unwrap();
@@ -2046,9 +2051,20 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
 
     let t_emu = emu.clone();
     let conf_thread = conf.clone();
-    let _emu_thread = std::thread::spawn(move || {
-        start_emulator(&t_emu, &conf_thread).expect("Error detected while closing the emulator")
-    });
+    // Clone the observer so the emulator thread writes its stdout/stderr in real-time
+    // through the same observer as the rest of the task.
+    let o_for_emu = o.clone();
+    let emu_thread = if cli.background {
+        // Fire and forget: spawn without joining; emulator output still forwarded live.
+        std::thread::spawn(move || {
+            let _ = start_emulator(&t_emu, &conf_thread, &o_for_emu);
+        });
+        None
+    } else {
+        let handle =
+            std::thread::spawn(move || start_emulator(&t_emu, &conf_thread, &o_for_emu));
+        Some(handle)
+    };
 
     if cli.albireo.is_some() {
         std::thread::sleep(Duration::from_secs(5));
@@ -2074,7 +2090,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
     #[cfg(windows)]
     std::thread::sleep(Duration::from_millis(1000 * 3));
 
-    dbg!(&cli.command);
     let res = match cli.command {
         Commands::Orgams(OrgamsCli {
             src,
@@ -2116,7 +2131,7 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                     OrgamsRobotAction::new_save_binary(&src, dst.as_deref())
                 };
 
-                robot.handle_orgams(cli.drive_a.as_deref(), cli.albireo.as_deref(), action)
+                robot.handle_orgams(cli.drive_a.as_deref(), cli.albireo.as_deref(), action, o)
             }
         },
 
@@ -2130,8 +2145,6 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
             Ok(())
         }
     };
-
-    dbg!(&res);
 
     if !cli.keepemulator {
         robot.close();
@@ -2161,6 +2174,17 @@ pub fn handle_arguments<E: EventObserver>(mut cli: EmuCli, o: &E) -> Result<(), 
                 if backup_folder.exists() {
                     fs_err::rename(&backup_folder, &emu_folder).map_err(|e| e.to_string())?;
                 }
+            }
+        }
+    }
+
+    // For non-background tasks: block until the emulator window is closed.
+    if let Some(handle) = emu_thread {
+        let emu_result =
+            handle.join().unwrap_or_else(|_| Err("emulator thread panicked".to_string()));
+        if let Err(e) = emu_result {
+            if res.is_ok() {
+                return Err(e);
             }
         }
     }

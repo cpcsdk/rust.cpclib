@@ -558,7 +558,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         }
     }
     else if let Some(tile_matches) = matches.subcommand_matches("tile") {
-        dbg!(OutputFormat::TileEncoded {
+        OutputFormat::TileEncoded {
             tile_width: TileWidthCapture::NbBytes(parse_int(
                 tile_matches
                     .get_one::<String>("WIDTH")
@@ -585,7 +585,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
                 .map(|v| parse_int(v))
                 .map(GridHeightCapture::TilesInColumn)
                 .unwrap_or(GridHeightCapture::FullHeight)
-        })
+        }
     }
     else {
         // Standard case
@@ -805,7 +805,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         }
     }
     else if let Some(sub_scr) = sub_scr {
-        let fname = dbg!(sub_scr.get_one::<String>("SCR").unwrap());
+        let fname = sub_scr.get_one::<String>("SCR").unwrap();
 
         match &conversion {
             Output::CPCMemoryStandard(scr, palette) => {

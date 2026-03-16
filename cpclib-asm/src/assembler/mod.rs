@@ -1346,7 +1346,7 @@ impl Env {
         for (activepage, _page) in pages_mmr[0..self.sna.pages_info.len()].iter().enumerate() {
             for brk in self.sna.pages_info[activepage].collect_breakpoints() {
                 let info = &brk.info;
-                eprint!("{info}");
+                self.observer().emit_stderr(&format!("{info}"));
 
                 if let Some(chunk) = winape_chunk.as_mut()
                     && let Some(brk) = brk.winape()

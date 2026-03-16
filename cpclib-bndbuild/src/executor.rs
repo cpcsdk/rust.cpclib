@@ -111,7 +111,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                     .run(task.args(), observer)
                 },
                 crate::runners::emulator::Emulator::EmulatorFacade => {
-                    EmulatorFacadeRunner::default().run(dbg!(task.args()), observer)
+                    EmulatorFacadeRunner::default().run(task.args(), observer)
                 },
             }
         },

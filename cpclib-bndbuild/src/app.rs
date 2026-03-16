@@ -258,9 +258,17 @@ impl BndBuilderCommand {
         init_targets: Option<Vec<Utf8PathBuf>>,
         watch: WatchState,
         mut current_step: usize,
-        builder: BndBuilder,
+        mut builder: BndBuilder,
         observers: Arc<ListOfBndBuilderObserverRc>
     ) -> Result<Option<Self>, BndBuilderError> {
+        // Sync the command's observer chain into the builder so that all
+        // rule/task events (StartRule, StopRule, StartTask, …) reach the
+        // same observers as direct emit_stdout/emit_stderr calls.
+        builder.clear_observers();
+        for obs in observers.iter() {
+            builder.add_observer(obs.clone());
+        }
+
         let targets_provided = init_targets.is_some();
 
         // get the list of targets

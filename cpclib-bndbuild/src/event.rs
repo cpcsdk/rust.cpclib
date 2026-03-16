@@ -31,6 +31,14 @@ pub enum BndBuilderEvent<'a> {
         nb: usize,
         out_of: usize
     },
+    /// Signals that `alias` is a co-target of the same rule as `representative`.
+    /// Emitted just before the representative's `StartRule`.
+    StartRuleAlias {
+        alias: &'a Utf8Path,
+        representative: &'a Utf8Path,
+        nb: usize,
+        out_of: usize
+    },
     StopRule(&'a Utf8Path),
     FailedRule(&'a Utf8Path),
     StartTask(Option<&'a Utf8Path>, &'a Task),
@@ -102,6 +110,21 @@ pub trait BndBuilderObserved: Debug + Sync + Send {
     fn start_rule<P: AsRef<Utf8Path>>(&self, rule: P, nb: usize, out_of: usize) {
         self.notify(BndBuilderEvent::StartRule {
             rule: rule.as_ref(),
+            nb,
+            out_of
+        })
+    }
+    #[inline]
+    fn start_rule_alias<P: AsRef<Utf8Path>, Q: AsRef<Utf8Path>>(
+        &self,
+        alias: P,
+        representative: Q,
+        nb: usize,
+        out_of: usize
+    ) {
+        self.notify(BndBuilderEvent::StartRuleAlias {
+            alias: alias.as_ref(),
+            representative: representative.as_ref(),
             nb,
             out_of
         })
@@ -411,6 +434,9 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
             },
             BndBuilderEvent::StartRule { rule, nb, out_of } => {
                 println!("[{nb}/{out_of}] Handle {rule}")
+            },
+            BndBuilderEvent::StartRuleAlias { alias, representative: _, nb, out_of } => {
+                println!("[{nb}/{out_of}] Handle {alias}")
             },
             BndBuilderEvent::StopRule(_) => {},
             BndBuilderEvent::FailedRule(rule) => {

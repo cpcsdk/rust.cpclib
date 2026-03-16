@@ -10,4 +10,4 @@ homepage.workspace = true
 [dependencies]
 ratatui = "0.30.0"
 cpclib-bndbuild.workspace = true
-anstyle = "1.0"
+cpclib-runner.workspace = true

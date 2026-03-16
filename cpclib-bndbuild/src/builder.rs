@@ -481,13 +481,18 @@ impl BndBuilder {
         };
 
         if let Some(ps) = other_paths.as_ref() {
+            // Do NOT increment task_count here — the representative's execute_rule
+            // will increment it once for the whole group.  We just peek ahead so
+            // aliases carry the same [nb/out_of] as the representative's StartRule.
+            #[cfg(feature = "rayon")]
+            let (upcoming_nb, nb_deps) = {
+                let state = state.read().expect("Failed to read state");
+                (state.task_count + 1, state.nb_deps)
+            };
+            #[cfg(not(feature = "rayon"))]
+            let (upcoming_nb, nb_deps) = (state.task_count + 1, state.nb_deps);
             ps.iter().for_each(|p| {
-                #[cfg(feature = "rayon")]
-                let mut state = state
-                    .write()
-                    .expect("Failed to acquire write lock on state");
-                state.task_count += 1;
-                self.start_rule(*p, state.task_count, state.nb_deps);
+                self.start_rule_alias(*p, repr, upcoming_nb, nb_deps);
             });
         }
         let res = self.execute_rule(repr, state);
@@ -627,6 +632,13 @@ impl BndBuilder {
             .flat_map(|r| r.targets())
             .map(|p| p.as_path())
             .collect_vec()
+    }
+}
+
+impl BndBuilder {
+    /// Replace this builder's observer list with a fresh empty one.
+    pub fn clear_observers(&mut self) {
+        self.observers = Arc::new(ListOfBndBuilderObserverRc::default());
     }
 }
 

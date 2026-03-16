@@ -2603,8 +2603,8 @@ dependencies = [
 name = "cpclib-bndbuild-ratatui"
 version = "0.11.0"
 dependencies = [
- "anstyle",
  "cpclib-bndbuild",
+ "cpclib-runner",
  "ratatui 0.30.0",
 ]
 
