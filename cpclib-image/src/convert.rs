@@ -6,6 +6,7 @@ use std::io::Write;
 
 use cpclib_common::bitfield::{BitRange, BitRangeMut};
 use cpclib_common::camino::Utf8Path;
+use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use fs_err::File;
 use image as im;
@@ -527,18 +528,8 @@ impl DisplayAddress {
 
         // Move the offset of one char
         self.set_offset(truncated_expected_offset);
-        if truncated_expected_offset != expected_offset {
-            println!(
-                "From {} to {} / {} / {:?}",
-                expected_offset,
-                truncated_expected_offset,
-                self.is_overscan(),
-                self
-            );
-        }
         // In overscan screen, change the page
         if truncated_expected_offset != expected_offset && self.is_overscan() {
-            println!("Change of page");
             let val = self.page() + 1;
             self.set_page(val);
         }
@@ -1238,7 +1229,8 @@ impl ImageConverter {
         transformations: TransformationsList,
         output: OutputFormat,
         crop_if_too_large: bool,
-        missing_pen: Option<Pen>
+        missing_pen: Option<Pen>,
+        o: &dyn EventObserver
     ) -> anyhow::Result<Output>
     where
         P: AsRef<Utf8Path>
@@ -1250,7 +1242,8 @@ impl ImageConverter {
             transformations,
             output,
             crop_if_too_large,
-            missing_pen
+            missing_pen,
+            o
         )
     }
 
@@ -1261,7 +1254,8 @@ impl ImageConverter {
         transformations: TransformationsList,
         encoding: SpriteEncoding,
         crop_if_too_large: bool,
-        missing_pen: Option<Pen>
+        missing_pen: Option<Pen>,
+        o: &dyn EventObserver
     ) -> anyhow::Result<SpriteOutput> {
         match &encoding {
             SpriteEncoding::Linear => {
@@ -1275,7 +1269,7 @@ impl ImageConverter {
 
                 let sprite = converter.load_sprite(input_file, missing_pen);
                 converter
-                    .apply_sprite_conversion(&sprite)
+                    .apply_sprite_conversion(&sprite, o)
                     .map(|output| output.sprite().unwrap())
             },
 
@@ -1294,7 +1288,8 @@ impl ImageConverter {
                     transformations,
                     OutputFormat::Sprite(SpriteEncoding::GrayCoded),
                     crop_if_too_large,
-                    missing_pen
+                    missing_pen,
+                    o
                 )?
                 .sprite()
                 .unwrap();
@@ -1333,7 +1328,8 @@ impl ImageConverter {
                     transformations,
                     OutputFormat::Sprite(SpriteEncoding::Linear),
                     crop_if_too_large,
-                    missing_pen
+                    missing_pen,
+                    o
                 )?
                 .sprite()
                 .unwrap();
@@ -1375,7 +1371,8 @@ impl ImageConverter {
         transformations: TransformationsList,
         output: OutputFormat,
         crop_if_too_large: bool,
-        missing_pen: Option<Pen>
+        missing_pen: Option<Pen>,
+        o: &dyn EventObserver
     ) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
             palette: palette.clone(),
@@ -1404,7 +1401,8 @@ impl ImageConverter {
                 transformations,
                 *sprite_output_format,
                 crop_if_too_large,
-                missing_pen
+                missing_pen,
+                o
             )
             .map(Output::Sprite)
         }
@@ -1423,7 +1421,8 @@ impl ImageConverter {
                 sprite_transformations,
                 *sprite_format,
                 crop_if_too_large,
-                missing_pen
+                missing_pen,
+                o
             )?;
 
             let mask_transformations = transformations
@@ -1439,7 +1438,8 @@ impl ImageConverter {
                 mask_transformations,
                 *sprite_format,
                 crop_if_too_large,
-                missing_pen
+                missing_pen,
+                o
             )?;
 
             // Just for debug stuff
@@ -1454,12 +1454,12 @@ impl ImageConverter {
         }
         else {
             let sprite = converter.load_sprite(input_file, missing_pen);
-            converter.apply_sprite_conversion(&sprite)
+            converter.apply_sprite_conversion(&sprite, o)
         }
     }
 
     /// Makes the conversion of the provided sprite to the expected format
-    pub fn import(sprite: &Sprite, output: OutputFormat) -> anyhow::Result<Output> {
+    pub fn import(sprite: &Sprite, output: OutputFormat, o: &dyn EventObserver) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
             palette: LockablePalette::empty(),
             mode: Mode::Zero, // TODO make the mode an optional argument,
@@ -1468,7 +1468,7 @@ impl ImageConverter {
             crop_if_too_large: false
         };
 
-        converter.apply_sprite_conversion(sprite)
+        converter.apply_sprite_conversion(sprite, o)
     }
 
     /// Load the initial image
@@ -1490,7 +1490,7 @@ impl ImageConverter {
     }
 
     /// Manage the conversion on the given sprite
-    fn apply_sprite_conversion(&mut self, sprite: &Sprite) -> anyhow::Result<Output> {
+    fn apply_sprite_conversion(&mut self, sprite: &Sprite, o: &dyn EventObserver) -> anyhow::Result<Output> {
         let output = self.output.clone();
 
         match output {
@@ -1500,7 +1500,7 @@ impl ImageConverter {
             OutputFormat::CPCMemory {
                 ref output_dimension,
                 ref display_address
-            } => self.build_memory_blocks(sprite, *output_dimension, *display_address),
+            } => self.build_memory_blocks(sprite, *output_dimension, *display_address, o),
             OutputFormat::CPCSplittingMemory(ref _vec) => unimplemented!(),
             OutputFormat::TileEncoded {
                 tile_width,
@@ -1633,7 +1633,8 @@ impl ImageConverter {
         &mut self,
         sprite: &Sprite,
         dim: CPCScreenDimension,
-        display_address: DisplayAddress
+        display_address: DisplayAddress,
+        o: &dyn EventObserver
     ) -> anyhow::Result<Output> {
         let screen_width = u32::from(dim.width(sprite.mode().unwrap()));
         let screen_height = u32::from(dim.height());
@@ -1649,11 +1650,11 @@ impl ImageConverter {
             }
         }
         else if screen_width > sprite.pixel_width() {
-            eprintln!(
-                "[Warning] The image width ({}) is smaller than the cpc screen width ({})",
+            o.emit_stderr(&format!(
+                "[Warning] The image width ({}) is smaller than the cpc screen width ({})\n",
                 sprite.pixel_width(),
                 screen_width
-            );
+            ));
         }
 
         if screen_height < sprite.height() {
@@ -1666,11 +1667,11 @@ impl ImageConverter {
             }
         }
         else if screen_height > sprite.height() {
-            eprintln!(
-                "[Warning] The image height ({}) is smaller than the cpc screen height ({})",
+            o.emit_stderr(&format!(
+                "[Warning] The image height ({}) is smaller than the cpc screen height ({})\n",
                 sprite.height(),
                 screen_height
-            );
+            ));
         }
 
         // Simulate the memory
@@ -1746,10 +1747,10 @@ impl ImageConverter {
             // used_pages.len()
             // ));
 
-            eprintln!(
-                "An overscan screen is requested but {} pages has been feed",
+            o.emit_stderr(&format!(
+                "[Warning] An overscan screen is requested but {} pages has been feed\n",
                 used_pages.len()
-            ); // TODO need to investigate
+            )); // TODO need to investigate
         }
 
         // Generate the right output format

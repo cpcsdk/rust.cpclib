@@ -12,6 +12,7 @@ use cpclib_catart::entry::{
     UnifiedCatalog
 };
 use cpclib_catart::interpret::{Interpreter, Mode, display_screen_diff, screens_are_equal};
+use cpclib_common::event::EventObserver;
 use cpclib_common::num::Num;
 use cpclib_disc::amsdos::{AmsdosEntries, AmsdosManagerNonMut, BlocIdx};
 use cpclib_disc::disc::Disc;
@@ -147,7 +148,7 @@ pub fn catalog_to_basic_listing_with_headers(
     Ok(catalog.extract_basic_from_sequential_catart(show_headers))
 }
 
-pub fn handle_catalog_command(args: CatalogApp) -> Result<(), String> {
+pub fn handle_catalog_command(args: CatalogApp, o: &dyn EventObserver) -> Result<(), String> {
     match args.command {
         CatalogCommand::Build {
             basic_file,
@@ -164,7 +165,8 @@ pub fn handle_catalog_command(args: CatalogApp) -> Result<(), String> {
                 &input,
                 output,
                 render_options.png_path(),
-                render_options.parse_locale()
+                render_options.parse_locale(),
+                o
             )
         },
 
@@ -178,7 +180,8 @@ pub fn handle_catalog_command(args: CatalogApp) -> Result<(), String> {
                 CatalogType::Cat,
                 render_options.png_path(),
                 render_options.parse_locale(),
-                render_options.parse_mode()
+                render_options.parse_mode(),
+                o
             )
         },
 
@@ -192,7 +195,8 @@ pub fn handle_catalog_command(args: CatalogApp) -> Result<(), String> {
                 CatalogType::Dir,
                 render_options.png_path(),
                 render_options.parse_locale(),
-                render_options.parse_mode()
+                render_options.parse_mode(),
+                o
             )
         },
 
@@ -200,21 +204,21 @@ pub fn handle_catalog_command(args: CatalogApp) -> Result<(), String> {
             let input_file = args
                 .input_file
                 .ok_or_else(|| "input_file is required for 'list' command".to_string())?;
-            list_catalog_command(&input_file, false)
+            list_catalog_command(&input_file, false, o)
         },
 
         CatalogCommand::Listall => {
             let input_file = args
                 .input_file
                 .ok_or_else(|| "input_file is required for 'listall' command".to_string())?;
-            list_catalog_command(&input_file, true)
+            list_catalog_command(&input_file, true, o)
         },
 
         CatalogCommand::Decode { output_file } => {
             let input_file = args
                 .input_file
                 .ok_or_else(|| "input_file is required for 'decode' command".to_string())?;
-            decode_catalog_command(&input_file, output_file.as_deref())
+            decode_catalog_command(&input_file, output_file.as_deref(), o)
         },
 
         CatalogCommand::Modify {
@@ -267,7 +271,7 @@ pub fn handle_catalog_command(args: CatalogApp) -> Result<(), String> {
                 return Err("Cannot specify both --cat and --dir".to_string());
             };
 
-            debug_catalog_command(&input_file, catalog_type)
+            debug_catalog_command(&input_file, catalog_type, o)
         }
     }
 }
@@ -277,7 +281,8 @@ fn display_catalog_command(
     catalog_type: CatalogType,
     png_output: Option<&str>,
     locale: Locale,
-    mode: Mode
+    mode: Mode,
+    o: &dyn EventObserver
 ) -> Result<(), String> {
     // Load the raw catalog bytes
     let catalog_bytes = load_catalog_bytes(catalog_fname)
@@ -295,7 +300,7 @@ fn display_catalog_command(
         .interpret(&commands, true)
         .map_err(|e| format!("Failed to interpret commands: {}", e))?;
 
-    println!("{}", interpreter);
+    o.emit_stdout(&format!("{}", interpreter));
     // Generate PNG if requested
     if let Some(png_path) = png_output {
         save_interpreter_png(&interpreter, png_path)?;
@@ -304,15 +309,15 @@ fn display_catalog_command(
     Ok(())
 }
 
-fn list_catalog_command(catalog_fname: &str, listall: bool) -> Result<(), String> {
+fn list_catalog_command(catalog_fname: &str, listall: bool, o: &dyn EventObserver) -> Result<(), String> {
     let catalog_content = load_catalog_entries(catalog_fname)
         .map_err(|e| format!("Error while loading catalog entries: {}", e))?;
 
-    list_catalog_entries(&catalog_content, listall);
+    list_catalog_entries(&catalog_content, listall, o);
     Ok(())
 }
 
-fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Result<(), String> {
+fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType, o: &dyn EventObserver) -> Result<(), String> {
     // Load the raw catalog bytes
     let catalog_bytes = load_catalog_bytes(catalog_fname)
         .map_err(|e| format!("Error while loading catalog bytes: {}", e))?;
@@ -326,7 +331,7 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
         ));
     }
 
-    println!("=== CatArt Debug Information ===\n");
+    o.emit_stdout("=== CatArt Debug Information ===\n\n");
 
     // Extract catalog and convert to UnifiedCatalog
     let catalog = catalog_extraction(&catalog_bytes, catalog_type)
@@ -370,7 +375,7 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
         // Skip empty entries
         if fname.is_empty() {
             if let Some(&original_idx) = fname_to_idx.get(&fname_bytes) {
-                println!("Entry {}: (empty)", original_idx);
+                o.emit_stdout(&format!("Entry {}: (empty)\n", original_idx));
             }
             else {
                 unreachable!("Empty entry not found in original catalog bytes");
@@ -401,9 +406,9 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
             .collect();
 
         // Print entry information
-        println!("Entry {:<2}: {}", original_idx, bytes_without_dot.join(" "));
-        println!(
-            "          {}",
+        o.emit_stdout(&format!("Entry {:<2}: {}\n", original_idx, bytes_without_dot.join(" ")));
+        o.emit_stdout(&format!(
+            "          {}\n",
             std::str::from_utf8(
                 &entry
                     .all_generated_bytes()
@@ -412,9 +417,9 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
                     .collect::<Vec<u8>>()
             )
             .unwrap_or("Invalid UTF-8")
-        );
+        ));
 
-        println!("          {}", printable_bytes);
+        o.emit_stdout(&format!("          {}\n", printable_bytes));
 
         // Check if entry is hidden/system
         if fname.is_hidden() || fname.is_system() {
@@ -425,21 +430,21 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType) -> Resu
             if fname.is_system() {
                 flags.push("system");
             }
-            println!("  Status: ({})", flags.join(", "));
+            o.emit_stdout(&format!("  Status: ({})\n", flags.join(", ")));
         }
         else {
             // Get the commands that represent this entry
             let commands = fname.commands();
 
             // Show CharCommands (more explicit than BASIC)
-            println!("          {}", commands.to_command_string());
+            o.emit_stdout(&format!("          {}\n", commands.to_command_string()));
 
             // Convert commands to BASIC string
             let basic_string = commands.to_basic_string();
 
-            println!("          {}", basic_string);
+            o.emit_stdout(&format!("          {}\n", basic_string));
         }
-        println!();
+        o.emit_stdout("\n");
     }
 
     Ok(())
@@ -548,7 +553,7 @@ where
     .expect("Unable to parse number")
 }
 
-fn list_catalog_entries(catalog_content: &AmsdosEntries, listall: bool) {
+fn list_catalog_entries(catalog_content: &AmsdosEntries, listall: bool, o: &dyn EventObserver) {
     for (idx, entry) in catalog_content.all_entries().enumerate() {
         let contains_id = !entry.is_erased();
         let is_hidden = entry.is_system();
@@ -558,22 +563,21 @@ fn list_catalog_entries(catalog_content: &AmsdosEntries, listall: bool) {
         let contains_control_chars = !fname.as_str().chars().all(|c| c.is_ascii_graphic());
 
         if contains_id && !contains_control_chars {
-            print!("{idx}. {fname}");
+            let mut line = format!("{idx}. {fname}");
             if is_hidden {
-                print!(" [hidden]");
+                line.push_str(" [hidden]");
             }
             if is_read_only {
-                print!(" [read only]");
+                line.push_str(" [read only]");
             }
-
-            print!(" {:>4}Kb {:?}", entry.used_space(), entry.used_blocs());
-            println!();
+            line.push_str(&format!(" {:>4}Kb {:?}", entry.used_space(), entry.used_blocs()));
+            o.emit_stdout(&format!("{line}\n"));
         }
         else if contains_id && contains_control_chars && listall {
-            println!("{idx}. => CAT ART <=");
+            o.emit_stdout(&format!("{idx}. => CAT ART <=\n"));
         }
         else if !contains_id && listall {
-            println!("{idx}. => EMPTY SLOT <=");
+            o.emit_stdout(&format!("{idx}. => EMPTY SLOT <=\n"));
         }
     }
 }
@@ -708,7 +712,8 @@ fn build_catart_from_basic(
     basic_filename: &str,
     output_filename: &str,
     png_output: Option<&str>,
-    locale: Locale
+    locale: Locale,
+    o: &dyn EventObserver
 ) -> Result<(), String> {
     info!("Building catart from BASIC file: {}", basic_filename);
 
@@ -718,8 +723,8 @@ fn build_catart_from_basic(
 
     // Step 1.5: Display original BASIC program execution
     info!("Original BASIC program execution:");
-    println!("\n=== Original BASIC Program ===");
-    println!("{}\n", basic_program);
+    o.emit_stdout("\n=== Original BASIC Program ===\n");
+    o.emit_stdout(&format!("{}\n\n", basic_program));
 
     // Step 2: Convert to CharCommandList
     let generated_char_commands = basic_to_char_commands(&basic_program)?;
@@ -747,8 +752,8 @@ fn build_catart_from_basic(
 
     // Step 2.6: Display original catart output
     info!("Original catart output:");
-    println!("=== Original CatArt Output ===");
-    println!("{}\n", generated_char_commands);
+    o.emit_stdout("=== Original CatArt Output ===\n");
+    o.emit_stdout(&format!("{}\n\n", generated_char_commands));
 
     // Step 3: Build UnifiedCatalog using SerialCatalogBuilder
     let unified_catalog = build_unified_catalog(&generated_char_commands);
@@ -978,7 +983,7 @@ fn build_catart_from_basic(
     // Step 7.5: Compare screens and display diff if different
     if screens_are_equal(&original_screen, &reconstructed_screen) {
         info!("✓ Screens are identical!");
-        println!("\n=== Reconstructed CatArt Output ===");
+        o.emit_stdout("\n=== Reconstructed CatArt Output ===\n");
         // Use the same code path as test_crtc_catart
         match catalog_to_basic_listing(catalog_bytes, CatalogType::Cat) {
             Ok(catalog_basic_program) => {
@@ -986,50 +991,50 @@ fn build_catart_from_basic(
                     Ok(catalog_basic_command_list) => {
                         match catalog_basic_command_list.to_char_commands() {
                             Ok(commands) => {
-                                println!("{}", commands);
+                                o.emit_stdout(&format!("{}", commands));
                             },
                             Err(e) => {
-                                eprintln!(
+                                o.emit_stderr(&format!(
                                     "Warning: Failed to convert BASIC to CharCommandList: {:?}",
                                     e
-                                );
+                                ));
                             }
                         }
                     },
                     Err(e) => {
-                        eprintln!(
+                        o.emit_stderr(&format!(
                             "Warning: Failed to convert BASIC program to BasicCommandList: {:?}",
                             e
-                        );
+                        ));
                     }
                 }
             },
             Err(e) => {
-                eprintln!(
+                o.emit_stderr(&format!(
                     "Warning: Failed to extract BASIC program from catalog: {}",
                     e
-                );
+                ));
             }
         }
     }
     else {
         info!("⚠ Screens differ! Displaying side-by-side comparison:");
-        println!("\n=== CatArt Comparison (Screens Differ!) ===");
+        o.emit_stdout("\n=== CatArt Comparison (Screens Differ!) ===\n");
         let diff_display = display_screen_diff(
             &original_screen,
             &original_palette,
             &reconstructed_screen,
             &reconstructed_palette
         );
-        println!("{}", diff_display);
+        o.emit_stdout(&format!("{}", diff_display));
     }
 
     // Step 8: Display the generated BASIC program and compare its bytes
     info!("Displaying generated BASIC program from catalog:");
-    println!("\n=== Reconstructed BASIC Program ===");
+    o.emit_stdout("\n=== Reconstructed BASIC Program ===\n");
     match catalog_to_basic_listing(catalog_bytes, CatalogType::Cat) {
         Ok(reconstructed_basic) => {
-            println!("\n{}", reconstructed_basic);
+            o.emit_stdout(&format!("\n{}", reconstructed_basic));
 
             // Convert to CharCommandList for byte comparison
             info!("\n=== BASIC PROGRAM BYTE COMPARISON ===");
@@ -1116,22 +1121,22 @@ fn build_catart_from_basic(
                     }
                 },
                 Err(e) => {
-                    eprintln!(
+                    o.emit_stderr(&format!(
                         "Warning: Failed to convert reconstructed BASIC to commands: {}",
                         e
-                    );
+                    ));
                 }
             }
         },
         Err(e) => {
-            eprintln!("Warning: Failed to generate BASIC listing: {}", e);
+            o.emit_stderr(&format!("Warning: Failed to generate BASIC listing: {}", e));
         }
     }
 
     Ok(())
 }
 
-fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> Result<(), String> {
+fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>, o: &dyn EventObserver) -> Result<(), String> {
     info!("Decoding catart from: {}", catalog_fname);
 
     // Load the raw catalog bytes
@@ -1147,7 +1152,7 @@ fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>) -> Res
                 info!("Saved BASIC listing to {}", path);
             }
             else {
-                println!("{}", basic_program);
+                o.emit_stdout(&format!("{}", basic_program));
             }
         },
         Err(e) => {

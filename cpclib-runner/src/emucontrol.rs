@@ -2153,8 +2153,8 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(mut cli: EmuCli, o: 
     #[allow(unused_variables)]
     if let Some((backup_folder, emu_folder)) = albireo_backup_and_original {
         if cli.keepemulator {
-            eprintln!(
-                "Albireo folder not cleaned automatically. you'll have to do it if necessary"
+            o.emit_stderr(
+                "Albireo folder not cleaned automatically. you'll have to do it if necessary\n"
             );
         }
         else {

@@ -12,6 +12,7 @@ use codespan_reporting::files::SimpleFile;
 use codespan_reporting::term::termcolor::Buffer;
 use codespan_reporting::term::{Chars, emit_to_io_write};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::event::EventObserver;
 use cpclib_common::itertools::Itertools;
 use minijinja::context;
 
@@ -541,12 +542,15 @@ impl BndBuilder {
                 // execute all the tasks for this rule
                 for task in rule.commands() {
                     let task_observer = this.task_observer(p, task);
-                    crate::execute(task, &task_observer).map_err(|e| {
-                        BndBuilderError::ExecuteError {
+                    if let Err(e) = crate::execute(task, &task_observer) {
+                        // Emit the error message as task stderr so TUI observers capture it.
+                        task_observer.emit_stderr(&e);
+                        self.failed_rule(p);
+                        return Err(BndBuilderError::ExecuteError {
                             fname: p.to_string(),
                             msg: e
-                        }
-                    })?;
+                        });
+                    }
                 }
             }
 
@@ -571,6 +575,7 @@ impl BndBuilder {
             }
         }
         else if !p.exists() {
+            self.failed_rule(p);
             return Err(BndBuilderError::ExecuteError {
                 fname: p.to_string(),
                 msg: "no rule to build it".to_owned()

@@ -164,9 +164,6 @@ fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
             let p0 = pixels::mode0::mix_mode0_mode3(p10, p20);
             let p1 = pixels::mode0::mix_mode0_mode3(p11, p21);
 
-            eprintln!("{}/{} {:?} + {:?} = {:?}", u1, u2, &p10, &p20, &p0);
-            eprintln!("{}/{} {:?} + {:?} = {:?}", u1, u2, &p11, &p21, &p1);
-
             pixels::mode0::pens_to_byte(p0, p1)
         })
         .collect::<Vec<u8>>()

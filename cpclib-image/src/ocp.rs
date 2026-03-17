@@ -1,9 +1,10 @@
+use cpclib_common::event::EventObserver;
 use crate::ga::{Ink, Palette};
 use crate::image::Mode;
 
 /// ! Utility code related to OCP
-pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D) -> Vec<u8> {
-    eprintln!("[WARNING] OCP compression has never been tested");
+pub fn compress<D: as_slice::AsSlice<Element = u8>>(data: D, o: &dyn EventObserver) -> Vec<u8> {
+    o.emit_stderr("[WARNING] OCP compression has never been tested\n");
 
     let data = data.as_slice();
     const MARKER: u8 = 1;

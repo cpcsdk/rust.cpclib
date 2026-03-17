@@ -623,7 +623,7 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 // TODO - Add the ability to import a target palette
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
-fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
+fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
     let input_file = matches.get_one::<Utf8PathBuf>("SOURCE").unwrap();
     let output_mode = matches
         .get_one::<String>("MODE")
@@ -696,8 +696,9 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         transformations,
         output_format,
         crop_if_too_large,
-        missing_pen
-    )?;
+        missing_pen,
+        o
+    )?;;
 
     if sub_sprite.is_some() {
         // TODO share code with the tile branch
@@ -810,7 +811,7 @@ fn convert(matches: &ArgMatches) -> anyhow::Result<()> {
         match &conversion {
             Output::CPCMemoryStandard(scr, palette) => {
                 let scr = if sub_scr.contains_id("COMPRESSED") {
-                    ocp::compress(scr)
+                    ocp::compress(scr, o)
                 }
                 else {
                     scr.to_vec()
@@ -1483,7 +1484,7 @@ pub fn process_img2cpc(matches: &ArgMatches, _args: Command, o: &dyn EventObserv
         std::process::exit(exitcode::USAGE);
     }
 
-    convert(matches).expect("Unable to make the conversion");
+    convert(matches, o).expect("Unable to make the conversion");
 
     #[cfg(feature = "xferlib")]
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
@@ -1513,7 +1514,7 @@ pub fn process_img2cpc(matches: &ArgMatches, _args: Command, o: &dyn EventObserv
                         kind: notify::event::EventKind::Create(_),
                         ..
                     }) => {
-                        if let Err(e) = convert(matches) {
+                        if let Err(e) = convert(matches, o) {
                             return Err(Error::msg(format!(
                                 "[ERROR] Unable to convert the image {e}"
                             )));

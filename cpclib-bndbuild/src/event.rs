@@ -54,20 +54,18 @@ pub enum BndBuilderEvent<'a> {
 /// Implement this trait to create custom observers that react to
 /// build state changes, task execution, and output streams.
 pub trait BndBuilderObserver: EventObserver {
-    fn update(&mut self, event: BndBuilderEvent);
+    fn update(&self, event: BndBuilderEvent);
 }
 
 impl<T: BndBuilderObserver> BndBuilderObserver for Box<T> {
-    fn update(&mut self, event: BndBuilderEvent) {
-        self.deref_mut().update(event)
+    fn update(&self, event: BndBuilderEvent) {
+        self.deref().update(event)
     }
 }
 
 impl<T: BndBuilderObserver> BndBuilderObserver for Arc<T> {
-    fn update(&mut self, event: BndBuilderEvent) {
-        Arc::<T>::get_mut(self)
-            .expect("Failed to get mutable reference to observer (multiple Arc references exist)")
-            .update(event)
+    fn update(&self, event: BndBuilderEvent) {
+        self.deref().update(event)
     }
 }
 
@@ -178,7 +176,7 @@ impl BndBuilderObserverRc {
             .deref()
             .write()
             .expect("Failed to acquire write lock on observer")
-            .deref_mut()
+            .deref()
             .update(event);
     }
 }
@@ -279,14 +277,15 @@ impl EventObserver for ListOfBndBuilderObserverRc {
 }
 
 impl BndBuilderObserver for ListOfBndBuilderObserverRc {
-    fn update(&mut self, event: BndBuilderEvent) {
+    fn update(&self, event: BndBuilderEvent) {
         for observer in self.0.clone().into_iter() {
-            let mut observer = observer
+            observer
                 .0
                 .deref()
                 .write()
-                .expect("Failed to acquire write lock on observer");
-            observer.update(event.clone());
+                .expect("Failed to acquire write lock on observer")
+                .deref()
+                .update(event.clone());
         }
     }
 }
@@ -377,8 +376,11 @@ where E: BndBuilderObserved + Sync
 impl<E> BndBuilderObserver for RuleTaskEventDispatcher<'_, '_, '_, E>
 where E: BndBuilderObserved
 {
-    fn update(&mut self, _event: BndBuilderEvent) {
-        unreachable!()
+    fn update(&self, event: BndBuilderEvent) {
+        // Forward events from nested bndbuild invocations to the outer
+        // builder's observer list so the TUI receives structured events
+        // (StartTask, StopTask, StartRule, etc.) rather than plain text.
+        self.observed.notify(event);
     }
 }
 
@@ -421,7 +423,7 @@ pub fn line_contains_ansi_escapes(line: &str) -> bool {
 }
 
 impl BndBuilderObserver for BndBuilderDefaultObserver {
-    fn update(&mut self, event: BndBuilderEvent) {
+    fn update(&self, event: BndBuilderEvent) {
         match event {
             BndBuilderEvent::ChangeState(s) => {
                 match s {
@@ -483,4 +485,16 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
             BndBuilderEvent::Stderr(s) => print!("{s}")
         }
     }
+}
+
+impl BndBuilderObserver for cpclib_common::event::CapturingObserver {
+    fn update(&self, _event: BndBuilderEvent) {
+        // No-op: CapturingObserver captures output through the EventObserver
+        // methods (emit_stdout/emit_stderr); structured build events are not
+        // captured here as CapturingObserver is primarily a test helper.
+    }
+}
+
+impl BndBuilderObserver for () {
+    fn update(&self, _event: BndBuilderEvent) {}
 }

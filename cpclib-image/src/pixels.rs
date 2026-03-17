@@ -64,7 +64,7 @@ pub mod mode2 {
 
     pub fn pen_to_pixel_byte(pen: Pen, pixel: PixelPosition) -> u8 {
         let pen = if pen.number() > 3 {
-            eprintln!("[MODE2] with pen {:?}", &pen);
+            log::warn!("[MODE2] with pen {:?}", &pen);
             Pen::from(0)
         }
         else {
@@ -260,7 +260,7 @@ pub mod mode1 {
     /// Convert the pen value to its byte representation at the proper place
     pub fn pen_to_pixel_byte<P: Into<PixelPosition>>(pen: Pen, pixel: P) -> u8 {
         let pen = if pen.number() > 3 {
-            eprintln!("[MODE1] with pen {:?} replaced by pen 0", &pen);
+            log::warn!("[MODE1] with pen {:?} replaced by pen 0", &pen);
             Pen::from(0)
         }
         else {

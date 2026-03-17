@@ -4920,7 +4920,7 @@ unsigned char *Exomizer_crunch(unsigned char *input_data, int input_len, int *re
     infilec = argc - flagind;
 
 
-printf("crunching with exomizer (the art of patience...)\n");
+/* printf("crunching with exomizer (the art of patience...)\n"); */
 
 /* only memory */
 

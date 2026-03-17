@@ -86,7 +86,7 @@ impl<E: EventObserver> Runner for CatalogRunner<E> {
                 .chain(itr.iter().map(|s| s.as_ref().to_string()))
         )
         .map_err(|e| e.to_string())?;
-        cpclib_catalog::handle_catalog_command(app)
+        cpclib_catalog::handle_catalog_command(app, o)
     }
 
     fn get_command(&self) -> &str {
