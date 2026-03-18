@@ -190,12 +190,12 @@ impl<'a> Widget for InlineTaskWidget<'a> {
             TaskStatus::Running => {
                 const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
                 let frame = FRAMES[(elapsed_ms as usize / 100) % FRAMES.len()];
-                let est_hint = entry.estimated_duration.map(|est| {
+                let est_hint = entry.estimated_duration.and_then(|est| {
                     let spent = entry.started.elapsed();
                     if spent >= est {
-                        format!("  +{}", fmt_duration(spent - est))
+                        None
                     } else {
-                        format!("  ~{}", fmt_duration(est - spent))
+                        Some(format!("  ~{}", fmt_duration(est - spent)))
                     }
                 }).unwrap_or_default();
                 // Marquee-scroll the task name when it doesn't fit and the user
@@ -332,13 +332,13 @@ fn render_running_rule(
     } else {
         format!("  {elapsed_str}")
     };
-    // ETA hint: show remaining or over-time if we have a cached estimate.
-    let est_hint: String = rule.estimated_duration.map(|est| {
+    // ETA hint: show remaining time only; hide when over-time to avoid confusion.
+    let est_hint: String = rule.estimated_duration.and_then(|est| {
         let spent = rule.started.elapsed();
         if spent >= est {
-            format!("  +{}", fmt_duration(spent - est))
+            None
         } else {
-            format!("  ~{}", fmt_duration(est - spent))
+            Some(format!("  ~{}", fmt_duration(est - spent)))
         }
     }).unwrap_or_default();
     let counter = format!("{counter}{est_hint}");
