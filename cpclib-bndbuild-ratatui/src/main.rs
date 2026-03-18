@@ -26,6 +26,12 @@ fn main() {
         Ok(Some(a)) => a,
     };
 
+    // Capture the top-level build file path before we drop `app` so we can
+    // seed `current_build_file` in the TUI state.  This ensures that rule
+    // timings for different projects (different -f paths) are stored under
+    // distinct keys even when both are invoked from the same working directory.
+    let outer_build_file: Option<String> = app.build_file().map(|s| s.to_owned());
+
     let (tx, rx) = mpsc::channel::<RatatuiMessage>();
 
     let mut cmd = match app.command() {
@@ -76,7 +82,8 @@ fn main() {
         build_error:     None,
         build_started:   None,
         build_duration:  None,
-        current_build_file: None,
+        current_build_file: outer_build_file,
+        build_nesting_depth: 0,
         estimated_finish: None,
         timing_cache: TimingCache::load(
             &std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),

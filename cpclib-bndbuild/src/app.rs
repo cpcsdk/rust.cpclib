@@ -868,6 +868,11 @@ impl BndBuilderApp {
         }
     }
 
+    /// Return the build file passed via `-f / --file`, if any.
+    pub fn build_file(&self) -> Option<&str> {
+        self.matches.get_one::<String>("file").map(|s| s.as_str())
+    }
+
     pub fn add_observer<O: Into<BndBuilderObserverRc>>(&mut self, o: O) {
         Arc::get_mut(&mut self.observers)
             .expect("Failed to get mutable reference to observers (multiple Arc references exist)")

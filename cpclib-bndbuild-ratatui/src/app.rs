@@ -51,6 +51,11 @@ pub(crate) struct BndBuilderRatatui {
     pub(crate) build_duration: Option<Duration>,
     /// Active build file for nested bndbuild invocations (tagged onto new rules).
     pub(crate) current_build_file: Option<String>,
+    /// Nesting depth of RunTasks/Finish pairs. The outermost build has depth 1
+    /// while running; depth returns to 0 only when the outermost Finish arrives.
+    /// Nested bndbuild tasks increment this when their RunTasks fires and
+    /// decrement it on their Finish, so we can ignore premature inner Finishes.
+    pub(crate) build_nesting_depth: usize,
     /// Build-time prediction cache (`.bndbuild_timings` in the working directory).
     pub(crate) timing_cache: TimingCache,
     /// Absolute time at which the build is estimated to finish.
@@ -147,14 +152,26 @@ impl BndBuilderRatatui {
                 },
                 RatatuiState::RunTasks => {
                     self.build_started.get_or_insert_with(Instant::now);
+                    self.build_nesting_depth += 1;
                     self.phase = BuildPhase::Running { current: 0, total: 0 }
                 },
                 RatatuiState::Finish => {
-                    if let Some(t) = self.build_started {
-                        self.build_duration.get_or_insert_with(|| t.elapsed());
+                    if self.build_nesting_depth > 0 {
+                        self.build_nesting_depth -= 1;
                     }
-                    self.phase = BuildPhase::Finished;
-                    self.selected_rule = None;
+                    // Only snap duration and transition to Finished for the
+                    // outermost build. Nested bndbuild tasks also fire Finish;
+                    // those must be ignored so the header keeps counting up.
+                    if self.build_nesting_depth == 0 {
+                        if let Some(t) = self.build_started {
+                            self.build_duration.get_or_insert_with(|| t.elapsed());
+                        }
+                        self.phase = BuildPhase::Finished;
+                        self.selected_rule = None;
+                        // Persist timing data immediately so that a terminal
+                        // close (Ctrl+C, window X) does not lose the samples.
+                        self.timing_cache.save().ok();
+                    }
                 },
             },
 
