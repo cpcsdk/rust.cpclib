@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use camino::Utf8Path;
 use clap::ArgMatches;
 use cpclib_common::clap::{self, Command};
 use cpclib_runner::event::EventObserver;
@@ -7,7 +8,7 @@ use cpclib_runner::runner::runner::RunnerWithClapMatches;
 
 use super::{Runner, RunnerWithClap};
 use crate::built_info;
-use crate::event::{BndBuilderObserver, BndBuilderObserverRc};
+use crate::event::{BndBuilderEvent, BndBuilderObserver, BndBuilderObserverRc};
 use crate::task::BNDBUILD_CMDS;
 
 pub struct BndBuildRunner<E: BndBuilderObserver> {
@@ -101,8 +102,18 @@ impl<E: BndBuilderObserver + Clone + 'static> Runner for BndBuildRunner<E> {
         // (StartTask, StopTask, StartRule, etc.) are forwarded as structured
         // events to the TUI or test-capturing observer.  `o.clone()` is cheap
         // when E = Arc<T> (just increments the ref-count).
+
+        // Emit the build file path so TUI can label rules with their source.
+        let build_file_utf8: Option<&Utf8Path> = matches
+            .get_one::<String>("file")
+            .map(|s| Utf8Path::new(s.as_str()));
+        o.update(BndBuilderEvent::BuildFileContext(build_file_utf8));
+
         let obs = BndBuilderObserverRc::new(o.clone());
         let res = crate::process_matches_with_observer(&matches, obs);
+
+        // Reset build file context after nested build finishes.
+        o.update(BndBuilderEvent::BuildFileContext(None));
         // restoration of cwd
         std::env::set_current_dir(cwd).unwrap();
 

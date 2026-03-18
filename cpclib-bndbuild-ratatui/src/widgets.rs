@@ -162,18 +162,36 @@ impl<'a> Widget for InlineTaskWidget<'a> {
 
         let show_output = area.height > 1
             && (matches!(entry.status, TaskStatus::Running)
-                || (matches!(entry.status, TaskStatus::Failed(_)) && !entry.stderr.is_empty()));
+                || (matches!(entry.status, TaskStatus::Failed(_)) && !entry.stderr.is_empty())
+                || (matches!(entry.status, TaskStatus::Success(_)) && !entry.stdout.is_empty()));
         if show_output {
             let out_area = Rect { y: area.y + 1, height: area.height - 1, ..area };
-            let stderr_iter =
-                entry.stderr.iter().map(|s| (s.as_str(), Style::default().fg(Color::Red)));
-            let all_lines: Vec<(&str, Style)> = if matches!(entry.status, TaskStatus::Running) {
-                stderr_iter
-                    .chain(entry.stdout.iter().map(|s| (s.as_str(), Style::default())))
-                    .collect()
-            } else {
-                // Failed: only stderr (stdout is noise after failure)
-                stderr_iter.collect()
+            let all_lines: Vec<(&str, Style)> = match &entry.status {
+                TaskStatus::Running => {
+                    let stderr_iter = entry
+                        .stderr
+                        .iter()
+                        .map(|s| (s.as_str(), Style::default().fg(Color::Red)));
+                    stderr_iter
+                        .chain(entry.stdout.iter().map(|s| (s.as_str(), Style::default())))
+                        .collect()
+                },
+                TaskStatus::Failed(_) => {
+                    // Failed: only stderr (stdout is noise after failure)
+                    entry
+                        .stderr
+                        .iter()
+                        .map(|s| (s.as_str(), Style::default().fg(Color::Red)))
+                        .collect()
+                },
+                TaskStatus::Success(_) => {
+                    // Success with stdout: show the output (e.g. emulator logs).
+                    entry
+                        .stdout
+                        .iter()
+                        .map(|s| (s.as_str(), Style::default().fg(Color::DarkGray)))
+                        .collect()
+                },
             };
             let start = all_lines.len().saturating_sub(out_area.height as usize);
             let w = out_area.width as usize;
@@ -219,11 +237,17 @@ impl<'a> Widget for RuleWidget<'a> {
         };
         let elapsed_ms = rule.started.elapsed().as_millis() as u64;
 
+        // Trim trailing '.' from display names (targets often end with '.' as a convention).
+        let full_name_display = full_name.trim_end_matches('.');
+
         match &rule.status {
-            RuleStatus::Running => render_running_rule(rule, selected, &full_name, area, buf),
+            RuleStatus::Running => render_running_rule(rule, selected, full_name_display, area, buf),
+            RuleStatus::UpToDate => {
+                render_uptodate_rule(rule, full_name_display, elapsed_ms, area, buf)
+            },
             RuleStatus::Success(dur) | RuleStatus::Failed(dur) => {
                 let is_success = matches!(&rule.status, RuleStatus::Success(_));
-                render_finished_rule(rule, selected, is_success, dur, &full_name, elapsed_ms, area, buf);
+                render_finished_rule(rule, selected, is_success, dur, full_name_display, elapsed_ms, area, buf);
             },
         }
     }
@@ -328,6 +352,29 @@ fn render_running_rule(
     }
 }
 
+/// Compact 1-line rendering for rules whose targets were already up to date.
+fn render_uptodate_rule(rule: &RuleEntry, full_name: &str, elapsed_ms: u64, area: Rect, buf: &mut Buffer) {
+    let prefix = "≡  ";
+    let prefix_w = prefix.chars().count();
+    let source_suffix: String = rule
+        .source
+        .as_deref()
+        .map(|s| format!("  [{}]", s))
+        .unwrap_or_default();
+    let suffix_w = source_suffix.chars().count();
+    let names_avail =
+        (area.width as usize * 2 / 3).min((area.width as usize).saturating_sub(prefix_w + suffix_w));
+    let name_text = marquee_window(full_name, elapsed_ms, names_avail);
+    let mut spans = vec![
+        Span::styled(prefix, Style::default().fg(Color::Cyan)),
+        Span::styled(name_text, Style::default().fg(Color::DarkGray)),
+    ];
+    if !source_suffix.is_empty() {
+        spans.push(Span::styled(source_suffix, Style::default().fg(Color::DarkGray)));
+    }
+    Paragraph::new(Line::from(spans)).render(area, buf);
+}
+
 fn render_finished_rule(
     rule: &RuleEntry,
     selected: bool,
@@ -411,15 +458,64 @@ fn render_finished_rule(
                 .render(Rect { y: inner.y + row as u16, height: 1, ..inner }, buf);
         }
     } else if is_success {
-        // ── Success: compact 1-line view ────────────────────────────────────
-        let prefix = format!("✓  {:6.2}s  ", dur.as_secs_f64());
-        let prefix_w = prefix.chars().count();
-        let names_avail =
-            (area.width as usize * 2 / 3).min((area.width as usize).saturating_sub(prefix_w));
-        let name_text = marquee_window(full_name, elapsed_ms, names_avail);
-        Paragraph::new(Line::from(vec![Span::raw(prefix), Span::raw(name_text)]))
-            .style(Style::default().fg(Color::Green))
-            .render(area, buf);
+        let has_stdout = rule.tasks.iter().any(|t| !t.stdout.is_empty());
+        if has_stdout && area.height > 1 {
+            // ── Success with output: expanded box view ─────────────────────────
+            // Emulator stdout (and any other task output) arrives all at once when
+            // the process closes. Keep the rule expanded so it remains visible.
+            let title_str = format!("✓  {:6.2}s  {full_name}", dur.as_secs_f64());
+            let source_suffix: String = rule
+                .source
+                .as_deref()
+                .map(|s| format!("  [{}]", s))
+                .unwrap_or_default();
+            let block = Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green))
+                .title(Line::from(vec![
+                    Span::styled(
+                        title_str,
+                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(source_suffix, Style::default().fg(Color::DarkGray)),
+                ]));
+            let inner = block.inner(area);
+            block.render(area, buf);
+            let mut y_off = 0u16;
+            for task in &rule.tasks {
+                if y_off >= inner.height {
+                    break;
+                }
+                let avail = inner.height - y_off;
+                let h = task.inline_height().min(avail);
+                InlineTaskWidget::new(task).render(
+                    Rect { y: inner.y + y_off, height: h, ..inner },
+                    buf,
+                );
+                y_off += h;
+            }
+        } else {
+            // ── Success: compact 1-line view ──────────────────────────────────
+            let prefix = format!("✓  {:6.2}s  ", dur.as_secs_f64());
+            let prefix_w = prefix.chars().count();
+            let source_suffix: String = rule
+                .source
+                .as_deref()
+                .map(|s| format!("  [{}]", s))
+                .unwrap_or_default();
+            let suffix_w = source_suffix.chars().count();
+            let names_avail = (area.width as usize * 2 / 3)
+                .min((area.width as usize).saturating_sub(prefix_w + suffix_w));
+            let name_text = marquee_window(full_name, elapsed_ms, names_avail);
+            let mut spans = vec![
+                Span::styled(prefix, Style::default().fg(Color::Green)),
+                Span::styled(name_text, Style::default().fg(Color::Green)),
+            ];
+            if !source_suffix.is_empty() {
+                spans.push(Span::styled(source_suffix, Style::default().fg(Color::DarkGray)));
+            }
+            Paragraph::new(Line::from(spans)).render(area, buf);
+        }
     } else if area.height <= 1 {
         // ── Failed: 1-line fallback ──────────────────────────────────────────
         let prefix = format!("✗  {:6.2}s  ", dur.as_secs_f64());

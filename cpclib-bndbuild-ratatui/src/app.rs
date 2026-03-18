@@ -6,7 +6,7 @@ use std::time::Duration;
 use cpclib_bndbuild::app::BndBuilderCommand;
 use cpclib_runner::kill_all_children;
 use ratatui::Frame;
-use ratatui::crossterm::event::{self, KeyCode, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{self, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Backend;
 use ratatui::style::{Color, Modifier, Style};
@@ -44,6 +44,8 @@ pub(crate) struct BndBuilderRatatui {
     pub(crate) selected_rule: Option<usize>,
     /// Error message from the build thread, set when the build fails.
     pub(crate) build_error: Option<String>,
+    /// Active build file for nested bndbuild invocations (tagged onto new rules).
+    pub(crate) current_build_file: Option<String>,
 }
 
 impl BndBuilderRatatui {
@@ -147,6 +149,7 @@ impl BndBuilderRatatui {
                 let aliases = self.pending_aliases.remove(&rule).unwrap_or_default();
                 let mut entry = RuleEntry::new(rule, nb, out_of);
                 entry.aliases = aliases;
+                entry.source = self.current_build_file.clone();
                 self.rules.push(entry);
                 self.phase = BuildPhase::Running { current: nb, total: out_of };
                 self.scroll = None; // auto-follow
@@ -157,6 +160,16 @@ impl BndBuilderRatatui {
                     let d = r.started.elapsed();
                     r.status = RuleStatus::Success(d);
                 }
+            },
+
+            RatatuiEvent::SkippedRule(rule) => {
+                if let Some(r) = self.running_rule_mut(&rule) {
+                    r.status = RuleStatus::UpToDate;
+                }
+            },
+
+            RatatuiEvent::BuildFileContext(ctx) => {
+                self.current_build_file = ctx;
             },
 
             RatatuiEvent::FailedRule(rule) => {
@@ -355,99 +368,132 @@ impl BndBuilderRatatui {
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
             if event::poll(Duration::from_millis(16))? {
-                if let event::Event::Key(k) = event::read()? {
-                    if k.kind == KeyEventKind::Press {
-                        // Ctrl+C: restore terminal and kill immediately.
-                        if k.code == KeyCode::Char('c')
-                            && k.modifiers.contains(KeyModifiers::CONTROL)
-                        {
-                            kill_all_children();
-                            drop(terminal);
-                            crate::terminal::restore_terminal().ok();
-                            std::process::exit(130);
+                match event::read()? {
+                    event::Event::Key(k) => {
+                        if k.kind == KeyEventKind::Press {
+                            // Ctrl+C: restore terminal and kill immediately.
+                            if k.code == KeyCode::Char('c')
+                                && k.modifiers.contains(KeyModifiers::CONTROL)
+                            {
+                                kill_all_children();
+                                drop(terminal);
+                                crate::terminal::restore_terminal().ok();
+                                std::process::exit(130);
+                            }
+                            match k.code {
+                                KeyCode::Esc => {
+                                    self.confirm_quit = false;
+                                    self.selected_rule = None;
+                                },
+                                KeyCode::Tab => {
+                                    self.confirm_quit = false;
+                                    let n = self.rules.len();
+                                    self.selected_rule = match self.selected_rule {
+                                        None => {
+                                            if n > 0 { Some(0) } else { None }
+                                        },
+                                        Some(i) => {
+                                            if i + 1 < n { Some(i + 1) } else { None }
+                                        },
+                                    };
+                                },
+                                KeyCode::BackTab => {
+                                    self.confirm_quit = false;
+                                    let n = self.rules.len();
+                                    self.selected_rule = match self.selected_rule {
+                                        None => {
+                                            if n > 0 { Some(n - 1) } else { None }
+                                        },
+                                        Some(0) => None,
+                                        Some(i) => Some(i - 1),
+                                    };
+                                },
+                                KeyCode::Char('q') | KeyCode::Char('Q') => {
+                                    let build_done = matches!(self.phase, BuildPhase::Finished);
+                                    if build_done {
+                                        self.exit = true;
+                                        break 'main;
+                                    } else if self.confirm_quit {
+                                        kill_all_children();
+                                        drop(terminal);
+                                        crate::terminal::restore_terminal().ok();
+                                        std::process::exit(1);
+                                    } else {
+                                        self.confirm_quit = true;
+                                    }
+                                },
+                                KeyCode::Down | KeyCode::Char('j') => {
+                                    self.confirm_quit = false;
+                                    if let Some(idx) = self.selected_rule {
+                                        if let Some(rule) = self.rules.get_mut(idx) {
+                                            rule.task_scroll =
+                                                rule.task_scroll.saturating_sub(1);
+                                        }
+                                    } else {
+                                        let next = skip.saturating_add(1);
+                                        self.scroll = Some(next.min(self.total_entries()));
+                                    }
+                                },
+                                KeyCode::Up | KeyCode::Char('k') => {
+                                    self.confirm_quit = false;
+                                    if let Some(idx) = self.selected_rule {
+                                        if let Some(rule) = self.rules.get_mut(idx) {
+                                            rule.task_scroll =
+                                                rule.task_scroll.saturating_add(1);
+                                        }
+                                    } else {
+                                        self.scroll = Some(skip.saturating_sub(1));
+                                    }
+                                },
+                                KeyCode::Left => {
+                                    if let Some(idx) = self.selected_rule {
+                                        if let Some(rule) = self.rules.get_mut(idx) {
+                                            rule.h_scroll = rule.h_scroll.saturating_sub(4);
+                                        }
+                                    }
+                                },
+                                KeyCode::Right => {
+                                    if let Some(idx) = self.selected_rule {
+                                        if let Some(rule) = self.rules.get_mut(idx) {
+                                            rule.h_scroll = rule.h_scroll.saturating_add(4);
+                                        }
+                                    }
+                                },
+                                _ => {},
+                            }
                         }
-                        match k.code {
-                            KeyCode::Esc => {
-                                self.confirm_quit = false;
-                                self.selected_rule = None;
-                            },
-                            KeyCode::Tab => {
-                                self.confirm_quit = false;
-                                let n = self.rules.len();
-                                self.selected_rule = match self.selected_rule {
-                                    None => {
-                                        if n > 0 { Some(0) } else { None }
-                                    },
-                                    Some(i) => {
-                                        if i + 1 < n { Some(i + 1) } else { None }
-                                    },
-                                };
-                            },
-                            KeyCode::BackTab => {
-                                self.confirm_quit = false;
-                                let n = self.rules.len();
-                                self.selected_rule = match self.selected_rule {
-                                    None => {
-                                        if n > 0 { Some(n - 1) } else { None }
-                                    },
-                                    Some(0) => None,
-                                    Some(i) => Some(i - 1),
-                                };
-                            },
-                            KeyCode::Char('q') | KeyCode::Char('Q') => {
-                                let build_done = matches!(self.phase, BuildPhase::Finished);
-                                if build_done {
-                                    self.exit = true;
-                                    break 'main;
-                                } else if self.confirm_quit {
-                                    kill_all_children();
-                                    drop(terminal);
-                                    crate::terminal::restore_terminal().ok();
-                                    std::process::exit(1);
-                                } else {
-                                    self.confirm_quit = true;
-                                }
-                            },
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                self.confirm_quit = false;
-                                if let Some(idx) = self.selected_rule {
-                                    if let Some(rule) = self.rules.get_mut(idx) {
-                                        rule.task_scroll =
-                                            rule.task_scroll.saturating_sub(1);
+                    },
+                    event::Event::Mouse(mouse_ev) => {
+                        if mouse_ev.kind == MouseEventKind::Down(MouseButton::Left) {
+                            let row = mouse_ev.row;
+                            // Row 0 = header, last row = status bar; list starts at row 1.
+                            if row >= 1 {
+                                let list_row = row - 1;
+                                let mut cur_y = 0u16;
+                                let mut clicked: Option<usize> = None;
+                                for (idx, rule) in self.rules.iter().enumerate() {
+                                    if idx < skip {
+                                        continue;
                                     }
-                                } else {
-                                    let next = skip.saturating_add(1);
-                                    self.scroll = Some(next.min(self.total_entries()));
-                                }
-                            },
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                self.confirm_quit = false;
-                                if let Some(idx) = self.selected_rule {
-                                    if let Some(rule) = self.rules.get_mut(idx) {
-                                        rule.task_scroll =
-                                            rule.task_scroll.saturating_add(1);
+                                    let h = rule.height();
+                                    if list_row >= cur_y && list_row < cur_y + h {
+                                        clicked = Some(idx);
+                                        break;
                                     }
-                                } else {
-                                    self.scroll = Some(skip.saturating_sub(1));
+                                    cur_y += h;
                                 }
-                            },
-                            KeyCode::Left => {
-                                if let Some(idx) = self.selected_rule {
-                                    if let Some(rule) = self.rules.get_mut(idx) {
-                                        rule.h_scroll = rule.h_scroll.saturating_sub(4);
-                                    }
+                                if let Some(idx) = clicked {
+                                    // Clicking the already-selected rule deselects it.
+                                    self.selected_rule = if self.selected_rule == Some(idx) {
+                                        None
+                                    } else {
+                                        Some(idx)
+                                    };
                                 }
-                            },
-                            KeyCode::Right => {
-                                if let Some(idx) = self.selected_rule {
-                                    if let Some(rule) = self.rules.get_mut(idx) {
-                                        rule.h_scroll = rule.h_scroll.saturating_add(4);
-                                    }
-                                }
-                            },
-                            _ => {},
+                            }
                         }
-                    }
+                    },
+                    _ => {},
                 }
             }
 

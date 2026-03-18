@@ -72,6 +72,7 @@ fn main() {
         pending_aliases: std::collections::HashMap::new(),
         selected_rule:   None,
         build_error:     None,
+        current_build_file: None,
     };
 
     let result = state.run(term);

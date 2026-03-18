@@ -525,6 +525,10 @@ impl BndBuilder {
             self.start_rule(p, state.task_count, state.nb_deps);
         }
 
+        // Track whether this rule was skipped (already up to date) so we can
+        // emit SkippedRule instead of StopRule at the end.
+        let mut skipped = false;
+
         if let Some(rule) = this.rule(p) {
             let (disabled, done) = if rule.is_disabled() {
                 self.emit_stderr(format!("The target {p} is disabled and ignored."));
@@ -537,6 +541,7 @@ impl BndBuilder {
                 }
                 (false, done)
             };
+            skipped = done;
 
             if !done {
                 // execute all the tasks for this rule
@@ -583,9 +588,15 @@ impl BndBuilder {
         }
         else {
             self.emit_stdout(format!("\t{} is already up to date\n", &p));
+            skipped = true;
         }
 
-        self.stop_rule(p);
+        if skipped {
+            self.skipped_rule(p);
+        }
+        else {
+            self.stop_rule(p);
+        }
 
         Ok(())
     }
@@ -710,6 +721,10 @@ impl BndBuilderObserved for BndBuilder {
 
     fn stop_rule<P: AsRef<Utf8Path>>(&self, task: P) {
         self.notify(crate::event::BndBuilderEvent::StopRule(task.as_ref()))
+    }
+
+    fn skipped_rule<P: AsRef<Utf8Path>>(&self, task: P) {
+        self.notify(crate::event::BndBuilderEvent::SkippedRule(task.as_ref()))
     }
 
     fn failed_rule<P: AsRef<Utf8Path>>(&self, task: P) {

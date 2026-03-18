@@ -28,6 +28,10 @@ impl<'a> From<BndBuilderEvent<'a>> for RatatuiEvent {
                 }
             },
             BndBuilderEvent::StopRule(rule) => RatatuiEvent::StopRule(rule.to_string()),
+            BndBuilderEvent::SkippedRule(rule) => RatatuiEvent::SkippedRule(rule.to_string()),
+            BndBuilderEvent::BuildFileContext(path) => {
+                RatatuiEvent::BuildFileContext(path.map(|p| p.to_string()))
+            },
             BndBuilderEvent::FailedRule(rule) => RatatuiEvent::FailedRule(rule.to_string()),
             BndBuilderEvent::StartTask(rule, task) => {
                 RatatuiEvent::StartTask {
@@ -76,7 +80,11 @@ pub enum RatatuiEvent {
         out_of: usize
     },
     StopRule(String),
+    /// Rule was already up to date — no tasks were executed.
+    SkippedRule(String),
     FailedRule(String),
+    /// Active build file changed (from a nested bndbuild runner).
+    BuildFileContext(Option<String>),
     StartTask {
         rule: Option<String>,
         task: String

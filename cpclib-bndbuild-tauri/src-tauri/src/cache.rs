@@ -183,7 +183,13 @@ impl BndBuilderObserver for TauriBndBuilderObserver {
             },
             cpclib_bndbuild::event::BndBuilderEvent::Stderr(o) => {
                 self.app_handle.emit("event-stderr", o).unwrap();
-            }
+            },
+            cpclib_bndbuild::event::BndBuilderEvent::SkippedRule(rule) => {
+                self.app_handle
+                    .emit("event-skipped_rule", rule.as_str())
+                    .unwrap();
+            },
+            cpclib_bndbuild::event::BndBuilderEvent::BuildFileContext(_) => {}
         }
     }
 }

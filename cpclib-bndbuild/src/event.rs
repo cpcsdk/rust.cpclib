@@ -40,7 +40,12 @@ pub enum BndBuilderEvent<'a> {
         out_of: usize
     },
     StopRule(&'a Utf8Path),
+    /// Rule was not executed because it is already up to date.
+    SkippedRule(&'a Utf8Path),
     FailedRule(&'a Utf8Path),
+    /// Emitted by nested build runners to indicate which build file is active.
+    /// `None` resets to the top-level build.
+    BuildFileContext(Option<&'a Utf8Path>),
     StartTask(Option<&'a Utf8Path>, &'a Task),
     StopTask(Option<&'a Utf8Path>, &'a Task, Duration),
     TaskStdout(&'a Utf8Path, &'a Task, &'a str),
@@ -132,8 +137,16 @@ pub trait BndBuilderObserved: Debug + Sync + Send {
         self.notify(BndBuilderEvent::StopRule(task.as_ref()))
     }
     #[inline]
+    fn skipped_rule<P: AsRef<Utf8Path>>(&self, task: P) {
+        self.notify(BndBuilderEvent::SkippedRule(task.as_ref()))
+    }
+    #[inline]
     fn failed_rule<P: AsRef<Utf8Path>>(&self, task: P) {
         self.notify(BndBuilderEvent::FailedRule(task.as_ref()))
+    }
+    #[inline]
+    fn build_file_context(&self, path: Option<&Utf8Path>) {
+        self.notify(BndBuilderEvent::BuildFileContext(path))
     }
     #[inline]
     fn start_task(&self, rule: Option<&Utf8Path>, task: &Task) {
@@ -441,6 +454,8 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
                 println!("[{nb}/{out_of}] Handle {alias}")
             },
             BndBuilderEvent::StopRule(_) => {},
+            BndBuilderEvent::SkippedRule(_) => {},
+            BndBuilderEvent::BuildFileContext(_) => {},
             BndBuilderEvent::FailedRule(rule) => {
                 eprintln!("[FAIL] {rule}");
             },

@@ -44,7 +44,10 @@ impl TaskEntry {
             TaskStatus::Running => 1 + (self.stdout.len() + self.stderr.len()).min(8) as u16,
             // Failed tasks show up to 8 stderr lines inline so the user can see why.
             TaskStatus::Failed(_) => 1 + self.stderr.len().min(8) as u16,
-            _ => 1,
+            // Success tasks show stdout if they produced any (e.g. emulator output).
+            TaskStatus::Success(_) => {
+                if self.stdout.is_empty() { 1 } else { 1 + self.stdout.len().min(8) as u16 }
+            },
         }
     }
 
@@ -53,7 +56,7 @@ impl TaskEntry {
         match self.status {
             TaskStatus::Running => 1 + (self.stdout.len() + self.stderr.len()) as u16,
             TaskStatus::Failed(_) => 1 + self.stderr.len() as u16,
-            _ => 1,
+            TaskStatus::Success(_) => 1 + self.stdout.len() as u16,
         }
     }
 }
@@ -65,6 +68,8 @@ pub(crate) enum RuleStatus {
     Running,
     Success(Duration),
     Failed(Duration),
+    /// Rule was skipped because all targets are already up to date.
+    UpToDate,
 }
 
 #[derive(Debug)]
@@ -81,6 +86,8 @@ pub(crate) struct RuleEntry {
     pub(crate) task_scroll: usize,
     /// Chars to skip from the left edge in the expanded output view (Left/Right keys).
     pub(crate) h_scroll:    usize,
+    /// Source build file for rules coming from a nested bndbuild invocation.
+    pub(crate) source:      Option<String>,
 }
 
 impl RuleEntry {
@@ -95,6 +102,7 @@ impl RuleEntry {
             status:      RuleStatus::Running,
             task_scroll: 0,
             h_scroll:    0,
+            source:      None,
         }
     }
 
@@ -115,6 +123,18 @@ impl RuleEntry {
                 let inner: u16 = self.tasks.iter().map(|t| t.inline_height()).sum();
                 if inner > 0 { (2 + inner).max(3) } else { 1 }
             },
+            // Success rules expand when any task produced stdout (e.g. emulator output)
+            // so the output remains visible after the process closes.
+            RuleStatus::Success(_) => {
+                let has_stdout = self.tasks.iter().any(|t| !t.stdout.is_empty());
+                if has_stdout {
+                    let inner: u16 = self.tasks.iter().map(|t| t.inline_height()).sum();
+                    if inner > 0 { (2 + inner).max(3) } else { 1 }
+                } else {
+                    1
+                }
+            },
+            // UpToDate: compact 1-line view.
             _ => 1,
         }
     }
