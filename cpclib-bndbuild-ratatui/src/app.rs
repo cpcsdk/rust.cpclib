@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cpclib_bndbuild::app::BndBuilderCommand;
 use cpclib_runner::kill_all_children;
@@ -44,6 +44,10 @@ pub(crate) struct BndBuilderRatatui {
     pub(crate) selected_rule: Option<usize>,
     /// Error message from the build thread, set when the build fails.
     pub(crate) build_error: Option<String>,
+    /// When the first RunTasks event arrives (build actually starts executing).
+    pub(crate) build_started: Option<Instant>,
+    /// Total duration snapped when the build finishes (so it stops growing).
+    pub(crate) build_duration: Option<Duration>,
     /// Active build file for nested bndbuild invocations (tagged onto new rules).
     pub(crate) current_build_file: Option<String>,
 }
@@ -136,9 +140,15 @@ impl BndBuilderRatatui {
                     self.phase = BuildPhase::ComputingDeps(p)
                 },
                 RatatuiState::RunTasks => {
+                    self.build_started.get_or_insert_with(Instant::now);
                     self.phase = BuildPhase::Running { current: 0, total: 0 }
                 },
-                RatatuiState::Finish => self.phase = BuildPhase::Finished,
+                RatatuiState::Finish => {
+                    if let Some(t) = self.build_started {
+                        self.build_duration.get_or_insert_with(|| t.elapsed());
+                    }
+                    self.phase = BuildPhase::Finished;
+                },
             },
 
             RatatuiEvent::StartRuleAlias { alias, representative, .. } => {
@@ -211,9 +221,9 @@ impl BndBuilderRatatui {
                         let clean = clean.trim_end_matches('\r');
                         if !clean.is_empty() {
                             if t.stdout.len() >= MAX_LINES_PER_TASK {
-                                t.stdout.remove(0);
+                                t.stdout.pop_front();
                             }
-                            t.stdout.push(clean.to_owned());
+                            t.stdout.push_back(clean.to_owned());
                         }
                     }
                 }
@@ -226,9 +236,9 @@ impl BndBuilderRatatui {
                         let clean = clean.trim_end_matches('\r');
                         if !clean.is_empty() {
                             if t.stderr.len() >= MAX_LINES_PER_TASK {
-                                t.stderr.remove(0);
+                                t.stderr.pop_front();
                             }
-                            t.stderr.push(clean.to_owned());
+                            t.stderr.push_back(clean.to_owned());
                         }
                     }
                 }
@@ -327,6 +337,10 @@ impl BndBuilderRatatui {
                     if !matches!(self.phase, BuildPhase::Finished) {
                         self.phase = BuildPhase::Finished;
                     }
+                    // Snap the elapsed duration if not already recorded.
+                    if let Some(t) = self.build_started {
+                        self.build_duration.get_or_insert_with(|| t.elapsed());
+                    }
                     // If the build ended with an error, mark any still-running
                     // rules and tasks as Failed so the TUI reflects the failure.
                     if matches!(thread_result, Some(Err(_))) {
@@ -388,7 +402,7 @@ impl BndBuilderRatatui {
                                 KeyCode::Tab => {
                                     self.confirm_quit = false;
                                     let n = self.rules.len();
-                                    self.selected_rule = match self.selected_rule {
+                                    let new_sel = match self.selected_rule {
                                         None => {
                                             if n > 0 { Some(0) } else { None }
                                         },
@@ -396,17 +410,35 @@ impl BndBuilderRatatui {
                                             if i + 1 < n { Some(i + 1) } else { None }
                                         },
                                     };
+                                    if new_sel != self.selected_rule {
+                                        if let Some(idx) = new_sel {
+                                            if let Some(r) = self.rules.get_mut(idx) {
+                                                r.task_scroll = 0;
+                                                r.h_scroll = 0;
+                                            }
+                                        }
+                                        self.selected_rule = new_sel;
+                                    }
                                 },
                                 KeyCode::BackTab => {
                                     self.confirm_quit = false;
                                     let n = self.rules.len();
-                                    self.selected_rule = match self.selected_rule {
+                                    let new_sel = match self.selected_rule {
                                         None => {
                                             if n > 0 { Some(n - 1) } else { None }
                                         },
                                         Some(0) => None,
                                         Some(i) => Some(i - 1),
                                     };
+                                    if new_sel != self.selected_rule {
+                                        if let Some(idx) = new_sel {
+                                            if let Some(r) = self.rules.get_mut(idx) {
+                                                r.task_scroll = 0;
+                                                r.h_scroll = 0;
+                                            }
+                                        }
+                                        self.selected_rule = new_sel;
+                                    }
                                 },
                                 KeyCode::Char('q') | KeyCode::Char('Q') => {
                                     let build_done = matches!(self.phase, BuildPhase::Finished);
@@ -459,38 +491,75 @@ impl BndBuilderRatatui {
                                         }
                                     }
                                 },
+                                KeyCode::Home | KeyCode::Char('g') => {
+                                    self.scroll = Some(0);
+                                },
+                                KeyCode::End | KeyCode::Char('G') => {
+                                    self.scroll = None; // auto-follow = bottom
+                                },
+                                KeyCode::PageUp => {
+                                    let page = (list_h as usize).saturating_sub(1);
+                                    self.scroll = Some(skip.saturating_sub(page));
+                                },
+                                KeyCode::PageDown => {
+                                    let page = (list_h as usize).saturating_sub(1);
+                                    let next = skip.saturating_add(page);
+                                    self.scroll = Some(next.min(self.total_entries()));
+                                },
                                 _ => {},
                             }
                         }
                     },
                     event::Event::Mouse(mouse_ev) => {
-                        if mouse_ev.kind == MouseEventKind::Down(MouseButton::Left) {
-                            let row = mouse_ev.row;
-                            // Row 0 = header, last row = status bar; list starts at row 1.
-                            if row >= 1 {
-                                let list_row = row - 1;
-                                let mut cur_y = 0u16;
-                                let mut clicked: Option<usize> = None;
-                                for (idx, rule) in self.rules.iter().enumerate() {
-                                    if idx < skip {
-                                        continue;
+                        match mouse_ev.kind {
+                            MouseEventKind::Down(MouseButton::Left) => {
+                                let row = mouse_ev.row;
+                                // Row 0 = header, last row = status bar; list starts at row 1.
+                                if row >= 1 {
+                                    let list_row = row - 1;
+                                    let mut cur_y = 0u16;
+                                    let mut clicked: Option<usize> = None;
+                                    for (idx, rule) in self.rules.iter().enumerate() {
+                                        if idx < skip {
+                                            continue;
+                                        }
+                                        let h = rule.height();
+                                        if list_row >= cur_y && list_row < cur_y + h {
+                                            clicked = Some(idx);
+                                            break;
+                                        }
+                                        cur_y += h;
                                     }
-                                    let h = rule.height();
-                                    if list_row >= cur_y && list_row < cur_y + h {
-                                        clicked = Some(idx);
-                                        break;
+                                    if let Some(idx) = clicked {
+                                        // Clicking the already-selected rule deselects it.
+                                        self.selected_rule = if self.selected_rule == Some(idx) {
+                                            None
+                                        } else {
+                                            Some(idx)
+                                        };
                                     }
-                                    cur_y += h;
                                 }
-                                if let Some(idx) = clicked {
-                                    // Clicking the already-selected rule deselects it.
-                                    self.selected_rule = if self.selected_rule == Some(idx) {
-                                        None
-                                    } else {
-                                        Some(idx)
-                                    };
+                            },
+                            MouseEventKind::ScrollUp => {
+                                if let Some(idx) = self.selected_rule {
+                                    if let Some(rule) = self.rules.get_mut(idx) {
+                                        rule.task_scroll = rule.task_scroll.saturating_add(1);
+                                    }
+                                } else {
+                                    self.scroll = Some(skip.saturating_sub(1));
                                 }
-                            }
+                            },
+                            MouseEventKind::ScrollDown => {
+                                if let Some(idx) = self.selected_rule {
+                                    if let Some(rule) = self.rules.get_mut(idx) {
+                                        rule.task_scroll = rule.task_scroll.saturating_sub(1);
+                                    }
+                                } else {
+                                    let next = skip.saturating_add(1);
+                                    self.scroll = Some(next.min(self.total_entries()));
+                                }
+                            },
+                            _ => {},
                         }
                     },
                     _ => {},
@@ -524,6 +593,15 @@ impl BndBuilderRatatui {
         .split(area);
 
         // Header
+        let elapsed_str = {
+            match self.build_duration {
+                Some(d) => format!("  {:5.1}s", d.as_secs_f64()),
+                None    => match self.build_started {
+                    Some(t) => format!("  {:5.1}s", t.elapsed().as_secs_f64()),
+                    None    => String::new(),
+                },
+            }
+        };
         let header = match &self.phase {
             BuildPhase::Idle => "bndbuild".to_owned(),
             BuildPhase::ComputingDeps(p) => format!("Computing dependencies: {p}"),
@@ -536,21 +614,21 @@ impl BndBuilderRatatui {
                     .map(|r| r.out_of)
                     .sum();
                 if global_total > 0 {
-                    format!("Building [{global_current}/{global_total}]")
+                    format!("Building [{global_current}/{global_total}]{elapsed_str}")
                 } else {
-                    "Building\u{2026}".to_owned()
+                    format!("Building\u{2026}{elapsed_str}")
                 }
             },
             BuildPhase::Finished => {
                 if let Some(err) = &self.build_error {
                     let short = if err.len() > 100 {
-                        format!("\u{2717} Build FAILED: {}…", &err[..97])
+                        format!("\u{2717} Build FAILED{elapsed_str}: {}…", &err[..97])
                     } else {
-                        format!("\u{2717} Build FAILED: {err}")
+                        format!("\u{2717} Build FAILED{elapsed_str}: {err}")
                     };
                     short
                 } else {
-                    "Build finished".to_owned()
+                    format!("Build finished{elapsed_str}")
                 }
             },
         };
@@ -581,6 +659,11 @@ impl BndBuilderRatatui {
             .iter()
             .filter(|r| matches!(r.status, RuleStatus::Success(_)))
             .count();
+        let skipped_rules = self
+            .rules
+            .iter()
+            .filter(|r| matches!(r.status, RuleStatus::UpToDate))
+            .count();
         let failed_rules = self
             .rules
             .iter()
@@ -601,7 +684,7 @@ impl BndBuilderRatatui {
                 if failed_rules > 0 {
                     (
                         format!(
-                            "\u{2717} Build failed  \u{b7}  {done_rules} {} done  {failed_rules} {} failed  \u{b7}  q quit  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}",
+                            "\u{2717} Build failed  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  {failed_rules} {} failed  \u{b7}  q quit  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}",
                             rn(done_rules),
                             rn(failed_rules)
                         ),
@@ -610,7 +693,7 @@ impl BndBuilderRatatui {
                 } else {
                     (
                         format!(
-                            "\u{2713} Build complete  \u{b7}  {done_rules} {}  \u{b7}  q quit  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}",
+                            "\u{2713} Build complete  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  \u{b7}  q quit  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}",
                             rn(done_rules)
                         ),
                         Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
@@ -619,7 +702,7 @@ impl BndBuilderRatatui {
             },
             _ => (
                 format!(
-                    "Rules: {running_rules} running  {done_rules} done  {failed_rules} failed \
+                    "Rules: {running_rules} running  {done_rules} done  {skipped_rules} skipped  {failed_rules} failed \
                      \u{b7}  {running_tasks} {} active  \u{b7}  q quit  ^C force-quit  \u{2191}\u{2193}/jk scroll  tab select",
                     tn(running_tasks)
                 ),

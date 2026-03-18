@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -18,8 +19,8 @@ pub(crate) enum TaskStatus {
 pub(crate) struct TaskEntry {
     pub(crate) task:    String,
     pub(crate) started: Instant,
-    pub(crate) stdout:  Vec<String>,
-    pub(crate) stderr:  Vec<String>,
+    pub(crate) stdout:  VecDeque<String>,
+    pub(crate) stderr:  VecDeque<String>,
     pub(crate) status:  TaskStatus,
 }
 
@@ -28,8 +29,8 @@ impl TaskEntry {
         Self {
             task,
             started: Instant::now(),
-            stdout:  Vec::new(),
-            stderr:  Vec::new(),
+            stdout:  VecDeque::new(),
+            stderr:  VecDeque::new(),
             status:  TaskStatus::Running,
         }
     }
@@ -42,8 +43,9 @@ impl TaskEntry {
     pub(crate) fn inline_height(&self) -> u16 {
         match self.status {
             TaskStatus::Running => 1 + (self.stdout.len() + self.stderr.len()).min(8) as u16,
-            // Failed tasks show up to 8 stderr lines inline so the user can see why.
-            TaskStatus::Failed(_) => 1 + self.stderr.len().min(8) as u16,
+            // Failed tasks show up to 8 stderr/stdout lines inline so the user can see why.
+            // stdout is included because PTY-spawned processes route all output there.
+            TaskStatus::Failed(_) => 1 + (self.stderr.len() + self.stdout.len()).min(8) as u16,
             // Success tasks show stdout if they produced any (e.g. emulator output).
             TaskStatus::Success(_) => {
                 if self.stdout.is_empty() { 1 } else { 1 + self.stdout.len().min(8) as u16 }
@@ -55,7 +57,7 @@ impl TaskEntry {
     pub(crate) fn full_height(&self) -> u16 {
         match self.status {
             TaskStatus::Running => 1 + (self.stdout.len() + self.stderr.len()) as u16,
-            TaskStatus::Failed(_) => 1 + self.stderr.len() as u16,
+            TaskStatus::Failed(_) => 1 + (self.stderr.len() + self.stdout.len()) as u16,
             TaskStatus::Success(_) => 1 + self.stdout.len() as u16,
         }
     }

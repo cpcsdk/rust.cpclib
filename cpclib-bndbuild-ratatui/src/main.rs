@@ -72,6 +72,8 @@ fn main() {
         pending_aliases: std::collections::HashMap::new(),
         selected_rule:   None,
         build_error:     None,
+        build_started:   None,
+        build_duration:  None,
         current_build_file: None,
     };
 

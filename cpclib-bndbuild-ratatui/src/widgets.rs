@@ -8,24 +8,48 @@ use crate::model::{RuleEntry, RuleStatus, TaskEntry, TaskStatus};
 
 // ─── ANSI helpers ─────────────────────────────────────────────────────────────
 
-/// Strip CSI escape sequences (`ESC [ … final-byte`) from a string so that
-/// raw assembler diagnostics don't corrupt ratatui's cell buffer.
+/// Strip ANSI/VT escape sequences from a string so raw terminal output does
+/// not corrupt ratatui's cell buffer.
+///
+/// Handled families:
+/// - CSI  `ESC [ … final-byte(0x40–0x7e)` — colour codes, cursor motion, …
+/// - OSC  `ESC ] … BEL` or `ESC ] … ESC \`  — window-title strings, etc.
+/// - SS3  `ESC O <one-char>` — function-key encoding
+/// - Other two-char `ESC X` sequences — the ESC and the following char are dropped.
 pub(crate) fn strip_ansi_codes(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
-        if c == '\x1b' {
-            // CSI: ESC '[' <params> <final-byte in 0x40–0x7e>
-            if chars.next() == Some('[') {
+        if c != '\x1b' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('[') => {
+                // CSI: consume until final byte in 0x40–0x7e
                 for inner in chars.by_ref() {
                     if ('\x40'..='\x7e').contains(&inner) {
                         break;
                     }
                 }
-            }
-            // Non-CSI ESC sequences: just drop the ESC itself; leave the rest.
-        } else {
-            out.push(c);
+            },
+            Some(']') => {
+                // OSC: consume until BEL or ST (ESC \)
+                loop {
+                    match chars.next() {
+                        None | Some('\x07') => break,          // BEL terminates
+                        Some('\x1b') => { chars.next(); break }, // ESC \ terminates
+                        _ => {},
+                    }
+                }
+            },
+            Some('O') => {
+                // SS3: single character follows
+                chars.next();
+            },
+            Some(_) | None => {
+                // Any other two-char ESC sequence: both chars dropped
+            },
         }
     }
     out
@@ -177,11 +201,14 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                         .collect()
                 },
                 TaskStatus::Failed(_) => {
-                    // Failed: only stderr (stdout is noise after failure)
-                    entry
+                    // Failed: stderr first (red), then stdout — PTY-spawned processes
+                    // emit all output (including errors) through stdout.
+                    let stderr_iter = entry
                         .stderr
                         .iter()
-                        .map(|s| (s.as_str(), Style::default().fg(Color::Red)))
+                        .map(|s| (s.as_str(), Style::default().fg(Color::Red)));
+                    stderr_iter
+                        .chain(entry.stdout.iter().map(|s| (s.as_str(), Style::default())))
                         .collect()
                 },
                 TaskStatus::Success(_) => {
