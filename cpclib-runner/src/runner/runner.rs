@@ -321,9 +321,17 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                     o.emit_stdout(&current_line);
                 }
             });
-            // Wait for child in scope body, then drop slave → signals EOF to PTY master reader
+            // Wait for child, then close both slave and master.
+            //
+            // On Windows (ConPTY) the output pipe is only closed once the
+            // pseudoconsole is destroyed, which happens when `master` is
+            // dropped (calls CloseConsolePseudoConsole).  Dropping `slave`
+            // alone is not enough — the reader thread blocks forever.
+            // Dropping `master` here (inside the scope, before the implicit
+            // join) forces the pty_reader to see EOF/error and exit.
             pty_exit = Some(child.wait());
             drop(slave);
+            drop(master);
         });
 
         let status = pty_exit

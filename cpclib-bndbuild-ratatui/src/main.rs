@@ -2,6 +2,7 @@
 mod model;
 mod observer;
 mod terminal;
+mod timing;
 mod widgets;
 mod app;
 
@@ -11,6 +12,7 @@ use app::BndBuilderRatatui;
 use model::BuildPhase;
 use observer::{BndBuilderRatatuiObserver, RatatuiMessage};
 use terminal::{init_terminal, restore_terminal};
+use timing::TimingCache;
 use cpclib_bndbuild::app::BndBuilderApp;
 use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserverRc};
 
@@ -75,6 +77,10 @@ fn main() {
         build_started:   None,
         build_duration:  None,
         current_build_file: None,
+        estimated_finish: None,
+        timing_cache: TimingCache::load(
+            &std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+        ),
     };
 
     let result = state.run(term);

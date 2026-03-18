@@ -6,7 +6,27 @@ use ratatui::widgets::{Block, Borders, Paragraph, Widget};
 
 use crate::model::{RuleEntry, RuleStatus, TaskEntry, TaskStatus};
 
-// ─── ANSI helpers ─────────────────────────────────────────────────────────────
+// ─── Duration formatting ──────────────────────────────────────────────────────
+
+/// Format a `Duration` in a compact, human-readable way:
+/// -    < 60 s  → "12.3s"
+/// -  ≥ 60 s    → "1m23s"
+/// - ≥ 3600 s   → "1h23m"
+pub(crate) fn fmt_duration(d: std::time::Duration) -> String {
+    let total_secs = d.as_secs();
+    if total_secs < 60 {
+        format!("{:.1}s", d.as_secs_f64())
+    } else if total_secs < 3600 {
+        let m = total_secs / 60;
+        let s = total_secs % 60;
+        format!("{m}m{s:02}s")
+    } else {
+        let h = total_secs / 3600;
+        let m = (total_secs % 3600) / 60;
+        format!("{h}h{m:02}m")
+    }
+}
+
 
 /// Strip ANSI/VT escape sequences from a string so raw terminal output does
 /// not corrupt ratatui's cell buffer.
@@ -165,15 +185,33 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                 Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
         };
+        let elapsed_ms = entry.started.elapsed().as_millis() as u64;
         let header = match &entry.status {
             TaskStatus::Running => {
                 const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-                let frame =
-                    FRAMES[(entry.started.elapsed().as_millis() as usize / 100) % FRAMES.len()];
-                format!("{frame} {}", entry.task)
+                let frame = FRAMES[(elapsed_ms as usize / 100) % FRAMES.len()];
+                let est_hint = entry.estimated_duration.map(|est| {
+                    let spent = entry.started.elapsed();
+                    if spent >= est {
+                        format!("  +{}", fmt_duration(spent - est))
+                    } else {
+                        format!("  ~{}", fmt_duration(est - spent))
+                    }
+                }).unwrap_or_default();
+                // Marquee-scroll the task name when it doesn't fit and the user
+                // hasn't manually scrolled (h_scroll == 0 means "follow mode").
+                let prefix_cols = 2usize; // spinner + space
+                let hint_cols = est_hint.chars().count();
+                let name_avail = (area.width as usize).saturating_sub(prefix_cols + hint_cols);
+                let name_str = if h_scroll == 0 {
+                    marquee_window(&entry.task, elapsed_ms, name_avail)
+                } else {
+                    entry.task.clone()
+                };
+                format!("{frame} {name_str}{est_hint}")
             },
             TaskStatus::Success(d) | TaskStatus::Failed(d) => {
-                format!("{prefix} {:6.2}s  {}", d.as_secs_f64(), entry.task)
+                format!("{prefix} {}  {}", fmt_duration(*d), entry.task)
             },
         };
         // Apply h_scroll to header line too.
@@ -288,11 +326,22 @@ fn render_running_rule(
     buf: &mut Buffer,
 ) {
     let elapsed_ms = rule.started.elapsed().as_millis() as u64;
+    let elapsed_str = fmt_duration(rule.started.elapsed());
     let counter = if rule.out_of > 0 {
-        format!("  [{}/{}]", rule.nb, rule.out_of)
+        format!("  [{}/{}]  {elapsed_str}", rule.nb, rule.out_of)
     } else {
-        String::new()
+        format!("  {elapsed_str}")
     };
+    // ETA hint: show remaining or over-time if we have a cached estimate.
+    let est_hint: String = rule.estimated_duration.map(|est| {
+        let spent = rule.started.elapsed();
+        if spent >= est {
+            format!("  +{}", fmt_duration(spent - est))
+        } else {
+            format!("  ~{}", fmt_duration(est - spent))
+        }
+    }).unwrap_or_default();
+    let counter = format!("{counter}{est_hint}");
 
     // Title bar has area.width columns; border chars take 1 each side.
     let title_bar_w = area.width.saturating_sub(2) as usize;
@@ -389,14 +438,15 @@ fn render_uptodate_rule(rule: &RuleEntry, full_name: &str, elapsed_ms: u64, area
         .map(|s| format!("  [{}]", s))
         .unwrap_or_default();
     let suffix_w = source_suffix.chars().count();
-    let names_avail =
-        (area.width as usize * 2 / 3).min((area.width as usize).saturating_sub(prefix_w + suffix_w));
+    let names_avail = (area.width as usize).saturating_sub(prefix_w + suffix_w);
     let name_text = marquee_window(full_name, elapsed_ms, names_avail);
+    let pad_w = names_avail.saturating_sub(name_text.chars().count());
     let mut spans = vec![
         Span::styled(prefix, Style::default().fg(Color::Cyan)),
         Span::styled(name_text, Style::default().fg(Color::DarkGray)),
     ];
     if !source_suffix.is_empty() {
+        spans.push(Span::raw(" ".repeat(pad_w)));
         spans.push(Span::styled(source_suffix, Style::default().fg(Color::DarkGray)));
     }
     Paragraph::new(Line::from(spans)).render(area, buf);
@@ -419,7 +469,7 @@ fn render_finished_rule(
         } else {
             ("✗", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
         };
-        let title_str = format!("{icon} {:6.2}s  {full_name}  ", dur.as_secs_f64());
+        let title_str = format!("{icon} {}  {full_name}  ", fmt_duration(*dur));
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan))
@@ -452,7 +502,7 @@ fn render_finished_rule(
             let d_str = match &task.status {
                 TaskStatus::Running => "  ??.??s".to_owned(),
                 TaskStatus::Success(d) | TaskStatus::Failed(d) => {
-                    format!("  {:6.2}s", d.as_secs_f64())
+                    format!("  {}", fmt_duration(*d))
                 },
             };
             all_lines.push((format!("{t_icon}{d_str}  {}", task.task), t_style));
@@ -485,67 +535,30 @@ fn render_finished_rule(
                 .render(Rect { y: inner.y + row as u16, height: 1, ..inner }, buf);
         }
     } else if is_success {
-        let has_stdout = rule.tasks.iter().any(|t| !t.stdout.is_empty());
-        if has_stdout && area.height > 1 {
-            // ── Success with output: expanded box view ─────────────────────────
-            // Emulator stdout (and any other task output) arrives all at once when
-            // the process closes. Keep the rule expanded so it remains visible.
-            let title_str = format!("✓  {:6.2}s  {full_name}", dur.as_secs_f64());
-            let source_suffix: String = rule
-                .source
-                .as_deref()
-                .map(|s| format!("  [{}]", s))
-                .unwrap_or_default();
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Green))
-                .title(Line::from(vec![
-                    Span::styled(
-                        title_str,
-                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(source_suffix, Style::default().fg(Color::DarkGray)),
-                ]));
-            let inner = block.inner(area);
-            block.render(area, buf);
-            let mut y_off = 0u16;
-            for task in &rule.tasks {
-                if y_off >= inner.height {
-                    break;
-                }
-                let avail = inner.height - y_off;
-                let h = task.inline_height().min(avail);
-                InlineTaskWidget::new(task).render(
-                    Rect { y: inner.y + y_off, height: h, ..inner },
-                    buf,
-                );
-                y_off += h;
-            }
-        } else {
-            // ── Success: compact 1-line view ──────────────────────────────────
-            let prefix = format!("✓  {:6.2}s  ", dur.as_secs_f64());
-            let prefix_w = prefix.chars().count();
-            let source_suffix: String = rule
-                .source
-                .as_deref()
-                .map(|s| format!("  [{}]", s))
-                .unwrap_or_default();
-            let suffix_w = source_suffix.chars().count();
-            let names_avail = (area.width as usize * 2 / 3)
-                .min((area.width as usize).saturating_sub(prefix_w + suffix_w));
-            let name_text = marquee_window(full_name, elapsed_ms, names_avail);
-            let mut spans = vec![
-                Span::styled(prefix, Style::default().fg(Color::Green)),
-                Span::styled(name_text, Style::default().fg(Color::Green)),
-            ];
-            if !source_suffix.is_empty() {
-                spans.push(Span::styled(source_suffix, Style::default().fg(Color::DarkGray)));
-            }
-            Paragraph::new(Line::from(spans)).render(area, buf);
+        // ── Success: compact 1-line view ──────────────────────────────────
+        let prefix = format!("✓  {}  ", fmt_duration(*dur));
+        let prefix_w = prefix.chars().count();
+        let source_suffix: String = rule
+            .source
+            .as_deref()
+            .map(|s| format!("  [{}]", s))
+            .unwrap_or_default();
+        let suffix_w = source_suffix.chars().count();
+        let names_avail = (area.width as usize).saturating_sub(prefix_w + suffix_w);
+        let name_text = marquee_window(full_name, elapsed_ms, names_avail);
+        let pad_w = names_avail.saturating_sub(name_text.chars().count());
+        let mut spans = vec![
+            Span::styled(prefix, Style::default().fg(Color::Green)),
+            Span::styled(name_text, Style::default().fg(Color::Green)),
+        ];
+        if !source_suffix.is_empty() {
+            spans.push(Span::raw(" ".repeat(pad_w)));
+            spans.push(Span::styled(source_suffix, Style::default().fg(Color::DarkGray)));
         }
+        Paragraph::new(Line::from(spans)).render(area, buf);
     } else if area.height <= 1 {
         // ── Failed: 1-line fallback ──────────────────────────────────────────
-        let prefix = format!("✗  {:6.2}s  ", dur.as_secs_f64());
+        let prefix = format!("✗  {}  ", fmt_duration(*dur));
         let suffix = "  [FAILED]";
         let prefix_w = prefix.chars().count();
         let suffix_w = suffix.chars().count();
@@ -562,7 +575,7 @@ fn render_finished_rule(
     } else {
         // ── Failed: box view with tasks listed ───────────────────────────────
         let title_str =
-            format!("✗ {:6.2}s  {full_name}  [FAILED]", dur.as_secs_f64());
+            format!("✗ {}  {full_name}  [FAILED]", fmt_duration(*dur));
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))

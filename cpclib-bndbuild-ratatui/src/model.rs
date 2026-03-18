@@ -22,16 +22,25 @@ pub(crate) struct TaskEntry {
     pub(crate) stdout:  VecDeque<String>,
     pub(crate) stderr:  VecDeque<String>,
     pub(crate) status:  TaskStatus,
+    /// Historical average duration for this task, if cache data exists.
+    pub(crate) estimated_duration: Option<Duration>,
+    /// Rule name this task belongs to (needed to record timing in StopTask).
+    pub(crate) parent_rule: Option<String>,
+    /// Build file this task's rule came from (needed to key into the cache).
+    pub(crate) parent_build_file: Option<String>,
 }
 
 impl TaskEntry {
     pub(crate) fn new(task: String) -> Self {
         Self {
             task,
-            started: Instant::now(),
-            stdout:  VecDeque::new(),
-            stderr:  VecDeque::new(),
-            status:  TaskStatus::Running,
+            started:            Instant::now(),
+            stdout:             VecDeque::new(),
+            stderr:             VecDeque::new(),
+            status:             TaskStatus::Running,
+            estimated_duration: None,
+            parent_rule:        None,
+            parent_build_file:  None,
         }
     }
 
@@ -90,6 +99,8 @@ pub(crate) struct RuleEntry {
     pub(crate) h_scroll:    usize,
     /// Source build file for rules coming from a nested bndbuild invocation.
     pub(crate) source:      Option<String>,
+    /// Historical average duration for this rule, if cache data exists.
+    pub(crate) estimated_duration: Option<Duration>,
 }
 
 impl RuleEntry {
@@ -101,10 +112,11 @@ impl RuleEntry {
             out_of,
             started:     Instant::now(),
             tasks:       Vec::new(),
-            status:      RuleStatus::Running,
-            task_scroll: 0,
-            h_scroll:    0,
-            source:      None,
+            status:             RuleStatus::Running,
+            task_scroll:        0,
+            h_scroll:           0,
+            source:             None,
+            estimated_duration: None,
         }
     }
 
@@ -125,17 +137,9 @@ impl RuleEntry {
                 let inner: u16 = self.tasks.iter().map(|t| t.inline_height()).sum();
                 if inner > 0 { (2 + inner).max(3) } else { 1 }
             },
-            // Success rules expand when any task produced stdout (e.g. emulator output)
-            // so the output remains visible after the process closes.
-            RuleStatus::Success(_) => {
-                let has_stdout = self.tasks.iter().any(|t| !t.stdout.is_empty());
-                if has_stdout {
-                    let inner: u16 = self.tasks.iter().map(|t| t.inline_height()).sum();
-                    if inner > 0 { (2 + inner).max(3) } else { 1 }
-                } else {
-                    1
-                }
-            },
+            // Success rules always show as compact 1-line. Any task stdout is
+            // still visible when the user TABs to select (expand) the rule.
+            RuleStatus::Success(_) => 1,
             // UpToDate: compact 1-line view.
             _ => 1,
         }

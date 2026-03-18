@@ -17,7 +17,8 @@ use ratatui::Terminal;
 use crate::model::{BuildPhase, RuleEntry, RuleStatus, TaskEntry, TaskStatus};
 use crate::observer::RatatuiMessage;
 use crate::ratatui_event::{RatatuiEvent, RatatuiState};
-use crate::widgets::{strip_ansi_codes, RulesView};
+use crate::timing::TimingCache;
+use crate::widgets::{fmt_duration, strip_ansi_codes, RulesView};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,11 @@ pub(crate) struct BndBuilderRatatui {
     pub(crate) build_duration: Option<Duration>,
     /// Active build file for nested bndbuild invocations (tagged onto new rules).
     pub(crate) current_build_file: Option<String>,
+    /// Build-time prediction cache (`.bndbuild_timings` in the working directory).
+    pub(crate) timing_cache: TimingCache,
+    /// Absolute time at which the build is estimated to finish.
+    /// Precomputed on each event so `draw()` never does a full rules scan.
+    pub(crate) estimated_finish: Option<std::time::Instant>,
 }
 
 impl BndBuilderRatatui {
@@ -148,6 +154,7 @@ impl BndBuilderRatatui {
                         self.build_duration.get_or_insert_with(|| t.elapsed());
                     }
                     self.phase = BuildPhase::Finished;
+                    self.selected_rule = None;
                 },
             },
 
@@ -157,25 +164,51 @@ impl BndBuilderRatatui {
 
             RatatuiEvent::StartRule { rule, nb, out_of } => {
                 let aliases = self.pending_aliases.remove(&rule).unwrap_or_default();
-                let mut entry = RuleEntry::new(rule, nb, out_of);
+                let mut entry = RuleEntry::new(rule.clone(), nb, out_of);
                 entry.aliases = aliases;
                 entry.source = self.current_build_file.clone();
+                // Look up the historical average duration for this rule so the
+                // widget can show an ETA while it is running.
+                entry.estimated_duration = self.timing_cache.estimate(
+                    self.current_build_file.as_deref().unwrap_or(""),
+                    &rule,
+                    "",
+                );
                 self.rules.push(entry);
                 self.phase = BuildPhase::Running { current: nb, total: out_of };
                 self.scroll = None; // auto-follow
+                self.recompute_eta();
             },
 
             RatatuiEvent::StopRule(rule) => {
-                if let Some(r) = self.running_rule_mut(&rule) {
+                // Phase 1: update status and capture what we need for the cache,
+                // ending the mutable borrow before we touch self.timing_cache.
+                let timing = if let Some(r) = self.running_rule_mut(&rule) {
                     let d = r.started.elapsed();
+                    let source = r.source.clone();
                     r.status = RuleStatus::Success(d);
+                    Some((source, d))
+                } else {
+                    None
+                };
+                // Phase 2: persist the new sample (only for successful completions).
+                if let Some((source, d)) = timing {
+                    self.timing_cache.record(
+                        source.as_deref().unwrap_or(""),
+                        &rule,
+                        "",
+                        d,
+                    );
                 }
+                self.recompute_eta();
             },
 
             RatatuiEvent::SkippedRule(rule) => {
                 if let Some(r) = self.running_rule_mut(&rule) {
                     r.status = RuleStatus::UpToDate;
+                    // UpToDate rules were never built — do NOT record a timing sample.
                 }
+                self.recompute_eta();
             },
 
             RatatuiEvent::BuildFileContext(ctx) => {
@@ -194,23 +227,61 @@ impl BndBuilderRatatui {
                     }
                     r.status = RuleStatus::Failed(d);
                 }
+                self.recompute_eta();
             },
 
             RatatuiEvent::StartTask { rule: Some(rule_name), task } => {
+                // Phase 1: collect the rule's build-file context and look up the
+                // cached estimate (read-only borrows end here).
+                let build_file = self
+                    .rules
+                    .iter()
+                    .rev()
+                    .find(|r| r.is_running() && r.name == rule_name)
+                    .and_then(|r| r.source.clone());
+                let est = self.timing_cache.estimate(
+                    build_file.as_deref().unwrap_or(""),
+                    &rule_name,
+                    &task,
+                );
+                // Phase 2: push the task (mutable borrow acceptable now).
                 if let Some(r) = self.running_rule_mut(&rule_name) {
-                    r.tasks.push(TaskEntry::new(task));
+                    let mut t = TaskEntry::new(task);
+                    t.estimated_duration  = est;
+                    t.parent_rule         = Some(rule_name);
+                    t.parent_build_file   = build_file;
+                    r.tasks.push(t);
                 } else {
                     self.orphans.push(TaskEntry::new(task));
                 }
+                // Note: starting a task does not meaningfully change the global ETA.
             },
 
             RatatuiEvent::StartTask { rule: None, task } => {
                 self.orphans.push(TaskEntry::new(task));
             },
 
-            RatatuiEvent::StopTask { task, duration, .. } => {
+            RatatuiEvent::StopTask { rule, task, duration } => {
+                // Phase 1: find the rule's build-file context (read-only borrow).
+                let build_file = rule.as_ref().and_then(|rn| {
+                    self.rules
+                        .iter()
+                        .rev()
+                        .find(|r| r.name == *rn)
+                        .and_then(|r| r.source.clone())
+                });
+                // Phase 2: update status (mutable borrow).
                 if let Some(t) = self.running_task_mut(&task) {
                     t.status = TaskStatus::Success(duration);
+                }
+                // Phase 3: record the timing sample; do NOT save yet — saved at quit.
+                if let Some(rule_name) = &rule {
+                    self.timing_cache.record(
+                        build_file.as_deref().unwrap_or(""),
+                        rule_name,
+                        &task,
+                        duration,
+                    );
                 }
             },
 
@@ -297,6 +368,56 @@ impl BndBuilderRatatui {
         }
     }
 
+    // ── ETA ───────────────────────────────────────────────────────────────────
+
+    /// Recompute `estimated_finish` from the current rule states.
+    ///
+    /// Called on every relevant event (rule start/stop/fail/skip) so that
+    /// `draw()` can read a pre-computed value without iterating rules per frame.
+    pub(crate) fn recompute_eta(&mut self) {
+        let total_expected = self.rules.iter().map(|r| r.out_of).max().unwrap_or(0);
+        let not_started = total_expected.saturating_sub(self.rules.len());
+
+        // Remaining time for currently running rules with a cached estimate.
+        let mut any_data = false;
+        let running_rem: Duration = self
+            .rules
+            .iter()
+            .filter(|r| r.is_running())
+            .filter_map(|r| {
+                let est = r.estimated_duration?;
+                any_data = true;
+                let spent = r.started.elapsed();
+                Some(est.saturating_sub(spent))
+            })
+            .sum();
+
+        // Average estimate across all rules that have cache data.
+        let known: Vec<Duration> = self
+            .rules
+            .iter()
+            .filter_map(|r| r.estimated_duration)
+            .collect();
+        let avg_rule: Option<Duration> = if known.is_empty() {
+            None
+        } else {
+            any_data = true;
+            let sum: u128 = known.iter().map(|d| d.as_nanos()).sum();
+            Some(Duration::from_nanos((sum / known.len() as u128) as u64))
+        };
+
+        if !any_data {
+            self.estimated_finish = None;
+            return;
+        }
+
+        let future_rem = avg_rule
+            .map(|avg| avg * not_started as u32)
+            .unwrap_or(Duration::ZERO);
+
+        self.estimated_finish = Some(std::time::Instant::now() + running_rem + future_rem);
+    }
+
     // ── Run loop ──────────────────────────────────────────────────────────────
 
     pub(crate) fn run<T: Backend>(&mut self, mut terminal: Terminal<T>) -> io::Result<()> {
@@ -337,6 +458,7 @@ impl BndBuilderRatatui {
                     if !matches!(self.phase, BuildPhase::Finished) {
                         self.phase = BuildPhase::Finished;
                     }
+                    self.selected_rule = None;
                     // Snap the elapsed duration if not already recorded.
                     if let Some(t) = self.build_started {
                         self.build_duration.get_or_insert_with(|| t.elapsed());
@@ -446,6 +568,7 @@ impl BndBuilderRatatui {
                                         self.exit = true;
                                         break 'main;
                                     } else if self.confirm_quit {
+                                        self.timing_cache.save().ok();
                                         kill_all_children();
                                         drop(terminal);
                                         crate::terminal::restore_terminal().ok();
@@ -572,10 +695,17 @@ impl BndBuilderRatatui {
         }
 
         match thread_result {
-            Some(Ok(())) => Ok(()),
-            Some(Err(e)) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            Some(Ok(())) => {
+                self.timing_cache.save().ok();
+                Ok(())
+            },
+            Some(Err(e)) => {
+                self.timing_cache.save().ok();
+                Err(io::Error::new(io::ErrorKind::Other, e.to_string()))
+            },
             None => {
                 // Thread was still running when the user quit (q during build).
+                self.timing_cache.save().ok();
                 Ok(())
             },
         }
@@ -595,12 +725,22 @@ impl BndBuilderRatatui {
         // Header
         let elapsed_str = {
             match self.build_duration {
-                Some(d) => format!("  {:5.1}s", d.as_secs_f64()),
+                Some(d) => format!("  {}", fmt_duration(d)),
                 None    => match self.build_started {
-                    Some(t) => format!("  {:5.1}s", t.elapsed().as_secs_f64()),
+                    Some(t) => format!("  {}", fmt_duration(t.elapsed())),
                     None    => String::new(),
                 },
             }
+        };
+        let eta_str: String = if matches!(&self.phase, BuildPhase::Running { .. }) {
+            self.estimated_finish
+                .map(|finish| {
+                    let remaining = finish.saturating_duration_since(std::time::Instant::now());
+                    format!("  ETA ~{}", fmt_duration(remaining))
+                })
+                .unwrap_or_default()
+        } else {
+            String::new()
         };
         let header = match &self.phase {
             BuildPhase::Idle => "bndbuild".to_owned(),
@@ -614,9 +754,9 @@ impl BndBuilderRatatui {
                     .map(|r| r.out_of)
                     .sum();
                 if global_total > 0 {
-                    format!("Building [{global_current}/{global_total}]{elapsed_str}")
+                    format!("Building [{global_current}/{global_total}]{elapsed_str}{eta_str}")
                 } else {
-                    format!("Building\u{2026}{elapsed_str}")
+                    format!("Building\u{2026}{elapsed_str}{eta_str}")
                 }
             },
             BuildPhase::Finished => {
