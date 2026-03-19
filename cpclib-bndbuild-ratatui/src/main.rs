@@ -1,6 +1,7 @@
 ﻿mod ratatui_event;
 mod model;
 mod observer;
+mod profile;
 mod terminal;
 mod timing;
 mod widgets;
@@ -31,6 +32,20 @@ fn main() {
     // timings for different projects (different -f paths) are stored under
     // distinct keys even when both are invoked from the same working directory.
     let outer_build_file: Option<String> = app.build_file().map(|s| s.to_owned());
+    // Resolve the profile path to absolute NOW, before app.command() may change the
+    // working directory via decode_from_reader / set_current_dir. That ensures
+    // a relative path like "profile.html" points to the user's launch directory.
+    let profile_output: Option<String> = app.profile_output().map(|s| {
+        let p = std::path::Path::new(s);
+        if p.is_absolute() {
+            s.to_owned()
+        } else {
+            std::env::current_dir()
+                .ok()
+                .map(|d| d.join(p).to_string_lossy().into_owned())
+                .unwrap_or_else(|| s.to_owned())
+        }
+    });
 
     let (tx, rx) = mpsc::channel::<RatatuiMessage>();
 
@@ -87,6 +102,8 @@ fn main() {
         estimated_finish:    None,
         collapse_uptodate:   false,
         show_help:           false,
+        profile_msg:         None,
+        profile_output,
         timing_cache: TimingCache::load(
             &std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
         ),

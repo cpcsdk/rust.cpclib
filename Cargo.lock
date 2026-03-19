@@ -2605,6 +2605,7 @@ version = "0.11.0"
 dependencies = [
  "cpclib-bndbuild",
  "cpclib-runner",
+ "minijinja",
  "ratatui 0.30.0",
 ]
 

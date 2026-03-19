@@ -363,6 +363,15 @@ pub fn build_args_parser() -> clap::Command {
             .num_args(0..=1)
             .require_equals(false)
     )
+    .arg(
+        Arg::new("profile")
+            .long("profile")
+            .short('p')
+            .value_name("FILE")
+            .value_hint(ValueHint::FilePath)
+            .help("After build completes, save an HTML build-time profile to FILE.")
+            .conflicts_with_all(["list", "init", "clear", "dot", "show"])
+    )
 }
 
 pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {

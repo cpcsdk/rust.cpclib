@@ -34,7 +34,7 @@ impl EventObserver for TauriBndBuilderObserver {
 }
 
 impl BndBuilderObserver for TauriBndBuilderObserver {
-    fn update(&mut self, event: cpclib_bndbuild::event::BndBuilderEvent) {
+    fn update(&self, event: cpclib_bndbuild::event::BndBuilderEvent) {
         match event {
             cpclib_bndbuild::event::BndBuilderEvent::ChangeState(_state) => {
                 // ignore that or use it to change a css class

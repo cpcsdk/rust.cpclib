@@ -871,6 +871,11 @@ impl BndBuilderApp {
         self.matches.get_one::<String>("file").map(|s| s.as_str())
     }
 
+    /// Return the profile output path passed via `--profile`, if any.
+    pub fn profile_output(&self) -> Option<&str> {
+        self.matches.get_one::<String>("profile").map(|s| s.as_str())
+    }
+
     pub fn add_observer<O: Into<BndBuilderObserverRc>>(&mut self, o: O) {
         Arc::get_mut(&mut self.observers)
             .expect("Failed to get mutable reference to observers (multiple Arc references exist)")

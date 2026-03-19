@@ -11,3 +11,4 @@ homepage.workspace = true
 ratatui = "0.30.0"
 cpclib-bndbuild = { workspace = true, features = ["self-update"] }
 cpclib-runner.workspace = true
+minijinja.workspace = true

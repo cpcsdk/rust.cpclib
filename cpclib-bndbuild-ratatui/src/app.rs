@@ -12,7 +12,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Backend;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Terminal;
 
 use crate::model::{BuildPhase, RuleEntry, RuleStatus, TaskEntry, TaskStatus};
@@ -66,6 +66,11 @@ pub(crate) struct BndBuilderRatatui {
     pub(crate) collapse_uptodate: bool,
     /// When true, the `?` help overlay is shown.
     pub(crate) show_help: bool,
+    /// Set to a status string after the user presses `p` to save a profile.
+    /// Stays visible in the status bar for the remainder of the session.
+    pub(crate) profile_msg: Option<String>,
+    /// `--profile FILE` path from CLI args: if set, auto-saves on build completion.
+    pub(crate) profile_output: Option<String>,
 }
 
 impl BndBuilderRatatui {
@@ -206,6 +211,16 @@ impl BndBuilderRatatui {
                         // Persist timing data immediately so that a terminal
                         // close (Ctrl+C, window X) does not lose the samples.
                         self.timing_cache.save().ok();
+                        // Auto-save profile immediately on build completion so that
+                        // Ctrl+C or window-close does not lose the report.
+                        if let (Some(path_str), Some(started), Some(dur)) = (
+                            self.profile_output.as_deref(),
+                            self.build_started,
+                            self.build_duration,
+                        ) {
+                            let path = std::path::PathBuf::from(path_str);
+                            crate::profile::save_profile(&self.rules, started, dur, &path).ok();
+                        }
                     }
                 },
             },
@@ -545,6 +560,18 @@ impl BndBuilderRatatui {
                     if let Some(t) = self.build_started {
                         self.build_duration.get_or_insert_with(|| t.elapsed());
                     }
+                    // Auto-save profile for builds that finish without a Finish
+                    // message (e.g. the build failed and do_finish was skipped).
+                    // The Finish handler already covers the success case, but this
+                    // ensures the file is also written on error paths.
+                    if let (Some(path_str), Some(started), Some(dur)) = (
+                        self.profile_output.as_deref(),
+                        self.build_started,
+                        self.build_duration,
+                    ) {
+                        let path = std::path::PathBuf::from(path_str);
+                        crate::profile::save_profile(&self.rules, started, dur, &path).ok();
+                    }
                     // If the build ended with an error, mark any still-running
                     // rules and tasks as Failed so the TUI reflects the failure.
                     if matches!(thread_result, Some(Err(_))) {
@@ -730,6 +757,37 @@ impl BndBuilderRatatui {
                                     self.confirm_quit = false;
                                     self.show_help = !self.show_help;
                                 },
+                                KeyCode::Char('p') | KeyCode::Char('P') => {
+                                    self.confirm_quit = false;
+                                    let build_done = matches!(self.phase, BuildPhase::Finished);
+                                    if build_done {
+                                        if let (Some(started), Some(dur)) =
+                                            (self.build_started, self.build_duration)
+                                        {
+                                            let path_str = self
+                                                .profile_output
+                                                .as_deref()
+                                                .unwrap_or("bndbuild-profile.html");
+                                            let path = std::path::Path::new(path_str);
+                                            match crate::profile::save_profile(
+                                                &self.rules,
+                                                started,
+                                                dur,
+                                                path,
+                                            ) {
+                                                Ok(()) => {
+                                                    self.profile_msg = Some(format!(
+                                                        "Profile saved \u{2192} {path_str}"
+                                                    ));
+                                                },
+                                                Err(e) => {
+                                                    self.profile_msg =
+                                                        Some(format!("Profile error: {e}"));
+                                                },
+                                            }
+                                        }
+                                    }
+                                },
                                 _ => {},
                             }
                         }
@@ -783,6 +841,19 @@ impl BndBuilderRatatui {
         }
 
         self.timing_cache.save().ok();
+        // Auto-save profile if --profile was specified on the command line.
+        if let (Some(path_str), Some(started), Some(dur)) =
+            (&self.profile_output, self.build_started, self.build_duration)
+        {
+            if let Err(e) = crate::profile::save_profile(
+                &self.rules,
+                started,
+                dur,
+                std::path::Path::new(path_str),
+            ) {
+                eprintln!("Warning: could not save profile: {e}");
+            }
+        }
         match thread_result {
             Some(Ok(())) => Ok(()),
             Some(Err(e)) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
@@ -925,10 +996,12 @@ impl BndBuilderRatatui {
 
         let (status_text, status_style) = match &self.phase {
             BuildPhase::Finished => {
-                if failed_rules > 0 {
+                if let Some(msg) = &self.profile_msg {
+                    (msg.clone(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                } else if failed_rules > 0 {
                     (
                         format!(
-                            "\u{2717} Build failed  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  {failed_rules} {} failed  \u{b7}  q quit  r retry  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}  ?:help",
+                            "\u{2717} Build failed  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  {failed_rules} {} failed  \u{b7}  q quit  r retry  p:profile  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}  ?:help",
                             rn(done_rules),
                             rn(failed_rules)
                         ),
@@ -937,7 +1010,7 @@ impl BndBuilderRatatui {
                 } else {
                     (
                         format!(
-                            "\u{2713} Build complete  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  \u{b7}  q quit  r retry  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}  ?:help",
+                            "\u{2713} Build complete  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  \u{b7}  q quit  r retry  p:profile  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}  ?:help",
                             rn(done_rules)
                         ),
                         Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
@@ -998,7 +1071,7 @@ impl BndBuilderRatatui {
     }
 
     fn draw_help_modal(&self, frame: &mut Frame) {
-        let modal_rect = Self::centered_rect(frame.area(), 58, 15);
+        let modal_rect = Self::centered_rect(frame.area(), 60, 16);
         frame.render_widget(Clear, modal_rect);
         let key = |k: &'static str| Span::styled(k, Style::default().fg(Color::Yellow));
         let desc = |d: &'static str| Span::raw(d);
@@ -1011,6 +1084,7 @@ impl BndBuilderRatatui {
             Line::from(vec![key("  G/End           "), desc("Go to bottom")]),
             Line::from(vec![key("  u               "), desc("Toggle up-to-date rule collapse")]),
             Line::from(vec![key("  r               "), desc("Retry build (after build finishes)")]),
+            Line::from(vec![key("  p               "), desc("Save build profile to bndbuild-profile.html")]),
             Line::from(vec![key("  q               "), desc("Quit (confirm during build)")]),
             Line::from(vec![key("  Ctrl+C          "), desc("Force quit immediately")]),
             Line::from(vec![key("  ?               "), desc("Close this help")]),
