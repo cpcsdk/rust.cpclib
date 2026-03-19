@@ -51,10 +51,11 @@ impl TaskEntry {
     /// Rows this task takes when rendered inline inside a rule widget (non-selected).
     pub(crate) fn inline_height(&self) -> u16 {
         match self.status {
-            TaskStatus::Running => 1 + (self.stdout.len() + self.stderr.len()).min(8) as u16,
-            // Failed tasks show up to 8 stderr/stdout lines inline so the user can see why.
-            // stdout is included because PTY-spawned processes route all output there.
-            TaskStatus::Failed(_) => 1 + (self.stderr.len() + self.stdout.len()).min(8) as u16,
+            // Running and Failed both show up to 8 lines inline.
+            // stdout is included for Failed because PTY-spawned processes route all output there.
+            TaskStatus::Running | TaskStatus::Failed(_) => {
+                1 + (self.stdout.len() + self.stderr.len()).min(8) as u16
+            },
             // Success tasks show stdout if they produced any (e.g. emulator output).
             TaskStatus::Success(_) => {
                 if self.stdout.is_empty() { 1 } else { 1 + self.stdout.len().min(8) as u16 }
@@ -65,8 +66,9 @@ impl TaskEntry {
     /// Rows this task needs to display ALL output (used in selected/expanded running view).
     pub(crate) fn full_height(&self) -> u16 {
         match self.status {
-            TaskStatus::Running => 1 + (self.stdout.len() + self.stderr.len()) as u16,
-            TaskStatus::Failed(_) => 1 + (self.stderr.len() + self.stdout.len()) as u16,
+            TaskStatus::Running | TaskStatus::Failed(_) => {
+                1 + (self.stdout.len() + self.stderr.len()) as u16
+            },
             TaskStatus::Success(_) => 1 + self.stdout.len() as u16,
         }
     }

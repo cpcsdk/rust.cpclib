@@ -149,6 +149,32 @@ impl BndBuilderRatatui {
 
     // ── Event application ─────────────────────────────────────────────────────
 
+    /// Route output lines from a task into its stdout/stderr buffer and stamp
+    /// `last_output` on the parent rule to trigger a brief border flash.
+    fn push_task_output(&mut self, task_name: &str, output: &str, is_stderr: bool) {
+        let parent_rule = if let Some(t) = self.any_task_mut(task_name) {
+            for line in output.lines() {
+                let clean = strip_ansi_codes(line);
+                let clean = clean.trim_end_matches('\r');
+                if !clean.is_empty() {
+                    let buf = if is_stderr { &mut t.stderr } else { &mut t.stdout };
+                    if buf.len() >= MAX_LINES_PER_TASK {
+                        buf.pop_front();
+                    }
+                    buf.push_back(clean.to_owned());
+                }
+            }
+            t.parent_rule.clone()
+        } else {
+            None
+        };
+        if let Some(rn) = parent_rule {
+            if let Some(r) = self.rules.iter_mut().rev().find(|r| r.name == rn) {
+                r.last_output = Some(Instant::now());
+            }
+        }
+    }
+
     pub(crate) fn apply_event(&mut self, event: RatatuiEvent) {
         match event {
             RatatuiEvent::ChangeState(state) => match state {
@@ -242,9 +268,7 @@ impl BndBuilderRatatui {
             },
 
             RatatuiEvent::FailedRule(rule) => {
-                let timing = if let Some(r) =
-                    self.rules.iter_mut().rev().find(|r| r.is_running() && r.name == rule)
-                {
+                let timing = if let Some(r) = self.running_rule_mut(&rule) {
                     let d = r.started.elapsed();
                     for t in r.tasks.iter_mut() {
                         if t.is_running() {
@@ -302,19 +326,18 @@ impl BndBuilderRatatui {
             },
 
             RatatuiEvent::StopTask { rule, task, duration } => {
-                // Phase 1: find the rule's build-file context (read-only borrow).
-                let build_file = rule.as_ref().and_then(|rn| {
-                    self.rules
-                        .iter()
-                        .rev()
-                        .find(|r| r.name == *rn)
-                        .and_then(|r| r.source.clone())
-                });
-                // Phase 2: update status (mutable borrow).
-                if let Some(t) = self.running_task_mut(&task) {
+                // Use the build-file path already stored on the task entry to avoid
+                // a second rules scan.  Fall back to searching the rules vec only when
+                // the task was already stopped (rare race in parallel builds).
+                let build_file = if let Some(t) = self.running_task_mut(&task) {
+                    let bf = t.parent_build_file.clone();
                     t.status = TaskStatus::Success(duration);
-                }
-                // Phase 3: record the timing sample; do NOT save yet — saved at quit.
+                    bf
+                } else {
+                    rule.as_ref().and_then(|rn| {
+                        self.rules.iter().rev().find(|r| r.name == *rn).and_then(|r| r.source.clone())
+                    })
+                };
                 if let Some(rule_name) = &rule {
                     self.timing_cache.record(
                         build_file.as_deref().unwrap_or(""),
@@ -326,50 +349,11 @@ impl BndBuilderRatatui {
             },
 
             RatatuiEvent::TaskStdout { task, output, .. } => {
-                let parent_rule = if let Some(t) = self.any_task_mut(&task) {
-                    for line in output.lines() {
-                        let clean = strip_ansi_codes(line);
-                        let clean = clean.trim_end_matches('\r');
-                        if !clean.is_empty() {
-                            if t.stdout.len() >= MAX_LINES_PER_TASK {
-                                t.stdout.pop_front();
-                            }
-                            t.stdout.push_back(clean.to_owned());
-                        }
-                    }
-                    t.parent_rule.clone()
-                } else {
-                    None
-                };
-                // Flash the parent rule's border to draw attention to active output.
-                if let Some(rn) = parent_rule {
-                    if let Some(r) = self.rules.iter_mut().rev().find(|r| r.name == rn) {
-                        r.last_output = Some(Instant::now());
-                    }
-                }
+                self.push_task_output(&task, &output, false);
             },
 
             RatatuiEvent::TaskStderr { task, output, .. } => {
-                let parent_rule = if let Some(t) = self.any_task_mut(&task) {
-                    for line in output.lines() {
-                        let clean = strip_ansi_codes(line);
-                        let clean = clean.trim_end_matches('\r');
-                        if !clean.is_empty() {
-                            if t.stderr.len() >= MAX_LINES_PER_TASK {
-                                t.stderr.pop_front();
-                            }
-                            t.stderr.push_back(clean.to_owned());
-                        }
-                    }
-                    t.parent_rule.clone()
-                } else {
-                    None
-                };
-                if let Some(rn) = parent_rule {
-                    if let Some(r) = self.rules.iter_mut().rev().find(|r| r.name == rn) {
-                        r.last_output = Some(Instant::now());
-                    }
-                }
+                self.push_task_output(&task, &output, true);
             },
 
             RatatuiEvent::Stdout(_) | RatatuiEvent::Stderr(_) => {},
@@ -391,45 +375,72 @@ impl BndBuilderRatatui {
     /// How many entries to skip so that content from that entry onward fills
     /// `visible_rows` rows (or fills as much as possible).
     pub(crate) fn bottom_skip(&self, visible_rows: u16) -> usize {
-        let heights: Vec<u16> = self
-            .rules
-            .iter()
-            .map(|r| {
-                // Collapsed UpToDate rules take no screen space, so they
-                // should not contribute to the auto-follow skip computation.
-                if self.collapse_uptodate && matches!(r.status, RuleStatus::UpToDate) {
-                    0
-                } else {
-                    r.height()
-                }
-            })
-            .chain(self.orphans.iter().map(|t| t.inline_height()))
-            .collect();
-
-        if heights.is_empty() {
+        let total = self.total_entries();
+        if total == 0 {
             return 0;
         }
-
+        // Iterate from the bottom (orphans first, then rules) without allocating.
+        // The first entry is always included even if it is taller than the screen.
+        let rule_heights = self.rules.iter().rev().map(|r| {
+            if self.collapse_uptodate && matches!(r.status, RuleStatus::UpToDate) { 0 }
+            else { r.height() }
+        });
+        let heights_from_bottom =
+            self.orphans.iter().rev().map(|t| t.inline_height()).chain(rule_heights);
         let mut remaining = visible_rows;
         let mut visible = 0usize;
-        for &h in heights.iter().rev() {
-            if visible == 0 {
+        for h in heights_from_bottom {
+            if visible == 0 || h <= remaining {
                 visible += 1;
                 remaining = remaining.saturating_sub(h);
-            } else if h <= remaining {
-                visible += 1;
-                remaining -= h;
             } else {
                 break;
             }
         }
-        heights.len().saturating_sub(visible)
+        total.saturating_sub(visible)
     }
 
     pub(crate) fn effective_skip(&self, list_h: u16) -> usize {
         match self.scroll {
             None => self.bottom_skip(list_h),
             Some(n) => n.min(self.total_entries()),
+        }
+    }
+
+    // ── Selection & scroll helpers ────────────────────────────────────────────
+
+    /// Change the selected rule, resetting its scroll state when a new rule is chosen.
+    fn select_rule(&mut self, new_sel: Option<usize>) {
+        if new_sel != self.selected_rule {
+            if let Some(idx) = new_sel {
+                if let Some(r) = self.rules.get_mut(idx) {
+                    r.task_scroll = 0;
+                    r.h_scroll = 0;
+                }
+            }
+            self.selected_rule = new_sel;
+        }
+    }
+
+    /// Scroll toward newer content (Down / ScrollDown).
+    fn scroll_list_down(&mut self, skip: usize) {
+        if let Some(idx) = self.selected_rule {
+            if let Some(rule) = self.rules.get_mut(idx) {
+                rule.task_scroll = rule.task_scroll.saturating_sub(1);
+            }
+        } else {
+            self.scroll = Some(skip.saturating_add(1).min(self.total_entries()));
+        }
+    }
+
+    /// Scroll toward older content (Up / ScrollUp).
+    fn scroll_list_up(&mut self, skip: usize) {
+        if let Some(idx) = self.selected_rule {
+            if let Some(rule) = self.rules.get_mut(idx) {
+                rule.task_scroll = rule.task_scroll.saturating_add(1);
+            }
+        } else {
+            self.scroll = Some(skip.saturating_sub(1));
         }
     }
 
@@ -461,17 +472,16 @@ impl BndBuilderRatatui {
             .unwrap_or(Duration::ZERO);
 
         // Average estimate across all rules that have cache data.
-        let known: Vec<Duration> = self
+        let (known_sum, known_count) = self
             .rules
             .iter()
             .filter_map(|r| r.estimated_duration)
-            .collect();
-        let avg_rule: Option<Duration> = if known.is_empty() {
+            .fold((0u128, 0usize), |(s, c), d| (s + d.as_nanos(), c + 1));
+        let avg_rule: Option<Duration> = if known_count == 0 {
             None
         } else {
             any_data = true;
-            let sum: u128 = known.iter().map(|d| d.as_nanos()).sum();
-            Some(Duration::from_nanos((sum / known.len() as u128) as u64))
+            Some(Duration::from_nanos((known_sum / known_count as u128) as u64))
         };
 
         if !any_data {
@@ -507,7 +517,7 @@ impl BndBuilderRatatui {
             // If so, drain all pending messages and force the phase to Finished
             // so the user can see the final state and press 'q' to exit.
             if thread_result.is_none() {
-                if thread.as_ref().map_or(false, |t| t.is_finished()) {
+                if thread.as_ref().is_some_and(|t| t.is_finished()) {
                     let handle = thread.take().unwrap();
                     match handle.join() {
                         Ok(res) => thread_result = Some(res),
@@ -597,42 +607,20 @@ impl BndBuilderRatatui {
                                     self.confirm_quit = false;
                                     let n = self.rules.len();
                                     let new_sel = match self.selected_rule {
-                                        None => {
-                                            if n > 0 { Some(0) } else { None }
-                                        },
-                                        Some(i) => {
-                                            if i + 1 < n { Some(i + 1) } else { None }
-                                        },
+                                        None    => if n > 0 { Some(0) } else { None },
+                                        Some(i) => if i + 1 < n { Some(i + 1) } else { None },
                                     };
-                                    if new_sel != self.selected_rule {
-                                        if let Some(idx) = new_sel {
-                                            if let Some(r) = self.rules.get_mut(idx) {
-                                                r.task_scroll = 0;
-                                                r.h_scroll = 0;
-                                            }
-                                        }
-                                        self.selected_rule = new_sel;
-                                    }
+                                    self.select_rule(new_sel);
                                 },
                                 KeyCode::BackTab => {
                                     self.confirm_quit = false;
                                     let n = self.rules.len();
                                     let new_sel = match self.selected_rule {
-                                        None => {
-                                            if n > 0 { Some(n - 1) } else { None }
-                                        },
+                                        None    => if n > 0 { Some(n - 1) } else { None },
                                         Some(0) => None,
                                         Some(i) => Some(i - 1),
                                     };
-                                    if new_sel != self.selected_rule {
-                                        if let Some(idx) = new_sel {
-                                            if let Some(r) = self.rules.get_mut(idx) {
-                                                r.task_scroll = 0;
-                                                r.h_scroll = 0;
-                                            }
-                                        }
-                                        self.selected_rule = new_sel;
-                                    }
+                                    self.select_rule(new_sel);
                                 },
                                 KeyCode::Char('q') | KeyCode::Char('Q') => {
                                     let build_done = matches!(self.phase, BuildPhase::Finished);
@@ -651,26 +639,11 @@ impl BndBuilderRatatui {
                                 },
                                 KeyCode::Down | KeyCode::Char('j') => {
                                     self.confirm_quit = false;
-                                    if let Some(idx) = self.selected_rule {
-                                        if let Some(rule) = self.rules.get_mut(idx) {
-                                            rule.task_scroll =
-                                                rule.task_scroll.saturating_sub(1);
-                                        }
-                                    } else {
-                                        let next = skip.saturating_add(1);
-                                        self.scroll = Some(next.min(self.total_entries()));
-                                    }
+                                    self.scroll_list_down(skip);
                                 },
                                 KeyCode::Up | KeyCode::Char('k') => {
                                     self.confirm_quit = false;
-                                    if let Some(idx) = self.selected_rule {
-                                        if let Some(rule) = self.rules.get_mut(idx) {
-                                            rule.task_scroll =
-                                                rule.task_scroll.saturating_add(1);
-                                        }
-                                    } else {
-                                        self.scroll = Some(skip.saturating_sub(1));
-                                    }
+                                    self.scroll_list_up(skip);
                                 },
                                 KeyCode::Left => {
                                     if let Some(idx) = self.selected_rule {
@@ -792,23 +765,10 @@ impl BndBuilderRatatui {
                                 }
                             },
                             MouseEventKind::ScrollUp => {
-                                if let Some(idx) = self.selected_rule {
-                                    if let Some(rule) = self.rules.get_mut(idx) {
-                                        rule.task_scroll = rule.task_scroll.saturating_add(1);
-                                    }
-                                } else {
-                                    self.scroll = Some(skip.saturating_sub(1));
-                                }
+                                self.scroll_list_up(skip);
                             },
                             MouseEventKind::ScrollDown => {
-                                if let Some(idx) = self.selected_rule {
-                                    if let Some(rule) = self.rules.get_mut(idx) {
-                                        rule.task_scroll = rule.task_scroll.saturating_sub(1);
-                                    }
-                                } else {
-                                    let next = skip.saturating_add(1);
-                                    self.scroll = Some(next.min(self.total_entries()));
-                                }
+                                self.scroll_list_down(skip);
                             },
                             _ => {},
                         }
@@ -822,20 +782,12 @@ impl BndBuilderRatatui {
             }
         }
 
+        self.timing_cache.save().ok();
         match thread_result {
-            Some(Ok(())) => {
-                self.timing_cache.save().ok();
-                Ok(())
-            },
-            Some(Err(e)) => {
-                self.timing_cache.save().ok();
-                Err(io::Error::new(io::ErrorKind::Other, e.to_string()))
-            },
-            None => {
-                // Thread was still running when the user quit (q during build).
-                self.timing_cache.save().ok();
-                Ok(())
-            },
+            Some(Ok(())) => Ok(()),
+            Some(Err(e)) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            // Thread was still running when the user quit (q during build).
+            None => Ok(()),
         }
     }
 
@@ -851,13 +803,11 @@ impl BndBuilderRatatui {
         .split(area);
 
         // Header
-        let elapsed_str = match self.build_duration {
-            Some(d) => format!("  {}", fmt_duration(d)),
-            None    => match self.build_started {
-                Some(t) => format!("  {}", fmt_duration(t.elapsed())),
-                None    => String::new(),
-            },
-        };
+        let elapsed_str = self
+            .build_duration
+            .or_else(|| self.build_started.map(|t| t.elapsed()))
+            .map(|d| format!("  {}", fmt_duration(d)))
+            .unwrap_or_default();
         let eta_str: String = if matches!(&self.phase, BuildPhase::Running { .. }) {
             self.estimated_finish
                 .map(|finish| {
@@ -952,28 +902,22 @@ impl BndBuilderRatatui {
             chunks[1],
         );
 
-        // Status bar
-        let running_rules = self.rules.iter().filter(|r| r.is_running()).count();
-        let done_rules = self
-            .rules
-            .iter()
-            .filter(|r| matches!(r.status, RuleStatus::Success(_)))
-            .count();
-        let skipped_rules = self
-            .rules
-            .iter()
-            .filter(|r| matches!(r.status, RuleStatus::UpToDate))
-            .count();
-        let failed_rules = self
-            .rules
-            .iter()
-            .filter(|r| matches!(r.status, RuleStatus::Failed(_)))
-            .count();
+        // Status bar — single pass over rules for all counts.
+        let (running_rules, done_rules, skipped_rules, failed_rules) =
+            self.rules.iter().fold((0usize, 0, 0, 0), |(run, done, skip, fail), r| {
+                match &r.status {
+                    RuleStatus::Running    => (run + 1, done, skip, fail),
+                    RuleStatus::Success(_) => (run, done + 1, skip, fail),
+                    RuleStatus::UpToDate   => (run, done, skip + 1, fail),
+                    RuleStatus::Failed(_)  => (run, done, skip, fail + 1),
+                }
+            });
         let running_tasks: usize = self
             .rules
             .iter()
-            .map(|r| r.tasks.iter().filter(|t| t.is_running()).count())
-            .sum::<usize>()
+            .flat_map(|r| r.tasks.iter())
+            .filter(|t| t.is_running())
+            .count()
             + self.orphans.iter().filter(|t| t.is_running()).count();
 
         let rn = |n: usize| if n == 1 { "rule".to_owned() } else { "rules".to_owned() };
@@ -1021,16 +965,20 @@ impl BndBuilderRatatui {
         }
     }
 
-    fn draw_confirm_modal(&self, frame: &mut Frame) {
-        let area = frame.area();
-        let modal_w = 54u16.min(area.width);
-        let modal_h = 5u16.min(area.height);
-        let modal_rect = Rect {
+    /// Return a rectangle centered within `area` capped to at most `w`×`h`.
+    fn centered_rect(area: Rect, w: u16, h: u16) -> Rect {
+        let modal_w = w.min(area.width);
+        let modal_h = h.min(area.height);
+        Rect {
             x:      area.x + area.width.saturating_sub(modal_w) / 2,
             y:      area.y + area.height.saturating_sub(modal_h) / 2,
             width:  modal_w,
             height: modal_h,
-        };
+        }
+    }
+
+    fn draw_confirm_modal(&self, frame: &mut Frame) {
+        let modal_rect = Self::centered_rect(frame.area(), 54, 5);
         frame.render_widget(Clear, modal_rect);
         frame.render_widget(
             Paragraph::new(
@@ -1050,15 +998,7 @@ impl BndBuilderRatatui {
     }
 
     fn draw_help_modal(&self, frame: &mut Frame) {
-        let area = frame.area();
-        let modal_w = 58u16.min(area.width);
-        let modal_h = 15u16.min(area.height);
-        let modal_rect = Rect {
-            x:      area.x + area.width.saturating_sub(modal_w) / 2,
-            y:      area.y + area.height.saturating_sub(modal_h) / 2,
-            width:  modal_w,
-            height: modal_h,
-        };
+        let modal_rect = Self::centered_rect(frame.area(), 58, 15);
         frame.render_widget(Clear, modal_rect);
         let key = |k: &'static str| Span::styled(k, Style::default().fg(Color::Yellow));
         let desc = |d: &'static str| Span::raw(d);

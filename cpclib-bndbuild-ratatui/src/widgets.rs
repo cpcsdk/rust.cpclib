@@ -210,25 +210,25 @@ impl<'a> Widget for InlineTaskWidget<'a> {
             TaskStatus::Running => {
                 const FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
                 let frame = FRAMES[(elapsed_ms as usize / 100) % FRAMES.len()];
+                let elapsed = entry.started.elapsed();
+                // Live elapsed time, same layout as finished tasks: "1.2s  "
+                let timing = format!("{}  ", fmt_duration(elapsed));
                 let est_hint = entry.estimated_duration.and_then(|est| {
-                    let spent = entry.started.elapsed();
-                    if spent >= est {
-                        None
-                    } else {
-                        Some(format!("  ~{}", fmt_duration(est - spent)))
-                    }
+                    if elapsed >= est { None }
+                    else { Some(format!("  ~{}", fmt_duration(est - elapsed))) }
                 }).unwrap_or_default();
-                // Marquee-scroll the task name when it doesn't fit and the user
-                // hasn't manually scrolled (h_scroll == 0 means "follow mode").
-                let prefix_cols = 2usize; // spinner + space
-                let hint_cols = est_hint.chars().count();
-                let name_avail = (area.width as usize).saturating_sub(prefix_cols + hint_cols);
+                // Prefix = spinner + space (2 cols), then timing, then name, then hint.
+                let prefix_cols = 2usize;
+                let timing_cols = timing.chars().count();
+                let hint_cols   = est_hint.chars().count();
+                let name_avail  = (area.width as usize)
+                    .saturating_sub(prefix_cols + timing_cols + hint_cols);
                 let name_str = if h_scroll == 0 {
                     marquee_window(&entry.task, elapsed_ms, name_avail)
                 } else {
                     entry.task.clone()
                 };
-                format!("{frame} {name_str}{est_hint}")
+                format!("{frame} {timing}{name_str}{est_hint}")
             },
             TaskStatus::Success(d) | TaskStatus::Failed(d) => {
                 // Fixed prefix: "✓  1.2s  " — must never be scrolled away.
@@ -246,17 +246,9 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                 format!("{prefix}{timing}{name_str}")
             },
         };
-        // Apply h_scroll to header line too (running mode only — for finished
-        // tasks the prefix+timing are pinned and only the name scrolls via
-        // marquee_window above, so raw h_scroll must NOT be applied again).
-        let header_display: String = match &entry.status {
-            TaskStatus::Running => {
-                let header_chars: Vec<char> = header.chars().collect();
-                header_chars[h_scroll.min(header_chars.len())..].iter().collect()
-            },
-            _ => header,
-        };
-        Paragraph::new(header_display)
+        // Prefix+timing are always pinned for both running and finished tasks;
+        // the name part already accounts for h_scroll via marquee_window above.
+        Paragraph::new(header)
             .style(style)
             .render(Rect { height: 1, ..area }, buf);
 
@@ -267,18 +259,9 @@ impl<'a> Widget for InlineTaskWidget<'a> {
         if show_output {
             let out_area = Rect { y: area.y + 1, height: area.height - 1, ..area };
             let all_lines: Vec<(&str, Style)> = match &entry.status {
-                TaskStatus::Running => {
-                    let stderr_iter = entry
-                        .stderr
-                        .iter()
-                        .map(|s| (s.as_str(), Style::default().fg(Color::Red)));
-                    stderr_iter
-                        .chain(entry.stdout.iter().map(|s| (s.as_str(), Style::default())))
-                        .collect()
-                },
-                TaskStatus::Failed(_) => {
-                    // Failed: stderr first (red), then stdout — PTY-spawned processes
-                    // emit all output (including errors) through stdout.
+                // Running and Failed: stderr (red) first, then stdout.
+                // PTY-spawned processes may route all output through stdout.
+                TaskStatus::Running | TaskStatus::Failed(_) => {
                     let stderr_iter = entry
                         .stderr
                         .iter()
@@ -478,28 +461,47 @@ fn render_running_rule(
     }
 }
 
-/// Compact 1-line rendering for rules whose targets were already up to date.
-fn render_uptodate_rule(rule: &RuleEntry, full_name: &str, elapsed_ms: u64, area: Rect, buf: &mut Buffer) {
-    let prefix = "≡  ";
+/// Render a compact 1-line rule row: `prefix <marquee name>  [source]`.
+/// `prefix_style` applies to the prefix; `name_style` to the scrolling name.
+fn render_compact_rule_line(
+    prefix: &str,
+    prefix_style: Style,
+    full_name: &str,
+    name_style: Style,
+    source: Option<&str>,
+    elapsed_ms: u64,
+    area: Rect,
+    buf: &mut Buffer,
+) {
     let prefix_w = prefix.chars().count();
-    let source_suffix: String = rule
-        .source
-        .as_deref()
-        .map(|s| format!("  [{}]", s))
-        .unwrap_or_default();
+    let source_suffix: String = source.map(|s| format!("  [{s}]")).unwrap_or_default();
     let suffix_w = source_suffix.chars().count();
     let names_avail = (area.width as usize).saturating_sub(prefix_w + suffix_w);
     let name_text = marquee_window(full_name, elapsed_ms, names_avail);
     let pad_w = names_avail.saturating_sub(name_text.chars().count());
     let mut spans = vec![
-        Span::styled(prefix, Style::default().fg(Color::Cyan)),
-        Span::styled(name_text, Style::default().fg(Color::DarkGray)),
+        Span::styled(prefix.to_owned(), prefix_style),
+        Span::styled(name_text, name_style),
     ];
     if !source_suffix.is_empty() {
         spans.push(Span::raw(" ".repeat(pad_w)));
         spans.push(Span::styled(source_suffix, Style::default().fg(Color::DarkGray)));
     }
     Paragraph::new(Line::from(spans)).render(area, buf);
+}
+
+/// Compact 1-line rendering for rules whose targets were already up to date.
+fn render_uptodate_rule(rule: &RuleEntry, full_name: &str, elapsed_ms: u64, area: Rect, buf: &mut Buffer) {
+    render_compact_rule_line(
+        "≡  ",
+        Style::default().fg(Color::Cyan),
+        full_name,
+        Style::default().fg(Color::DarkGray),
+        rule.source.as_deref(),
+        elapsed_ms,
+        area,
+        buf,
+    );
 }
 
 fn render_finished_rule(
@@ -587,25 +589,16 @@ fn render_finished_rule(
     } else if is_success {
         // ── Success: compact 1-line view ──────────────────────────────────
         let prefix = format!("✓  {}  ", fmt_duration(*dur));
-        let prefix_w = prefix.chars().count();
-        let source_suffix: String = rule
-            .source
-            .as_deref()
-            .map(|s| format!("  [{}]", s))
-            .unwrap_or_default();
-        let suffix_w = source_suffix.chars().count();
-        let names_avail = (area.width as usize).saturating_sub(prefix_w + suffix_w);
-        let name_text = marquee_window(full_name, elapsed_ms, names_avail);
-        let pad_w = names_avail.saturating_sub(name_text.chars().count());
-        let mut spans = vec![
-            Span::styled(prefix, Style::default().fg(Color::Green)),
-            Span::styled(name_text, Style::default().fg(Color::Green)),
-        ];
-        if !source_suffix.is_empty() {
-            spans.push(Span::raw(" ".repeat(pad_w)));
-            spans.push(Span::styled(source_suffix, Style::default().fg(Color::DarkGray)));
-        }
-        Paragraph::new(Line::from(spans)).render(area, buf);
+        render_compact_rule_line(
+            &prefix,
+            Style::default().fg(Color::Green),
+            full_name,
+            Style::default().fg(Color::Green),
+            rule.source.as_deref(),
+            elapsed_ms,
+            area,
+            buf,
+        );
     } else if area.height <= 1 {
         // ── Failed: 1-line fallback ──────────────────────────────────────────
         let prefix = format!("✗  {}  ", fmt_duration(*dur));
