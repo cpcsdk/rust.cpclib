@@ -231,13 +231,31 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                 format!("{frame} {name_str}{est_hint}")
             },
             TaskStatus::Success(d) | TaskStatus::Failed(d) => {
-                format!("{prefix} {}  {}", fmt_duration(*d), entry.task)
+                // Fixed prefix: "✓  1.2s  " — must never be scrolled away.
+                let timing = format!("{}  ", fmt_duration(*d));
+                // prefix = "✓ " (2 cols), timing cols, then available for name.
+                let prefix_cols = prefix.chars().count(); // "✓ " = 2
+                let timing_cols = timing.chars().count();
+                let name_avail =
+                    (area.width as usize).saturating_sub(prefix_cols + timing_cols);
+                let name_str = if h_scroll == 0 {
+                    marquee_window(&entry.task, elapsed_ms, name_avail)
+                } else {
+                    entry.task.clone()
+                };
+                format!("{prefix}{timing}{name_str}")
             },
         };
-        // Apply h_scroll to header line too.
-        let header_chars: Vec<char> = header.chars().collect();
-        let header_display: String =
-            header_chars[h_scroll.min(header_chars.len())..].iter().collect();
+        // Apply h_scroll to header line too (running mode only — for finished
+        // tasks the prefix+timing are pinned and only the name scrolls via
+        // marquee_window above, so raw h_scroll must NOT be applied again).
+        let header_display: String = match &entry.status {
+            TaskStatus::Running => {
+                let header_chars: Vec<char> = header.chars().collect();
+                header_chars[h_scroll.min(header_chars.len())..].iter().collect()
+            },
+            _ => header,
+        };
         Paragraph::new(header_display)
             .style(style)
             .render(Rect { height: 1, ..area }, buf);
