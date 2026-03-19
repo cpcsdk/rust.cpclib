@@ -348,7 +348,7 @@ impl BndBuilderCommand {
         builder: BndBuilder,
         g: Option<&str>,
         details: bool,
-        _observers: &O
+        observers: &O
     ) -> Result<(), BndBuilderError> {
         let dot = builder.to_dot(details);
 
@@ -397,8 +397,7 @@ impl BndBuilderCommand {
             }
         }
         else {
-            builder.emit_stdout(dot);
-            builder.emit_stdout("\n");
+            observers.emit_stdout(&dot);
             Ok(())
         }
     }
