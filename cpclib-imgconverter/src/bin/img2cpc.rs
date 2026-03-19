@@ -14,6 +14,7 @@
 #![allow(unused)]
 
 use cpclib_imgconverter::{build_img2cpc_args_parser, built_info, process_img2cpc};
+use cpclib_common::event::DiscardObserver;
 
 fn main() -> anyhow::Result<()> {
     let desc_before = format!(
@@ -25,5 +26,5 @@ fn main() -> anyhow::Result<()> {
     let args = build_img2cpc_args_parser().before_help(desc_before);
 
     let matches = args.clone().get_matches();
-    process_img2cpc(&matches, args)
+    process_img2cpc(&matches, args, &DiscardObserver)
 }
