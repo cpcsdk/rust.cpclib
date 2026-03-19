@@ -1042,6 +1042,11 @@ impl BndBuilderApp {
                 }
             }
 
+            // Capture the launch CWD before get_buildfile_content may change it
+            // via decode_from_reader -> set_current_dir. This lets us absolutize
+            // any user-supplied output paths (dot, etc.) correctly.
+            let launch_cwd = std::env::current_dir().ok();
+
             let content = self.get_buildfile_content(fname)?;
 
             if matches.get_flag("show") {
@@ -1086,9 +1091,21 @@ impl BndBuilderApp {
             if matches.contains_id("dot") {
                 let graph_details = matches.get_flag("graph_details");
                 if let Some(g) = matches.get_one::<String>("dot") {
+                    // Resolve relative dot output paths against the launch CWD
+                    // (not the build-file dir that set_current_dir may have set).
+                    let g_abs = {
+                        let p = std::path::Path::new(g.as_str());
+                        if p.is_absolute() {
+                            g.to_owned()
+                        } else if let Some(ref cwd) = launch_cwd {
+                            cwd.join(p).to_string_lossy().into_owned()
+                        } else {
+                            g.to_owned()
+                        }
+                    };
                     Ok(BndBuilderCommandInner::Dot(
                         builder,
-                        Some(g.to_owned()),
+                        Some(g_abs),
                         graph_details
                     ))
                 }
