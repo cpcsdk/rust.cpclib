@@ -52,6 +52,7 @@ default-members = [
   "cpclib-basmdoc",
   "cpclib-bdasm",
   "cpclib-bndbuild",
+  "cpclib-bndbuild-ratatui",
   "cpclib-catalog",
   "cpclib-catart",
   "cpclib-common",
