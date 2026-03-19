@@ -261,6 +261,7 @@ cpclib-borgams = { path = "./cpclib-borgams/" }
 cpclib-basmdoc = { path = "./cpclib-basmdoc/" }
 cpclib-bdasm = { path = "./cpclib-bdasm/" }
 cpclib-bndbuild = { path = "./cpclib-bndbuild/" }
+cpclib-bndbuild-ratatui = { path = "./cpclib-bndbuild-ratatui/" }
 cpclib-bndbuild-tauri = { path = "./cpclib-bndbuild-tauri/src-tauri" }
 cpclib-catart = { path = "./cpclib-catart/" }
 cpclib-catalog = { path = "./cpclib-catalog/" }
