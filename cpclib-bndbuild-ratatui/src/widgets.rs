@@ -100,10 +100,13 @@ pub(crate) fn marquee_window(names: &str, elapsed_ms: u64, avail: usize) -> Stri
 // ─── Rules list widget ────────────────────────────────────────────────────────
 
 pub(crate) struct RulesView<'a> {
-    pub(crate) rules:         &'a [RuleEntry],
-    pub(crate) orphans:       &'a [TaskEntry],
-    pub(crate) skip:          usize,
-    pub(crate) selected_rule: Option<usize>,
+    pub(crate) rules:             &'a [RuleEntry],
+    pub(crate) orphans:           &'a [TaskEntry],
+    pub(crate) skip:              usize,
+    pub(crate) selected_rule:     Option<usize>,
+    /// When true, UpToDate rules are hidden and replaced by a single summary
+    /// line at the bottom of the list.
+    pub(crate) collapse_uptodate: bool,
 }
 
 impl<'a> Widget for RulesView<'a> {
@@ -111,8 +114,15 @@ impl<'a> Widget for RulesView<'a> {
         let mut y = area.y;
         let bottom = area.y + area.height;
         let mut remaining_skip = self.skip;
+        let mut collapsed_uptodate: usize = 0;
 
         for (idx, rule) in self.rules.iter().enumerate() {
+            // Collapsed UpToDate rules are removed from the visible layout —
+            // they don't consume skip budget or screen rows.
+            if self.collapse_uptodate && matches!(rule.status, RuleStatus::UpToDate) {
+                collapsed_uptodate += 1;
+                continue;
+            }
             if remaining_skip > 0 {
                 remaining_skip -= 1;
                 continue;
@@ -148,6 +158,16 @@ impl<'a> Widget for RulesView<'a> {
                 buf,
             );
             y += h;
+        }
+        // Collapsed UpToDate summary line rendered at the bottom of the list.
+        if collapsed_uptodate > 0 && y < bottom {
+            let s = if collapsed_uptodate == 1 {
+                "\u{2261}  [1 rule up-to-date  \u{b7}  u to expand]".to_owned()
+            } else {
+                format!("\u{2261}  [{collapsed_uptodate} rules up-to-date  \u{b7}  u to expand]")
+            };
+            Paragraph::new(Line::from(Span::styled(s, Style::default().fg(Color::DarkGray))))
+                .render(Rect { x: area.x, y, width: area.width, height: 1 }, buf);
         }
     }
 }
@@ -374,7 +394,19 @@ fn render_running_rule(
             Span::styled(counter.clone(), Style::default().fg(Color::DarkGray)),
         ])
     };
-    let border_color = if selected { Color::Cyan } else { Color::Yellow };
+    // Flash the border white for 400 ms when new output arrives, drawing the
+    // user's eye to the active rule without requiring them to select it.
+    let flash = rule
+        .last_output
+        .map(|t| t.elapsed() < std::time::Duration::from_millis(400))
+        .unwrap_or(false);
+    let border_color = if selected {
+        Color::Cyan
+    } else if flash {
+        Color::White
+    } else {
+        Color::Yellow
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))

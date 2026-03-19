@@ -101,22 +101,27 @@ pub(crate) struct RuleEntry {
     pub(crate) source:      Option<String>,
     /// Historical average duration for this rule, if cache data exists.
     pub(crate) estimated_duration: Option<Duration>,
+    /// Instant of the last stdout/stderr output received from any task in this
+    /// rule.  Used to briefly flash the border so the user's eye is drawn to
+    /// active rules even when not selected.
+    pub(crate) last_output: Option<Instant>,
 }
 
 impl RuleEntry {
     pub(crate) fn new(name: String, nb: usize, out_of: usize) -> Self {
         Self {
             name,
-            aliases:     Vec::new(),
+            aliases:            Vec::new(),
             nb,
             out_of,
-            started:     Instant::now(),
-            tasks:       Vec::new(),
+            started:            Instant::now(),
+            tasks:              Vec::new(),
             status:             RuleStatus::Running,
             task_scroll:        0,
             h_scroll:           0,
             source:             None,
             estimated_duration: None,
+            last_output:        None,
         }
     }
 

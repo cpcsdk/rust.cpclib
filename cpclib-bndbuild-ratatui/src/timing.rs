@@ -106,8 +106,11 @@ impl TimingCache {
 
     // ── Estimation ────────────────────────────────────────────────────────────
 
-    /// Return the average historical duration for the given key, or `None` if
-    /// no samples exist yet.
+    /// Return an exponentially-weighted moving average (EWMA) of historical
+    /// durations for the given key, or `None` if no samples exist yet.
+    ///
+    /// α = 0.3 means recent samples are weighted more heavily, so the estimate
+    /// adapts quickly when a target gets faster or slower after a code change.
     pub(crate) fn estimate(
         &self,
         build_file: &str,
@@ -123,8 +126,12 @@ impl TimingCache {
         if v.is_empty() {
             return None;
         }
-        let avg = v.iter().map(|d| d.as_nanos()).sum::<u128>() / v.len() as u128;
-        Some(Duration::from_nanos(avg as u64))
+        const ALPHA: f64 = 0.3;
+        let mut ewma = v[0].as_secs_f64();
+        for d in &v[1..] {
+            ewma = (1.0 - ALPHA) * ewma + ALPHA * d.as_secs_f64();
+        }
+        Some(Duration::from_secs_f64(ewma))
     }
 
     // ── Persistence ───────────────────────────────────────────────────────────

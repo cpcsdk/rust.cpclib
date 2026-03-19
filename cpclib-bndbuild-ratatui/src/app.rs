@@ -3,7 +3,8 @@ use std::io;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use cpclib_bndbuild::app::BndBuilderCommand;
+use cpclib_bndbuild::app::{BndBuilderApp, BndBuilderCommand};
+use cpclib_bndbuild::event::{BndBuilderObserved, BndBuilderObserverRc};
 use cpclib_runner::kill_all_children;
 use ratatui::Frame;
 use ratatui::crossterm::event::{self, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind};
@@ -15,7 +16,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Widget};
 use ratatui::Terminal;
 
 use crate::model::{BuildPhase, RuleEntry, RuleStatus, TaskEntry, TaskStatus};
-use crate::observer::RatatuiMessage;
+use crate::observer::{BndBuilderRatatuiObserver, RatatuiMessage};
 use crate::ratatui_event::{RatatuiEvent, RatatuiState};
 use crate::timing::TimingCache;
 use crate::widgets::{fmt_duration, strip_ansi_codes, RulesView};
@@ -61,6 +62,10 @@ pub(crate) struct BndBuilderRatatui {
     /// Absolute time at which the build is estimated to finish.
     /// Precomputed on each event so `draw()` never does a full rules scan.
     pub(crate) estimated_finish: Option<std::time::Instant>,
+    /// When true, UpToDate rules are collapsed into a single summary line.
+    pub(crate) collapse_uptodate: bool,
+    /// When true, the `?` help overlay is shown.
+    pub(crate) show_help: bool,
 }
 
 impl BndBuilderRatatui {
@@ -167,7 +172,11 @@ impl BndBuilderRatatui {
                             self.build_duration.get_or_insert_with(|| t.elapsed());
                         }
                         self.phase = BuildPhase::Finished;
-                        self.selected_rule = None;
+                        // Auto-jump to first failed rule so cause of failure is immediately visible.
+                        self.selected_rule = self
+                            .rules
+                            .iter()
+                            .position(|r| matches!(r.status, RuleStatus::Failed(_)));
                         // Persist timing data immediately so that a terminal
                         // close (Ctrl+C, window X) does not lose the samples.
                         self.timing_cache.save().ok();
@@ -233,7 +242,7 @@ impl BndBuilderRatatui {
             },
 
             RatatuiEvent::FailedRule(rule) => {
-                if let Some(r) =
+                let timing = if let Some(r) =
                     self.rules.iter_mut().rev().find(|r| r.is_running() && r.name == rule)
                 {
                     let d = r.started.elapsed();
@@ -242,7 +251,21 @@ impl BndBuilderRatatui {
                             t.status = TaskStatus::Failed(t.started.elapsed());
                         }
                     }
+                    let source = r.source.clone();
                     r.status = RuleStatus::Failed(d);
+                    Some((source, d))
+                } else {
+                    None
+                };
+                // Record partial timing even for failures so ETA can learn from
+                // builds that fail after significant work on this rule.
+                if let Some((source, d)) = timing {
+                    self.timing_cache.record(
+                        source.as_deref().unwrap_or(""),
+                        &rule,
+                        "",
+                        d,
+                    );
                 }
                 self.recompute_eta();
             },
@@ -303,7 +326,7 @@ impl BndBuilderRatatui {
             },
 
             RatatuiEvent::TaskStdout { task, output, .. } => {
-                if let Some(t) = self.any_task_mut(&task) {
+                let parent_rule = if let Some(t) = self.any_task_mut(&task) {
                     for line in output.lines() {
                         let clean = strip_ansi_codes(line);
                         let clean = clean.trim_end_matches('\r');
@@ -314,11 +337,20 @@ impl BndBuilderRatatui {
                             t.stdout.push_back(clean.to_owned());
                         }
                     }
+                    t.parent_rule.clone()
+                } else {
+                    None
+                };
+                // Flash the parent rule's border to draw attention to active output.
+                if let Some(rn) = parent_rule {
+                    if let Some(r) = self.rules.iter_mut().rev().find(|r| r.name == rn) {
+                        r.last_output = Some(Instant::now());
+                    }
                 }
             },
 
             RatatuiEvent::TaskStderr { task, output, .. } => {
-                if let Some(t) = self.any_task_mut(&task) {
+                let parent_rule = if let Some(t) = self.any_task_mut(&task) {
                     for line in output.lines() {
                         let clean = strip_ansi_codes(line);
                         let clean = clean.trim_end_matches('\r');
@@ -328,6 +360,14 @@ impl BndBuilderRatatui {
                             }
                             t.stderr.push_back(clean.to_owned());
                         }
+                    }
+                    t.parent_rule.clone()
+                } else {
+                    None
+                };
+                if let Some(rn) = parent_rule {
+                    if let Some(r) = self.rules.iter_mut().rev().find(|r| r.name == rn) {
+                        r.last_output = Some(Instant::now());
                     }
                 }
             },
@@ -354,7 +394,15 @@ impl BndBuilderRatatui {
         let heights: Vec<u16> = self
             .rules
             .iter()
-            .map(|r| r.height())
+            .map(|r| {
+                // Collapsed UpToDate rules take no screen space, so they
+                // should not contribute to the auto-follow skip computation.
+                if self.collapse_uptodate && matches!(r.status, RuleStatus::UpToDate) {
+                    0
+                } else {
+                    r.height()
+                }
+            })
             .chain(self.orphans.iter().map(|t| t.inline_height()))
             .collect();
 
@@ -407,7 +455,10 @@ impl BndBuilderRatatui {
                 let spent = r.started.elapsed();
                 Some(est.saturating_sub(spent))
             })
-            .sum();
+            // Parallel rules run concurrently; the critical path is the
+            // longest remaining lane, not the sum of all lanes.
+            .max()
+            .unwrap_or(Duration::ZERO);
 
         // Average estimate across all rules that have cache data.
         let known: Vec<Duration> = self
@@ -475,7 +526,11 @@ impl BndBuilderRatatui {
                     if !matches!(self.phase, BuildPhase::Finished) {
                         self.phase = BuildPhase::Finished;
                     }
-                    self.selected_rule = None;
+                    // Auto-jump to first failed rule for immediate failure visibility.
+                    self.selected_rule = self
+                        .rules
+                        .iter()
+                        .position(|r| matches!(r.status, RuleStatus::Failed(_)));
                     // Snap the elapsed duration if not already recorded.
                     if let Some(t) = self.build_started {
                         self.build_duration.get_or_insert_with(|| t.elapsed());
@@ -646,6 +701,62 @@ impl BndBuilderRatatui {
                                     let next = skip.saturating_add(page);
                                     self.scroll = Some(next.min(self.total_entries()));
                                 },
+                                KeyCode::Char('r') | KeyCode::Char('R') => {
+                                    self.confirm_quit = false;
+                                    self.show_help = false;
+                                    let build_done = matches!(self.phase, BuildPhase::Finished);
+                                    if build_done && thread.is_none() {
+                                        // Re-parse CLI args for a fresh command — avoids
+                                        // needing Clone on BndBuilderCommand/BndBuilderCommandInner.
+                                        if let Ok(Some(new_app)) = BndBuilderApp::new() {
+                                            let new_build_file =
+                                                new_app.build_file().map(|s| s.to_owned());
+                                            if let Ok(mut retry_cmd) = new_app.command() {
+                                                let (tx2, rx2) = mpsc::channel::<RatatuiMessage>();
+                                                retry_cmd.clear_observers();
+                                                retry_cmd.add_observer(BndBuilderObserverRc::new(
+                                                    BndBuilderRatatuiObserver::new(tx2),
+                                                ));
+                                                // Reset all state for a fresh build run.
+                                                self.rules.clear();
+                                                self.orphans.clear();
+                                                self.phase = BuildPhase::default();
+                                                self.scroll = None;
+                                                self.selected_rule = None;
+                                                self.build_error = None;
+                                                self.build_started = None;
+                                                self.build_duration = None;
+                                                self.pending_aliases.clear();
+                                                self.current_build_file = new_build_file;
+                                                self.build_nesting_depth = 0;
+                                                self.estimated_finish = None;
+                                                self.rx = rx2;
+                                                thread_result = None;
+                                                thread = Some(std::thread::spawn(move || {
+                                                    retry_cmd.execute()
+                                                }));
+                                            }
+                                        }
+                                    }
+                                },
+                                KeyCode::Char('u') | KeyCode::Char('U') => {
+                                    self.confirm_quit = false;
+                                    self.collapse_uptodate = !self.collapse_uptodate;
+                                    // Deselect if the selected rule is now being collapsed.
+                                    if self.collapse_uptodate {
+                                        if let Some(idx) = self.selected_rule {
+                                            if let Some(r) = self.rules.get(idx) {
+                                                if matches!(r.status, RuleStatus::UpToDate) {
+                                                    self.selected_rule = None;
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                KeyCode::Char('?') => {
+                                    self.confirm_quit = false;
+                                    self.show_help = !self.show_help;
+                                },
                                 _ => {},
                             }
                         }
@@ -740,14 +851,12 @@ impl BndBuilderRatatui {
         .split(area);
 
         // Header
-        let elapsed_str = {
-            match self.build_duration {
-                Some(d) => format!("  {}", fmt_duration(d)),
-                None    => match self.build_started {
-                    Some(t) => format!("  {}", fmt_duration(t.elapsed())),
-                    None    => String::new(),
-                },
-            }
+        let elapsed_str = match self.build_duration {
+            Some(d) => format!("  {}", fmt_duration(d)),
+            None    => match self.build_started {
+                Some(t) => format!("  {}", fmt_duration(t.elapsed())),
+                None    => String::new(),
+            },
         };
         let eta_str: String = if matches!(&self.phase, BuildPhase::Running { .. }) {
             self.estimated_finish
@@ -759,9 +868,22 @@ impl BndBuilderRatatui {
         } else {
             String::new()
         };
-        let header = match &self.phase {
-            BuildPhase::Idle => "bndbuild".to_owned(),
-            BuildPhase::ComputingDeps(p) => format!("Computing dependencies: {p}"),
+        match &self.phase {
+            BuildPhase::Idle => {
+                frame.render_widget(
+                    Paragraph::new("bndbuild")
+                        .style(Style::default().add_modifier(Modifier::BOLD)),
+                    chunks[0],
+                );
+            },
+            BuildPhase::ComputingDeps(p) => {
+                let text = format!("Computing dependencies: {p}");
+                frame.render_widget(
+                    Paragraph::new(text)
+                        .style(Style::default().add_modifier(Modifier::BOLD)),
+                    chunks[0],
+                );
+            },
             BuildPhase::Running { .. } => {
                 let global_current = self.rules.len();
                 let global_total: usize = self
@@ -770,41 +892,62 @@ impl BndBuilderRatatui {
                     .filter(|r| r.nb == 1)
                     .map(|r| r.out_of)
                     .sum();
+                let mut spans = vec![
+                    Span::styled("Building ", Style::default().add_modifier(Modifier::BOLD)),
+                ];
                 if global_total > 0 {
-                    format!("Building [{global_current}/{global_total}]{elapsed_str}{eta_str}")
+                    const BAR_W: usize = 20;
+                    let done   = (global_current * BAR_W / global_total).min(BAR_W);
+                    let filled = "\u{2588}".repeat(done);
+                    let empty  = "\u{2591}".repeat(BAR_W - done);
+                    spans.push(Span::styled("[", Style::default().fg(Color::DarkGray)));
+                    spans.push(Span::styled(filled, Style::default().fg(Color::Green)));
+                    spans.push(Span::styled(empty,  Style::default().fg(Color::DarkGray)));
+                    spans.push(Span::styled("]", Style::default().fg(Color::DarkGray)));
+                    spans.push(Span::styled(
+                        format!(" {global_current}/{global_total}"),
+                        Style::default().fg(Color::DarkGray),
+                    ));
                 } else {
-                    format!("Building\u{2026}{elapsed_str}{eta_str}")
+                    spans.push(Span::raw("\u{2026}"));
                 }
+                if !elapsed_str.is_empty() {
+                    spans.push(Span::styled(
+                        elapsed_str.clone(),
+                        Style::default().fg(Color::DarkGray),
+                    ));
+                }
+                if !eta_str.is_empty() {
+                    spans.push(Span::styled(eta_str.clone(), Style::default().fg(Color::Cyan)));
+                }
+                frame.render_widget(Paragraph::new(Line::from(spans)), chunks[0]);
             },
             BuildPhase::Finished => {
-                if let Some(err) = &self.build_error {
+                let (text, style) = if let Some(err) = &self.build_error {
                     let short = if err.len() > 100 {
-                        format!("\u{2717} Build FAILED{elapsed_str}: {}…", &err[..97])
+                        format!("\u{2717} Build FAILED{elapsed_str}: {}\u{2026}", &err[..97])
                     } else {
                         format!("\u{2717} Build FAILED{elapsed_str}: {err}")
                     };
-                    short
+                    (short, Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
                 } else {
-                    format!("Build finished{elapsed_str}")
-                }
+                    (
+                        format!("\u{2713} Build complete{elapsed_str}"),
+                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    )
+                };
+                frame.render_widget(Paragraph::new(text).style(style), chunks[0]);
             },
-        };
-        let header_style = if matches!(&self.phase, BuildPhase::Finished)
-            && self.build_error.is_some()
-        {
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().add_modifier(Modifier::BOLD)
-        };
-        frame.render_widget(Paragraph::new(header).style(header_style), chunks[0]);
+        }
 
         // Rule list
         frame.render_widget(
             RulesView {
-                rules:         &self.rules,
-                orphans:       &self.orphans,
+                rules:             &self.rules,
+                orphans:           &self.orphans,
                 skip,
-                selected_rule: self.selected_rule,
+                selected_rule:     self.selected_rule,
+                collapse_uptodate: self.collapse_uptodate,
             },
             chunks[1],
         );
@@ -841,7 +984,7 @@ impl BndBuilderRatatui {
                 if failed_rules > 0 {
                     (
                         format!(
-                            "\u{2717} Build failed  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  {failed_rules} {} failed  \u{b7}  q quit  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}",
+                            "\u{2717} Build failed  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  {failed_rules} {} failed  \u{b7}  q quit  r retry  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}  ?:help",
                             rn(done_rules),
                             rn(failed_rules)
                         ),
@@ -850,7 +993,7 @@ impl BndBuilderRatatui {
                 } else {
                     (
                         format!(
-                            "\u{2713} Build complete  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  \u{b7}  q quit  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}",
+                            "\u{2713} Build complete  \u{b7}  {done_rules} {} done  {skipped_rules} skipped  \u{b7}  q quit  r retry  tab select  \u{2191}\u{2193}/\u{2190}\u{2192}  ?:help",
                             rn(done_rules)
                         ),
                         Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
@@ -860,7 +1003,7 @@ impl BndBuilderRatatui {
             _ => (
                 format!(
                     "Rules: {running_rules} running  {done_rules} done  {skipped_rules} skipped  {failed_rules} failed \
-                     \u{b7}  {running_tasks} {} active  \u{b7}  q quit  ^C force-quit  \u{2191}\u{2193}/jk scroll  tab select",
+                     \u{b7}  {running_tasks} {} active  \u{b7}  q quit  ^C force-quit  \u{2191}\u{2193}/jk scroll  tab select  u:collapse  ?:help",
                     tn(running_tasks)
                 ),
                 Style::default().fg(Color::DarkGray),
@@ -871,6 +1014,10 @@ impl BndBuilderRatatui {
         // Confirm-quit modal overlay
         if self.confirm_quit {
             self.draw_confirm_modal(frame);
+        }
+        // Help overlay (drawn on top of confirm-quit if both are active)
+        if self.show_help {
+            self.draw_help_modal(frame);
         }
     }
 
@@ -898,6 +1045,47 @@ impl BndBuilderRatatui {
                     ),
             )
             .style(Style::default().fg(Color::White)),
+            modal_rect,
+        );
+    }
+
+    fn draw_help_modal(&self, frame: &mut Frame) {
+        let area = frame.area();
+        let modal_w = 58u16.min(area.width);
+        let modal_h = 15u16.min(area.height);
+        let modal_rect = Rect {
+            x:      area.x + area.width.saturating_sub(modal_w) / 2,
+            y:      area.y + area.height.saturating_sub(modal_h) / 2,
+            width:  modal_w,
+            height: modal_h,
+        };
+        frame.render_widget(Clear, modal_rect);
+        let key = |k: &'static str| Span::styled(k, Style::default().fg(Color::Yellow));
+        let desc = |d: &'static str| Span::raw(d);
+        let lines = vec![
+            Line::from(vec![key("  \u{2191}/\u{2193}  j/k        "), desc("Scroll rules")]),
+            Line::from(vec![key("  Tab/Shift+Tab   "), desc("Select/expand rule")]),
+            Line::from(vec![key("  \u{2190}/\u{2192}             "), desc("Horizontal scroll (in selection)")]),
+            Line::from(vec![key("  PgUp/PgDn       "), desc("Page up/down")]),
+            Line::from(vec![key("  g/Home          "), desc("Go to top")]),
+            Line::from(vec![key("  G/End           "), desc("Go to bottom")]),
+            Line::from(vec![key("  u               "), desc("Toggle up-to-date rule collapse")]),
+            Line::from(vec![key("  r               "), desc("Retry build (after build finishes)")]),
+            Line::from(vec![key("  q               "), desc("Quit (confirm during build)")]),
+            Line::from(vec![key("  Ctrl+C          "), desc("Force quit immediately")]),
+            Line::from(vec![key("  ?               "), desc("Close this help")]),
+        ];
+        frame.render_widget(
+            Paragraph::new(lines)
+                .block(
+                    Block::default()
+                        .title(" Key Bindings ")
+                        .borders(Borders::ALL)
+                        .border_style(
+                            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                        ),
+                )
+                .style(Style::default().fg(Color::White)),
             modal_rect,
         );
     }
