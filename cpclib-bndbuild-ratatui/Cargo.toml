@@ -9,5 +9,5 @@ homepage.workspace = true
 
 [dependencies]
 ratatui = "0.30.0"
-cpclib-bndbuild.workspace = true
+cpclib-bndbuild = { workspace = true, features = ["self-update"] }
 cpclib-runner.workspace = true

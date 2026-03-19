@@ -678,23 +678,21 @@ Usage: 2CDT [arguments] <input filename> <.cdt image>
 
         #[cfg(feature = "self-update")]
         let update_self = || -> Result<(), BndBuilderError> {
-            observers.emit_stdout("> Update bndbuild\n");
-            let (asset_url, _asset_name) = if cfg!(target_os = "windows") {
-                (
-                    "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild.exe",
-                    "bndbuild.exe"
-                )
-            }
-            else if cfg!(not(target_os = "windows")) {
-                (
-                    "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/bndbuild",
-                    "bndbuild"
+            let binary_name = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.file_stem().map(|s| s.to_os_string()))
+                .and_then(|s| s.into_string().ok())
+                .unwrap_or_else(|| "bndbuild".to_string());
+            observers.emit_stdout(&format!("> Update {binary_name}\n"));
+            let asset_url = if cfg!(target_os = "windows") {
+                format!(
+                    "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/{binary_name}.exe"
                 )
             }
             else {
-                return Err(BndBuilderError::AnyError(
-                    "Self-update is not supported on this platform".to_string()
-                ));
+                format!(
+                    "https://github.com/cpcsdk/rust.cpclib/releases/download/latest/{binary_name}"
+                )
             };
             let mut tmp_exec_path = camino_tempfile::Builder::new()
                 .prefix("self_update")
@@ -702,7 +700,7 @@ Usage: 2CDT [arguments] <input filename> <.cdt image>
                 .map_err(|e| BndBuilderError::AnyError(format!("Temporary file error. {e}")))?;
             let tmp_exec = tmp_exec_path.as_file_mut();
 
-            self_update::Download::from_url(asset_url).download_to(tmp_exec)?;
+            self_update::Download::from_url(&asset_url).download_to(tmp_exec)?;
             self_update::self_replace::self_replace(tmp_exec_path).map_err(|e| {
                 BndBuilderError::UpdateError(format!("Failed to replace binary: {e}"))
             })?;
