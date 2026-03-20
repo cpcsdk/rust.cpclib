@@ -108,7 +108,7 @@ pub enum BndBuilderCommandInner {
         builder: BndBuilder
     },
     /// Generate the graphviz file on stdout
-    Dot(BndBuilder, Option<String>, bool),
+    Dot(BndBuilder, Option<String>, bool, Option<Utf8PathBuf>),
     /// Update the executable from github artifact or the command if specified
     Update(Option<String>)
 }
@@ -246,8 +246,8 @@ impl BndBuilderCommand {
                 current_step,
                 builder
             } => Self::execute_build(targets, watch, current_step, builder, observers),
-            BndBuilderCommandInner::Dot(builder, g, details) => {
-                Self::execute_dot(builder, g.as_deref(), details, &observers)?;
+            BndBuilderCommandInner::Dot(builder, g, details, source_file) => {
+                Self::execute_dot(builder, g.as_deref(), details, source_file.as_deref(), &observers)?;
                 Ok(None)
             }
         }
@@ -348,9 +348,10 @@ impl BndBuilderCommand {
         builder: BndBuilder,
         g: Option<&str>,
         details: bool,
+        source_file: Option<&Utf8Path>,
         observers: &O
     ) -> Result<(), BndBuilderError> {
-        let dot = builder.to_dot(details);
+        let dot = builder.to_dot_multi(source_file, details);
 
         if let Some(g) = g {
             let path: &Utf8Path = Utf8Path::new(g);
@@ -1089,6 +1090,19 @@ impl BndBuilderApp {
 
             if matches.contains_id("dot") {
                 let graph_details = matches.get_flag("graph_details");
+                // Absolutize the source build file path so execute_dot can
+                // resolve cross-file BndBuild references correctly.
+                let source_file_abs: Option<Utf8PathBuf> = {
+                    let p = fname.as_std_path();
+                    let abs_str = if p.is_absolute() {
+                        fname.as_str().to_owned()
+                    } else if let Some(ref cwd) = launch_cwd {
+                        cwd.join(p).to_string_lossy().into_owned()
+                    } else {
+                        fname.as_str().to_owned()
+                    };
+                    Some(Utf8PathBuf::from(abs_str))
+                };
                 if let Some(g) = matches.get_one::<String>("dot") {
                     // Resolve relative dot output paths against the launch CWD
                     // (not the build-file dir that set_current_dir may have set).
@@ -1105,11 +1119,12 @@ impl BndBuilderApp {
                     Ok(BndBuilderCommandInner::Dot(
                         builder,
                         Some(g_abs),
-                        graph_details
+                        graph_details,
+                        source_file_abs
                     ))
                 }
                 else {
-                    Ok(BndBuilderCommandInner::Dot(builder, None, graph_details))
+                    Ok(BndBuilderCommandInner::Dot(builder, None, graph_details, source_file_abs))
                 }
             }
             else {

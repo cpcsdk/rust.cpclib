@@ -1,3 +1,4 @@
+mod dot;
 pub mod graph;
 pub mod rule;
 pub mod rules;
