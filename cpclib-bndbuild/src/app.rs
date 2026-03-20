@@ -108,8 +108,8 @@ pub enum BndBuilderCommandInner {
         builder: BndBuilder
     },
     /// Generate the graphviz file on stdout
-    /// Fields: builder, output_path, graph_details, include_dependencies, source_file
-    Dot(BndBuilder, Option<String>, bool, bool, Option<Utf8PathBuf>),
+    /// Fields: builder, output_path, graph_details, include_dependencies, hide_tasks, source_file
+    Dot(BndBuilder, Option<String>, bool, bool, bool, Option<Utf8PathBuf>),
     /// Update the executable from github artifact or the command if specified
     Update(Option<String>)
 }
@@ -247,8 +247,8 @@ impl BndBuilderCommand {
                 current_step,
                 builder
             } => Self::execute_build(targets, watch, current_step, builder, observers),
-            BndBuilderCommandInner::Dot(builder, g, details, include_deps, source_file) => {
-                Self::execute_dot(builder, g.as_deref(), details, include_deps, source_file.as_deref(), &observers)?;
+            BndBuilderCommandInner::Dot(builder, g, details, include_deps, hide_tasks, source_file) => {
+                Self::execute_dot(builder, g.as_deref(), details, include_deps, hide_tasks, source_file.as_deref(), &observers)?;
                 Ok(None)
             }
         }
@@ -350,13 +350,14 @@ impl BndBuilderCommand {
         g: Option<&str>,
         details: bool,
         include_deps: bool,
+        hide_tasks: bool,
         source_file: Option<&Utf8Path>,
         observers: &O
     ) -> Result<(), BndBuilderError> {
         let dot = if include_deps {
-            builder.to_dot_multi(source_file, details)
+            builder.to_dot_multi(source_file, details, hide_tasks)
         } else {
-            builder.to_dot(details)
+            builder.to_dot(details, hide_tasks)
         };
 
         if let Some(g) = g {
@@ -1097,6 +1098,7 @@ impl BndBuilderApp {
             if matches.contains_id("dot") {
                 let graph_details = matches.get_flag("graph_details");
                 let include_deps = matches.get_flag("dot_dependencies");
+                let hide_tasks = matches.get_flag("dot_no_tasks");
                 // Absolutize the source build file path so execute_dot can
                 // resolve cross-file BndBuild references correctly.
                 let source_file_abs: Option<Utf8PathBuf> = {
@@ -1128,11 +1130,12 @@ impl BndBuilderApp {
                         Some(g_abs),
                         graph_details,
                         include_deps,
+                        hide_tasks,
                         source_file_abs
                     ))
                 }
                 else {
-                    Ok(BndBuilderCommandInner::Dot(builder, None, graph_details, include_deps, source_file_abs))
+                    Ok(BndBuilderCommandInner::Dot(builder, None, graph_details, include_deps, hide_tasks, source_file_abs))
                 }
             }
             else {

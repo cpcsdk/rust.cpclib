@@ -266,6 +266,13 @@ pub fn build_args_parser() -> clap::Command {
                 .requires("dot")
         )
         .arg(
+            Arg::new("dot_no_tasks")
+                .long("dot-no-tasks")
+                .help("Hide task/command boxes from the graph, showing only file-to-file dependencies (requires --dot)")
+                .action(ArgAction::SetTrue)
+                .requires("dot")
+        )
+        .arg(
             Arg::new("show")
                 .long("show")
                 .help("Show the file AFTER interpreting the templates")

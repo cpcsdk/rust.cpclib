@@ -42,7 +42,7 @@ fn parse_bndbuild_file_ref(args: &str) -> Option<(String, Vec<String>)> {
 impl Rules {
     /// Generate a graphvis representation of the build.
     /// If `compressed` is `true`, the rules are not shown.
-    pub fn to_dot(&self, compressed: bool) -> String {
+    pub fn to_dot(&self, compressed: bool, hide_tasks: bool) -> String {
         let mut output_bytes = Vec::new();
         {
             let mut writer = DotWriter::from(&mut output_bytes);
@@ -63,6 +63,22 @@ impl Rules {
             for rule in self.rules() {
                 let deps = rule.dependencies();
                 let tgts = rule.targets();
+
+                if hide_tasks {
+                    for dep in deps {
+                        let dep_node = format!("\"{dep}\"");
+                        all_deps.insert(dep_node.clone());
+                        for tgt in tgts {
+                            let tgt_node = format!("\"{tgt}\"");
+                            all_tgts.insert(tgt_node.clone());
+                            let _e = digraph.edge(&dep_node, &tgt_node);
+                        }
+                    }
+                    for tgt in tgts {
+                        all_tgts.insert(format!("\"{tgt}\""));
+                    }
+                    continue;
+                }
 
                 let cmd = rule
                     .commands()
@@ -203,10 +219,10 @@ impl Rules {
     /// dependencies are immediately visible.
     ///
     /// Falls back to [`Rules::to_dot`] when `source_file` is `None`.
-    pub fn to_dot_multi(&self, source_file: Option<&Utf8Path>, compressed: bool) -> String {
+    pub fn to_dot_multi(&self, source_file: Option<&Utf8Path>, compressed: bool, hide_tasks: bool) -> String {
         let source_file = match source_file {
             Some(f) => f,
-            None => return self.to_dot(compressed)
+            None => return self.to_dot(compressed, hide_tasks)
         };
 
         // ----------------------------------------------------------------
@@ -428,6 +444,23 @@ impl Rules {
                         let cmd = &pr.cmd;
 
                         if pr.deps.is_empty() && cmd.is_empty() {
+                            ids_for_file.push(None);
+                            continue;
+                        }
+
+                        if hide_tasks {
+                            for dep in &pr.deps {
+                                let dep_node = format!("\"{}{}\"" , node_prefix, dep);
+                                all_deps.insert(dep_node.clone());
+                                for tgt in &pr.targets {
+                                    let tgt_node = format!("\"{}{}\"" , node_prefix, tgt);
+                                    all_tgts.insert(tgt_node.clone());
+                                    cluster.edge(&dep_node, &tgt_node);
+                                }
+                            }
+                            for tgt in &pr.targets {
+                                all_tgts.insert(format!("\"{}{}\"" , node_prefix, tgt));
+                            }
                             ids_for_file.push(None);
                             continue;
                         }
