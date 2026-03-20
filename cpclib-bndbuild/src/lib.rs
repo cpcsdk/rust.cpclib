@@ -259,6 +259,13 @@ pub fn build_args_parser() -> clap::Command {
                 .requires("dot")
         )
         .arg(
+            Arg::new("dot_dependencies")
+                .long("dot-dependencies")
+                .help("Also include all build files referenced via bndbuild tasks in the graph (requires --dot)")
+                .action(ArgAction::SetTrue)
+                .requires("dot")
+        )
+        .arg(
             Arg::new("show")
                 .long("show")
                 .help("Show the file AFTER interpreting the templates")
