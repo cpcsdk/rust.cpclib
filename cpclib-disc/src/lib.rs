@@ -113,17 +113,17 @@ impl Disc for AnyDisc {
         Self: Sized,
         P: AsRef<Utf8Path>
     {
-        let path = path.as_ref();
-        if path
-            .extension()
-            .map(|ext| ext.eq_ignore_ascii_case("hfe"))
-            .unwrap_or(false)
-        {
+        //let path = path.as_ref();
+        //if path
+        //    .extension()
+        //    .map(|ext| ext.eq_ignore_ascii_case("hfe"))
+        //    .unwrap_or(false)
+        //{
             Hfe::open(path).map(|d| d.into())
-        }
-        else {
-            ExtendedDsk::open(path).map(|d| d.into())
-        }
+        //}
+        //else {
+        //    ExtendedDsk::open(path).map(|d| d.into())
+       // }
     }
 
     #[cfg(not(feature = "hfe"))]
