@@ -34,6 +34,18 @@ pub fn tokenize_macro_body<'l, 'p>(
             });
         }
         let after_open = open + 1;
+        // `{{paramname}` — the outer `{` is a literal (e.g. opening an
+        // expression like `{value + 7}`); the inner `{paramname}` is a
+        // normal parameter substitution.  Emit the first `{` as a literal
+        // and restart processing from the second `{`.
+        if bytes.get(after_open) == Some(&b'{') {
+            segments.push(MacroSegment::Lit {
+                start: open,
+                end: after_open
+            });
+            cursor = after_open;
+            continue;
+        }
         if let Some(rel_close) = memchr(b'}', &bytes[after_open..]) {
             let close = after_open + rel_close;
             let key = &listing[after_open..close];
