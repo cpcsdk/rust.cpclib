@@ -209,7 +209,7 @@ impl Deref for CachedBndBuilder {
 }
 impl CachedBndBuilder {
     pub async fn new(mut builder: BndBuilder, app_handle: &AppHandle) -> Result<Self, String> {
-        let dot = builder.to_dot(true); // TODO handle compressed and not compressed version and show them on demand
+        let dot = builder.to_dot(true, true); // TODO handle compressed and not compressed version and show them on demand
         log::info!("Try to convert {:?}", &dot);
 
         // XXX the sidecar way does not work when bundled. No time to really look why
