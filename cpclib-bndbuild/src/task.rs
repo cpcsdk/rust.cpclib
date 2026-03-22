@@ -5,7 +5,6 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, LazyLock};
 
 use camino::Utf8Path;
-use cpclib_common::clap::ArgMatches;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::uz80::UZ80_CMD;
@@ -30,7 +29,6 @@ use cpclib_runner::runner::tracker::at3::extra::{
     SongToWav, SongToYm, Z80Profiler
 };
 use cpclib_runner::runner::tracker::chipnsfx::CHIPNSFX_CMD;
-use cpclib_runner::runner::twocdt::TWO_CDT_CMD;
 use fancy_regex::Regex;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer};
@@ -46,6 +44,7 @@ use crate::runners::emulator::Emulator;
 use crate::runners::fade::FADE_CMD;
 use crate::runners::hideur::HIDEUR_CMD;
 use crate::runners::tracker::{SongConverter, Tracker};
+use cpclib_common::clap::ArgMatches;
 
 /// Represents the kind of task based on how it's implemented
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -95,10 +94,6 @@ pub enum InnerTask {
     YmCruncher(YmCruncher, StandardTaskArguments)
 }
 
-/// Represents a build task with a unique identifier.
-///
-/// Tasks encapsulate various build operations (assembly, compilation,
-/// image conversion, etc.) and track dependencies between build steps.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Task {
     pub(crate) inner: InnerTask,
@@ -137,7 +132,7 @@ impl Task {
     fn next_id() -> usize {
         static COUNTER: AtomicUsize = AtomicUsize::new(1);
 
-        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        unsafe { COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed) }
     }
 
     pub fn id(&self) -> usize {
@@ -246,7 +241,7 @@ pub const CSL_CMDS: &[&str] = &["csl"];
 pub const CRUNCH_CMDS: &[&str] = &["crunch", "compress"];
 
 pub const RTZX_CMDS: &[&str] = &["rtzx"];
-pub const TWO_CDT_CMDS: &[&str] = &[TWO_CDT_CMD];
+pub const TWO_CDT_CMDS: &[&str] = &["2cdt"];
 
 pub const SONG2AKM_CMDS: &[&str] = &[SongToAkm::CMD];
 pub const SONG2AKG_CMDS: &[&str] = &[SongToAkg::CMD];
@@ -313,7 +308,7 @@ macro_rules! is_some_cmd {
             paste::paste! {
                 #[inline]
                 pub fn [<is_ $code:lower _cmd>](code: &str) -> bool {
-                    [< $code:upper _CMDS>] .iter().contains(&code)
+                    [< $code:upper _CMDS>].iter().any(|c| c.eq_ignore_ascii_case(code))
                 }
             }
         )*
@@ -371,7 +366,6 @@ impl<'de> Deserialize<'de> for InnerTask {
                 };
                 let std = StandardTaskArguments {
                     args: next.to_owned(),
-                    original_args: None,
                     ignore_error: ignore
                 };
                 match InnerTask::from_command_and_arguments(code, std) {
@@ -562,10 +556,6 @@ impl InnerTask {
         Self::Cdt(CdtManager::Rtzx, std)
     }
 
-    pub fn with_two_cdt(std: StandardTaskArguments) -> Self {
-        Self::Cdt(CdtManager::TwoCdt, std)
-    }
-
     /// Create an InnerTask from a command token and its standard arguments.
     pub fn from_command_and_arguments(
         code: &str,
@@ -705,7 +695,7 @@ impl InnerTask {
             let res = Ok(Self::with_ym_cruncher(YmCruncher::Fap, std));
 
             #[cfg(not(feature = "fap"))]
-            let res = Err("FAP command requires the 'fap' feature to be enabled".to_string());
+            let res = unreachable!();
 
             res
         }
@@ -811,7 +801,7 @@ impl InnerTask {
             Ok(Self::with_rtzx(std))
         }
         else if is_two_cdt_cmd(code) {
-            Ok(Self::with_two_cdt(std))
+            Ok(Self::Cdt(crate::runners::cdt::CdtManager::TwoCdt, std))
         }
         else {
             Err(format!("{code} is an invalid command"))
@@ -901,6 +891,7 @@ impl InnerTask {
             | InnerTask::Hxcfe(t)
             | InnerTask::ImgToCpc(t)
             | InnerTask::ImpDsk(t)
+            | InnerTask::BndBuild(t)
             | InnerTask::Martine(t)
             | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
@@ -926,18 +917,42 @@ impl InnerTask {
         self
     }
 
-    /// Returns true if the task is "phony" (doesn't produce a file output).
-    /// Phony tasks include: Echo, Emulator, Grafx2, Tracker, Xfer
+    // TODO deeply check the arguments of the commands because here we may be wrong ...
     pub fn is_phony(&self) -> bool {
         match self {
-            // Explicitly phony tasks (don't produce files)
+            InnerTask::Assembler(..) => false, // wrong when displaying stuff
+            InnerTask::BndBuild(_) => false,
+            InnerTask::BasmDoc(_) => false,
+            InnerTask::Convgeneric(_) => false,
+            InnerTask::Cdt(..) => false,
+            InnerTask::Catalog(_) => false,
+            InnerTask::Locomotive(_) => false,
+            InnerTask::Cp(_) => false,
+            InnerTask::Mv(_) => false,
+            InnerTask::CpcToImg(_) => false,
+            InnerTask::Crunch(_) => false,
+            InnerTask::Disassembler(..) => false,
+            InnerTask::Disc(_) => false,
             InnerTask::Echo(_) => true,
             InnerTask::Emulator(..) => true,
+            InnerTask::Extern(_) => false,
             InnerTask::Grafx2(_) => true,
-            InnerTask::Tracker(..) => true,
+            InnerTask::YmCruncher(..) => false,
+            InnerTask::Fade(_) => false,
+            InnerTask::Hideur(_) => false,
+            InnerTask::HspCompiler(_) => false,
+            InnerTask::Hxcfe(_) => false,
+            InnerTask::ImgToCpc(_) => false,
+            InnerTask::ImpDsk(_) => false,
+            InnerTask::Martine(_t) => false,
+            InnerTask::Mkdir(_) => false,
+            InnerTask::Rm(_s) => false, // wrong when downloading files
+            InnerTask::Snapshot(_) => false,
+            InnerTask::SongConverter(_, _t) => false,
+            InnerTask::Tracker(_, _t) => true, // XXX think if false is better
             InnerTask::Xfer(_) => true,
-            // All other tasks produce files
-            _ => false
+            InnerTask::Cpr(_) => false,
+            InnerTask::Csl(_) => false
         }
     }
 
@@ -962,8 +977,7 @@ impl InnerTask {
             InnerTask::Locomotive(_) => TaskKind::Embedded,
             InnerTask::Snapshot(_) => TaskKind::Embedded,
             InnerTask::Xfer(_) => TaskKind::Embedded,
-            InnerTask::Cdt(crate::runners::cdt::CdtManager::Rtzx, _) => TaskKind::Embedded,
-            InnerTask::Cdt(crate::runners::cdt::CdtManager::TwoCdt, _) => TaskKind::Delegated,
+            InnerTask::Cdt(..) => TaskKind::Embedded,
 
             // Emulated tasks - run through an emulator
             InnerTask::Assembler(Assembler::Orgams, _) => TaskKind::Emulated,
@@ -1071,8 +1085,6 @@ impl InnerTask {
 #[derive(Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 pub struct StandardTaskArguments {
     pub(crate) args: String,
-    #[serde(skip)]
-    original_args: Option<String>,
     ignore_error: bool
 }
 
@@ -1080,33 +1092,22 @@ impl StandardTaskArguments {
     pub fn new<S: Into<String>>(args: S) -> Self {
         Self {
             args: args.into(),
-            original_args: None,
             ignore_error: false
         }
     }
 
-    /// Get the original arguments before variable replacement, if available
-    pub fn original_args(&self) -> Option<&str> {
-        self.original_args.as_deref()
-    }
-
     /// This method modify the args to replace automatic variables by the expected values
+    /// TODO keep the original argument for display and error purposes ?
     pub fn replace_automatic_variables(
         &mut self,
         first_dep: Option<&Utf8Path>,
         first_tgt: Option<&Utf8Path>
     ) -> Result<(), String> {
-        static RE_FIRST_DEP: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r"\${1}(?!\$)<").expect("Valid regex pattern for first dependency")
-        }); // 1 repetition does not seem to work :(
-        static RE_FIRST_TGT: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r"\${1}(?!\$)@").expect("Valid regex pattern for first target")
-        });
+        static RE_FIRST_DEP: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"\${1}(?!\$)<").unwrap()); // 1 repetition does not seem to work :(
+        static RE_FIRST_TGT: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"\${1}(?!\$)@").unwrap());
 
-        // Store original args before modification
-        if self.original_args.is_none() {
-            self.original_args = Some(self.args.clone());
-        }
         let initial = self.args.clone();
 
         if let Some(first_dep) = first_dep {
@@ -1116,7 +1117,7 @@ impl StandardTaskArguments {
             let first_dep = first_dep.as_str().replace("\\", "\\\\");
             self.args = RE_FIRST_DEP.replace_all(&self.args, first_dep).into_owned();
         }
-        else if RE_FIRST_DEP.is_match(&self.args).unwrap_or(false) {
+        else if RE_FIRST_DEP.is_match(&self.args).unwrap() {
             self.args = initial;
             return Err(format!(
                 "{} contains $<, but there are no available dependencies.",
@@ -1132,7 +1133,7 @@ impl StandardTaskArguments {
 
             self.args = RE_FIRST_TGT.replace_all(&self.args, first_tgt).into_owned();
         }
-        else if RE_FIRST_TGT.is_match(&self.args).unwrap_or(false) {
+        else if RE_FIRST_TGT.is_match(&self.args).unwrap() {
             self.args = initial;
             return Err(format!(
                 "{} contains $@, but there are no available targets.",
@@ -1166,16 +1167,16 @@ impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArgument
                     // `--ace` for `REMU_OUTPUT`). If no visible alias is
                     // present, prefer any declared alias (hidden or not),
                     // then fall back to the main long name.
-                    if let Some(aliases) = a.get_visible_aliases()
-                        && let Some(first) = aliases.first()
-                    {
-                        return Some(format!("--{}", first));
+                    if let Some(aliases) = a.get_visible_aliases() {
+                        if let Some(first) = aliases.iter().next() {
+                            return Some(format!("--{}", first));
+                        }
                     }
 
-                    if let Some(all_aliases) = a.get_all_aliases()
-                        && let Some(first) = all_aliases.first()
-                    {
-                        return Some(format!("--{}", first));
+                    if let Some(all_aliases) = a.get_all_aliases() {
+                        if let Some(first) = all_aliases.iter().next() {
+                            return Some(format!("--{}", first));
+                        }
                     }
 
                     // Fallback to the main long name.
@@ -1190,11 +1191,7 @@ impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArgument
             None
         }
 
-        fn collect(
-            cmd: &cpclib_common::clap::Command,
-            matches: &ArgMatches,
-            out: &mut Vec<String>
-        ) {
+        fn collect(cmd: &cpclib_common::clap::Command, matches: &ArgMatches, out: &mut Vec<String>) {
             for id in matches.ids() {
                 let id_str = id.as_str();
 
@@ -1226,12 +1223,14 @@ impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArgument
                 }
 
                 if let Ok(Some(b)) = matches.try_get_one::<bool>(id_str) {
-                    if *b
-                        && let Some(cpclib_common::clap::parser::ValueSource::CommandLine) =
+                    if *b {
+                        if let Some(cpclib_common::clap::parser::ValueSource::CommandLine) =
                             matches.value_source(id_str)
-                        && let Some(token) = declared_token_for(cmd, id_str)
-                    {
-                        out.push(token);
+                        {
+                            if let Some(token) = declared_token_for(cmd, id_str) {
+                                out.push(token);
+                            }
+                        }
                     }
                     continue;
                 }
@@ -1244,8 +1243,7 @@ impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArgument
                 // parent command (we can't map more precisely).
                 if let Some(sub_cmd) = cmd.get_subcommands().find(|s| s.get_name() == sub_name) {
                     collect(sub_cmd, sub_matches, out);
-                }
-                else {
+                } else {
                     collect(cmd, sub_matches, out);
                 }
             }
@@ -1271,10 +1269,9 @@ impl StandardTaskArguments {
 
 #[cfg(test)]
 mod test {
-    use cpclib_common::clap::{Arg, ArgAction, Command};
-
     use super::InnerTask;
     use crate::task::StandardTaskArguments;
+    use cpclib_common::clap::{Command, Arg, ArgAction};
 
     #[test]
     fn test_automatic_arguments() {
@@ -1389,7 +1386,6 @@ mod test {
                 crate::runners::assembler::Assembler::Basm,
                 StandardTaskArguments {
                     args: "toto.asm -o toto.o".to_owned(),
-                    original_args: None,
                     ignore_error: false
                 }
             )
@@ -1403,7 +1399,6 @@ mod test {
                 crate::runners::assembler::Assembler::Basm,
                 StandardTaskArguments {
                     args: "toto.asm -o toto.o".to_owned(),
-                    original_args: None,
                     ignore_error: true
                 }
             )
@@ -1435,10 +1430,20 @@ mod test {
             .arg(Arg::new("input").long("input").num_args(1))
             .arg(Arg::new("opt").long("opt").num_args(1))
             .arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue))
-            .subcommand(Command::new("sub").arg(Arg::new("subarg").long("subarg").num_args(1)));
+            .subcommand(
+                Command::new("sub").arg(Arg::new("subarg").long("subarg").num_args(1)),
+            );
 
         let argv = [
-            "prog", "--input", "a.bin", "--opt", "x", "--flag", "sub", "--subarg", "y"
+            "prog",
+            "--input",
+            "a.bin",
+            "--opt",
+            "x",
+            "--flag",
+            "sub",
+            "--subarg",
+            "y",
         ];
 
         let matches = cmd.clone().get_matches_from(&argv);
@@ -1475,7 +1480,7 @@ mod test {
             "--ace",
             "demosystem.rasm",
             "--lst",
-            "demosystem.lst"
+            "demosystem.lst",
         ];
 
         let matches = cmd.clone().get_matches_from(&argv);

@@ -23,7 +23,9 @@ impl From<BasicError> for Box<AssemblerError> {
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::LazyLock;
+use std::sync::Mutex;
 
 use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
 use codespan_reporting::files::SimpleFiles;
@@ -41,6 +43,22 @@ use crate::Z80Span;
 use crate::assembler::AssemblingPass;
 use crate::parser::ParserContext;
 use crate::preamble::{LocatedListing, SourceString, Z80ParserError, Z80ParserErrorKind};
+
+// Global render-time overrides for file contents. When set, functions that
+// render diagnostics will prefer the override content for the given
+// filename. This allows rendering an inner macro error with prefixed blank
+// lines so that codespan prints absolute line numbers.
+static GLOBAL_RENDER_OVERRIDES: LazyLock<Mutex<BTreeMap<String, String>>> =
+    LazyLock::new(|| Mutex::new(BTreeMap::new()));
+
+fn resolve_source_override(filename: &str, default: &str) -> String {
+    let map = GLOBAL_RENDER_OVERRIDES.lock().unwrap();
+    if let Some(s) = map.get(filename) {
+        s.clone()
+    } else {
+        default.to_owned()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpressionError {
@@ -477,7 +495,13 @@ impl AssemblerError {
                             .unwrap_or_else(|| e.0.state.context_name().unwrap_or("no file"))
                             .to_owned();
 
-                        let source = e.0.state.complete_source();
+                        let source = resolve_source_override(
+                            e.0.state
+                                .filename()
+                                .map(|p| p.as_os_str().to_str().unwrap())
+                                .unwrap_or("no file"),
+                            e.0.state.complete_source(),
+                        );
                         let file_id = match fname_to_id.get(&filename) {
                             Some(&id) => id,
                             None => {
@@ -793,7 +817,64 @@ impl AssemblerError {
                             };
 
                             let msg = build_simple_error_message(&msg, span, Severity::Error);
-                            write!(f, "{msg}\n{root}")
+
+                            // Render the inner/root error to string first so we can
+                            // adjust any file:line:col occurrences that refer to the
+                            // macro definition source. When a macro is defined at
+                            // `location` and the inner error reports a line X
+                            // relative to the macro body, the absolute line in the
+                            // original file should be `location.line + X - 1`.
+                            let mut root_str = format!("{root}");
+
+                            // Fix the gutter line number and header filename:line for
+                            // inner macro errors. The inner render shows the macro-local
+                            // line (e.g. "88 │", "...1558:9 > MACRO ...") but we want
+                            // the absolute file line (e.g. "1645 │", "...1645:9 > MACRO ...").
+                            if let Some(def) = location {
+                                let macro_marker = format!(" > MACRO {}::", name);
+                                if let Some(marker_pos) = root_str.find(&macro_marker) {
+                                    let num_start = marker_pos + macro_marker.len();
+                                    let num_end = root_str[num_start..]
+                                        .find(|c: char| !c.is_ascii_digit())
+                                        .map(|n| num_start + n)
+                                        .unwrap_or(root_str.len());
+                                    if let Ok(macro_local) = root_str[num_start..num_end].parse::<usize>() {
+                                        let abs_line = def.line() as usize + macro_local - 1;
+                                        let old_ln = macro_local.to_string();
+                                        let new_ln = abs_line.to_string();
+
+                                        // 1. Fix the header filename:line reference.
+                                        //    The context name is "{fname}:{def_line}:{col} > MACRO ..."
+                                        //    where def_line is the macro definition line, not the
+                                        //    absolute error line. Replace it with abs_line.
+                                        let def_line_str = (def.line() as usize).to_string();
+                                        let fname = def.fname();
+                                        let basename = std::path::Path::new(fname)
+                                            .file_name()
+                                            .and_then(|s| s.to_str())
+                                            .unwrap_or(fname);
+                                        let hdr_old = format!("{}:{}:", basename, def_line_str);
+                                        let hdr_new = format!("{}:{}:", basename, new_ln);
+                                        root_str = root_str.replacen(&hdr_old, &hdr_new, 1);
+
+                                        // 2. Fix the gutter line number.
+                                        //    Colored output: codespan wraps gutter numbers as
+                                        //    \x1b[0m\x1b[36m{N}\x1b[0m{space}
+                                        let ansi_old = format!("\x1b[0m\x1b[36m{old_ln}\x1b[0m ");
+                                        let ansi_new = format!("\x1b[0m\x1b[36m{new_ln}\x1b[0m ");
+                                        // Plain-text output (Unicode and ASCII box chars)
+                                        let plain_old_u = format!("{old_ln} │");
+                                        let plain_new_u = format!("{new_ln} │");
+                                        let plain_old_a = format!("{old_ln} |");
+                                        let plain_new_a = format!("{new_ln} |");
+                                        root_str = root_str.replace(&ansi_old, &ansi_new);
+                                        root_str = root_str.replace(&plain_old_u, &plain_new_u);
+                                        root_str = root_str.replace(&plain_old_a, &plain_new_a);
+                                    }
+                                }
+                            }
+
+                            write!(f, "{msg}\n{root_str}")
                         },
 
                         AssemblerError::BasicError { error } => {
@@ -942,7 +1023,7 @@ impl AssemblerError {
 
 fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z80Span) -> String {
     let filename = build_filename(span);
-    let source = span.state.complete_source();
+    let source = resolve_source_override(filename.as_ref(), span.state.complete_source());
     let offset = span.offset_from_start();
 
     let mut source_files = SimpleFiles::new();
@@ -980,7 +1061,7 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 #[inline]
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
     let filename = build_filename(span);
-    let source = span.state.complete_source();
+    let source = resolve_source_override(filename.as_ref(), span.state.complete_source());
     let offset = span.offset_from_start();
 
     let mut source_files = SimpleFiles::new();
@@ -1038,7 +1119,7 @@ fn build_simple_error_message_with_notes(
     span: &Z80Span
 ) -> String {
     let filename = build_filename(span);
-    let source = span.state.complete_source();
+    let source = resolve_source_override(filename.as_ref(), span.state.complete_source());
     let offset = span.offset_from_start();
 
     let mut source_files = SimpleFiles::new();

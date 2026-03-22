@@ -20,11 +20,11 @@ pub mod parse;
 
 // Import clap for derive macro (used even with cmdline feature)
 #[cfg(feature = "cmdline")]
-use cpclib_build_argv_derive::BuildArgv;
-#[cfg(feature = "cmdline")]
 use cpclib_common::clap;
 #[cfg(feature = "cmdline")]
 use cpclib_common::clap::{ArgMatches, Command, CommandFactory, Parser};
+#[cfg(feature = "cmdline")]
+use cpclib_build_argv_derive::BuildArgv;
 
 #[cfg(feature = "interactive")]
 pub mod cli;
@@ -1119,50 +1119,48 @@ mod tests {
         assert_eq!(sna.memory_dump().len(), BANK_SIZE * 4 * 2);
     }
 
-    #[cfg(all(test, feature = "cmdline"))]
-    mod build_argv_tests {
-        use crate::SnapshotCli;
+#[cfg(all(test, feature = "cmdline"))]
+mod build_argv_tests {
+    use crate::SnapshotCli;
 
-        #[test]
-        fn test_build_argv_for_snapshotcli() {
-            let cli = SnapshotCli {
-                info: true,
-                debug: false,
-                output: Some("out.sna".to_string()),
-                in_snapshot: Some("in.sna".to_string()),
-                load: vec!["file1".to_string(), "0x4000".to_string()],
-                get_token: vec![],
-                set_token: vec!["TOK".to_string(), "1".to_string()],
-                put_data: vec!["0x100".to_string(), "255".to_string()],
-                sna_version: "2".to_string(),
-                flags: true,
-                #[cfg(feature = "interactive")]
-                cli: false /* `cli` field is cfg(feature = "interactive") so we set it false here when present */
-            };
+    #[test]
+    fn test_build_argv_for_snapshotcli() {
+        let cli = SnapshotCli {
+            info: true,
+            debug: false,
+            output: Some("out.sna".to_string()),
+            in_snapshot: Some("in.sna".to_string()),
+            load: vec!["file1".to_string(), "0x4000".to_string()],
+            get_token: vec![],
+            set_token: vec!["TOK".to_string(), "1".to_string()],
+            put_data: vec!["0x100".to_string(), "255".to_string()],
+            sna_version: "2".to_string(),
+            flags: true,
+            #[cfg(feature = "interactive")]
+            cli: false,
+            // `cli` field is cfg(feature = "interactive") so we set it false here when present
+        };
 
-            let argv = cli.build_argv();
+        let argv = cli.build_argv();
 
-            // We assert the produced argv contains the expected tokens and values
-            // (the derive macro is a prototype and may vary token forms).
-            assert_eq!(argv.get(0).map(|s| s.as_str()), Some("snapshot"));
+        // We assert the produced argv contains the expected tokens and values
+        // (the derive macro is a prototype and may vary token forms).
+        assert_eq!(argv.get(0).map(|s| s.as_str()), Some("snapshot"));
 
-            // helper to find a subsequence
-            let find_seq = |hay: &Vec<String>, seq: &[&str]| -> bool {
-                hay.windows(seq.len())
-                    .any(|w| w.iter().map(|s| s.as_str()).eq(seq.iter().cloned()))
-            };
+        // helper to find a subsequence
+        let find_seq = |hay: &Vec<String>, seq: &[&str]| -> bool {
+            hay.windows(seq.len()).any(|w| w.iter().map(|s| s.as_str()).eq(seq.iter().cloned()))
+        };
 
-            assert!(find_seq(&argv, &["--output", "out.sna"]));
-            assert!(
-                find_seq(&argv, &["-i", "in.sna"]) || find_seq(&argv, &["--in_snapshot", "in.sna"])
-            );
-            assert!(find_seq(&argv, &["-l", "file1", "0x4000"]));
-            assert!(find_seq(&argv, &["-s", "TOK", "1"]));
-            assert!(find_seq(&argv, &["-p", "0x100", "255"]));
-            assert!(find_seq(&argv, &["--sna-version", "2"]));
-            assert!(argv.contains(&"--flags".to_string()));
-        }
+        assert!(find_seq(&argv, &["--output", "out.sna"]));
+        assert!(find_seq(&argv, &["-i", "in.sna"]) || find_seq(&argv, &["--in_snapshot", "in.sna"]));
+        assert!(find_seq(&argv, &["-l", "file1", "0x4000"]));
+        assert!(find_seq(&argv, &["-s", "TOK", "1"]));
+        assert!(find_seq(&argv, &["-p", "0x100", "255"]));
+        assert!(find_seq(&argv, &["--sna-version", "2"]));
+        assert!(argv.contains(&"--flags".to_string()));
     }
+}
 
     #[test]
     fn test_memory() {
