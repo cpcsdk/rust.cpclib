@@ -140,6 +140,7 @@ pub fn list_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(l) => Ok(l.len().into()),
         ExprResult::String(s) => Ok(s.len().into()),
+        ExprResult::Char(_) => Ok(1.into()),
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
