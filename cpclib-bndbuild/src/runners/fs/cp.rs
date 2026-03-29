@@ -49,7 +49,25 @@ impl<E: EventObserver> Runner for CpRunner<E> {
             if from.is_dir() {
                 dircpy::copy_dir_advanced(from, &to, true, true, true, Vec::new(), Vec::new())
                     .map_err(|e| error.push_str(&format!("Error when copying directory {from} to {to}. {e}.\n")))
-                    .map(|success| o.emit_stdout(&format!("Copied directory {from} to {to}.")))
+                    .map(|_| {
+                        fn count_files(path: &std::path::Path) -> usize {
+                            match fs_err::metadata(path) {
+                                Ok(meta) if meta.is_file() => 1,
+                                Ok(meta) if meta.is_dir() => fs_err::read_dir(path)
+                                    .ok()
+                                    .into_iter()
+                                    .flat_map(|it| it.filter_map(Result::ok))
+                                    .map(|entry| count_files(&entry.path()))
+                                    .sum(),
+                                _ => 0
+                            }
+                        }
+
+                        let copied_files = count_files(from.as_std_path());
+                        o.emit_stdout(&format!(
+                            "Copied directory {from} to {to} ({copied_files} files)."
+                        ));
+                    })
             }
             else {
                 fs_err::copy(from, &to)
