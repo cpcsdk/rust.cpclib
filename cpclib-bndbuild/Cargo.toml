@@ -46,6 +46,7 @@ clap = { workspace = true, features = ["derive"] }
 codespan-reporting.workspace = true
 delegate.workspace = true
 dot-writer = "0.1.4"
+dircpy.workspace = true
 either.workspace = true
 fancy-duration = "0.9.2"
 globmatch = "0.3"

@@ -46,9 +46,16 @@ impl<E: EventObserver> Runner for CpRunner<E> {
                 to.to_path_buf()
             };
 
-            fs_err::copy(from, &to)
-                .map_err(|e| error.push_str(&format!("Error when copying {from} to {to}. {e}.\n")))
-                .map(|success| o.emit_stdout(&format!("Copied {from} to {to} ({success} bytes).")))
+            if from.is_dir() {
+                dircpy::copy_dir_advanced(from, &to, true, true, true, Vec::new(), Vec::new())
+                    .map_err(|e| error.push_str(&format!("Error when copying directory {from} to {to}. {e}.\n")))
+                    .map(|success| o.emit_stdout(&format!("Copied directory {from} to {to}.")))
+            }
+            else {
+                fs_err::copy(from, &to)
+                    .map_err(|e| error.push_str(&format!("Error when copying {from} to {to}. {e}.\n")))
+                    .map(|success| o.emit_stdout(&format!("Copied {from} to {to} ({success} bytes).")))
+            }
         };
 
         match files.len() {

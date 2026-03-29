@@ -154,6 +154,7 @@ curl = "0.4.49"
 custom_error = "1.9.2"
 dbg = "1.0.4"
 delegate = "0.13.5"
+dircpy = "0.3.20"
 either = "1.15.0"
 #encoding_rs = { version = "0.8.34", default-features = false, features = [   "alloc", ] }
 enigo = "0.6"
