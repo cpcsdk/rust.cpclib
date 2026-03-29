@@ -32,7 +32,7 @@ impl EventObserver for PyConsoleObserver {
 }
 
 impl BndBuilderObserver for PyConsoleObserver {
-    fn update(&mut self, event: BndBuilderEvent) {
+    fn update(&self, event: BndBuilderEvent) {
         use cpclib_bndbuild::event::BndBuilderEvent::*;
         match event {
             ChangeState(_) => {
@@ -65,6 +65,9 @@ impl BndBuilderObserver for PyConsoleObserver {
             Stderr(s) => {
                 eprintln!("{}", s);
             }
+            StartRuleAlias { alias, representative, nb, out_of } => todo!(),
+            SkippedRule(utf8_path) => todo!(),
+            BuildFileContext(utf8_path) => todo!(),
         }
     }
 }
