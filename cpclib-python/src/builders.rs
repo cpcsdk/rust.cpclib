@@ -562,7 +562,6 @@ impl PySnapshot {
             put_data: put_vec,
             sna_version: b.sna_version.clone(),
             flags: false,
-            #[cfg(feature = "interactive")]
             cli: false,
         }
     }

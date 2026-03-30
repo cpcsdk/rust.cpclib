@@ -20,7 +20,7 @@ cpclib-bndbuild = { path = "../cpclib-bndbuild", default-features = false }
 cpclib-cpr = { path = "../cpclib-cpr", default-features = false }
 cpclib-crunchers = { path = "../cpclib-crunchers", default-features = false }
 cpclib-common = { path = "../cpclib-common", default-features = false }
-cpclib-sna = { path = "../cpclib-sna", default-features = false, features = ["cmdline"] }
+cpclib-sna = { path = "../cpclib-sna", default-features = false, features = ["cmdline", "interactive"] }
 
 [package.metadata]
 # Notes: This crate provides Python bindings; extend with real wrappers as needed.
