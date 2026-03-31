@@ -54,7 +54,7 @@ fn test_embedded_commands_help() {
 
             println!("Testing --help for: {}", command_name);
 
-            let mut cmd = cargo_bin_cmd!("bndbuild");
+            let mut cmd = cargo_bin("bndbuild").unwrap();
             cmd.arg("--direct")
                 .arg(&command_name)
                 .arg("--")
@@ -76,7 +76,7 @@ fn test_embedded_commands_version() {
 
             println!("Testing --version for: {}", command_name);
 
-            let mut cmd = cargo_bin_cmd!("bndbuild");
+            let mut cmd = cargo_bin_cmd!("bndbuild").unwrap();
             cmd.arg("--direct")
                 .arg(&command_name)
                 .arg("--")
