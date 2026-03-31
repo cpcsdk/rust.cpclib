@@ -10,6 +10,7 @@ pub const RASM_CMD: &str = "rasm";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum RasmVersion {
     #[default]
+    Polaris, //3..
     Beacon2025, // 2.3.6
     Consolidation2024 // V2_2_5
 }
@@ -25,6 +26,7 @@ impl Display for RasmVersion {
 impl GithubInformation for RasmVersion {
     fn version_name(&self) -> &'static str {
         match self {
+            Self::Polaris => "Polaris",
             Self::Beacon2025 => "Beacon",
             Self::Consolidation2024 => "Consolidation"
         }
@@ -50,6 +52,7 @@ impl GithubInformation for RasmVersion {
 impl ExecutableInformation for RasmVersion {
     fn target_os_folder(&self) -> &'static str {
         match self {
+            Self::Polaris => "rasm_polaris",
             Self::Beacon2025 => "rasm_beacon",
             Self::Consolidation2024 => "rasm_consolidation"
         }

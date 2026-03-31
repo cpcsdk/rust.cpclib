@@ -239,12 +239,12 @@ fn test_interactive_control_file_edit() {
     let bdasm_path = get_bdasm_bin();
     let mut cmd = std::process::Command::new(bdasm_path);
     cmd.arg(&test_binary)
-        .arg("-o")
+        .arg("-O")
         .arg(&output)
         .arg("--control")
         .arg(&control_file);
 
-    let mut session = spawn_command(cmd, Some(Duration::from_secs(5))).unwrap();
+    let mut session = spawn_command(cmd, Some(5000)).unwrap();
 
     // Wait for completion
     session.exp_eof().unwrap();
@@ -256,19 +256,19 @@ fn test_interactive_control_file_edit() {
     );
 
     // Modify control file to add a label
-    let modified_control = "origin 0x0000\nlabel 0x0000 start\n";
+    let modified_control = "origin 0x0000\nlabel start=0x0000\n";
     fs::write(&control_file, modified_control).unwrap();
 
     // Run again with modified control file
     let output2 = temp_dir.path().join("output2.asm");
     let mut cmd2 = std::process::Command::new(get_bdasm_bin());
     cmd2.arg(&test_binary)
-        .arg("-o")
+        .arg("-O")
         .arg(&output2)
         .arg("--control")
         .arg(&control_file);
 
-    let mut session2 = spawn_command(cmd2, Some(Duration::from_secs(5))).unwrap();
+    let mut session2 = spawn_command(cmd2, Some(5000)).unwrap();
     session2.exp_eof().unwrap();
 
     // Verify the label appears in output
@@ -297,11 +297,11 @@ fn test_interactive_prompt_with_verbose() {
     let bdasm_path = get_bdasm_bin();
     let mut cmd = std::process::Command::new(bdasm_path);
     cmd.arg(&test_binary)
-        .arg("-o")
+        .arg("-O")
         .arg(&output)
         .arg("--verbose");
 
-    let result = spawn_command(cmd, Some(Duration::from_secs(5)));
+    let result = spawn_command(cmd, Some(5000));
 
     if let Ok(mut session) = result {
         // Try to capture verbose output
