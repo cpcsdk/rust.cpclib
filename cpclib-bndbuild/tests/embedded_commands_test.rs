@@ -1,7 +1,11 @@
+use assert_cmd::{Command, cargo};
 use cpclib_bndbuild::task::{InnerTask, TaskKind};
-
+use serial_test::serial;
+use assert_cmd::assert::OutputAssertExt;
+use assert_cmd::cargo::cargo_bin_cmd;
 /// Test that all embedded tasks are properly classified
 #[test]
+#[serial]
 fn test_task_classification() {
     let mut embedded_count = 0;
     let mut delegated_count = 0;
@@ -40,62 +44,58 @@ fn test_task_classification() {
     );
 }
 
-mod integration {
-    use assert_cmd::Command;
+/// Test that all embedded commands properly handle --help option
+#[test]
+#[serial]
+fn test_embedded_commands_help() {
+    for task in InnerTask::all() {
+        if task.kind() == TaskKind::Embedded {
+            let command_name = get_command_name(&task);
 
-    use super::*;
+            println!("Testing --help for: {}", command_name);
 
-    /// Test that all embedded commands properly handle --help option
-    #[test]
-    fn test_embedded_commands_help() {
-        for task in InnerTask::all() {
-            if task.kind() == TaskKind::Embedded {
-                let command_name = get_command_name(&task);
+            let mut cmd = cargo_bin_cmd!("bndbuild");
+            cmd.arg("--direct")
+                .arg(&command_name)
+                .arg("--")
+                .arg("--help");
 
-                println!("Testing --help for: {}", command_name);
-
-                let mut cmd = Command::cargo_bin("bndbuild").unwrap();
-                cmd.arg("--direct")
-                    .arg(&command_name)
-                    .arg("--")
-                    .arg("--help");
-
-                let assert = cmd.assert();
-                assert.success().code(0);
-            }
+            let assert = cmd.assert();
+            assert.success().code(0);
         }
     }
+}
 
-    /// Test that all embedded commands properly handle --version option
-    #[test]
-    fn test_embedded_commands_version() {
-        for task in InnerTask::all() {
-            if task.kind() == TaskKind::Embedded {
-                let command_name = get_command_name(&task);
+/// Test that all embedded commands properly handle --version option
+#[test]
+#[serial]
+fn test_embedded_commands_version() {
+    for task in InnerTask::all() {
+        if task.kind() == TaskKind::Embedded {
+            let command_name = get_command_name(&task);
 
-                println!("Testing --version for: {}", command_name);
+            println!("Testing --version for: {}", command_name);
 
-                let mut cmd = Command::cargo_bin("bndbuild").unwrap();
-                cmd.arg("--direct")
-                    .arg(&command_name)
-                    .arg("--")
-                    .arg("--version");
+            let mut cmd = cargo_bin_cmd!("bndbuild");
+            cmd.arg("--direct")
+                .arg(&command_name)
+                .arg("--")
+                .arg("--version");
 
-                let assert = cmd.assert();
-                assert.success().code(0);
-            }
+            let assert = cmd.assert();
+            assert.success().code(0);
         }
     }
+}
 
-    /// Helper function to extract the command name from an InnerTask
-    fn get_command_name(task: &InnerTask) -> String {
-        // Convert the task to string representation and extract the command
-        let task_str = format!("{}", task);
-        task_str
-            .split_whitespace()
-            .next()
-            .unwrap_or("")
-            .trim_start_matches('-')
-            .to_string()
-    }
+/// Helper function to extract the command name from an InnerTask
+fn get_command_name(task: &InnerTask) -> String {
+    // Convert the task to string representation and extract the command
+    let task_str = format!("{}", task);
+    task_str
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .trim_start_matches('-')
+        .to_string()
 }
