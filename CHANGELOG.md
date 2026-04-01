@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cpclib-bndbuild` add support of the catalog command
 - `cpclib-bndbuild` add support to the hxcfe (inner) command
 - `cpclib-bndbuild` add support to the csl command
+- `cpclib-bndbuild` add `archive` command for creating, listing, and extracting .zip and .tar.gz archives
 - `cpclib-emucontrol` add support to activate roms (it was only possible to dectivate them before)
 - `cpclib-locomotive` new crate to handle the executable for basisc manipulation
 - `cpclib-orgams-ascii` add support to ORGAMS files. This crate aims at converting orgams sourceode to ascii and ascii source code to orgams. (in fact utf8, but...)

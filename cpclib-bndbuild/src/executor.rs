@@ -30,6 +30,7 @@ use crate::runners::disassembler::{BdasmRunner, Disassembler};
 use crate::runners::disc::DiscManagerRunner;
 use crate::runners::echo::EchoRunner;
 use crate::runners::fade::FadeRunner;
+use crate::runners::archive::ArchiveRunner;
 use crate::runners::fs::cp::CpRunner;
 use crate::runners::fs::mkdir::MkdirRunner;
 use crate::runners::fs::mv::MvRunner;
@@ -229,6 +230,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         },
         InnerTask::Mkdir(_) => MkdirRunner::default().run(task.args(), observer),
         InnerTask::Rm(_) => RmRunner::default().run(task.args(), observer),
+        InnerTask::Archive(_) => ArchiveRunner::default().run(task.args(), observer),
         InnerTask::Xfer(_) => XferRunner::default().run(task.args(), observer),
         InnerTask::Cpr(_) => CprCliRunner::default().run(task.args(), observer),
         InnerTask::Csl(_) => CslRunner::default().run(task.args(), observer),

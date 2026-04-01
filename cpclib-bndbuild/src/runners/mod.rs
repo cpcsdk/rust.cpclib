@@ -4,6 +4,7 @@ use cpclib_runner::runner::{Runner, RunnerWithClap};
 #[macro_use]
 pub mod macros;
 
+pub mod archive;
 pub mod assembler;
 pub mod ay;
 pub mod basmdoc;

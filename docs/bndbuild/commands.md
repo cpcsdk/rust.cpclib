@@ -108,6 +108,80 @@ Options:
 Inner command of cpclib-bndbuild 0.11.0
 ```
 
+### File management: archive (archive,arc)
+
+```
+Archive management for creating, listing, and extracting .zip and .tar.gz archives.
+
+Usage: archive <COMMAND>
+
+Commands:
+  create   Create a new archive
+  list     List contents of an archive
+  extract  Extract files from an archive
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
+
+Inner command of cpclib-bndbuild 0.11.0
+```
+
+**Create an archive:**
+
+```
+Create a new archive by adding files and folders.
+
+Usage: archive create <ARCHIVE> <FILES>...
+
+Arguments:
+  <ARCHIVE>    Archive file to create (.zip or .tar.gz/.tgz)
+  <FILES>...   Files and folders to add to the archive
+
+Examples:
+  archive create output.zip file1.asm file2.asm folder/
+  archive create backup.tar.gz src/ data/ README.md
+```
+
+**List archive contents:**
+
+```
+List the contents of an archive.
+
+Usage: archive list <ARCHIVE>
+
+Arguments:
+  <ARCHIVE>    Archive file to list (.zip or .tar.gz/.tgz)
+
+Examples:
+  archive list output.zip
+  archive list backup.tar.gz
+```
+
+**Extract an archive:**
+
+```
+Extract files from an archive.
+
+Usage: archive extract <ARCHIVE> [OPTIONS]
+
+Arguments:
+  <ARCHIVE>    Archive file to extract (.zip or .tar.gz/.tgz)
+
+Options:
+  -o, --output <DIR>    Output directory (default: current directory)
+
+Examples:
+  archive extract output.zip
+  archive extract backup.tar.gz --output extracted/
+```
+
+**Format Detection:**
+
+The archive format is automatically detected from the file extension:
+- `.zip` - ZIP format
+- `.tar.gz` or `.tgz` - TAR with GZIP compression
+
 ### File management: Orgams to text conversion (borgams)
 
 **Standalone:** Available as `borgams` binary. For complete documentation, see [Borgams Documentation](../../borgams).

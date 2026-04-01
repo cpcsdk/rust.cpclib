@@ -87,6 +87,7 @@ pub enum InnerTask {
     Mkdir(StandardTaskArguments),
     Mv(StandardTaskArguments),
     Rm(StandardTaskArguments),
+    Archive(StandardTaskArguments),
     Snapshot(StandardTaskArguments),
     SongConverter(SongConverter, StandardTaskArguments),
     Tracker(Tracker, StandardTaskArguments),
@@ -210,6 +211,7 @@ pub const CP_CMDS: &[&str] = &["cp", "copy"];
 pub const MV_CMDS: &[&str] = &["mv", "move", "rename"];
 pub const MKDIR_CMDS: &[&str] = &["mkdir"];
 pub const RM_CMDS: &[&str] = &["rm", "del"];
+pub const ARCHIVE_CMDS: &[&str] = &["archive", "arc"];
 
 pub const BNDBUILD_CMDS: &[&str] = &["bndbuild", "build"];
 pub const CONVGENERIC_CMDS: &[&str] = &[CONVGENERIC_CMD];
@@ -286,6 +288,7 @@ impl Display for InnerTask {
             Self::Martine(s) => (MARTINE_CMDS[0], s),
             Self::Mkdir(s) => (MKDIR_CMDS[0], s),
             Self::Rm(s) => (RM_CMDS[0], s),
+            Self::Archive(s) => (ARCHIVE_CMDS[0], s),
             Self::Snapshot(s) => (SNA_CMDS[0], s),
             Self::SongConverter(t, s) => (t.get_command(), s),
             Self::Tracker(t, s) => (t.get_command(), s),
@@ -318,7 +321,7 @@ macro_rules! is_some_cmd {
 
 #[rustfmt::skip]
 is_some_cmd!(
-    ace, amspirit, at, ayt,
+    ace, amspirit, at, ayt, archive,
     basm, basmdoc, bdasm, bndbuild,
     catalog, capriceforever, chipnsfx, convgeneric, cpr, csl, crunch, cp, cpcec, cpcemupower, cpc2img,
     disark, disc,
@@ -522,6 +525,10 @@ impl InnerTask {
 
     pub fn with_rm(std: StandardTaskArguments) -> Self {
         Self::Rm(std)
+    }
+
+    pub fn with_archive(std: StandardTaskArguments) -> Self {
+        Self::Archive(std)
     }
 
     pub fn with_snapshot(std: StandardTaskArguments) -> Self {
@@ -797,6 +804,9 @@ impl InnerTask {
         else if is_rm_cmd(code) {
             Ok(Self::with_rm(std))
         }
+        else if is_archive_cmd(code) {
+            Ok(Self::with_archive(std))
+        }
         else if is_rtzx_cmd(code) {
             Ok(Self::with_rtzx(std))
         }
@@ -855,6 +865,7 @@ impl InnerTask {
             | InnerTask::Martine(t)
             | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
+            | InnerTask::Archive(t)
             | InnerTask::Xfer(t)
             | InnerTask::Cpr(t)
             | InnerTask::Csl(t)
@@ -891,10 +902,10 @@ impl InnerTask {
             | InnerTask::Hxcfe(t)
             | InnerTask::ImgToCpc(t)
             | InnerTask::ImpDsk(t)
-            | InnerTask::BndBuild(t)
             | InnerTask::Martine(t)
             | InnerTask::Mkdir(t)
             | InnerTask::Rm(t)
+            | InnerTask::Archive(t)
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
@@ -947,6 +958,7 @@ impl InnerTask {
             InnerTask::Martine(_t) => false,
             InnerTask::Mkdir(_) => false,
             InnerTask::Rm(_s) => false, // wrong when downloading files
+            InnerTask::Archive(_) => false,
             InnerTask::Snapshot(_) => false,
             InnerTask::SongConverter(_, _t) => false,
             InnerTask::Tracker(_, _t) => true, // XXX think if false is better
@@ -996,7 +1008,7 @@ impl InnerTask {
             InnerTask::YmCruncher(..) => TaskKind::Delegated,
 
             // File system operations - could be considered embedded
-            InnerTask::Cp(_) | InnerTask::Mv(_) | InnerTask::Mkdir(_) | InnerTask::Rm(_) => {
+            InnerTask::Cp(_) | InnerTask::Mv(_) | InnerTask::Mkdir(_) | InnerTask::Rm(_) | InnerTask::Archive(_) => {
                 TaskKind::Embedded
             },
 

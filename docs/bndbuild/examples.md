@@ -22,6 +22,8 @@ This page documents working examples from the [cpclib-bndbuild/tests](https://gi
   - [chipnsfx - ChipNSFX Music](#chipnsfx---chipnsfx-music)
 - [Data Compression](#data-compression)
   - [crunch - Multiple Crunchers](#crunch---multiple-crunchers)
+- [File Management](#file-management)
+  - [archive - Archive Creation and Management](#archive---archive-creation-and-management)
 - [Complex Projects](#complex-projects)
   - [ucpm - Multi-Format Project](#ucpm---multi-format-project)
   - [delegated - Delegated Build Rules](#delegated---delegated-build-rules)
@@ -653,6 +655,66 @@ Tests various compression formats supported by bndbuild.
 - Multiple compression formats
 - Exomizer, LZ48, LZ49, ApUltra, LZ4, LZSA1, LZSA2, Shrinkler, ZX0
 - Automated $< and $@ variable usage
+
+---
+
+## File Management
+
+### archive - Archive Creation and Management
+
+**Description:** Demonstrates how to use the archive command for creating backups, distribution packages, and managing project files.
+
+**Example Build file:**
+
+```yaml
+# Create a release archive
+- tgt: release.zip
+  dep: demo.sna demo.dsk README.md LICENSE
+  cmd: archive create release.zip demo.sna demo.dsk README.md LICENSE
+  help: Package the demo with documentation into a release archive
+
+# Create a backup of source files
+- tgt: backup
+  phony: true
+  cmd: archive create backup.tar.gz src/ assets/ *.asm bndbuild.yml
+  help: Create a compressed backup of all source files
+
+# Extract assets from an archive
+- tgt: extract-assets
+  phony: true
+  dep: assets.zip
+  cmd: archive extract assets.zip --output .
+  help: Extract asset files from archive
+
+# List archive contents before extraction
+- tgt: list-assets
+  dep: assets.zip
+  cmd: archive list assets.zip
+  help: Display the contents of the assets archive
+
+# Create distribution package with build artifacts
+- tgt: dist
+  dep: build
+  cmd: 
+    - mkdir -p dist
+    - cp demo.sna demo.dsk dist/
+    - cp README.md LICENSE dist/
+    - archive create demo-v1.0.zip dist/
+    - rm -rf dist
+  help: Create a distribution package with all release files
+```
+
+**Key Features:**
+- Create `.zip` or `.tar.gz` archives
+- Automatic format detection from file extension
+- List archive contents
+- Extract archives with optional output directory
+- Useful for releases, backups, and asset management
+- Command alias: `arc` for shorter syntax
+
+**Note:** Format is automatically detected:
+- `.zip` → ZIP format
+- `.tar.gz` or `.tgz` → TAR with GZIP compression
 
 ---
 
