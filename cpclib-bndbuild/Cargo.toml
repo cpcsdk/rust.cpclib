@@ -81,6 +81,7 @@ test-generator = "0.3.1"
 serial_test = "3.3.1"
 camino-tempfile = { workspace = true }
 assert_cmd = "2.1.1"
+predicates = "3.1"
 
 [[bin]]
 name = "bndbuild"

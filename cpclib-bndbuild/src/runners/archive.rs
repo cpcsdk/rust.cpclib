@@ -33,7 +33,15 @@ enum ArchiveCommand {
 
         /// Files or directories to add to the archive
         #[arg(required = true)]
-        files: Vec<String>
+        files: Vec<String>,
+
+        /// Strip this prefix from file paths in the archive
+        #[arg(short, long)]
+        strip_prefix: Option<String>,
+
+        /// Store only basenames (no directory structure)
+        #[arg(short, long)]
+        basename_only: bool
     },
 
     /// List contents of an archive
@@ -151,8 +159,8 @@ impl<E: EventObserver> Runner for ArchiveRunner<E> {
         };
 
         match command {
-            ArchiveCommand::Create { output, files } => {
-                create_archive(&output, &files, o)?;
+            ArchiveCommand::Create { output, files, strip_prefix, basename_only } => {
+                create_archive(&output, &files, strip_prefix.as_deref(), basename_only, o)?;
             },
             ArchiveCommand::List { archive } => {
                 list_archive(&archive, o)?;
@@ -169,17 +177,19 @@ impl<E: EventObserver> Runner for ArchiveRunner<E> {
 fn create_archive<E: EventObserver>(
     output: &str,
     files: &[String],
+    strip_prefix: Option<&str>,
+    basename_only: bool,
     o: &E
 ) -> Result<(), String> {
     let format = ArchiveFormat::from_path(output)?;
 
     match format {
-        ArchiveFormat::Zip => create_zip(output, files, o),
-        ArchiveFormat::TarGz => create_tar_gz(output, files, o)
+        ArchiveFormat::Zip => create_zip(output, files, strip_prefix, basename_only, o),
+        ArchiveFormat::TarGz => create_tar_gz(output, files, strip_prefix, basename_only, o)
     }
 }
 
-fn create_zip<E: EventObserver>(output: &str, files: &[String], o: &E) -> Result<(), String> {
+fn create_zip<E: EventObserver>(output: &str, files: &[String], strip_prefix: Option<&str>, basename_only: bool, o: &E) -> Result<(), String> {
     let file = File::create(output).map_err(|e| format!("Failed to create {}: {}", output, e))?;
     let mut zip = zip::ZipWriter::new(file);
 
@@ -190,10 +200,10 @@ fn create_zip<E: EventObserver>(output: &str, files: &[String], o: &E) -> Result
     for file_path in files {
         let path = Utf8Path::new(file_path);
         if path.is_file() {
-            add_file_to_zip(&mut zip, path, options, o)?;
+            add_file_to_zip(&mut zip, path, strip_prefix, basename_only, options, o)?;
         }
         else if path.is_dir() {
-            add_dir_to_zip(&mut zip, path, path, options, o)?;
+            add_dir_to_zip(&mut zip, path, path, strip_prefix, basename_only, options, o)?;
         }
         else {
             return Err(format!("Path not found: {}", file_path));
@@ -210,13 +220,15 @@ fn create_zip<E: EventObserver>(output: &str, files: &[String], o: &E) -> Result
 fn add_file_to_zip<W: Write + std::io::Seek, E: EventObserver>(
     zip: &mut zip::ZipWriter<W>,
     path: &Utf8Path,
+    strip_prefix: Option<&str>,
+    basename_only: bool,
     options: zip::write::SimpleFileOptions,
     o: &E
 ) -> Result<(), String> {
     let mut file = File::open(path).map_err(|e| format!("Failed to open {}: {}", path, e))?;
-    let name = path.as_str();
+    let name = compute_archive_name(path, strip_prefix, basename_only);
 
-    zip.start_file(name, options)
+    zip.start_file(&name, options)
         .map_err(|e| format!("Failed to add {} to zip: {}", name, e))?;
 
     let mut buffer = Vec::new();
@@ -234,6 +246,8 @@ fn add_dir_to_zip<W: Write + std::io::Seek, E: EventObserver>(
     zip: &mut zip::ZipWriter<W>,
     dir: &Utf8Path,
     base: &Utf8Path,
+    strip_prefix: Option<&str>,
+    basename_only: bool,
     options: zip::write::SimpleFileOptions,
     o: &E
 ) -> Result<(), String> {
@@ -245,32 +259,59 @@ fn add_dir_to_zip<W: Write + std::io::Seek, E: EventObserver>(
             .map_err(|e| format!("Invalid UTF-8 path: {}", e))?;
 
         if path.is_file() {
-            add_file_to_zip(zip, &path, options, o)?;
+            add_file_to_zip(zip, &path, strip_prefix, basename_only, options, o)?;
         }
         else if path.is_dir() {
-            add_dir_to_zip(zip, &path, base, options, o)?;
+            add_dir_to_zip(zip, &path, base, strip_prefix, basename_only, options, o)?;
         }
     }
 
     Ok(())
 }
 
-fn create_tar_gz<E: EventObserver>(output: &str, files: &[String], o: &E) -> Result<(), String> {
+/// Compute the archive entry name from a file path, applying transformations
+fn compute_archive_name(path: &Utf8Path, strip_prefix: Option<&str>, basename_only: bool) -> String {
+    if basename_only {
+        return path.file_name().unwrap_or("file").to_string();
+    }
+    
+    if let Some(prefix) = strip_prefix {
+        // Remove all occurrences of the prefix component from the path
+        let components: Vec<_> = path
+            .components()
+            .filter(|comp| comp.as_os_str() != prefix)
+            .collect();
+        
+        if !components.is_empty() {
+            let mut result = Utf8PathBuf::new();
+            for comp in components {
+                result.push(comp);
+            }
+            return result.as_str().to_string();
+        }
+    }
+    
+    path.as_str().to_string()
+}
+
+fn create_tar_gz<E: EventObserver>(output: &str, files: &[String], strip_prefix: Option<&str>, basename_only: bool, o: &E) -> Result<(), String> {
     let tar_gz = File::create(output).map_err(|e| format!("Failed to create {}: {}", output, e))?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
     for file_path in files {
         let path = Utf8Path::new(file_path);
+        let archive_name = compute_archive_name(path, strip_prefix, basename_only);
+        
         if path.is_file() {
-            tar.append_path(path.as_str())
+            tar.append_path_with_name(path.as_str(), &archive_name)
                 .map_err(|e| format!("Failed to add {} to tar: {}", file_path, e))?;
-            o.emit_stdout(&format!("  Added: {}", file_path));
+            o.emit_stdout(&format!("  Added: {}", archive_name));
         }
         else if path.is_dir() {
-            tar.append_dir_all(path.as_str(), path.as_str())
+            tar.append_dir_all(&archive_name, path.as_str())
                 .map_err(|e| format!("Failed to add directory {} to tar: {}", file_path, e))?;
-            o.emit_stdout(&format!("  Added directory: {}", file_path));
+            o.emit_stdout(&format!("  Added directory: {}", archive_name));
         }
         else {
             return Err(format!("Path not found: {}", file_path));

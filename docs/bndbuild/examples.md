@@ -670,13 +670,13 @@ Tests various compression formats supported by bndbuild.
 # Create a release archive
 - tgt: release.zip
   dep: demo.sna demo.dsk README.md LICENSE
-  cmd: archive create release.zip demo.sna demo.dsk README.md LICENSE
+  cmd: archive create -o release.zip demo.sna demo.dsk README.md LICENSE
   help: Package the demo with documentation into a release archive
 
 # Create a backup of source files
 - tgt: backup
   phony: true
-  cmd: archive create backup.tar.gz src/ assets/ *.asm bndbuild.yml
+  cmd: archive create -o backup.tar.gz src/ assets/ *.asm bndbuild.yml
   help: Create a compressed backup of all source files
 
 # Extract assets from an archive
@@ -692,16 +692,22 @@ Tests various compression formats supported by bndbuild.
   cmd: archive list assets.zip
   help: Display the contents of the assets archive
 
-# Create distribution package with build artifacts
+# Create distribution package without dist/ folder in archive
 - tgt: dist
   dep: build
   cmd: 
     - mkdir -p dist
     - cp demo.sna demo.dsk dist/
     - cp README.md LICENSE dist/
-    - archive create demo-v1.0.zip dist/
+    - archive create -o demo-v1.0.zip -s dist dist/*
     - rm -rf dist
-  help: Create a distribution package with all release files
+  help: Create a clean distribution package (files at root of archive)
+
+# Archive with flat structure (only filenames)
+- tgt: flat-archive.zip
+  dep: src/main.asm data/sprites.bin
+  cmd: archive create -o flat-archive.zip -b src/main.asm data/sprites.bin
+  help: Create archive with only filenames, no directory structure
 ```
 
 **Key Features:**
@@ -709,8 +715,15 @@ Tests various compression formats supported by bndbuild.
 - Automatic format detection from file extension
 - List archive contents
 - Extract archives with optional output directory
+- Strip directory prefixes with `-s/--strip-prefix` option
+- Flatten directory structure with `-b/--basename-only` option
 - Useful for releases, backups, and asset management
 - Command alias: `arc` for shorter syntax
+
+**Path Control Options:**
+- **Default behavior**: Files are stored with their full paths (e.g., `dist/file.txt`)
+- **`-s dist` / `--strip-prefix dist`**: Removes the `dist/` prefix from paths (e.g., `dist/file.txt` → `file.txt`)
+- **`-b` / `--basename-only`**: Stores only filenames, no directories (e.g., `src/sub/file.txt` → `file.txt`)
 
 **Note:** Format is automatically detected:
 - `.zip` → ZIP format

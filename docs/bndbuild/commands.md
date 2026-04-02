@@ -132,15 +132,29 @@ Inner command of cpclib-bndbuild 0.11.0
 ```
 Create a new archive by adding files and folders.
 
-Usage: archive create <ARCHIVE> <FILES>...
+Usage: archive create -o <OUTPUT> [OPTIONS] <FILES>...
 
 Arguments:
-  <ARCHIVE>    Archive file to create (.zip or .tar.gz/.tgz)
   <FILES>...   Files and folders to add to the archive
 
+Options:
+  -o, --output <OUTPUT>        Archive file to create (.zip or .tar.gz/.tgz)
+  -s, --strip-prefix <PREFIX>  Strip this prefix from file paths in the archive
+  -b, --basename-only          Store only basenames (no directory structure)
+  -h, --help                   Print help
+
 Examples:
-  archive create output.zip file1.asm file2.asm folder/
-  archive create backup.tar.gz src/ data/ README.md
+  # Basic usage - creates archive with full paths
+  archive create -o output.zip file1.asm file2.asm folder/
+  
+  # Strip directory prefix - useful when archiving dist/* without the dist/ folder
+  archive create -o release.zip -s dist dist/*
+  
+  # Store only filenames, no directory structure
+  archive create -o flat.zip -b src/file1.txt data/file2.txt
+  
+  # TAR.GZ format
+  archive create -o backup.tar.gz src/ data/ README.md
 ```
 
 **List archive contents:**
