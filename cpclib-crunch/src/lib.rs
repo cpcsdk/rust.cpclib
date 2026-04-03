@@ -62,6 +62,7 @@ pub struct CrunchArgs {
 #[derive(Debug, ValueEnum, Clone)]
 pub enum Cruncher {
     Apultra,
+    BackwardZx0,
     Exomizer,
     Lz4,
     Lz48,
@@ -77,6 +78,7 @@ impl Cruncher {
     pub fn z80(&self) -> &Utf8Path {
         let fname = match self {
             Cruncher::Apultra => "inner://unaplib.asm",
+            Cruncher::BackwardZx0 => "inner://uncrunch/dzx0_standard_back.asm",
             Cruncher::Exomizer => "inner://deexo.asm",
             Cruncher::Lz4 => "inner://lz4_docent.asm",
             Cruncher::Lz48 => "inner://lz48decrunch.asm",
@@ -147,7 +149,8 @@ pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
         Cruncher::Lzsa2 => CompressMethod::Lzsa(LzsaVersion::V1, None),
         Cruncher::Shrinkler => CompressMethod::Shrinkler(Default::default()),
         Cruncher::Zx0 => CompressMethod::Zx0,
-        Cruncher::Upkr => CompressMethod::Upkr
+        Cruncher::Upkr => CompressMethod::Upkr,
+        Cruncher::BackwardZx0 => CompressMethod::BackwardZx0,
     };
 
     let crunched = cruncher
