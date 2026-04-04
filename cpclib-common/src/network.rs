@@ -91,8 +91,8 @@ pub fn upload_file_multipart(
     use std::io::BufReader;
 
     // Verify file exists before proceeding
-    let _file = File::open(file_path)
-        .map_err(|e| format!("Failed to open file {}: {}", file_path, e))?;
+    let _file =
+        File::open(file_path).map_err(|e| format!("Failed to open file {}: {}", file_path, e))?;
 
     // Build multipart form manually
     let boundary = format!("----WebKitFormBoundary{:016x}", rand::random::<u64>());

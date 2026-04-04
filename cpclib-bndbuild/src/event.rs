@@ -450,7 +450,12 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
             BndBuilderEvent::StartRule { rule, nb, out_of } => {
                 println!("[{nb}/{out_of}] Handle {rule}")
             },
-            BndBuilderEvent::StartRuleAlias { alias, representative: _, nb, out_of } => {
+            BndBuilderEvent::StartRuleAlias {
+                alias,
+                representative: _,
+                nb,
+                out_of
+            } => {
                 println!("[{nb}/{out_of}] Handle {alias}")
             },
             BndBuilderEvent::StopRule(_) => {},

@@ -32,9 +32,9 @@ pub(crate) const CACHE_FILENAME: &str = ".bndbuild_timings";
 pub(crate) struct TimingKey {
     /// Absolute canonical path to the bndbuild file, or empty for the root build.
     pub(crate) build_file: String,
-    pub(crate) rule:       String,
+    pub(crate) rule: String,
     /// Empty string → rule-level sample; otherwise the task command string.
-    pub(crate) task:       String,
+    pub(crate) task: String
 }
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
@@ -42,9 +42,9 @@ pub(crate) struct TimingKey {
 /// In-memory timing cache with TSV-based load/save support.
 pub(crate) struct TimingCache {
     /// Path to the on-disk cache file.
-    path:    PathBuf,
+    path: PathBuf,
     /// Per-key sample list (insertion order, oldest first).
-    entries: HashMap<TimingKey, Vec<Duration>>,
+    entries: HashMap<TimingKey, Vec<Duration>>
 }
 
 impl TimingCache {
@@ -63,12 +63,15 @@ impl TimingCache {
                 else {
                     continue;
                 };
-                let Ok(nanos) = ns_str.parse::<u64>() else { continue };
+                let Ok(nanos) = ns_str.parse::<u64>()
+                else {
+                    continue;
+                };
 
                 let key = TimingKey {
                     build_file: bf.to_owned(),
-                    rule:       rule.to_owned(),
-                    task:       task.to_owned(),
+                    rule: rule.to_owned(),
+                    task: task.to_owned()
                 };
                 let v = entries.entry(key).or_default();
                 // Only load up to MAX_SAMPLES (older entries are silently skipped).
@@ -85,17 +88,11 @@ impl TimingCache {
 
     /// Append a new duration sample for the given key, evicting the oldest
     /// entry once `MAX_SAMPLES` is exceeded.
-    pub(crate) fn record(
-        &mut self,
-        build_file: &str,
-        rule: &str,
-        task: &str,
-        duration: Duration,
-    ) {
+    pub(crate) fn record(&mut self, build_file: &str, rule: &str, task: &str, duration: Duration) {
         let key = TimingKey {
             build_file: build_file.to_owned(),
-            rule:       rule.to_owned(),
-            task:       task.to_owned(),
+            rule: rule.to_owned(),
+            task: task.to_owned()
         };
         let v = self.entries.entry(key).or_default();
         if v.len() >= MAX_SAMPLES {
@@ -111,16 +108,11 @@ impl TimingCache {
     ///
     /// α = 0.3 means recent samples are weighted more heavily, so the estimate
     /// adapts quickly when a target gets faster or slower after a code change.
-    pub(crate) fn estimate(
-        &self,
-        build_file: &str,
-        rule: &str,
-        task: &str,
-    ) -> Option<Duration> {
+    pub(crate) fn estimate(&self, build_file: &str, rule: &str, task: &str) -> Option<Duration> {
         let key = TimingKey {
             build_file: build_file.to_owned(),
-            rule:       rule.to_owned(),
-            task:       task.to_owned(),
+            rule: rule.to_owned(),
+            task: task.to_owned()
         };
         let v = self.entries.get(&key)?;
         if v.is_empty() {

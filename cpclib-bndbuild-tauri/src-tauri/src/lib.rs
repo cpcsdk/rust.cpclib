@@ -570,7 +570,11 @@ impl BndbuildState {
     pub async fn load<P: Into<Utf8PathBuf>>(path: P, app: &AppHandle) -> Self {
         let fname = path.into();
 
-        let from_path_result = cpclib_bndbuild::BndBuilder::from_path(&fname, #[cfg(feature = "rayon")]false);
+        let from_path_result = cpclib_bndbuild::BndBuilder::from_path(
+            &fname,
+            #[cfg(feature = "rayon")]
+            false
+        );
 
         match from_path_result {
             Ok((fname, builder)) => {

@@ -16,17 +16,18 @@ pub(crate) fn fmt_duration(d: std::time::Duration) -> String {
     let total_secs = d.as_secs();
     if total_secs < 60 {
         format!("{:.1}s", d.as_secs_f64())
-    } else if total_secs < 3600 {
+    }
+    else if total_secs < 3600 {
         let m = total_secs / 60;
         let s = total_secs % 60;
         format!("{m}m{s:02}s")
-    } else {
+    }
+    else {
         let h = total_secs / 3600;
         let m = (total_secs % 3600) / 60;
         format!("{h}h{m:02}m")
     }
 }
-
 
 /// Strip ANSI/VT escape sequences from a string so raw terminal output does
 /// not corrupt ratatui's cell buffer.
@@ -57,9 +58,12 @@ pub(crate) fn strip_ansi_codes(s: &str) -> String {
                 // OSC: consume until BEL or ST (ESC \)
                 loop {
                     match chars.next() {
-                        None | Some('\x07') => break,          // BEL terminates
-                        Some('\x1b') => { chars.next(); break }, // ESC \ terminates
-                        _ => {},
+                        None | Some('\x07') => break, // BEL terminates
+                        Some('\x1b') => {
+                            chars.next();
+                            break;
+                        }, // ESC \ terminates
+                        _ => {}
                     }
                 }
             },
@@ -69,7 +73,7 @@ pub(crate) fn strip_ansi_codes(s: &str) -> String {
             },
             Some(_) | None => {
                 // Any other two-char ESC sequence: both chars dropped
-            },
+            }
         }
     }
     out
@@ -100,13 +104,13 @@ pub(crate) fn marquee_window(names: &str, elapsed_ms: u64, avail: usize) -> Stri
 // ─── Rules list widget ────────────────────────────────────────────────────────
 
 pub(crate) struct RulesView<'a> {
-    pub(crate) rules:             &'a [RuleEntry],
-    pub(crate) orphans:           &'a [TaskEntry],
-    pub(crate) skip:              usize,
-    pub(crate) selected_rule:     Option<usize>,
+    pub(crate) rules: &'a [RuleEntry],
+    pub(crate) orphans: &'a [TaskEntry],
+    pub(crate) skip: usize,
+    pub(crate) selected_rule: Option<usize>,
     /// When true, UpToDate rules are hidden and replaced by a single summary
     /// line at the bottom of the list.
-    pub(crate) collapse_uptodate: bool,
+    pub(crate) collapse_uptodate: bool
 }
 
 impl<'a> Widget for RulesView<'a> {
@@ -135,12 +139,22 @@ impl<'a> Widget for RulesView<'a> {
             // user can read its full output. Nothing renders below it.
             let h = if is_selected {
                 bottom - y
-            } else {
+            }
+            else {
                 rule.height().min(bottom - y)
             };
-            RuleWidget { rule, selected: is_selected }.render(
-                Rect { x: area.x, y, width: area.width, height: h },
-                buf,
+            RuleWidget {
+                rule,
+                selected: is_selected
+            }
+            .render(
+                Rect {
+                    x: area.x,
+                    y,
+                    width: area.width,
+                    height: h
+                },
+                buf
             );
             y += h;
         }
@@ -154,8 +168,13 @@ impl<'a> Widget for RulesView<'a> {
             }
             let h = task.inline_height().min(bottom - y);
             InlineTaskWidget::new(task).render(
-                Rect { x: area.x, y, width: area.width, height: h },
-                buf,
+                Rect {
+                    x: area.x,
+                    y,
+                    width: area.width,
+                    height: h
+                },
+                buf
             );
             y += h;
         }
@@ -163,11 +182,23 @@ impl<'a> Widget for RulesView<'a> {
         if collapsed_uptodate > 0 && y < bottom {
             let s = if collapsed_uptodate == 1 {
                 "\u{2261}  [1 rule up-to-date  \u{b7}  u to expand]".to_owned()
-            } else {
+            }
+            else {
                 format!("\u{2261}  [{collapsed_uptodate} rules up-to-date  \u{b7}  u to expand]")
             };
-            Paragraph::new(Line::from(Span::styled(s, Style::default().fg(Color::DarkGray))))
-                .render(Rect { x: area.x, y, width: area.width, height: 1 }, buf);
+            Paragraph::new(Line::from(Span::styled(
+                s,
+                Style::default().fg(Color::DarkGray)
+            )))
+            .render(
+                Rect {
+                    x: area.x,
+                    y,
+                    width: area.width,
+                    height: 1
+                },
+                buf
+            );
         }
     }
 }
@@ -175,9 +206,9 @@ impl<'a> Widget for RulesView<'a> {
 // ─── Inline task widget ───────────────────────────────────────────────────────
 
 pub(crate) struct InlineTaskWidget<'a> {
-    pub(crate) task:     &'a TaskEntry,
+    pub(crate) task: &'a TaskEntry,
     /// Horizontal character offset applied to all output lines.
-    pub(crate) h_scroll: usize,
+    pub(crate) h_scroll: usize
 }
 
 impl<'a> InlineTaskWidget<'a> {
@@ -200,10 +231,12 @@ impl<'a> Widget for InlineTaskWidget<'a> {
         let (prefix, style) = match &entry.status {
             TaskStatus::Running => ("● ", Style::default().fg(Color::Yellow)),
             TaskStatus::Success(_) => ("✓ ", Style::default().fg(Color::Green)),
-            TaskStatus::Failed(_) => (
-                "✗ ",
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-            ),
+            TaskStatus::Failed(_) => {
+                (
+                    "✗ ",
+                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                )
+            },
         };
         let elapsed_ms = entry.started.elapsed().as_millis() as u64;
         let header = match &entry.status {
@@ -213,19 +246,27 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                 let elapsed = entry.started.elapsed();
                 // Live elapsed time, same layout as finished tasks: "1.2s  "
                 let timing = format!("{}  ", fmt_duration(elapsed));
-                let est_hint = entry.estimated_duration.and_then(|est| {
-                    if elapsed >= est { None }
-                    else { Some(format!("  ~{}", fmt_duration(est - elapsed))) }
-                }).unwrap_or_default();
+                let est_hint = entry
+                    .estimated_duration
+                    .and_then(|est| {
+                        if elapsed >= est {
+                            None
+                        }
+                        else {
+                            Some(format!("  ~{}", fmt_duration(est - elapsed)))
+                        }
+                    })
+                    .unwrap_or_default();
                 // Prefix = spinner + space (2 cols), then timing, then name, then hint.
                 let prefix_cols = 2usize;
                 let timing_cols = timing.chars().count();
-                let hint_cols   = est_hint.chars().count();
-                let name_avail  = (area.width as usize)
-                    .saturating_sub(prefix_cols + timing_cols + hint_cols);
+                let hint_cols = est_hint.chars().count();
+                let name_avail =
+                    (area.width as usize).saturating_sub(prefix_cols + timing_cols + hint_cols);
                 let name_str = if h_scroll == 0 {
                     marquee_window(&entry.task, elapsed_ms, name_avail)
-                } else {
+                }
+                else {
                     entry.task.clone()
                 };
                 format!("{frame} {timing}{name_str}{est_hint}")
@@ -236,15 +277,15 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                 // prefix = "✓ " (2 cols), timing cols, then available for name.
                 let prefix_cols = prefix.chars().count(); // "✓ " = 2
                 let timing_cols = timing.chars().count();
-                let name_avail =
-                    (area.width as usize).saturating_sub(prefix_cols + timing_cols);
+                let name_avail = (area.width as usize).saturating_sub(prefix_cols + timing_cols);
                 let name_str = if h_scroll == 0 {
                     marquee_window(&entry.task, elapsed_ms, name_avail)
-                } else {
+                }
+                else {
                     entry.task.clone()
                 };
                 format!("{prefix}{timing}{name_str}")
-            },
+            }
         };
         // Prefix+timing are always pinned for both running and finished tasks;
         // the name part already accounts for h_scroll via marquee_window above.
@@ -257,7 +298,11 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                 || (matches!(entry.status, TaskStatus::Failed(_)) && !entry.stderr.is_empty())
                 || (matches!(entry.status, TaskStatus::Success(_)) && !entry.stdout.is_empty()));
         if show_output {
-            let out_area = Rect { y: area.y + 1, height: area.height - 1, ..area };
+            let out_area = Rect {
+                y: area.y + 1,
+                height: area.height - 1,
+                ..area
+            };
             let all_lines: Vec<(&str, Style)> = match &entry.status {
                 // Running and Failed: stderr (red) first, then stdout.
                 // PTY-spawned processes may route all output through stdout.
@@ -277,7 +322,7 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                         .iter()
                         .map(|s| (s.as_str(), Style::default().fg(Color::DarkGray)))
                         .collect()
-                },
+                }
             };
             let start = all_lines.len().saturating_sub(out_area.height as usize);
             let w = out_area.width as usize;
@@ -289,9 +334,14 @@ impl<'a> Widget for InlineTaskWidget<'a> {
                 let chars: Vec<char> = line.chars().collect();
                 let from = h_scroll.min(chars.len());
                 let visible: String = chars[from..].iter().take(w).collect();
-                Paragraph::new(visible)
-                    .style(*sty)
-                    .render(Rect { y: out_area.y + i as u16, height: 1, ..out_area }, buf);
+                Paragraph::new(visible).style(*sty).render(
+                    Rect {
+                        y: out_area.y + i as u16,
+                        height: 1,
+                        ..out_area
+                    },
+                    buf
+                );
             }
         }
     }
@@ -300,8 +350,8 @@ impl<'a> Widget for InlineTaskWidget<'a> {
 // ─── Rule widget ──────────────────────────────────────────────────────────────
 
 pub(crate) struct RuleWidget<'a> {
-    pub(crate) rule:     &'a RuleEntry,
-    pub(crate) selected: bool,
+    pub(crate) rule: &'a RuleEntry,
+    pub(crate) selected: bool
 }
 
 impl<'a> Widget for RuleWidget<'a> {
@@ -314,7 +364,8 @@ impl<'a> Widget for RuleWidget<'a> {
         // Build a full display name that includes any co-target aliases.
         let full_name: std::borrow::Cow<str> = if rule.aliases.is_empty() {
             std::borrow::Cow::Borrowed(rule.name.as_str())
-        } else {
+        }
+        else {
             let parts = std::iter::once(rule.name.as_str())
                 .chain(rule.aliases.iter().map(|s| s.as_str()))
                 .collect::<Vec<_>>()
@@ -327,14 +378,25 @@ impl<'a> Widget for RuleWidget<'a> {
         let full_name_display = full_name.trim_end_matches('.');
 
         match &rule.status {
-            RuleStatus::Running => render_running_rule(rule, selected, full_name_display, area, buf),
+            RuleStatus::Running => {
+                render_running_rule(rule, selected, full_name_display, area, buf)
+            },
             RuleStatus::UpToDate => {
                 render_uptodate_rule(rule, full_name_display, elapsed_ms, area, buf)
             },
             RuleStatus::Success(dur) | RuleStatus::Failed(dur) => {
                 let is_success = matches!(&rule.status, RuleStatus::Success(_));
-                render_finished_rule(rule, selected, is_success, dur, full_name_display, elapsed_ms, area, buf);
-            },
+                render_finished_rule(
+                    rule,
+                    selected,
+                    is_success,
+                    dur,
+                    full_name_display,
+                    elapsed_ms,
+                    area,
+                    buf
+                );
+            }
         }
     }
 }
@@ -344,24 +406,29 @@ fn render_running_rule(
     selected: bool,
     full_name: &str,
     area: Rect,
-    buf: &mut Buffer,
+    buf: &mut Buffer
 ) {
     let elapsed_ms = rule.started.elapsed().as_millis() as u64;
     let elapsed_str = fmt_duration(rule.started.elapsed());
     let counter = if rule.out_of > 0 {
         format!("  [{}/{}]  {elapsed_str}", rule.nb, rule.out_of)
-    } else {
+    }
+    else {
         format!("  {elapsed_str}")
     };
     // ETA hint: show remaining time only; hide when over-time to avoid confusion.
-    let est_hint: String = rule.estimated_duration.and_then(|est| {
-        let spent = rule.started.elapsed();
-        if spent >= est {
-            None
-        } else {
-            Some(format!("  ~{}", fmt_duration(est - spent)))
-        }
-    }).unwrap_or_default();
+    let est_hint: String = rule
+        .estimated_duration
+        .and_then(|est| {
+            let spent = rule.started.elapsed();
+            if spent >= est {
+                None
+            }
+            else {
+                Some(format!("  ~{}", fmt_duration(est - spent)))
+            }
+        })
+        .unwrap_or_default();
     let counter = format!("{counter}{est_hint}");
 
     // Title bar has area.width columns; border chars take 1 each side.
@@ -377,17 +444,19 @@ fn render_running_rule(
                 Span::styled("⟳ ", Style::default().fg(Color::Yellow)),
                 Span::raw(full_name.to_owned()),
             ])
-        } else {
+        }
+        else {
             Line::from(vec![
                 Span::styled("⟳ ", Style::default().fg(Color::Yellow)),
                 Span::raw(full_name.to_owned()),
                 Span::styled(counter.clone(), Style::default().fg(Color::DarkGray)),
             ])
         }
-    } else {
+    }
+    else {
         // Too long: marquee-scroll the names from right to left.
-        let names_avail = (title_bar_w * 2 / 3)
-            .min(title_bar_w.saturating_sub(prefix_w + counter_w));
+        let names_avail =
+            (title_bar_w * 2 / 3).min(title_bar_w.saturating_sub(prefix_w + counter_w));
         let scrolled = marquee_window(full_name, elapsed_ms, names_avail);
         Line::from(vec![
             Span::styled("⟳ ", Style::default().fg(Color::Yellow)),
@@ -403,9 +472,11 @@ fn render_running_rule(
         .unwrap_or(false);
     let border_color = if selected {
         Color::Cyan
-    } else if flash {
+    }
+    else if flash {
         Color::White
-    } else {
+    }
+    else {
         Color::Yellow
     };
     let block = Block::default()
@@ -418,8 +489,14 @@ fn render_running_rule(
     // Auto-scroll: show the most-recent (last) tasks when they don't all fit.
     // When selected, use full (uncapped) per-task height so all output lines are
     // reachable via task_scroll.
-    let height_fn =
-        |t: &TaskEntry| -> u16 { if selected { t.full_height() } else { t.inline_height() } };
+    let height_fn = |t: &TaskEntry| -> u16 {
+        if selected {
+            t.full_height()
+        }
+        else {
+            t.inline_height()
+        }
+    };
     let auto_start = {
         let mut rem = inner.height;
         let mut fit = 0usize;
@@ -428,10 +505,12 @@ fn render_running_rule(
             if fit == 0 {
                 fit += 1;
                 rem = rem.saturating_sub(h);
-            } else if h <= rem {
+            }
+            else if h <= rem {
                 fit += 1;
                 rem -= h;
-            } else {
+            }
+            else {
                 break;
             }
         }
@@ -440,7 +519,8 @@ fn render_running_rule(
     // When selected, allow scrolling back from the auto-follow position.
     let task_start = if selected {
         auto_start.saturating_sub(rule.task_scroll)
-    } else {
+    }
+    else {
         auto_start
     };
 
@@ -453,10 +533,18 @@ fn render_running_rule(
         let h = height_fn(task).min(avail);
         let widget = if selected {
             InlineTaskWidget::with_h_scroll(task, rule.h_scroll)
-        } else {
+        }
+        else {
             InlineTaskWidget::new(task)
         };
-        widget.render(Rect { y, height: h, ..inner }, buf);
+        widget.render(
+            Rect {
+                y,
+                height: h,
+                ..inner
+            },
+            buf
+        );
         y += h;
     }
 }
@@ -471,7 +559,7 @@ fn render_compact_rule_line(
     source: Option<&str>,
     elapsed_ms: u64,
     area: Rect,
-    buf: &mut Buffer,
+    buf: &mut Buffer
 ) {
     let prefix_w = prefix.chars().count();
     let source_suffix: String = source.map(|s| format!("  [{s}]")).unwrap_or_default();
@@ -485,13 +573,22 @@ fn render_compact_rule_line(
     ];
     if !source_suffix.is_empty() {
         spans.push(Span::raw(" ".repeat(pad_w)));
-        spans.push(Span::styled(source_suffix, Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(
+            source_suffix,
+            Style::default().fg(Color::DarkGray)
+        ));
     }
     Paragraph::new(Line::from(spans)).render(area, buf);
 }
 
 /// Compact 1-line rendering for rules whose targets were already up to date.
-fn render_uptodate_rule(rule: &RuleEntry, full_name: &str, elapsed_ms: u64, area: Rect, buf: &mut Buffer) {
+fn render_uptodate_rule(
+    rule: &RuleEntry,
+    full_name: &str,
+    elapsed_ms: u64,
+    area: Rect,
+    buf: &mut Buffer
+) {
     render_compact_rule_line(
         "≡  ",
         Style::default().fg(Color::Cyan),
@@ -500,7 +597,7 @@ fn render_uptodate_rule(rule: &RuleEntry, full_name: &str, elapsed_ms: u64, area
         rule.source.as_deref(),
         elapsed_ms,
         area,
-        buf,
+        buf
     );
 }
 
@@ -512,14 +609,23 @@ fn render_finished_rule(
     full_name: &str,
     elapsed_ms: u64,
     area: Rect,
-    buf: &mut Buffer,
+    buf: &mut Buffer
 ) {
     if selected {
         // ── Expanded detail view ─────────────────────────────────────────────
         let (icon, title_style) = if is_success {
-            ("✓", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
-        } else {
-            ("✗", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+            (
+                "✓",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD)
+            )
+        }
+        else {
+            (
+                "✗",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+            )
         };
         let title_str = format!("{icon} {}  {full_name}  ", fmt_duration(*dur));
         let block = Block::default()
@@ -529,7 +635,7 @@ fn render_finished_rule(
                 Span::styled(title_str, title_style),
                 Span::styled(
                     "esc/tab · ↑↓ scroll · ←→ h-scroll",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(Color::DarkGray)
                 ),
             ]));
         let inner = block.inner(area);
@@ -539,23 +645,34 @@ fn render_finished_rule(
         let mut all_lines: Vec<(String, Style)> = Vec::new();
         for task in &rule.tasks {
             let (t_icon, t_style) = match &task.status {
-                TaskStatus::Running => (
-                    "⠿",
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-                ),
-                TaskStatus::Success(_) => (
-                    "✓",
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
-                ),
+                TaskStatus::Running => {
+                    (
+                        "⠿",
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD)
+                    )
+                },
+                TaskStatus::Success(_) => {
+                    (
+                        "✓",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD)
+                    )
+                },
                 TaskStatus::Failed(_) => {
-                    ("✗", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+                    (
+                        "✗",
+                        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                    )
                 },
             };
             let d_str = match &task.status {
                 TaskStatus::Running => "  ??.??s".to_owned(),
                 TaskStatus::Success(d) | TaskStatus::Failed(d) => {
                     format!("  {}", fmt_duration(*d))
-                },
+                }
             };
             all_lines.push((format!("{t_icon}{d_str}  {}", task.task), t_style));
             for s in &task.stderr {
@@ -582,11 +699,17 @@ fn render_finished_rule(
             let chars: Vec<char> = text.chars().collect();
             let from = h_off.min(chars.len());
             let visible_str: String = chars[from..].iter().take(w).collect();
-            Paragraph::new(visible_str)
-                .style(*style)
-                .render(Rect { y: inner.y + row as u16, height: 1, ..inner }, buf);
+            Paragraph::new(visible_str).style(*style).render(
+                Rect {
+                    y: inner.y + row as u16,
+                    height: 1,
+                    ..inner
+                },
+                buf
+            );
         }
-    } else if is_success {
+    }
+    else if is_success {
         // ── Success: compact 1-line view ──────────────────────────────────
         let prefix = format!("✓  {}  ", fmt_duration(*dur));
         render_compact_rule_line(
@@ -597,9 +720,10 @@ fn render_finished_rule(
             rule.source.as_deref(),
             elapsed_ms,
             area,
-            buf,
+            buf
         );
-    } else if area.height <= 1 {
+    }
+    else if area.height <= 1 {
         // ── Failed: 1-line fallback ──────────────────────────────────────────
         let prefix = format!("✗  {}  ", fmt_duration(*dur));
         let suffix = "  [FAILED]";
@@ -615,16 +739,16 @@ fn render_finished_rule(
         ]))
         .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
         .render(area, buf);
-    } else {
+    }
+    else {
         // ── Failed: box view with tasks listed ───────────────────────────────
-        let title_str =
-            format!("✗ {}  {full_name}  [FAILED]", fmt_duration(*dur));
+        let title_str = format!("✗ {}  {full_name}  [FAILED]", fmt_duration(*dur));
         let block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
             .title(Line::from(Span::styled(
                 title_str,
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
             )));
         let inner = block.inner(area);
         block.render(area, buf);
@@ -636,8 +760,12 @@ fn render_finished_rule(
             let avail = inner.height - y_off;
             let h = task.inline_height().min(avail);
             InlineTaskWidget::new(task).render(
-                Rect { y: inner.y + y_off, height: h, ..inner },
-                buf,
+                Rect {
+                    y: inner.y + y_off,
+                    height: h,
+                    ..inner
+                },
+                buf
             );
             y_off += h;
         }

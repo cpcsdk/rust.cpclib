@@ -113,17 +113,17 @@ impl Disc for AnyDisc {
         Self: Sized,
         P: AsRef<Utf8Path>
     {
-        //let path = path.as_ref();
-        //if path
+        // let path = path.as_ref();
+        // if path
         //    .extension()
         //    .map(|ext| ext.eq_ignore_ascii_case("hfe"))
         //    .unwrap_or(false)
         //{
-            Hfe::open(path).map(|d| d.into())
+        Hfe::open(path).map(|d| d.into())
         //}
-        //else {
+        // else {
         //    ExtendedDsk::open(path).map(|d| d.into())
-       // }
+        // }
     }
 
     #[cfg(not(feature = "hfe"))]
@@ -196,7 +196,10 @@ pub fn open_disc<P: AsRef<Utf8Path>>(path: P, fail_if_missing: bool) -> Result<A
 }
 
 #[cfg(feature = "cmdline")]
-pub fn dsk_manager_handle(matches: &ArgMatches, o: &dyn EventObserver) -> Result<(), DskManagerError> {
+pub fn dsk_manager_handle(
+    matches: &ArgMatches,
+    o: &dyn EventObserver
+) -> Result<(), DskManagerError> {
     use cpclib_common::camino::Utf8Path;
 
     let dsk_fname = matches.get_one::<String>("DSK_FILE").unwrap();
@@ -368,7 +371,9 @@ pub fn dsk_manager_handle(matches: &ArgMatches, o: &dyn EventObserver) -> Result
                         if amsdos_fname.is_err() || !amsdos_fname.unwrap().is_valid() {
                             // the amsdos header is crappy and does not handle properly the name. Probably because it comes from orgams ;)
                             // then we try to replace it by the file name
-                            o.emit_stderr("AMSDOS filename is invalid. We try to use the PC filename");
+                            o.emit_stderr(
+                                "AMSDOS filename is invalid. We try to use the PC filename"
+                            );
 
                             let pc_fname = fname.file_name().unwrap().to_ascii_uppercase();
                             let mut pc_fname = pc_fname.split(".");

@@ -13,8 +13,8 @@
 #![deny(clippy::pedantic)]
 #![allow(unused)]
 
-use cpclib_imgconverter::{build_img2cpc_args_parser, built_info, process_img2cpc};
 use cpclib_common::event::DiscardObserver;
+use cpclib_imgconverter::{build_img2cpc_args_parser, built_info, process_img2cpc};
 
 fn main() -> anyhow::Result<()> {
     let desc_before = format!(

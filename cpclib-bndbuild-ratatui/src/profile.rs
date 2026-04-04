@@ -23,7 +23,7 @@ pub(crate) fn save_profile(
     rules: &[RuleEntry],
     build_started: Instant,
     total_duration: Duration,
-    path: &Path,
+    path: &Path
 ) -> std::io::Result<()> {
     let html = build_html_minijinja(rules, build_started, total_duration);
     std::fs::write(path, html.as_bytes())
@@ -32,19 +32,19 @@ pub(crate) fn save_profile(
 // ─── Internal data model ──────────────────────────────────────────────────────
 
 struct TaskRow {
-    name:  String,
+    name: String,
     start: Duration, // offset from build_started
-    dur:   Duration,
-    color: &'static str,
+    dur: Duration,
+    color: &'static str
 }
 
 struct RuleRow {
-    name:   String,
-    start:  Duration, // offset from build_started
-    dur:    Duration,
-    color:  &'static str,
+    name: String,
+    start: Duration, // offset from build_started
+    dur: Duration,
+    color: &'static str,
     status: &'static str,
-    tasks:  Vec<TaskRow>,
+    tasks: Vec<TaskRow>
 }
 
 fn collect_rows(rules: &[RuleEntry], build_started: Instant) -> Vec<RuleRow> {
@@ -60,7 +60,7 @@ fn collect_rows(rules: &[RuleEntry], build_started: Instant) -> Vec<RuleRow> {
                 RuleStatus::Success(d) => (*d, "#a6e3a1", "ok"),
                 RuleStatus::Failed(d) => (*d, "#f38ba8", "FAILED"),
                 RuleStatus::UpToDate => (Duration::ZERO, "#89dceb", "up-to-date"),
-                RuleStatus::Running => (r.started.elapsed(), "#f9e2af", "running"),
+                RuleStatus::Running => (r.started.elapsed(), "#f9e2af", "running")
             };
 
             let tasks = r
@@ -74,13 +74,25 @@ fn collect_rows(rules: &[RuleEntry], build_started: Instant) -> Vec<RuleRow> {
                     let (d, c) = match &t.status {
                         TaskStatus::Success(d) => (*d, "#a6e3a1"),
                         TaskStatus::Failed(d) => (*d, "#f38ba8"),
-                        TaskStatus::Running => (t.started.elapsed(), "#f9e2af"),
+                        TaskStatus::Running => (t.started.elapsed(), "#f9e2af")
                     };
-                    TaskRow { name: t.task.clone(), start: task_start, dur: d, color: c }
+                    TaskRow {
+                        name: t.task.clone(),
+                        start: task_start,
+                        dur: d,
+                        color: c
+                    }
                 })
                 .collect();
 
-            RuleRow { name: r.name.clone(), start, dur, color, status, tasks }
+            RuleRow {
+                name: r.name.clone(),
+                start,
+                dur,
+                color,
+                status,
+                tasks
+            }
         })
         .collect()
 }
@@ -91,9 +103,15 @@ fn fmt_dur(d: Duration) -> String {
     let ms = d.as_millis();
     if ms < 1000 {
         format!("{}ms", ms)
-    } else {
+    }
+    else {
         let s = d.as_secs_f64();
-        if s < 100.0 { format!("{:.2}s", s) } else { format!("{:.0}s", s) }
+        if s < 100.0 {
+            format!("{:.2}s", s)
+        }
+        else {
+            format!("{:.0}s", s)
+        }
     }
 }
 
@@ -109,7 +127,8 @@ fn truncate_left(s: &str, max: usize) -> String {
     let count = s.chars().count();
     if count <= max {
         s.to_owned()
-    } else {
+    }
+    else {
         let tail: String = s
             .chars()
             .rev()
@@ -228,11 +247,13 @@ fn build_gantt(rows: &[RuleRow], total: Duration) -> String {
     let svg_h = PAD_Y + TICK_ROW + n * ROW_H + PAD_Y;
 
     // Choose a tick interval such that at most 14 ticks are shown.
-    let tick_secs = [0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0]
-        .iter()
-        .copied()
-        .find(|&t| total_secs / t <= 14.0)
-        .unwrap_or(600.0);
+    let tick_secs = [
+        0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0
+    ]
+    .iter()
+    .copied()
+    .find(|&t| total_secs / t <= 14.0)
+    .unwrap_or(600.0);
 
     let chart_x0 = PAD_X + LABEL_W;
     let chart_y0 = PAD_Y + TICK_ROW;
@@ -243,7 +264,8 @@ fn build_gantt(rows: &[RuleRow], total: Duration) -> String {
     w!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" \
          style=\"font-family:inherit\">",
-        svg_w, svg_h
+        svg_w,
+        svg_h
     );
     w!("<rect width=\"100%\" height=\"100%\" fill=\"#181825\" rx=\"6\"/>");
 
@@ -251,7 +273,10 @@ fn build_gantt(rows: &[RuleRow], total: Duration) -> String {
     w!(
         "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" \
          stroke=\"#45475a\" stroke-width=\"1\"/>",
-        chart_x0, PAD_Y, chart_x0, svg_h - PAD_Y
+        chart_x0,
+        PAD_Y,
+        chart_x0,
+        svg_h - PAD_Y
     );
 
     // X-axis grid lines and labels.
@@ -261,11 +286,13 @@ fn build_gantt(rows: &[RuleRow], total: Duration) -> String {
         w!(
             "<line x1=\"{x:.1}\" y1=\"{}\" x2=\"{x:.1}\" y2=\"{}\" \
              stroke=\"#313244\" stroke-width=\"1\"/>",
-            chart_y0, svg_h - PAD_Y
+            chart_y0,
+            svg_h - PAD_Y
         );
         let label = if tick_secs >= 1.0 {
             format!("{}s", t as u64)
-        } else {
+        }
+        else {
             format!("{:.1}s", t)
         };
         w!(
@@ -290,7 +317,10 @@ fn build_gantt(rows: &[RuleRow], total: Duration) -> String {
             w!(
                 "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" \
                  fill=\"#1e1e2e\" opacity=\"0.45\"/>",
-                PAD_X, row_top, LABEL_W, ROW_H
+                PAD_X,
+                row_top,
+                LABEL_W,
+                ROW_H
             );
         }
 
@@ -311,19 +341,15 @@ fn build_gantt(rows: &[RuleRow], total: Duration) -> String {
         let bar_w = (row.dur.as_nanos() as f64 / total_ns * CHART_W as f64).max(2.0);
 
         // Tooltip: name + status + duration + task list.
-        let mut tip = format!(
-            "{}\n{} · {}",
-            esc(&row.name),
-            row.status,
-            fmt_dur(row.dur)
-        );
+        let mut tip = format!("{}\n{} · {}", esc(&row.name), row.status, fmt_dur(row.dur));
         for t in &row.tasks {
             tip.push_str(&format!("\n  {} \u{2014} {}", fmt_dur(t.dur), esc(&t.name)));
         }
         w!(
             "<rect x=\"{bar_x:.1}\" y=\"{bar_y}\" width=\"{bar_w:.1}\" height=\"{bar_h}\" \
              fill=\"{}\" rx=\"3\" opacity=\"0.88\"><title>{}</title></rect>",
-            row.color, tip
+            row.color,
+            tip
         );
 
         // Duration label inside bar when bar is wide enough.
@@ -371,12 +397,10 @@ fn build_table(rows: &[RuleRow], total: Duration) -> String {
     let mut s = String::new();
     macro_rules! w { ($($a:tt)*) => { s.push_str(&format!($($a)*)); }; }
 
-    w!(
-        "<table><thead><tr>\
+    w!("<table><thead><tr>\
          <th>#</th><th>Rule</th><th>Duration</th><th>Share</th>\
          <th>Status</th><th>Tasks</th><th>Slowest task</th>\
-         </tr></thead><tbody>"
-    );
+         </tr></thead><tbody>");
 
     for (rank, row) in sorted.iter().enumerate() {
         let pct = row.dur.as_nanos() as f64 / total_ns * 100.0;
@@ -388,7 +412,7 @@ fn build_table(rows: &[RuleRow], total: Duration) -> String {
             "ok" => "s-ok",
             "FAILED" => "s-failed",
             "up-to-date" => "s-uptodate",
-            _ => "s-running",
+            _ => "s-running"
         };
         w!(
             "<tr>\

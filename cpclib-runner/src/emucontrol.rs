@@ -1515,7 +1515,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.orgams_wait_save(o)
     }
 
-    fn orgams_import(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    fn orgams_import(
+        &mut self,
+        src: &str,
+        o: &dyn EventObserver
+    ) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         self.type_text("ùo");
         self.r#return();
 
@@ -1530,7 +1534,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.orgams_wait_import(o)
     }
 
-    fn orgams_load(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    fn orgams_load(
+        &mut self,
+        src: &str,
+        o: &dyn EventObserver
+    ) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         // Open orgams
         o.emit_stdout(&format!("> Launch orgams and open file \"{src}\"\n"));
 
@@ -1545,7 +1553,11 @@ impl<E: UsedEmulator> RobotImpl<E> {
         res
     }
 
-    fn orgams_assemble(&mut self, src: &str, o: &dyn EventObserver) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
+    fn orgams_assemble(
+        &mut self,
+        src: &str,
+        o: &dyn EventObserver
+    ) -> Result<(), ImageBuffer<Rgba<u8>, Vec<u8>>> {
         o.emit_stdout(&format!("> Assemble {src}\n"));
         self.ctrl_char('1');
 
@@ -1843,7 +1855,10 @@ impl<E: EventObserver + Clone + 'static> RunnerWithClap for EmulatorFacadeRunner
     }
 }
 
-pub fn handle_arguments<E: EventObserver + Clone + 'static>(mut cli: EmuCli, o: &E) -> Result<(), String> {
+pub fn handle_arguments<E: EventObserver + Clone + 'static>(
+    mut cli: EmuCli,
+    o: &E
+) -> Result<(), String> {
     if cli.clear_cache {
         clear_base_cache_folder().map_err(|e| format!("Unable to clear the cache folder. {e}"))?;
     }
@@ -2060,9 +2075,9 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(mut cli: EmuCli, o: 
             let _ = start_emulator(&t_emu, &conf_thread, &o_for_emu);
         });
         None
-    } else {
-        let handle =
-            std::thread::spawn(move || start_emulator(&t_emu, &conf_thread, &o_for_emu));
+    }
+    else {
+        let handle = std::thread::spawn(move || start_emulator(&t_emu, &conf_thread, &o_for_emu));
         Some(handle)
     };
 
@@ -2180,8 +2195,9 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(mut cli: EmuCli, o: 
 
     // For non-background tasks: block until the emulator window is closed.
     if let Some(handle) = emu_thread {
-        let emu_result =
-            handle.join().unwrap_or_else(|_| Err("emulator thread panicked".to_string()));
+        let emu_result = handle
+            .join()
+            .unwrap_or_else(|_| Err("emulator thread panicked".to_string()));
         if let Err(e) = emu_result {
             if res.is_ok() {
                 return Err(e);

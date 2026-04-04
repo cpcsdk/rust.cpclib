@@ -48,17 +48,23 @@ impl<E: EventObserver> Runner for CpRunner<E> {
 
             if from.is_dir() {
                 dircpy::copy_dir_advanced(from, &to, true, true, true, Vec::new(), Vec::new())
-                    .map_err(|e| error.push_str(&format!("Error when copying directory {from} to {to}. {e}.\n")))
+                    .map_err(|e| {
+                        error.push_str(&format!(
+                            "Error when copying directory {from} to {to}. {e}.\n"
+                        ))
+                    })
                     .map(|_| {
                         fn count_files(path: &std::path::Path) -> usize {
                             match fs_err::metadata(path) {
                                 Ok(meta) if meta.is_file() => 1,
-                                Ok(meta) if meta.is_dir() => fs_err::read_dir(path)
-                                    .ok()
-                                    .into_iter()
-                                    .flat_map(|it| it.filter_map(Result::ok))
-                                    .map(|entry| count_files(&entry.path()))
-                                    .sum(),
+                                Ok(meta) if meta.is_dir() => {
+                                    fs_err::read_dir(path)
+                                        .ok()
+                                        .into_iter()
+                                        .flat_map(|it| it.filter_map(Result::ok))
+                                        .map(|entry| count_files(&entry.path()))
+                                        .sum()
+                                },
                                 _ => 0
                             }
                         }
@@ -71,8 +77,12 @@ impl<E: EventObserver> Runner for CpRunner<E> {
             }
             else {
                 fs_err::copy(from, &to)
-                    .map_err(|e| error.push_str(&format!("Error when copying {from} to {to}. {e}.\n")))
-                    .map(|success| o.emit_stdout(&format!("Copied {from} to {to} ({success} bytes).")))
+                    .map_err(|e| {
+                        error.push_str(&format!("Error when copying {from} to {to}. {e}.\n"))
+                    })
+                    .map(|success| {
+                        o.emit_stdout(&format!("Copied {from} to {to} ({success} bytes)."))
+                    })
             }
         };
 
@@ -163,8 +173,14 @@ mod test {
         let obs = CapturingObserver::new();
         let result = cp.inner_run(&["--help"], &obs);
         assert!(result.is_ok(), "help should succeed");
-        assert!(!obs.stdout_joined().is_empty(), "help text should appear in observer stdout");
-        assert!(obs.get_stderr().is_empty(), "help should not emit to stderr");
+        assert!(
+            !obs.stdout_joined().is_empty(),
+            "help text should appear in observer stdout"
+        );
+        assert!(
+            obs.get_stderr().is_empty(),
+            "help should not emit to stderr"
+        );
     }
 
     #[test]
@@ -174,8 +190,14 @@ mod test {
         let obs = CapturingObserver::new();
         let result = cp.inner_run(&["--version"], &obs);
         assert!(result.is_ok(), "version should succeed");
-        assert!(!obs.stdout_joined().is_empty(), "version string should appear in observer stdout");
-        assert!(obs.get_stderr().is_empty(), "version should not emit to stderr");
+        assert!(
+            !obs.stdout_joined().is_empty(),
+            "version string should appear in observer stdout"
+        );
+        assert!(
+            obs.get_stderr().is_empty(),
+            "version should not emit to stderr"
+        );
     }
 
     #[test]
@@ -185,7 +207,10 @@ mod test {
         let obs = CapturingObserver::new();
         let result = cp.inner_run(&["--not-a-valid-flag"], &obs);
         assert!(result.is_err(), "invalid argument should fail");
-        assert!(!obs.get_stderr().is_empty(), "clap error should be emitted to observer stderr");
+        assert!(
+            !obs.get_stderr().is_empty(),
+            "clap error should be emitted to observer stderr"
+        );
         assert!(obs.get_stdout().is_empty(), "no stdout on arg error");
     }
 }

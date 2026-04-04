@@ -105,7 +105,9 @@ pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
             .0;
         let content = Vec::from(content);
         let content = String::from_utf8(content).unwrap();
-        o.emit_stdout(&format!("; Import \"{fname}\" in basm or include the following content:\n{content}"));
+        o.emit_stdout(&format!(
+            "; Import \"{fname}\" in basm or include the following content:\n{content}"
+        ));
         return Ok(());
     }
 
@@ -150,7 +152,7 @@ pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
         Cruncher::Shrinkler => CompressMethod::Shrinkler(Default::default()),
         Cruncher::Zx0 => CompressMethod::Zx0,
         Cruncher::Upkr => CompressMethod::Upkr,
-        Cruncher::BackwardZx0 => CompressMethod::BackwardZx0,
+        Cruncher::BackwardZx0 => CompressMethod::BackwardZx0
     };
 
     let crunched = cruncher

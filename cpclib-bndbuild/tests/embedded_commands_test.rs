@@ -1,8 +1,8 @@
+use assert_cmd::assert::OutputAssertExt;
+use assert_cmd::cargo::cargo_bin_cmd;
 use assert_cmd::{Command, cargo};
 use cpclib_bndbuild::task::{InnerTask, TaskKind};
 use serial_test::serial;
-use assert_cmd::assert::OutputAssertExt;
-use assert_cmd::cargo::cargo_bin_cmd;
 /// Test that all embedded tasks are properly classified
 #[test]
 #[serial]

@@ -109,7 +109,14 @@ pub enum BndBuilderCommandInner {
     },
     /// Generate the graphviz file on stdout
     /// Fields: builder, output_path, graph_details, include_dependencies, hide_tasks, source_file
-    Dot(BndBuilder, Option<String>, bool, bool, bool, Option<Utf8PathBuf>),
+    Dot(
+        BndBuilder,
+        Option<String>,
+        bool,
+        bool,
+        bool,
+        Option<Utf8PathBuf>
+    ),
     /// Update the executable from github artifact or the command if specified
     Update(Option<String>)
 }
@@ -247,8 +254,23 @@ impl BndBuilderCommand {
                 current_step,
                 builder
             } => Self::execute_build(targets, watch, current_step, builder, observers),
-            BndBuilderCommandInner::Dot(builder, g, details, include_deps, hide_tasks, source_file) => {
-                Self::execute_dot(builder, g.as_deref(), details, include_deps, hide_tasks, source_file.as_deref(), &observers)?;
+            BndBuilderCommandInner::Dot(
+                builder,
+                g,
+                details,
+                include_deps,
+                hide_tasks,
+                source_file
+            ) => {
+                Self::execute_dot(
+                    builder,
+                    g.as_deref(),
+                    details,
+                    include_deps,
+                    hide_tasks,
+                    source_file.as_deref(),
+                    &observers
+                )?;
                 Ok(None)
             }
         }
@@ -356,7 +378,8 @@ impl BndBuilderCommand {
     ) -> Result<(), BndBuilderError> {
         let dot = if include_deps {
             builder.to_dot_multi(source_file, details, hide_tasks)
-        } else {
+        }
+        else {
             builder.to_dot(details, hide_tasks)
         };
 
@@ -880,7 +903,9 @@ impl BndBuilderApp {
 
     /// Return the profile output path passed via `--profile`, if any.
     pub fn profile_output(&self) -> Option<&str> {
-        self.matches.get_one::<String>("profile").map(|s| s.as_str())
+        self.matches
+            .get_one::<String>("profile")
+            .map(|s| s.as_str())
     }
 
     pub fn add_observer<O: Into<BndBuilderObserverRc>>(&mut self, o: O) {
@@ -1105,9 +1130,11 @@ impl BndBuilderApp {
                     let p = fname.as_std_path();
                     let abs_str = if p.is_absolute() {
                         fname.as_str().to_owned()
-                    } else if let Some(ref cwd) = launch_cwd {
+                    }
+                    else if let Some(ref cwd) = launch_cwd {
                         cwd.join(p).to_string_lossy().into_owned()
-                    } else {
+                    }
+                    else {
                         fname.as_str().to_owned()
                     };
                     Some(Utf8PathBuf::from(abs_str))
@@ -1119,9 +1146,11 @@ impl BndBuilderApp {
                         let p = std::path::Path::new(g.as_str());
                         if p.is_absolute() {
                             g.to_owned()
-                        } else if let Some(ref cwd) = launch_cwd {
+                        }
+                        else if let Some(ref cwd) = launch_cwd {
                             cwd.join(p).to_string_lossy().into_owned()
-                        } else {
+                        }
+                        else {
                             g.to_owned()
                         }
                     };
@@ -1135,7 +1164,14 @@ impl BndBuilderApp {
                     ))
                 }
                 else {
-                    Ok(BndBuilderCommandInner::Dot(builder, None, graph_details, include_deps, hide_tasks, source_file_abs))
+                    Ok(BndBuilderCommandInner::Dot(
+                        builder,
+                        None,
+                        graph_details,
+                        include_deps,
+                        hide_tasks,
+                        source_file_abs
+                    ))
                 }
             }
             else {

@@ -25,7 +25,6 @@ use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::LazyLock;
 
-
 use codespan_reporting::diagnostic::{Diagnostic, Label, Severity};
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::termcolor::Buffer;
@@ -74,7 +73,8 @@ fn adjust_macro_source(filename: &str, source: &str, offset: usize) -> (String, 
     let adj = macro_line_offset(filename);
     if adj > 0 {
         (format!("{}{}", "\n".repeat(adj), source), offset + adj)
-    } else {
+    }
+    else {
         (source.to_owned(), offset)
     }
 }
@@ -499,20 +499,24 @@ impl AssemblerError {
                     .collect();
                 let str = errors
                     .iter()
-                    .filter(|e| match e.1 {
-                        Z80ParserErrorKind::Winnow => {
-                            !offsets_with_label.contains(&Z80Span::from(*e.0).offset_from_start())
-                        },
-                        kind => !kind.is_dbg(),
+                    .filter(|e| {
+                        match e.1 {
+                            Z80ParserErrorKind::Winnow => {
+                                !offsets_with_label
+                                    .contains(&Z80Span::from(*e.0).offset_from_start())
+                            },
+                            kind => !kind.is_dbg()
+                        }
                     })
                     .map(|e| {
                         let ctx = e.1.display_label();
 
-                        let filename = e.0.state
-                            .filename()
-                            .map(|p| p.as_os_str().to_str().unwrap())
-                            .unwrap_or_else(|| e.0.state.context_name().unwrap_or("no file"))
-                            .to_owned();
+                        let filename =
+                            e.0.state
+                                .filename()
+                                .map(|p| p.as_os_str().to_str().unwrap())
+                                .unwrap_or_else(|| e.0.state.context_name().unwrap_or("no file"))
+                                .to_owned();
 
                         let line_adj = macro_line_offset(&filename);
                         let raw_offset = Z80Span::from(*e.0).offset_from_start();
@@ -531,8 +535,7 @@ impl AssemblerError {
                         };
 
                         let offset = raw_offset + line_adj;
-                        let end = if let Z80ParserErrorKind::ContextWithEnd { end_offset, .. } =
-                            e.1
+                        let end = if let Z80ParserErrorKind::ContextWithEnd { end_offset, .. } = e.1
                         {
                             end_offset + line_adj
                         }
@@ -991,7 +994,11 @@ impl AssemblerError {
 
 fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z80Span) -> String {
     let filename = build_filename(span);
-    let (source, offset) = adjust_macro_source(filename.as_ref(), span.state.complete_source(), span.offset_from_start());
+    let (source, offset) = adjust_macro_source(
+        filename.as_ref(),
+        span.state.complete_source(),
+        span.offset_from_start()
+    );
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
@@ -1028,7 +1035,11 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
 #[inline]
 pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severity) -> String {
     let filename = build_filename(span);
-    let (source, offset) = adjust_macro_source(filename.as_ref(), span.state.complete_source(), span.offset_from_start());
+    let (source, offset) = adjust_macro_source(
+        filename.as_ref(),
+        span.state.complete_source(),
+        span.offset_from_start()
+    );
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);
@@ -1085,7 +1096,11 @@ fn build_simple_error_message_with_notes(
     span: &Z80Span
 ) -> String {
     let filename = build_filename(span);
-    let (source, offset) = adjust_macro_source(filename.as_ref(), span.state.complete_source(), span.offset_from_start());
+    let (source, offset) = adjust_macro_source(
+        filename.as_ref(),
+        span.state.complete_source(),
+        span.offset_from_start()
+    );
 
     let mut source_files = SimpleFiles::new();
     let file = source_files.add(filename, source);

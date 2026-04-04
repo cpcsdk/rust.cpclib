@@ -32,8 +32,10 @@ fn basm() -> i32 {
     let args: Vec<String> = std::env::args().collect();
     let matches = match parser.try_get_matches_from(args) {
         Ok(m) => m,
-        Err(e) if e.kind() == cpclib_common::clap::error::ErrorKind::DisplayHelp
-               || e.kind() == cpclib_common::clap::error::ErrorKind::DisplayVersion => {
+        Err(e)
+            if e.kind() == cpclib_common::clap::error::ErrorKind::DisplayHelp
+                || e.kind() == cpclib_common::clap::error::ErrorKind::DisplayVersion =>
+        {
             o.emit_stdout(&e.to_string());
             return 0;
         },

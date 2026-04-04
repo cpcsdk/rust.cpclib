@@ -1,4 +1,5 @@
 use cpclib_common::event::EventObserver;
+
 use crate::ga::{Ink, Palette};
 use crate::image::Mode;
 

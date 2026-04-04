@@ -12,35 +12,35 @@ pub(crate) const MAX_LINES_PER_TASK: usize = 2000;
 pub(crate) enum TaskStatus {
     Running,
     Success(Duration),
-    Failed(Duration),
+    Failed(Duration)
 }
 
 #[derive(Debug)]
 pub(crate) struct TaskEntry {
-    pub(crate) task:    String,
+    pub(crate) task: String,
     pub(crate) started: Instant,
-    pub(crate) stdout:  VecDeque<String>,
-    pub(crate) stderr:  VecDeque<String>,
-    pub(crate) status:  TaskStatus,
+    pub(crate) stdout: VecDeque<String>,
+    pub(crate) stderr: VecDeque<String>,
+    pub(crate) status: TaskStatus,
     /// Historical average duration for this task, if cache data exists.
     pub(crate) estimated_duration: Option<Duration>,
     /// Rule name this task belongs to (needed to record timing in StopTask).
     pub(crate) parent_rule: Option<String>,
     /// Build file this task's rule came from (needed to key into the cache).
-    pub(crate) parent_build_file: Option<String>,
+    pub(crate) parent_build_file: Option<String>
 }
 
 impl TaskEntry {
     pub(crate) fn new(task: String) -> Self {
         Self {
             task,
-            started:            Instant::now(),
-            stdout:             VecDeque::new(),
-            stderr:             VecDeque::new(),
-            status:             TaskStatus::Running,
+            started: Instant::now(),
+            stdout: VecDeque::new(),
+            stderr: VecDeque::new(),
+            status: TaskStatus::Running,
             estimated_duration: None,
-            parent_rule:        None,
-            parent_build_file:  None,
+            parent_rule: None,
+            parent_build_file: None
         }
     }
 
@@ -58,7 +58,12 @@ impl TaskEntry {
             },
             // Success tasks show stdout if they produced any (e.g. emulator output).
             TaskStatus::Success(_) => {
-                if self.stdout.is_empty() { 1 } else { 1 + self.stdout.len().min(8) as u16 }
+                if self.stdout.is_empty() {
+                    1
+                }
+                else {
+                    1 + self.stdout.len().min(8) as u16
+                }
             },
         }
     }
@@ -69,7 +74,7 @@ impl TaskEntry {
             TaskStatus::Running | TaskStatus::Failed(_) => {
                 1 + (self.stdout.len() + self.stderr.len()) as u16
             },
-            TaskStatus::Success(_) => 1 + self.stdout.len() as u16,
+            TaskStatus::Success(_) => 1 + self.stdout.len() as u16
         }
     }
 }
@@ -82,48 +87,48 @@ pub(crate) enum RuleStatus {
     Success(Duration),
     Failed(Duration),
     /// Rule was skipped because all targets are already up to date.
-    UpToDate,
+    UpToDate
 }
 
 #[derive(Debug)]
 pub(crate) struct RuleEntry {
-    pub(crate) name:    String,
+    pub(crate) name: String,
     /// Co-target names that share the same rule (populated before this entry is created).
     pub(crate) aliases: Vec<String>,
-    pub(crate) nb:      usize,
-    pub(crate) out_of:  usize,
+    pub(crate) nb: usize,
+    pub(crate) out_of: usize,
     pub(crate) started: Instant,
-    pub(crate) tasks:   Vec<TaskEntry>,
-    pub(crate) status:  RuleStatus,
+    pub(crate) tasks: Vec<TaskEntry>,
+    pub(crate) status: RuleStatus,
     /// Lines to skip from the auto-follow bottom (Up key increases, Down key decreases).
     pub(crate) task_scroll: usize,
     /// Chars to skip from the left edge in the expanded output view (Left/Right keys).
-    pub(crate) h_scroll:    usize,
+    pub(crate) h_scroll: usize,
     /// Source build file for rules coming from a nested bndbuild invocation.
-    pub(crate) source:      Option<String>,
+    pub(crate) source: Option<String>,
     /// Historical average duration for this rule, if cache data exists.
     pub(crate) estimated_duration: Option<Duration>,
     /// Instant of the last stdout/stderr output received from any task in this
     /// rule.  Used to briefly flash the border so the user's eye is drawn to
     /// active rules even when not selected.
-    pub(crate) last_output: Option<Instant>,
+    pub(crate) last_output: Option<Instant>
 }
 
 impl RuleEntry {
     pub(crate) fn new(name: String, nb: usize, out_of: usize) -> Self {
         Self {
             name,
-            aliases:            Vec::new(),
+            aliases: Vec::new(),
             nb,
             out_of,
-            started:            Instant::now(),
-            tasks:              Vec::new(),
-            status:             RuleStatus::Running,
-            task_scroll:        0,
-            h_scroll:           0,
-            source:             None,
+            started: Instant::now(),
+            tasks: Vec::new(),
+            status: RuleStatus::Running,
+            task_scroll: 0,
+            h_scroll: 0,
+            source: None,
             estimated_duration: None,
-            last_output:        None,
+            last_output: None
         }
     }
 
@@ -148,7 +153,7 @@ impl RuleEntry {
             // still visible when the user TABs to select (expand) the rule.
             RuleStatus::Success(_) => 1,
             // UpToDate: compact 1-line view.
-            _ => 1,
+            _ => 1
         }
     }
 }
@@ -160,6 +165,9 @@ pub(crate) enum BuildPhase {
     #[default]
     Idle,
     ComputingDeps(String),
-    Running { current: usize, total: usize },
-    Finished,
+    Running {
+        current: usize,
+        total: usize
+    },
+    Finished
 }

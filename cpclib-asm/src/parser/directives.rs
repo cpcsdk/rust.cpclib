@@ -1268,13 +1268,14 @@ fn parse_enum_entry_label(
 /// are accepted as field identifiers because they will always be rendered with the prefix.
 fn parse_enum_field(
     allow_directives: bool
-) -> impl Fn(&mut InnerZ80Span) -> ModalResult<Option<(Z80Span, Option<LocatedExpr>)>, Z80ParserError> {
+) -> impl Fn(&mut InnerZ80Span) -> ModalResult<Option<(Z80Span, Option<LocatedExpr>)>, Z80ParserError>
+{
     move |input: &mut InnerZ80Span| {
         // If we're sitting on a block terminator, signal end of fields without consuming.
         if peek(alt((
             parse_directive_word(b"ENDENUM"),
             parse_directive_word(b"MEND"),
-            parse_directive_word(b"ENDM"),
+            parse_directive_word(b"ENDM")
         )))
         .parse_next(input)
         .is_ok()
@@ -1318,7 +1319,7 @@ fn parse_enum_fields(
                 alt((
                     my_space1.value(()),
                     parse_comment.value(()),
-                    line_ending.value(()),
+                    line_ending.value(())
                 ))
             )
         )
@@ -1373,7 +1374,9 @@ pub fn parse_enum(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z8
             parse_directive_word(b"ENDM")
         ))
     ))
-    .context(StrContext::Label("ENUM: not closed (expected ENDENUM, MEND, or ENDM)"))
+    .context(StrContext::Label(
+        "ENUM: not closed (expected ENDENUM, MEND, or ENDM)"
+    ))
     .parse_next(input)?;
 
     Ok(LocatedTokenInner::Enum {
@@ -2812,8 +2815,11 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pars
     let inner = inner_code.parse_next(input)?;
 
     let _ = cut_err(
-        preceded(my_space0, alt((Caseless("DEPHASE"), Caseless("REND"), Caseless("ENDR"))))
-            .context(StrContext::Label("RORG: missing REND"))
+        preceded(
+            my_space0,
+            alt((Caseless("DEPHASE"), Caseless("REND"), Caseless("ENDR")))
+        )
+        .context(StrContext::Label("RORG: missing REND"))
     )
     .parse_next(input)?;
 

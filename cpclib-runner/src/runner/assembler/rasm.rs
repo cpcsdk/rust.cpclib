@@ -10,9 +10,9 @@ pub const RASM_CMD: &str = "rasm";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum RasmVersion {
     #[default]
-    Polaris, //3..
-    Beacon2025, // 2.3.6
-    Consolidation2024 // V2_2_5
+    Polaris, // 3..
+    Beacon2025,        // 2.3.6
+    Consolidation2024  // V2_2_5
 }
 
 impl GithubCompilableApplication for RasmVersion {}

@@ -30,7 +30,10 @@ pub fn run<O: EventObserver>(args: &CslCliArgs, o: &O) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     if args.verbose {
-        o.emit_stderr(&format!("Successfully parsed {} instructions", script.len()));
+        o.emit_stderr(&format!(
+            "Successfully parsed {} instructions",
+            script.len()
+        ));
     }
 
     // Output the parsed script to stdout

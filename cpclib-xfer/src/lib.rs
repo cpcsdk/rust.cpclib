@@ -315,8 +315,8 @@ impl CpcXfer {
     }
 
     fn download_dir(&self) -> Result<M4FilesList, Box<XferError>> {
-        let content = cpclib_common::network::get_to_string(&self.uri("sd/m4/dir.txt"))
-            .map_err(|e| {
+        let content =
+            cpclib_common::network::get_to_string(&self.uri("sd/m4/dir.txt")).map_err(|e| {
                 Box::new(XferError::InternalError {
                     reason: format!("Failed to download directory listing: {}", e)
                 })
@@ -380,7 +380,7 @@ impl CpcXfer {
     pub fn ls_request(&self, folder: &str) -> Result<(), Box<XferError>> {
         let folder_encoded = cpclib_common::network::url_encode(folder);
         let url = format!("{}?ls={}", self.uri("config.cgi"), folder_encoded);
-        
+
         cpclib_common::network::ureq::get(&url)
             .header("User-Agent", "cpcxfer")
             .call()
@@ -389,7 +389,7 @@ impl CpcXfer {
                     source: Box::new(e)
                 })
             })?;
-        
+
         Ok(())
     }
 }

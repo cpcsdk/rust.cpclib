@@ -11,14 +11,14 @@ use crate::ratatui_event::RatatuiEvent;
 pub(crate) enum RatatuiMessage {
     NewEvent(RatatuiEvent),
     Stdout(String),
-    Stderr(String),
+    Stderr(String)
 }
 
 // ─── Observer ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
 pub(crate) struct BndBuilderRatatuiObserver {
-    tx: mpsc::Sender<RatatuiMessage>,
+    tx: mpsc::Sender<RatatuiMessage>
 }
 
 impl BndBuilderRatatuiObserver {

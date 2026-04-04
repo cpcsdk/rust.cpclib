@@ -4,8 +4,8 @@ use cpclib_common::winnow::error::{AddContext, ParserError, StrContext};
 use cpclib_common::winnow::stream::Stream;
 
 use super::obtained::LocatedListing;
-use crate::parser::source::Z80Span;
 use crate::InnerZ80Span;
+use crate::parser::source::Z80Span;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Z80ParserErrorKind {
@@ -62,7 +62,7 @@ impl Z80ParserErrorKind {
             | Self::DebugContext(ctx) => ctx.to_string(),
             Self::Winnow => "Unknown error".to_owned(),
             Self::Char(c) => format!("Error with char '{c}'"),
-            Self::Inner { .. } => unreachable!("Inner entries are flattened before display"),
+            Self::Inner { .. } => unreachable!("Inner entries are flattened before display")
         }
     }
 
@@ -133,21 +133,28 @@ fn find_furthest_offset_same_file(
 ) -> Option<usize> {
     errors
         .iter()
-        .filter_map(|(span, kind)| match kind {
-            Z80ParserErrorKind::Context(_)
-            | Z80ParserErrorKind::ContextWithEnd { .. }
-            | Z80ParserErrorKind::DebugContext(_) => None,
-            Z80ParserErrorKind::Inner { error, .. } => {
-                if Z80Span::from(*span).filename() == origin_file {
-                    find_furthest_offset_same_file(origin_file, &error.0)
+        .filter_map(|(span, kind)| {
+            match kind {
+                Z80ParserErrorKind::Context(_)
+                | Z80ParserErrorKind::ContextWithEnd { .. }
+                | Z80ParserErrorKind::DebugContext(_) => None,
+                Z80ParserErrorKind::Inner { error, .. } => {
+                    if Z80Span::from(*span).filename() == origin_file {
+                        find_furthest_offset_same_file(origin_file, &error.0)
+                    }
+                    else {
+                        None
+                    }
+                },
+                _ => {
+                    let s = Z80Span::from(*span);
+                    if s.filename() == origin_file {
+                        Some(s.offset_from_start())
+                    }
+                    else {
+                        None
+                    }
                 }
-                else {
-                    None
-                }
-            },
-            _ => {
-                let s = Z80Span::from(*span);
-                if s.filename() == origin_file { Some(s.offset_from_start()) } else { None }
             }
         })
         .max()
@@ -168,7 +175,12 @@ fn furthest_failure_offset_same_file(
 impl Z80ParserError {
     fn make_context_kind(&self, input: &InnerZ80Span, ctx: StrContext) -> Z80ParserErrorKind {
         match furthest_failure_offset_same_file(input, &self.0) {
-            Some(end_offset) => Z80ParserErrorKind::ContextWithEnd { context: ctx, end_offset },
+            Some(end_offset) => {
+                Z80ParserErrorKind::ContextWithEnd {
+                    context: ctx,
+                    end_offset
+                }
+            },
             None => Z80ParserErrorKind::Context(ctx)
         }
     }

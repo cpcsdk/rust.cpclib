@@ -19,7 +19,12 @@ impl<'a> From<BndBuilderEvent<'a>> for RatatuiEvent {
                     out_of
                 }
             },
-            BndBuilderEvent::StartRuleAlias { alias, representative, nb, out_of } => {
+            BndBuilderEvent::StartRuleAlias {
+                alias,
+                representative,
+                nb,
+                out_of
+            } => {
                 RatatuiEvent::StartRuleAlias {
                     alias: alias.to_string(),
                     representative: representative.to_string(),

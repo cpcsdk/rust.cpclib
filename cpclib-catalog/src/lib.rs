@@ -309,7 +309,11 @@ fn display_catalog_command(
     Ok(())
 }
 
-fn list_catalog_command(catalog_fname: &str, listall: bool, o: &dyn EventObserver) -> Result<(), String> {
+fn list_catalog_command(
+    catalog_fname: &str,
+    listall: bool,
+    o: &dyn EventObserver
+) -> Result<(), String> {
     let catalog_content = load_catalog_entries(catalog_fname)
         .map_err(|e| format!("Error while loading catalog entries: {}", e))?;
 
@@ -317,7 +321,11 @@ fn list_catalog_command(catalog_fname: &str, listall: bool, o: &dyn EventObserve
     Ok(())
 }
 
-fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType, o: &dyn EventObserver) -> Result<(), String> {
+fn debug_catalog_command(
+    catalog_fname: &str,
+    catalog_type: CatalogType,
+    o: &dyn EventObserver
+) -> Result<(), String> {
     // Load the raw catalog bytes
     let catalog_bytes = load_catalog_bytes(catalog_fname)
         .map_err(|e| format!("Error while loading catalog bytes: {}", e))?;
@@ -406,7 +414,11 @@ fn debug_catalog_command(catalog_fname: &str, catalog_type: CatalogType, o: &dyn
             .collect();
 
         // Print entry information
-        o.emit_stdout(&format!("Entry {:<2}: {}\n", original_idx, bytes_without_dot.join(" ")));
+        o.emit_stdout(&format!(
+            "Entry {:<2}: {}\n",
+            original_idx,
+            bytes_without_dot.join(" ")
+        ));
         o.emit_stdout(&format!(
             "          {}\n",
             std::str::from_utf8(
@@ -570,7 +582,11 @@ fn list_catalog_entries(catalog_content: &AmsdosEntries, listall: bool, o: &dyn 
             if is_read_only {
                 line.push_str(" [read only]");
             }
-            line.push_str(&format!(" {:>4}Kb {:?}", entry.used_space(), entry.used_blocs()));
+            line.push_str(&format!(
+                " {:>4}Kb {:?}",
+                entry.used_space(),
+                entry.used_blocs()
+            ));
             o.emit_stdout(&format!("{line}\n"));
         }
         else if contains_id && contains_control_chars && listall {
@@ -1136,7 +1152,11 @@ fn build_catart_from_basic(
     Ok(())
 }
 
-fn decode_catalog_command(catalog_fname: &str, output_path: Option<&str>, o: &dyn EventObserver) -> Result<(), String> {
+fn decode_catalog_command(
+    catalog_fname: &str,
+    output_path: Option<&str>,
+    o: &dyn EventObserver
+) -> Result<(), String> {
     info!("Decoding catart from: {}", catalog_fname);
 
     // Load the raw catalog bytes

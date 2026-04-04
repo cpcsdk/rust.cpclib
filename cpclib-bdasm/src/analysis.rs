@@ -165,7 +165,10 @@ pub fn collect_addresses_from_expressions(
 }
 
 /// Injects label names into expressions where possible.
-pub fn inject_labels_into_expressions<O: EventObserver>(listing: &mut Listing, o: &O) -> Result<()> {
+pub fn inject_labels_into_expressions<O: EventObserver>(
+    listing: &mut Listing,
+    o: &O
+) -> Result<()> {
     let (_bytes, table) = cpclib_asm::assemble_tokens_with_options(listing, Default::default())
         .map_err(|e| BdAsmError::AssemblyFailed(e.to_string()))?;
 

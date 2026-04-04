@@ -1459,7 +1459,11 @@ impl ImageConverter {
     }
 
     /// Makes the conversion of the provided sprite to the expected format
-    pub fn import(sprite: &Sprite, output: OutputFormat, o: &dyn EventObserver) -> anyhow::Result<Output> {
+    pub fn import(
+        sprite: &Sprite,
+        output: OutputFormat,
+        o: &dyn EventObserver
+    ) -> anyhow::Result<Output> {
         let mut converter = ImageConverter {
             palette: LockablePalette::empty(),
             mode: Mode::Zero, // TODO make the mode an optional argument,
@@ -1490,7 +1494,11 @@ impl ImageConverter {
     }
 
     /// Manage the conversion on the given sprite
-    fn apply_sprite_conversion(&mut self, sprite: &Sprite, o: &dyn EventObserver) -> anyhow::Result<Output> {
+    fn apply_sprite_conversion(
+        &mut self,
+        sprite: &Sprite,
+        o: &dyn EventObserver
+    ) -> anyhow::Result<Output> {
         let output = self.output.clone();
 
         match output {

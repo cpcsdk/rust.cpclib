@@ -3947,7 +3947,14 @@ macro_rules! visit_token_impl {
                 start,
                 step,
                 fields
-            } => $env.visit_enum(prefix.as_ref(), start.as_ref(), step.as_ref(), fields.as_slice()),
+            } => {
+                $env.visit_enum(
+                    prefix.as_ref(),
+                    start.as_ref(),
+                    step.as_ref(),
+                    fields.as_slice()
+                )
+            },
             $cls::Export(labels) => $env.visit_export(labels.as_slice()),
             $cls::Equ { label, expr } => $env.visit_equ(&label, expr),
             $cls::Even => $env.visit_even(),

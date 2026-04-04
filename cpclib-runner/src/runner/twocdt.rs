@@ -1,13 +1,14 @@
 use std::fmt::Display;
 
+#[cfg(target_os = "linux")]
+use cpclib_common::camino::Utf8Path;
+
 use crate::delegated::{ArchiveFormat, Compiler, DelegateApplicationDescription};
 use crate::event::EventObserver;
 #[cfg(target_os = "linux")]
-use crate::runner::Runner;
-#[cfg(target_os = "linux")]
 use crate::runner::ExternRunner;
 #[cfg(target_os = "linux")]
-use cpclib_common::camino::Utf8Path;
+use crate::runner::Runner;
 
 pub const TWO_CDT_CMD: &str = "2cdt";
 

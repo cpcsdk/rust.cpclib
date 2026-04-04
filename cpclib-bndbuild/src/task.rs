@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, LazyLock};
 
 use camino::Utf8Path;
+use cpclib_common::clap::ArgMatches;
 use cpclib_common::itertools::Itertools;
 use cpclib_runner::emucontrol::EMUCTRL_CMD;
 use cpclib_runner::runner::assembler::uz80::UZ80_CMD;
@@ -44,7 +45,6 @@ use crate::runners::emulator::Emulator;
 use crate::runners::fade::FADE_CMD;
 use crate::runners::hideur::HIDEUR_CMD;
 use crate::runners::tracker::{SongConverter, Tracker};
-use cpclib_common::clap::ArgMatches;
 
 /// Represents the kind of task based on how it's implemented
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1008,9 +1008,11 @@ impl InnerTask {
             InnerTask::YmCruncher(..) => TaskKind::Delegated,
 
             // File system operations - could be considered embedded
-            InnerTask::Cp(_) | InnerTask::Mv(_) | InnerTask::Mkdir(_) | InnerTask::Rm(_) | InnerTask::Archive(_) => {
-                TaskKind::Embedded
-            },
+            InnerTask::Cp(_)
+            | InnerTask::Mv(_)
+            | InnerTask::Mkdir(_)
+            | InnerTask::Rm(_)
+            | InnerTask::Archive(_) => TaskKind::Embedded,
 
             // Utilities
             InnerTask::Echo(_) => TaskKind::Embedded,
@@ -1203,7 +1205,11 @@ impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArgument
             None
         }
 
-        fn collect(cmd: &cpclib_common::clap::Command, matches: &ArgMatches, out: &mut Vec<String>) {
+        fn collect(
+            cmd: &cpclib_common::clap::Command,
+            matches: &ArgMatches,
+            out: &mut Vec<String>
+        ) {
             for id in matches.ids() {
                 let id_str = id.as_str();
 
@@ -1255,7 +1261,8 @@ impl From<(&cpclib_common::clap::Command, &ArgMatches)> for StandardTaskArgument
                 // parent command (we can't map more precisely).
                 if let Some(sub_cmd) = cmd.get_subcommands().find(|s| s.get_name() == sub_name) {
                     collect(sub_cmd, sub_matches, out);
-                } else {
+                }
+                else {
                     collect(cmd, sub_matches, out);
                 }
             }
@@ -1281,9 +1288,10 @@ impl StandardTaskArguments {
 
 #[cfg(test)]
 mod test {
+    use cpclib_common::clap::{Arg, ArgAction, Command};
+
     use super::InnerTask;
     use crate::task::StandardTaskArguments;
-    use cpclib_common::clap::{Command, Arg, ArgAction};
 
     #[test]
     fn test_automatic_arguments() {
@@ -1442,20 +1450,10 @@ mod test {
             .arg(Arg::new("input").long("input").num_args(1))
             .arg(Arg::new("opt").long("opt").num_args(1))
             .arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue))
-            .subcommand(
-                Command::new("sub").arg(Arg::new("subarg").long("subarg").num_args(1)),
-            );
+            .subcommand(Command::new("sub").arg(Arg::new("subarg").long("subarg").num_args(1)));
 
         let argv = [
-            "prog",
-            "--input",
-            "a.bin",
-            "--opt",
-            "x",
-            "--flag",
-            "sub",
-            "--subarg",
-            "y",
+            "prog", "--input", "a.bin", "--opt", "x", "--flag", "sub", "--subarg", "y"
         ];
 
         let matches = cmd.clone().get_matches_from(&argv);
@@ -1492,7 +1490,7 @@ mod test {
             "--ace",
             "demosystem.rasm",
             "--lst",
-            "demosystem.lst",
+            "demosystem.lst"
         ];
 
         let matches = cmd.clone().get_matches_from(&argv);

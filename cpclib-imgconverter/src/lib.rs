@@ -698,7 +698,7 @@ fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
         crop_if_too_large,
         missing_pen,
         o
-    )?;;
+    )?;
 
     if sub_sprite.is_some() {
         // TODO share code with the tile branch
@@ -1463,7 +1463,11 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
     Ok(())
 }
 
-pub fn process_img2cpc(matches: &ArgMatches, _args: Command, o: &dyn EventObserver) -> anyhow::Result<()> {
+pub fn process_img2cpc(
+    matches: &ArgMatches,
+    _args: Command,
+    o: &dyn EventObserver
+) -> anyhow::Result<()> {
     // Note: clap automatically handles --help, no need to check manually
     // Removed: if matches.get_flag("help") { ... }
 

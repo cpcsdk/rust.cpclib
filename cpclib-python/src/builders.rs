@@ -4,12 +4,13 @@
 //! commands from Python. Builders construct actual Task instances using the
 //! proper internal structures, ensuring compile-time validation.
 
-use pyo3::prelude::*;
-use cpclib_bndbuild::task::{Task, StandardTaskArguments, InnerTask};
-use cpclib_bndbuild::runners::tracker::{Tracker, SongConverter};
 use cpclib_bndbuild::runners::ay::YmCruncher;
+use cpclib_bndbuild::runners::tracker::{SongConverter, Tracker};
+use cpclib_bndbuild::task::{InnerTask, StandardTaskArguments, Task};
+use cpclib_common::clap::{Arg, ArgMatches, CommandFactory};
 use cpclib_sna::SnapshotCli;
-use cpclib_common::clap::{ArgMatches, CommandFactory, Arg};
+use pyo3::prelude::*;
+
 use crate::bndbuild::PyBndTask;
 
 /// Builder for snapshot manipulation commands
@@ -33,21 +34,21 @@ use crate::bndbuild::PyBndTask;
 pub struct PySnapshotBuilder {
     /// Load a snapshot file as base
     in_snapshot: Option<String>,
-    
+
     /// Output snapshot file
     output: Option<String>,
-    
+
     /// Set token values (TOKEN, VALUE pairs)
     set_tokens: Vec<(String, String)>,
-    
+
     /// Put byte values into memory (ADDRESS, BYTE pairs)
     put_data: Vec<(u32, u8)>,
-    
+
     /// Load files at addresses (FILE, ADDRESS pairs)
     load_files: Vec<(String, String)>,
-    
+
     /// Snapshot version (1, 2, or 3)
-    sna_version: String,
+    sna_version: String
 }
 
 #[pymethods]
@@ -73,7 +74,7 @@ impl PySnapshotBuilder {
     }
 
     /// Set a memory token value (fluent API - returns self for chaining)
-    /// 
+    ///
     /// Use token:index format for array values, e.g., "CRTC_REG:6" to set CRTC register 6
     pub fn set_token(&mut self, token: &str, value: &str) -> Self {
         self.set_tokens.push((token.to_string(), value.to_string()));
@@ -81,7 +82,7 @@ impl PySnapshotBuilder {
     }
 
     /// Put a byte value at a specific memory address (fluent API - returns self for chaining)
-    /// 
+    ///
     /// Example: put_data(0x4000, 0xFF) writes byte 0xFF at address 0x4000
     pub fn put_data(&mut self, address: u32, byte: u8) -> Self {
         self.put_data.push((address, byte));
@@ -90,7 +91,8 @@ impl PySnapshotBuilder {
 
     /// Load a file at a specific address (fluent API - returns self for chaining)
     pub fn load(&mut self, file: &str, address: &str) -> Self {
-        self.load_files.push((file.to_string(), address.to_string()));
+        self.load_files
+            .push((file.to_string(), address.to_string()));
         self.clone()
     }
 
@@ -101,7 +103,7 @@ impl PySnapshotBuilder {
     }
 
     /// Build the task from the collected parameters
-    /// 
+    ///
     /// This constructs an actual SnapshotCli instance for compile-time type safety,
     /// then converts it to a command-line string representation.
     pub fn build(&self, py: Python) -> PyResult<Py<PyBndTask>> {
@@ -151,7 +153,7 @@ impl PySnapshotBuilder {
 pub struct PyArkosTracker3Builder {
     input: Option<String>,
     output: Option<String>,
-    extra_args: Vec<String>,
+    extra_args: Vec<String>
 }
 
 #[pymethods]
@@ -182,30 +184,33 @@ impl PyArkosTracker3Builder {
     /// Build the task using proper Tracker struct
     pub fn build(&self, py: Python) -> PyResult<Py<PyBndTask>> {
         let mut args = Vec::new();
-        
+
         if let Some(ref input) = self.input {
             args.push(shell_escape(input));
         }
-        
+
         if let Some(ref output) = self.output {
             args.push(shell_escape(output));
         }
-        
+
         for arg in &self.extra_args {
             args.push(shell_escape(arg));
         }
-        
+
         let args_string = args.join(" ");
         let std_args = StandardTaskArguments::new(args_string);
         let tracker = Tracker::new_at3_default();
         let inner = InnerTask::with_tracker(tracker, std_args);
         let task = Task::from(inner);
-        
+
         PyBndTask::new_from_task(py, task)
     }
 
     fn __repr__(&self) -> String {
-        format!("ArkosTracker3Builder(input={:?}, output={:?})", self.input, self.output)
+        format!(
+            "ArkosTracker3Builder(input={:?}, output={:?})",
+            self.input, self.output
+        )
     }
 }
 
@@ -225,7 +230,7 @@ impl PyArkosTracker3Builder {
 pub struct PyChipnsfxBuilder {
     input: Option<String>,
     output: Option<String>,
-    extra_args: Vec<String>,
+    extra_args: Vec<String>
 }
 
 #[pymethods]
@@ -256,30 +261,33 @@ impl PyChipnsfxBuilder {
     /// Build the task using proper Tracker struct
     pub fn build(&self, py: Python) -> PyResult<Py<PyBndTask>> {
         let mut args = Vec::new();
-        
+
         if let Some(ref input) = self.input {
             args.push(shell_escape(input));
         }
-        
+
         if let Some(ref output) = self.output {
             args.push(shell_escape(output));
         }
-        
+
         for arg in &self.extra_args {
             args.push(shell_escape(arg));
         }
-        
+
         let args_string = args.join(" ");
         let std_args = StandardTaskArguments::new(args_string);
         let tracker = Tracker::new_chipnsfx_default();
         let inner = InnerTask::with_tracker(tracker, std_args);
         let task = Task::from(inner);
-        
+
         PyBndTask::new_from_task(py, task)
     }
 
     fn __repr__(&self) -> String {
-        format!("ChipnsfxBuilder(input={:?}, output={:?})", self.input, self.output)
+        format!(
+            "ChipnsfxBuilder(input={:?}, output={:?})",
+            self.input, self.output
+        )
     }
 }
 
@@ -298,7 +306,7 @@ impl PyChipnsfxBuilder {
 #[derive(Default, Clone)]
 pub struct PyMinyBuilder {
     input: Option<String>,
-    output: Option<String>,
+    output: Option<String>
 }
 
 #[pymethods]
@@ -323,25 +331,28 @@ impl PyMinyBuilder {
     /// Build the task using proper YmCruncher struct
     pub fn build(&self, py: Python) -> PyResult<Py<PyBndTask>> {
         let mut args = Vec::new();
-        
+
         if let Some(ref input) = self.input {
             args.push(shell_escape(input));
         }
-        
+
         if let Some(ref output) = self.output {
             args.push(shell_escape(output));
         }
-        
+
         let args_string = args.join(" ");
         let std_args = StandardTaskArguments::new(args_string);
         let inner = InnerTask::with_ym_cruncher(YmCruncher::Miny, std_args);
         let task = Task::from(inner);
-        
+
         PyBndTask::new_from_task(py, task)
     }
 
     fn __repr__(&self) -> String {
-        format!("MinyBuilder(input={:?}, output={:?})", self.input, self.output)
+        format!(
+            "MinyBuilder(input={:?}, output={:?})",
+            self.input, self.output
+        )
     }
 }
 
@@ -360,7 +371,7 @@ impl PyMinyBuilder {
 #[derive(Default, Clone)]
 pub struct PyAytBuilder {
     input: Option<String>,
-    output: Option<String>,
+    output: Option<String>
 }
 
 #[pymethods]
@@ -385,25 +396,28 @@ impl PyAytBuilder {
     /// Build the task using proper YmCruncher struct
     pub fn build(&self, py: Python) -> PyResult<Py<PyBndTask>> {
         let mut args = Vec::new();
-        
+
         if let Some(ref input) = self.input {
             args.push(shell_escape(input));
         }
-        
+
         if let Some(ref output) = self.output {
             args.push(shell_escape(output));
         }
-        
+
         let args_string = args.join(" ");
         let std_args = StandardTaskArguments::new(args_string);
         let inner = InnerTask::with_ym_cruncher(YmCruncher::Ayt, std_args);
         let task = Task::from(inner);
-        
+
         PyBndTask::new_from_task(py, task)
     }
 
     fn __repr__(&self) -> String {
-        format!("AytBuilder(input={:?}, output={:?})", self.input, self.output)
+        format!(
+            "AytBuilder(input={:?}, output={:?})",
+            self.input, self.output
+        )
     }
 }
 
@@ -431,7 +445,7 @@ pub struct PySongConverterBuilder {
     converter_type: String,
     input: Option<String>,
     output: Option<String>,
-    extra_args: Vec<String>,
+    extra_args: Vec<String>
 }
 
 #[pymethods]
@@ -442,7 +456,7 @@ impl PySongConverterBuilder {
             converter_type: converter_type.to_lowercase(),
             input: None,
             output: None,
-            extra_args: Vec::new(),
+            extra_args: Vec::new()
         }
     }
 
@@ -467,22 +481,22 @@ impl PySongConverterBuilder {
     /// Build the task using proper SongConverter struct
     pub fn build(&self, py: Python) -> PyResult<Py<PyBndTask>> {
         let mut args = Vec::new();
-        
+
         if let Some(ref input) = self.input {
             args.push(shell_escape(input));
         }
-        
+
         if let Some(ref output) = self.output {
             args.push(shell_escape(output));
         }
-        
+
         for arg in &self.extra_args {
             args.push(shell_escape(arg));
         }
-        
+
         let args_string = args.join(" ");
         let std_args = StandardTaskArguments::new(args_string);
-        
+
         // Map converter type to the correct SongConverter variant
         let converter = match self.converter_type.as_str() {
             "akg" => SongConverter::new_song_to_akg_default(),
@@ -495,15 +509,17 @@ impl PySongConverterBuilder {
             "wav" => SongConverter::new_song_to_wav_default(),
             "ym" => SongConverter::new_song_to_ym_default(),
             "z80profiler" | "profiler" => SongConverter::new_z80profiler_default(),
-            _ => return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Unknown converter type: {}. Valid types: akg, akm, aky, events, raw, soundeffects, vgm, wav, ym, z80profiler", 
-                        self.converter_type)
-            )),
+            _ => {
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "Unknown converter type: {}. Valid types: akg, akm, aky, events, raw, soundeffects, vgm, wav, ym, z80profiler",
+                    self.converter_type
+                )));
+            },
         };
-        
+
         let inner = InnerTask::with_songconverter(converter, std_args);
         let task = Task::from(inner);
-        
+
         PyBndTask::new_from_task(py, task)
     }
 
@@ -519,7 +535,8 @@ impl PySongConverterBuilder {
 fn shell_escape(s: &str) -> String {
     if s.contains(' ') || s.contains('"') {
         format!("\"{}\"", s.replace('"', "\\\""))
-    } else {
+    }
+    else {
         s.to_string()
     }
 }
@@ -562,7 +579,7 @@ impl PySnapshot {
             put_data: put_vec,
             sna_version: b.sna_version.clone(),
             flags: false,
-            cli: false,
+            cli: false
         }
     }
 

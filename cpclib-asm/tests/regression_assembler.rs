@@ -13,14 +13,14 @@ fn inspect_issue60_real_world_error() {
         "\telse\n",
         "\t\tGRAY_CODE_ACTION_ORDER = [\n",
         "\t\t\t[0, 0+11],\n",
-        "\t\t\t[0, 1+11],a\n",  // stray 'a' — the error is HERE (line 7)
+        "\t\t\t[0, 1+11],a\n", // stray 'a' — the error is HERE (line 7)
         "\t\t\t[1, 0+11]\n",
         "\t\t]\n",
         "\tendif\n"
     );
     let err = assemble(code).unwrap_err();
     let err_str = err.to_string();
-	eprintln!("Error message:\n{err_str}");
+    eprintln!("Error message:\n{err_str}");
     assert!(
         err_str.contains("syntax error in list"),
         "Expected bracketed-list error context, got:\n{err_str}"

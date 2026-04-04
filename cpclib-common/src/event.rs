@@ -70,6 +70,7 @@ pub struct DiscardObserver;
 
 impl EventObserver for DiscardObserver {
     fn emit_stdout(&self, _s: &str) {}
+
     fn emit_stderr(&self, _s: &str) {}
 }
 

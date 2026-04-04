@@ -302,7 +302,12 @@ impl BdAsmEnv {
 
     /// Inject labels into the listing
     /// Collects addresses from expressions and injects all labels
-    fn inject_labels<O: EventObserver>(&mut self, listing: &mut Listing, binary_size: usize, o: &O) -> Result<()> {
+    fn inject_labels<O: EventObserver>(
+        &mut self,
+        listing: &mut Listing,
+        binary_size: usize,
+        o: &O
+    ) -> Result<()> {
         // Calculate the valid address range for label generation
         let valid_range = self.valid_range(binary_size);
 
@@ -408,7 +413,11 @@ pub struct BdAsmCli {
 /// For raw binary: reads entire file and optionally strips AMSDOS header
 ///
 /// Returns: (bytes to disassemble, optional AMSDOS loading address)
-fn load_input_bytes<O: EventObserver>(filename: &Utf8PathBuf, origin: Option<u16>, o: &O) -> Result<(Vec<u8>, Option<u16>)> {
+fn load_input_bytes<O: EventObserver>(
+    filename: &Utf8PathBuf,
+    origin: Option<u16>,
+    o: &O
+) -> Result<(Vec<u8>, Option<u16>)> {
     // Check if this is a SNA file by extension
     let is_sna = filename
         .extension()
@@ -497,7 +506,8 @@ pub fn process<O: EventObserver>(cli: &BdAsmCli, o: &O) -> Result<()> {
 
     // Load the input bytes from either SNA or raw binary file
     // Pass the origin from control_file to help with SNA extraction
-    let (input_bytes, amsdos_load) = load_input_bytes(&input_filename, control_file.get_origin(), o)?;
+    let (input_bytes, amsdos_load) =
+        load_input_bytes(&input_filename, control_file.get_origin(), o)?;
 
     // Check if first bytes need to be removed (skip directive)
     let input_bytes: &[u8] = if skip_bytes > 0 {

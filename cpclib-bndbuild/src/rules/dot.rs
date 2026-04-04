@@ -12,16 +12,16 @@ use cpclib_common::itertools::Itertools;
 use dot_writer::{Attributes, DotWriter, Node, Scope, Style};
 
 use super::Rules;
+use crate::EXPECTED_FILENAMES;
 use crate::env::create_template_env;
 use crate::task::InnerTask;
-use crate::EXPECTED_FILENAMES;
 
 /// Parse a bndbuild argument string to extract `-f`/`--file` FILE and
 /// any positional target arguments.  Returns `(file_path, targets)` when
 /// the `-f` flag is present; `None` otherwise.
 fn parse_bndbuild_file_ref(args: &str) -> Option<(String, Vec<String>)> {
-    let tokens: Vec<String> = shlex::split(args)
-        .unwrap_or_else(|| args.split_whitespace().map(str::to_owned).collect());
+    let tokens: Vec<String> =
+        shlex::split(args).unwrap_or_else(|| args.split_whitespace().map(str::to_owned).collect());
     let mut file: Option<String> = None;
     let mut targets: Vec<String> = Vec::new();
     let mut iter = tokens.into_iter();
@@ -219,7 +219,12 @@ impl Rules {
     /// dependencies are immediately visible.
     ///
     /// Falls back to [`Rules::to_dot`] when `source_file` is `None`.
-    pub fn to_dot_multi(&self, source_file: Option<&Utf8Path>, compressed: bool, hide_tasks: bool) -> String {
+    pub fn to_dot_multi(
+        &self,
+        source_file: Option<&Utf8Path>,
+        compressed: bool,
+        hide_tasks: bool
+    ) -> String {
         let source_file = match source_file {
             Some(f) => f,
             None => return self.to_dot(compressed, hide_tasks)
@@ -245,36 +250,52 @@ impl Rules {
         }
 
         fn make_prules(rules: &Rules) -> Vec<PRule> {
-            rules.rules().iter().map(|rule| {
-                let targets = rule.targets().iter().map(|t| t.to_string()).collect();
-                let deps = rule.dependencies().iter().map(|d| d.to_string()).collect();
-                let cmd = rule
-                    .commands()
-                    .iter()
-                    .map(|c| {
-                        c.to_string()
-                            .replace("\\", "\\\\")
-                            .replace("\"", "\\\"")
-                            .lines()
-                            .map(|l| l.trim())
-                            .join(" \\\\\\l  ")
-                    })
-                    .join(" \\l");
-                let cmd = if cmd.contains("\\l") { cmd + " \\l" } else { cmd };
-                let help = rule.help().map(str::to_owned);
-                let bndbuild_refs = rule
-                    .commands()
-                    .iter()
-                    .filter_map(|task| {
-                        if let InnerTask::BndBuild(args) = &task.inner {
-                            parse_bndbuild_file_ref(args.args())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                PRule { targets, deps, cmd, help, bndbuild_refs }
-            }).collect()
+            rules
+                .rules()
+                .iter()
+                .map(|rule| {
+                    let targets = rule.targets().iter().map(|t| t.to_string()).collect();
+                    let deps = rule.dependencies().iter().map(|d| d.to_string()).collect();
+                    let cmd = rule
+                        .commands()
+                        .iter()
+                        .map(|c| {
+                            c.to_string()
+                                .replace("\\", "\\\\")
+                                .replace("\"", "\\\"")
+                                .lines()
+                                .map(|l| l.trim())
+                                .join(" \\\\\\l  ")
+                        })
+                        .join(" \\l");
+                    let cmd = if cmd.contains("\\l") {
+                        cmd + " \\l"
+                    }
+                    else {
+                        cmd
+                    };
+                    let help = rule.help().map(str::to_owned);
+                    let bndbuild_refs = rule
+                        .commands()
+                        .iter()
+                        .filter_map(|task| {
+                            if let InnerTask::BndBuild(args) = &task.inner {
+                                parse_bndbuild_file_ref(args.args())
+                            }
+                            else {
+                                None
+                            }
+                        })
+                        .collect();
+                    PRule {
+                        targets,
+                        deps,
+                        cmd,
+                        help,
+                        bndbuild_refs
+                    }
+                })
+                .collect()
         }
 
         // Resolve a path, converting directories to their contained build file,
@@ -288,7 +309,8 @@ impl Rules {
                     .map(|f| p.join(f))
                     .find(|candidate| candidate.is_file())
                     .unwrap_or(p)
-            } else {
+            }
+            else {
                 p
             };
             std::fs::canonicalize(&resolved)
@@ -302,7 +324,8 @@ impl Rules {
         let source_abs: String = {
             let raw = if source_file.is_absolute() {
                 Utf8PathBuf::from(source_file)
-            } else {
+            }
+            else {
                 std::env::current_dir()
                     .ok()
                     .and_then(|p| Utf8PathBuf::from_path_buf(p).ok())
@@ -318,7 +341,10 @@ impl Rules {
         let mut bfs_queue: Vec<(String, Utf8PathBuf)> = Vec::new();
         {
             let p = Utf8PathBuf::from(&source_abs);
-            let base = p.parent().map(|d| d.to_owned()).unwrap_or_else(|| Utf8PathBuf::from("."));
+            let base = p
+                .parent()
+                .map(|d| d.to_owned())
+                .unwrap_or_else(|| Utf8PathBuf::from("."));
             bfs_queue.push((source_abs.clone(), base));
         }
 
@@ -345,14 +371,16 @@ impl Rules {
                         .and_then(|d| d.file_name())
                         .map(str::to_owned)
                         .unwrap_or_else(|| fname.to_owned())
-                } else {
+                }
+                else {
                     fname.to_owned()
                 }
             };
 
             let prules: Vec<PRule> = if file_idx == 0 {
                 make_prules(self)
-            } else {
+            }
+            else {
                 // Use the Jinja template engine (same as normal loading) so that
                 // files using {%include%} / {{…}} are rendered before YAML parsing.
                 let rendered_opt: Option<String> = (|| {
@@ -360,13 +388,11 @@ impl Rules {
                     let parent = path.parent()?;
                     std::env::set_current_dir(parent).ok()?;
                     let content = std::fs::read_to_string(&path).ok()?;
-                    let env = create_template_env(
-                        Some(parent),
-                        &[] as &[(&str, &str)]
-                    );
+                    let env = create_template_env(Some(parent), &[] as &[(&str, &str)]);
                     env.render_str(&content, minijinja::context!()).ok()
                 })();
-                match rendered_opt.and_then(|content| serde_yaml::from_str::<Rules>(&content).ok()) {
+                match rendered_opt.and_then(|content| serde_yaml::from_str::<Rules>(&content).ok())
+                {
                     Some(r) => make_prules(&r),
                     None => {
                         // File cannot be loaded: record an empty cluster and move on.
@@ -385,7 +411,8 @@ impl Rules {
                 for (ref_file, _ref_tgts) in &pr.bndbuild_refs {
                     let raw_abs = if Utf8Path::new(ref_file).is_absolute() {
                         Utf8PathBuf::from(ref_file)
-                    } else {
+                    }
+                    else {
                         base_dir.join(ref_file)
                     };
                     let ref_abs = resolve_and_canon(raw_abs);
@@ -400,7 +427,11 @@ impl Rules {
                 }
             }
 
-            files.push(PFile { label: make_label(&abs_path), base_dir, rules: prules });
+            files.push(PFile {
+                label: make_label(&abs_path),
+                base_dir,
+                rules: prules
+            });
         }
 
         // ----------------------------------------------------------------
@@ -433,7 +464,10 @@ impl Rules {
                 let node_prefix = format!("f{}:", file_idx);
                 let strip_prefix = |s: &str| -> String {
                     let inner = s.trim_matches('"');
-                    inner.strip_prefix(&*node_prefix).unwrap_or(inner).to_owned()
+                    inner
+                        .strip_prefix(&*node_prefix)
+                        .unwrap_or(inner)
+                        .to_owned()
                 };
 
                 {
@@ -450,16 +484,16 @@ impl Rules {
 
                         if hide_tasks {
                             for dep in &pr.deps {
-                                let dep_node = format!("\"{}{}\"" , node_prefix, dep);
+                                let dep_node = format!("\"{}{}\"", node_prefix, dep);
                                 all_deps.insert(dep_node.clone());
                                 for tgt in &pr.targets {
-                                    let tgt_node = format!("\"{}{}\"" , node_prefix, tgt);
+                                    let tgt_node = format!("\"{}{}\"", node_prefix, tgt);
                                     all_tgts.insert(tgt_node.clone());
                                     cluster.edge(&dep_node, &tgt_node);
                                 }
                             }
                             for tgt in &pr.targets {
-                                all_tgts.insert(format!("\"{}{}\"" , node_prefix, tgt));
+                                all_tgts.insert(format!("\"{}{}\"", node_prefix, tgt));
                             }
                             ids_for_file.push(None);
                             continue;
@@ -472,7 +506,8 @@ impl Rules {
                                 if compressed {
                                     rn.set("shape", "point", false);
                                     rn.set("tooltip", cmd, true);
-                                } else {
+                                }
+                                else {
                                     rn.set_label(cmd);
                                     rn.set_font("Courier New");
                                     rn.set_font_size(12.);
@@ -496,18 +531,20 @@ impl Rules {
                                 let tgt_node = format!("\"{}{}\"", node_prefix, tgt);
                                 all_tgts.insert(tgt_node.clone());
                                 cluster.edge(&rid_str, &tgt_node);
-
                             }
                             ids_for_file.push(Some(rid_str));
-                        } else {
+                        }
+                        else {
                             let rid_str: String = {
                                 let mut rn = cluster.node_auto();
                                 if cmd.is_empty() {
                                     rn.set("shape", "point", false);
-                                } else if compressed {
+                                }
+                                else if compressed {
                                     rn.set("shape", "point", false);
                                     rn.set("tooltip", cmd, true);
-                                } else {
+                                }
+                                else {
                                     rn.set_label(cmd);
                                     rn.set_font("Courier New");
                                     rn.set_font_size(12.);
@@ -526,7 +563,6 @@ impl Rules {
                                 let tgt_node = format!("\"{}{}\"", node_prefix, tgt);
                                 all_tgts.insert(tgt_node.clone());
                                 cluster.edge(&rid_str, &tgt_node);
-
                             }
                             ids_for_file.push(Some(rid_str));
                         }
@@ -586,7 +622,8 @@ impl Rules {
                     for (ref_file, ref_targets) in &pr.bndbuild_refs {
                         let raw_abs = if Utf8Path::new(ref_file).is_absolute() {
                             Utf8PathBuf::from(ref_file)
-                        } else {
+                        }
+                        else {
                             pfile.base_dir.join(ref_file)
                         };
                         let ref_abs = resolve_and_canon(raw_abs);
@@ -605,7 +642,8 @@ impl Rules {
                                 .cloned()
                                 .into_iter()
                                 .collect()
-                        } else {
+                        }
+                        else {
                             ref_targets.clone()
                         };
                         // For each target: link from the target node in the referenced file

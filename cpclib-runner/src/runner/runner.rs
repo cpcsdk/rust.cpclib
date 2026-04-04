@@ -114,12 +114,11 @@ pub trait RunnerWithClapDerive: RunnerWithClap {
             return Ok(None);
         }
         let matches = matches.unwrap();
-        let args: Self::Args = Self::Args::from_arg_matches(&matches)
-            .map_err(|err| {
-                let msg = format!("Failed to parse arguments: {err}");
-                e.emit_stderr(&msg);
-                msg
-            })?;
+        let args: Self::Args = Self::Args::from_arg_matches(&matches).map_err(|err| {
+            let msg = format!("Failed to parse arguments: {err}");
+            e.emit_stderr(&msg);
+            msg
+        })?;
         Ok(Some(args))
     }
 }
@@ -189,6 +188,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         if self.transparent {
             use std::io::BufReader;
             use std::process::{Child, Stdio};
+
             use utf8_chars::BufReadCharsExt;
 
             let mut cmd = std::process::Command::new(app);
@@ -260,7 +260,7 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         // the child's stdout and stderr into a single stream through the pseudo-console.
         // There is no portable way to separate them when using a PTY, so all child output
         // is forwarded to emit_stdout.
-        use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+        use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
         let pty_system = native_pty_system();
         let pair = pty_system
