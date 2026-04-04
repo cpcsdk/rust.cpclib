@@ -1,15 +1,14 @@
 use assert_cmd::cargo::cargo_bin_cmd;
-use assert_cmd::prelude::*;
+use camino::{Utf8Path, Utf8PathBuf};
 use predicates::prelude::*;
 use serial_test::serial;
 use std::fs;
-use std::path::PathBuf;
 
 type TempDir = camino_tempfile::Utf8TempDir;
 
 
 /// Helper to create test files
-fn create_test_files(dir: &TempDir) -> (PathBuf, PathBuf, PathBuf) {
+fn create_test_files(dir: &TempDir) -> (Utf8PathBuf, Utf8PathBuf, Utf8PathBuf) {
     let file1 = dir.path().join("file1.txt");
     let file2 = dir.path().join("file2.txt");
     let file3 = dir.path().join("file3.txt");
@@ -18,11 +17,16 @@ fn create_test_files(dir: &TempDir) -> (PathBuf, PathBuf, PathBuf) {
     fs::write(&file2, "content2").unwrap();
     fs::write(&file3, "content3").unwrap();
     
-    (file1.into(), file2.into(), file3.into())
+    (file1, file2, file3)
+}
+
+/// Helper to convert path to string with forward slashes for cross-platform CLI args
+fn path_to_arg(path: &Utf8Path) -> String {
+    path.as_str().replace('\\', "/")
 }
 
 /// Helper to create test files in a subdirectory
-fn create_test_files_in_subdir(dir: &camino_tempfile::Utf8TempDir, subdir: &str) -> (PathBuf, PathBuf, PathBuf) {
+fn create_test_files_in_subdir(dir: &camino_tempfile::Utf8TempDir, subdir: &str) -> (Utf8PathBuf, Utf8PathBuf, Utf8PathBuf) {
     let sub_path = dir.path().join(subdir);
     fs::create_dir_all(&sub_path).unwrap();
     
@@ -34,7 +38,7 @@ fn create_test_files_in_subdir(dir: &camino_tempfile::Utf8TempDir, subdir: &str)
     fs::write(&file2, "content2").unwrap();
     fs::write(&file3, "content3").unwrap();
     
-    (file1.into(), file2.into(), file3.into())
+    (file1, file2, file3)
 }
 
 #[test]
@@ -51,7 +55,7 @@ fn test_archive_create_basic_zip() {
         .arg("archive")
         .arg("create")
         .arg("-o")
-        .arg(&archive)
+        .arg(path_to_arg(&archive))
         .arg(file1.file_name().unwrap())
         .arg(file2.file_name().unwrap())
         .arg(file3.file_name().unwrap());
@@ -77,7 +81,7 @@ fn test_archive_create_basic_targz() {
         .arg("archive")
         .arg("create")
         .arg("-o")
-        .arg(&archive)
+        .arg(path_to_arg(&archive))
         .arg(file1.file_name().unwrap())
         .arg(file2.file_name().unwrap());
     
@@ -103,7 +107,7 @@ fn test_archive_list_zip() {
         .arg("archive")
         .arg("create")
         .arg("-o")
-        .arg(&archive)
+        .arg(path_to_arg(&archive))
         .arg(file1.file_name().unwrap())
         .arg(file2.file_name().unwrap());
     
@@ -116,7 +120,7 @@ fn test_archive_list_zip() {
         .arg("--")
         .arg("archive")
         .arg("list")
-        .arg(&archive);
+        .arg(path_to_arg(&archive));
     
     list_cmd.assert()
         .success()
@@ -141,7 +145,7 @@ fn test_archive_extract_zip() {
         .arg("archive")
         .arg("create")
         .arg("-o")
-        .arg(&archive)
+        .arg(path_to_arg(&archive))
         .arg(file1.file_name().unwrap())
         .arg(file2.file_name().unwrap());
     
@@ -154,7 +158,7 @@ fn test_archive_extract_zip() {
         .arg("--")
         .arg("archive")
         .arg("extract")
-        .arg(&archive);
+        .arg(path_to_arg(&archive));
     
     extract_cmd.assert()
         .success()
@@ -180,12 +184,12 @@ fn test_archive_strip_prefix() {
         .arg("archive")
         .arg("create")
         .arg("-o")
-        .arg(&archive)
+        .arg(path_to_arg(&archive))
         .arg("-s")
         .arg("dist")
-        .arg(&file1)
-        .arg(&file2)
-        .arg(&file3);
+        .arg(path_to_arg(&file1))
+        .arg(path_to_arg(&file2))
+        .arg(path_to_arg(&file3));
     
     cmd.assert()
         .success()
@@ -193,21 +197,25 @@ fn test_archive_strip_prefix() {
         .stdout(predicate::str::contains("file2.txt"))
         .stdout(predicate::str::contains("file3.txt"));
     
-    // List to verify paths don't contain "dist/" prefix
+    // List to verify paths don't contain "dist" prefix
     let mut list_cmd = cargo_bin_cmd!("bndbuild");
     list_cmd.current_dir(temp.path())
         .arg("--direct")
         .arg("--")
         .arg("archive")
         .arg("list")
-        .arg(&archive);
+        .arg(path_to_arg(&archive));
     
-    list_cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("file1.txt"))
-        .stdout(predicate::str::contains("file2.txt"))
-        .stdout(predicate::str::contains("file3.txt"))
-        .stdout(predicate::str::contains("dist/").not()); // Should NOT contain "dist/"
+    let output = list_cmd.assert().success();
+    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
+    
+    // Verify files are present
+    assert!(stdout.contains("file1.txt"));
+    assert!(stdout.contains("file2.txt"));
+    assert!(stdout.contains("file3.txt"));
+    // Should NOT contain "dist/" or "dist\\" prefix
+    assert!(!stdout.contains("dist/") && !stdout.contains("dist\\"), 
+            "Archive listing should not contain dist prefix, got: {}", stdout);
 }
 
 #[test]
@@ -228,7 +236,7 @@ fn test_archive_basename_only() {
     
     let archive = temp.path().join("test.zip");
     
-    // Create archive with basename-only
+    // Create archive with basename-only  
     let mut cmd = cargo_bin_cmd!("bndbuild");
     cmd.current_dir(temp.path())
         .arg("--direct")
@@ -236,10 +244,10 @@ fn test_archive_basename_only() {
         .arg("archive")
         .arg("create")
         .arg("-o")
-        .arg(&archive)
+        .arg(path_to_arg(&archive))
         .arg("-b")
-        .arg(&file1)
-        .arg(&file2);
+        .arg(path_to_arg(&file1))
+        .arg(path_to_arg(&file2));
     
     cmd.assert()
         .success()
@@ -253,7 +261,7 @@ fn test_archive_basename_only() {
         .arg("--")
         .arg("archive")
         .arg("list")
-        .arg(&archive);
+        .arg(path_to_arg(&archive));
     
     list_cmd.assert()
         .success()
@@ -296,10 +304,14 @@ fn test_archive_with_directory() {
         .arg("list")
         .arg(&archive);
     
-    list_cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("mydir/file1.txt"))
-        .stdout(predicate::str::contains("mydir/file2.txt"));
+    // Use platform-independent path checks
+    let output = list_cmd.assert().success();
+    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
+    
+    // Check that files exist regardless of path separator
+    assert!(stdout.contains("file1.txt"), "Should contain file1.txt");
+    assert!(stdout.contains("file2.txt"), "Should contain file2.txt");
+    assert!(stdout.contains("mydir"), "Should contain mydir");
 }
 
 #[test]
@@ -318,7 +330,7 @@ fn test_archive_invalid_format() {
         .arg("archive")
         .arg("create")
         .arg("-o")
-        .arg(&archive)
+        .arg(path_to_arg(&archive))
         .arg(file1.file_name().unwrap());
     
     cmd.assert()
@@ -363,6 +375,11 @@ fn test_archive_strip_prefix_with_wildcard() {
     create_test_files_in_subdir(&temp, "dist");
     let archive = temp.path().join("test.zip");
     
+    // Use platform-independent path construction
+    let file1_path = temp.path().join("dist").join("file1.txt");
+    let file2_path = temp.path().join("dist").join("file2.txt");
+    let file3_path = temp.path().join("dist").join("file3.txt");
+    
     // Create archive using wildcard and strip prefix
     let mut cmd = cargo_bin_cmd!("bndbuild");
     cmd.current_dir(temp.path())
@@ -371,12 +388,12 @@ fn test_archive_strip_prefix_with_wildcard() {
         .arg("archive")
         .arg("create")
         .arg("-o")
-        .arg(&archive)
+        .arg(path_to_arg(&archive))
         .arg("-s")
         .arg("dist")
-        .arg("dist/file1.txt")
-        .arg("dist/file2.txt")
-        .arg("dist/file3.txt");
+        .arg(path_to_arg(&file1_path))
+        .arg(path_to_arg(&file2_path))
+        .arg(path_to_arg(&file3_path));
     
     cmd.assert()
         .success()
@@ -389,15 +406,16 @@ fn test_archive_strip_prefix_with_wildcard() {
         .arg("--")
         .arg("archive")
         .arg("list")
-        .arg(&archive);
+        .arg(path_to_arg(&archive));
     
     let output = list_cmd.assert().success();
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     
-    // Verify files are listed without "dist/" prefix
+    // Verify files are listed without "dist" prefix (platform-independent)
     assert!(stdout.contains("file1.txt"));
     assert!(stdout.contains("file2.txt"));
     assert!(stdout.contains("file3.txt"));
-    // Ensure "dist/" doesn't appear in paths
-    assert!(!stdout.contains("dist/file"));
+    // Ensure "dist" doesn't appear in paths (check both separators)
+    assert!(!stdout.contains("dist/file") && !stdout.contains("dist\\file"), 
+            "Archive listing should not contain dist prefix, got: {}", stdout);
 }

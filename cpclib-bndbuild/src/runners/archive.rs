@@ -198,15 +198,28 @@ fn create_zip<E: EventObserver>(output: &str, files: &[String], strip_prefix: Op
         .unix_permissions(0o755);
 
     for file_path in files {
-        let path = Utf8Path::new(file_path);
-        if path.is_file() {
-            add_file_to_zip(&mut zip, path, strip_prefix, basename_only, options, o)?;
-        }
-        else if path.is_dir() {
-            add_dir_to_zip(&mut zip, path, path, strip_prefix, basename_only, options, o)?;
-        }
-        else {
-            return Err(format!("Path not found: {}", file_path));
+        // On Windows, paths work with forward slashes too
+        let path = Utf8PathBuf::from(file_path.replace('\\', "/"));
+        if !path.exists() {
+            // If normalized path doesn't exist, try the original string
+            let path_orig = Utf8PathBuf::from(file_path);
+            if !path_orig.exists() {
+                return Err(format!("Path not found: {}", file_path));
+            }
+            // Use original path if it exists
+            if path_orig.is_file() {
+                add_file_to_zip(&mut zip, &path_orig, strip_prefix, basename_only, options, o)?;
+            }
+            else if path_orig.is_dir() {
+                add_dir_to_zip(&mut zip, &path_orig, &path_orig, strip_prefix, basename_only, options, o)?;
+            }
+        } else {
+            if path.is_file() {
+                add_file_to_zip(&mut zip, &path, strip_prefix, basename_only, options, o)?;
+            }
+            else if path.is_dir() {
+                add_dir_to_zip(&mut zip, &path, &path, strip_prefix, basename_only, options, o)?;
+            }
         }
     }
 
@@ -300,21 +313,18 @@ fn create_tar_gz<E: EventObserver>(output: &str, files: &[String], strip_prefix:
     let mut tar = tar::Builder::new(enc);
 
     for file_path in files {
-        let path = Utf8Path::new(file_path);
-        let archive_name = compute_archive_name(path, strip_prefix, basename_only);
-        
-        if path.is_file() {
-            tar.append_path_with_name(path.as_str(), &archive_name)
-                .map_err(|e| format!("Failed to add {} to tar: {}", file_path, e))?;
-            o.emit_stdout(&format!("  Added: {}", archive_name));
-        }
-        else if path.is_dir() {
-            tar.append_dir_all(&archive_name, path.as_str())
-                .map_err(|e| format!("Failed to add directory {} to tar: {}", file_path, e))?;
-            o.emit_stdout(&format!("  Added directory: {}", archive_name));
-        }
-        else {
-            return Err(format!("Path not found: {}", file_path));
+        // On Windows, paths work with forward slashes too
+        let path = Utf8PathBuf::from(file_path.replace('\\', "/"));
+        if !path.exists() {
+            let path_orig = Utf8PathBuf::from(file_path);
+            if !path_orig.exists() {
+                return Err(format!("Path not found: {}", file_path));
+            }
+            let archive_name = compute_archive_name(&path_orig, strip_prefix, basename_only);
+            process_tar_path(&path_orig, &archive_name, &mut tar, o, file_path)?;
+        } else {
+            let archive_name = compute_archive_name(&path, strip_prefix, basename_only);
+            process_tar_path(&path, &archive_name, &mut tar, o, file_path)?;
         }
     }
 
@@ -322,6 +332,26 @@ fn create_tar_gz<E: EventObserver>(output: &str, files: &[String], strip_prefix:
         .map_err(|e| format!("Failed to finalize tar.gz: {}", e))?;
 
     o.emit_stdout(&format!("Created archive: {}", output));
+    Ok(())
+}
+
+fn process_tar_path<E: EventObserver>(
+    path: &Utf8Path,
+    archive_name: &str,
+    tar: &mut tar::Builder<GzEncoder<File>>,
+    o: &E,
+    file_path: &str
+) -> Result<(), String> {
+    if path.is_file() {
+        tar.append_path_with_name(path.as_str(), archive_name)
+            .map_err(|e| format!("Failed to add {} to tar: {}", file_path, e))?;
+        o.emit_stdout(&format!("  Added: {}", archive_name));
+    }
+    else if path.is_dir() {
+        tar.append_dir_all(archive_name, path.as_str())
+            .map_err(|e| format!("Failed to add directory {} to tar: {}", file_path, e))?;
+        o.emit_stdout(&format!("  Added directory: {}", archive_name));
+    }
     Ok(())
 }
 
