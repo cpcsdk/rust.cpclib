@@ -1487,7 +1487,7 @@ impl<T: AsRef<Self> + std::fmt::Display> std::ops::Add<T> for ExprResult {
                 ExprResult::Char(s.chars().next().unwrap() as u8) + rhs.clone()
             },
 
-            (ExprResult::String(s), _) => {
+            (ExprResult::String(s), _) => { // This is better to use string_concat 
                 let rhs_str = rhs.to_string();
                 Ok(ExprResult::String(format!("{s}{rhs_str}").into()))
             },

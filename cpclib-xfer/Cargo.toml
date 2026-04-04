@@ -30,7 +30,6 @@ getset.workspace = true
 serde.workspace = true
 
 path-absolutize = { workspace = true, optional = false }
-curl = { workspace = true, optional = false }
 
 
 [build-dependencies]

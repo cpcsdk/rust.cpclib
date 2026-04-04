@@ -264,6 +264,8 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
 
         "binary_transform": Function::HardCoded(HardCodedFunction::BinaryTransform),
 
+        "<": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Low)),
+        ">": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::High)),
         "abs": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::Abs)),
         "acos": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::ACos)),
         "asin": Function::HardCoded(HardCodedFunction::UnaryFunction(UnaryFunction::ASin)),

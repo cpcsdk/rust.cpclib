@@ -31,7 +31,6 @@ serde = { workspace = true, features = ["derive"] }
 camino-tempfile.workspace = true
 
 path-absolutize = {workspace = true, optional = false }
-curl = {workspace = true, optional = false }
 
 
 time.workspace = true

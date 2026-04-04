@@ -2812,7 +2812,7 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pars
     let inner = inner_code.parse_next(input)?;
 
     let _ = cut_err(
-        preceded(my_space0, alt((Caseless("DEPHASE"), Caseless("REND"))))
+        preceded(my_space0, alt((Caseless("DEPHASE"), Caseless("REND"), Caseless("ENDR"))))
             .context(StrContext::Label("RORG: missing REND"))
     )
     .parse_next(input)?;

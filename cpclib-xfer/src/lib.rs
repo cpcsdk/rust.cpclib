@@ -1,7 +1,6 @@
 use cpclib_common::camino::Utf8Path;
 use cpclib_disc as disc;
 use cpclib_sna as sna;
-use curl::easy::{Easy, Form};
 use custom_error::custom_error;
 use fs_err as fs;
 use path_absolutize::*;
@@ -240,26 +239,16 @@ impl CpcXfer {
         );
         let destination = destination.to_string();
 
-        let mut form = Form::new();
-        form.part("upfile")
-            .file(local_fname)
-            .filename(&destination)
-            .add()
-            .unwrap();
-        let mut easy = Easy::new();
-        easy.url(&self.uri("files.shtml")).map_err(|e| {
-            Box::new(XferError::ConnectionError2 {
-                source: Box::new(e)
-            })
-        })?;
-        easy.httppost(form).map_err(|e| {
-            Box::new(XferError::ConnectionError2 {
-                source: Box::new(e)
-            })
-        })?;
-        easy.perform().map_err(|e| {
-            Box::new(XferError::ConnectionError2 {
-                source: Box::new(e)
+        // Use the network helper from cpclib-common to upload the file
+        cpclib_common::network::upload_file_multipart(
+            &self.uri("files.shtml"),
+            "upfile",
+            local_fname,
+            &destination
+        )
+        .map_err(|e| {
+            Box::new(XferError::InternalError {
+                reason: format!("Upload failed: {}", e)
             })
         })?;
 
@@ -326,37 +315,14 @@ impl CpcXfer {
     }
 
     fn download_dir(&self) -> Result<M4FilesList, Box<XferError>> {
-        let mut dst = Vec::new();
-        {
-            {
-                let mut easy = Easy::new();
-                easy.url(&self.uri("sd/m4/dir.txt")).map_err(|e| {
-                    Box::new(XferError::ConnectionError2 {
-                        source: Box::new(e)
-                    })
-                })?;
-                let mut easy = easy.transfer();
-                easy.write_function(|data| {
-                    dst.extend_from_slice(data);
-                    Ok(data.len())
+        let content = cpclib_common::network::get_to_string(&self.uri("sd/m4/dir.txt"))
+            .map_err(|e| {
+                Box::new(XferError::InternalError {
+                    reason: format!("Failed to download directory listing: {}", e)
                 })
-                .map_err(|e| {
-                    Box::new(XferError::ConnectionError2 {
-                        source: Box::new(e)
-                    })
-                })?;
-                easy.perform().map_err(|e| {
-                    Box::new(XferError::ConnectionError2 {
-                        source: Box::new(e)
-                    })
-                })?;
-            }
-        }
+            })?;
 
-        let content =
-            std::str::from_utf8(&dst).expect("Unable to create an UTF8 string for M4 content");
-
-        Ok(M4FilesList::from(content)) // TODO use try-from
+        Ok(M4FilesList::from(content.as_str())) // TODO use try-from
     }
 
     /// Change the current directory
@@ -412,24 +378,18 @@ impl CpcXfer {
     }
 
     pub fn ls_request(&self, folder: &str) -> Result<(), Box<XferError>> {
-        let mut easy = Easy::new();
-        let folder = easy.url_encode(folder.as_bytes());
-        easy.get(true).map_err(|e| {
-            Box::new(XferError::ConnectionError2 {
-                source: Box::new(e)
-            })
-        })?;
-        let url = format!("{}?ls={}", self.uri("config.cgi"), folder);
-        easy.url(&url).map_err(|e| {
-            Box::new(XferError::ConnectionError2 {
-                source: Box::new(e)
-            })
-        })?;
-        easy.perform().map_err(|e| {
-            Box::new(XferError::ConnectionError2 {
-                source: Box::new(e)
-            })
-        })?;
+        let folder_encoded = cpclib_common::network::url_encode(folder);
+        let url = format!("{}?ls={}", self.uri("config.cgi"), folder_encoded);
+        
+        cpclib_common::network::ureq::get(&url)
+            .header("User-Agent", "cpcxfer")
+            .call()
+            .map_err(|e| {
+                Box::new(XferError::ConnectionError2 {
+                    source: Box::new(e)
+                })
+            })?;
+        
         Ok(())
     }
 }
