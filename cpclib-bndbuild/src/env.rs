@@ -33,6 +33,14 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
         Ok(path.replace("\\", "\\\\\\\\"))
     }
 
+    fn basename(path: String) -> Result<String, Error> {
+        Ok(std::path::Path::new(&path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&path)
+            .to_string())
+    }
+
     pub fn path_loader<'x, P: AsRef<std::path::Path> + 'x>(
         dir: P
     ) -> impl for<'a> Fn(&'a str) -> Result<Option<String>, Error> + Send + Sync + 'static {
@@ -56,6 +64,7 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
     env.set_loader(path_loader(current_dir));
     env.add_function("fail", error);
     env.add_function("assert", assert);
+    env.add_function("basename", basename);
     env.add_function("basm_escape_path", basm_escape_path);
     env.add_filter("basm_escape_path", basm_escape_path);
 

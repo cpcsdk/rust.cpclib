@@ -3,6 +3,8 @@ use std::sync::{Arc, LazyLock, Mutex, MutexGuard};
 
 use cpclib_common::camino::Utf8Path;
 #[cfg(feature = "indicatif")]
+use cpclib_common::itertools::Itertools;
+#[cfg(feature = "indicatif")]
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 static PROGRESS: LazyLock<Arc<Mutex<Progress>>> =
