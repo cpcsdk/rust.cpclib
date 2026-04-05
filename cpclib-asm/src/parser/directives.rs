@@ -446,7 +446,7 @@ pub fn parse_basic_hide_lines(
 pub fn parse_include(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let once_fname = (
         opt(delimited(my_space0, parse_word(b"ONCE"), my_space0)),
-        cut_err(parse_fname.context(StrContext::Label("INCLUDE: error in fname")))
+        cut_err(parse_fname_or_expression.context(StrContext::Label("INCLUDE: error in fname")))
     )
         .parse_next(input)?;
 
@@ -484,7 +484,7 @@ pub fn parse_incbin(
     transformation: BinaryTransformation
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
-        let fname = preceded(my_space0, parse_fname).parse_next(input)?;
+        let fname = preceded(my_space0, parse_fname_or_expression).parse_next(input)?;
 
         let offset =
             opt(preceded((my_space0, (','), my_space0), located_expr)).parse_next(input)?;
@@ -551,7 +551,7 @@ pub fn parse_save(
         };
 
         let dsk_filename = if save_type.is_some() && save_kind == SaveKind::Save {
-            opt(preceded(parse_comma, parse_fname)).parse_next(input)?
+            opt(preceded(parse_comma, parse_fname_or_expression)).parse_next(input)?
         }
         else {
             None
@@ -1227,7 +1227,7 @@ pub fn parse_defs(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z8
 }
 
 pub fn parse_snainit(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    let fname = located_expr(input)?;
+    let fname = parse_fname_or_expression(input)?;
 
     Ok(LocatedTokenInner::SnaInit(fname))
 }
@@ -2920,6 +2920,41 @@ mod tests {
             else {
                 assert!(res.res.is_err(), "Should error on input: {}", input);
             }
+        }
+    }
+
+
+    #[test]
+    fn test_parse_fname_or_exp() {
+        let cases_fname_only = [
+            "a/path/to/a/file.asm",
+            "\"a/path/to/a/file.asm\"",
+        ];
+
+
+        let cases_expr = [
+            "string_concat(vara,varb)"
+        ];
+
+        for input in &cases_fname_only {
+            let res = dbg!(parse_test(parse_fname, input));
+            assert!(res.res.is_ok(), "Should parse successfully: {}", input);
+        }
+
+
+        for input in &cases_expr {
+            let res = dbg!(parse_test(located_expr, input));
+            assert!(res.res.is_ok(), "Should parse successfully: {}", input);
+
+            let res = dbg!(parse_test(parse_fname, input));
+            assert!(res.res.is_err(), "Should not parse as filename: {}", input);
+        }
+
+
+
+        for input in cases_fname_only.iter().chain(cases_expr.iter()) {
+            let res = dbg!(parse_test(parse_fname_or_expression, input));
+            assert!(res.res.is_ok(), "Should parse successfully: {}", input);
         }
     }
 }

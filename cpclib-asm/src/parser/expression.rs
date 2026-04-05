@@ -37,9 +37,17 @@ include!(concat!(env!("OUT_DIR"), "/forbidden_names_generated.rs"));
 pub fn parse_fname(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
     alt((
         parse_string.map(|s: UnescapedString| LocatedExpr::String(s)),
-        terminated(parse_label(false), not(alt(("/", "://"))))
+        terminated(parse_label(false), not(alt(("/", "://", "("))))
             .map(|l| LocatedExpr::Label(l.into())),
         parse_stringlike_without_quote.map(|s: UnescapedString| LocatedExpr::String(s))
+    ))
+    .parse_next(input)
+}
+
+pub fn parse_fname_or_expression(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
+    alt((
+        parse_fname,
+        located_expr
     ))
     .parse_next(input)
 }
@@ -1132,13 +1140,15 @@ pub fn parse_stringlike_without_quote(
     input: &mut InnerZ80Span
 ) -> ModalResult<UnescapedString, Z80ParserError> {
     let (normal, escapable) = (
-        none_of(('\\', ' ', '\r', '\n', ':', ';')),
+        none_of(('\\', ' ', '\r', '\n', ':', ';', '(')),
         one_of(('\\', ' ', ':', ';'))
     );
     let (string, slice) = opt(my_escaped(normal, '\\', escapable))
         .map(|s| s.unwrap_or_default())
         .with_taken()
         .parse_next(input)?;
+
+    let _ = not(one_of((b'(', b'.'))).context(StrContext::Label("Unexpected character after unquoted filename")) .parse_next(input)?;
 
     let slice = (*input).update_slice(slice);
 
