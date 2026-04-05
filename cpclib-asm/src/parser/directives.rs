@@ -1227,7 +1227,7 @@ pub fn parse_defs(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z8
 }
 
 pub fn parse_snainit(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    let fname = parse_fname(input)?;
+    let fname = located_expr(input)?;
 
     Ok(LocatedTokenInner::SnaInit(fname))
 }
