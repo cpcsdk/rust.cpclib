@@ -4,25 +4,19 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
-use cpclib_common::clap::{
-    self, Arg, ArgAction, Command, CommandFactory, FromArgMatches, Parser, Subcommand
-};
+use cpclib_common::clap::{self, Arg, ArgAction, Command, CommandFactory, FromArgMatches, Parser, Subcommand};
 use cpclib_runner::event::EventObserver;
 #[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};
-use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
+use flate2::Compression;
 use tar::Archive as TarArchive;
 
 use crate::task::ARCHIVE_CMDS;
 
 #[derive(Parser, Debug)]
-#[command(
-    name = "archive",
-    about = "Create, list, and extract archives (.zip or .tar.gz)",
-    arg_required_else_help = true
-)]
+#[command(name = "archive", about = "Create, list, and extract archives (.zip or .tar.gz)", arg_required_else_help = true)]
 struct ArchiveArgs {
     #[command(subcommand)]
     command: Option<ArchiveCommand>
@@ -105,7 +99,8 @@ impl<E: EventObserver> Default for ArchiveRunner<E> {
 impl<E: EventObserver> ArchiveRunner<E> {
     pub fn new() -> Self {
         Self {
-            command: ArchiveArgs::command().no_binary_name(true),
+            command: ArchiveArgs::command()
+                .no_binary_name(true),
             _phantom: PhantomData::<E>
         }
     }
@@ -164,12 +159,7 @@ impl<E: EventObserver> Runner for ArchiveRunner<E> {
         };
 
         match command {
-            ArchiveCommand::Create {
-                output,
-                files,
-                strip_prefix,
-                basename_only
-            } => {
+            ArchiveCommand::Create { output, files, strip_prefix, basename_only } => {
                 create_archive(&output, &files, strip_prefix.as_deref(), basename_only, o)?;
             },
             ArchiveCommand::List { archive } => {
@@ -199,13 +189,7 @@ fn create_archive<E: EventObserver>(
     }
 }
 
-fn create_zip<E: EventObserver>(
-    output: &str,
-    files: &[String],
-    strip_prefix: Option<&str>,
-    basename_only: bool,
-    o: &E
-) -> Result<(), String> {
+fn create_zip<E: EventObserver>(output: &str, files: &[String], strip_prefix: Option<&str>, basename_only: bool, o: &E) -> Result<(), String> {
     let file = File::create(output).map_err(|e| format!("Failed to create {}: {}", output, e))?;
     let mut zip = zip::ZipWriter::new(file);
 
@@ -214,52 +198,15 @@ fn create_zip<E: EventObserver>(
         .unix_permissions(0o755);
 
     for file_path in files {
-        // On Windows, paths work with forward slashes too
-        let path = Utf8PathBuf::from(file_path.replace('\\', "/"));
-        if !path.exists() {
-            // If normalized path doesn't exist, try the original string
-            let path_orig = Utf8PathBuf::from(file_path);
-            if !path_orig.exists() {
-                return Err(format!("Path not found: {}", file_path));
-            }
-            // Use original path if it exists
-            if path_orig.is_file() {
-                add_file_to_zip(
-                    &mut zip,
-                    &path_orig,
-                    strip_prefix,
-                    basename_only,
-                    options,
-                    o
-                )?;
-            }
-            else if path_orig.is_dir() {
-                add_dir_to_zip(
-                    &mut zip,
-                    &path_orig,
-                    &path_orig,
-                    strip_prefix,
-                    basename_only,
-                    options,
-                    o
-                )?;
-            }
+        let path = Utf8Path::new(file_path);
+        if path.is_file() {
+            add_file_to_zip(&mut zip, path, strip_prefix, basename_only, options, o)?;
+        }
+        else if path.is_dir() {
+            add_dir_to_zip(&mut zip, path, path, strip_prefix, basename_only, options, o)?;
         }
         else {
-            if path.is_file() {
-                add_file_to_zip(&mut zip, &path, strip_prefix, basename_only, options, o)?;
-            }
-            else if path.is_dir() {
-                add_dir_to_zip(
-                    &mut zip,
-                    &path,
-                    &path,
-                    strip_prefix,
-                    basename_only,
-                    options,
-                    o
-                )?;
-            }
+            return Err(format!("Path not found: {}", file_path));
         }
     }
 
@@ -323,22 +270,18 @@ fn add_dir_to_zip<W: Write + std::io::Seek, E: EventObserver>(
 }
 
 /// Compute the archive entry name from a file path, applying transformations
-fn compute_archive_name(
-    path: &Utf8Path,
-    strip_prefix: Option<&str>,
-    basename_only: bool
-) -> String {
+fn compute_archive_name(path: &Utf8Path, strip_prefix: Option<&str>, basename_only: bool) -> String {
     if basename_only {
         return path.file_name().unwrap_or("file").to_string();
     }
-
+    
     if let Some(prefix) = strip_prefix {
         // Remove all occurrences of the prefix component from the path
         let components: Vec<_> = path
             .components()
             .filter(|comp| comp.as_os_str() != prefix)
             .collect();
-
+        
         if !components.is_empty() {
             let mut result = Utf8PathBuf::new();
             for comp in components {
@@ -347,35 +290,31 @@ fn compute_archive_name(
             return result.as_str().to_string();
         }
     }
-
+    
     path.as_str().to_string()
 }
 
-fn create_tar_gz<E: EventObserver>(
-    output: &str,
-    files: &[String],
-    strip_prefix: Option<&str>,
-    basename_only: bool,
-    o: &E
-) -> Result<(), String> {
+fn create_tar_gz<E: EventObserver>(output: &str, files: &[String], strip_prefix: Option<&str>, basename_only: bool, o: &E) -> Result<(), String> {
     let tar_gz = File::create(output).map_err(|e| format!("Failed to create {}: {}", output, e))?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
     for file_path in files {
-        // On Windows, paths work with forward slashes too
-        let path = Utf8PathBuf::from(file_path.replace('\\', "/"));
-        if !path.exists() {
-            let path_orig = Utf8PathBuf::from(file_path);
-            if !path_orig.exists() {
-                return Err(format!("Path not found: {}", file_path));
-            }
-            let archive_name = compute_archive_name(&path_orig, strip_prefix, basename_only);
-            process_tar_path(&path_orig, &archive_name, &mut tar, o, file_path)?;
+        let path = Utf8Path::new(file_path);
+        let archive_name = compute_archive_name(path, strip_prefix, basename_only);
+        
+        if path.is_file() {
+            tar.append_path_with_name(path.as_str(), &archive_name)
+                .map_err(|e| format!("Failed to add {} to tar: {}", file_path, e))?;
+            o.emit_stdout(&format!("  Added: {}", archive_name));
+        }
+        else if path.is_dir() {
+            tar.append_dir_all(&archive_name, path.as_str())
+                .map_err(|e| format!("Failed to add directory {} to tar: {}", file_path, e))?;
+            o.emit_stdout(&format!("  Added directory: {}", archive_name));
         }
         else {
-            let archive_name = compute_archive_name(&path, strip_prefix, basename_only);
-            process_tar_path(&path, &archive_name, &mut tar, o, file_path)?;
+            return Err(format!("Path not found: {}", file_path));
         }
     }
 
@@ -383,26 +322,6 @@ fn create_tar_gz<E: EventObserver>(
         .map_err(|e| format!("Failed to finalize tar.gz: {}", e))?;
 
     o.emit_stdout(&format!("Created archive: {}", output));
-    Ok(())
-}
-
-fn process_tar_path<E: EventObserver>(
-    path: &Utf8Path,
-    archive_name: &str,
-    tar: &mut tar::Builder<GzEncoder<File>>,
-    o: &E,
-    file_path: &str
-) -> Result<(), String> {
-    if path.is_file() {
-        tar.append_path_with_name(path.as_str(), archive_name)
-            .map_err(|e| format!("Failed to add {} to tar: {}", file_path, e))?;
-        o.emit_stdout(&format!("  Added: {}", archive_name));
-    }
-    else if path.is_dir() {
-        tar.append_dir_all(archive_name, path.as_str())
-            .map_err(|e| format!("Failed to add directory {} to tar: {}", file_path, e))?;
-        o.emit_stdout(&format!("  Added directory: {}", archive_name));
-    }
     Ok(())
 }
 
@@ -425,7 +344,11 @@ fn list_zip<E: EventObserver>(archive: &str, o: &E) -> Result<(), String> {
         let file = zip
             .by_index(i)
             .map_err(|e| format!("Failed to read entry {}: {}", i, e))?;
-        o.emit_stdout(&format!("  {} ({} bytes)", file.name(), file.size()));
+        o.emit_stdout(&format!(
+            "  {} ({} bytes)",
+            file.name(),
+            file.size()
+        ));
     }
 
     Ok(())
@@ -437,15 +360,16 @@ fn list_tar_gz<E: EventObserver>(archive: &str, o: &E) -> Result<(), String> {
     let mut tar = TarArchive::new(dec);
 
     o.emit_stdout(&format!("Contents of {}:", archive));
-    for entry in tar
-        .entries()
-        .map_err(|e| format!("Failed to read tar: {}", e))?
-    {
+    for entry in tar.entries().map_err(|e| format!("Failed to read tar: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let path = entry
             .path()
             .map_err(|e| format!("Failed to read entry path: {}", e))?;
-        o.emit_stdout(&format!("  {} ({} bytes)", path.display(), entry.size()));
+        o.emit_stdout(&format!(
+            "  {} ({} bytes)",
+            path.display(),
+            entry.size()
+        ));
     }
 
     Ok(())
@@ -489,8 +413,8 @@ fn extract_zip<E: EventObserver>(archive: &str, dest: &str, o: &E) -> Result<(),
                 fs_err::create_dir_all(parent)
                     .map_err(|e| format!("Failed to create parent directory: {}", e))?;
             }
-            let mut outfile =
-                File::create(&outpath).map_err(|e| format!("Failed to create file: {}", e))?;
+            let mut outfile = File::create(&outpath)
+                .map_err(|e| format!("Failed to create file: {}", e))?;
             std::io::copy(&mut file, &mut outfile)
                 .map_err(|e| format!("Failed to extract file: {}", e))?;
             o.emit_stdout(&format!("  Extracted: {}", file.name()));
@@ -516,10 +440,7 @@ fn extract_tar_gz<E: EventObserver>(archive: &str, dest: &str, o: &E) -> Result<
     let file = File::open(archive).map_err(|e| format!("Failed to open {}: {}", archive, e))?;
     let dec = GzDecoder::new(file);
     let mut tar = TarArchive::new(dec);
-    for entry in tar
-        .entries()
-        .map_err(|e| format!("Failed to read tar: {}", e))?
-    {
+    for entry in tar.entries().map_err(|e| format!("Failed to read tar: {}", e))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
         let path = entry
             .path()

@@ -289,6 +289,11 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, Box<Ass
             Ok(ExprResult::String(s1.into()))
         },
 
+        (ExprResult::Char(s1), ExprResult::String(s2)) => {
+            let s1 = format!("{}{}", *s1 as char, fix_string(s2.clone()));
+            Ok(ExprResult::String(s1.into()))
+        },
+
         (ExprResult::String(s1), ExprResult::Char(s2)) => {
             let s1 = format!("{}{}", s1, *s2 as char);
             Ok(ExprResult::String(s1.into()))
