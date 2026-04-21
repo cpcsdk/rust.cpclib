@@ -274,6 +274,8 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let factor = preceded(
         my_space0,
         alt((
+            // Proximity label references: _+ and _- (bare _ is parsed as normal label)
+            parse_proximity_label_usage.map(|l| LocatedExpr::Label(l.into())),
             positive_number,
             parse_bool_value,
             prefixed_label_expr,
@@ -942,6 +944,25 @@ pub fn parse_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z8
     Ok(LocatedDataAccess::Expression(expr))
 }
 
+/// Parse proximity label references: _+ and _-
+/// - `_+` forward reference to next _ label
+/// - `_-` backward reference to previous _ label  
+/// - Bare `_` is NOT a proximity label in expressions - it's only valid as a label definition
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_proximity_label_usage(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+    let start_input = *input;
+    
+    // Only accept _+ or _- as proximity label references  
+    // Bare _ is handled as a normal label and transformed by the symbol table
+    if let Ok(proximity_label) = alt::<_, _, Z80ParserError, _>((b"_+", b"_-")).parse_next(input) {
+        return Ok(start_input.update_slice(proximity_label));
+    }
+    
+    // Not a proximity label reference
+    Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+}
+
 // Label parsing functions
 pub fn parse_label(
     doubledots: bool
@@ -949,7 +970,15 @@ pub fn parse_label(
     #[cfg_attr(not(target_arch = "wasm32"), inline)]
     #[cfg_attr(target_arch = "wasm32", inline(never))]
     move |input: &mut InnerZ80Span| {
+        // Try parsing as proximity label reference first (_+ or _-)
+        // Bare _ will be parsed as a normal label and transformed by symbol table
         let start = input.checkpoint();
+        if let Ok(proximity_label) = parse_proximity_label_usage.parse_next(input) {
+            return Ok(proximity_label);
+        }
+        
+        // Continue with normal label parsing
+        input.reset(&start);
 
         let is_orgams = input.state.options().is_orgams();
         let obtained_label = if is_orgams {
@@ -1349,6 +1378,7 @@ pub fn string_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Pars
 #[cfg(test)]
 pub mod test {
     use crate::parse_expr_bracketed_list;
+    use crate::parse_proximity_label_usage;
     use crate::parser::parser::test::parse_test;
 
     #[test]
@@ -1386,5 +1416,39 @@ pub mod test {
                     .unwrap_err()
             );
         }
+    }
+
+    #[test]
+    fn test_parse_proximity_label_forward() {
+        let result = parse_test(parse_proximity_label_usage, "_+");
+        assert!(result.is_ok(), "Should parse _+ as proximity label");
+        assert_eq!(result.as_ref().unwrap().as_ref().to_string(), "_+");
+    }
+
+    #[test]
+    fn test_parse_proximity_label_backward() {
+        let result = parse_test(parse_proximity_label_usage, "_-");
+        assert!(result.is_ok(), "Should parse _- as proximity label");
+        assert_eq!(result.as_ref().unwrap().as_ref().to_string(), "_-");
+    }
+
+    #[test]
+    fn test_parse_proximity_label_not_regular_label() {
+        let result = parse_test(parse_proximity_label_usage, "_foo");
+        assert!(result.is_err(), "Should NOT parse _foo as proximity label");
+    }
+
+    #[test]
+    fn test_parse_proximity_label_bare_underscore_not_allowed() {
+        // Bare _ should not be recognized as proximity label in expressions
+        // It's only valid as a label definition
+        let result = parse_test(parse_proximity_label_usage, "_");
+        assert!(result.is_err(), "Should NOT parse bare _ as proximity label in expressions");
+    }
+
+    #[test]
+    fn test_parse_proximity_label_not_double_underscore() {
+        let result = parse_test(parse_proximity_label_usage, "__");
+        assert!(result.is_err(), "Should NOT parse __ as proximity label");
     }
 }

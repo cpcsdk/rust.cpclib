@@ -43,6 +43,29 @@ Labels can be generated thanks to the content of other ones.
 --8<-- "cpclib-basm/tests/asm/good_labels_generated.asm"
 ```
 
+### Proximity labels
+
+`BASM` supports proximity labels (also known as anonymous labels), a feature inspired by `rasm` and `spasm-ng` assemblers.
+
+Proximity labels use the underscore `_` character as a reusable label name:
+
+- `_` defines an anonymous label at the current position
+- `_+` references the **next** `_` label (forward reference)
+- `_-` references the **previous** `_` label (backward reference)
+
+Each time you define a new `_` label, it becomes independent from previous ones. This is particularly useful for small local jumps where inventing unique label names would be cumbersome.
+
+```z80
+--8<-- "cpclib-basm/tests/asm/good_proximity_labels.asm"
+```
+
+!!! note "Important notes"
+
+    - Using `_-` before defining any `_` label will cause an error
+    - Using `_+` without a subsequent `_` label will cause an error
+    - Proximity labels are completely independent from normal labels that contain underscores (e.g., `my_label`)
+    - Each `_` definition increments an internal counter, making it distinct from previous `_` labels
+
 ## Instructions
 
 Here is the list of instructions used to validate `BASM`:

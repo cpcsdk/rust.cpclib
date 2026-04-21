@@ -1,0 +1,78 @@
+; Equivalent test without proximity labels
+; This should produce the exact same binary as good_proximity_labels.asm
+; All _ proximity labels are replaced with explicit unique labels
+
+        org 0x4000
+
+; Test 1: Simple forward reference
+        nop
+        jr _prx0        ; Jump to next _ label
+        nop
+_prx0   nop             ; Target of _+
+
+; Test 2: Simple backward reference
+_prx1   nop             ; New _ label
+        nop
+        jr _prx1        ; Jump to previous _ label
+
+; Test 3: Multiple proximity labels in sequence
+_prx2   ld a, 1         ; First _
+        cp 1
+        jr nz, _prx3    ; Jump to next _
+        ld a, 2
+_prx3   cp 2            ; Second _
+        jr nz, _prx4    ; Jump to next _
+        ld a, 3
+_prx4   cp 3            ; Third _
+
+; Test 4: Proximity labels in a loop
+        ld b, 5
+_prx5   dec b           ; Loop start
+        jr nz, _prx5    ; Jump back to loop start
+
+; Test 5: Forward and backward in same block
+        jr _prx6        ; Jump forward
+        nop
+        nop
+_prx6   nop             ; Landing point
+        jr _prx6        ; Jump back to self (infinite loop pattern)
+
+; Test 6: Proximity labels with normal underscored labels
+_normal_label
+        ld a, 0xFF
+        jp _normal_label ; Normal label still works
+
+; Test 7: Complex sequence with mixed references
+_prx7   ld hl, 0x8000   ; Label 1
+        jr _prx8        ; Forward to label 2
+        nop
+_prx8   ld de, 0x4000   ; Label 2
+        jr _prx9        ; Forward to label 3
+        nop
+_prx9   ld bc, 0x2000   ; Label 3
+        ; Can reference backward
+        djnz _prx9      ; Back to label 3
+
+; Test 8: Proximity labels in nested structure
+        ld b, 3
+_prx10  push bc         ; Outer loop start
+        ld c, 2
+_prx11  pop hl          ; Inner loop start
+        push hl
+        dec c
+        jr nz, _prx11   ; Back to inner loop start
+        pop bc
+        dec b
+        jr nz, _prx11   ; Back to most recent _ (which is inner loop, not outer!)
+
+; Test 9: Using _ in expressions
+_prx12  nop
+value   equ $ - _prx12  ; Should calculate distance from previous _
+
+; Test 10: Verify normal labels with underscore prefix still work
+_test_label_1
+_test_label_2
+        jp _test_label_1
+        jp _test_label_2
+
+        ret

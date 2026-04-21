@@ -2474,6 +2474,11 @@ impl Env {
         let label = self.symbols().normalize_symbol(label_span.as_str());
         let label = label.value();
 
+        // Increment proximity counter BEFORE any checks if defining _ label
+        if label == "_" {
+            self.symbols_mut().increment_proximity_counter();
+        }
+
         // A label cannot be defined multiple times
         let res = if self.symbols().contains_symbol(label)?
             && (self.pass.is_first_pass()

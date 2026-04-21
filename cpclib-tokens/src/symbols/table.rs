@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::AHashMap as HashMap;
 #[cfg(feature = "rayon")]
@@ -213,7 +214,7 @@ impl<'t> Iterator for ModuleSymbolTableIterator<'t> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[allow(missing_docs)]
 pub struct SymbolsTable {
     /// Tree of symbols. The default one is the root. build and maintained all over assembling
@@ -237,7 +238,10 @@ pub struct SymbolsTable {
     /// Contains all the symbols that have been used in expressions
     used_symbols: HashSet<Symbol>,
 
-    counters: Vec<ExprResult>
+    counters: Vec<ExprResult>,
+
+    /// Counter for proximity labels (_). Starts at -1 (no proximity label defined yet)
+    proximity_label_counter: AtomicI32
 }
 
 impl Default for SymbolsTable {
@@ -254,7 +258,29 @@ impl Default for SymbolsTable {
             namespace_stack: Vec::new(),
             used_symbols: HashSet::new(),
             counters: Default::default(),
-            functions_stack: Default::default()
+            functions_stack: Default::default(),
+            proximity_label_counter: AtomicI32::new(-1)
+        }
+    }
+}
+
+impl Clone for SymbolsTable {
+    fn clone(&self) -> Self {
+        Self {
+            map: self.map.clone(),
+            functions_stack: self.functions_stack.clone(),
+            current_pass_map: self.current_pass_map.clone(),
+            dummy: self.dummy,
+            current_global_label: self.current_global_label.clone(),
+            namespace_stack: self.namespace_stack.clone(),
+            assignable: self.assignable.clone(),
+            seed_stack: self.seed_stack.clone(),
+            used_symbols: self.used_symbols.clone(),
+            counters: self.counters.clone(),
+            // Clone the atomic by loading its current value
+            proximity_label_counter: AtomicI32::new(
+                self.proximity_label_counter.load(Ordering::Relaxed)
+            )
         }
     }
 }
@@ -273,6 +299,8 @@ impl SymbolsTable {
     pub fn new_pass(&mut self) {
         self.current_pass_map = ModuleSymbolTable::default();
         self.current_pass_map.add_children("".to_owned().into());
+        // Reset proximity label counter for each pass
+        self.proximity_label_counter.store(-1, Ordering::Relaxed);
     }
 
     pub fn used_symbols(&self) -> impl Iterator<Item = &Symbol> {
@@ -383,10 +411,36 @@ impl SymbolsTable {
             }
         }
 
+        // Handle proximity labels (inspired by spasm-ng/rasm)
+        // _ is an anonymous proximity label, _+ refers to next, _- refers to previous
+        if symbol == "_" {
+            // Defining a proximity label - use counter+1 (will be incremented separately)
+            let counter = self.proximity_label_counter.load(Ordering::Relaxed) + 1;
+            symbol = format!("LPR{}OX", counter);
+        } else if symbol == "_+" {
+            // Forward reference to next proximity label  
+            let counter = self.proximity_label_counter.load(Ordering::Relaxed) + 1;
+            symbol = format!("LPR{}OX", counter + 1);
+        } else if symbol == "_-" {
+            // Backward reference to previous proximity label
+            let counter = self.proximity_label_counter.load(Ordering::Relaxed) + 1;
+            if counter <= 0 {
+                return Err(SymbolError::WrongSymbol(
+                    "Cannot use _- before declaring _ proximity label".into()
+                ));
+            }
+            symbol = format!("LPR{}OX", counter);
+        }
+
         let symbol: Symbol = symbol.into();
         // dbg!("output", &symbol);
 
         Ok(symbol)
+    }
+
+    /// Increment the proximity label counter. Call this ONCE when encountering a _ label definition.
+    pub fn increment_proximity_counter(&self) {
+        self.proximity_label_counter.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -1075,6 +1129,7 @@ impl SymbolsTableCaseDependent {
             pub fn push_counter_value(&mut self, e: ExprResult);
             pub fn enter_function(&mut self);
             pub fn leave_function(&mut self);
+            pub fn increment_proximity_counter(&self);
         }
     }
 
