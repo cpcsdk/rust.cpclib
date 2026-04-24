@@ -16,8 +16,10 @@
   - dsk hello2.dsk add HELLO2.BIN
 
 - tgt: clean
+  phony: true
   cmd: -rm HELLO2.BIN
 
 - tgt: distclean
   dep: clean
+  phony: true
   cmd: -rm hello1.dsk hello2.dsk
