@@ -4145,15 +4145,8 @@ impl Env {
         l: &[(E, Option<E>)]
     ) -> Result<(), Box<AssemblerError>> {
         for (count, val) in l.iter() {
-            let count = self.resolve_expr_must_never_fail(count)?.int()?;
-            let val = match val {
-                Some(val) => self.resolve_expr_may_fail_in_first_pass(val)?.int()?,
-                None => 0
-            };
-
-            for _ in 0..count {
-                self.output_byte(val as u8)?;
-            }
+            let bytes = self.assemble_defs_item(count, val.as_ref())?;
+            self.output_bytes(&bytes)?;
         }
         Ok(())
     }
@@ -5349,7 +5342,7 @@ impl Env {
 
         if count < 0 {
             return Err(Box::new(AssemblerError::AssemblingError {
-                msg: format!("{count} is an invalid value")
+                msg: format!("DEFS count must be positive ({count} is an invalid value)")
             }));
         }
 
