@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 
 use cpclib_common::itertools::Itertools;
@@ -48,8 +49,8 @@ pub trait ExprEvaluationExt: Display {
     /// Resolve the expression base on the env context
     fn resolve(&self, env: &mut Env) -> Result<ExprResult, Box<AssemblerError>>;
 
-    /// Get all the symbols used
-    fn symbols_used(&self) -> Vec<&str>;
+    /// Get all the symbols used (returns Cow to use references where possible, owned strings when needed)
+    fn symbols_used(&self) -> Vec<Cow<'_, str>>;
 
     fn r#type(&self) -> &str;
 }
@@ -61,7 +62,7 @@ where T: ExprEvaluationExt + ?Sized
         (**self).resolve(env)
     }
 
-    fn symbols_used(&self) -> Vec<&str> {
+    fn symbols_used(&self) -> Vec<Cow<'_, str>> {
         (**self).symbols_used()
     }
 
@@ -307,7 +308,7 @@ macro_rules! resolve_impl {
 
 impl ExprEvaluationExt for Expr {
     /// XXX Be sure it is well synchronized with LocatedExpr
-    fn symbols_used(&self) -> Vec<&str> {
+    fn symbols_used(&self) -> Vec<Cow<'_, str>> {
         match self {
             Expr::RelativeDelta(_)
             | Expr::Value(_)
@@ -317,7 +318,7 @@ impl ExprEvaluationExt for Expr {
             | Expr::String(_)
             | Expr::Rnd => Vec::new(),
 
-            Expr::Label(label) | Expr::PrefixedLabel(_, label) => vec![label.as_str()],
+            Expr::Label(label) | Expr::PrefixedLabel(_, label) => vec![Cow::Borrowed(label.as_str())],
 
             Expr::Paren(a) | Expr::UnaryOperation(_, a) => a.symbols_used(),
 
@@ -331,8 +332,18 @@ impl ExprEvaluationExt for Expr {
                 syms
             },
 
-            _ => {
-                unimplemented!("Need to retreive the symbols from the operation")
+            Expr::UnaryTokenOperation(_op, token) => {
+                // Extract symbols from the token's expressions (e.g., duration(ld a, (label)))
+                // Token.symbols() returns HashSet<String>, so we need Cow::Owned here
+                use cpclib_tokens::ListingElement;
+                token.symbols().into_iter().map(Cow::Owned).collect()
+            },
+
+            Expr::Ternary(cond, true_expr, false_expr) => {
+                let mut syms = cond.symbols_used();
+                syms.extend(true_expr.symbols_used());
+                syms.extend(false_expr.symbols_used());
+                syms
             }
         }
     }

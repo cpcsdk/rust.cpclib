@@ -918,7 +918,7 @@ impl Env {
     fn track_used_symbols<E: ExprEvaluationExt>(&mut self, e: &E) -> Result<(), AssemblerError> {
         e.symbols_used()
             .into_iter()
-            .map(|symbol| self.symbols.use_symbol(symbol))
+            .map(|symbol| self.symbols.use_symbol(symbol.as_ref()))
             .filter_map(Result::err)
             .try_for_each(|e| Result::Err(Box::new(AssemblerError::from(e))))?;
         Ok(())

@@ -474,7 +474,7 @@ impl ExprEvaluationExt for LocatedExpr {
     }
 
     /// Be sure it is always synchronized with Expr
-    fn symbols_used(&self) -> Vec<&str> {
+    fn symbols_used(&self) -> Vec<Cow<'_, str>> {
         match self {
             LocatedExpr::RelativeDelta(..)
             | LocatedExpr::Value(..)
@@ -485,7 +485,7 @@ impl ExprEvaluationExt for LocatedExpr {
             | LocatedExpr::Rnd(_) => Vec::new(),
 
             LocatedExpr::Label(label) | LocatedExpr::PrefixedLabel(_, label, _) => {
-                vec![label.as_str()]
+                vec![Cow::Borrowed(label.as_str())]
             },
 
             LocatedExpr::BinaryOperation(_, box a, box b, _) => {
@@ -501,9 +501,11 @@ impl ExprEvaluationExt for LocatedExpr {
                 l.iter().flat_map(|e| e.symbols_used()).collect_vec()
             },
 
-            LocatedExpr::UnaryTokenOperation(_, box _t, _) => {
-                eprintln!("symbols_used is not implemented for UnaryTokenOperation");
-                vec![]
+            LocatedExpr::UnaryTokenOperation(_, box t, _) => {
+                // Extract symbols from the token's expressions (e.g., duration(ld a, (label)))
+                // Token.symbols() returns HashSet<String>, so we need Cow::Owned here
+                use cpclib_tokens::ListingElement;
+                t.symbols().into_iter().map(Cow::Owned).collect()
             },
 
             LocatedExpr::Ternary(box cond, box true_expr, box false_expr, _) => {
