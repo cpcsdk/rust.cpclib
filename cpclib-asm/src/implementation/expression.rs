@@ -181,28 +181,36 @@ macro_rules! resolve_impl {
         }
         else if $self.is_label() {
             let label = $self.label();
-            match  $env.symbols().any_value(label)?.map(|vl| vl.value()) {
+            let value = $env.symbols().any_value(label)?;
+            match value.map(|vl| vl.value()) {
                 Some(cpclib_tokens::symbols::Value::Expr( val)) => Ok(val.clone().into()),
                 Some(cpclib_tokens::symbols::Value::Address( val)) => Ok(val.address().into()),
                 Some(cpclib_tokens::symbols::Value::Struct(s)) => Ok(s.len($env.symbols()).into()),
                 Some(cpclib_tokens::symbols::Value::String( val)) => Ok(val.into()),
-                Some(_e) => { Err(AssemblerError::WrongSymbolType {
-                    symbol: label.into(),
-                    isnot: "a value".into(),
-                })},
-                None => Err(if $env.pass().is_first_pass() {
-                    // no need to lost time to make the leveinstein search
-                    AssemblerError::UnknownSymbol {
-                        symbol: label.into(),
-                        closest: None,
+                // Error cases: expand label for clear error messages (e.g., show "label_0" not "label_{{idx}}")
+                error_case => {
+                    let expanded_label = $env.symbols().extend_local_and_patterns_for_symbol(label)?;
+                    match error_case {
+                        Some(_e) => Err(AssemblerError::WrongSymbolType {
+                            symbol: expanded_label.into(),
+                            isnot: "a value".into(),
+                        }),
+                        None => Err(if $env.pass().is_first_pass() {
+                            // no need to lost time to make the leveinstein search
+                            AssemblerError::UnknownSymbol {
+                                symbol: expanded_label.into(),
+                                closest: None,
+                            }
+                        } else {
+                            // here it is more problematic
+                            AssemblerError::UnknownSymbol {
+                                symbol: expanded_label.clone().into(),
+                                closest:  $env.symbols().closest_symbol(expanded_label.value(), SymbolFor::Number)?.map(|s| s.into()),
+                            }
+                        }),
+                        _ => unreachable!()
                     }
-                } else {
-                    // here it is more problematic
-                    AssemblerError::UnknownSymbol {
-                        symbol: label.into(),
-                        closest:  $env.symbols().closest_symbol(label, SymbolFor::Number)?.map(|s| s.into()),
-                    }
-                })
+                }
             }.map_err(|e| Box::new(e))
 
         }

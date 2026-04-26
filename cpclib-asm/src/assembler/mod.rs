@@ -4659,35 +4659,8 @@ impl Env {
 
         // generate the bytes
         visit_processed_tokens(code, self).map_err(|e| {
-            let e = if let AssemblerError::RelocatedError {
-                error: box AssemblerError::UnknownSymbol { closest: _, symbol },
-                span
-            } = &*e
-            {
-                if let Some(counter_name) = counter_name {
-                    if counter_name == format!("{{{symbol}}}") {
-                        AssemblerError::RelocatedError {
-                            error: Box::new(AssemblerError::UnknownSymbol {
-                                closest: Some(counter_name.into()),
-                                symbol: symbol.clone()
-                            }),
-                            span: span.clone()
-                        }
-                    }
-                    else {
-                        *e.clone()
-                    }
-                }
-                else {
-                    *e.clone()
-                }
-            }
-            else {
-                *e.clone()
-            };
-
             Box::new(AssemblerError::RepeatIssue {
-                error: Box::new(e),
+                error: e,
                 span: span.cloned(),
                 repetition: iteration as _
             })
