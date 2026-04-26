@@ -741,7 +741,8 @@ impl Env {
                         ..
                     } => {
                         let exp_str = exp.to_string();
-                        if exp_str.as_str() == symbol.as_str() {
+                        // Case-insensitive comparison since symbol names may be normalized (uppercased)
+                        if exp_str.eq_ignore_ascii_case(symbol.as_str()) {
                             Ok(exp_str.into())
                         }
                         else {
