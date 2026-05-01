@@ -167,6 +167,8 @@ fn expect_one_line_success(real_fname: &str) {
     if real_fname.contains("basic") // basic cannot be inlined 
     || real_fname.contains("good_module.asm")
     // there are labels with ::
+    || real_fname.contains("good_opcode.asm")
+    // opcode() with multiline cannot be represented as single line with :
     {
         return;
     }

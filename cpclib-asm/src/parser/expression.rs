@@ -21,7 +21,7 @@ use smallvec::{Array, SmallVec};
 
 // Import from parser submodules
 use super::common::{
-    build_span, build_span_covering, my_line_ending, my_space0, parse_comma, parse_comma_multiline,
+    build_span, build_span_covering, my_line_ending, my_space0, my_space0_with_newlines, my_space1, parse_comma, parse_comma_multiline,
     parse_token, parse_word
 };
 use super::error::Z80ParserError;
@@ -239,6 +239,22 @@ pub fn parse_bool_value(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z8
     Ok(LocatedExpr::Bool(bool, span.into()))
 }
 
+/// Parse content inside parentheses, allowing newlines and comments in the whitespace
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+fn parse_in_parens_with_newlines<O, F>(
+    mut parser: F
+) -> impl Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>
+where
+    F: Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>
+{
+    delimited(
+        ('(', my_space0_with_newlines),
+        parser,
+        (my_space0_with_newlines, ')')
+    )
+}
+
 /// Get a factor
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
@@ -326,8 +342,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
         // specific content for specific functions
         if fname.as_str().eq_ignore_ascii_case("opcode") {
             // TODO move it in function handling and not operation
-            let token =
-                delimited(('(', my_space0), parse_token, (my_space0, ')')).parse_next(input)?;
+            let token = parse_in_parens_with_newlines(parse_token).parse_next(input)?;
             LocatedExpr::UnaryTokenOperation(
                 UnaryTokenOperation::Opcode,
                 Box::new(token),
@@ -335,8 +350,7 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
             )
         }
         else if fname.as_str().eq_ignore_ascii_case("duration") {
-            let token =
-                delimited(('(', my_space0), parse_token, (my_space0, ')')).parse_next(input)?;
+            let token = parse_in_parens_with_newlines(parse_token).parse_next(input)?;
             LocatedExpr::UnaryTokenOperation(
                 UnaryTokenOperation::Duration,
                 Box::new(token),

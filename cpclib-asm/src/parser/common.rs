@@ -977,6 +977,54 @@ pub fn my_space1(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80Parse
         .parse_next(input)
 }
 
+/// Like my_space1 but also accepts plain newlines (for use inside parentheses where newlines should be allowed)
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn my_space1_with_newlines(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+    let cloned = *input;
+
+    let spaces = alt((
+        eof.value(()).context(StrContext::Label("End of file")), // end of file
+        one_of(|c: u8| c.is_space() || c == b'\n' || c == b'\r')
+            .value(())
+            .context(StrContext::Label("Space or newline")), // space, tab, or newline
+        (parse_comment, line_ending)
+            .value(())
+            .context(StrContext::Label("comment with newline")), // comment followed by newline
+        (
+            // continuated line
+            space0,
+            '\\',
+            space0,
+            opt(parse_comment),
+            line_ending,
+            space0
+        )
+            .value(())
+            .context(StrContext::Label("continuated line")),
+        (space0, '\\', space0)
+            .value(())
+            .context(StrContext::Label("new line request")),
+        parse_multiline_comment.value(())
+    ));
+
+    my_repeat1::<_, _, (), Z80ParserError, _>(spaces)
+        .take()
+        .map(|s| cloned.update_slice(s))
+        .parse_next(input)
+}
+
+/// Like my_space0 but also accepts plain newlines (for use inside parentheses)
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn my_space0_with_newlines(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+    let cloned = *input;
+    opt(my_space1_with_newlines)
+        .take()
+        .map(|s| cloned.update_slice(s))
+        .parse_next(input)
+}
+
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn my_line_ending(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
