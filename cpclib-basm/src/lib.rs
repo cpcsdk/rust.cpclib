@@ -231,6 +231,7 @@ pub fn assemble(
 
     assemble_options.set_force_void(!matches.get_flag("NO_FORCED_VOID"));
     assemble_options.set_debug(matches.get_flag("DEBUG"));
+    assemble_options.set_forbid_memory_override(matches.get_flag("FORBID_MEMORY_OVERRIDE"));
 
     if matches.get_flag("OVERRIDE") {
         assemble_options
@@ -872,6 +873,13 @@ pub fn build_args_parser() -> clap::Command {
                         Arg::new("DEBUG")
                         .help("Trace more information to help debug")
                         .long("debug")
+                        .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("FORBID_MEMORY_OVERRIDE")
+                        .help("Forbid memory override (convert warnings to errors)")
+                        .long("forbid-memory-override")
+                        .alias("no-override")
                         .action(ArgAction::SetTrue)
                     )
                     .arg(

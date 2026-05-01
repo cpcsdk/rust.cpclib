@@ -1937,7 +1937,7 @@ impl Env {
     }
 
     pub fn allow_memory_override(&self) -> bool {
-        true // TODO parametrize it in the options (and set false by default)
+        !self.options().assemble_options().forbid_memory_override()
     }
 
     /// Write consecutives bytes

@@ -92,7 +92,8 @@ pub struct AssemblingOptions {
     amsdos_behavior: AmsdosAddBehavior,
     enable_warnings: bool,
     force_void: bool,
-    debug: bool
+    debug: bool,
+    forbid_memory_override: bool
 }
 
 impl Default for AssemblingOptions {
@@ -109,7 +110,8 @@ impl Default for AssemblingOptions {
             amsdos_behavior: AmsdosAddBehavior::FailIfPresent,
             enable_warnings: true,
             force_void: true,
-            debug: false
+            debug: false,
+            forbid_memory_override: false
         }
     }
 }
@@ -188,6 +190,15 @@ impl AssemblingOptions {
 
     pub fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
+    }
+
+    pub fn forbid_memory_override(&self) -> bool {
+        self.forbid_memory_override
+    }
+
+    pub fn set_forbid_memory_override(&mut self, forbid: bool) -> &mut Self {
+        self.forbid_memory_override = forbid;
+        self
     }
 
     pub fn snapshot_model(&self) -> Option<&Snapshot> {
