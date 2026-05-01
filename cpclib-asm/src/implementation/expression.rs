@@ -240,23 +240,20 @@ macro_rules! resolve_impl {
 
                 cpclib_tokens::UnaryTokenOperation::Opcode => {
                     let bytes = token.to_bytes()?;
-                    match bytes.len() {
-                        0 => Err(
+                    if bytes.is_empty() {
+                        Err(
                             AssemblerError::ExpressionError(
                                 ExpressionError::OwnError(
                                     Box::new(AssemblerError::AssemblingError{msg:format!("{} is assembled with 0 bytes", token)})
                                 )
                             )
-                        ),
-                        1 => Ok(i32::from(bytes[0]).into()),
-                        2 => Ok((i32::from(bytes[0]) * 256 + i32::from(bytes[1])).into()),
-                        val => Err(
-                            AssemblerError::ExpressionError(
-                                ExpressionError::OwnError(
-                                    Box::new(AssemblerError::AssemblingError{msg:format!("{} is assembled with {} bytes", token, val)})
-                                )
-                            )
                         )
+                    } else {
+                        // Always return a list (convertible to int when length is 1)
+                        let byte_list: Vec<ExprResult> = bytes.iter()
+                            .map(|&b| ExprResult::Value(i32::from(b)))
+                            .collect();
+                        Ok(ExprResult::List(byte_list))
                     }
                 }
             }.map_err(|e| Box::new(e))

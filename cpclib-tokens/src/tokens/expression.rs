@@ -1182,8 +1182,14 @@ impl ExprResult {
             ExprResult::Value(i) => Ok(*i),
             ExprResult::Char(i) => Ok(*i as i32),
             ExprResult::Bool(b) => Ok(if *b { 1 } else { 0 }),
+            ExprResult::List(l) if l.len() == 1 => {
+                // Single-element lists can be converted to int (e.g., opcode(inc e))
+                l[0].int()
+            },
             _ => {
-                panic!("TODO remove this forgotten panic");
+                Err(ExpressionTypeError(format!(
+                    "Try to convert {self} as an integer"
+                )))
             }
         }
     }
