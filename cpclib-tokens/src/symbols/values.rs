@@ -62,8 +62,8 @@ impl Struct {
     /// Get the len of any field
     pub fn field_size<T: SymbolsTableTrait>(token: &Token, table: &T) -> i32 {
         match token {
-            Token::Defb(c) => c.len() as i32,
-            Token::Defw(c) => 2 * c.len() as i32,
+            Token::Defb(c) => c.len().max(1) as i32,
+            Token::Defw(c) => (2 * c.len()).max(2) as i32,
             Token::MacroCall(n, _) => {
                 let s = table.struct_value(n).ok().unwrap().unwrap(); // TODO handle error here
                 s.len(table)

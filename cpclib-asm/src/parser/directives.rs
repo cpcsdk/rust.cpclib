@@ -41,38 +41,104 @@ use super::expression::{
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
 use super::orgams::parse_orgams_fail;
-use super::source::Z80Span;
 pub use super::parser::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
+use super::source::Z80Span;
 use crate::hashed_choice;
 use crate::preamble::*;
+
+/// Helper function to add multi-line error context to any parser within a block directive.
+/// When any error occurs within a block directive (WHILE, FOR, REPEAT, etc.), this helper
+/// ensures the error spans from the block start to where the error occurred, making it easy
+/// to identify which block contains the error and see its full extent.
+///
+/// # Arguments
+/// * `parser` - Any parser that may produce errors
+/// * `block_start_span` - The span captured at the start of the block (after keyword)
+/// * `error_context` - Context message for the multi-line span (e.g., "WHILE: error in block")
+///
+/// # Returns
+/// A parser that will automatically add ContextWithEnd on all Cut errors
+fn parse_block_error<O, F>(
+    mut parser: F,
+    block_start_span: InnerZ80Span,
+    error_context: &'static str
+) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<O, Z80ParserError>
+where
+    F: Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>
+{
+    move |input: &mut InnerZ80Span| {
+        let result = parser.parse_next(input);
+        match result {
+            Ok(v) => Ok(v),
+            Err(ErrMode::Cut(mut err)) => {
+                let end_offset = Z80Span::from(*input).offset_from_start();
+                // Add ContextWithEnd to show the full block span
+                // Keep existing error messages but add the visual span context
+                let has_context_with_end = err.0.iter().any(|(_, kind)| {
+                    matches!(kind, Z80ParserErrorKind::ContextWithEnd { .. })
+                });
+                
+                if !has_context_with_end {
+                    err.0.insert(0, (
+                        block_start_span,
+                        Z80ParserErrorKind::ContextWithEnd {
+                            context: StrContext::Label(error_context),
+                            end_offset
+                        }
+                    ));
+                }
+                Err(ErrMode::Cut(err))
+            },
+            other => other
+        }
+    }
+}
 
 pub fn parse_while(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0(input)?;
     let while_start = input.checkpoint();
+    let while_start_span = *input;
     let _ = parse_directive_word(b"WHILE").parse_next(input)?;
 
-    let cond = cut_err(located_expr.context(StrContext::Label("WHILE: error in condition")))
-        .parse_next(input)?;
-
-    // we must have either a new line or :
-    alt((
-        delimited(my_space0, ':', my_space0).value(()),
-        preceded(my_space0, line_ending).value(())
-    ))
+    let cond = parse_block_error(
+        cut_err(located_expr.context(StrContext::Label("WHILE: error in condition"))),
+        while_start_span,
+        "WHILE: error in block"
+    )
     .parse_next(input)?;
 
-    let inner = cut_err(inner_code.context(StrContext::Label("WHILE: issue in the content")))
-        .parse_next(input)?;
-    let _ = cut_err(
-        preceded(
-            my_space0,
-            alt((
-                parse_directive_word(b"ENDWHILE"),
-                parse_directive_word(b"ENDW"),
-                parse_directive_word(b"WEND")
-            ))
-        )
-        .context(StrContext::Label("WHILE: not closed"))
+    // we must have either a new line or :
+    parse_block_error(
+        alt((
+            delimited(my_space0, ':', my_space0).value(()),
+            preceded(my_space0, line_ending).value(())
+        )),
+        while_start_span,
+        "WHILE: error in block"
+    )
+    .parse_next(input)?;
+
+    let inner = parse_block_error(
+        cut_err(inner_code.context(StrContext::Label("WHILE: issue in the content"))),
+        while_start_span,
+        "WHILE: error in block"
+    )
+    .parse_next(input)?;
+    
+    let _ = parse_block_error(
+        cut_err(
+            preceded(
+                my_space0,
+                alt((
+                    parse_directive_word(b"ENDWHILE"),
+                    parse_directive_word(b"ENDW"),
+                    parse_directive_word(b"WEND")
+                ))
+            )
+            .context(StrContext::Label("WHILE: not closed"))
+        ),
+        while_start_span,
+        "WHILE: not closed"
     )
     .parse_next(input)?;
 
@@ -86,8 +152,12 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
     let switch_start = *input;
     let _ = parse_directive_word(b"SWITCH")(input)?;
 
-    let value = cut_err(
-        preceded(my_space0, located_expr).context(StrContext::Label("SWITCH: tested value"))
+    let value = parse_block_error(
+        cut_err(
+            preceded(my_space0, located_expr).context(StrContext::Label("SWITCH: tested value"))
+        ),
+        switch_start,
+        "SWITCH: error in block"
     )
     .parse_next(input)?;
 
@@ -95,34 +165,42 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
     let mut default_listing = None;
 
     loop {
-        cut_err(
-            repeat::<_, _, (), _, _>(
-                0..,
-                alt((
-                    my_space1.value(()),
-                    line_ending.value(()),
-                    ':'.value(()),
-                    parse_comment.value(())
-                ))
-            )
-            .context(StrContext::Label("SWITCH: whitespace error"))
+        parse_block_error(
+            cut_err(
+                repeat::<_, _, (), _, _>(
+                    0..,
+                    alt((
+                        my_space1.value(()),
+                        line_ending.value(()),
+                        ':'.value(()),
+                        parse_comment.value(())
+                    ))
+                )
+                .context(StrContext::Label("SWITCH: whitespace error"))
+            ),
+            switch_start,
+            "SWITCH: error in block"
         )
         .parse_next(input)?;
 
         // after default it is mandatory to end the block
         let endswitch = if default_listing.is_some() {
-            cut_err(
-                preceded(
-                    my_space0,
-                    alt((
-                        parse_directive_word(b"ENDS"),
-                        parse_directive_word(b"ENDSWITCH")
+            parse_block_error(
+                cut_err(
+                    preceded(
+                        my_space0,
+                        alt((
+                            parse_directive_word(b"ENDS"),
+                            parse_directive_word(b"ENDSWITCH")
+                        ))
+                        .value(true)
+                    )
+                    .context(StrContext::Label(
+                        "SWITCH: endswitch not present after default listing."
                     ))
-                    .value(true)
-                )
-                .context(StrContext::Label(
-                    "SWITCH: endswitch not present after default listing."
-                ))
+                ),
+                switch_start,
+                "SWITCH: not closed"
             )
             .parse_next(input)?
         }
@@ -145,15 +223,22 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
 
         let value = preceded(my_space0, opt(parse_directive_word(b"CASE"))).parse_next(input)?;
         if value.is_some() {
-            let value = cut_err(
-                delimited(my_space0, located_expr, opt(':'))
-                    .context(StrContext::Label("SWITCH: case value error."))
+            let value = parse_block_error(
+                cut_err(
+                    delimited(my_space0, located_expr, opt(':'))
+                        .context(StrContext::Label("SWITCH: case value error."))
+                ),
+                switch_start,
+                "SWITCH: error in block"
             )
             .parse_next(input)?;
 
-            let inner =
-                cut_err(inner_code.context(StrContext::Label("SWITCH: error in case code")))
-                    .parse_next(input)?;
+            let inner = parse_block_error(
+                cut_err(inner_code.context(StrContext::Label("SWITCH: error in case code"))),
+                switch_start,
+                "SWITCH: error in block"
+            )
+            .parse_next(input)?;
 
             let do_break =
                 opt(preceded(my_space0, parse_directive_word(b"BREAK"))).parse_next(input)?;
@@ -161,50 +246,78 @@ pub fn parse_switch(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
             cases_listing.push((value, inner, do_break.is_some()));
         }
         else {
-            let _ = cut_err(
-                delimited(
-                    my_space0,
-                    parse_directive_word(b"DEFAULT"),
-                    opt((my_space0, ':'))
-                )
-                .context(StrContext::Label(
-                    "Only CASE, DEFAULT or ENDSWITCH are expected."
-                ))
+            let _ = parse_block_error(
+                cut_err(
+                    delimited(
+                        my_space0,
+                        parse_directive_word(b"DEFAULT"),
+                        opt((my_space0, ':'))
+                    )
+                    .context(StrContext::Label(
+                        "Only CASE, DEFAULT or ENDSWITCH are expected."
+                    ))
+                ),
+                switch_start,
+                "SWITCH: error in block"
             )
             .parse_next(input)?;
-            let default =
-                cut_err(inner_code.context(StrContext::Label("SWITCH: error in default case")))
-                    .parse_next(input)?;
+            let default = parse_block_error(
+                cut_err(inner_code.context(StrContext::Label("SWITCH: error in default case"))),
+                switch_start,
+                "SWITCH: error in block"
+            )
+            .parse_next(input)?;
             default_listing = Some(default);
         }
     }
 }
 
 pub fn parse_for(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+    let _ = my_space0(input)?;
     let for_start = input.checkpoint();
-    let _ = preceded(my_space0, parse_directive_word(b"FOR")).parse_next(input)?;
+    let for_start_span = *input;
+    let _ = parse_directive_word(b"FOR").parse_next(input)?;
 
     // Get parameters
-    let counter = cut_err(parse_label(false)).parse_next(input)?;
-    let start = cut_err(preceded(parse_comma, located_expr)).parse_next(input)?;
-    let stop = cut_err(preceded(parse_comma, located_expr)).parse_next(input)?;
+    let counter = parse_block_error(
+        cut_err(parse_label(false).context(StrContext::Label("FOR: error in counter"))),
+        for_start_span,
+        "FOR: error in block"
+    ).parse_next(input)?;
+    let start = parse_block_error(
+        cut_err(preceded(parse_comma, located_expr).context(StrContext::Label("FOR: error in start value"))),
+        for_start_span,
+        "FOR: error in block"
+    ).parse_next(input)?;
+    let stop = parse_block_error(
+        cut_err(preceded(parse_comma, located_expr).context(StrContext::Label("FOR: error in stop value"))),
+        for_start_span,
+        "FOR: error in block"
+    ).parse_next(input)?;
     let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
     // Get loop content
-    let inner = cut_err(inner_code.context(StrContext::Label("FOR: issue in the content")))
-        .parse_next(input)?;
+    let inner = parse_block_error(
+        cut_err(inner_code.context(StrContext::Label("FOR: issue in the content"))),
+        for_start_span,
+        "FOR: error in block"
+    ).parse_next(input)?;
 
     // Collect end of loop
-    let _ = cut_err(
-        preceded(
-            my_space0,
-            alt((
-                parse_directive_word(b"ENDFOR"),
-                parse_directive_word(b"FEND"),
-                parse_directive_word(b"ENDF")
-            ))
-        )
-        .context(StrContext::Label("FOR: not closed"))
+    let _ = parse_block_error(
+        cut_err(
+            preceded(
+                my_space0,
+                alt((
+                    parse_directive_word(b"ENDFOR"),
+                    parse_directive_word(b"FEND"),
+                    parse_directive_word(b"ENDF")
+                ))
+            )
+            .context(StrContext::Label("FOR: not closed"))
+        ),
+        for_start_span,
+        "FOR: not closed"
     )
     .parse_next(input)?;
 
@@ -222,24 +335,33 @@ pub fn parse_for(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Parse
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_confined(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
-    // let _ = my_space0(input)?;
+    let _ = my_space0(input)?;
     let confined_start = input.checkpoint();
+    let confined_start_span = *input;
 
     let _ = parse_directive_word(b"CONFINED").parse_next(input)?;
 
-    let inner = cut_err(inner_code.context(StrContext::Label("CONFINED: issue in the content")))
-        .parse_next(input)?;
+    let inner = parse_block_error(
+        cut_err(inner_code.context(StrContext::Label("CONFINED: issue in the content"))),
+        confined_start_span,
+        "CONFINED: error in block"
+    )
+    .parse_next(input)?;
 
-    let _ = cut_err(
-        preceded(
-            my_space0,
-            alt((
-                parse_directive_word(b"ENDCONFINED"),
-                parse_directive_word(b"CEND"),
-                parse_directive_word(b"ENDC")
-            ))
-        )
-        .context(StrContext::Label("CONFINED: not closed"))
+    let _ = parse_block_error(
+        cut_err(
+            preceded(
+                my_space0,
+                alt((
+                    parse_directive_word(b"ENDCONFINED"),
+                    parse_directive_word(b"CEND"),
+                    parse_directive_word(b"ENDC")
+                ))
+            )
+            .context(StrContext::Label("CONFINED: not closed"))
+        ),
+        confined_start_span,
+        "CONFINED: not closed"
     )
     .parse_next(input)?;
 
@@ -251,7 +373,7 @@ pub fn parse_confined(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80
 pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0(input)?;
     let repeat_start = input.checkpoint();
-    let repeat_start_span = *input;  // Save the span at the start of REPEAT, before parsing the keyword
+    let repeat_start_span = *input;
     let _ = alt((
         parse_directive_word(b"REP"),
         parse_directive_word(b"REPT"),
@@ -262,45 +384,43 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
     let count = opt(located_expr).parse_next(input)?;
     match count {
         Some(count) => {
-            let counter = cut_err(
-                opt(preceded(parse_comma, parse_label(false)))
-                    .context(StrContext::Label("REPEAT: issue in the counter"))
+            let counter = parse_block_error(
+                cut_err(
+                    opt(preceded(parse_comma, parse_label(false)))
+                        .context(StrContext::Label("REPEAT: issue in the counter"))
+                ),
+                repeat_start_span,
+                "REPEAT: error in block"
             )
             .parse_next(input)?;
             let counter_start = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
             let counter_step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
-            let inner =
-                cut_err(inner_code.context(StrContext::Label("REPEAT: issue in the content")))
-                    .parse_next(input)?;
-
-            // Try to parse the closing directive, and if it fails, add context with end offset
-            let close_result = cut_err(
-                preceded(
-                    my_space0,
-                    alt((
-                        parse_directive_word(b"ENDREPEAT"),
-                        parse_directive_word(b"ENDREPT"),
-                        parse_directive_word(b"ENDREP"),
-                        parse_directive_word(b"ENDR"),
-                        parse_directive_word(b"REND")
-                    ))
-                )
+            let inner = parse_block_error(
+                cut_err(inner_code.context(StrContext::Label("REPEAT: issue in the content"))),
+                repeat_start_span,
+                "REPEAT: error in block"
             )
-            .parse_next(input);
+            .parse_next(input)?;
 
-            // If parsing the closing directive failed, add ContextWithEnd
-            if let Err(ErrMode::Cut(mut err)) = close_result {
-                let end_offset = Z80Span::from(*input).offset_from_start();
-                err.0.push((
-                    repeat_start_span,
-                    Z80ParserErrorKind::ContextWithEnd {
-                        context: StrContext::Label("REPEAT: not closed"),
-                        end_offset
-                    }
-                ));
-                return Err(ErrMode::Cut(err));
-            }
+            let _ = parse_block_error(
+                cut_err(
+                    preceded(
+                        my_space0,
+                        alt((
+                            parse_directive_word(b"ENDREPEAT"),
+                            parse_directive_word(b"ENDREPT"),
+                            parse_directive_word(b"ENDREP"),
+                            parse_directive_word(b"ENDR"),
+                            parse_directive_word(b"REND")
+                        ))
+                    )
+                    .context(StrContext::Label("REPEAT: not closed"))
+                ),
+                repeat_start_span,
+                "REPEAT: not closed"
+            )
+            .parse_next(input)?;
 
             let token = LocatedTokenInner::Repeat(
                 count,
@@ -314,31 +434,28 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
         },
 
         None => {
-            let inner =
-                cut_err(inner_code.context(StrContext::Label("REPEAT: issue in the content")))
-                    .parse_next(input)?;
-
-            // Try to parse UNTIL, and if it fails, add context with end offset
-            let until_result = cut_err(
-                delimited(my_space0, parse_directive_word(b"UNTIL"), my_space0)
+            let inner = parse_block_error(
+                cut_err(inner_code.context(StrContext::Label("REPEAT: issue in the content"))),
+                repeat_start_span,
+                "REPEAT: error in block"
             )
-            .parse_next(input);
+            .parse_next(input)?;
 
-            if let Err(ErrMode::Cut(mut err)) = until_result {
-                let end_offset = Z80Span::from(*input).offset_from_start();
-                err.0.push((
-                    repeat_start_span,
-                    Z80ParserErrorKind::ContextWithEnd {
-                        context: StrContext::Label("REPEAT ... UNTIL: not closed"),
-                        end_offset
-                    }
-                ));
-                return Err(ErrMode::Cut(err));
-            }
-
-            let cond =
-                cut_err(located_expr.context(StrContext::Label("REPEAT UNTIL: condition error")))
-                    .parse_next(input)?;
+            let _ = parse_block_error(
+                cut_err(
+                    delimited(my_space0, parse_directive_word(b"UNTIL"), my_space0)
+                        .context(StrContext::Label("REPEAT ... UNTIL: not closed"))
+                ),
+                repeat_start_span,
+                "REPEAT ... UNTIL: not closed"
+            )
+            .parse_next(input)?;
+            let cond = parse_block_error(
+                cut_err(located_expr.context(StrContext::Label("REPEAT UNTIL: condition error"))),
+                repeat_start_span,
+                "REPEAT: error in block"
+            )
+            .parse_next(input)?;
             let token = LocatedTokenInner::RepeatUntil(cond, inner)
                 .into_located_token_between(&repeat_start, *input);
             Ok(token)
@@ -347,62 +464,85 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
 }
 
 pub fn parse_iterate(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+    let _ = my_space0(input)?;
     let iterate_start = input.checkpoint();
-    let _ = preceded(
-        my_space0,
-        alt((
-            parse_directive_word(b"ITERATE"),
-            parse_directive_word(b"ITER")
-        ))
+    let iterate_start_span = *input;
+    let _ = alt((
+        parse_directive_word(b"ITERATE"),
+        parse_directive_word(b"ITER")
+    ))
+    .parse_next(input)?;
+
+    let counter = parse_block_error(
+        cut_err(
+            preceded(my_space0, parse_label(false))
+                .context(StrContext::Label("ITERATE: issue in the counter"))
+        ),
+        iterate_start_span,
+        "ITERATE: error in block"
     )
     .parse_next(input)?;
 
-    let counter = cut_err(
-        preceded(my_space0, parse_label(false))
-            .context(StrContext::Label("ITERATE: issue in the counter"))
-    )
-    .parse_next(input)?;
-
-    let comma_or_in = cut_err(
-        preceded(my_space0, alt((parse_word(b"IN"), parse_comma)))
-            .context(StrContext::Label("ITERATE: expected ',' or 'in'"))
+    let comma_or_in = parse_block_error(
+        cut_err(
+            preceded(my_space0, alt((parse_word(b"IN"), parse_comma)))
+                .context(StrContext::Label("ITERATE: expected ',' or 'in'"))
+        ),
+        iterate_start_span,
+        "ITERATE: error in block"
     )
     .parse_next(input)?;
 
     let values = if comma_or_in.contains(&b',') {
-        let values = cut_err(expr_list.context(StrContext::Label("ITERATE: values issue")))
-            .parse_next(input)?;
+        let values = parse_block_error(
+            cut_err(expr_list.context(StrContext::Label("ITERATE: values issue"))),
+            iterate_start_span,
+            "ITERATE: error in block"
+        )
+        .parse_next(input)?;
         either::Either::Left(values)
     }
     else {
-        let values = cut_err(
-            alt((
-                parse_expr_bracketed_list,
-                parse_any_function_call,
-                parse_assemble,
-                parse_label(false).map(|l| LocatedExpr::Label(l.into()))
-            ))
-            .context(StrContext::Label("ITERATE: list issue"))
+        let values = parse_block_error(
+            cut_err(
+                alt((
+                    parse_expr_bracketed_list,
+                    parse_any_function_call,
+                    parse_assemble,
+                    parse_label(false).map(|l| LocatedExpr::Label(l.into()))
+                ))
+                .context(StrContext::Label("ITERATE: list issue"))
+            ),
+            iterate_start_span,
+            "ITERATE: error in block"
         )
         .parse_next(input)?;
         either::Either::Right(values)
     };
 
-    let inner = cut_err(inner_code.context(StrContext::Label("ITERATE: issue in the content")))
-        .parse_next(input)?;
+    let inner = parse_block_error(
+        cut_err(inner_code.context(StrContext::Label("ITERATE: issue in the content"))),
+        iterate_start_span,
+        "ITERATE: error in block"
+    )
+    .parse_next(input)?;
 
-    let _ = cut_err(
-        (
-            my_space0,
-            alt((
-                parse_directive_word(b"ENDITERATE"),
-                parse_directive_word(b"ENDITER"),
-                parse_directive_word(b"ENDI"),
-                parse_directive_word(b"IEND")
-            )),
-            my_space0
-        )
-            .context(StrContext::Label("ITERATE: not closed"))
+    let _ = parse_block_error(
+        cut_err(
+            (
+                my_space0,
+                alt((
+                    parse_directive_word(b"ENDITERATE"),
+                    parse_directive_word(b"ENDITER"),
+                    parse_directive_word(b"ENDI"),
+                    parse_directive_word(b"IEND")
+                )),
+                my_space0
+            )
+                .context(StrContext::Label("ITERATE: not closed"))
+        ),
+        iterate_start_span,
+        "ITERATE: not closed"
     )
     .parse_next(input)?;
 
@@ -414,6 +554,7 @@ pub fn parse_iterate(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80P
 /// TODO
 pub fn parse_basic(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let basic_start = input.checkpoint();
+    let basic_start_span = *input;
     let _ = (my_space0, Caseless("LOCOMOTIVE"), my_space0).parse_next(input)?;
 
     // collect the labels that are spread to the basic environnement
@@ -437,15 +578,19 @@ pub fn parse_basic(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Par
 
     // TODO factorize with the the code of parse_macro
     let before_content = input.checkpoint();
-    let (_, end) = cut_err(
-        repeat_till::<_, _, (), _, _, _, _>(
-            0..,
-            take(1usize),
-            parse_directive_word(b"ENDLOCOMOTIVE")
-        )
-        .context(StrContext::Label(
-            "BASIC: impossible to collect BASIC content"
-        ))
+    let (_, end) = parse_block_error(
+        cut_err(
+            repeat_till::<_, _, (), _, _, _, _>(
+                0..,
+                take(1usize),
+                parse_directive_word(b"ENDLOCOMOTIVE")
+            )
+            .context(StrContext::Label(
+                "BASIC: impossible to collect BASIC content"
+            ))
+        ),
+        basic_start_span,
+        "BASIC: not closed"
     )
     .parse_next(input)?;
 
@@ -650,17 +795,32 @@ pub fn parse_run(
 }
 
 pub fn parse_module(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+    let _ = my_space0(input)?;
     let module_start = input.checkpoint();
+    let module_start_span = *input;
     let _ = parse_directive_word(b"MODULE").parse_next(input)?;
 
-    let name = cut_err(parse_label(false).context(StrContext::Label("MODULE: error in naming")))
-        .parse_next(input)?;
+    let name = parse_block_error(
+        cut_err(parse_label(false).context(StrContext::Label("MODULE: error in naming"))),
+        module_start_span,
+        "MODULE: error in block"
+    )
+    .parse_next(input)?;
 
-    let inner = cut_err(inner_code.context(StrContext::Label("MODULE: issue in the content")))
-        .parse_next(input)?;
-    let _ = cut_err(
-        preceded(my_space0, parse_directive_word(b"ENDMODULE"))
-            .context(StrContext::Label("MODULE: not closed"))
+    let inner = parse_block_error(
+        cut_err(inner_code.context(StrContext::Label("MODULE: issue in the content"))),
+        module_start_span,
+        "MODULE: error in block"
+    )
+    .parse_next(input)?;
+    
+    let _ = parse_block_error(
+        cut_err(
+            preceded(my_space0, parse_directive_word(b"ENDMODULE"))
+                .context(StrContext::Label("MODULE: not closed"))
+        ),
+        module_start_span,
+        "MODULE: not closed"
     )
     .parse_next(input)?;
 
@@ -673,41 +833,47 @@ pub fn parse_module(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
 pub fn parse_crunched_section(
     input: &mut InnerZ80Span
 ) -> ModalResult<LocatedToken, Z80ParserError> {
+    let _ = my_space0(input)?;
     let crunched_start = input.checkpoint();
-    let kind = preceded(
-        my_space0,
-        alt((
-            #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZEXO").value(CrunchType::LZEXO),
-            #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZ4").value(CrunchType::LZ4),
-            parse_directive_word(b"LZ48").value(CrunchType::LZ48),
-            parse_directive_word(b"LZ49").value(CrunchType::LZ49),
-            #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZSHRINKLER").value(CrunchType::Shrinkler),
-            #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZUPKR").value(CrunchType::Upkr),
-            #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZX7").value(CrunchType::LZX7),
-            #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZX0_BACKWARD").value(CrunchType::BackwardZx0),
-            #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZX0").value(CrunchType::Zx0),
-            #[cfg(not(target_arch = "wasm32"))]
-            parse_directive_word(b"LZAPU").value(CrunchType::LZAPU),
-            parse_directive_word(b"LZSA1").value(CrunchType::LZSA1),
-            parse_directive_word(b"LZSA2").value(CrunchType::LZSA2)
-        ))
+    let crunched_start_span = *input;
+    let kind = alt((
+        #[cfg(not(target_arch = "wasm32"))]
+        parse_directive_word(b"LZEXO").value(CrunchType::LZEXO),
+        #[cfg(not(target_arch = "wasm32"))]
+        parse_directive_word(b"LZ4").value(CrunchType::LZ4),
+        parse_directive_word(b"LZ48").value(CrunchType::LZ48),
+        parse_directive_word(b"LZ49").value(CrunchType::LZ49),
+        #[cfg(not(target_arch = "wasm32"))]
+        parse_directive_word(b"LZSHRINKLER").value(CrunchType::Shrinkler),
+        #[cfg(not(target_arch = "wasm32"))]
+        parse_directive_word(b"LZUPKR").value(CrunchType::Upkr),
+        #[cfg(not(target_arch = "wasm32"))]
+        parse_directive_word(b"LZX7").value(CrunchType::LZX7),
+        #[cfg(not(target_arch = "wasm32"))]
+        parse_directive_word(b"LZX0_BACKWARD").value(CrunchType::BackwardZx0),
+        #[cfg(not(target_arch = "wasm32"))]
+        parse_directive_word(b"LZX0").value(CrunchType::Zx0),
+        #[cfg(not(target_arch = "wasm32"))]
+        parse_directive_word(b"LZAPU").value(CrunchType::LZAPU),
+        parse_directive_word(b"LZSA1").value(CrunchType::LZSA1),
+        parse_directive_word(b"LZSA2").value(CrunchType::LZSA2)
+    ))
+    .parse_next(input)?;
+
+    let inner = parse_block_error(
+        cut_err(inner_code.context(StrContext::Label("CRUNCHED SECTION: issue in the content"))),
+        crunched_start_span,
+        "CRUNCHED SECTION: error in block"
     )
     .parse_next(input)?;
 
-    let inner =
-        cut_err(inner_code.context(StrContext::Label("CRUNCHED SECTION: issue in the content")))
-            .parse_next(input)?;
-
-    let _ = cut_err(
-        (my_space0, parse_directive_word(b"LZCLOSE"), my_space0)
-            .context(StrContext::Label("CRUNCHED SECTION section: not closed"))
+    let _ = parse_block_error(
+        cut_err(
+            (my_space0, parse_directive_word(b"LZCLOSE"), my_space0)
+                .context(StrContext::Label("CRUNCHED SECTION: not closed"))
+        ),
+        crunched_start_span,
+        "CRUNCHED SECTION: not closed"
     )
     .parse_next(input)?;
 
@@ -1954,48 +2120,73 @@ pub fn parse_function_listing(
 }
 
 pub fn parse_function(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+    let _ = my_space0(input)?;
     let function_start = input.checkpoint();
-    let _ = preceded(my_space0, parse_directive_word(b"FUNCTION")).parse_next(input)?;
-    let name = cut_err(parse_label(false).context(StrContext::Label("FUNCTION: wrong name")))
-        .parse_next(input)?;
+    let function_start_span = *input;
+    let _ = parse_directive_word(b"FUNCTION").parse_next(input)?;
+    let name = parse_block_error(
+        cut_err(parse_label(false).context(StrContext::Label("FUNCTION: wrong name"))),
+        function_start_span,
+        "FUNCTION: error in block"
+    )
+    .parse_next(input)?;
 
     let cloned = *input;
-    let arguments: Vec<InnerZ80Span> = cut_err(
-        preceded(
-            opt(parse_comma),
-            separated::<_, InnerZ80Span, Vec<InnerZ80Span>, _, _, _, _>(
-                0..,
-                delimited(
-                    my_space0,
-                    take_till(1.., |c| {
-                        c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' '
-                    })
-                    .map(|s: &[u8]| cloned.update_slice(s)),
-                    my_space0
-                ),
-                parse_comma
+    let arguments: Vec<InnerZ80Span> = parse_block_error(
+        cut_err(
+            preceded(
+                opt(parse_comma),
+                separated::<_, InnerZ80Span, Vec<InnerZ80Span>, _, _, _, _>(
+                    0..,
+                    delimited(
+                        my_space0,
+                        take_till(1.., |c| {
+                            c == b'\n' || c == b'\r' || c == b':' || c == b',' || c == b' '
+                        })
+                        .map(|s: &[u8]| cloned.update_slice(s)),
+                        my_space0
+                    ),
+                    parse_comma
+                )
             )
-        )
-        .context(StrContext::Label("FUNCTION: errors in parameters"))
+            .context(StrContext::Label("FUNCTION: errors in parameters"))
+        ),
+        function_start_span,
+        "FUNCTION: error in block"
     )
     .parse_next(input)?;
     let arguments = arguments.into_iter().map(|span| span.into()).collect_vec();
 
-    cut_err(
-        preceded(my_space0, my_line_ending)
-            .context(StrContext::Label("FUNCTION: errors after parameters"))
+    parse_block_error(
+        cut_err(
+            preceded(my_space0, my_line_ending)
+                .context(StrContext::Label("FUNCTION: errors after parameters"))
+        ),
+        function_start_span,
+        "FUNCTION: error in block"
     )
     .parse_next(input)?;
 
-    let listing =
-        cut_err(parse_function_listing.context(StrContext::Label("FUNCTION: invalid content")))
-            .parse_next(input)?;
+    let listing = parse_block_error(
+        cut_err(parse_function_listing.context(StrContext::Label("FUNCTION: invalid content"))),
+        function_start_span,
+        "FUNCTION: error in block"
+    )
+    .parse_next(input)?;
 
     repeat::<_, _, (), _, _>(0.., my_line_ending).parse_next(input)?;
-    let _ = alt((
-        parse_directive_word(b"ENDF"),
-        parse_directive_word(b"ENDFUNCTION")
-    ))
+    
+    let _ = parse_block_error(
+        cut_err(
+            alt((
+                parse_directive_word(b"ENDF"),
+                parse_directive_word(b"ENDFUNCTION")
+            ))
+            .context(StrContext::Label("FUNCTION: not closed"))
+        ),
+        function_start_span,
+        "FUNCTION: not closed"
+    )
     .parse_next(input)?;
 
     Ok(LocatedTokenInner::Function(name.into(), arguments, listing)
@@ -2004,16 +2195,22 @@ pub fn parse_function(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80
 
 pub fn parse_macro(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let dir_start = input.checkpoint();
+    let macro_start_span = *input;
     let _ = parse_directive_word(b"MACRO").parse_next(input)?;
 
-    let name = cut_err(parse_label(false).context(StrContext::Label("MACRO: wrong name")))
-        .parse_next(input)?;
+    let name = parse_block_error(
+        cut_err(parse_label(false).context(StrContext::Label("MACRO: wrong name"))),
+        macro_start_span,
+        "MACRO: error in block"
+    )
+    .parse_next(input)?;
 
-    parse_macro_inner(dir_start, name).parse_next(input)
+    parse_macro_inner(dir_start, macro_start_span, name).parse_next(input)
 }
 
 pub fn parse_macro_inner(
     dir_start: <InnerZ80Span as Stream>::Checkpoint,
+    macro_start_span: InnerZ80Span,
     name: InnerZ80Span
 ) -> impl FnMut(&mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedToken, Z80ParserError> {
@@ -2049,10 +2246,14 @@ pub fn parse_macro_inner(
         .parse_next(input)?;
 
         if let Some(CommaOrParenthesis::Parenthesis) = comma_or_parenthesis {
-            cut_err(
-                (my_space0, ')', my_space0)
-                    .value(())
-                    .context("`)` expected`")
+            parse_block_error(
+                cut_err(
+                    (my_space0, ')', my_space0)
+                        .value(())
+                        .context("`)` expected`")
+                ),
+                macro_start_span,
+                "MACRO: error in block"
             )
             .parse_next(input)?;
         }
@@ -2066,19 +2267,23 @@ pub fn parse_macro_inner(
         alt((my_space0.value(()), my_line_ending.value(()))).parse_next(input)?;
 
         let before_content = input.checkpoint();
-        let (_, end) = cut_err(
-            repeat_till::<_, _, (), _, _, _, _>(
-                0..,
-                take(1usize),
-                alt((
-                    parse_directive_word(b"ENDM"),
-                    parse_directive_word(b"ENDMACRO"),
-                    parse_directive_word(b"MEND")
+        let (_, end) = parse_block_error(
+            cut_err(
+                repeat_till::<_, _, (), _, _, _, _>(
+                    0..,
+                    take(1usize),
+                    alt((
+                        parse_directive_word(b"ENDM"),
+                        parse_directive_word(b"ENDMACRO"),
+                        parse_directive_word(b"MEND")
+                    ))
+                )
+                .context(StrContext::Label(
+                    "MACRO: impossible to collect macro content"
                 ))
-            )
-            .context(StrContext::Label(
-                "MACRO: impossible to collect macro content"
-            ))
+            ),
+            macro_start_span,
+            "MACRO: not closed"
         )
         .parse_next(input)?;
 
@@ -2241,8 +2446,8 @@ pub fn parse_startingindex(
 pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let is_orgams = input.state.options().is_orgams();
 
-    let if_clone = *input;
     let if_start = input.checkpoint();
+    let if_start_span = *input;
 
     let mut conditions = Vec::with_capacity(4);
     let mut else_clause = None;
@@ -2267,9 +2472,13 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
         }
 
         let condition = if let Ok(test_kind) = if_token_or_error {
-            let cond = cut_err(
-                delimited(my_space0, parse_conditional_condition(test_kind), my_space0)
-                    .context(StrContext::Label("Condition: error in the condition"))
+            let cond = parse_block_error(
+                cut_err(
+                    delimited(my_space0, parse_conditional_condition(test_kind), my_space0)
+                        .context(StrContext::Label("Condition: error in the condition"))
+                ),
+                if_start_span,
+                "IF: error in block"
             )
             .parse_next(input)?;
             Some(cond)
@@ -2278,22 +2487,30 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
             None
         };
 
-        let _ = cut_err(
-            alt((
-                delimited(my_space0, parse_comment, line_ending).take(),
-                line_ending.take(),
-                ':'.take()
-            ))
-            .context(StrContext::Label(
-                "Condition: condition must end by a new line or ':'"
-            ))
+        let _ = parse_block_error(
+            cut_err(
+                alt((
+                    delimited(my_space0, parse_comment, line_ending).take(),
+                    line_ending.take(),
+                    ':'.take()
+                ))
+                .context(StrContext::Label(
+                    "Condition: condition must end by a new line or ':'"
+                ))
+            ),
+            if_start_span,
+            "IF: error in block"
         )
         .parse_next(input)
         .map_err(|e| e.add_context(input, &if_start, "Error in condition"))?;
 
-        let code = cut_err(inner_code.context(StrContext::Label(
-            "Condition: syntax error in conditionnal code"
-        )))
+        let code = parse_block_error(
+            cut_err(inner_code.context(StrContext::Label(
+                "Condition: syntax error in conditionnal code"
+            ))),
+            if_start_span,
+            "IF: error in block"
+        )
         .parse_next(input)?;
 
         if let Some(condition) = condition {
@@ -2322,14 +2539,17 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
             delimited(my_space0, ':', my_space0).value(()),
             delimited(my_space0, parse_comment, line_ending).value(())
         ))),
-        cut_err(preceded(
-            my_space0,
-            parse_directive_word(if is_orgams { b"END" } else { b"ENDIF" })
-        ))
-        .take()
+        parse_block_error(
+            cut_err(preceded(
+                my_space0,
+                parse_directive_word(if is_orgams { b"END" } else { b"ENDIF" })
+            ))
+            .take(),
+            if_start_span,
+            if is_orgams { "IF: not closed (missing END)" } else { "IF: not closed (missing ENDIF)" }
+        )
     )
-        .parse_next(input)
-        .map_err(|e| e.add_context(&if_clone, &if_start, "End directive not found"))?;
+    .parse_next(input)?;
 
     let token = LocatedTokenInner::If(conditions, else_clause)
         .into_located_token_between(&if_start, *input);
@@ -2829,24 +3049,38 @@ pub fn parse_macro_name(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z
 pub fn parse_rorg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let _ = my_space0.parse_next(input)?;
     let rorg_start = input.checkpoint();
+    let rorg_start_span = *input;
     let _ = alt((Caseless("PHASE"), Caseless("RORG"))).parse_next(input)?;
 
-    let exp = cut_err(
-        delimited(my_space1, located_expr, my_space0)
-            .context(StrContext::Label("RORG: error in the expression"))
+    let exp = parse_block_error(
+        cut_err(
+            delimited(my_space1, located_expr, my_space0)
+                .context(StrContext::Label("RORG: error in the expression"))
+        ),
+        rorg_start_span,
+        "RORG: error in block"
     )
     .parse_next(input)?;
 
     let _ = my_line_ending.parse_next(input)?;
 
-    let inner = inner_code.parse_next(input)?;
+    let inner = parse_block_error(
+        inner_code,
+        rorg_start_span,
+        "RORG: error in block"
+    )
+    .parse_next(input)?;
 
-    let _ = cut_err(
-        preceded(
-            my_space0,
-            alt((Caseless("DEPHASE"), Caseless("REND"), Caseless("ENDR")))
-        )
-        .context(StrContext::Label("RORG: missing REND"))
+    let _ = parse_block_error(
+        cut_err(
+            preceded(
+                my_space0,
+                alt((Caseless("DEPHASE"), Caseless("REND"), Caseless("ENDR")))
+            )
+            .context(StrContext::Label("RORG: missing REND"))
+        ),
+        rorg_start_span,
+        "RORG: missing REND"
     )
     .parse_next(input)?;
 

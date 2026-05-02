@@ -426,6 +426,7 @@ pub fn parse_line_component_standard(
     let _before_let = input.checkpoint();
     let r#let = terminated(opt(parse_directive_word(b"LET")), my_space0).parse_next(input)?;
     let before_label = input.checkpoint();
+    let before_label_span = *input;
 
     let mut label: Option<InnerZ80Span> = if r#let.is_some() {
         // label is mandatory when there is let
@@ -514,7 +515,7 @@ pub fn parse_line_component_standard(
 
     if let Some(label_modifier) = label_modifier {
         if label_modifier == LabelModifier::Macro {
-            let r#macro = parse_macro_inner(before_label, label.unwrap())
+            let r#macro = parse_macro_inner(before_label, before_label_span, label.unwrap())
                 .context(StrContext::Label("MACRO: error on macro definition"))
                 .parse_next(input)?;
             return Ok((None, Some(r#macro)));
