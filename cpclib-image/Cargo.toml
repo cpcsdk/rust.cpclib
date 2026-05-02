@@ -28,7 +28,7 @@ nutype = {workspace = true, features = ["serde", "new_unchecked"]}
 serde.workspace = true
 #arrays = "0.2.0"
 
-rayon = { version = "1.11", optional = true }
+rayon = { version = "1.12", optional = true }
 
 [features]
 default = []

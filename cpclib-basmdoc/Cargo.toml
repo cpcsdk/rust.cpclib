@@ -22,7 +22,7 @@ fs-err.workspace = true
 delegate.workspace = true
 glob.workspace = true
 minijinja = { workspace = true, features = ["loader"] }
-regex = "1.11"
+regex = "1.12"
 rayon = { workspace = true, optional = true }
 minify-html = { version = "0.18", optional = true }
 rust-embed = {workspace = true, features = ["include-exclude", "compression"]}
@@ -34,15 +34,15 @@ indicatif = "0.17"
 serde_json = "1.0"
 
 dirs = "5.0"
-ureq = "2.10"
-flate2 = "1.0"
+ureq = "2.12"
+flate2 = "1.1"
 
 
 pandoc = {version="0.8"}
 pulldown-cmark = "0.12"
 
 [dev-dependencies]
-tempfile = "3.6"
+tempfile = "3.27"
 
 [build-dependencies]
 cpclib-asm.workspace = true

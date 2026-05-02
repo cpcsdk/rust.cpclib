@@ -32,6 +32,7 @@ use super::common::{
     parse_optional_argname_and_value, parse_word
 };
 use super::context;
+use super::error::Z80ParserErrorKind;
 use super::expression::{
     expr, expr_list, ignore_ascii_case_allowed_label, located_expr, parse_any_function_call,
     parse_assemble, parse_expr_bracketed_list, parse_flag_value_inner, parse_fname, parse_label,
@@ -40,6 +41,7 @@ use super::expression::{
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
 use super::orgams::parse_orgams_fail;
+use super::source::Z80Span;
 pub use super::parser::{END_DIRECTIVE, STAND_ALONE_DIRECTIVE, START_DIRECTIVE};
 use crate::hashed_choice;
 use crate::preamble::*;
@@ -247,15 +249,14 @@ pub fn parse_confined(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80
 }
 
 pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
+    let _ = my_space0(input)?;
     let repeat_start = input.checkpoint();
-    let _ = preceded(
-        my_space0,
-        alt((
-            parse_directive_word(b"REP"),
-            parse_directive_word(b"REPT"),
-            parse_directive_word(b"REPEAT")
-        ))
-    )
+    let repeat_start_span = *input;  // Save the span at the start of REPEAT, before parsing the keyword
+    let _ = alt((
+        parse_directive_word(b"REP"),
+        parse_directive_word(b"REPT"),
+        parse_directive_word(b"REPEAT")
+    ))
     .parse_next(input)?;
 
     let count = opt(located_expr).parse_next(input)?;
@@ -273,7 +274,8 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
                 cut_err(inner_code.context(StrContext::Label("REPEAT: issue in the content")))
                     .parse_next(input)?;
 
-            let _ = cut_err(
+            // Try to parse the closing directive, and if it fails, add context with end offset
+            let close_result = cut_err(
                 preceded(
                     my_space0,
                     alt((
@@ -284,9 +286,21 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
                         parse_directive_word(b"REND")
                     ))
                 )
-                .context(StrContext::Label("REPEAT: not closed"))
             )
-            .parse_next(input)?;
+            .parse_next(input);
+
+            // If parsing the closing directive failed, add ContextWithEnd
+            if let Err(ErrMode::Cut(mut err)) = close_result {
+                let end_offset = Z80Span::from(*input).offset_from_start();
+                err.0.push((
+                    repeat_start_span,
+                    Z80ParserErrorKind::ContextWithEnd {
+                        context: StrContext::Label("REPEAT: not closed"),
+                        end_offset
+                    }
+                ));
+                return Err(ErrMode::Cut(err));
+            }
 
             let token = LocatedTokenInner::Repeat(
                 count,
@@ -304,11 +318,24 @@ pub fn parse_repeat(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
                 cut_err(inner_code.context(StrContext::Label("REPEAT: issue in the content")))
                     .parse_next(input)?;
 
-            let _ = cut_err(
+            // Try to parse UNTIL, and if it fails, add context with end offset
+            let until_result = cut_err(
                 delimited(my_space0, parse_directive_word(b"UNTIL"), my_space0)
-                    .context(StrContext::Label("REPEAT ... UNTIL: not closed"))
             )
-            .parse_next(input)?;
+            .parse_next(input);
+
+            if let Err(ErrMode::Cut(mut err)) = until_result {
+                let end_offset = Z80Span::from(*input).offset_from_start();
+                err.0.push((
+                    repeat_start_span,
+                    Z80ParserErrorKind::ContextWithEnd {
+                        context: StrContext::Label("REPEAT ... UNTIL: not closed"),
+                        end_offset
+                    }
+                ));
+                return Err(ErrMode::Cut(err));
+            }
+
             let cond =
                 cut_err(located_expr.context(StrContext::Label("REPEAT UNTIL: condition error")))
                     .parse_next(input)?;

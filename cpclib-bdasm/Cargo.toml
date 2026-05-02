@@ -35,7 +35,7 @@ built.workspace = true
 escargot = "0.5"
 predicates = "3.1"
 fs-err.workspace = true
-tempfile = "3.13"
+tempfile = "3.27"
 
 [target.'cfg(unix)'.dev-dependencies]
 rexpect = "0.5"
