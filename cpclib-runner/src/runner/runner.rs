@@ -259,6 +259,77 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         // Note: the OS-level PTY (ConPTY on Windows, posix_openpt on Linux/macOS) merges
         // the child's stdout and stderr into a single stream through the pseudo-console.
         // There is no portable way to separate them when using a PTY, so all child output
+
+                #[cfg(target_os = "macos")]
+                {
+                    use std::io::BufReader;
+                    use std::process::{Child, Stdio};
+
+                    use utf8_chars::BufReadCharsExt;
+
+                    let mut cmd = std::process::Command::new(app);
+                    cmd.current_dir(&in_dir);
+                    for arg in &itr[1..] {
+                        cmd.arg(arg);
+                    }
+                    let cmd = cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
+                    let mut child: Child =
+                        cmd.spawn()
+                            .map_err(|e| format!("Error while launching {}. {}", app, e))?;
+                    let child_pid = child.id();
+                    register_child_pid(child_pid);
+                    let child_stdout = child
+                        .stdout
+                        .take()
+                        .expect("Internal error, could not take stdout");
+                    let child_stderr = child
+                        .stderr
+                        .take()
+                        .expect("Internal error, could not take stderr");
+
+                    thread::scope(|s| {
+                        s.spawn(|| {
+                            let mut stdout = BufReader::new(child_stdout);
+                            let mut current_string = String::new();
+                            for c in stdout.chars().flatten() {
+                                current_string.push(c);
+                                if c == '\n' {
+                                    o.emit_stdout(&current_string);
+                                    current_string.clear();
+                                }
+                            }
+                            if !current_string.is_empty() {
+                                o.emit_stdout(&current_string);
+                            }
+                        });
+                        s.spawn(|| {
+                            let mut stderr = BufReader::new(child_stderr);
+                            let mut current_string = String::new();
+                            for c in stderr.chars().flatten() {
+                                current_string.push(c);
+                                if c == '\n' {
+                                    o.emit_stderr(&current_string);
+                                    current_string.clear();
+                                }
+                            }
+                            if !current_string.is_empty() {
+                                o.emit_stderr(&current_string);
+                            }
+                        });
+                    });
+
+                    let status = child
+                        .wait()
+                        .map_err(|e| format!("Error while executing {}. {}", app, e))?;
+                    deregister_child_pid(child_pid);
+
+                    return if status.success() {
+                        Ok(())
+                    }
+                    else {
+                        Err("Error while launching the command.".to_owned())
+                    };
+                }
         // is forwarded to emit_stdout.
         use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
