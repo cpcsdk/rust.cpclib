@@ -28,7 +28,7 @@ impl FAPVersion {
             FAPVersion::V1_0_0 => (DOWNLOAD_URL_V1_0, "fap1.0.0")
         };
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         let exec = "FapCrunchLin";
         #[cfg(target_os = "windows")]
         let exec = "FapCrunchWin.exe";
