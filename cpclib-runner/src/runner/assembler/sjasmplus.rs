@@ -43,6 +43,10 @@ impl GithubInformation for SjasmplusVersion {
     fn windows_key(&self) -> Option<&'static str> {
         Some("sjasmplus-1.20.3.win.zip")
     }
+
+    fn macos_key(&self) -> Option<&'static str> {
+        Some("sjasmplus-1.20.3-src.tar.xz")
+    }
 }
 
 impl ExecutableInformation for SjasmplusVersion {
@@ -56,7 +60,7 @@ impl ExecutableInformation for SjasmplusVersion {
         #[cfg(target_os = "windows")]
         return "sjasmplus.exe";
         #[cfg(target_os = "macos")]
-        todo!("Sjasmplus executable not defined for macOS");
+        return "sjasmplus";
     }
 }
 
@@ -64,6 +68,12 @@ impl CompilableInformation for SjasmplusVersion {
     fn target_os_commands(&self) -> Option<&'static [&'static [&'static str]]> {
         if cfg!(target_os = "linux") {
             Some(&[&["cmake", "sjasmplus-1.20.3"], &["make"]])
+        }
+        else if cfg!(target_os = "macos") {
+            Some(&[
+                &["make", "-C", "sjasmplus-1.20.3"],
+                &["cp", "sjasmplus-1.20.3/sjasmplus", "."]
+            ])
         }
         else {
             None
@@ -78,6 +88,6 @@ impl DownloadableInformation for SjasmplusVersion {
         #[cfg(target_os = "windows")]
         return ArchiveFormat::Zip;
         #[cfg(target_os = "macos")]
-        todo!("Sjasmplus archive format not defined for macOS");
+        return ArchiveFormat::TarXz;
     }
 }
