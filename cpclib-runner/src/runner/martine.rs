@@ -27,7 +27,7 @@ cfg_select! {
                             .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.41.4/martine-0.41.4-linux-amd64.zip")
                             .folder("martine_0_41_4")
                             .archive_format(ArchiveFormat::Zip)
-                            .exec_fname("martine")
+                            .exec_fname("build/martine")
                             .build(),
                     MartineVersion::V0_39  =>
                         DelegateApplicationDescription::builder()
@@ -50,7 +50,7 @@ cfg_select! {
                             .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.41.4/martine-0.41.4-windows-amd64.zip")
                             .folder("martine_0_41_4")
                             .archive_format(ArchiveFormat::Zip)
-                            .exec_fname("martine.exe")
+                            .exec_fname("build/martine.exe")
                             .build(),
                     MartineVersion::V0_39  =>
                         DelegateApplicationDescription::builder()
@@ -120,7 +120,7 @@ exec "$MARTINE_EXEC" "$@"
                             .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.41.4/martine-0.41.4-darwin-amd64.zip")
                             .folder("martine_0_41_4")
                             .archive_format(ArchiveFormat::Zip)
-                            .exec_fname("martine")
+                            .exec_fname("build/martine")
                             .post_install(post_install)
                             .build()
                     },
