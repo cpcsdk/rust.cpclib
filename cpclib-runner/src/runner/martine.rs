@@ -5,8 +5,8 @@ pub const MARTINE_CMD: &str = "martine";
 
 #[derive(Default)]
 pub enum MartineVersion {
-    #[default]
     V0_41_4,
+    #[default]
     V0_39
 }
 
@@ -125,10 +125,10 @@ exec "$MARTINE_EXEC" "$@"
                             .build()
                     },
                     MartineVersion::V0_39 => DelegateApplicationDescription::builder()
-                        .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-linux-amd64.zip")
+                        .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-darwin-amd64.zip")
                         .folder("martine_0_39")
                         .archive_format(ArchiveFormat::Zip)
-                        .exec_fname("martine.linux")
+                        .exec_fname("martine.app/Contents/MacOS/martine")
                         .build(),
                 }
             }

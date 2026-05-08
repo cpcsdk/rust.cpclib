@@ -132,10 +132,12 @@ impl ExecutableInformation for At3Version {
     }
 
     fn target_os_exec_fname(&self) -> &'static str {
-        #[cfg(not(target_os = "windows"))]
-        return "ArkosTracker3";
+        #[cfg(target_os = "macos")]
+        return "ArkosTracker3.app/Contents/MacOS/ArkosTracker3";
         #[cfg(target_os = "windows")]
         return "ArkosTracker3.exe";
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        return "ArkosTracker3";
     }
 }
 

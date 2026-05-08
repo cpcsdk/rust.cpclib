@@ -222,11 +222,20 @@ pub fn execute<E: BndBuilderObserver + 'static>(
             .run(task.args(), observer)
         },
         InnerTask::Martine(_) => {
+            // Martine v0.39 crashes without arguments (invalid log filename with parentheses)
+            // Inject --help when no arguments provided to avoid crash
+            let args = task.args();
+            let safe_args = if args.trim().is_empty() {
+                "--help"
+            } else {
+                args
+            };
+            
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),
                 MartineVersion::default().get_command().to_owned()
             )
-            .run(task.args(), observer)
+            .run(safe_args, observer)
         },
         InnerTask::Mkdir(_) => MkdirRunner::default().run(task.args(), observer),
         InnerTask::Rm(_) => RmRunner::default().run(task.args(), observer),
