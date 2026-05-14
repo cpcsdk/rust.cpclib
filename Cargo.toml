@@ -144,7 +144,6 @@ walkdir = "2.5.0"
 cc = "1.2.61"
 cfg-if = "1.0.4"
 chardetng = { version = "0.1.17", features = ["multithreading"] }
-choice_nocase = "0.2.0"
 clap = { version="4.5.61", features=["color", "derive"]}
 codespan-reporting = "0.13.1"
 #contracts = "0.6.3"

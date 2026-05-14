@@ -1804,16 +1804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "choice_nocase"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "188916c0aa44c9b38fb2910758222451f588d1baa918c9cb6e1e736594af9abc"
-dependencies = [
- "proc-macro2 1.0.106",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2442,7 +2432,6 @@ dependencies = [
  "built",
  "cfg-if",
  "chardetng",
- "choice_nocase",
  "codespan-reporting 0.13.1",
  "compact_str 0.9.0",
  "cpclib-basic",

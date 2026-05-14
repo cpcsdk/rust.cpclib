@@ -1,6 +1,5 @@
 // Registers module - contains register parsing functions and constants
 
-use choice_nocase::choice_nocase;
 use cpclib_common::winnow::ascii::{Caseless, alpha1, alphanumeric1};
 use cpclib_common::winnow::combinator::{alt, not, opt, preceded, terminated};
 use cpclib_common::winnow::error::ErrMode;
@@ -23,10 +22,10 @@ pub fn parse_register16(
     let code = terminated(take(2usize), not(alpha1)).parse_next(input)?;
 
     let reg = match code {
-        choice_nocase!(b"AF") => Register16::Af,
-        choice_nocase!(b"BC") => Register16::Bc,
-        choice_nocase!(b"DE") => Register16::De,
-        choice_nocase!(b"HL") => Register16::Hl,
+        b"AF"|b"af"|b"Af"|b"aF" => Register16::Af,
+        b"BC"|b"bc"|b"Bc"|b"bC" => Register16::Bc,
+        b"DE"|b"de"|b"De"|b"dE" => Register16::De,
+        b"HL"|b"hl"|b"Hl"|b"hL" => Register16::Hl,
         _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
     };
 
@@ -210,9 +209,13 @@ pub fn parse_indexregister16(
         .take()
         .parse_next(input)?;
 
-    let reg = match code {
-        choice_nocase!(b"IX") => IndexRegister16::Ix,
-        choice_nocase!(b"IY") => IndexRegister16::Iy,
+
+    let reg = match code[0] {
+        b'I'|b'i' => match code[1] {
+            b'X'|b'x' => IndexRegister16::Ix,
+            b'Y'|b'y' => IndexRegister16::Iy,
+            _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+        },
         _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
     };
 
