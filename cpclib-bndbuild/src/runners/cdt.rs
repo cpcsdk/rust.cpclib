@@ -6,7 +6,7 @@ use cpclib_common::event::EventObserver;
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 use fs_err::File;
 use rtzx::ui::commands::{Commands, run_convert, run_inspect, run_play};
-use rtzx::{self, TzxData};
+use rtzx::{TapeDataFile, TapeDataFileType};
 
 use crate::task::{RTZX_CMDS, TWO_CDT_CMDS};
 
@@ -108,21 +108,28 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
         let display = file_name.display();
 
         // Open the path in read-only mode, returns `io::Result<File>`
-        let file = match File::open(file_name) {
+        let mut file = match File::open(file_name) {
             Err(why) => return Err(format!("Couldn't open {}: {}", display, why)),
             Ok(file) => file
         };
 
         let config = &cli.command.as_ref().map(|cmd| cmd.config()).unwrap();
 
-        let tzx_data = TzxData::parse_from(file);
+        let file_type = file_name
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| TapeDataFileType::from(ext))
+            .unwrap_or_default();
+
+        let tape_data = TapeDataFile::read_as(&mut file, file_type)
+            .map_err(|e| e.to_string())?;
 
         match &cli.command {
             Some(Commands::Inspect(args)) => {
-                run_inspect(file_name, config, args.waveforms, &tzx_data)
+                run_inspect(file_name, config, args.waveforms, &tape_data)
             },
-            Some(Commands::Convert(args)) => run_convert(args, config, &tzx_data),
-            Some(Commands::Play(_)) => run_play(file_name, config, &tzx_data),
+            Some(Commands::Convert(args)) => run_convert(args, config, &tape_data),
+            Some(Commands::Play(_)) => run_play(file_name, config, &tape_data),
             None => Ok(())
         }
         .map_err(|e| e.to_string())
