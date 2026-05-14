@@ -1,5 +1,3 @@
-#![feature(const_trait_impl)]
-
 use std::collections::HashSet;
 use std::io::Read;
 use std::ops::Deref;

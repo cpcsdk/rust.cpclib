@@ -1,5 +1,3 @@
-#![feature(cfg_select)]
-
 pub use enigo;
 pub use xcap;
 

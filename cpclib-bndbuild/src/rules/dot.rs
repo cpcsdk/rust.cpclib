@@ -16,6 +16,17 @@ use crate::EXPECTED_FILENAMES;
 use crate::env::create_template_env;
 use crate::task::InnerTask;
 
+fn make_rule_node<'a, 'b, 'c>(
+    digraph: &'b mut Scope<'a, 'c>,
+    help: Option<&str>
+) -> Node<'b, 'c> {
+    let mut rule_node = digraph.node_auto();
+    if let Some(help) = help {
+        rule_node.set("tooltip", help, true);
+    }
+    rule_node
+}
+
 /// Parse a bndbuild argument string to extract `-f`/`--file` FILE and
 /// any positional target arguments.  Returns `(file_path, targets)` when
 /// the `-f` flag is present; `None` otherwise.
@@ -99,14 +110,7 @@ impl Rules {
                     cmd
                 };
 
-                let build_rule_node =
-                    for<'a, 'b, 'c> |digraph: &'b mut Scope<'a, 'c>| -> Node<'b, 'c> {
-                        let mut rule_node = digraph.node_auto();
-                        if let Some(help) = rule.help() {
-                            rule_node.set("tooltip", help, true);
-                        }
-                        rule_node
-                    };
+                let rule_help = rule.help();
                 let complete_rule_node = |cmd: &str, rule_node: &mut Node| {
                     debug_assert!(!cmd.is_empty());
                     if compressed {
@@ -126,7 +130,7 @@ impl Rules {
                     }
                     else {
                         let id = {
-                            let mut rule_node = build_rule_node(&mut digraph);
+                            let mut rule_node = make_rule_node(&mut digraph, rule_help);
                             complete_rule_node(&cmd, &mut rule_node);
                             rule_node.id()
                         };
@@ -146,7 +150,7 @@ impl Rules {
                     }
                 }
                 else {
-                    let mut rule_node = build_rule_node(&mut digraph);
+                    let mut rule_node = make_rule_node(&mut digraph, rule_help);
                     if cmd.is_empty() {
                         rule_node.set("shape", "point", false);
                     }

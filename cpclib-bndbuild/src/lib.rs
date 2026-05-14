@@ -1,7 +1,3 @@
-#![feature(cfg_select)]
-#![feature(str_as_str)]
-#![feature(closure_lifetime_binder)]
-
 use std::env::current_dir;
 use std::sync::OnceLock;
 
