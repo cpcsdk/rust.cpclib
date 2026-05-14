@@ -47,7 +47,11 @@ pub struct BasmDocCommand {
     pub title: Option<String>,
 
     /// Disable HTML minification (enabled by default)
-    #[arg(long = "no-minify")]
+    #[arg(
+        long = "no-minify",
+        action = clap::ArgAction::SetTrue,
+        default_value_t = false
+    )]
     pub no_minify: bool
 }
 
