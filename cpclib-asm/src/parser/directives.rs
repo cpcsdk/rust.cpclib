@@ -27,8 +27,9 @@ use cpclib_tokens::macro_segment::tokenize_macro_body;
 use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};
 
 use super::common::{
-    inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0, my_space1,
-    parse_argname_and_value, parse_comma, parse_comment, parse_convertible_word,
+    inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0,
+    my_space0_with_newlines, my_space1, parse_argname_and_value, parse_comma,
+    parse_comma_multiline, parse_comment, parse_convertible_word,
     parse_optional_argname_and_value, parse_word
 };
 use super::context;
@@ -2926,63 +2927,112 @@ pub fn parse_macro_or_struct_call_inner(
 
         let has_parenthesis = opt((
             '(',
-            my_space0,
-            not(alt((("void", my_space0).value(()), ')'.value(()))))
+            my_space0_with_newlines,
+            not(alt((("void", my_space0_with_newlines).value(()), ')'.value(()))))
         ))
         .parse_next(input)?
         .is_some();
-        let args: Vec<(LocatedMacroParam, &[u8])> = if peek(alt((
-            eof.value(()),
-            parse_comment.value(()),
-            line_ending.value(()),
-            ':'.value(())
-        )))
-        .parse_next(input)
-        .is_ok()
+        let args: Vec<(LocatedMacroParam, &[u8])> = if !has_parenthesis
+            && peek(alt((
+                eof.value(()),
+                parse_comment.value(()),
+                line_ending.value(()),
+                ':'.value(())
+            )))
+            .parse_next(input)
+            .is_ok()
+            || (has_parenthesis
+                && peek(alt((eof.value(()), parse_comment.value(()), ':'.value(()))))
+                    .parse_next(input)
+                    .is_ok())
         {
             vec![]
         }
         else {
-            cut_err(
-                alt((
-                    delimited(
-                        my_space0,
-                        alt((
-                            "()".value(()),
-                            Caseless("(void)").value(()),
-                            parse_comment.value(())
-                        )),
-                        my_space0
-                    )
-                    .value(Default::default()),
+            if has_parenthesis {
+                cut_err(
                     alt((
-                        alt((Caseless("(void)"), "()")).value(Vec::new()),
-                        separated(
-                            1..,
+                        delimited(
+                            my_space0,
                             alt((
-                                parse_macro_arg.with_taken(),
-                                my_space1
-                                    .map(|space: InnerZ80Span| {
-                                        LocatedMacroParam::RawArgument(space.into())
-                                    })
-                                    .with_taken()
+                                "()".value(()),
+                                Caseless("(void)").value(()),
+                                parse_comment.value(())
                             )),
-                            parse_comma
+                            my_space0
                         )
+                        .value(Default::default()),
+                        alt((
+                            alt((Caseless("(void)"), "()")).value(Vec::new()),
+                            delimited(
+                                my_space0_with_newlines,
+                                separated(
+                                    1..,
+                                    alt((
+                                        parse_macro_arg.with_taken(),
+                                        my_space1
+                                            .map(|space: InnerZ80Span| {
+                                                LocatedMacroParam::RawArgument(space.into())
+                                            })
+                                            .with_taken()
+                                    )),
+                                    parse_comma_multiline
+                                ),
+                                my_space0_with_newlines
+                            )
+                        ))
                     ))
-                ))
-                .context(if for_struct {
-                    "STRUCT: error in arguments list"
-                }
-                else {
-                    "MACRO or STRUCT: forbidden name"
-                })
-            )
-            .parse_next(input)?
+                    .context(if for_struct {
+                        "STRUCT: error in arguments list"
+                    }
+                    else {
+                        "MACRO or STRUCT: forbidden name"
+                    })
+                )
+                .parse_next(input)?
+            }
+            else {
+                cut_err(
+                    alt((
+                        delimited(
+                            my_space0,
+                            alt((
+                                "()".value(()),
+                                Caseless("(void)").value(()),
+                                parse_comment.value(())
+                            )),
+                            my_space0
+                        )
+                        .value(Default::default()),
+                        alt((
+                            alt((Caseless("(void)"), "()")).value(Vec::new()),
+                            separated(
+                                1..,
+                                alt((
+                                    parse_macro_arg.with_taken(),
+                                    my_space1
+                                        .map(|space: InnerZ80Span| {
+                                            LocatedMacroParam::RawArgument(space.into())
+                                        })
+                                        .with_taken()
+                                )),
+                                parse_comma
+                            )
+                        ))
+                    ))
+                    .context(if for_struct {
+                        "STRUCT: error in arguments list"
+                    }
+                    else {
+                        "MACRO or STRUCT: forbidden name"
+                    })
+                )
+                .parse_next(input)?
+            }
         };
 
         if has_parenthesis {
-            (my_space0, ')', my_space0).parse_next(input)?;
+            (my_space0_with_newlines, ')', my_space0).parse_next(input)?;
         }
 
         if args.len() == 1 && args.first().unwrap().0.is_empty() {
@@ -3249,6 +3299,41 @@ mod tests {
         for input in cases_fname_only.iter().chain(cases_expr.iter()) {
             let res = dbg!(parse_test(parse_fname_or_expression, input));
             assert!(res.res.is_ok(), "Should parse successfully: {}", input);
+        }
+    }
+
+
+    #[test]
+    fn test_parse_macro_call() {
+        let cases = [
+            ("MACRO1", "MACRO1()", 0),
+            ("MACRO2", "MACRO2(void)", 0),
+            ("MACRO3", "MACRO3(42)", 1),
+            ("MACRO4", "MACRO4(arg1, arg2, arg3)", 3),
+            ("MACRO5", "MACRO5([nested, list], {eval} evaluated_arg, raw_arg)", 3),
+            ("SWITCH_VALUES", "SWITCH_VALUES(scroller_configuration_table.current_generating_code_table,scroller_configuration_table.next_generating_code_table)", 2),
+            ("SWITCH_VALUES", "SWITCH_VALUES(\nscroller_configuration_table.current_generating_code_table,\nscroller_configuration_table.next_generating_code_table\n)", 2),
+            ("add_to_a", "add_to_a(10)", 1)
+        ];
+
+        for (name, call, expected_args) in cases {
+            let res = dbg!(parse_test(parse_macro_or_struct_call(false, false), call));
+            assert!(
+                res.res.is_ok(),
+                "Should parse successfully: {} (error: {:?})",
+                call,
+                res.res.err()
+            );
+
+            let token = dbg!(res.res.unwrap().inner.left().unwrap());
+            if let LocatedTokenInner::MacroCall(call_name, args) = token {
+                assert_eq!(call_name.as_bstr(), name.as_bytes(), "Macro name should match");
+                assert_eq!(args.len(), expected_args, "Expected {} arguments, got {}", expected_args, args.len());
+                println!("Parsed macro call: {} with args: {:?}", call_name, args);
+            }
+            else {
+                panic!("Expected a MacroCall token");
+            }
         }
     }
 }

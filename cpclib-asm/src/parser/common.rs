@@ -616,9 +616,14 @@ pub fn parse_line_component_standard(
 
         // otherwise this is a normal stuff
 
-        // we must have an instruction if label is missing; otherwise it is optional
+        // We speculatively parse an instruction first; on failure, restore input so
+        // the macro-call fallback sees the original span (e.g. NAME(args)).
+        let before_instruction = input.checkpoint();
         let instruction =
             opt(alt((parse_z80_directive_with_block, parse_single_token))).parse_next(input)?;
+        if instruction.is_none() {
+            input.reset(&before_instruction);
+        }
 
         if label.is_some() && instruction.is_none() {
             if let Ok(call) = parse_macro_or_struct_call_inner(false, label.take().unwrap()) // label is eaten
