@@ -514,7 +514,7 @@ impl PySongConverterBuilder {
                     "Unknown converter type: {}. Valid types: akg, akm, aky, events, raw, soundeffects, vgm, wav, ym, z80profiler",
                     self.converter_type
                 )));
-            },
+            }
         };
 
         let inner = InnerTask::with_songconverter(converter, std_args);

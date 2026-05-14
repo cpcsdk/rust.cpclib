@@ -29,7 +29,7 @@ impl Corresponds for Os {
             },
             Os::MacOsx => {
                 cfg!(target_os = "macos")
-            },
+            }
         }
     }
 }

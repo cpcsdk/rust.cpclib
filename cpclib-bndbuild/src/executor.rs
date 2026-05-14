@@ -227,10 +227,11 @@ pub fn execute<E: BndBuilderObserver + 'static>(
             let args = task.args();
             let safe_args = if args.trim().is_empty() {
                 "--help"
-            } else {
+            }
+            else {
                 args
             };
-            
+
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),
                 MartineVersion::default().get_command().to_owned()

@@ -315,7 +315,9 @@ impl ExprEvaluationExt for Expr {
             | Expr::String(_)
             | Expr::Rnd => Vec::new(),
 
-            Expr::Label(label) | Expr::PrefixedLabel(_, label) => vec![Cow::Borrowed(label.as_str())],
+            Expr::Label(label) | Expr::PrefixedLabel(_, label) => {
+                vec![Cow::Borrowed(label.as_str())]
+            },
 
             Expr::Paren(a) | Expr::UnaryOperation(_, a) => a.symbols_used(),
 

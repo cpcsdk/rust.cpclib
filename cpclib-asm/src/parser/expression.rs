@@ -21,8 +21,8 @@ use smallvec::{Array, SmallVec};
 
 // Import from parser submodules
 use super::common::{
-    build_span, build_span_covering, my_line_ending, my_space0, my_space0_with_newlines, parse_comma, parse_comma_multiline,
-    parse_token, parse_word
+    build_span, build_span_covering, my_line_ending, my_space0, my_space0_with_newlines,
+    parse_comma, parse_comma_multiline, parse_token, parse_word
 };
 use super::error::Z80ParserError;
 use super::obtained::{LocatedDataAccess, LocatedExpr, LocatedToken, MayHaveSpan, UnescapedString};
@@ -44,12 +44,10 @@ pub fn parse_fname(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Pars
     .parse_next(input)
 }
 
-pub fn parse_fname_or_expression(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80ParserError> {
-    alt((
-        parse_fname,
-        located_expr
-    ))
-    .parse_next(input)
+pub fn parse_fname_or_expression(
+    input: &mut InnerZ80Span
+) -> ModalResult<LocatedExpr, Z80ParserError> {
+    alt((parse_fname, located_expr)).parse_next(input)
 }
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
@@ -245,9 +243,7 @@ pub fn parse_bool_value(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z8
 fn parse_in_parens_with_newlines<O, F>(
     parser: F
 ) -> impl Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>
-where
-    F: Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>
-{
+where F: Parser<InnerZ80Span, O, ErrMode<Z80ParserError>> {
     delimited(
         ('(', my_space0_with_newlines),
         parser,
@@ -964,15 +960,17 @@ pub fn parse_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedDataAccess, Z8
 /// - Bare `_` is NOT a proximity label in expressions - it's only valid as a label definition
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_proximity_label_usage(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+pub fn parse_proximity_label_usage(
+    input: &mut InnerZ80Span
+) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let start_input = *input;
-    
-    // Only accept _+ or _- as proximity label references  
+
+    // Only accept _+ or _- as proximity label references
     // Bare _ is handled as a normal label and transformed by the symbol table
     if let Ok(proximity_label) = alt::<_, _, Z80ParserError, _>((b"_+", b"_-")).parse_next(input) {
         return Ok(start_input.update_slice(proximity_label));
     }
-    
+
     // Not a proximity label reference
     Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
 }
@@ -990,7 +988,7 @@ pub fn parse_label(
         if let Ok(proximity_label) = parse_proximity_label_usage.parse_next(input) {
             return Ok(proximity_label);
         }
-        
+
         // Continue with normal label parsing
         input.reset(&start);
 
@@ -1191,7 +1189,11 @@ pub fn parse_stringlike_without_quote(
         .with_taken()
         .parse_next(input)?;
 
-    not(one_of((b'(', b'.'))).context(StrContext::Label("Unexpected character after unquoted filename")) .parse_next(input)?;
+    not(one_of((b'(', b'.')))
+        .context(StrContext::Label(
+            "Unexpected character after unquoted filename"
+        ))
+        .parse_next(input)?;
 
     let slice = (*input).update_slice(slice);
 
@@ -1391,9 +1393,8 @@ pub fn string_expr(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Pars
 
 #[cfg(test)]
 pub mod test {
-    use crate::parse_expr_bracketed_list;
-    use crate::parse_proximity_label_usage;
     use crate::parser::parser::test::parse_test;
+    use crate::{parse_expr_bracketed_list, parse_proximity_label_usage};
 
     #[test]
     pub fn test_list_parse() {
@@ -1457,7 +1458,10 @@ pub mod test {
         // Bare _ should not be recognized as proximity label in expressions
         // It's only valid as a label definition
         let result = parse_test(parse_proximity_label_usage, "_");
-        assert!(result.is_err(), "Should NOT parse bare _ as proximity label in expressions");
+        assert!(
+            result.is_err(),
+            "Should NOT parse bare _ as proximity label in expressions"
+        );
     }
 
     #[test]

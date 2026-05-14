@@ -417,11 +417,13 @@ impl SymbolsTable {
             // Defining a proximity label - use counter+1 (will be incremented separately)
             let counter = self.proximity_label_counter.load(Ordering::Relaxed) + 1;
             symbol = format!("LPR{}OX", counter);
-        } else if symbol == "_+" {
-            // Forward reference to next proximity label  
+        }
+        else if symbol == "_+" {
+            // Forward reference to next proximity label
             let counter = self.proximity_label_counter.load(Ordering::Relaxed) + 1;
             symbol = format!("LPR{}OX", counter + 1);
-        } else if symbol == "_-" {
+        }
+        else if symbol == "_-" {
             // Backward reference to previous proximity label
             let counter = self.proximity_label_counter.load(Ordering::Relaxed) + 1;
             if counter <= 0 {

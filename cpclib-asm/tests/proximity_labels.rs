@@ -14,14 +14,14 @@ fn test_proximity_label_forward() {
 _       nop
         djnz _-
     "#;
-    
+
     let result = cpclib_asm::assemble(code);
     assert!(result.is_ok(), "Failed to assemble: {:?}", result.err());
-    
+
     let bytes = result.unwrap();
     // nop = 0x00
     // jr _+ = 0x18 0x01 (jump forward 1 byte, skipping one nop)
-    // nop = 0x00  
+    // nop = 0x00
     // nop = 0x00 (this is the _ label)
     // djnz _- = 0x10 0xFD (loop back to _ label, PC+0xFD from after instruction)
     assert_eq!(bytes.len(), 7);
@@ -42,10 +42,10 @@ fn test_proximity_label_backward() {
 _       nop
         djnz _-
     "#;
-    
+
     let result = cpclib_asm::assemble(code);
     assert!(result.is_ok(), "Failed to assemble: {:?}", result.err());
-    
+
     let bytes = result.unwrap();
     // nop = 0x00 (this is the _ label at address 0)
     // djnz _- = 0x10 0xFD (loop back to address 0; PC=3 after instruction, 0-3=-3=0xFD)
@@ -66,10 +66,10 @@ _       nop
 _       push hl
         djnz _-
     "#;
-    
+
     let result = cpclib_asm::assemble(code);
     assert!(result.is_ok(), "Failed to assemble: {:?}", result.err());
-    
+
     let bytes = result.unwrap();
     // First jr _+ should jump to first _ (nop)
     // Second jr _+ should jump to second _ (push hl)
@@ -94,9 +94,13 @@ _           push hl
             defs 256
         rend
     "#;
-    
+
     let result = cpclib_asm::assemble(code);
-    assert!(result.is_ok(), "Proximity labels should work in repeat: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Proximity labels should work in repeat: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -107,14 +111,20 @@ fn test_proximity_label_error_backward_before_any_definition() {
         nop
         jr _-
     "#;
-    
+
     let result = cpclib_asm::assemble(code);
     // This should fail because we're trying to use _- before defining any _ label
-    assert!(result.is_err(), "Should error when using _- before defining _");
-    
+    assert!(
+        result.is_err(),
+        "Should error when using _- before defining _"
+    );
+
     let error_msg = format!("{:?}", result.err().unwrap());
-    assert!(error_msg.contains("_-") || error_msg.contains("proximity"), 
-            "Error should mention proximity label issue: {}", error_msg);
+    assert!(
+        error_msg.contains("_-") || error_msg.contains("proximity"),
+        "Error should mention proximity label issue: {}",
+        error_msg
+    );
 }
 
 #[test]
@@ -125,10 +135,13 @@ fn test_proximity_label_error_forward_no_definition() {
         nop
         jr _+
     "#;
-    
+
     let result = cpclib_asm::assemble(code);
     // This should fail because _+ refers to a label that's never defined
-    assert!(result.is_err(), "Should error when _+ refers to undefined label");
+    assert!(
+        result.is_err(),
+        "Should error when _+ refers to undefined label"
+    );
 }
 
 #[test]
@@ -146,10 +159,14 @@ _       nop           ; first _ label (address 3)
 _       push hl       ; second _ label (address 8)
         djnz _-       ; loop back to second _ (address 8)
     "#;
-    
+
     let result = cpclib_asm::assemble(code);
-    assert!(result.is_ok(), "Complex proximity label sequence should work: {:?}", result.err());
-    
+    assert!(
+        result.is_ok(),
+        "Complex proximity label sequence should work: {:?}",
+        result.err()
+    );
+
     let bytes = result.unwrap();
     // Expected: [00, 18, 01, 76, 00, 10, FD, 18, 01, 76, E5, 10, FD]
     //            nop jr +1  halt nop djnz jr +1  halt push djnz
@@ -177,7 +194,11 @@ _       push hl
         djnz _-
         jr main
     "#;
-    
+
     let result = cpclib_asm::assemble(code);
-    assert!(result.is_ok(), "Proximity labels should coexist with normal labels: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Proximity labels should coexist with normal labels: {:?}",
+        result.err()
+    );
 }

@@ -1,5 +1,5 @@
-use std::process::Command;
 use std::io::Cursor;
+use std::process::Command;
 
 use cpclib_common::camino::Utf8PathBuf;
 
@@ -41,9 +41,7 @@ impl FAPVersion {
 
         #[cfg(target_os = "windows")]
         let (url, folder, exec) = match self {
-            FAPVersion::V1_0_2 => {
-                (DOWNLOAD_URL_V1_0_2, "fap1.0.2", "Build/FapCrunchWin.exe")
-            },
+            FAPVersion::V1_0_2 => (DOWNLOAD_URL_V1_0_2, "fap1.0.2", "Build/FapCrunchWin.exe"),
             FAPVersion::V1_0_0 => (DOWNLOAD_URL_V1_0, "fap1.0.0", "Build/FapCrunchWin.exe")
         };
 
@@ -122,48 +120,49 @@ impl FAPVersion {
                     Ok(())
                 });
 
-            let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-                Box::new(|desc: &DelegateApplicationDescription<E>| {
-                    // Ensure player binaries are available from the official v1.0.2 release archive.
-                    let release_zip = desc
-                        .cache_folder()
-                        .join("fastayplayer-v1.0.2-src")
-                        .join("Release")
-                        .join("Fap-1.0.2.zip");
-                    let release_dir = desc.cache_folder().join("fap-release-assets");
-                    if release_dir.exists() {
-                        fs_err::remove_dir_all(&release_dir).map_err(|e| e.to_string())?;
+            let post_install: Box<
+                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+            > = Box::new(|desc: &DelegateApplicationDescription<E>| {
+                // Ensure player binaries are available from the official v1.0.2 release archive.
+                let release_zip = desc
+                    .cache_folder()
+                    .join("fastayplayer-v1.0.2-src")
+                    .join("Release")
+                    .join("Fap-1.0.2.zip");
+                let release_dir = desc.cache_folder().join("fap-release-assets");
+                if release_dir.exists() {
+                    fs_err::remove_dir_all(&release_dir).map_err(|e| e.to_string())?;
+                }
+                fs_err::create_dir_all(&release_dir).map_err(|e| e.to_string())?;
+
+                let zip_content = fs_err::read(&release_zip).map_err(|e| e.to_string())?;
+                zip_extract::extract(Cursor::new(zip_content), release_dir.as_std_path(), true)
+                    .map_err(|e| e.to_string())?;
+
+                let from_play = {
+                    let in_build = release_dir.join("Build").join("fap-play.bin");
+                    if in_build.exists() {
+                        in_build
                     }
-                    fs_err::create_dir_all(&release_dir).map_err(|e| e.to_string())?;
-
-                    let zip_content = fs_err::read(&release_zip).map_err(|e| e.to_string())?;
-                    zip_extract::extract(Cursor::new(zip_content), release_dir.as_std_path(), true)
-                        .map_err(|e| e.to_string())?;
-
-                    let from_play = {
-                        let in_build = release_dir.join("Build").join("fap-play.bin");
-                        if in_build.exists() {
-                            in_build
-                        }
-                        else {
-                            release_dir.join("fap-play.bin")
-                        }
-                    };
-                    let from_init = {
-                        let in_build = release_dir.join("Build").join("fap-init.bin");
-                        if in_build.exists() {
-                            in_build
-                        }
-                        else {
-                            release_dir.join("fap-init.bin")
-                        }
-                    };
-                    fs_err::copy(from_play, desc.cache_folder().join("fap-play.bin"))
-                        .map_err(|e| e.to_string())?;
-                    fs_err::copy(from_init, desc.cache_folder().join("fap-init.bin"))
-                        .map_err(|e| e.to_string())?;
-                    Ok(())
-                });
+                    else {
+                        release_dir.join("fap-play.bin")
+                    }
+                };
+                let from_init = {
+                    let in_build = release_dir.join("Build").join("fap-init.bin");
+                    if in_build.exists() {
+                        in_build
+                    }
+                    else {
+                        release_dir.join("fap-init.bin")
+                    }
+                };
+                fs_err::copy(from_play, desc.cache_folder().join("fap-play.bin"))
+                    .map_err(|e| e.to_string())?;
+                fs_err::copy(from_init, desc.cache_folder().join("fap-init.bin"))
+                    .map_err(|e| e.to_string())?;
+                Ok(())
+            });
 
             builder.compile(compile).post_install(post_install)
         };

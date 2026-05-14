@@ -35,8 +35,7 @@ use super::context;
 use super::error::Z80ParserErrorKind;
 use super::expression::{
     expr, expr_list, ignore_ascii_case_allowed_label, located_expr, parse_any_function_call,
-    parse_assemble, parse_expr_bracketed_list, parse_flag_value_inner, parse_label,
-    parse_string
+    parse_assemble, parse_expr_bracketed_list, parse_flag_value_inner, parse_label, parse_string
 };
 use super::instructions::{parse_nop, parse_opcode_no_arg};
 use super::obtained::{LocatedToken, LocatedTokenInner};
@@ -111,18 +110,22 @@ where
                 let end_offset = Z80Span::from(*input).offset_from_start();
                 // Add ContextWithEnd to show the full block span
                 // Keep existing error messages but add the visual span context
-                let has_context_with_end = err.0.iter().any(|(_, kind)| {
-                    matches!(kind, Z80ParserErrorKind::ContextWithEnd { .. })
-                });
-                
+                let has_context_with_end = err
+                    .0
+                    .iter()
+                    .any(|(_, kind)| matches!(kind, Z80ParserErrorKind::ContextWithEnd { .. }));
+
                 if !has_context_with_end {
-                    err.0.insert(0, (
-                        block_start_span,
-                        Z80ParserErrorKind::ContextWithEnd {
-                            context: StrContext::Label(error_context),
-                            end_offset
-                        }
-                    ));
+                    err.0.insert(
+                        0,
+                        (
+                            block_start_span,
+                            Z80ParserErrorKind::ContextWithEnd {
+                                context: StrContext::Label(error_context),
+                                end_offset
+                            }
+                        )
+                    );
                 }
                 Err(ErrMode::Cut(err))
             },
@@ -161,7 +164,7 @@ pub fn parse_while(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Par
         ERR_WHILE_ERROR_IN_BLOCK
     )
     .parse_next(input)?;
-    
+
     let _ = parse_block_error(
         cut_err(
             preceded(
@@ -320,17 +323,26 @@ pub fn parse_for(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Parse
         cut_err(parse_label(false).context(StrContext::Label("FOR: error in counter"))),
         for_start_span,
         ERR_FOR_ERROR_IN_BLOCK
-    ).parse_next(input)?;
+    )
+    .parse_next(input)?;
     let start = parse_block_error(
-        cut_err(preceded(parse_comma, located_expr).context(StrContext::Label("FOR: error in start value"))),
+        cut_err(
+            preceded(parse_comma, located_expr)
+                .context(StrContext::Label("FOR: error in start value"))
+        ),
         for_start_span,
         ERR_FOR_ERROR_IN_BLOCK
-    ).parse_next(input)?;
+    )
+    .parse_next(input)?;
     let stop = parse_block_error(
-        cut_err(preceded(parse_comma, located_expr).context(StrContext::Label("FOR: error in stop value"))),
+        cut_err(
+            preceded(parse_comma, located_expr)
+                .context(StrContext::Label("FOR: error in stop value"))
+        ),
         for_start_span,
         ERR_FOR_ERROR_IN_BLOCK
-    ).parse_next(input)?;
+    )
+    .parse_next(input)?;
     let step = opt(preceded(parse_comma, located_expr)).parse_next(input)?;
 
     // Get loop content
@@ -338,7 +350,8 @@ pub fn parse_for(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Parse
         cut_err(inner_code.context(StrContext::Label("FOR: issue in the content"))),
         for_start_span,
         ERR_FOR_ERROR_IN_BLOCK
-    ).parse_next(input)?;
+    )
+    .parse_next(input)?;
 
     // Collect end of loop
     let _ = parse_block_error(
@@ -850,7 +863,7 @@ pub fn parse_module(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
         ERR_MODULE_ERROR_IN_BLOCK
     )
     .parse_next(input)?;
-    
+
     let _ = parse_block_error(
         cut_err(
             preceded(my_space0, parse_directive_word(b"ENDMODULE"))
@@ -2191,7 +2204,7 @@ pub fn parse_function(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80
     .parse_next(input)?;
 
     repeat::<_, _, (), _, _>(0.., my_line_ending).parse_next(input)?;
-    
+
     let _ = parse_block_error(
         cut_err(
             alt((
@@ -2562,10 +2575,15 @@ pub fn parse_conditional(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, 
             ))
             .take(),
             if_start_span,
-            if is_orgams { "IF: not closed (missing END)" } else { ERR_IF_NOT_CLOSED }
+            if is_orgams {
+                "IF: not closed (missing END)"
+            }
+            else {
+                ERR_IF_NOT_CLOSED
+            }
         )
     )
-    .parse_next(input)?;
+        .parse_next(input)?;
 
     let token = LocatedTokenInner::If(conditions, else_clause)
         .into_located_token_between(&if_start, *input);
@@ -3093,12 +3111,8 @@ pub fn parse_rorg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pars
 
     let _ = my_line_ending.parse_next(input)?;
 
-    let inner = parse_block_error(
-        inner_code,
-        rorg_start_span,
-        ERR_RORG_ERROR_IN_BLOCK
-    )
-    .parse_next(input)?;
+    let inner = parse_block_error(inner_code, rorg_start_span, ERR_RORG_ERROR_IN_BLOCK)
+        .parse_next(input)?;
 
     let _ = parse_block_error(
         cut_err(
@@ -3213,24 +3227,16 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_parse_fname_or_exp() {
-        let cases_fname_only = [
-            "a/path/to/a/file.asm",
-            "\"a/path/to/a/file.asm\"",
-        ];
+        let cases_fname_only = ["a/path/to/a/file.asm", "\"a/path/to/a/file.asm\""];
 
-
-        let cases_expr = [
-            "string_concat(vara,varb)"
-        ];
+        let cases_expr = ["string_concat(vara,varb)"];
 
         for input in &cases_fname_only {
             let res = dbg!(parse_test(parse_fname, input));
             assert!(res.res.is_ok(), "Should parse successfully: {}", input);
         }
-
 
         for input in &cases_expr {
             let res = dbg!(parse_test(located_expr, input));
@@ -3239,8 +3245,6 @@ mod tests {
             let res = dbg!(parse_test(parse_fname, input));
             assert!(res.res.is_err(), "Should not parse as filename: {}", input);
         }
-
-
 
         for input in cases_fname_only.iter().chain(cases_expr.iter()) {
             let res = dbg!(parse_test(parse_fname_or_expression, input));

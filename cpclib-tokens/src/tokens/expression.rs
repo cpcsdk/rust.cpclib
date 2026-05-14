@@ -1190,7 +1190,7 @@ impl ExprResult {
                 Err(ExpressionTypeError(format!(
                     "Try to convert {self} as an integer"
                 )))
-            }
+            },
         }
     }
 

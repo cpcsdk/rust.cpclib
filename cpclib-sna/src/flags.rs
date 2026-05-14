@@ -501,9 +501,7 @@ impl fmt::Display for FlagValue {
             FlagValue::Word(val) => write!(f, "0x{val:.4x}"),
             FlagValue::Array(array) => {
                 write!(f, "[")
-                    .and_then(|_x| {
-                        write!(f, "{}", array.iter().map(|b| format!("{b}")).join(", "))
-                    })
+                    .and_then(|_x| write!(f, "{}", array.iter().map(|b| format!("{b}")).join(", ")))
                     .and_then(|_x| write!(f, "]"))
             },
         }

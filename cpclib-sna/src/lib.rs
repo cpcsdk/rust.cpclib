@@ -1137,8 +1137,7 @@ mod tests {
                 sna_version: "2".to_string(),
                 flags: true,
                 #[cfg(feature = "interactive")]
-                cli: false
-                // `cli` field is cfg(feature = "interactive") so we set it false here when present
+                cli: false /* `cli` field is cfg(feature = "interactive") so we set it false here when present */
             };
 
             let argv = cli.build_argv();

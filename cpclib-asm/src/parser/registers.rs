@@ -22,10 +22,10 @@ pub fn parse_register16(
     let code = terminated(take(2usize), not(alpha1)).parse_next(input)?;
 
     let reg = match code {
-        b"AF"|b"af"|b"Af"|b"aF" => Register16::Af,
-        b"BC"|b"bc"|b"Bc"|b"bC" => Register16::Bc,
-        b"DE"|b"de"|b"De"|b"dE" => Register16::De,
-        b"HL"|b"hl"|b"Hl"|b"hL" => Register16::Hl,
+        b"AF" | b"af" | b"Af" | b"aF" => Register16::Af,
+        b"BC" | b"bc" | b"Bc" | b"bC" => Register16::Bc,
+        b"DE" | b"de" | b"De" | b"dE" => Register16::De,
+        b"HL" | b"hl" | b"Hl" | b"hL" => Register16::Hl,
         _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
     };
 
@@ -209,12 +209,13 @@ pub fn parse_indexregister16(
         .take()
         .parse_next(input)?;
 
-
     let reg = match code[0] {
-        b'I'|b'i' => match code[1] {
-            b'X'|b'x' => IndexRegister16::Ix,
-            b'Y'|b'y' => IndexRegister16::Iy,
-            _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+        b'I' | b'i' => {
+            match code[1] {
+                b'X' | b'x' => IndexRegister16::Ix,
+                b'Y' | b'y' => IndexRegister16::Iy,
+                _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+            }
         },
         _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
     };

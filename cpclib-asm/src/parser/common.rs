@@ -981,7 +981,9 @@ pub fn my_space1(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80Parse
 /// Like my_space1 but also accepts plain newlines (for use inside parentheses where newlines should be allowed)
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn my_space1_with_newlines(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+pub fn my_space1_with_newlines(
+    input: &mut InnerZ80Span
+) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
 
     let spaces = alt((
@@ -1018,7 +1020,9 @@ pub fn my_space1_with_newlines(input: &mut InnerZ80Span) -> ModalResult<InnerZ80
 /// Like my_space0 but also accepts plain newlines (for use inside parentheses)
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn my_space0_with_newlines(input: &mut InnerZ80Span) -> ModalResult<InnerZ80Span, Z80ParserError> {
+pub fn my_space0_with_newlines(
+    input: &mut InnerZ80Span
+) -> ModalResult<InnerZ80Span, Z80ParserError> {
     let cloned = *input;
     opt(my_space1_with_newlines)
         .take()

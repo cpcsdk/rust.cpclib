@@ -128,49 +128,55 @@ impl DownloadableInformation for At3Version {
     fn target_os_postinstall<E: cpclib_common::event::EventObserver>(
         &self
     ) -> Option<crate::delegated::PostInstall<E>> {
-        use crate::delegated::DelegateApplicationDescription;
         use std::os::unix::fs::PermissionsExt;
 
-        let post_install: Box<
-            dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
-        > = Box::new(|desc: &DelegateApplicationDescription<E>| {
-            let folder = desc.cache_folder();
+        use crate::delegated::DelegateApplicationDescription;
 
-            // Remove quarantine attributes recursively (no-op if not set, safe to run)
-            let _ = std::process::Command::new("xattr")
-                .args(["-dr", "com.apple.quarantine", folder.as_str()])
-                .output();
+        let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+            Box::new(|desc: &DelegateApplicationDescription<E>| {
+                let folder = desc.cache_folder();
 
-            // Restore execute bit and ad-hoc sign every regular file under the folder.
-            // zip_extract does not always preserve Unix permissions, and on macOS
-            // Gatekeeper sends SIGKILL to unsigned binaries before they can run.
-            fn fix_dir(dir: &cpclib_common::camino::Utf8Path) -> Result<(), String> {
-                for entry in fs_err::read_dir(dir).map_err(|e| e.to_string())? {
-                    let entry = entry.map_err(|e| e.to_string())?;
-                    let path = entry.path();
-                    let meta = entry.metadata().map_err(|e| e.to_string())?;
-                    if meta.is_dir() {
-                        if let Some(p) = cpclib_common::camino::Utf8Path::from_path(&path) {
-                            fix_dir(p)?;
+                // Remove quarantine attributes recursively (no-op if not set, safe to run)
+                let _ = std::process::Command::new("xattr")
+                    .args(["-dr", "com.apple.quarantine", folder.as_str()])
+                    .output();
+
+                // Restore execute bit and ad-hoc sign every regular file under the folder.
+                // zip_extract does not always preserve Unix permissions, and on macOS
+                // Gatekeeper sends SIGKILL to unsigned binaries before they can run.
+                fn fix_dir(dir: &cpclib_common::camino::Utf8Path) -> Result<(), String> {
+                    for entry in fs_err::read_dir(dir).map_err(|e| e.to_string())? {
+                        let entry = entry.map_err(|e| e.to_string())?;
+                        let path = entry.path();
+                        let meta = entry.metadata().map_err(|e| e.to_string())?;
+                        if meta.is_dir() {
+                            if let Some(p) = cpclib_common::camino::Utf8Path::from_path(&path) {
+                                fix_dir(p)?;
+                            }
                         }
-                    } else if meta.is_file() {
-                        // Ensure executable bit
-                        let mut perms = meta.permissions();
-                        perms.set_mode(perms.mode() | 0o111);
-                        fs_err::set_permissions(&path, perms).map_err(|e| e.to_string())?;
+                        else if meta.is_file() {
+                            // Ensure executable bit
+                            let mut perms = meta.permissions();
+                            perms.set_mode(perms.mode() | 0o111);
+                            fs_err::set_permissions(&path, perms).map_err(|e| e.to_string())?;
 
-                        // Ad-hoc sign (suppresses Gatekeeper SIGKILL on unsigned binaries)
-                        let _ = std::process::Command::new("codesign")
-                            .args(["--sign", "-", "--force", "--preserve-metadata=entitlements"])
-                            .arg(&path)
-                            .output();
+                            // Ad-hoc sign (suppresses Gatekeeper SIGKILL on unsigned binaries)
+                            let _ = std::process::Command::new("codesign")
+                                .args([
+                                    "--sign",
+                                    "-",
+                                    "--force",
+                                    "--preserve-metadata=entitlements"
+                                ])
+                                .arg(&path)
+                                .output();
+                        }
                     }
+                    Ok(())
                 }
-                Ok(())
-            }
 
-            fix_dir(&folder)
-        });
+                fix_dir(&folder)
+            });
 
         Some(post_install.into())
     }

@@ -563,7 +563,6 @@ impl BndBuilder {
             if !disabled && !rule.is_phony() {
                 let wrong_files = rule.targets().iter().filter(|t| !t.exists()).join(" ");
                 if !wrong_files.is_empty() {
-                    
                     let msg = format!(
                         "After executing the rule for target {p}, the following expected files have not been generated: {wrong_files}. There is probably an error in your build file (a file typo or lack of phony configuration)."
                     );
@@ -573,16 +572,13 @@ impl BndBuilder {
                     if ALLOW_MISSING_FILES_AFTER_BUILD {
                         let orange = anstyle::Style::new()
                             .fg_color(Some(anstyle::Color::Rgb(RgbColor(255, 165, 0))));
-                        self.emit_stderr(
-
-                                format!(
-                                    "{}{msg}\n{}",  
-                                
-                                orange.render(),
-                                orange.render_reset()
-                                )
-                        );
-                    } else {
+                        self.emit_stderr(format!(
+                            "{}{msg}\n{}",
+                            orange.render(),
+                            orange.render_reset()
+                        ));
+                    }
+                    else {
                         self.failed_rule(p);
                         return Err(BndBuilderError::ExecuteError {
                             fname: p.to_string(),
