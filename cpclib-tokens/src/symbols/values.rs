@@ -94,7 +94,7 @@ pub struct SourceLocation {
 
 impl Display for SourceLocation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}:{}", &self.fname, self.line, self.column)
+        write!(f, "{}:{}:{}", self.fname, self.line, self.column)
     }
 }
 

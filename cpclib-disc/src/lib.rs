@@ -302,9 +302,9 @@ pub fn dsk_manager_handle(
                 .unwrap_or_else(|_| panic!("Unable to add {file}"));
 
             let base_label = Utf8Path::new(file).file_name().unwrap().replace('.', "_");
-            listing.add(builder::equ(format!("{}_head", &base_label), head));
-            listing.add(builder::equ(format!("{}_track", &base_label), track));
-            listing.add(builder::equ(format!("{}_sector", &base_label), sector));
+            listing.add(builder::equ(format!("{}_head", base_label), head));
+            listing.add(builder::equ(format!("{}_track", base_label), track));
+            listing.add(builder::equ(format!("{}_sector", base_label), sector));
 
             head = next_position.0;
             track = next_position.1;

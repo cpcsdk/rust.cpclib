@@ -215,7 +215,7 @@ impl FileAndSupport {
         match &self.support {
             StorageSupport::Disc(p) => Utf8PathBuf::from(format!("{}#{}", p, self.file.1)),
             StorageSupport::Tape(_utf8_path_buf) => todo!(),
-            StorageSupport::Host => Utf8PathBuf::from(format!("{}", &self.file.1))
+            StorageSupport::Host => Utf8PathBuf::from(format!("{}", self.file.1))
         }
     }
 

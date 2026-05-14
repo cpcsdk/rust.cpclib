@@ -22,28 +22,13 @@ impl Corresponds for Os {
     fn corresponds(&self) -> bool {
         match self {
             Os::Windows => {
-                if cfg!(target_os = "windows") {
-                    true
-                }
-                else {
-                    false
-                }
+                cfg!(target_os = "windows")
             },
             Os::Linux => {
-                if cfg!(target_os = "linux") {
-                    true
-                }
-                else {
-                    false
-                }
+                cfg!(target_os = "linux")
             },
             Os::MacOsx => {
-                if cfg!(target_os = "macos") {
-                    true
-                }
-                else {
-                    false
-                }
+                cfg!(target_os = "macos")
             },
         }
     }

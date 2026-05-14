@@ -335,7 +335,7 @@ pub struct WabpChunk {
 
 #[allow(dead_code)]
 impl WabpChunk {
-    const CODE: RiffCode = RiffCode::new([b'W', b'A', b'B', b'P']);
+    const CODE: RiffCode = RiffCode::new(*b"WABP");
 
     delegate! {
         to self.riff {

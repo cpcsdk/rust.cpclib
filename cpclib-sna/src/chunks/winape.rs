@@ -37,7 +37,7 @@ impl Deref for WinapeBreakPointChunk {
 }
 
 impl WinapeBreakPointChunk {
-    const CODE: RiffCode = RiffCode::new([b'B', b'R', b'K', b'S']);
+    const CODE: RiffCode = RiffCode::new(*b"BRKS");
 
     delegate! {
         to self.riff {

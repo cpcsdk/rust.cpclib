@@ -426,7 +426,7 @@ fn load_input_bytes<O: EventObserver>(
 
     if is_sna {
         // Load SNA snapshot
-        let snapshot = Snapshot::load(filename).map_err(|e| std::io::Error::other(e))?;
+        let snapshot = Snapshot::load(filename).map_err(std::io::Error::other)?;
 
         // Get the full memory from snapshot (includes both hardcoded memory and chunks)
         // Truncate to Z80 address space (64KB = 0x10000 bytes)

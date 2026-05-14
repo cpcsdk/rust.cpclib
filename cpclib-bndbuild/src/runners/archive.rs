@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
-use cpclib_common::clap::{self, Arg, ArgAction, Command, CommandFactory, FromArgMatches, Parser, Subcommand};
+use cpclib_common::clap::{self, Command, CommandFactory, FromArgMatches, Parser, Subcommand};
 use cpclib_runner::event::EventObserver;
 #[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};

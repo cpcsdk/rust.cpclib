@@ -2198,11 +2198,10 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         let emu_result = handle
             .join()
             .unwrap_or_else(|_| Err("emulator thread panicked".to_string()));
-        if let Err(e) = emu_result {
-            if res.is_ok() {
+        if let Err(e) = emu_result
+            && res.is_ok() {
                 return Err(e);
             }
-        }
     }
 
     res

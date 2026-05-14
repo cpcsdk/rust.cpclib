@@ -66,13 +66,13 @@ impl BndBuilderObserver for PyConsoleObserver {
                 eprintln!("{}", s);
             },
             StartRuleAlias {
-                alias,
-                representative,
-                nb,
-                out_of
+                alias: _,
+                representative: _,
+                nb: _,
+                out_of: _
             } => todo!(),
-            SkippedRule(utf8_path) => todo!(),
-            BuildFileContext(utf8_path) => todo!()
+            SkippedRule(_utf8_path) => todo!(),
+            BuildFileContext(_utf8_path) => todo!()
         }
     }
 }

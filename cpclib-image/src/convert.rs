@@ -1141,7 +1141,7 @@ impl Debug for Output {
             Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
             Output::CPCMemoryStandard(..) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
             Output::CPCMemoryOverscan(..) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
-            Output::CPCSplittingMemory(vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", &vec),
+            Output::CPCSplittingMemory(vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", vec),
             Output::TilesList {
                 tile_height,
                 tile_width,

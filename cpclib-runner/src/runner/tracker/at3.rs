@@ -145,7 +145,7 @@ impl DownloadableInformation for At3Version {
             // zip_extract does not always preserve Unix permissions, and on macOS
             // Gatekeeper sends SIGKILL to unsigned binaries before they can run.
             fn fix_dir(dir: &cpclib_common::camino::Utf8Path) -> Result<(), String> {
-                for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+                for entry in fs_err::read_dir(dir).map_err(|e| e.to_string())? {
                     let entry = entry.map_err(|e| e.to_string())?;
                     let path = entry.path();
                     let meta = entry.metadata().map_err(|e| e.to_string())?;
@@ -157,7 +157,7 @@ impl DownloadableInformation for At3Version {
                         // Ensure executable bit
                         let mut perms = meta.permissions();
                         perms.set_mode(perms.mode() | 0o111);
-                        std::fs::set_permissions(&path, perms).map_err(|e| e.to_string())?;
+                        fs_err::set_permissions(&path, perms).map_err(|e| e.to_string())?;
 
                         // Ad-hoc sign (suppresses Gatekeeper SIGKILL on unsigned binaries)
                         let _ = std::process::Command::new("codesign")

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
-use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::camino::Utf8Path;
 use cpclib_common::itertools::Itertools;
 use serde::{self, Deserialize};
 use topologic::AcyclicDependencyGraph;

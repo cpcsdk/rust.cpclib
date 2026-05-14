@@ -21,7 +21,7 @@ use smallvec::{Array, SmallVec};
 
 // Import from parser submodules
 use super::common::{
-    build_span, build_span_covering, my_line_ending, my_space0, my_space0_with_newlines, my_space1, parse_comma, parse_comma_multiline,
+    build_span, build_span_covering, my_line_ending, my_space0, my_space0_with_newlines, parse_comma, parse_comma_multiline,
     parse_token, parse_word
 };
 use super::error::Z80ParserError;
@@ -243,7 +243,7 @@ pub fn parse_bool_value(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z8
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 fn parse_in_parens_with_newlines<O, F>(
-    mut parser: F
+    parser: F
 ) -> impl Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>
 where
     F: Parser<InnerZ80Span, O, ErrMode<Z80ParserError>>
@@ -1191,7 +1191,7 @@ pub fn parse_stringlike_without_quote(
         .with_taken()
         .parse_next(input)?;
 
-    let _ = not(one_of((b'(', b'.'))).context(StrContext::Label("Unexpected character after unquoted filename")) .parse_next(input)?;
+    not(one_of((b'(', b'.'))).context(StrContext::Label("Unexpected character after unquoted filename")) .parse_next(input)?;
 
     let slice = (*input).update_slice(slice);
 

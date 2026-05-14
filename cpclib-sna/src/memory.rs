@@ -184,7 +184,7 @@ impl SnapshotMemory {
     pub fn to_chunks(&self) -> Vec<SnapshotChunk> {
         let memory = self.memory();
         let mut chunks = Vec::new();
-        let mut current_idx = [b'M', b'E', b'M', b'0'];
+        let mut current_idx = *b"MEM0";
         let mut cursor = 0;
 
         while cursor < memory.len() {

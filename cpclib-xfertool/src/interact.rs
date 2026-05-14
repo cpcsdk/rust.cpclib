@@ -369,7 +369,7 @@ ls                  List the files in the current M4 directory.
 
         while !self.exit {
             // Build the prompt value
-            let prompt = format!("arnold@{}:{} $ ", self.xfer.hostname(), &self.cwd);
+            let prompt = format!("arnold@{}:{} $ ", self.xfer.hostname(), self.cwd);
 
             // Treat the line
             let readline = rl.readline(&prompt);

@@ -4412,7 +4412,7 @@ impl Env {
             return Err(Box::new(AssemblerError::ForIssue {
                 error: AssemblerError::ExpressionError(ExpressionError::OwnError(Box::new(
                     AssemblerError::AssemblingError {
-                        msg: format!("Counter {} already exists", &counter_name)
+                        msg: format!("Counter {} already exists", counter_name)
                     }
                 )))
                 .into(),
@@ -4911,7 +4911,7 @@ impl Env {
                 let warning = AssemblerError::AssemblingError {
                     msg: format!(
                         "{} is not a local label. A better name without the dot would be better",
-                        &label
+                        label
                     )
                 };
                 let warning = AssemblerWarning::AssemblingError {

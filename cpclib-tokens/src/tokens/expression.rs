@@ -1027,7 +1027,7 @@ pub struct ExpressionTypeError(String);
 
 impl Display for ExpressionTypeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.0)
+        write!(f, "{}", self.0)
     }
 }
 

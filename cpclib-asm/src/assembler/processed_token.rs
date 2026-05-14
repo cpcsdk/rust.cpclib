@@ -1161,7 +1161,7 @@ where
                                 "ASM" | "Z80" => {
                                     let warning = format!(
                                         "{} seems to be a source code and not a binary file.",
-                                        &fname
+                                        fname
                                     );
                                     env.add_warning(Box::new(dbg!(
                                         AssemblerWarning::AssemblingError { msg: warning }

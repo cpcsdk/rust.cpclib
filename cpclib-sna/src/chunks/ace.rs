@@ -179,7 +179,7 @@ impl Deref for AceSymbolChunk {
 }
 
 impl AceSymbolChunk {
-    const CODE: RiffCode = RiffCode::new([b'S', b'Y', b'M', b'B']);
+    const CODE: RiffCode = RiffCode::new(*b"SYMB");
 
     delegate! {
         to self.riff {
@@ -336,7 +336,7 @@ impl Deref for AceBreakPointChunk {
 }
 
 impl AceBreakPointChunk {
-    const CODE: RiffCode = RiffCode::new([b'B', b'R', b'K', b'C']);
+    const CODE: RiffCode = RiffCode::new(*b"BRKC");
 
     delegate! {
         to self.riff {

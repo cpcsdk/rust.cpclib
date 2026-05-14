@@ -123,8 +123,8 @@ impl std::fmt::Debug for Snapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Snapshot ({{")?;
         write!(f, "\theader: TODO")?;
-        write!(f, "memory: {:?}", &self.memory)?;
-        write!(f, "chunks: {:?}", &self.chunks)?;
+        write!(f, "memory: {:?}", self.memory)?;
+        write!(f, "chunks: {:?}", self.chunks)?;
         write!(f, "}})")
     }
 }
@@ -979,7 +979,7 @@ pub fn process<E: EventObserver>(matches: &ArgMatches, o: &E) -> Result<(), Snap
     if matches.contains_id("getToken") {
         for token in matches.get_many::<String>("getToken").unwrap() {
             let token = SnapshotFlag::from_str(token).unwrap();
-            println!("{:?} => {}", &token, sna.get_value(&token));
+            println!("{:?} => {}", token, sna.get_value(&token));
         }
         return Ok(());
     }

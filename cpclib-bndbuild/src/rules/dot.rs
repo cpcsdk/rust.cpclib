@@ -313,7 +313,7 @@ impl Rules {
             else {
                 p
             };
-            std::fs::canonicalize(&resolved)
+            fs_err::canonicalize(&resolved)
                 .ok()
                 .and_then(|c| Utf8PathBuf::from_path_buf(c).ok())
                 .map(|c| c.into_string())
@@ -387,7 +387,7 @@ impl Rules {
                     let path = Utf8PathBuf::from(&abs_path);
                     let parent = path.parent()?;
                     std::env::set_current_dir(parent).ok()?;
-                    let content = std::fs::read_to_string(&path).ok()?;
+                    let content = fs_err::read_to_string(&path).ok()?;
                     let env = create_template_env(Some(parent), &[] as &[(&str, &str)]);
                     env.render_str(&content, minijinja::context!()).ok()
                 })();

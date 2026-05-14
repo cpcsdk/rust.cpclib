@@ -3,7 +3,7 @@ use std::fmt::Display;
 #[cfg(target_os = "linux")]
 use cpclib_common::camino::Utf8Path;
 
-use crate::delegated::{ArchiveFormat, Compiler, DelegateApplicationDescription};
+use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
 #[cfg(target_os = "linux")]
 use crate::runner::ExternRunner;

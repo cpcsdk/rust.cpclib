@@ -502,7 +502,7 @@ impl fmt::Display for FlagValue {
             FlagValue::Array(array) => {
                 write!(f, "[")
                     .and_then(|_x| {
-                        write!(f, "{}", &array.iter().map(|b| format!("{b}")).join(", "))
+                        write!(f, "{}", array.iter().map(|b| format!("{b}")).join(", "))
                     })
                     .and_then(|_x| write!(f, "]"))
             },

@@ -98,7 +98,7 @@ impl Display for Rule {
         }
 
         if self.commands.len() == 1 {
-            writeln!(f, "  cmd: {}", &self.commands[0])?;
+            writeln!(f, "  cmd: {}", self.commands[0])?;
         }
         else if !self.commands.is_empty() {
             writeln!(f, "  cmd:")?;

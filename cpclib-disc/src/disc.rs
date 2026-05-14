@@ -155,9 +155,9 @@ pub trait Disc {
         let mut res = Vec::new();
 
         for count in 0..nb_sectors {
-            match self.sector_read_bytes(head.clone(), track, sector_id + count) {
-                None => return None,
-                Some(s) => res.extend(s)
+            {
+                let s = self.sector_read_bytes(head.clone(), track, sector_id + count)?;
+                res.extend(s)
             }
         }
 

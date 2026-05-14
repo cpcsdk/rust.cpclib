@@ -1042,7 +1042,7 @@ fn build_catart_from_basic(
             &reconstructed_screen,
             &reconstructed_palette
         );
-        o.emit_stdout(&format!("{}", diff_display));
+        o.emit_stdout(&diff_display.to_string());
     }
 
     // Step 8: Display the generated BASIC program and compare its bytes

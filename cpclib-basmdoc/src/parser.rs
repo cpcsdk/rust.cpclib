@@ -106,12 +106,9 @@ fn documentation_type<T: ListingElement + ToString>(
 
         // Handle local labels (starting with .)
         if label.starts_with('.') {
-            if let Some(parent) = last_global_label {
+            {
+                let parent = last_global_label?;
                 label = format!("{}{}", parent, label);
-            }
-            else {
-                // Local label without a parent is invalid
-                return None;
             }
         }
 

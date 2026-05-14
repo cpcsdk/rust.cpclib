@@ -202,7 +202,7 @@ impl Deref for RemuChunk {
 }
 
 impl RemuChunk {
-    const CODE: RiffCode = RiffCode::new([b'R', b'E', b'M', b'U']);
+    const CODE: RiffCode = RiffCode::new(*b"REMU");
 
     delegate! {
         to self.riff {
