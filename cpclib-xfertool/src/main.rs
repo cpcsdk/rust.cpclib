@@ -24,8 +24,6 @@ use cpclib_xfertool::{build_args_parser, built_info, process};
 #[cfg(feature = "watch")]
 use crossbeam_channel::unbounded;
 #[cfg(feature = "watch")]
-use hotwatch::{Event, Hotwatch};
-#[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 fn main() -> anyhow::Result<()> {
