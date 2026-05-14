@@ -1,5 +1,3 @@
-#![feature(box_patterns)]
-
 use std::fmt::Display;
 use std::io;
 use std::io::Write;

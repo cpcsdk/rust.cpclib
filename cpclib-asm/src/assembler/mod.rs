@@ -735,15 +735,26 @@ impl Env {
             Err(e) => {
                 match &*e {
                     // the parser consider file.ext to be a label ... because it could ! So if it is not the case we need to fallback
-                    AssemblerError::UnknownSymbol { symbol, .. }
-                    | AssemblerError::RelocatedError {
-                        error: box AssemblerError::UnknownSymbol { symbol, .. },
-                        ..
-                    } => {
+                    AssemblerError::UnknownSymbol { symbol, .. } => {
                         let exp_str = exp.to_string();
                         // Case-insensitive comparison since symbol names may be normalized (uppercased)
                         if exp_str.eq_ignore_ascii_case(symbol.as_str()) {
                             Ok(exp_str.into())
+                        }
+                        else {
+                            Err(e)
+                        }
+                    },
+                    AssemblerError::RelocatedError { error, .. } => {
+                        if let AssemblerError::UnknownSymbol { symbol, .. } = error.as_ref() {
+                            let exp_str = exp.to_string();
+                            // Case-insensitive comparison since symbol names may be normalized (uppercased)
+                            if exp_str.eq_ignore_ascii_case(symbol.as_str()) {
+                                Ok(exp_str.into())
+                            }
+                            else {
+                                Err(e)
+                            }
                         }
                         else {
                             Err(e)
@@ -1399,11 +1410,14 @@ impl Env {
                 (_, Ok(_)) => {
                     // nothing to do
                 },
-                (
-                    Some(box AssemblerError::MultipleErrors { errors: e1 }),
-                    Err(box AssemblerError::MultipleErrors { errors: mut e2 })
-                ) => {
-                    e1.append(&mut e2);
+                (Some(existing), Err(new_err)) => match (existing.as_mut(), *new_err) {
+                    (
+                        AssemblerError::MultipleErrors { errors: e1 },
+                        AssemblerError::MultipleErrors { errors: mut e2 }
+                    ) => {
+                        e1.append(&mut e2);
+                    },
+                    _ => unimplemented!()
                 },
                 (None, Err(l_errors)) => {
                     assert_failures = Some(l_errors);
@@ -1460,11 +1474,14 @@ impl Env {
                 (_, Ok(_)) => {
                     // nothing to do
                 },
-                (
-                    Some(box AssemblerError::MultipleErrors { errors: e1 }),
-                    Err(box AssemblerError::MultipleErrors { errors: mut e2 })
-                ) => {
-                    e1.append(&mut e2);
+                (Some(existing), Err(new_err)) => match (existing.as_mut(), *new_err) {
+                    (
+                        AssemblerError::MultipleErrors { errors: e1 },
+                        AssemblerError::MultipleErrors { errors: mut e2 }
+                    ) => {
+                        e1.append(&mut e2);
+                    },
+                    _ => unreachable!()
                 },
                 (None, Err(l_errors)) => {
                     print_errors = Some(l_errors);
@@ -2523,13 +2540,10 @@ impl Env {
         };
 
         // Try to fallback on a macro call - parser is not that much great
-        if let Err(box AssemblerError::AlreadyDefinedSymbol {
-            symbol: _,
-            kind,
-            here: _
-        }) = &res
-        {
-            if kind == "macro" || kind == "struct" {
+        if let Err(err) = &res {
+            if let AssemblerError::AlreadyDefinedSymbol { kind, .. } = err.as_ref()
+                && (kind == "macro" || kind == "struct")
+            {
                 let message = AssemblerError::AssemblingError {
                     msg:
                         "Use (void) for macros or structs with no parameters to disambiguate them with labels"
@@ -2548,15 +2562,11 @@ impl Env {
                     &macro_token,
                     std::sync::Arc::new(std::sync::RwLock::new(self))
                 )?;
-                processed_token.visited(self)
-            }
-            else {
-                res
+                return processed_token.visited(self);
             }
         }
-        else {
-            res
-        }
+
+        res
     }
 
     fn visit_noexport<S: AsRef<str> + Display>(
@@ -3508,11 +3518,13 @@ impl Env {
         // Handle errors: some errors (like unknown symbols) can be deferred to next pass
         if let Err(e) = assembly_result {
             // Check if this is a recoverable error that might be resolved in a later pass
-            let is_recoverable = matches!(
-                &*e,
-                AssemblerError::UnknownSymbol { .. }
-                | AssemblerError::RelocatedError { error: box AssemblerError::UnknownSymbol { .. }, .. }
-            );
+            let is_recoverable = match e.as_ref() {
+                AssemblerError::UnknownSymbol { .. } => true,
+                AssemblerError::RelocatedError { error, .. } => {
+                    matches!(error.as_ref(), AssemblerError::UnknownSymbol { .. })
+                },
+                _ => false
+            };
 
             // In first pass or if error is recoverable, defer it and request additional pass
             if crunched_env.pass.is_first_pass() || is_recoverable {
@@ -4788,15 +4800,20 @@ impl Env {
 
                 (
                     AssemblerError::RelocatedWarning {
-                        warning: box AssemblerWarning::OverrideMemory(prev_addr, prev_size),
+                        warning: prev_warning,
                         span: prev_span
                     },
                     AssemblerError::RelocatedWarning {
-                        warning: box AssemblerWarning::OverrideMemory(curr_addr, curr_size),
+                        warning: curr_warning,
                         span: curr_span
                     }
                 ) => {
-                    if (prev_addr.offset_in_cpc() + *prev_size as u32 == curr_addr.offset_in_cpc())
+                    if let (
+                        AssemblerWarning::OverrideMemory(prev_addr, prev_size),
+                        AssemblerWarning::OverrideMemory(curr_addr, curr_size)
+                    ) = (prev_warning.as_ref(), curr_warning.as_ref())
+                        && (prev_addr.offset_in_cpc() + *prev_size as u32
+                            == curr_addr.offset_in_cpc())
                         && std::ptr::eq(
                             prev_span.complete_source().as_ptr(),
                             curr_span.complete_source().as_ptr()
@@ -4837,13 +4854,15 @@ impl Env {
 
             if let Some(new_size) = new_size {
                 if let Some(new_span) = new_span {
-                    if let AssemblerError::RelocatedWarning {
-                        warning: box AssemblerWarning::OverrideMemory(_prev_addr, prev_size),
-                        span
-                    } = &mut *self.warnings[previous_warning_idx]
+                    if let AssemblerError::RelocatedWarning { warning, span } =
+                        &mut *self.warnings[previous_warning_idx]
                     {
-                        *prev_size = new_size;
-                        *span = new_span;
+                        if let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
+                            warning.as_mut()
+                        {
+                            *prev_size = new_size;
+                            *span = new_span;
+                        }
                     }
                 }
                 else if let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =

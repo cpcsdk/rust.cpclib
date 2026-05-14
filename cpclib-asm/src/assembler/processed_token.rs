@@ -1,5 +1,6 @@
 use std::borrow::{Borrow, Cow};
 use std::cell::OnceCell;
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
@@ -154,42 +155,38 @@ impl IncludeState {
             let env_guard = env.read().unwrap();
             env_guard.options().clone()
         };
-        let state: &mut IncludeStateInner = if !self.0.contains_key(fname) {
-            let content = read_source(fname.clone(), options.parse_options())?;
+        let state: &mut IncludeStateInner = match self.0.entry(fname.clone()) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                let content = read_source(fname.clone(), options.parse_options())?;
 
-            if options.show_progress() {
-                Progress::progress().add_parse(progress::normalize(fname));
-            }
-
-            let builder = options
-                .clone()
-                .context_builder()
-                .set_current_filename(fname.clone());
-
-            let listing = parse_z80_with_context_builder(content, builder)?;
-
-            // Remove the progression
-            if options.show_progress() {
-                Progress::progress().remove_parse(progress::normalize(fname));
-            }
-
-            let include_state = IncludeStateInnerTryBuilder {
-                listing,
-                processed_tokens_builder: |listing: &LocatedListing| {
-                    // Minimize lock scope: clone Arc, do not hold lock across call
-                    build_processed_tokens_list(listing.as_slice(), env.clone())
+                if options.show_progress() {
+                    Progress::progress().add_parse(progress::normalize(fname));
                 }
-            }
-            .try_build()?;
 
-            self.0
-                .try_insert(fname.clone(), include_state)
-                .expect("BUG: fname should not already be in include map")
-        }
-        else {
-            self.0
-                .get_mut(fname)
-                .expect("BUG: fname should exist in include map")
+                let builder = options
+                    .clone()
+                    .context_builder()
+                    .set_current_filename(fname.clone());
+
+                let listing = parse_z80_with_context_builder(content, builder)?;
+
+                // Remove the progression
+                if options.show_progress() {
+                    Progress::progress().remove_parse(progress::normalize(fname));
+                }
+
+                let include_state = IncludeStateInnerTryBuilder {
+                    listing,
+                    processed_tokens_builder: |listing: &LocatedListing| {
+                        // Minimize lock scope: clone Arc, do not hold lock across call
+                        build_processed_tokens_list(listing.as_slice(), env.clone())
+                    }
+                }
+                .try_build()?;
+
+                entry.insert(include_state)
+            }
         };
 
         // handle the listing
@@ -1172,49 +1169,46 @@ where
                         }
 
                         // get the data for the given file
-                        let data = if !contents.contains_key(&fname) {
-                            // need to load the file
+                        let data = match contents.entry(fname.clone()) {
+                            Entry::Occupied(entry) => entry.into_mut(),
+                            Entry::Vacant(entry) => {
+                                // need to load the file
+                                let (data, header) =
+                                    load_file(fname.as_path(), env.options().parse_options())?;
 
-                            let (data, header) =
-                                load_file(fname.as_path(), env.options().parse_options())?;
+                                if let Some(header) = header {
+                                    let ams_fname = header
+                                        .amsdos_filename()
+                                        .map(|ams_fname| ams_fname.filename_with_user())
+                                        .unwrap_or_else(|_| "<WRONG FILENAME>".to_owned());
+                                    let txt = match header.file_type() {
+                                        Ok(AmsdosFileType::Binary) => {
+                                            format! {"{to_print_fname}|{ams_fname} BINARY  L:0x{:x} X:0x{:x}", header.loading_address(), header.execution_address()}
+                                        },
+                                        Ok(AmsdosFileType::Protected) => {
+                                            format! {"{to_print_fname}|{ams_fname} PROTECTED L:0x{:x} X:0x{:x}", header.loading_address(), header.execution_address()}
+                                        },
+                                        Ok(AmsdosFileType::Basic) => {
+                                            format!("{ams_fname} BASIC")
+                                        },
+                                        Err(_) => format!("{ams_fname} <WRONG FILETYPE>")
+                                    };
 
-                            if let Some(header) = header {
-                                let ams_fname = header
-                                    .amsdos_filename()
-                                    .map(|ams_fname| ams_fname.filename_with_user())
-                                    .unwrap_or_else(|_| "<WRONG FILENAME>".to_owned());
-                                let txt = match header.file_type() {
-                                    Ok(AmsdosFileType::Binary) => {
-                                        format! {"{to_print_fname}|{ams_fname} BINARY  L:0x{:x} X:0x{:x}", header.loading_address(), header.execution_address()}
-                                    },
-                                    Ok(AmsdosFileType::Protected) => {
-                                        format! {"{to_print_fname}|{ams_fname} PROTECTED L:0x{:x} X:0x{:x}", header.loading_address(), header.execution_address()}
-                                    },
-                                    Ok(AmsdosFileType::Basic) => format!("{ams_fname} BASIC"),
-                                    Err(_) => format!("{ams_fname} <WRONG FILETYPE>")
-                                };
+                                    let warning = AssemblerWarning::AssemblingError {
+                                        msg: format!("Header has been removed for {txt}")
+                                    };
+                                    let warning = if let Some(span) = possible_span {
+                                        warning.locate_warning(span.clone())
+                                    }
+                                    else {
+                                        warning
+                                    };
 
-                                let warning = AssemblerWarning::AssemblingError {
-                                    msg: format!("Header has been removed for {txt}")
-                                };
-                                let warning = if let Some(span) = possible_span {
-                                    warning.locate_warning(span.clone())
+                                    env.add_warning(Box::new(warning))
                                 }
-                                else {
-                                    warning
-                                };
 
-                                env.add_warning(Box::new(warning))
+                                entry.insert(data.into())
                             }
-
-                            contents
-                                .try_insert(fname.clone(), data.into())
-                                .expect("BUG: fname should not already be in incbin contents")
-                        }
-                        else {
-                            contents
-                                .get(&fname)
-                                .expect("BUG: fname should exist in incbin contents")
                         };
 
                         let mut data = data.as_slice();
@@ -1450,7 +1444,7 @@ where
                         Ok(())
                     },
 
-                    Some(ProcessedTokenState::Warning(box token)) => {
+                    Some(ProcessedTokenState::Warning(token)) => {
                         let warning = AssemblerError::RelocatedWarning {
                             warning: Box::new(AssemblerError::AssemblingError {
                                 msg: self.token.warning_message().to_owned()

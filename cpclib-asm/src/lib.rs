@@ -1,15 +1,5 @@
 #![deny(deprecated)]
-#![feature(specialization)]
-#![feature(exact_size_is_empty)]
-#![feature(box_patterns)]
-#![feature(box_into_inner)]
 #![recursion_limit = "256"]
-#![feature(map_try_insert)]
-#![feature(get_mut_unchecked)]
-#![feature(stmt_expr_attributes)]
-#![feature(write_all_vectored)]
-#![feature(string_from_utf8_lossy_owned)]
-#![feature(guard_patterns)]
 
 /// Implementation of various behavior for the tokens of cpclib_tokens
 pub mod implementation;

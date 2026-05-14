@@ -484,7 +484,7 @@ where
     <R as IntoIterator>::IntoIter: ExactSizeIterator
 {
     let remainder = remainder.into_iter();
-    if remainder.is_empty() {
+    if remainder.len() == 0 {
         initial
     }
     else {

@@ -134,22 +134,22 @@ impl ExprElement for LocatedExpr {
                 Expr::List(l.iter().map(|e| e.to_expr().into_owned()).collect_vec())
             },
             LocatedExpr::PrefixedLabel(p, l, _) => Expr::PrefixedLabel(*p, l.into()),
-            LocatedExpr::Paren(box p, _) => Expr::Paren(Box::new(p.to_expr().into_owned())),
-            LocatedExpr::UnaryOperation(o, box e, _) => {
+            LocatedExpr::Paren(p, _) => Expr::Paren(Box::new(p.to_expr().into_owned())),
+            LocatedExpr::UnaryOperation(o, e, _) => {
                 Expr::UnaryOperation(*o, Box::new(e.to_expr().into_owned()))
             },
-            LocatedExpr::UnaryTokenOperation(o, box t, _) => {
+            LocatedExpr::UnaryTokenOperation(o, t, _) => {
                 Expr::UnaryTokenOperation(*o, Box::new(t.to_token().into_owned()))
             },
 
-            LocatedExpr::BinaryOperation(o, box e1, box e2, _) => {
+            LocatedExpr::BinaryOperation(o, e1, e2, _) => {
                 Expr::BinaryOperation(
                     *o,
                     Box::new(e1.to_expr().into_owned()),
                     Box::new(e2.to_expr().into_owned())
                 )
             },
-            LocatedExpr::Ternary(box cond, box true_expr, box false_expr, _) => {
+            LocatedExpr::Ternary(cond, true_expr, false_expr, _) => {
                 Expr::Ternary(
                     Box::new(cond.to_expr().into_owned()),
                     Box::new(true_expr.to_expr().into_owned()),
@@ -336,7 +336,7 @@ impl ExprElement for LocatedExpr {
 
     fn token(&self) -> &Self::Token {
         match self {
-            Self::UnaryTokenOperation(_, box token, _) => token,
+            Self::UnaryTokenOperation(_, token, _) => token.as_ref(),
             _ => unreachable!()
         }
     }
@@ -445,9 +445,9 @@ impl ExprElement for LocatedExpr {
 
     fn arg1(&self) -> &Self {
         match self {
-            Self::BinaryOperation(_, box arg1, ..) => arg1,
-            Self::UnaryOperation(_, box arg, _) => arg,
-            Self::Paren(box p, _) => p,
+            Self::BinaryOperation(_, arg1, ..) => arg1.as_ref(),
+            Self::UnaryOperation(_, arg, _) => arg.as_ref(),
+            Self::Paren(p, _) => p.as_ref(),
 
             _ => unreachable!()
         }
@@ -455,7 +455,7 @@ impl ExprElement for LocatedExpr {
 
     fn arg2(&self) -> &Self {
         match self {
-            Self::BinaryOperation(_, _, box arg2, _) => arg2,
+            Self::BinaryOperation(_, _, arg2, _) => arg2.as_ref(),
             _ => unreachable!()
         }
     }
@@ -488,7 +488,7 @@ impl ExprEvaluationExt for LocatedExpr {
                 vec![Cow::Borrowed(label.as_str())]
             },
 
-            LocatedExpr::BinaryOperation(_, box a, box b, _) => {
+            LocatedExpr::BinaryOperation(_, a, b, _) => {
                 a.symbols_used()
                     .into_iter()
                     .chain(b.symbols_used())
@@ -501,14 +501,14 @@ impl ExprEvaluationExt for LocatedExpr {
                 l.iter().flat_map(|e| e.symbols_used()).collect_vec()
             },
 
-            LocatedExpr::UnaryTokenOperation(_, box t, _) => {
+            LocatedExpr::UnaryTokenOperation(_, t, _) => {
                 // Extract symbols from the token's expressions (e.g., duration(ld a, (label)))
                 // Token.symbols() returns HashSet<String>, so we need Cow::Owned here
                 use cpclib_tokens::ListingElement;
                 t.symbols().into_iter().map(Cow::Owned).collect()
             },
 
-            LocatedExpr::Ternary(box cond, box true_expr, box false_expr, _) => {
+            LocatedExpr::Ternary(cond, true_expr, false_expr, _) => {
                 cond.symbols_used()
                     .into_iter()
                     .chain(true_expr.symbols_used())

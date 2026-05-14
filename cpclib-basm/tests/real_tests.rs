@@ -187,7 +187,7 @@ fn expect_one_line_success(real_fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let content = fs_err::read_to_string(dbg!(&real_fname["cpclib-basm/".len()..]))
+    let content = fs_err::read_to_string(&real_fname["cpclib-basm/".len()..])
         .expect("Unable to read_source");
 
     static RE1: LazyLock<Regex> = LazyLock::new(|| Regex::new(r";.*$").unwrap());
