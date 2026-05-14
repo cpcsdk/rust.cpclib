@@ -8,10 +8,15 @@ license.workspace = true
 [lib]
 name = "cpclib_python"
 crate-type = ["cdylib", "rlib"]
+test = false
+
+[features]
+default = ["extension-module"]
+extension-module = ["pyo3/extension-module"]
 
 [dependencies]
-pyo3 = { version = "0.27.2", features = ["extension-module"] }
-bon = "3.9.1"
+pyo3 = { version = "0.28.3", features = ["extension-module"] }
+bon.workspace = true
 cpclib-asm = { path = "../cpclib-asm", default-features = false }
 cpclib-basic = { path = "../cpclib-basic", default-features = false }
 cpclib-basm = { path = "../cpclib-basm", default-features = false }
@@ -24,3 +29,9 @@ cpclib-sna = { path = "../cpclib-sna", default-features = false, features = ["cm
 
 [package.metadata]
 # Notes: This crate provides Python bindings; extend with real wrappers as needed.
+
+[package.metadata.maturin]
+features = ["extension-module"]
+
+[build-dependencies]
+pyo3-build-config = "0.28.3"

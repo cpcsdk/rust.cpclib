@@ -110,7 +110,6 @@ impl MacroParam {
     }
 }
 
-#[remain::sorted]
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 #[allow(missing_docs)]
 pub enum Mnemonic {
@@ -188,8 +187,9 @@ pub enum Mnemonic {
 }
 
 impl fmt::Display for Mnemonic {
+    #[remain::check]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        #[remain::sorted]
+        #[sorted]
         match self {
             Mnemonic::Adc => write!(f, "ADC"),
             Mnemonic::Add => write!(f, "ADD"),
@@ -599,7 +599,6 @@ pub enum AssemblerFlavor {
 }
 
 /// The embeded Listing can be of several kind (with the token or with decorated version of the token)
-#[remain::sorted]
 #[derive(Debug, Clone, Hash, PartialEq)]
 #[allow(missing_docs)]
 pub enum Token {
@@ -994,6 +993,7 @@ pub enum Token {
 impl Eq for Token {}
 
 impl fmt::Display for Token {
+    #[remain::check]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let expr_list_to_string = |exprs: &Vec<Expr>| {
             exprs
@@ -1010,7 +1010,7 @@ impl fmt::Display for Token {
                 .join(",")
         };
 
-        #[remain::sorted]
+        #[sorted]
         match self {
 
             Token::Align( expr, None)
