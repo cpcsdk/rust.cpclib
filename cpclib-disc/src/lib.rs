@@ -1,5 +1,3 @@
-#![feature(impl_trait_in_bindings)]
-
 use std::collections::VecDeque;
 #[cfg(feature = "cmdline")]
 use std::io::{Read, Write};

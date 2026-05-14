@@ -1,5 +1,3 @@
-#![feature(iter_next_chunk)]
-
 pub mod ga;
 pub mod image;
 pub mod ink;

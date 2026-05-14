@@ -122,8 +122,14 @@ impl OcpPalette {
             }
         }
 
-        let excluded = data.next_chunk().unwrap();
-        let projected = data.next_chunk().unwrap();
+        let mut excluded: [u8; 16] = Default::default();
+        let mut projected: [u8; 16] = Default::default();
+        for x in 0..16 {
+            excluded[x] = data.next().unwrap();
+        }
+        for x in 0..16 {
+            projected[x] = data.next().unwrap();
+        }
 
         assert!(data.next().is_none());
 
