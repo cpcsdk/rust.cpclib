@@ -66,9 +66,9 @@ serde.workspace = true
 shlex.workspace = true
 thiserror = "2.0"
 topologic = "1.1.0"
-clap_complete = "4.6.3"
+clap_complete = "4.6.5"
 query-shell = "0.3.0"
-utf8-chars = "3.0.6"
+utf8-chars = "3.0.7"
 fancy-regex = "0.17.0"
 
 [build-dependencies]
@@ -80,7 +80,7 @@ build-deps = "0.1.4"
 test-generator = "0.3.1"
 serial_test = "3.4.0"
 camino-tempfile = { workspace = true }
-assert_cmd = "2.2.1"
+assert_cmd = "2.2.2"
 predicates = "3.1"
 
 [[bin]]
