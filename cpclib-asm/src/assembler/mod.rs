@@ -4926,6 +4926,24 @@ impl Env {
         }
         else {
             let label = self.handle_global_and_local_labels(label_span.as_str())?;
+            let normalized_label = self.symbols().normalize_symbol(label);
+            let normalized_label_value = normalized_label.value();
+            let normalized_braced_label = format!("{{{}}}", normalized_label_value);
+
+            // Forbid self-referential EQU (e.g. `x equ y - x`), otherwise first-pass fallback
+            // can silently inject a bogus value and make the symbol look valid.
+            if exp.symbols_used().iter().any(|used| {
+                let normalized_used = self.symbols().normalize_symbol(used.as_ref());
+                let used_value = normalized_used.value();
+                used_value == normalized_label_value || used_value == normalized_braced_label
+            }) {
+                return Err(Box::new(AssemblerError::AssemblingError {
+                    msg: format!(
+                        "Invalid self-referential EQU for symbol '{}'",
+                        normalized_label_value
+                    )
+                }));
+            }
 
             if label.starts_with(".") {
                 let warning = AssemblerError::AssemblingError {
