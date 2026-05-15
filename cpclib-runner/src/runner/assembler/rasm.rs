@@ -10,7 +10,8 @@ pub const RASM_CMD: &str = "rasm";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum RasmVersion {
     #[default]
-    Polaris, // 3..
+    Atlas, // 3.2.3
+    Polaris, // 3.
     Beacon2025,        // 2.3.6
     Consolidation2024  // V2_2_5
 }
@@ -26,6 +27,7 @@ impl Display for RasmVersion {
 impl GithubInformation for RasmVersion {
     fn version_name(&self) -> &'static str {
         match self {
+            Self::Atlas => "Atlas",
             Self::Polaris => "Polaris",
             Self::Beacon2025 => "Beacon",
             Self::Consolidation2024 => "Consolidation"
@@ -47,11 +49,16 @@ impl GithubInformation for RasmVersion {
     fn windows_key(&self) -> Option<&'static str> {
         Some("rasm_w64.exe")
     }
+
+    fn macos_key(&self) -> Option<&'static str> {
+        Some("rasm.macOS")
+    }
 }
 
 impl ExecutableInformation for RasmVersion {
     fn target_os_folder(&self) -> &'static str {
         match self {
+            Self::Atlas => "rasm_atlas",
             Self::Polaris => "rasm_polaris",
             Self::Beacon2025 => "rasm_beacon",
             Self::Consolidation2024 => "rasm_consolidation"
@@ -62,7 +69,7 @@ impl ExecutableInformation for RasmVersion {
         #[cfg(target_os = "windows")]
         return "rasm_w64.exe";
         #[cfg(target_os = "macos")]
-        todo!("RASM executable not defined for macOS");
+        return "rasm.macOS";
         #[cfg(target_os = "linux")]
         return "rasm";
     }
@@ -72,6 +79,10 @@ impl CompilableInformation for RasmVersion {
     fn target_os_commands(&self) -> Option<&'static [&'static [&'static str]]> {
         if cfg!(target_os = "linux") {
             Some(&[&["make"], &["mv", "rasm.exe", "rasm"]])
+        }
+        else if cfg!(target_os = "macos") {
+            // here we do not compile, but we need to set the executable bit on the downloaded file
+            Some(&[&["chmod", "+x", "rasm.macOS"]])
         }
         else {
             None
@@ -86,6 +97,8 @@ impl DownloadableInformation for RasmVersion {
         #[cfg(target_os = "windows")]
         return ArchiveFormat::Raw;
         #[cfg(target_os = "macos")]
-        todo!("RASM archive format not defined for macOS");
+        return ArchiveFormat::Raw;
     }
+
+
 }
