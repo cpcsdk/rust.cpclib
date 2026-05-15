@@ -232,6 +232,33 @@ impl From<Value> for evalexpr::Value {
     }
 }
 
+impl From<&Value> for evalexpr::Value {
+    fn from(val: &Value) -> Self {
+        match val {
+            Value::Expr(e) => {
+                match e {
+                    ExprResult::Float(f) => evalexpr::Value::Float((*f).into()),
+                    ExprResult::Value(v) => evalexpr::Value::Int(*v as _),
+                    ExprResult::Char(c) => evalexpr::Value::Int(*c as _),
+                    ExprResult::Bool(b) => evalexpr::Value::Boolean(*b),
+                    ExprResult::String(s) => evalexpr::Value::String(s.to_string()),
+                    ExprResult::List(_l) => unimplemented!(),
+                    ExprResult::Matrix {
+                        width: _,
+                        height: _,
+                        content: _
+                    } => unimplemented!()
+                }
+            },
+            Value::String(s) => evalexpr::Value::String(s.to_string()),
+            Value::Address(v) => evalexpr::Value::Int(v.address() as _),
+            Value::Macro(m) => evalexpr::Value::String(m.name.to_string()),
+            Value::Struct(s) => evalexpr::Value::String(s.name.to_string()),
+            Value::Counter(c) => evalexpr::Value::Int(*c as _)
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 pub enum SymbolFor {
     Number,
@@ -415,6 +442,12 @@ impl From<ValueAndSource> for Value {
 impl From<ValueAndSource> for evalexpr::Value {
     fn from(val: ValueAndSource) -> Self {
         val.value.into()
+    }
+}
+
+impl From<&ValueAndSource> for evalexpr::Value {
+    fn from(val: &ValueAndSource) -> Self {
+        (&val.value).into()
     }
 }
 

@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::ops::{Deref, DerefMut};
-use std::sync::LazyLock;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::AHashMap as HashMap;
@@ -11,7 +10,6 @@ use cpclib_common::smol_str::ToSmolStr;
 use cpclib_common::strsim;
 use delegate::delegate;
 use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree};
-use regex::Regex;
 
 use crate::symbols::{
     PhysicalAddress, Struct, Symbol, SymbolError, SymbolFor, Value, ValueAndSource, ValueMacro
@@ -186,6 +184,54 @@ struct ModuleSymbolTableIterator<'t> {
     current: std::collections::hash_map::Iter<'t, Symbol, ValueAndSource>
 }
 
+struct BalancedBracedSegmentsIter<'a> {
+    iter: std::str::CharIndices<'a>,
+    start: Option<usize>,
+    depth: usize
+}
+
+impl<'a> BalancedBracedSegmentsIter<'a> {
+    fn new(text: &'a str) -> Self {
+        Self {
+            iter: text.char_indices(),
+            start: None,
+            depth: 0
+        }
+    }
+}
+
+impl Iterator for BalancedBracedSegmentsIter<'_> {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for (idx, ch) in &mut self.iter {
+            match ch {
+                '{' => {
+                    if self.depth == 0 {
+                        self.start = Some(idx);
+                    }
+                    self.depth += 1;
+                },
+                '}' => {
+                    if self.depth == 0 {
+                        continue;
+                    }
+
+                    self.depth -= 1;
+                    if self.depth == 0 {
+                        if let Some(begin) = self.start.take() {
+                            return Some((begin, idx + 1));
+                        }
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        None
+    }
+}
+
 impl<'t> ModuleSymbolTableIterator<'t> {
     fn new(table: &'t ModuleSymbolTable) -> Self {
         Self {
@@ -288,6 +334,14 @@ impl Clone for SymbolsTable {
 /// Local/global label handling code
 #[allow(dead_code)]
 impl SymbolsTable {
+    /// Return top-level balanced `{...}` byte ranges found in `text` as an iterator.
+    ///
+    /// Returned tuples are `(start, end)` where `end` is exclusive.
+    /// Example: `A{{x} + 1}B{y}` => ranges for `{{x} + 1}` and `{y}`.
+    fn collect_balanced_braced_segments(text: &str) -> BalancedBracedSegmentsIter<'_> {
+        BalancedBracedSegmentsIter::new(text)
+    }
+
     pub fn enter_function(&mut self) {
         self.functions_stack.enter_function();
     }
@@ -349,47 +403,65 @@ impl SymbolsTable {
         // dbg!("Input", &symbol);
 
         // handle the labels build with patterns
-        // Get the replacement strings
-        static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{+[^\}]+\}+").unwrap());
-        let mut replace = HashSet::new();
-        for cap in RE.captures_iter(&symbol) {
-            if cap[0] != symbol {
-                replace.insert(cap[0].to_owned());
-            }
-        }
+        let input_symbol = symbol.clone();
+        let mut output_symbol = String::with_capacity(input_symbol.len());
+        let mut cursor = 0usize;
+        let mut has_replacement = false;
 
-        // make the replacement
-        for model in replace.iter() {
-            let local_expr = &model[1..model.len() - 1]; // remove {}
+        for (start, end) in Self::collect_balanced_braced_segments(&input_symbol)
+            .filter(|(start, end)| !(*start == 0 && *end == input_symbol.len()))
+        {
+            has_replacement = true;
+            output_symbol.push_str(&input_symbol[cursor..start]);
+            let local_expr = &input_symbol[start + 1..end - 1]; // remove {}
 
             let local_value = match self.any_value::<&str>(local_expr)?.map(|vl| vl.value()) {
                 Some(Value::String(s)) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
                 Some(Value::Counter(e)) => e.to_string(),
                 _ => {
-                    let tree = build_operator_tree(local_expr)
+                    // Expand nested `{symbol}` placeholders before evaluating arithmetic.
+                    let local_expr_for_eval = self
+                        .extend_local_and_patterns_for_symbol::<&str>(local_expr)?
+                        .value()
+                        .to_owned();
+
+                    let tree = build_operator_tree(&local_expr_for_eval)
                         .expect("Expression should be valid here. There is a bug in the assembler");
 
                     // Fill the variable values to allow an evaluation
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
-                        let variable_value = self
-                            .any_value::<&str>(variable)?
-                            .ok_or_else(|| SymbolError::WrongSymbol(variable.into()))?;
+                        let variable_value = if let Some(value) = self.any_value::<&str>(variable)? {
+                            value
+                        }
+                        else {
+                            let braced = format!("{{{variable}}}");
+                            self.any_value::<&str>(&braced)?
+                                .ok_or_else(|| SymbolError::WrongSymbol(variable.into()))?
+                        };
                         context
-                            .set_value(variable.to_owned(), variable_value.clone().into())
+                                .set_value(variable.to_owned(), variable_value.into())
                             .unwrap();
                     }
 
                     // evaluate the expression
                     let res = tree
                         .eval_with_context(&context)
-                        .map_err(|_e| SymbolError::CannotModify(local_expr.into()))?;
+                        .map_err(|_e| SymbolError::CannotModify(local_expr_for_eval.into()))?;
 
                     res.to_string()
                 }
             };
-            symbol = symbol.replace(model, &local_value);
+
+            output_symbol.push_str(&local_value);
+            cursor = end;
+        }
+
+        // make the replacement
+        if has_replacement {
+            output_symbol.push_str(&input_symbol[cursor..]);
+            symbol = output_symbol;
         }
 
         // Local symbols are expensed with their global symbol
