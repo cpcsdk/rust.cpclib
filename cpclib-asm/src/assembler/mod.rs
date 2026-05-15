@@ -1072,10 +1072,11 @@ impl Env {
             else {
                 AddressKind::Address
             };
+            let symbols = Some(self.symbols() as *const _);
 
             let trig = self.output_trigger.as_mut().unwrap();
 
-            trig.new_token(new, code_addr as _, kind, phy_addr);
+            trig.new_token(new, code_addr as _, kind, phy_addr, symbols);
         }
     }
 
@@ -3763,6 +3764,7 @@ impl Env {
             env.output_trigger = ListingOutputTrigger {
                 token: None,
                 bytes: Vec::new(),
+                symbols: None,
                 builder: builder.clone(),
                 start: 0,
                 physical_address: MemoryPhysicalAddress::new(0, 0).into()

@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
+use cpclib_tokens::symbols::SymbolsTableCaseDependent;
 use cpclib_tokens::ExprResult;
 use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress};
 
@@ -152,7 +153,8 @@ impl ListingOutput {
         bytes: &[u8],
         address: u32,
         address_kind: AddressKind,
-        physical_address: PhysicalAddress
+        physical_address: PhysicalAddress,
+        symbols: Option<*const SymbolsTableCaseDependent>
     ) {
         if !self.activated {
             return;
@@ -240,9 +242,11 @@ impl ListingOutput {
         }
 
         self.current_token_kind = match token.deref() {
-            LocatedTokenInner::Label(l) => TokenKind::Label(l.to_string()),
+            LocatedTokenInner::Label(l) => {
+                TokenKind::Label(Self::expand_listing_label(l.to_string(), symbols))
+            },
             LocatedTokenInner::Equ { label, .. } | LocatedTokenInner::Assign { label, .. } => {
-                TokenKind::Set(label.to_string())
+                TokenKind::Set(Self::expand_listing_label(label.to_string(), symbols))
             },
             LocatedTokenInner::Macro { name, .. } => TokenKind::MacroDefine(name.to_string()),
             LocatedTokenInner::MacroCall(..)
@@ -252,6 +256,22 @@ impl ListingOutput {
             | LocatedTokenInner::Repeat(..) => TokenKind::Displayable,
             _ => TokenKind::Hidden
         };
+    }
+
+    fn expand_listing_label(
+        raw_label: String,
+        symbols: Option<*const SymbolsTableCaseDependent>
+    ) -> String {
+        // Listing expansion is intentionally done only in listing pass to avoid runtime overhead.
+        symbols
+            .and_then(|symbols| {
+                let symbols = unsafe { symbols.as_ref() }?;
+                symbols
+                    .extend_local_and_patterns_for_symbol(&raw_label)
+                    .ok()
+                    .map(|symbol| symbol.to_string())
+            })
+            .unwrap_or(raw_label)
     }
 
     pub fn process_current_line(&mut self) {
@@ -430,6 +450,7 @@ pub struct ListingOutputTrigger {
     pub(crate) token: Option<*const LocatedToken>,
     /// the bytes progressively collected
     pub(crate) bytes: Vec<u8>,
+    pub(crate) symbols: Option<*const SymbolsTableCaseDependent>,
     pub(crate) start: u32,
     pub(crate) physical_address: PhysicalAddress,
     pub(crate) builder: Arc<RwLock<ListingOutput>>
@@ -445,7 +466,8 @@ impl ListingOutputTrigger {
         new: *const LocatedToken,
         code: u32,
         kind: AddressKind,
-        physical_address: PhysicalAddress
+        physical_address: PhysicalAddress,
+        symbols: Option<*const SymbolsTableCaseDependent>
     ) {
         // Retreive the previous token and handle it
         if let Some(token) = &self.token {
@@ -454,11 +476,13 @@ impl ListingOutputTrigger {
                 &self.bytes,
                 self.start,
                 kind,
-                self.physical_address
+                self.physical_address,
+                self.symbols
             );
         }
 
         self.token.replace(new); // TODO remove that clone that is memory/time eager
+        self.symbols = symbols;
 
         // TODO double check if these lines are current. I doubt it is the case when having severl instructions per line
         self.bytes.clear();
@@ -500,7 +524,8 @@ impl ListingOutputTrigger {
                 &self.bytes,
                 self.start,
                 AddressKind::Address,
-                self.physical_address
+                self.physical_address,
+                self.symbols
             );
         }
         self.builder.write().unwrap().finish();
