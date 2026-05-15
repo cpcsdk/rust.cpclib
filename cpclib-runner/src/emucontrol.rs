@@ -1036,7 +1036,9 @@ trait UsedEmulator: Sized {
     #[cfg(feature = "screenshot")]
     fn screenshot(robot: &mut RobotImpl<Self>) -> EmuScreenShot
     where Self: Sized {
-        robot.window.capture_image()
+        robot.window.as_ref().map(|w| w.capture_image()).unwrap_or_else(|| {
+            panic!("Emulator screenshot is not available for this emulator. This is a bug, please report it")
+        })
     }
 }
 

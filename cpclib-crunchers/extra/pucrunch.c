@@ -2909,6 +2909,8 @@ errorexit:
 
 
 
+// Commented out for FFI integration (library use)
+#if 0
 int main(int argc, char *argv[]) {
     int n, execAddr = -1, ea = -1, newlen, startAddr = -1, startEscape;
     int flags = F_2MHZ, lzlen = -1, buflen;
@@ -3414,5 +3416,6 @@ errexit:
 	free(indata);
     return n;
 }
+#endif
 
 
