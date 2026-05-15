@@ -22,6 +22,12 @@ impl Emulator {
         ))
     }
 
+    pub fn new_retrovm_default() -> Self {
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::RetroVm(
+            Default::default()
+        ))
+    }
+
     pub fn new_capriceforever_default() -> Self {
         Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::CapriceForever(
             Default::default()
@@ -72,6 +78,7 @@ impl Emulator {
             Self::new_sugarbox_default(),
             Self::new_cpcemupower_default(),
             Self::new_capriceforever_default(),
+            Self::new_retrovm_default(),
             Self::new_facade()
         ]
         .into_iter()

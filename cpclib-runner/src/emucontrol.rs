@@ -618,7 +618,9 @@ impl EmulatorConf {
 
         if let Some(drive_a) = &drive_a {
             match emu {
-                Emulator::Ace(_) | Emulator::Cpcec(_) => args.push(drive_a.to_string()),
+                Emulator::Ace(_) | Emulator::Cpcec(_) | Emulator::RetroVm(_) => {
+                    args.push(drive_a.to_string())
+                },
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) | Emulator::Amspirit(_) => {
                     args.push(emu.wine_compatible_fname(drive_a)?.to_string())
@@ -642,7 +644,8 @@ impl EmulatorConf {
                 Emulator::CpcEmuPower(_cpc_emu_power_version) => {
                     args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?))
                 },
-                Emulator::CapriceForever(_) => args.push(format!("/DriveB={drive_b}"))
+                Emulator::CapriceForever(_) => args.push(format!("/DriveB={drive_b}")),
+                Emulator::RetroVm(_) => return Err("Drive B not yet handled".to_owned())
             }
         }
 
@@ -664,7 +667,8 @@ impl EmulatorConf {
                 },
                 Emulator::CapriceForever(_v) => {
                     args.push(format!("/SNA=\"{sna}\""));
-                }
+                },
+                Emulator::RetroVm(_) => args.push(sna.to_string())
             }
         }
 
@@ -683,7 +687,8 @@ impl EmulatorConf {
                 Emulator::Amspirit(_) => todo!(),
                 Emulator::SugarBoxV2(_) => todo!(),
                 Emulator::CpcEmuPower(_cpc_emu_power_version) => todo!(),
-                Emulator::CapriceForever(_caprice_forever_version) => todo!()
+                Emulator::CapriceForever(_caprice_forever_version) => todo!(),
+                Emulator::RetroVm(_) => todo!()
             }
         }
 
@@ -781,7 +786,10 @@ impl EmulatorConf {
                 Emulator::CpcEmuPower(_) => args.push(format!("--auto=RUN\"{run}")),
                 Emulator::CapriceForever(_v) => {
                     args.push(format!("/Command=RUN\"\"{run}"));
-                }
+                },
+                Emulator::RetroVm(_) => {
+                    eprintln!("auto_run is currently ignored for RetroVM");
+                },
             }
         }
 
@@ -962,7 +970,7 @@ pub fn get_emulator_window(emu: &Emulator, _conf: &EmulatorConf) -> Option<EmuWi
         return Some(get_emulator_window_xvfb(emu));
     }
     #[cfg(feature = "screenshot")]
-    return Some(get_emulator_window_xcap(emu));
+    return get_emulator_window_xcap(emu);
 
     #[cfg(not(feature = "screenshot"))]
     None
@@ -1011,7 +1019,28 @@ fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
 }
 
 #[cfg(feature = "screenshot")]
-fn get_emulator_window_xcap(emu: &Emulator) -> EmuWindow {
+fn get_emulator_window_xcap(emu: &Emulator) -> Option<EmuWindow> {
+    const MAX_ATTEMPTS: usize = 30;
+    const RETRY_DELAY_MS: u64 = 200;
+
+    for _ in 0..MAX_ATTEMPTS {
+        if let Some(window) = get_emulator_window_xcap_once(emu) {
+            return Some(window);
+        }
+
+        std::thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+    }
+
+    eprintln!(
+        "No window emulator found after {} ms",
+        MAX_ATTEMPTS as u64 * RETRY_DELAY_MS
+    );
+
+    None
+}
+
+#[cfg(feature = "screenshot")]
+fn get_emulator_window_xcap_once(emu: &Emulator) -> Option<EmuWindow> {
     let windows = xcap::Window::all().unwrap();
     let mut windows = windows
         .into_iter()
@@ -1019,7 +1048,7 @@ fn get_emulator_window_xcap(emu: &Emulator) -> EmuWindow {
         .collect_vec();
 
     let window = match windows.len() {
-        0 => panic!("No window emulator found"),
+        0 => return None,
         1 => windows.pop().unwrap(),
         _ => {
             eprintln!("There are several available windows. I pick one, but it may be wrong");
@@ -1027,7 +1056,7 @@ fn get_emulator_window_xcap(emu: &Emulator) -> EmuWindow {
         }
     };
 
-    EmuWindow::Xcap(window)
+    Some(EmuWindow::Xcap(window))
 }
 
 trait UsedEmulator: Sized {
@@ -1048,6 +1077,7 @@ struct WinapeUsedEmulator {}
 struct AmspiritUsedEmulator {}
 struct SugarBoxV2UsedEmulator {}
 struct CpcEmuPowerUsedEmulator {}
+struct RetroVmUsedEmulator {}
 
 struct CapriceForeverUsedEmulator {}
 
@@ -1096,6 +1126,7 @@ impl UsedEmulator for WinapeUsedEmulator {}
 impl UsedEmulator for SugarBoxV2UsedEmulator {}
 impl UsedEmulator for AmspiritUsedEmulator {}
 impl UsedEmulator for CpcEmuPowerUsedEmulator {}
+impl UsedEmulator for RetroVmUsedEmulator {}
 impl UsedEmulator for CapriceForeverUsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
@@ -1126,6 +1157,7 @@ pub enum Robot {
     Amspirit(RobotImpl<AmspiritUsedEmulator>),
     SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>),
     CpcEmuPower(RobotImpl<CpcEmuPowerUsedEmulator>),
+    RetroVm(RobotImpl<RetroVmUsedEmulator>),
     CapriceForever(RobotImpl<CapriceForeverUsedEmulator>)
 }
 
@@ -1162,6 +1194,12 @@ impl From<RobotImpl<SugarBoxV2UsedEmulator>> for Robot {
 impl From<RobotImpl<CpcEmuPowerUsedEmulator>> for Robot {
     fn from(value: RobotImpl<CpcEmuPowerUsedEmulator>) -> Self {
         Self::CpcEmuPower(value)
+    }
+}
+
+impl From<RobotImpl<RetroVmUsedEmulator>> for Robot {
+    fn from(value: RobotImpl<RetroVmUsedEmulator>) -> Self {
+        Self::RetroVm(value)
     }
 }
 
@@ -1301,6 +1339,7 @@ impl Robot {
             Robot::Amspirit(r) => r,
             Robot::SugarboxV2(r) => r,
             Robot::CpcEmuPower(r) => r,
+            Robot::RetroVm(r) => r,
             Robot::CapriceForever(r) => r,
         } {
             #[cfg(feature = "screenshot")]
@@ -1340,6 +1379,9 @@ impl Robot {
             },
             Emulator::CpcEmuPower(_) => {
                 RobotImpl::<CpcEmuPowerUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
+            Emulator::RetroVm(_) => {
+                RobotImpl::<RetroVmUsedEmulator>::from((window, eventsManager, emu)).into()
             },
             Emulator::CapriceForever(_caprice_forever_version) => {
                 RobotImpl::<CapriceForeverUsedEmulator>::from((window, eventsManager, emu)).into()
@@ -1773,7 +1815,9 @@ pub enum Emu {
     Amspirit,
     Sugarbox,
     Cpcemupower,
-    Caprice
+    Caprice,
+    #[value(alias = "retrovm")]
+    Rvm
 }
 
 use clap::Args;
@@ -1918,7 +1962,8 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Emu::Caprice => Emulator::CapriceForever(Default::default()),
         Emu::Amspirit => Emulator::Amspirit(Default::default()),
         Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
-        Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default())
+        Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
+        Emu::Rvm => Emulator::RetroVm(Default::default())
     };
 
     {
@@ -2122,23 +2167,6 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         std::thread::sleep(Duration::from_secs(3));
     }
 
-    let window = get_emulator_window(&emu, &conf);
-    let enigo_settings = {
-        let mut settings = Settings::default();
-        settings.linux_delay = 1000 / 10;
-        if let Some(EmuWindow::Xvfb(display, _)) = &window {
-            settings.x11_display = Some(format!(":{display}"));
-            settings.x11_display = Some(format!("{display}"));
-        }
-        settings
-    };
-    let enigo = Enigo::new(&enigo_settings).unwrap();
-    let events = enigo.into();
-    let mut robot = Robot::new(&emu, window, events);
-
-    #[cfg(windows)]
-    std::thread::sleep(Duration::from_millis(1000 * 3));
-
     let res = match cli.command {
         #[cfg(feature = "screenshot")]
         Commands::Orgams(OrgamsCli {
@@ -2150,7 +2178,29 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
             orgamsa2orgamsb,
             orgamsb2orgamsa
         }) => {
-            if basm2orgamsa {
+            let window = get_emulator_window(&emu, &conf).ok_or_else(|| {
+                format!(
+                    "No emulator window found for '{}'. The emulator may be on another desktop/workspace.",
+                    emu.get_command()
+                )
+            })?;
+            let enigo_settings = {
+                let mut settings = Settings::default();
+                settings.linux_delay = 1000 / 10;
+                if let EmuWindow::Xvfb(display, _) = &window {
+                    settings.x11_display = Some(format!(":{display}"));
+                    settings.x11_display = Some(format!("{display}"));
+                }
+                settings
+            };
+            let enigo = Enigo::new(&enigo_settings).unwrap();
+            let events = enigo.into();
+            let mut robot = Robot::new(&emu, Some(window), events);
+
+            #[cfg(windows)]
+            std::thread::sleep(Duration::from_millis(1000 * 3));
+
+            let res = if basm2orgamsa {
                 if let Some(albi) = &cli.albireo {
                     let src = Utf8Path::new(albi).join(src);
                     let dst = dst.as_ref().unwrap();
@@ -2182,23 +2232,43 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
                 };
 
                 robot.handle_orgams(cli.drive_a.as_deref(), cli.albireo.as_deref(), action, o)
+            };
+
+            if !cli.keepemulator {
+                robot.close();
             }
+
+            res
         },
 
         Commands::Run { text } => {
             cli.keepemulator = true;
 
             if let Some(text) = text {
+                let window = get_emulator_window(&emu, &conf).ok_or_else(|| {
+                    format!(
+                        "No emulator window found for '{}'. The emulator may be on another desktop/workspace.",
+                        emu.get_command()
+                    )
+                })?;
+                let enigo_settings = {
+                    let mut settings = Settings::default();
+                    settings.linux_delay = 1000 / 10;
+                    if let EmuWindow::Xvfb(display, _) = &window {
+                        settings.x11_display = Some(format!(":{display}"));
+                        settings.x11_display = Some(format!("{display}"));
+                    }
+                    settings
+                };
+                let enigo = Enigo::new(&enigo_settings).unwrap();
+                let events = enigo.into();
+                let mut robot = Robot::new(&emu, Some(window), events);
                 robot.handle_raw_text(text);
             }
 
             Ok(())
         }
     };
-
-    if !cli.keepemulator {
-        robot.close();
-    }
 
     #[allow(unused_variables)]
     if let Some((backup_folder, emu_folder)) = albireo_backup_and_original {

@@ -3,6 +3,7 @@ pub mod amspirit;
 pub mod caprice_forever;
 pub mod cpcec;
 pub mod cpcemupower;
+pub mod retrovm;
 pub mod sugarbox;
 pub mod winape;
 
@@ -13,10 +14,12 @@ pub use amspirit::*;
 use caprice_forever::{CAPRICEFOREVER_CMD, CapriceForeverVersion};
 pub use cpcec::*;
 use cpcemupower::{CPCEMUPOWER_CMD, CpcEmuPowerVersion};
+use retrovm::{RETROVM_CMD, RetroVmVersion};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::event::EventObserver;
 pub use sugarbox::*;
 pub use winape::*;
+pub use retrovm::*;
 
 use crate::delegated::{
     DelegateApplicationDescription, GithubCompiledApplication, InternetDynamicCompiledApplication,
@@ -30,6 +33,7 @@ pub enum Emulator {
     CapriceForever(CapriceForeverVersion),
     Cpcec(CpcecVersion),
     CpcEmuPower(CpcEmuPowerVersion),
+    RetroVm(RetroVmVersion),
     Winape(WinapeVersion),
     SugarBoxV2(SugarBoxV2Version)
 }
@@ -80,7 +84,8 @@ impl Emulator {
             Emulator::Cpcec(_) => CPCEC_CMD,
             Emulator::Winape(_) => WINAPE_CMD,
             Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD,
-            Emulator::CpcEmuPower(_cpc_emu_power_version) => CPCEMUPOWER_CMD
+            Emulator::CpcEmuPower(_cpc_emu_power_version) => CPCEMUPOWER_CMD,
+            Emulator::RetroVm(_) => RETROVM_CMD
         }
     }
 
@@ -96,6 +101,7 @@ impl Emulator {
             Emulator::CapriceForever(_caprice_forever_version) => {
                 window_name.starts_with("CaPriCe Forever")
             },
+            Emulator::RetroVm(_) => window_name.starts_with("Retro Virtual Machine")
         }
     }
 
@@ -151,7 +157,8 @@ impl Emulator {
             Emulator::Amspirit(v) => v.configuration(),
             Emulator::SugarBoxV2(v) => v.configuration(),
             Emulator::CpcEmuPower(v) => v.configuration(),
-            Emulator::CapriceForever(v) => v.configuration()
+            Emulator::CapriceForever(v) => v.configuration(),
+            Emulator::RetroVm(v) => v.configuration()
         }
     }
 }
@@ -160,7 +167,7 @@ impl Emulator {
 mod test {
     use cpclib_common::network;
 
-    use super::{SugarBoxV2Version, WinapeVersion};
+    use super::{RetroVmVersion, SugarBoxV2Version, WinapeVersion};
     use crate::delegated::{DynamicUrlInformation, GithubInformation, StaticInformation};
     use crate::runner::emulator::{AceVersion, AmspiritVersion};
 
@@ -190,5 +197,13 @@ mod test {
         let urls = AmspiritVersion::default().static_download_urls();
         assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
         assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+    }
+
+    #[test]
+    fn test_download_retrovm() {
+        let urls = RetroVmVersion::default().static_download_urls();
+        assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.macos.as_ref().unwrap())).is_ok());
     }
 }

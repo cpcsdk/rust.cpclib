@@ -17,6 +17,7 @@ use cpclib_runner::runner::disassembler::ExternDisassembler;
 use cpclib_runner::runner::disassembler::disark::{DISARK_CMD, DisarkVersion};
 use cpclib_runner::runner::emulator::caprice_forever::CAPRICEFOREVER_CMD;
 use cpclib_runner::runner::emulator::cpcemupower::CPCEMUPOWER_CMD;
+use cpclib_runner::runner::emulator::retrovm::RETROVM_CMD;
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
 };
@@ -190,6 +191,7 @@ pub const AMSPIRIT_CMDS: &[&str] = &[AMSPIRIT_CMD];
 pub const SUGARBOX_CMDS: &[&str] = &[SUGARBOX_V2_CMD];
 pub const CPCEMUPOWER_CMDS: &[&str] = &[CPCEMUPOWER_CMD];
 pub const CAPRICEFOREVER_CMDS: &[&str] = &[CAPRICEFOREVER_CMD];
+pub const RETROVM_CMDS: &[&str] = &[RETROVM_CMD, "rvm"];
 
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const ORGAMS_CMDS: &[&str] = &["orgams"];
@@ -334,6 +336,7 @@ is_some_cmd!(
     miny,
     martine, mkdir, mv,
     orgams,
+    retrovm,
     rasm, rm, rtzx, two_cdt,
     sjasmplus, sna, sugarbox, song2akm, song2akg, song2aky, song2events, song2raw, song2soundeffects, song2vgm, song2wav, song2ym,
     z80profiler,
@@ -672,6 +675,9 @@ impl InnerTask {
                 Emulator::new_capriceforever_default(),
                 std
             ))
+        }
+        else if is_retrovm_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_retrovm_default(), std))
         }
         else if is_emuctrl_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_facade(), std))
