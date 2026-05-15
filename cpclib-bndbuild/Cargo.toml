@@ -89,9 +89,10 @@ path = "src/main.rs"
 
 [features]
 
-default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe"]
+default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe", "screenshot"]
 colored_errors = ["cpclib-basm/colored_errors"]
 fap = ["cpclib-runner/fap"]
+screenshot = ["cpclib-runner/screenshot"]
 hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe", "cpclib-runner/hfe"]
 indicatif = ["cpclib-basm/indicatif"]
 rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon", "cpclib-imgconverter/rayon"]

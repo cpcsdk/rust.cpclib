@@ -15,6 +15,8 @@ use delegate;
 use enigo::{Enigo, Key, Keyboard, Settings};
 #[cfg(windows)]
 use fs_extra;
+
+#[cfg(feature = "screenshot")]
 use xcap::image::{ImageBuffer, Rgba, open};
 
 use crate::ace_config::{AceConfig, AceConfigFlag};
@@ -25,6 +27,7 @@ use crate::runner::Runner;
 use crate::runner::emulator::Emulator;
 use crate::runner::runner::RunnerWithClap;
 
+#[cfg(feature = "screenshot")]
 type Screenshot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
@@ -107,17 +110,21 @@ fn memory_to_csl_expansion(memory: u32) -> cpclib_csl::MemoryExpansion {
     }
 }
 
+#[cfg(feature = "screenshot")]
 type EmuScreenShot = ImageBuffer<Rgba<u8>, Vec<u8>>;
 
 #[derive(Debug)]
 pub enum EmuWindow {
+    #[cfg(feature = "screenshot")]
     Xcap(xcap::Window),
     Xvfb(usize, Option<wmctrl::Window>)
 }
 
 impl EmuWindow {
+    #[cfg(feature = "screenshot")]
     pub fn capture_image(&self) -> EmuScreenShot {
         match self {
+            #[cfg(feature = "screenshot")]
             EmuWindow::Xcap(window) => window.capture_image().unwrap(),
             EmuWindow::Xvfb(_display, window) => {
                 match window {
@@ -950,12 +957,16 @@ pub fn start_emulator<E: EventObserver>(
     runner.inner_run(&args, o)
 }
 
-pub fn get_emulator_window(emu: &Emulator, _conf: &EmulatorConf) -> EmuWindow {
+pub fn get_emulator_window(emu: &Emulator, _conf: &EmulatorConf) -> Option<EmuWindow> {
     #[cfg(feature = "transparent-x11")]
     if conf.transparent {
-        return get_emulator_window_xvfb(emu);
+        return Some(get_emulator_window_xvfb(emu));
     }
-    get_emulator_window_xcap(emu)
+    #[cfg(feature = "screenshot")]
+    return Some(get_emulator_window_xcap(emu));
+
+    #[cfg(not(feature = "screenshot"))]
+    None
 }
 
 // XX this code seems buggy ATM it is unable to collect the window, no idea why
@@ -1000,6 +1011,7 @@ fn get_emulator_window_xvfb(emu: &Emulator) -> EmuWindow {
     EmuWindow::Xvfb(display_nb, window)
 }
 
+#[cfg(feature = "screenshot")]
 fn get_emulator_window_xcap(emu: &Emulator) -> EmuWindow {
     let windows = xcap::Window::all().unwrap();
     let mut windows = windows
@@ -1022,6 +1034,7 @@ fn get_emulator_window_xcap(emu: &Emulator) -> EmuWindow {
 trait UsedEmulator: Sized {
     /// the default behavior consists in capturing the full window emulator.
     /// This can of course be tailored to get the emulated screen area
+    #[cfg(feature = "screenshot")]
     fn screenshot(robot: &mut RobotImpl<Self>) -> EmuScreenShot
     where Self: Sized {
         robot.window.capture_image()
@@ -1039,6 +1052,7 @@ struct CapriceForeverUsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
+    #[cfg(feature = "screenshot")]
     fn screenshot(robot: &mut RobotImpl<Self>) -> Screenshot {
         let folder = robot.emu.screenshots_folder();
         let before_screenshots: HashSet<_> = glob::glob(folder.join("*.png").as_str())
@@ -1084,7 +1098,7 @@ impl UsedEmulator for CpcEmuPowerUsedEmulator {}
 impl UsedEmulator for CapriceForeverUsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
-    pub(crate) window: EmuWindow,
+    pub(crate) window: Option<EmuWindow>,
     pub(crate) events_manager: WindowEventsManager,
     pub(crate) emu: Emulator,
     _emu: PhantomData<E>
@@ -1156,8 +1170,8 @@ impl From<RobotImpl<CapriceForeverUsedEmulator>> for Robot {
     }
 }
 
-impl<E: UsedEmulator> From<(EmuWindow, WindowEventsManager, &Emulator)> for RobotImpl<E> {
-    fn from(value: (EmuWindow, WindowEventsManager, &Emulator)) -> Self {
+impl<E: UsedEmulator> From<(Option<EmuWindow>, WindowEventsManager, &Emulator)> for RobotImpl<E> {
+    fn from(value: (Option<EmuWindow>, WindowEventsManager, &Emulator)) -> Self {
         Self {
             window: value.0,
             events_manager: value.1,
@@ -1288,6 +1302,7 @@ impl Robot {
             Robot::CpcEmuPower(r) => r,
             Robot::CapriceForever(r) => r,
         } {
+            #[cfg(feature = "screenshot")]
             fn handle_orgams(
                 &mut self,
                 drivea: Option<&str>,
@@ -1301,7 +1316,7 @@ impl Robot {
 
     }
 
-    pub fn new(emu: &Emulator, window: EmuWindow, eventsManager: WindowEventsManager) -> Self {
+    pub fn new(emu: &Emulator, window: Option<EmuWindow>, eventsManager: WindowEventsManager) -> Self {
         match emu {
             Emulator::Ace(_) => {
                 RobotImpl::<AceUsedEmulator>::from((window, eventsManager, emu)).into()
@@ -1337,6 +1352,7 @@ impl Robot {
 }
 
 impl<E: UsedEmulator> RobotImpl<E> {
+    #[cfg(feature = "screenshot")]
     pub fn screenshot(&mut self) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
         E::screenshot(self)
     }
@@ -1365,6 +1381,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
 }
 
 impl<E: UsedEmulator> RobotImpl<E> {
+    #[cfg(feature = "screenshot")]
     pub fn handle_orgams(
         &mut self,
         drivea: Option<&str>,
@@ -1441,15 +1458,18 @@ impl<E: UsedEmulator> RobotImpl<E> {
         })
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_jump(&mut self) -> Result<(), Screenshot> {
         self.type_char('j');
         Ok(())
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_wait_import(&mut self, o: &dyn EventObserver) -> Result<(), Screenshot> {
         self.orgams_wait_save(o)
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_wait_save(&mut self, o: &dyn EventObserver) -> Result<(), Screenshot> {
         loop {
             let screen = self.screenshot();
@@ -1473,6 +1493,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_save_source(&mut self, dst: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
         self.ctrl_char('s');
         self.type_text(dst);
@@ -1482,6 +1503,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.orgams_wait_save(o)
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_export_source(&mut self, dst: &str, o: &dyn EventObserver) -> Result<(), Screenshot> {
         self.ctrl_char('e');
         self.type_text(dst);
@@ -1494,6 +1516,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.orgams_wait_save(o)
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_save(&mut self, dst: Option<&str>, o: &dyn EventObserver) -> Result<(), Screenshot> {
         o.emit_stdout("> Save result\n");
         // handle saving
@@ -1515,6 +1538,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.orgams_wait_save(o)
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_import(
         &mut self,
         src: &str,
@@ -1534,6 +1558,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.orgams_wait_import(o)
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_load(
         &mut self,
         src: &str,
@@ -1553,6 +1578,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         res
     }
 
+    #[cfg(feature = "screenshot")]
     fn orgams_assemble(
         &mut self,
         src: &str,
@@ -1577,6 +1603,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
     }
 
+    #[cfg(feature = "screenshot")]
     fn wait_orgams_assembling(&mut self) {
         let coord_of_interest = (0, 200);
         let mut finished = false;
@@ -1590,6 +1617,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         }
     }
 
+    #[cfg(feature = "screenshot")]
     fn wait_orgams_loading(&mut self) -> Result<(), Screenshot> {
         #[derive(PartialEq)]
         enum State {
@@ -1809,6 +1837,7 @@ pub struct OrgamsCli {
 
 #[derive(Subcommand, Clone, Debug)]
 pub enum Commands {
+    #[cfg(feature = "screenshot")]
     Orgams(OrgamsCli),
 
     Run {
@@ -2092,7 +2121,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     let enigo_settings = {
         let mut settings = Settings::default();
         settings.linux_delay = 1000 / 10;
-        if let EmuWindow::Xvfb(display, _) = &window {
+        if let Some(EmuWindow::Xvfb(display, _)) = &window {
             settings.x11_display = Some(format!(":{display}"));
             settings.x11_display = Some(format!("{display}"));
         }
@@ -2106,6 +2135,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     std::thread::sleep(Duration::from_millis(1000 * 3));
 
     let res = match cli.command {
+        #[cfg(feature = "screenshot")]
         Commands::Orgams(OrgamsCli {
             src,
             dst,

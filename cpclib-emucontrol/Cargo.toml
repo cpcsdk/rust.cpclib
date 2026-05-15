@@ -24,3 +24,8 @@ ntest = "0.9.5"
 [[bin]]
 name = "emucontrol"
 path = "src/main.rs"
+
+
+[features]
+default = ["screenshot"]
+screenshot = ["cpclib-runner/screenshot"]

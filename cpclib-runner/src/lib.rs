@@ -1,4 +1,5 @@
 pub use enigo;
+#[cfg(feature = "screenshot")]
 pub use xcap;
 
 pub mod ace_config;
