@@ -179,7 +179,7 @@ minijinja = "2.19.0"
 log = "0.4.29"
 memchr = "2"
 minus = { version = "5.7.0", features = ["static_output"] }
-notify = "7.0.0"
+notify = "8.2.0"
 num = "0.4.3"
 num-bigint = "0.4.6"
 nutype = "0.7.0"
