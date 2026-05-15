@@ -1,9 +1,8 @@
-#include "pucrunch.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Forward declare the core function (from pucrunch.c)
+// Minimal declarations needed by the FFI wrapper.
 int PackLz77(int lzlen, int flags, int *startEscape, int endAddr, int memEnd, int type);
 extern unsigned char *indata;
 extern int inlen;

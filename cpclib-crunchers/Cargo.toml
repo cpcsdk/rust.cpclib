@@ -29,7 +29,7 @@ cxx-build = "1.0"
 
 
 [features]
-default = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shinkler", "upkr", "zx0"]
+default = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0"]
 apultra = []
 exomizer = []
 lz4 = []
@@ -37,7 +37,7 @@ lz48 = []
 lz49 = []
 lzsa = []
 pucrunch = []
-shinkler = []
+shrinkler = []
 zx7 = []
 upkr = ["dep:upkr"]
 zx0 = ["dep:zx0"]

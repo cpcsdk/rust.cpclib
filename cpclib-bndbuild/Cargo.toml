@@ -89,7 +89,8 @@ path = "src/main.rs"
 
 [features]
 
-default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe", "screenshot"]
+default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe", "screenshot",
+"apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0"]
 colored_errors = ["cpclib-basm/colored_errors"]
 fap = ["cpclib-runner/fap"]
 screenshot = ["cpclib-runner/screenshot"]
@@ -107,7 +108,7 @@ lz48 = ["cpclib-crunch/lz48", "cpclib-asm/lz48", "cpclib-basm/lz48"]
 lz49 = ["cpclib-crunch/lz49", "cpclib-asm/lz49", "cpclib-basm/lz49"]
 lzsa = ["cpclib-crunch/lzsa", "cpclib-asm/lzsa", "cpclib-basm/lzsa"]
 pucrunch = ["cpclib-crunch/pucrunch", "cpclib-asm/pucrunch", "cpclib-basm/pucrunch"]
-shinkler = ["cpclib-crunch/shinkler", "cpclib-asm/shinkler", "cpclib-basm/shinkler"]
+shrinkler = ["cpclib-crunch/shrinkler", "cpclib-asm/shrinkler", "cpclib-basm/shrinkler"]
 zx7 = ["cpclib-crunch/zx7", "cpclib-asm/zx7", "cpclib-basm/zx7"]
 upkr = ["cpclib-crunch/upkr", "cpclib-asm/upkr", "cpclib-basm/upkr"]
 zx0 = ["cpclib-crunch/zx0", "cpclib-asm/zx0", "cpclib-basm/zx0"]

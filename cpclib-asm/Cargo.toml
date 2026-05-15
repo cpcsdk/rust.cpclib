@@ -88,7 +88,7 @@ fs-err.workspace = true
 
 
 [features]
-default = ["colored_errors", "indicatif", "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shinkler", "upkr", "zx0", "zx7"]
+default = ["colored_errors", "indicatif", "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0", "zx7"]
 colored_errors = []
 indicatif = ["dep:indicatif"]
 rayon = ["cpclib-common/rayon", "dep:rayon-cond"]
@@ -102,7 +102,7 @@ lz48 = ["cpclib-crunchers/lz48"]
 lz49 = ["cpclib-crunchers/lz49"]
 lzsa = ["cpclib-crunchers/lzsa"]
 pucrunch = ["cpclib-crunchers/pucrunch"]
-shinkler = ["cpclib-crunchers/shinkler"]
+shrinkler = ["cpclib-crunchers/shrinkler"]
 zx7 = ["cpclib-crunchers/zx7"]
 upkr = ["cpclib-crunchers/upkr"]
 zx0 = ["cpclib-crunchers/zx0"]
