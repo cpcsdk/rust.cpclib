@@ -17,9 +17,7 @@ impl MinimiserVersion {
     }
 }
 
-cfg_select! {
-    target_os = "windows" =>
-    {
+#[cfg(target_os = "windows")]
         impl MinimiserVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
@@ -33,10 +31,8 @@ cfg_select! {
                 }
             }
         }
-    }
 
-    target_os = "linux" =>
-    {
+#[cfg(target_os = "linux")]
         impl MinimiserVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
@@ -50,14 +46,10 @@ cfg_select! {
                 }
             }
         }
-    }
 
-     target_os = "macos" =>
-    {
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
         impl MinimiserVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 unimplemented!()
             }
         }
-    }
-}

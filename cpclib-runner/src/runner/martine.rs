@@ -16,9 +16,7 @@ impl MartineVersion {
     }
 }
 
-cfg_select! {
-    target_os = "linux" =>
-    {
+#[cfg(any(target_os = "linux", target_os = "haiku"))]
         impl MartineVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
@@ -39,9 +37,8 @@ cfg_select! {
                 }
             }
         }
-    }
-    target_os = "windows" =>
-    {
+
+#[cfg(target_os = "windows")]
         impl MartineVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
@@ -63,9 +60,7 @@ cfg_select! {
             }
         }
 
-    }
-    target_os = "macos" =>
-    {
+#[cfg(target_os = "macos")]
         impl MartineVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
@@ -140,7 +135,3 @@ exec "$MARTINE_EXEC" "$@"
                 }
             }
         }
-    }
-    _ => {
-    }
-}

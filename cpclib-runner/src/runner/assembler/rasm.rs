@@ -70,7 +70,7 @@ impl ExecutableInformation for RasmVersion {
         return "rasm_w64.exe";
         #[cfg(target_os = "macos")]
         return "rasm.macOS";
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "haiku"))]
         return "rasm";
     }
 }
@@ -92,7 +92,7 @@ impl CompilableInformation for RasmVersion {
 
 impl DownloadableInformation for RasmVersion {
     fn target_os_archive_format(&self) -> ArchiveFormat {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "haiku"))]
         return ArchiveFormat::Zip;
         #[cfg(target_os = "windows")]
         return ArchiveFormat::Raw;

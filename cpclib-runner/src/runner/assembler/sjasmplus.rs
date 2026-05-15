@@ -55,7 +55,7 @@ impl ExecutableInformation for SjasmplusVersion {
     }
 
     fn target_os_exec_fname(&self) -> &'static str {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "haiku"))]
         return "sjasmplus";
         #[cfg(target_os = "windows")]
         return "sjasmplus.exe";
@@ -83,7 +83,7 @@ impl CompilableInformation for SjasmplusVersion {
 
 impl DownloadableInformation for SjasmplusVersion {
     fn target_os_archive_format(&self) -> ArchiveFormat {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "haiku"))]
         return ArchiveFormat::TarXz;
         #[cfg(target_os = "windows")]
         return ArchiveFormat::Zip;

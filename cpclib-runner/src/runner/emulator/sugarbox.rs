@@ -30,7 +30,7 @@ impl DownloadableInformation for SugarBoxV2Version {
     fn target_os_archive_format(&self) -> ArchiveFormat {
         #[cfg(target_os = "windows")]
         return ArchiveFormat::SevenZ;
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux", target_os = "haiku"))]
         return ArchiveFormat::TarGz;
     }
 }
@@ -45,6 +45,8 @@ impl ExecutableInformation for SugarBoxV2Version {
                 return "Sugarbox-2.0.3-Darwin";
                 #[cfg(target_os = "linux")]
                 return "Sugarbox-2.0.3-Linux";
+                #[cfg(target_os = "haiku")]
+                return "Sugarbox-2.0.3-Haiku";
             },
             SugarBoxV2Version::V2_0_2 => {
                 #[cfg(target_os = "windows")]
@@ -53,6 +55,8 @@ impl ExecutableInformation for SugarBoxV2Version {
                 return "Sugarbox-2.0.2-Darwin";
                 #[cfg(target_os = "linux")]
                 return "Sugarbox-2.0.2-Linux";
+                #[cfg(target_os = "haiku")]
+                return "Sugarbox-2.0.2-Haiku";
             }
         }
     }
@@ -62,6 +66,8 @@ impl ExecutableInformation for SugarBoxV2Version {
         return "Sugarbox.exe";
         #[cfg(target_os = "macos")]
         return "Sugarbox";
+        #[cfg(target_os = "haiku")]
+        return "sugarbox";
         #[cfg(target_os = "linux")]
         return match self {
             Self::V2_0_3 => "Sugarbox-2.0.3-Linux/Sugarbox",
