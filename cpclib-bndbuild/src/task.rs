@@ -16,6 +16,7 @@ use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
 use cpclib_runner::runner::disassembler::ExternDisassembler;
 use cpclib_runner::runner::disassembler::disark::{DISARK_CMD, DisarkVersion};
 use cpclib_runner::runner::emulator::caprice_forever::CAPRICEFOREVER_CMD;
+use cpclib_runner::runner::emulator::cpcemu::CPCEMU_CMD;
 use cpclib_runner::runner::emulator::cpcemupower::CPCEMUPOWER_CMD;
 use cpclib_runner::runner::emulator::retrovm::RETROVM_CMD;
 use cpclib_runner::runner::emulator::{
@@ -189,6 +190,7 @@ pub const WINAPE_CMDS: &[&str] = &[WINAPE_CMD];
 pub const CPCEC_CMDS: &[&str] = &[CPCEC_CMD];
 pub const AMSPIRIT_CMDS: &[&str] = &[AMSPIRIT_CMD];
 pub const SUGARBOX_CMDS: &[&str] = &[SUGARBOX_V2_CMD];
+pub const CPCEMU_CMDS: &[&str] = &[CPCEMU_CMD, "cpc-emu"];
 pub const CPCEMUPOWER_CMDS: &[&str] = &[CPCEMUPOWER_CMD];
 pub const CAPRICEFOREVER_CMDS: &[&str] = &[CAPRICEFOREVER_CMD];
 pub const RETROVM_CMDS: &[&str] = &[RETROVM_CMD, "rvm"];
@@ -325,7 +327,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit, at, ayt, archive,
     basm, basmdoc, bdasm, bndbuild,
-    catalog, capriceforever, chipnsfx, convgeneric, cpr, csl, crunch, cp, cpcec, cpcemupower, cpc2img,
+    catalog, capriceforever, chipnsfx, convgeneric, cpcemu, cpr, csl, crunch, cp, cpcec, cpcemupower, cpc2img,
     disark, disc,
     echo, emuctrl, r#extern,
     fade,
@@ -660,6 +662,9 @@ impl InnerTask {
         }
         else if is_sugarbox_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_sugarbox_default(), std))
+        }
+        else if is_cpcemu_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_cpcemu_default(), std))
         }
         else if is_winape_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_winape_default(), std))

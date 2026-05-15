@@ -1,6 +1,7 @@
 pub mod ace;
 pub mod amspirit;
 pub mod caprice_forever;
+pub mod cpcemu;
 pub mod cpcec;
 pub mod cpcemupower;
 pub mod retrovm;
@@ -12,14 +13,16 @@ use std::path::absolute;
 pub use ace::*;
 pub use amspirit::*;
 use caprice_forever::{CAPRICEFOREVER_CMD, CapriceForeverVersion};
+use cpcemu::{CPCEMU_CMD, CpcEmuVersion};
 pub use cpcec::*;
 use cpcemupower::{CPCEMUPOWER_CMD, CpcEmuPowerVersion};
-use retrovm::{RETROVM_CMD, RetroVmVersion};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::event::EventObserver;
+use retrovm::{RETROVM_CMD, RetroVmVersion};
+pub use cpcemu::*;
 pub use sugarbox::*;
-pub use winape::*;
 pub use retrovm::*;
+pub use winape::*;
 
 use crate::delegated::{
     DelegateApplicationDescription, GithubCompiledApplication, InternetDynamicCompiledApplication,
@@ -31,6 +34,7 @@ pub enum Emulator {
     Ace(AceVersion),
     Amspirit(AmspiritVersion),
     CapriceForever(CapriceForeverVersion),
+    CpcEmu(CpcEmuVersion),
     Cpcec(CpcecVersion),
     CpcEmuPower(CpcEmuPowerVersion),
     RetroVm(RetroVmVersion),
@@ -81,6 +85,7 @@ impl Emulator {
             Emulator::Ace(_) => ACE_CMD,
             Emulator::Amspirit(_) => AMSPIRIT_CMD,
             Emulator::CapriceForever(_) => CAPRICEFOREVER_CMD,
+            Emulator::CpcEmu(_) => CPCEMU_CMD,
             Emulator::Cpcec(_) => CPCEC_CMD,
             Emulator::Winape(_) => WINAPE_CMD,
             Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD,
@@ -93,6 +98,7 @@ impl Emulator {
         let window_name = window_name.trim();
         match self {
             Emulator::Ace(_) => window_name.starts_with("ACE-DL -"),
+            Emulator::CpcEmu(_) => window_name.contains("CPCemu"),
             Emulator::Cpcec(_) => window_name.starts_with("CPCEC "),
             Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
             Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
@@ -152,6 +158,7 @@ impl Emulator {
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         match self {
             Emulator::Ace(v) => v.configuration(),
+            Emulator::CpcEmu(v) => v.configuration(),
             Emulator::Cpcec(v) => v.configuration(),
             Emulator::Winape(v) => v.configuration(),
             Emulator::Amspirit(v) => v.configuration(),
@@ -167,7 +174,7 @@ impl Emulator {
 mod test {
     use cpclib_common::network;
 
-    use super::{RetroVmVersion, SugarBoxV2Version, WinapeVersion};
+    use super::{CpcEmuVersion, RetroVmVersion, SugarBoxV2Version, WinapeVersion};
     use crate::delegated::{DynamicUrlInformation, GithubInformation, StaticInformation};
     use crate::runner::emulator::{AceVersion, AmspiritVersion};
 
@@ -203,6 +210,13 @@ mod test {
     fn test_download_retrovm() {
         let urls = RetroVmVersion::default().static_download_urls();
         assert!(network::download(dbg!(urls.linux.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
+        assert!(network::download(dbg!(urls.macos.as_ref().unwrap())).is_ok());
+    }
+
+    #[test]
+    fn test_download_cpcemu() {
+        let urls = CpcEmuVersion::default().static_download_urls();
         assert!(network::download(dbg!(urls.windows.as_ref().unwrap())).is_ok());
         assert!(network::download(dbg!(urls.macos.as_ref().unwrap())).is_ok());
     }

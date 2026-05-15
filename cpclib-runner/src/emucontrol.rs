@@ -618,7 +618,7 @@ impl EmulatorConf {
 
         if let Some(drive_a) = &drive_a {
             match emu {
-                Emulator::Ace(_) | Emulator::Cpcec(_) | Emulator::RetroVm(_) => {
+                Emulator::Ace(_) | Emulator::CpcEmu(_) | Emulator::Cpcec(_) | Emulator::RetroVm(_) => {
                     args.push(drive_a.to_string())
                 },
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
@@ -637,6 +637,7 @@ impl EmulatorConf {
         if let Some(drive_b) = &drive_b {
             match emu {
                 Emulator::Ace(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::CpcEmu(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
@@ -652,6 +653,7 @@ impl EmulatorConf {
         if let Some(sna) = &self.snapshot {
             match emu {
                 Emulator::Ace(_ace_version) => args.push(sna.to_string()),
+                Emulator::CpcEmu(_) => args.push(sna.to_string()),
                 Emulator::Cpcec(_cpcec_version) => args.push(sna.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(sna.to_string()),
                 Emulator::Winape(_winape_version) => {
@@ -682,6 +684,7 @@ impl EmulatorConf {
         if !self.roms_configuration.is_empty() {
             match emu {
                 Emulator::Ace(_) => todo!(),
+                Emulator::CpcEmu(_) => todo!(),
                 Emulator::Cpcec(_) => todo!(),
                 Emulator::Winape(_) => todo!(),
                 Emulator::Amspirit(_) => todo!(),
@@ -772,6 +775,9 @@ impl EmulatorConf {
                 Emulator::Ace(_) => {
                     args.push("-autoRunFile".to_owned());
                     args.push(run.clone())
+                },
+                Emulator::CpcEmu(_) => {
+                    eprintln!("auto_run is currently ignored for CPCEmu");
                 },
                 Emulator::Winape(_) => {
                     args.push(format!("/A:{run}"));
@@ -1077,6 +1083,7 @@ struct WinapeUsedEmulator {}
 struct AmspiritUsedEmulator {}
 struct SugarBoxV2UsedEmulator {}
 struct CpcEmuPowerUsedEmulator {}
+struct CpcEmuUsedEmulator {}
 struct RetroVmUsedEmulator {}
 
 struct CapriceForeverUsedEmulator {}
@@ -1126,6 +1133,7 @@ impl UsedEmulator for WinapeUsedEmulator {}
 impl UsedEmulator for SugarBoxV2UsedEmulator {}
 impl UsedEmulator for AmspiritUsedEmulator {}
 impl UsedEmulator for CpcEmuPowerUsedEmulator {}
+impl UsedEmulator for CpcEmuUsedEmulator {}
 impl UsedEmulator for RetroVmUsedEmulator {}
 impl UsedEmulator for CapriceForeverUsedEmulator {}
 
@@ -1157,6 +1165,7 @@ pub enum Robot {
     Amspirit(RobotImpl<AmspiritUsedEmulator>),
     SugarboxV2(RobotImpl<SugarBoxV2UsedEmulator>),
     CpcEmuPower(RobotImpl<CpcEmuPowerUsedEmulator>),
+    CpcEmu(RobotImpl<CpcEmuUsedEmulator>),
     RetroVm(RobotImpl<RetroVmUsedEmulator>),
     CapriceForever(RobotImpl<CapriceForeverUsedEmulator>)
 }
@@ -1194,6 +1203,12 @@ impl From<RobotImpl<SugarBoxV2UsedEmulator>> for Robot {
 impl From<RobotImpl<CpcEmuPowerUsedEmulator>> for Robot {
     fn from(value: RobotImpl<CpcEmuPowerUsedEmulator>) -> Self {
         Self::CpcEmuPower(value)
+    }
+}
+
+impl From<RobotImpl<CpcEmuUsedEmulator>> for Robot {
+    fn from(value: RobotImpl<CpcEmuUsedEmulator>) -> Self {
+        Self::CpcEmu(value)
     }
 }
 
@@ -1339,6 +1354,7 @@ impl Robot {
             Robot::Amspirit(r) => r,
             Robot::SugarboxV2(r) => r,
             Robot::CpcEmuPower(r) => r,
+            Robot::CpcEmu(r) => r,
             Robot::RetroVm(r) => r,
             Robot::CapriceForever(r) => r,
         } {
@@ -1364,6 +1380,9 @@ impl Robot {
         match emu {
             Emulator::Ace(_) => {
                 RobotImpl::<AceUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
+            Emulator::CpcEmu(_) => {
+                RobotImpl::<CpcEmuUsedEmulator>::from((window, eventsManager, emu)).into()
             },
             Emulator::Cpcec(_) => {
                 RobotImpl::<CpcecUsedEmulator>::from((window, eventsManager, emu)).into()
@@ -1815,6 +1834,7 @@ pub enum Emu {
     Amspirit,
     Sugarbox,
     Cpcemupower,
+    Cpcemu,
     Caprice,
     #[value(alias = "retrovm")]
     Rvm
@@ -1963,6 +1983,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Emu::Amspirit => Emulator::Amspirit(Default::default()),
         Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
         Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
+        Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
         Emu::Rvm => Emulator::RetroVm(Default::default())
     };
 
