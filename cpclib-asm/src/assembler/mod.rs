@@ -2544,8 +2544,8 @@ impl Env {
         };
 
         // Try to fallback on a macro call - parser is not that much great
-        if let Err(err) = &res {
-            if let AssemblerError::AlreadyDefinedSymbol { kind, .. } = err.as_ref()
+        if let Err(err) = &res
+            && let AssemblerError::AlreadyDefinedSymbol { kind, .. } = err.as_ref()
                 && (kind == "macro" || kind == "struct")
             {
                 let message = AssemblerError::AssemblingError {
@@ -2568,7 +2568,6 @@ impl Env {
                 )?;
                 return processed_token.visited(self);
             }
-        }
 
         res
     }
@@ -4860,14 +4859,12 @@ impl Env {
                 if let Some(new_span) = new_span {
                     if let AssemblerError::RelocatedWarning { warning, span } =
                         &mut *self.warnings[previous_warning_idx]
-                    {
-                        if let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
+                        && let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
                             warning.as_mut()
                         {
                             *prev_size = new_size;
                             *span = new_span;
                         }
-                    }
                 }
                 else if let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
                     &mut *self.warnings[previous_warning_idx]

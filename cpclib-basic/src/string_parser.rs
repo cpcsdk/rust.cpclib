@@ -1,7 +1,7 @@
 use cpclib_common::itertools::Itertools;
 use cpclib_common::winnow::ascii::{Caseless, line_ending};
 use cpclib_common::winnow::combinator::{
-    alt, cut_err, eof, not, opt, peek, preceded, repeat, terminated
+    alt, cut_err, eof, opt, peek, preceded, repeat, terminated
 };
 use cpclib_common::winnow::error::{ContextError, ErrMode, StrContext};
 use cpclib_common::winnow::stream::{AsChar, Stream};
