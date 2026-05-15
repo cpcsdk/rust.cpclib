@@ -99,5 +99,18 @@ rayon = ["cpclib-basm/rayon", "cpclib-common/rayon", "cpclib-asm/rayon", "cpclib
 sna-interactive = ["cpclib-sna/interactive"]
 self-update =["self_update"]
 
+
+apultra = ["cpclib-crunch/apultra", "cpclib-asm/apultra", "cpclib-basm/apultra"]
+exomizer = ["cpclib-crunch/exomizer", "cpclib-asm/exomizer", "cpclib-basm/exomizer"]
+lz4 = ["cpclib-crunch/lz4", "cpclib-asm/lz4", "cpclib-basm/lz4"]
+lz48 = ["cpclib-crunch/lz48", "cpclib-asm/lz48", "cpclib-basm/lz48"]
+lz49 = ["cpclib-crunch/lz49", "cpclib-asm/lz49", "cpclib-basm/lz49"]
+lzsa = ["cpclib-crunch/lzsa", "cpclib-asm/lzsa", "cpclib-basm/lzsa"]
+pucrunch = ["cpclib-crunch/pucrunch", "cpclib-asm/pucrunch", "cpclib-basm/pucrunch"]
+shinkler = ["cpclib-crunch/shinkler", "cpclib-asm/shinkler", "cpclib-basm/shinkler"]
+zx7 = ["cpclib-crunch/zx7", "cpclib-asm/zx7", "cpclib-basm/zx7"]
+upkr = ["cpclib-crunch/upkr", "cpclib-asm/upkr", "cpclib-basm/upkr"]
+zx0 = ["cpclib-crunch/zx0", "cpclib-asm/zx0", "cpclib-basm/zx0"]
+
 [profile.release]
 debug = 1

@@ -21,3 +21,18 @@ built = { version = "0.8.0", features = ["chrono"] }
 
 [lints]
 workspace = true
+
+
+[features]
+all = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shinkler", "upkr", "zx0"]
+apultra = ["cpclib-crunchers/apultra"]
+exomizer = ["cpclib-crunchers/exomizer"]
+lz4 = ["cpclib-crunchers/lz4"]
+lz48 = ["cpclib-crunchers/lz48"]
+lz49 = ["cpclib-crunchers/lz49"]
+lzsa = ["cpclib-crunchers/lzsa"]
+pucrunch = ["cpclib-crunchers/pucrunch"]
+shinkler = ["cpclib-crunchers/shinkler"]
+zx7 = ["cpclib-crunchers/zx7"]
+upkr = ["cpclib-crunchers/upkr"]
+zx0 = ["cpclib-crunchers/zx0"]

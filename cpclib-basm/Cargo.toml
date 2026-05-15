@@ -54,7 +54,7 @@ path = "src/main.rs"
 
 
 [features]
-default = ["xferlib", "indicatif", "colored_errors"]
+default = ["xferlib", "indicatif", "colored_errors", "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shinkler", "zx7", "upkr", "zx0"]
 xferlib = ["cpclib-xfer"]
 indicatif = ["cpclib-asm/indicatif"]
 colored_errors = ["cpclib-asm/colored_errors"]
@@ -62,3 +62,14 @@ rayon = ["cpclib-asm/rayon", "cpclib-common/rayon"]
 hfe = ["cpclib-disc/hfe", "cpclib-asm/hfe"]
 rasm-autotests = []
 
+apultra = ["cpclib-asm/apultra"]
+exomizer = ["cpclib-asm/exomizer"]
+lz4 = ["cpclib-asm/lz4"]
+lz48 = ["cpclib-asm/lz48"]
+lz49 = ["cpclib-asm/lz49"]
+lzsa = ["cpclib-asm/lzsa"]
+pucrunch = ["cpclib-asm/pucrunch"]
+shinkler = ["cpclib-asm/shinkler"]
+zx7 = ["cpclib-asm/zx7"]
+upkr = ["cpclib-asm/upkr"]
+zx0 = ["cpclib-asm/zx0"]

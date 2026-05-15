@@ -55,10 +55,21 @@ built = { workspace = true, features = ["chrono"] }
 
 
 [features]
-default = ["xferlib"]
+default = ["xferlib", "apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shinkler", "zx7", "upkr", "zx0"]
 xferlib = ["cpclib-xfer"]
 cmdline = ["cpclib-common/cmdline"]
 
 
 
 
+apultra = ["cpclib-crunchers/apultra"]
+exomizer = ["cpclib-crunchers/exomizer"]
+lz4 = ["cpclib-crunchers/lz4"]
+lz48 = ["cpclib-crunchers/lz48"]
+lz49 = ["cpclib-crunchers/lz49"]
+lzsa = ["cpclib-crunchers/lzsa"]
+pucrunch = ["cpclib-crunchers/pucrunch"]
+shinkler = ["cpclib-crunchers/shinkler"]
+zx7 = ["cpclib-crunchers/zx7"]
+upkr = ["cpclib-crunchers/upkr"]
+zx0 = ["cpclib-crunchers/zx0"]

@@ -4,6 +4,8 @@ use cpclib_common::clap;
 use cpclib_common::clap::CommandFactory;
 use cpclib_common::event::EventObserver;
 use cpclib_crunchers::CompressMethod;
+
+#[cfg(feature = "lzsa")]
 use cpclib_crunchers::lzsa::LzsaVersion;
 use cpclib_disc::amsdos::AmsdosAddBehavior;
 use cpclib_files::FileAndSupport;
@@ -61,34 +63,58 @@ pub struct CrunchArgs {
 
 #[derive(Debug, ValueEnum, Clone)]
 pub enum Cruncher {
+    #[cfg(feature = "apultra")]
     Apultra,
+    #[cfg(feature = "zx0")]
     BackwardZx0,
+    #[cfg(feature = "exomizer")]
     Exomizer,
+    #[cfg(feature = "lz4")]
     Lz4,
+    #[cfg(feature = "lz48")]
     Lz48,
+    #[cfg(feature = "lz49")]
     Lz49,
+    #[cfg(feature = "lzsa")]
     Lzsa1,
+    #[cfg(feature = "lzsa")]
     Lzsa2,
+    #[cfg(feature = "pucrunch")]
     Pucrunch,
+    #[cfg(feature = "shrinkler")]
     Shrinkler,
+    #[cfg(feature = "upkr")]
     Upkr,
+    #[cfg(feature = "zx0")]
     Zx0
 }
 
 impl Cruncher {
     pub fn z80(&self) -> &Utf8Path {
-        let fname = match self {
+        let fname: &str = match self {
+            #[cfg(feature = "apultra")]
             Cruncher::Apultra => "inner://unaplib.asm",
+            #[cfg(feature = "zx0")]
             Cruncher::BackwardZx0 => "inner://uncrunch/dzx0_standard_back.asm",
+            #[cfg(feature = "exomizer")]
             Cruncher::Exomizer => "inner://deexo.asm",
+            #[cfg(feature = "lz4")]
             Cruncher::Lz4 => "inner://lz4_docent.asm",
+            #[cfg(feature = "lz48")]
             Cruncher::Lz48 => "inner://lz48decrunch.asm",
+            #[cfg(feature = "lz49")]
             Cruncher::Lz49 => "inner://lz49decrunch.asm",
+            #[cfg(feature = "lzsa")]
             Cruncher::Lzsa1 => "inner://unlzsa1_fast.asm",
+            #[cfg(feature = "lzsa")]
             Cruncher::Lzsa2 => "inner://unlzsa1_fast.asm",
+            #[cfg(feature = "pucrunch")]
             Cruncher::Pucrunch => "inner://uncrunch/pucrunch_z80.asm",
+            #[cfg(feature = "shrinkler")]
             Cruncher::Shrinkler => "inner://deshrink.asm",
+            #[cfg(feature = "zx0")]
             Cruncher::Zx0 => "inner://dzx0_fast.asm",
+            #[cfg(feature = "upkr")]
             Cruncher::Upkr => "inner://uncrunch/upkr.asm"
         };
         fname.into()
@@ -143,18 +169,30 @@ pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
     };
 
     // TODO eventually get additional options to properly parametrize them
-    let cruncher = match args.cruncher {
+    let cruncher: CompressMethod = match args.cruncher {
+        #[cfg(feature = "apultra")]
         Cruncher::Apultra => CompressMethod::Apultra,
+        #[cfg(feature = "exomizer")]
         Cruncher::Exomizer => CompressMethod::Exomizer,
+        #[cfg(feature = "lz4")]
         Cruncher::Lz4 => CompressMethod::Lz4,
+        #[cfg(feature = "lz48")]
         Cruncher::Lz48 => CompressMethod::Lz48,
+        #[cfg(feature = "lz49")]
         Cruncher::Lz49 => CompressMethod::Lz49,
+        #[cfg(feature = "lzsa")]
         Cruncher::Lzsa1 => CompressMethod::Lzsa(LzsaVersion::V1, None),
+        #[cfg(feature = "lzsa")]
         Cruncher::Lzsa2 => CompressMethod::Lzsa(LzsaVersion::V1, None),
+        #[cfg(feature = "pucrunch")]
         Cruncher::Pucrunch => CompressMethod::Pucrunch,
+        #[cfg(feature = "shrinkler")]
         Cruncher::Shrinkler => CompressMethod::Shrinkler(Default::default()),
+        #[cfg(feature = "zx0")]
         Cruncher::Zx0 => CompressMethod::Zx0,
+        #[cfg(feature = "upkr")]
         Cruncher::Upkr => CompressMethod::Upkr,
+        #[cfg(feature = "backward_zx0")]
         Cruncher::BackwardZx0 => CompressMethod::BackwardZx0
     };
 
