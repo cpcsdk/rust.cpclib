@@ -1860,10 +1860,15 @@ fn parse_directive_of_size_others(
 ) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     match &word.to_ascii_uppercase()[..] {
         // 12
-        #[cfg(not(target_arch = "wasm32"))]
         b"INCSHRINKLER" => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler)).parse_next(input)
         },
+
+        // 15
+        b"INCZX0_BACKWARD" => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
+        },
+
 
         // 13
         b"STARTINGINDEX" => parse_startingindex.parse_next(input),
@@ -1944,14 +1949,10 @@ fn parse_directive_of_size_7(
         h if hashed_choice!(h, word, b"SECTION") => parse_section.parse_next(input),
         h if hashed_choice!(h, word, b"SNAINIT") => parse_snainit.parse_next(input),
         h if hashed_choice!(h, word, b"WARNING") => parse_warning(true).parse_next(input),
-        #[cfg(not(target_arch = "wasm32"))]
         h if hashed_choice!(h, word, b"INCUPKR") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Upkr)).parse_next(input)
         },
-        #[cfg(not(target_arch = "wasm32"))]
-        h if hashed_choice!(h, word, b"INCPUC") => {
-            parse_incbin(BinaryTransformation::Crunch(CrunchType::Pucrunch)).parse_next(input)
-        },
+   
         _ => {
             input.reset(input_start);
             Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
@@ -1978,11 +1979,9 @@ fn parse_directive_of_size_6(
         h if hashed_choice!(h, word, b"INCBIN") => {
             parse_incbin(BinaryTransformation::None).parse_next(input)
         },
-        #[cfg(not(target_arch = "wasm32"))]
         h if hashed_choice!(h, word, b"INCEXO") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZEXO)).parse_next(input)
         },
-        #[cfg(not(target_arch = "wasm32"))]
         h if hashed_choice!(h, word, b"INCLZ4") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ4)).parse_next(input)
         },
@@ -1995,20 +1994,17 @@ fn parse_directive_of_size_6(
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZ49)).parse_next(input)
         },
 
-        #[cfg(not(target_arch = "wasm32"))]
         h if hashed_choice!(h, word, b"INCAPU") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::LZAPU)).parse_next(input)
         },
 
-        #[cfg(not(target_arch = "wasm32"))]
         h if hashed_choice!(h, word, b"INCZX0") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Zx0)).parse_next(input)
         },
-
-        #[cfg(not(target_arch = "wasm32"))]
-        h if hashed_choice!(h, word, b"INCZX0_BACKWARD") => {
-            parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
+        h if hashed_choice!(h, word, b"INCPUC") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::Pucrunch)).parse_next(input)
         },
+
 
         h if hashed_choice!(h, word, b"OUTPUT") => parse_output.parse_next(input),
         h if hashed_choice!(h, word, b"RETURN") => parse_return.parse_next(input),

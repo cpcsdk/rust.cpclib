@@ -101,65 +101,127 @@ impl Compressor for CompressionType {
             return Err(Box::new(AssemblerError::NoDataToCrunch));
         }
 
-        let method = match self {
+        let method: CompressMethod = match self {
+            #[cfg(feature = "lz48")]
             CompressionType::LZ48 => {
-                Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Lz48)
+                Ok(CompressMethod::Lz48)
             },
-            CompressionType::LZ49 => Ok(CompressMethod::Lz49),
+            #[cfg(not(feature = "lz48"))]
+            CompressionType::LZ48 => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "LZ48 compression not available".to_owned()
+                }))
+            },
 
+
+            #[cfg(feature = "lz49")]
+            CompressionType::LZ49 => Ok(CompressMethod::Lz49),
+            #[cfg(not(feature = "lz49"))]
+            CompressionType::LZ49 => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "LZ49 compression not available".to_owned()
+            })),
+
+            #[cfg(feature = "lzsa")]
             CompressionType::LZSA1 => {
                 Ok(CompressMethod::Lzsa(
                     cpclib_crunchers::lzsa::LzsaVersion::V1,
                     None
                 ))
             },
+            #[cfg(feature = "lzsa")]
             CompressionType::LZSA2 => {
                 Ok(CompressMethod::Lzsa(
                     cpclib_crunchers::lzsa::LzsaVersion::V2,
                     None
                 ))
             },
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(feature = "lzsa"))]
+            CompressionType::LZSA1 | CompressionType::LZSA2=> {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "LZSA compression not available".to_owned()
+                }))
+            },
+
+
+            #[cfg(all(feature = "lz4", not(target_arch = "wasm32")))]
             CompressionType::LZ4 => Ok(CompressMethod::Lz4),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(feature = "lz4", not(target_arch = "wasm32"))))]
+            CompressionType::LZ4 => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "LZ4 compression not available".to_owned()
+                }))
+            },
+
+            #[cfg(all(feature = "zx0",not(target_arch = "wasm32")))]
             CompressionType::Zx0 => Ok(CompressMethod::Zx0),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(feature = "zx0", not(target_arch = "wasm32"))))]
+            CompressionType::Zx0 => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "zx0 compression not available".to_owned()
+                }))
+            },
+            #[cfg(all(feature = "zx0", not(target_arch = "wasm32")))]
             CompressionType::BackwardZx0 => Ok(CompressMethod::BackwardZx0),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(feature = "zx0", not(target_arch = "wasm32"))))]
+            CompressionType::BackwardZx0 => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "zx0 compression not available".to_owned()
+                }))
+            },
+
+
+            #[cfg(all(feature = "zx7", not(target_arch = "wasm32")))]
             CompressionType::LZX7 => Ok(CompressMethod::Zx7),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(feature = "zx7", not(target_arch = "wasm32"))))]
+            CompressionType::LZX7 => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "zx7 compression not available".to_owned()
+                }))
+            },
+
+
+            #[cfg(all(feature = "exo", not(target_arch = "wasm32")))]
             CompressionType::LZEXO => Ok(CompressMethod::Exomizer),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(feature = "exo", not(target_arch = "wasm32"))))]
+            CompressionType::LZEXO => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "exomizer compression not available".to_owned()
+                }))
+            },
+
+            #[cfg(all(feature = "apultra", not(target_arch = "wasm32")))]
             CompressionType::LZAPU => Ok(CompressMethod::Apultra),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(feature = "apultra", not(target_arch = "wasm32"))))]
+            CompressionType::LZAPU => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "apultra compression not available".to_owned()
+                }))
+            },
+
+            #[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
             CompressionType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default())),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(not(all(feature = "shrinkler", not(target_arch = "wasm32"))))]
+            CompressionType::Shrinkler => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "shrinkler compression not available".to_owned()
+                }))
+            },
+            #[cfg(all(feature = "pucrunch", not(target_arch = "wasm32")))]
             CompressionType::Pucrunch => Ok(CompressMethod::Pucrunch),
-            #[cfg(not(target_arch = "wasm32"))]
-            CompressionType::Upkr => Ok(CompressMethod::Upkr) /* #[cfg(target_arch = "wasm32")]
-                                                               * CrunchType::LZ4 => {
-                                                               * Err(AssemblerError::AssemblingError {
-                                                               * msg: "LZ4 compression not available".to_owned()
-                                                               * })
-                                                               * },
-                                                               * #[cfg(target_arch = "wasm32")]
-                                                               * CrunchType::LZX0 => {
-                                                               * Err(AssemblerError::AssemblingError {
-                                                               * msg: "LZX0 compression not available".to_owned()
-                                                               * })
-                                                               * },
-                                                               * #[cfg(target_arch = "wasm32")]
-                                                               * CrunchType::LZEXO => {
-                                                               * Err(AssemblerError::AssemblingError {
-                                                               * msg: "LZEXO compression not available".to_owned()
-                                                               * })
-                                                               * },
-                                                               * #[cfg(target_arch = "wasm32")]
-                                                               * CrunchType::LZAPU => {
-                                                               * Err(AssemblerError::AssemblingError {
-                                                               * msg: "LZAPU compression not available".to_owned()
-                                                               * })
-                                                               * }, */
+            #[cfg(not(all(feature = "pucrunch", not(target_arch = "wasm32"))))]
+            CompressionType::Pucrunch => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "pucrunch compression not available".to_owned()
+                }))
+            },
+            #[cfg(all(feature = "upkr", not(target_arch = "wasm32")))]
+            CompressionType::Upkr => Ok(CompressMethod::Upkr),
+            #[cfg(not(all(feature = "upkr", not(target_arch = "wasm32"))))]
+            CompressionType::Upkr => {
+                Err(Box::new(AssemblerError::AssemblingError {
+                    msg: "upkr compression not available".to_owned()
+                }))
+            } 
         }?;
 
         Ok(method

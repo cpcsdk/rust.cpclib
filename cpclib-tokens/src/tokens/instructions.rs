@@ -369,24 +369,16 @@ pub enum StableTickerAction<S: AsRef<str>> {
 pub enum CrunchType {
     LZ48,
     LZ49,
-    #[cfg(not(target_arch = "wasm32"))]
     LZ4,
     LZX7,
-    #[cfg(not(target_arch = "wasm32"))]
     Zx0,
-    #[cfg(not(target_arch = "wasm32"))]
     BackwardZx0,
-    #[cfg(not(target_arch = "wasm32"))]
     LZEXO,
-    #[cfg(not(target_arch = "wasm32"))]
     LZAPU,
     LZSA1,
     LZSA2,
-    #[cfg(not(target_arch = "wasm32"))]
     Shrinkler,
-    #[cfg(not(target_arch = "wasm32"))]
     Pucrunch,
-    #[cfg(not(target_arch = "wasm32"))]
     Upkr
 }
 

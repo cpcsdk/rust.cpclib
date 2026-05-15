@@ -768,7 +768,7 @@ impl HardCodedFunction {
                     #[cfg(not(target_arch = "wasm32"))]
                     b"LZAPU" => CrunchType::LZAPU,
                     #[cfg(not(target_arch = "wasm32"))]
-                    b"LZPUCRUNCH" | b"PUCRUNCH" => CrunchType::Pucrunch,
+                    b"LZPUCRUNCH" => CrunchType::Pucrunch,
                     _ => {
                         return Err(Box::new(AssemblerError::AssemblingError {
                             msg: format!("{crunch_type} is not a valid crunch")
