@@ -389,37 +389,45 @@ fn parse_special_key<'a>(input: &mut LocatingSlice<&'a str>) -> ParseResult<'a, 
         "\\(",
         alt((
             alt((
-                "ESC".value(SpecialKey::Esc),
-                "TAB".value(SpecialKey::Tab),
-                "CAP".value(SpecialKey::CapsLock),
-                "SHI".value(SpecialKey::Shift),
-                "CTR".value(SpecialKey::Ctrl),
-                "COP".value(SpecialKey::Copy),
-                "CLR".value(SpecialKey::Clr),
-                "DEL".value(SpecialKey::Del),
-                "RET".value(SpecialKey::Return),
+                alt((
+                    "ESC".value(SpecialKey::Esc),
+                    "TAB".value(SpecialKey::Tab),
+                    "CAP".value(SpecialKey::CapsLock),
+                    "SHI".value(SpecialKey::Shift),
+                    "CTR".value(SpecialKey::Ctrl),
+                    "COP".value(SpecialKey::Copy),
+                    "CLR".value(SpecialKey::Clr),
+                    "DEL".value(SpecialKey::Del),
+                    "RET".value(SpecialKey::Return)
+                )),
                 "ENT".value(SpecialKey::Enter),
-                "ARL".value(SpecialKey::ArrowLeft),
-                "ARR".value(SpecialKey::ArrowRight),
-                "ARU".value(SpecialKey::ArrowUp),
-                "ARD".value(SpecialKey::ArrowDown),
-                "FN0".value(SpecialKey::F0)
+                alt((
+                    "ARL".value(SpecialKey::ArrowLeft),
+                    "ARR".value(SpecialKey::ArrowRight),
+                    "ARU".value(SpecialKey::ArrowUp),
+                    "ARD".value(SpecialKey::ArrowDown),
+                    "FN0".value(SpecialKey::F0)
+                ))
             )),
             alt((
-                "FN1".value(SpecialKey::F1),
-                "FN2".value(SpecialKey::F2),
-                "FN3".value(SpecialKey::F3),
-                "FN4".value(SpecialKey::F4),
-                "FN5".value(SpecialKey::F5),
-                "FN6".value(SpecialKey::F6),
-                "FN7".value(SpecialKey::F7),
-                "FN8".value(SpecialKey::F8),
-                "FN9".value(SpecialKey::F9),
+                alt((
+                    "FN1".value(SpecialKey::F1),
+                    "FN2".value(SpecialKey::F2),
+                    "FN3".value(SpecialKey::F3),
+                    "FN4".value(SpecialKey::F4),
+                    "FN5".value(SpecialKey::F5),
+                    "FN6".value(SpecialKey::F6),
+                    "FN7".value(SpecialKey::F7),
+                    "FN8".value(SpecialKey::F8),
+                    "FN9".value(SpecialKey::F9)
+                )),
                 "{".value(SpecialKey::LeftBrace),
-                "}".value(SpecialKey::RightBrace),
-                "\\".value(SpecialKey::Backslash),
-                "'".value(SpecialKey::Quote),
-                "KOF".value(SpecialKey::NoDelayNextKey)
+                alt((
+                    "}".value(SpecialKey::RightBrace),
+                    "\\".value(SpecialKey::Backslash),
+                    "'".value(SpecialKey::Quote),
+                    "KOF".value(SpecialKey::NoDelayNextKey)
+                ))
             ))
         )),
         ")"
@@ -674,42 +682,52 @@ pub fn parse_instruction<'a>(
         ws0,
         alt((
             alt((
-                comment,
-                parse_csl_version,
-                parse_reset,
-                parse_crtc_select,
-                parse_gate_array,
-                parse_cpc_model_instr,
-                parse_memory_exp,
-                parse_rom_dir,
-                parse_rom_config,
-                parse_disk_insert,
-                parse_disk_dir,
-                parse_tape_insert,
-                parse_tape_dir,
-                parse_tape_play,
-                parse_tape_stop,
-                parse_tape_rewind,
-                parse_snapshot_load,
-                parse_snapshot_dir,
-                parse_key_delay,
-                parse_key_output
+                alt((
+                    comment,
+                    parse_csl_version,
+                    parse_reset,
+                    parse_crtc_select,
+                    parse_gate_array,
+                    parse_cpc_model_instr,
+                    parse_memory_exp,
+                    parse_rom_dir,
+                    parse_rom_config
+                )),
+                alt((
+                    parse_disk_insert,
+                    parse_disk_dir,
+                    parse_tape_insert,
+                    parse_tape_dir,
+                    parse_tape_play,
+                    parse_tape_stop,
+                    parse_tape_rewind,
+                    parse_snapshot_load,
+                    parse_snapshot_dir
+                )),
+                alt((
+                    parse_key_delay,
+                    parse_key_output
+                ))
             )),
             alt((
-                parse_key_from_file,
-                parse_keyboard_write,
-                parse_wait_driveonoff,
-                parse_wait_vsyncoffon,
-                parse_wait_ssm0000,
-                parse_wait,
-                parse_screenshot_name,
-                parse_screenshot_dir,
-                parse_screenshot,
-                parse_snapshot_name,
-                parse_snapshot_version,
-                parse_snapshot,
-                parse_csl_load,
-                parse_empty_line
+                alt((
+                    parse_key_from_file,
+                    parse_keyboard_write,
+                    parse_wait_driveonoff,
+                    parse_wait_vsyncoffon,
+                    parse_wait_ssm0000,
+                    parse_wait,
+                    parse_screenshot_name,
+                    parse_screenshot_dir,
+                    parse_screenshot
+                )),
+                alt((
+                    parse_snapshot_name,
+                    parse_snapshot_version,
+                    parse_snapshot,
+                    parse_csl_load,
+                    parse_empty_line
+                ))
             ))
         ))
     )

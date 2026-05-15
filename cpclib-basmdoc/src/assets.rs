@@ -38,8 +38,8 @@ fn download_or_cache(url: &str, filename: &str) -> Result<String, Box<dyn std::e
     }
 
     // Download the file
-    let response = ureq::get(url).call()?;
-    let content = response.into_string()?;
+    let mut response = ureq::get(url).call()?;
+    let content = response.body_mut().read_to_string()?;
 
     // Cache it
     fs_err::write(&cache_file, &content).ok();

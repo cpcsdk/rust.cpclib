@@ -296,21 +296,21 @@ pub fn parse_ld_normal(
         let _start = *input;
         let dst = cut_err(
             alt((
-                parse_reg_address,
-                parse_indexregister_address,
-                parse_indexregister_with_index,
-                parse_register_sp,
-                terminated(
-                    parse_register16,
-                    not(alt((Caseless(".low"), Caseless(".high"))))
-                ),
-                parse_register8,
-                parse_indexregister16,
-                parse_indexregister8,
-                parse_register_i,
-                parse_register_r,
-                parse_hl_address,
-                parse_address
+                alt((
+                    parse_reg_address,
+                    parse_indexregister_address,
+                    parse_indexregister_with_index,
+                    parse_register_sp,
+                    terminated(
+                        parse_register16,
+                        not(alt((Caseless(".low"), Caseless(".high"))))
+                    ),
+                    parse_register8,
+                    parse_indexregister16,
+                    parse_indexregister8,
+                    parse_register_i
+                )),
+                alt((parse_register_r, parse_hl_address, parse_address))
             ))
             .context(StrContext::Label("LD: wrong destination"))
         )

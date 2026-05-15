@@ -286,41 +286,45 @@ pub fn parse_factor(input: &mut InnerZ80Span) -> ModalResult<LocatedExpr, Z80Par
     let factor = preceded(
         my_space0,
         alt((
-            // Proximity label references: _+ and _- (bare _ is parsed as normal label)
-            parse_proximity_label_usage.map(|l| LocatedExpr::Label(l.into())),
-            positive_number,
-            parse_bool_value,
-            prefixed_label_expr,
-            parse_label(false).map(|l| LocatedExpr::Label(l.into())),
-            negative_number,
-            parse_expr_bracketed_list.verify(|_| !is_orgams),
-            // manage values
-            parse_string.map(|s| {
-                if s.as_ref().len() == 1 {
-                    LocatedExpr::Char(s.0.chars().next().unwrap(), s.1)
-                }
-                else {
-                    LocatedExpr::String(s)
-                }
-            }),
-            parse_counter,
-            // manage $ and $$
-            alt(("$$", "$")).map(|l| LocatedExpr::Label(cloned.update_slice(l).into())),
-            (
-                "-",
-                alt(("$$", "$"))
-                    .map(|l| Box::new(LocatedExpr::Label(cloned.update_slice(l).into())))
-            )
-                .with_taken()
-                .map(|((_m, dollar), content)| {
-                    LocatedExpr::UnaryOperation(
-                        UnaryOperation::Neg,
-                        dollar,
-                        cloned.update_slice(content).into()
-                    )
+            alt((
+                // Proximity label references: _+ and _- (bare _ is parsed as normal label)
+                parse_proximity_label_usage.map(|l| LocatedExpr::Label(l.into())),
+                positive_number,
+                parse_bool_value,
+                prefixed_label_expr,
+                parse_label(false).map(|l| LocatedExpr::Label(l.into())),
+                negative_number,
+                parse_expr_bracketed_list.verify(|_| !is_orgams),
+                // manage values
+                parse_string.map(|s| {
+                    if s.as_ref().len() == 1 {
+                        LocatedExpr::Char(s.0.chars().next().unwrap(), s.1)
+                    }
+                    else {
+                        LocatedExpr::String(s)
+                    }
                 }),
-            // manage labels
-            parens
+                parse_counter
+            )),
+            alt((
+                // manage $ and $$
+                alt(("$$", "$")).map(|l| LocatedExpr::Label(cloned.update_slice(l).into())),
+                (
+                    "-",
+                    alt(("$$", "$"))
+                        .map(|l| Box::new(LocatedExpr::Label(cloned.update_slice(l).into())))
+                )
+                    .with_taken()
+                    .map(|((_m, dollar), content)| {
+                        LocatedExpr::UnaryOperation(
+                            UnaryOperation::Neg,
+                            dollar,
+                            cloned.update_slice(content).into()
+                        )
+                    }),
+                // manage labels
+                parens
+            ))
         )) /* ,
             * my_space0 */
     )

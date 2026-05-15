@@ -495,18 +495,22 @@ pub fn parse_line_component_standard(
             b"=".value(LabelModifier::Equal(None)),
             alt((parse_word(b"FIELD").value(()), b"#".value(()))).value(LabelModifier::Field),
             alt((
-                b">>=".value(BinaryOperation::RightShift),
-                b"<<=".value(BinaryOperation::LeftShift),
-                b"+=".value(BinaryOperation::Add),
-                b"-=".value(BinaryOperation::Sub),
-                b"*=".value(BinaryOperation::Mul),
-                b"/=".value(BinaryOperation::Div),
-                b"%=".value(BinaryOperation::Mod),
-                b"&=".value(BinaryOperation::BinaryAnd),
-                b"|=".value(BinaryOperation::BinaryOr),
-                b"^=".value(BinaryOperation::BinaryXor),
-                b"&&=".value(BinaryOperation::BooleanAnd),
-                b"||=".value(BinaryOperation::BooleanOr)
+                alt((
+                    b">>=".value(BinaryOperation::RightShift),
+                    b"<<=".value(BinaryOperation::LeftShift),
+                    b"+=".value(BinaryOperation::Add),
+                    b"-=".value(BinaryOperation::Sub),
+                    b"*=".value(BinaryOperation::Mul),
+                    b"/=".value(BinaryOperation::Div),
+                    b"%=".value(BinaryOperation::Mod),
+                    b"&=".value(BinaryOperation::BinaryAnd),
+                    b"|=".value(BinaryOperation::BinaryOr)
+                )),
+                alt((
+                    b"^=".value(BinaryOperation::BinaryXor),
+                    b"&&=".value(BinaryOperation::BooleanAnd),
+                    b"||=".value(BinaryOperation::BooleanOr)
+                ))
             ))
             .map(|oper| LabelModifier::Equal(Some(oper)))
         )))

@@ -34,7 +34,7 @@ fs-err.workspace = true
 glob.workspace = true
 tar = "0.4.45"
 rust-ini.workspace = true
-scraper = "0.25.0"
+scraper = "0.27.0"
 transparent = { workspace = true, optional = true }
 xz2 = "0.1.7"
 wmctrl = "0.1.8"

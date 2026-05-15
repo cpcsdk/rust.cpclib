@@ -263,126 +263,149 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
 
     let mut instruction = alt((
         alt((parse_rem,)).map(|i| vec![i]),
-        // Control flow
+        // Control flow (split for winnow v1)
         alt((
-            parse_if,
-            parse_for,
-            parse_next,
-            parse_else,
-            parse_while,
-            parse_wend,
-            parse_goto,
-            parse_gosub,
-            parse_return,
-            parse_on_goto_gosub,
-            parse_on_error_goto,
-            parse_on_break,
-            parse_resume,
-            parse_error,
-            parse_cont,
-            parse_every,
-            parse_after
+            alt((
+                parse_if,
+                parse_for,
+                parse_next,
+                parse_else,
+                parse_while,
+                parse_wend,
+                parse_goto,
+                parse_gosub,
+                parse_return
+            )),
+            alt((
+                parse_on_goto_gosub,
+                parse_on_error_goto,
+                parse_on_break,
+                parse_resume,
+                parse_error,
+                parse_cont,
+                parse_every,
+                parse_after
+            ))
         )),
         // Graphics
         alt((
-            parse_draw,
-            parse_drawr,
-            parse_move,
-            parse_mover,
-            parse_plot,
-            parse_plotr,
-            parse_origin,
-            parse_clg,
-            parse_mask,
-            parse_frame,
-            parse_graphics_pen,
-            parse_graphics_paper
+            alt((
+                parse_draw,
+                parse_drawr,
+                parse_move,
+                parse_mover,
+                parse_plot,
+                parse_plotr,
+                parse_origin,
+                parse_clg,
+                parse_mask
+            )),
+            alt((
+                parse_frame,
+                parse_graphics_pen,
+                parse_graphics_paper
+            ))
         )),
         // Screen/Display
         alt((
-            parse_mode,
-            parse_cls,
-            parse_locate,
-            parse_ink,
-            parse_border,
-            parse_pen,
-            parse_paper,
-            parse_window,
-            parse_window_swap,
-            parse_cursor,
-            parse_tagoff,
-            parse_tag
+            alt((
+                parse_mode,
+                parse_cls,
+                parse_locate,
+                parse_ink,
+                parse_border,
+                parse_pen,
+                parse_paper,
+                parse_window,
+                parse_window_swap
+            )),
+            alt((parse_cursor, parse_tagoff, parse_tag))
         )),
         // Data/Memory
         alt((
-            parse_def_fn,
-            parse_data,
-            parse_read,
-            parse_restore,
-            parse_dim,
-            parse_poke,
-            parse_out,
-            parse_erase,
-            parse_swap,
-            parse_memory,
-            parse_wait
+            alt((
+                parse_def_fn,
+                parse_data,
+                parse_read,
+                parse_restore,
+                parse_dim,
+                parse_poke,
+                parse_out,
+                parse_erase,
+                parse_swap
+            )),
+            alt((parse_memory, parse_wait))
         )),
         // File operations & Program control
         alt((
-            parse_chain,
-            parse_merge,
-            parse_openin,
-            parse_openout,
-            parse_closein,
-            parse_closeout,
-            parse_load,
-            parse_save,
-            parse_cat,
-            parse_new,
-            parse_clear,
-            parse_end,
-            parse_stop
+            alt((
+                parse_chain,
+                parse_merge,
+                parse_openin,
+                parse_openout,
+                parse_closein,
+                parse_closeout,
+                parse_load,
+                parse_save,
+                parse_cat
+            )),
+            alt((
+                parse_new,
+                parse_clear,
+                parse_end,
+                parse_stop
+            ))
         )),
         // Math/Misc & I/O
         alt((
-            parse_deg,
-            parse_rad,
-            parse_randomize,
-            parse_sound,
-            parse_ent,
-            parse_env,
-            parse_release,
-            parse_line_input,
-            parse_key_def,
-            parse_key,
-            parse_zone,
-            parse_width,
-            parse_write,
-            parse_mid_assign,
-            parse_ei,
-            parse_di,
-            parse_call,
-            parse_run,
-            parse_input,
-            parse_print
+            alt((
+                parse_deg,
+                parse_rad,
+                parse_randomize,
+                parse_sound,
+                parse_ent,
+                parse_env,
+                parse_release,
+                parse_line_input,
+                parse_key_def
+            )),
+            alt((
+                parse_key,
+                parse_zone,
+                parse_width,
+                parse_write,
+                parse_mid_assign,
+                parse_ei,
+                parse_di,
+                parse_call,
+                parse_run
+            )),
+            alt((
+                parse_input,
+                parse_print
+            ))
         )),
         // Utilities & Debug
         alt((
-            parse_list,
-            parse_delete,
-            parse_renum,
-            parse_auto,
-            parse_edit,
-            parse_defint,
-            parse_defreal,
-            parse_defstr,
-            parse_tron,
-            parse_troff,
-            parse_symbol,
-            parse_symbol_after,
-            parse_speed_ink,
-            parse_speed_write,
-            parse_speed_key
+            alt((
+                parse_list,
+                parse_delete,
+                parse_renum,
+                parse_auto,
+                parse_edit,
+                parse_defint,
+                parse_defreal,
+                parse_defstr,
+                parse_tron
+            )),
+            alt((
+                parse_troff,
+                parse_symbol,
+                parse_symbol_after,
+                parse_speed_ink,
+                parse_speed_write,
+                parse_speed_key
+            ))
         )),
         // Assignment (LET is optional, but checked first since it's a keyword)
         // MID$ assignment is also checked before regular assignment as it's a special form
@@ -846,15 +869,17 @@ pub fn parse_print<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
     // Ensure PRINT is followed by space, colon, end-of-line, or special chars (not part of a longer identifier)
     peek(alt((
-        ' '.void(),
-        '\t'.void(),
-        ':'.void(),
-        '\n'.void(),
-        '\r'.void(),
-        '"'.void(), // a string
-        '#'.void(), // stream number
-        '$'.void(), // function like STRING$
-        '('.void(), // parenthesized expression
+        alt((
+            ' '.void(),
+            '\t'.void(),
+            ':'.void(),
+            '\n'.void(),
+            '\r'.void(),
+            '"'.void(), // a string
+            '#'.void(), // stream number
+            '$'.void(), // function like STRING$
+            '('.void() // parenthesized expression
+        )),
         eof.void()
     )))
     .parse_next(input)?;
@@ -1250,45 +1275,32 @@ pub fn parse_paper<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 
 /// FOR variable = start TO end [STEP increment]
 pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let (
-        _,
-        space_a,
-        var,
-        space_b,
-        eq,
-        mut space_c,
-        mut start_val,
-        mut space_d,
-        _,
-        mut space_e,
-        mut end_val,
-        step_part
-    ) = (
-        Caseless("FOR"),
-        parse_basic_space1,
-        cut_err(parse_variable.context(StrContext::Label("Variable expected"))),
-        parse_basic_space0,
-        cut_err('='.context(StrContext::Label("= expected"))),
-        parse_basic_space0,
-        cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::None)
-                .context(StrContext::Label("Start value expected"))
-        ),
-        parse_basic_space1,
-        cut_err(Caseless("TO").context(StrContext::Label("TO expected"))),
-        parse_basic_space1,
-        cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::None)
-                .context(StrContext::Label("End value expected"))
-        ),
-        opt((
-            parse_basic_space1,
-            Caseless("STEP"),
-            parse_basic_space1,
-            parse_numeric_expression(NumericExpressionConstraint::None)
-        ))
+    let _ = Caseless("FOR").parse_next(input)?;
+    let space_a = parse_basic_space1.parse_next(input)?;
+    let var = cut_err(parse_variable.context(StrContext::Label("Variable expected"))).parse_next(input)?;
+    let space_b = parse_basic_space0.parse_next(input)?;
+    let eq = cut_err('='.context(StrContext::Label("= expected"))).parse_next(input)?;
+    let mut space_c = parse_basic_space0.parse_next(input)?;
+    let mut start_val = cut_err(
+        parse_numeric_expression(NumericExpressionConstraint::None)
+            .context(StrContext::Label("Start value expected"))
     )
-        .parse_next(input)?;
+    .parse_next(input)?;
+    let mut space_d = parse_basic_space1.parse_next(input)?;
+    let _ = cut_err(Caseless("TO").context(StrContext::Label("TO expected"))).parse_next(input)?;
+    let mut space_e = parse_basic_space1.parse_next(input)?;
+    let mut end_val = cut_err(
+        parse_numeric_expression(NumericExpressionConstraint::None)
+            .context(StrContext::Label("End value expected"))
+    )
+    .parse_next(input)?;
+    let step_part = opt((
+        parse_basic_space1,
+        Caseless("STEP"),
+        parse_basic_space1,
+        parse_numeric_expression(NumericExpressionConstraint::None)
+    ))
+    .parse_next(input)?;
 
     let mut res = construct_token_list!(
         BasicToken::SimpleToken(BasicTokenNoPrefix::For),
@@ -3496,22 +3508,18 @@ pub fn parse_line_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult
     let _ = Caseless("LINE").parse_next(input)?;
     peek(alt((' '.void(), '\t'.void()))).parse_next(input)?;
 
-    let (space_a, _, space_b, canal, space_c, sep, space_d, string, space_e, comma, space_f, var) =
-        (
-            parse_basic_space1,
-            cut_err(Caseless("INPUT").context(StrContext::Label("INPUT expected"))),
-            parse_basic_space0,
-            opt(parse_canal),
-            parse_basic_space0,
-            opt(one_of([';', ','])),
-            parse_basic_space0,
-            opt(parse_quoted_string(true)),
-            parse_basic_space0,
-            opt(one_of([';', ','])),
-            parse_basic_space0,
-            parse_variable
-        )
-            .parse_next(input)?;
+    let space_a = parse_basic_space1.parse_next(input)?;
+    let _ = cut_err(Caseless("INPUT").context(StrContext::Label("INPUT expected"))).parse_next(input)?;
+    let space_b = parse_basic_space0.parse_next(input)?;
+    let canal = opt(parse_canal).parse_next(input)?;
+    let space_c = parse_basic_space0.parse_next(input)?;
+    let sep = opt(one_of([';', ','])).parse_next(input)?;
+    let space_d = parse_basic_space0.parse_next(input)?;
+    let string = opt(parse_quoted_string(true)).parse_next(input)?;
+    let space_e = parse_basic_space0.parse_next(input)?;
+    let comma = opt(one_of([';', ','])).parse_next(input)?;
+    let space_f = parse_basic_space0.parse_next(input)?;
+    let var = parse_variable.parse_next(input)?;
 
     let sep_token = sep.map(|s| vec![BasicToken::SimpleToken(s.into())]);
     let comma_token = comma.map(|c| vec![BasicToken::SimpleToken(c.into())]);
@@ -4039,19 +4047,23 @@ fn parse_numeric_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 
     // Parse the first value (number, variable, function call, or parenthesized expression)
     let mut value_tokens = alt((
-        parse_asc,
-        parse_val,
-        parse_len,
-        parse_min,
-        parse_max,
-        parse_round,
-        parse_all_generated_numeric_functions_any,
-        parse_all_generated_numeric_functions_any2,
-        parse_all_generated_numeric_functions_int,
-        parse_parenthesized_numeric_expression,
-        parse_basic_value.map(|v| vec![v]),
-        parse_integer_variable,
-        parse_float_variable
+        alt((
+            parse_asc,
+            parse_val,
+            parse_len,
+            parse_min,
+            parse_max,
+            parse_round,
+            parse_all_generated_numeric_functions_any,
+            parse_all_generated_numeric_functions_any2,
+            parse_all_generated_numeric_functions_int
+        )),
+        alt((
+            parse_parenthesized_numeric_expression,
+            parse_basic_value.map(|v| vec![v]),
+            parse_integer_variable,
+            parse_float_variable
+        ))
     ))
     .parse_next(input)?;
     res.append(&mut value_tokens);
@@ -4074,23 +4086,27 @@ fn parse_numeric_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 
         // Try to parse an operator
         let op_result: ModalResult<Vec<BasicToken>, ContextError<StrContext>> = alt((
-            Caseless("MOD").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mod)]),
-            "<=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThanOrEqual)]),
-            ">=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterOrEqual)]),
-            "<>".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)]),
-            "<".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)]),
-            ">".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)]),
-            "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals)]),
-            "^".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Power)]),
-            "\\".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::IntegerDivision)]),
-            "*".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Multiplication)]),
-            "/".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Division)]),
-            "+".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Addition)]),
-            "-".map(|_| {
-                vec![BasicToken::SimpleToken(
-                    BasicTokenNoPrefix::SubstractionOrUnaryMinus
-                )]
-            })
+            alt((
+                Caseless("MOD").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mod)]),
+                "<=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThanOrEqual)]),
+                ">=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterOrEqual)]),
+                "<>".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)]),
+                "<".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)]),
+                ">".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)]),
+                "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals)]),
+                "^".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Power)]),
+                "\\".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::IntegerDivision)])
+            )),
+            alt((
+                "*".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Multiplication)]),
+                "/".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Division)]),
+                "+".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Addition)]),
+                "-".map(|_| {
+                    vec![BasicToken::SimpleToken(
+                        BasicTokenNoPrefix::SubstractionOrUnaryMinus
+                    )]
+                })
+            ))
         ))
         .parse_next(input);
 
@@ -4107,19 +4123,23 @@ fn parse_numeric_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 
             // Parse next value
             if let Ok(mut next_value) = alt((
-                parse_asc,
-                parse_val,
-                parse_len,
-                parse_min,
-                parse_max,
-                parse_round,
-                parse_all_generated_numeric_functions_any,
-                parse_all_generated_numeric_functions_any2,
-                parse_all_generated_numeric_functions_int,
-                parse_parenthesized_numeric_expression,
-                parse_basic_value.map(|v| vec![v]),
-                parse_integer_variable,
-                parse_float_variable
+                alt((
+                    parse_asc,
+                    parse_val,
+                    parse_len,
+                    parse_min,
+                    parse_max,
+                    parse_round,
+                    parse_all_generated_numeric_functions_any,
+                    parse_all_generated_numeric_functions_any2,
+                    parse_all_generated_numeric_functions_int
+                )),
+                alt((
+                    parse_parenthesized_numeric_expression,
+                    parse_basic_value.map(|v| vec![v]),
+                    parse_integer_variable,
+                    parse_float_variable
+                ))
             ))
             .parse_next(input)
             {
@@ -4144,22 +4164,26 @@ fn parse_numeric_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 pub fn parse_string_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     // Parse first string value
     let mut result = alt((
-        parse_quoted_string(false),
-        parse_chr_dollar,
-        parse_mid_dollar,
-        parse_left_dollar,
-        parse_right_dollar,
-        parse_lower_dollar,
-        parse_upper_dollar,
-        parse_space_dollar,
-        parse_str_dollar,
-        parse_string_dollar,
-        parse_bin_dollar,
-        parse_dec_dollar,
-        parse_hex_dollar,
-        parse_inkey_dollar,
-        parse_copychar_dollar,
-        parse_string_variable
+        alt((
+            parse_quoted_string(false),
+            parse_chr_dollar,
+            parse_mid_dollar,
+            parse_left_dollar,
+            parse_right_dollar,
+            parse_lower_dollar,
+            parse_upper_dollar,
+            parse_space_dollar,
+            parse_str_dollar
+        )),
+        alt((
+            parse_string_dollar,
+            parse_bin_dollar,
+            parse_dec_dollar,
+            parse_hex_dollar,
+            parse_inkey_dollar,
+            parse_copychar_dollar,
+            parse_string_variable
+        ))
     ))
     .parse_next(input)?;
 
@@ -4171,22 +4195,26 @@ pub fn parse_string_expression<'src>(input: &mut &'src str) -> BasicSeveralToken
             '+',
             parse_basic_space0,
             alt((
-                parse_quoted_string(false),
-                parse_chr_dollar,
-                parse_mid_dollar,
-                parse_left_dollar,
-                parse_right_dollar,
-                parse_lower_dollar,
-                parse_upper_dollar,
-                parse_space_dollar,
-                parse_str_dollar,
-                parse_string_dollar,
-                parse_bin_dollar,
-                parse_dec_dollar,
-                parse_hex_dollar,
-                parse_inkey_dollar,
-                parse_copychar_dollar,
-                parse_string_variable
+                alt((
+                    parse_quoted_string(false),
+                    parse_chr_dollar,
+                    parse_mid_dollar,
+                    parse_left_dollar,
+                    parse_right_dollar,
+                    parse_lower_dollar,
+                    parse_upper_dollar,
+                    parse_space_dollar,
+                    parse_str_dollar
+                )),
+                alt((
+                    parse_string_dollar,
+                    parse_bin_dollar,
+                    parse_dec_dollar,
+                    parse_hex_dollar,
+                    parse_inkey_dollar,
+                    parse_copychar_dollar,
+                    parse_string_variable
+                ))
             ))
         )
             .map(|(mut space_before, plus, mut space_after, mut value)| {
@@ -4243,19 +4271,23 @@ pub fn parse_numeric_expression<'code>(
         let mut value_tokens = match constraint {
             NumericExpressionConstraint::None => {
                 alt((
-                    parse_asc,
-                    parse_val,
-                    parse_len,
-                    parse_min,
-                    parse_max,
-                    parse_round,
-                    parse_all_generated_numeric_functions_any,
-                    parse_all_generated_numeric_functions_any2,
-                    parse_all_generated_numeric_functions_int,
-                    parse_parenthesized_numeric_expression,
-                    parse_basic_value.map(|v| vec![v]),
-                    parse_integer_variable,
-                    parse_float_variable
+                    alt((
+                        parse_asc,
+                        parse_val,
+                        parse_len,
+                        parse_min,
+                        parse_max,
+                        parse_round,
+                        parse_all_generated_numeric_functions_any,
+                        parse_all_generated_numeric_functions_any2,
+                        parse_all_generated_numeric_functions_int
+                    )),
+                    alt((
+                        parse_parenthesized_numeric_expression,
+                        parse_basic_value.map(|v| vec![v]),
+                        parse_integer_variable,
+                        parse_float_variable
+                    ))
                 ))
                 .parse_next(input)?
             },
@@ -4284,26 +4316,30 @@ pub fn parse_numeric_expression<'code>(
 
             // Try to parse an operator
             let op_result: ModalResult<Vec<BasicToken>, ContextError<StrContext>> = alt((
-                Caseless("MOD").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mod)]),
-                Caseless("AND").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::And)]),
-                Caseless("OR").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Or)]),
-                Caseless("XOR").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Xor)]),
-                "<=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThanOrEqual)]),
-                ">=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterOrEqual)]),
-                "<>".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)]),
-                "<".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)]),
-                ">".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)]),
-                "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals)]),
-                "^".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Power)]),
-                "\\".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::IntegerDivision)]),
-                "*".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Multiplication)]),
-                "/".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Division)]),
-                "+".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Addition)]),
-                "-".map(|_| {
-                    vec![BasicToken::SimpleToken(
-                        BasicTokenNoPrefix::SubstractionOrUnaryMinus
-                    )]
-                })
+                alt((
+                    Caseless("MOD").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Mod)]),
+                    Caseless("AND").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::And)]),
+                    Caseless("OR").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Or)]),
+                    Caseless("XOR").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Xor)]),
+                    "<=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThanOrEqual)]),
+                    ">=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterOrEqual)]),
+                    "<>".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)]),
+                    "<".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)]),
+                    ">".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)])
+                )),
+                alt((
+                    "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals)]),
+                    "^".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Power)]),
+                    "\\".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::IntegerDivision)]),
+                    "*".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Multiplication)]),
+                    "/".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Division)]),
+                    "+".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Addition)]),
+                    "-".map(|_| {
+                        vec![BasicToken::SimpleToken(
+                            BasicTokenNoPrefix::SubstractionOrUnaryMinus
+                        )]
+                    })
+                ))
             ))
             .parse_next(input);
 
@@ -4327,19 +4363,20 @@ pub fn parse_numeric_expression<'code>(
             let mut rhs = match constraint {
                 NumericExpressionConstraint::None => {
                     alt((
-                        parse_asc,
+                        alt((parse_asc,
                         parse_val,
                         parse_len,
                         parse_min,
                         parse_max,
-                        parse_round,
+                        parse_round)),
+                        alt((
                         parse_all_generated_numeric_functions_any,
                         parse_all_generated_numeric_functions_any2,
                         parse_all_generated_numeric_functions_int,
                         parse_parenthesized_numeric_expression,
                         parse_basic_value.map(|v| vec![v]),
                         parse_integer_variable,
-                        parse_float_variable
+                        parse_float_variable))
                     ))
                     .parse_next(input)?
                 },
@@ -4401,13 +4438,7 @@ macro_rules! generate_string_functions {
                 }
             })+
 
-            pub fn parse_all_generated_string_functions<'src>(input:&mut  &'src str) -> BasicSeveralTokensResult<'src>{
-                alt((
-                    $(
-                        paste!{[<parse_ $name:lower>]},
-                    )+
-                )).parse_next(input)
-            }
+            // Removed macro-generated parse_all_generated_string_functions; use manual version below
 
 };
 }
@@ -4416,6 +4447,13 @@ generate_string_functions! {
     ASC: BasicToken::PrefixedToken(BasicTokenPrefixed::Asc),
     LEN: BasicToken::PrefixedToken(BasicTokenPrefixed::Len),
     VAL: BasicToken::PrefixedToken(BasicTokenPrefixed::Val)
+}
+
+// Manual expansion for winnow v1 compatibility (no tuple > 10)
+#[allow(clippy::needless_lifetimes)]
+pub fn parse_all_generated_string_functions<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    // Only 3, so no need to chunk
+    alt((parse_asc, parse_len, parse_val)).parse_next(input)
 }
 
 /// CHR$(code)
@@ -4883,13 +4921,7 @@ macro_rules! generate_numeric_functions {
 
 
             paste! {
-                    pub fn [<parse_all_generated_numeric_functions_ $kind >]<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-                    alt((
-                        $(
-                            paste!{[<parse_ $name:lower>]},
-                        )+
-                    )).parse_next(input)
-                }
+                    // Removed macro-generated parse_all_generated_numeric_functions_*; use manual version below
             }
         )+
 };
@@ -4917,7 +4949,53 @@ generate_numeric_functions! {
         SQ: BasicToken::PrefixedToken(BasicTokenPrefixed::Sq),
         SQR: BasicToken::PrefixedToken(BasicTokenPrefixed::Sqr)
     }
+} // <-- Properly terminate macro invocation
+// Manual expansion for winnow v1 compatibility (no tuple > 10)
+#[allow(clippy::needless_lifetimes)]
+pub fn parse_all_generated_numeric_functions_any<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    // 17 functions, so split into two groups
+    let group1 = alt((
+        parse_abs, parse_atn, parse_cint, parse_cos, parse_creal,
+        parse_exp, parse_fix, parse_fre, parse_inp
+    ));
+    let group2 = alt((
+        parse_int, parse_log, parse_log10, parse_peek, parse_sgn, parse_sin, parse_sq, parse_sqr
+    ));
+    alt((group1, group2)).parse_next(input)
+}
 
+#[allow(clippy::needless_lifetimes)]
+pub fn parse_all_generated_numeric_functions_any2<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    alt((
+        parse_remain,
+        parse_rnd,
+        parse_tan,
+        parse_test,
+        parse_testr,
+        parse_unt,
+        parse_xpos,
+        parse_ypos
+    ))
+    .parse_next(input)
+}
+
+#[allow(clippy::needless_lifetimes)]
+pub fn parse_all_generated_numeric_functions_int<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    alt((
+        parse_derr,
+        parse_eof,
+        parse_err,
+        parse_himem,
+        parse_inkey,
+        parse_joy,
+        parse_pos,
+        parse_time,
+        parse_vpos
+    ))
+    .parse_next(input)
+}
+
+generate_numeric_functions! {
     NumericExpressionConstraint::None | any2  => {
         REMAIN: BasicToken::PrefixedToken(BasicTokenPrefixed::Remain),
         RND: BasicToken::PrefixedToken(BasicTokenPrefixed::Rnd),
@@ -4928,7 +5006,9 @@ generate_numeric_functions! {
         XPOS: BasicToken::PrefixedToken(BasicTokenPrefixed::Xpos),
         YPOS: BasicToken::PrefixedToken(BasicTokenPrefixed::Ypos)
     }
+}
 
+generate_numeric_functions! {
     NumericExpressionConstraint::Integer | int => {
         DERR: BasicToken::PrefixedToken(BasicTokenPrefixed::Derr),
         EOF: BasicToken::PrefixedToken(BasicTokenPrefixed::Eof),
@@ -5010,7 +5090,7 @@ pub fn parse_hexadecimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTo
 }
 
 pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
-    (opt('-'), terminated(dec_u16_inner, not('.')))
+    (opt('-'), terminated(dec_u16_inner, cpclib_common::winnow::combinator::not('.')))
         .map(|(neg, val)| {
             let val = val as i16;
             BasicToken::Constant(
@@ -5024,7 +5104,7 @@ pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenR
 /// Parse binary digits (0-1) into a u16 value
 #[inline]
 pub fn bin_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
-    take_while(1..=16, ('0', '1'))
+    cpclib_common::winnow::token::take_while(1..=16, ('0', '1'))
         .map(|parsed: &str| {
             let mut res = 0_u32;
             for digit in parsed.chars() {
@@ -5041,7 +5121,7 @@ pub fn bin_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
 /// XXX stolen to the asm parser
 #[inline]
 pub fn hex_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
-    take_while(1..=4, AsChar::is_hex_digit)
+    cpclib_common::winnow::token::take_while(1..=4, AsChar::is_hex_digit)
         .map(|parsed: &str| {
             let mut res = 0_u32;
             for digit in parsed.chars() {
@@ -5058,7 +5138,7 @@ pub fn hex_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
 /// XXX stolen to the asm parser
 #[inline]
 pub fn dec_u16_inner(input: &mut &str) -> ModalResult<u16, ContextError> {
-    take_while(1.., '0'..='9')
+    cpclib_common::winnow::token::take_while(1.., '0'..='9')
         .verify(|parsed: &str| parsed.len() <= 5)
         .map(|parsed: &str| {
             let mut res = 0_u32;

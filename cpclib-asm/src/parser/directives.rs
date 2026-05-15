@@ -888,26 +888,30 @@ pub fn parse_crunched_section(
     let crunched_start = input.checkpoint();
     let crunched_start_span = *input;
     let kind = alt((
-        #[cfg(not(target_arch = "wasm32"))]
-        parse_directive_word(b"LZEXO").value(CrunchType::LZEXO),
-        #[cfg(not(target_arch = "wasm32"))]
-        parse_directive_word(b"LZ4").value(CrunchType::LZ4),
-        parse_directive_word(b"LZ48").value(CrunchType::LZ48),
-        parse_directive_word(b"LZ49").value(CrunchType::LZ49),
-        #[cfg(not(target_arch = "wasm32"))]
-        parse_directive_word(b"LZSHRINKLER").value(CrunchType::Shrinkler),
-        #[cfg(not(target_arch = "wasm32"))]
-        parse_directive_word(b"LZUPKR").value(CrunchType::Upkr),
-        #[cfg(not(target_arch = "wasm32"))]
-        parse_directive_word(b"LZX7").value(CrunchType::LZX7),
-        #[cfg(not(target_arch = "wasm32"))]
-        parse_directive_word(b"LZX0_BACKWARD").value(CrunchType::BackwardZx0),
-        #[cfg(not(target_arch = "wasm32"))]
-        parse_directive_word(b"LZX0").value(CrunchType::Zx0),
-        #[cfg(not(target_arch = "wasm32"))]
-        parse_directive_word(b"LZAPU").value(CrunchType::LZAPU),
-        parse_directive_word(b"LZSA1").value(CrunchType::LZSA1),
-        parse_directive_word(b"LZSA2").value(CrunchType::LZSA2)
+        alt((
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZEXO").value(CrunchType::LZEXO),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZ4").value(CrunchType::LZ4),
+            parse_directive_word(b"LZ48").value(CrunchType::LZ48),
+            parse_directive_word(b"LZ49").value(CrunchType::LZ49),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZSHRINKLER").value(CrunchType::Shrinkler),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZUPKR").value(CrunchType::Upkr),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZX7").value(CrunchType::LZX7),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZX0_BACKWARD").value(CrunchType::BackwardZx0),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZX0").value(CrunchType::Zx0)
+        )),
+        alt((
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZAPU").value(CrunchType::LZAPU),
+            parse_directive_word(b"LZSA1").value(CrunchType::LZSA1),
+            parse_directive_word(b"LZSA2").value(CrunchType::LZSA2)
+        ))
     ))
     .parse_next(input)?;
 
@@ -1388,31 +1392,35 @@ pub fn parse_breakpoint_argument(
     input: &mut InnerZ80Span
 ) -> ModalResult<BreakPointArgument, Z80ParserError> {
     alt((
-        parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value)
-            .map(|(k, v)| BreakPointArgument::Type { arg: k, value: v }),
-        parse_optional_argname_and_value("ACCESS", &parse_breakpoint_access_value)
-            .map(|(k, v)| BreakPointArgument::Access { arg: k, value: v }),
-        parse_optional_argname_and_value("RUNMODE", &parse_breakpoint_run_value)
-            .map(|(k, v)| BreakPointArgument::Run { arg: k, value: v }),
         alt((
-            parse_argname_and_value("ADDRESS", &located_expr),
-            parse_argname_and_value("ADDR", &located_expr)
+            parse_optional_argname_and_value("TYPE", &parse_breakpoint_type_value)
+                .map(|(k, v)| BreakPointArgument::Type { arg: k, value: v }),
+            parse_optional_argname_and_value("ACCESS", &parse_breakpoint_access_value)
+                .map(|(k, v)| BreakPointArgument::Access { arg: k, value: v }),
+            parse_optional_argname_and_value("RUNMODE", &parse_breakpoint_run_value)
+                .map(|(k, v)| BreakPointArgument::Run { arg: k, value: v }),
+            alt((
+                parse_argname_and_value("ADDRESS", &located_expr),
+                parse_argname_and_value("ADDR", &located_expr)
+            ))
+            .map(|(k, v)| BreakPointArgument::Address { arg: k, value: v }),
+            parse_argname_and_value("MASK", &located_expr)
+                .map(|(k, v)| BreakPointArgument::Mask { arg: k, value: v }),
+            parse_argname_and_value("SIZE", &located_expr)
+                .map(|(k, v)| BreakPointArgument::Size { arg: k, value: v }),
+            parse_argname_and_value("VALUE", &located_expr)
+                .map(|(k, v)| BreakPointArgument::Value { arg: k, value: v }),
+            parse_argname_and_value("VALMASK", &located_expr)
+                .map(|(k, v)| BreakPointArgument::ValueMask { arg: k, value: v })
+        )),
+        alt((
+            parse_argname_and_value("STEP", &located_expr)
+                .map(|(k, v)| BreakPointArgument::Step { arg: k, value: v }),
+            parse_argname_and_value("CONDITION", &located_expr)
+                .map(|(k, v)| BreakPointArgument::Condition { arg: k, value: v }),
+            parse_argname_and_value("NAME", &located_expr)
+                .map(|(k, v)| BreakPointArgument::Name { arg: k, value: v })
         ))
-        .map(|(k, v)| BreakPointArgument::Address { arg: k, value: v }),
-        parse_argname_and_value("MASK", &located_expr)
-            .map(|(k, v)| BreakPointArgument::Mask { arg: k, value: v }),
-        parse_argname_and_value("SIZE", &located_expr)
-            .map(|(k, v)| BreakPointArgument::Size { arg: k, value: v }),
-        parse_argname_and_value("VALUE", &located_expr)
-            .map(|(k, v)| BreakPointArgument::Value { arg: k, value: v }),
-        parse_argname_and_value("VALMASK", &located_expr)
-            .map(|(k, v)| BreakPointArgument::ValueMask { arg: k, value: v }),
-        parse_argname_and_value("STEP", &located_expr)
-            .map(|(k, v)| BreakPointArgument::Step { arg: k, value: v }),
-        parse_argname_and_value("CONDITION", &located_expr)
-            .map(|(k, v)| BreakPointArgument::Condition { arg: k, value: v }),
-        parse_argname_and_value("NAME", &located_expr)
-            .map(|(k, v)| BreakPointArgument::Name { arg: k, value: v })
     ))
     .parse_next(input)
 }
@@ -2352,21 +2360,25 @@ pub fn parse_z80_directive_with_block(
     }
     else {
         alt((
-            parse_basic.context(StrContext::Label("Basic code embedding")),
-            parse_macro.context(StrContext::Label("Error in macro")),
-            parse_crunched_section.context(StrContext::Label("Error in crunched section")),
-            parse_module.context(StrContext::Label("Error in module")),
-            parse_confined.context(StrContext::Label("Error in confined")),
-            parse_repeat.context(StrContext::Label("Error in repetition")),
-            parse_for.context(StrContext::Label("Error in for")),
-            parse_function.context(StrContext::Label("Error in function definition")),
-            parse_switch.context(StrContext::Label("Error in switch")),
-            parse_iterate.context(StrContext::Label("Error in iterate")),
-            parse_while.context(StrContext::Label("Error in while")),
-            parse_rorg.context(StrContext::Label("Error in rorg")),
-            parse_conditional.context(StrContext::Label("Error in condition")),
-            parse_assembler_control_max_passes_number
-                .context(StrContext::Label("Error in assembler control"))
+            alt((
+                parse_basic.context(StrContext::Label("Basic code embedding")),
+                parse_macro.context(StrContext::Label("Error in macro")),
+                parse_crunched_section.context(StrContext::Label("Error in crunched section")),
+                parse_module.context(StrContext::Label("Error in module")),
+                parse_confined.context(StrContext::Label("Error in confined")),
+                parse_repeat.context(StrContext::Label("Error in repetition")),
+                parse_for.context(StrContext::Label("Error in for")),
+                parse_function.context(StrContext::Label("Error in function definition")),
+                parse_switch.context(StrContext::Label("Error in switch"))
+            )),
+            alt((
+                parse_iterate.context(StrContext::Label("Error in iterate")),
+                parse_while.context(StrContext::Label("Error in while")),
+                parse_rorg.context(StrContext::Label("Error in rorg")),
+                parse_conditional.context(StrContext::Label("Error in condition")),
+                parse_assembler_control_max_passes_number
+                    .context(StrContext::Label("Error in assembler control"))
+            ))
         ))
         .parse_next(input)
     }
