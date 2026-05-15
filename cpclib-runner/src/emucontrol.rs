@@ -1595,7 +1595,7 @@ impl<E: UsedEmulator> RobotImpl<E> {
         self.wait_orgams_assembling();
         o.emit_stdout("  done.\n");
 
-        let result: ImageBuffer<Rgba<u8>, Vec<u8>> = self.window.capture_image();
+        let result: ImageBuffer<Rgba<u8>, Vec<u8>> = self.window.as_ref().unwrap().capture_image();
 
         if result
             .pixels()

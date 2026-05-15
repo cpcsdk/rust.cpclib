@@ -128,7 +128,7 @@ static unsigned char headerC64SW[] = {
     0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC64SW[] = {
+extern struct FixEntry fixTableC64SW[];
     {ftBEndHi, 0x0817 -0x07ff},
     {ftOverlap, 0x081b -0x07ff},
     {ftOverlapLo, 0x081d -0x07ff},
@@ -202,7 +202,7 @@ static unsigned char headerC64S[] = {
     0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC64S[] = {
+extern struct FixEntry fixTableC64S[];
     {ftBEndHi, 0x0817 -0x07ff},
     {ftStackSize, 0x081b -0x07ff},
     {ftReloc, 0x081e -0x07ff},
@@ -274,7 +274,7 @@ static unsigned char headerC64SB[] = {
     0x00,0x00
 };
 
-struct FixEntry fixTableC64SB[] = {
+extern struct FixEntry fixTableC64SB[];
     {ftBEndHi, 0x0817 -0x07ff},
     {ftStackSize, 0x081b -0x07ff},
     {ftReloc, 0x081e -0x07ff},
@@ -348,7 +348,7 @@ static unsigned char headerC64W[] = {
     0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC64W[] = {
+extern struct FixEntry fixTableC64W[];
     {ftFastDisable, 0x080e -0x07ff},
     {ftOverlap, 0x0816 -0x07ff},
     {ftOverlapLo, 0x0818 -0x07ff},
@@ -428,7 +428,7 @@ static unsigned char headerC64[] = {
     0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC64[] = {
+extern struct FixEntry fixTableC64[];
     {ftFastDisable, 0x080e -0x07ff},
     {ftIBufferSize, 0x0816 -0x07ff},
     {ftReloc, 0x0819 -0x07ff},
@@ -510,7 +510,7 @@ static unsigned char headerC64WD[] = {
     0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC64WD[] = {
+extern struct FixEntry fixTableC64WD[];
     {ftFastDisable, 0x080e -0x07ff},
     {ftOverlap, 0x0816 -0x07ff},
     {ftOverlapLo, 0x0818 -0x07ff},
@@ -594,7 +594,7 @@ static unsigned char headerC64D[] = {
     0x00,0x00
 };
 
-struct FixEntry fixTableC64D[] = {
+extern struct FixEntry fixTableC64D[];
     {ftFastDisable, 0x080e -0x07ff},
     {ftIBufferSize, 0x0816 -0x07ff},
     {ftReloc, 0x0819 -0x07ff},
@@ -677,7 +677,7 @@ static unsigned char headerC64WF[] = {
     0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC64WF[] = {
+extern struct FixEntry fixTableC64WF[];
     {ftFastDisable, 0x080e -0x07ff},
     {ftOverlap, 0x0816 -0x07ff},
     {ftOverlapLo, 0x0818 -0x07ff},
@@ -760,7 +760,7 @@ static unsigned char headerC64F[] = {
     0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC64F[] = {
+extern struct FixEntry fixTableC64F[];
     {ftFastDisable, 0x080e -0x07ff},
     {ftIBufferSize, 0x0816 -0x07ff},
     {ftReloc, 0x0819 -0x07ff},
@@ -835,7 +835,7 @@ static unsigned char headerVIC20[] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableVIC20[] = {
+extern struct FixEntry fixTableVIC20[];
     {ftIBufferSize, 0x120f -0x11ff},
     {ftReloc, 0x1212 -0x11ff},
     {ftStackSize, 0x121a -0x11ff},
@@ -908,7 +908,7 @@ static unsigned char headerVIC20B[] = {
     0x00,0x00
 };
 
-struct FixEntry fixTableVIC20B[] = {
+extern struct FixEntry fixTableVIC20B[];
     {ftIBufferSize, 0x120f -0x11ff},
     {ftReloc, 0x1212 -0x11ff},
     {ftStackSize, 0x121a -0x11ff},
@@ -981,7 +981,7 @@ static unsigned char headerVIC20W[] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableVIC20W[] = {
+extern struct FixEntry fixTableVIC20W[];
     {ftOverlap, 0x120f -0x11ff},
     {ftOverlapLo, 0x1211 -0x11ff},
     {ftOverlapHi, 0x1212 -0x11ff},
@@ -1055,7 +1055,7 @@ static unsigned char headerVIC20S[] = {
     0x00,0x00,0x00
 };
 
-struct FixEntry fixTableVIC20S[] = {
+extern struct FixEntry fixTableVIC20S[];
     {ftBEndHi, 0x1212 -0x11ff},
     {ftStackSize, 0x1216 -0x11ff},
     {ftReloc, 0x1219 -0x11ff},
@@ -1123,7 +1123,7 @@ static unsigned char headerVIC20SB[] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableVIC20SB[] = {
+extern struct FixEntry fixTableVIC20SB[];
     {ftBEndHi, 0x1212 -0x11ff},
     {ftStackSize, 0x1216 -0x11ff},
     {ftReloc, 0x1219 -0x11ff},
@@ -1192,7 +1192,7 @@ static unsigned char headerVIC20SW[] = {
     0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableVIC20SW[] = {
+extern struct FixEntry fixTableVIC20SW[];
     {ftBEndHi, 0x1212 -0x11ff},
     {ftOverlap, 0x1216 -0x11ff},
     {ftOverlapLo, 0x1218 -0x11ff},
@@ -1272,7 +1272,7 @@ static unsigned char headerVIC20WD[] = {
     0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableVIC20WD[] = {
+extern struct FixEntry fixTableVIC20WD[];
     {ftOverlap, 0x120f -0x11ff},
     {ftOverlapLo, 0x1211 -0x11ff},
     {ftOverlapHi, 0x1212 -0x11ff},
@@ -1353,7 +1353,7 @@ static unsigned char headerVIC20FB[] = {
     0x00
 };
 
-struct FixEntry fixTableVIC20FB[] = {
+extern struct FixEntry fixTableVIC20FB[];
     {ftIBufferSize, 0x120f -0x11ff},
     {ftReloc, 0x1212 -0x11ff},
     {ftStackSize, 0x121a -0x11ff},
@@ -1427,7 +1427,7 @@ static unsigned char headerC16[] = {
     0x00
 };
 
-struct FixEntry fixTableC16[] = {
+extern struct FixEntry fixTableC16[];
     {ftFastDisable, 0x1013 -0x0fff},
     {ftIBufferSize, 0x101a -0x0fff},
     {ftReloc, 0x101d -0x0fff},
@@ -1508,7 +1508,7 @@ static unsigned char headerC16W[] = {
     0x00,0x00
 };
 
-struct FixEntry fixTableC16W[] = {
+extern struct FixEntry fixTableC16W[];
     {ftFastDisable, 0x1013 -0x0fff},
     {ftOverlap, 0x101a -0x0fff},
     {ftOverlapLo, 0x101c -0x0fff},
@@ -1595,7 +1595,7 @@ static unsigned char headerC16WD[] = {
     0x00,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC16WD[] = {
+extern struct FixEntry fixTableC16WD[];
     {ftFastDisable, 0x1013 -0x0fff},
     {ftOverlap, 0x101a -0x0fff},
     {ftOverlapLo, 0x101c -0x0fff},
@@ -1678,7 +1678,7 @@ static unsigned char headerC16B[] = {
     0x00,0x00,0x00,0x00
 };
 
-struct FixEntry fixTableC16B[] = {
+extern struct FixEntry fixTableC16B[];
     {ftFastDisable, 0x1013 -0x0fff},
     {ftIBufferSize, 0x101a -0x0fff},
     {ftReloc, 0x101d -0x0fff},

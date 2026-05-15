@@ -90,6 +90,7 @@ pub enum Cruncher {
 }
 
 impl Cruncher {
+    #[cfg(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0"))]
     pub fn z80(&self) -> &Utf8Path {
         let fname: &str = match self {
             #[cfg(feature = "apultra")]
@@ -127,7 +128,11 @@ pub fn command() -> clap::Command {
 
 pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
     if args.z80 {
-        let fname = args.cruncher.z80();
+        #[cfg(not(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0")))]
+        panic!("This is a bug, please report it. The z80 option should not be available if no cruncher is enabled");
+
+        #[cfg(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0"))]
+        {let fname = args.cruncher.z80();
         let content = cpclib_asm::file::load_file(fname, &Default::default())
             .unwrap()
             .0;
@@ -137,6 +142,7 @@ pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
             "; Import \"{fname}\" in basm or include the following content:\n{content}"
         ));
         return Ok(());
+        }
     }
 
     // TODO move loading code in the disc crate
