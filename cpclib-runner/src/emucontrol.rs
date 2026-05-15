@@ -15,7 +15,6 @@ use delegate;
 use enigo::{Enigo, Key, Keyboard, Settings};
 #[cfg(windows)]
 use fs_extra;
-
 #[cfg(feature = "screenshot")]
 use xcap::image::{ImageBuffer, Rgba, open};
 
@@ -1316,7 +1315,11 @@ impl Robot {
 
     }
 
-    pub fn new(emu: &Emulator, window: Option<EmuWindow>, eventsManager: WindowEventsManager) -> Self {
+    pub fn new(
+        emu: &Emulator,
+        window: Option<EmuWindow>,
+        eventsManager: WindowEventsManager
+    ) -> Self {
         match emu {
             Emulator::Ace(_) => {
                 RobotImpl::<AceUsedEmulator>::from((window, eventsManager, emu)).into()

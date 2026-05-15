@@ -704,10 +704,7 @@ pub fn parse_instruction<'a>(
                     parse_snapshot_load,
                     parse_snapshot_dir
                 )),
-                alt((
-                    parse_key_delay,
-                    parse_key_output
-                ))
+                alt((parse_key_delay, parse_key_output))
             )),
             alt((
                 alt((

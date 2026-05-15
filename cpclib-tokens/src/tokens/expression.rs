@@ -1,7 +1,7 @@
 use std::borrow::{Borrow, Cow};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Add, Sub, Deref};
+use std::ops::{Add, Deref, Sub};
 
 use cpclib_common::smol_str::SmolStr;
 use ordered_float::OrderedFloat;
@@ -800,10 +800,11 @@ impl ExprElement for Expr {
         match self {
             Self::BinaryOperation(_, arg1, _) => arg1,
             Self::UnaryOperation(_, arg) => arg,
-            Self::Paren( p) => p,
+            Self::Paren(p) => p,
 
             _ => unreachable!()
-        }.deref()
+        }
+        .deref()
     }
 
     fn arg2(&self) -> &Self {

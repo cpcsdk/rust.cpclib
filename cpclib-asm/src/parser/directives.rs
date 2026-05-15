@@ -29,8 +29,8 @@ use cpclib_tokens::{Expr, ExprFormat, FormattedExpr};
 use super::common::{
     inner_code, inner_code_with_state, my_line_ending, my_many0_nocollect, my_space0,
     my_space0_with_newlines, my_space1, parse_argname_and_value, parse_comma,
-    parse_comma_multiline, parse_comment, parse_convertible_word,
-    parse_optional_argname_and_value, parse_word
+    parse_comma_multiline, parse_comment, parse_convertible_word, parse_optional_argname_and_value,
+    parse_word
 };
 use super::context;
 use super::error::Z80ParserErrorKind;
@@ -2940,7 +2940,10 @@ pub fn parse_macro_or_struct_call_inner(
         let has_parenthesis = opt((
             '(',
             my_space0_with_newlines,
-            not(alt((("void", my_space0_with_newlines).value(()), ')'.value(()))))
+            not(alt((
+                ("void", my_space0_with_newlines).value(()),
+                ')'.value(())
+            )))
         ))
         .parse_next(input)?
         .is_some();
@@ -3314,7 +3317,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn test_parse_macro_call() {
         let cases = [
@@ -3322,9 +3324,21 @@ mod tests {
             ("MACRO2", "MACRO2(void)", 0),
             ("MACRO3", "MACRO3(42)", 1),
             ("MACRO4", "MACRO4(arg1, arg2, arg3)", 3),
-            ("MACRO5", "MACRO5([nested, list], {eval} evaluated_arg, raw_arg)", 3),
-            ("SWITCH_VALUES", "SWITCH_VALUES(scroller_configuration_table.current_generating_code_table,scroller_configuration_table.next_generating_code_table)", 2),
-            ("SWITCH_VALUES", "SWITCH_VALUES(\nscroller_configuration_table.current_generating_code_table,\nscroller_configuration_table.next_generating_code_table\n)", 2),
+            (
+                "MACRO5",
+                "MACRO5([nested, list], {eval} evaluated_arg, raw_arg)",
+                3
+            ),
+            (
+                "SWITCH_VALUES",
+                "SWITCH_VALUES(scroller_configuration_table.current_generating_code_table,scroller_configuration_table.next_generating_code_table)",
+                2
+            ),
+            (
+                "SWITCH_VALUES",
+                "SWITCH_VALUES(\nscroller_configuration_table.current_generating_code_table,\nscroller_configuration_table.next_generating_code_table\n)",
+                2
+            ),
             ("add_to_a", "add_to_a(10)", 1)
         ];
 
@@ -3339,8 +3353,18 @@ mod tests {
 
             let token = dbg!(res.res.unwrap().inner.left().unwrap());
             if let LocatedTokenInner::MacroCall(call_name, args) = token {
-                assert_eq!(call_name.as_bstr(), name.as_bytes(), "Macro name should match");
-                assert_eq!(args.len(), expected_args, "Expected {} arguments, got {}", expected_args, args.len());
+                assert_eq!(
+                    call_name.as_bstr(),
+                    name.as_bytes(),
+                    "Macro name should match"
+                );
+                assert_eq!(
+                    args.len(),
+                    expected_args,
+                    "Expected {} arguments, got {}",
+                    expected_args,
+                    args.len()
+                );
                 println!("Parsed macro call: {} with args: {:?}", call_name, args);
             }
             else {

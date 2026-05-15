@@ -988,9 +988,10 @@ MEND";
     fn test_parse_macro_call() {
         assert!(dbg!(parse_test(parse_line_component, "empty     (void)")).is_ok());
         assert!(dbg!(parse_test(parse_line_component, "add_to_a(10)")).is_ok());
-        assert!(dbg!(parse_test(
-            inner_code,
-            "\
+        assert!(
+            dbg!(parse_test(
+                inner_code,
+                "\
 macro add_to_a value\n\
     add a, {value}\n\
 endm\n\
@@ -999,8 +1000,9 @@ ld a, 5\n\
 add_to_a(10)\n\
 add_to_a(3)\n\
 "
-        ))
-        .is_ok());
+            ))
+            .is_ok()
+        );
 
         let res = dbg!(parse_test(
             (parse_line_component, ':', parse_line_component),

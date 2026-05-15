@@ -1410,14 +1410,16 @@ impl Env {
                 (_, Ok(_)) => {
                     // nothing to do
                 },
-                (Some(existing), Err(new_err)) => match (existing.as_mut(), *new_err) {
-                    (
-                        AssemblerError::MultipleErrors { errors: e1 },
-                        AssemblerError::MultipleErrors { errors: mut e2 }
-                    ) => {
-                        e1.append(&mut e2);
-                    },
-                    _ => unimplemented!()
+                (Some(existing), Err(new_err)) => {
+                    match (existing.as_mut(), *new_err) {
+                        (
+                            AssemblerError::MultipleErrors { errors: e1 },
+                            AssemblerError::MultipleErrors { errors: mut e2 }
+                        ) => {
+                            e1.append(&mut e2);
+                        },
+                        _ => unimplemented!()
+                    }
                 },
                 (None, Err(l_errors)) => {
                     assert_failures = Some(l_errors);
@@ -1474,14 +1476,16 @@ impl Env {
                 (_, Ok(_)) => {
                     // nothing to do
                 },
-                (Some(existing), Err(new_err)) => match (existing.as_mut(), *new_err) {
-                    (
-                        AssemblerError::MultipleErrors { errors: e1 },
-                        AssemblerError::MultipleErrors { errors: mut e2 }
-                    ) => {
-                        e1.append(&mut e2);
-                    },
-                    _ => unreachable!()
+                (Some(existing), Err(new_err)) => {
+                    match (existing.as_mut(), *new_err) {
+                        (
+                            AssemblerError::MultipleErrors { errors: e1 },
+                            AssemblerError::MultipleErrors { errors: mut e2 }
+                        ) => {
+                            e1.append(&mut e2);
+                        },
+                        _ => unreachable!()
+                    }
                 },
                 (None, Err(l_errors)) => {
                     print_errors = Some(l_errors);

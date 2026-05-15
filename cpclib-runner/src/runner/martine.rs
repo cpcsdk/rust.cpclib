@@ -128,7 +128,7 @@ exec "$MARTINE_EXEC" "$@"
                             .build()
                     },
                     MartineVersion::V0_39 => {
-   
+
 
                         DelegateApplicationDescription::builder()
                             .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.39/martine-0.39-darwin-amd64.zip")

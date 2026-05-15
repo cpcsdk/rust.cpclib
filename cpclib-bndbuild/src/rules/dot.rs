@@ -16,10 +16,7 @@ use crate::EXPECTED_FILENAMES;
 use crate::env::create_template_env;
 use crate::task::InnerTask;
 
-fn make_rule_node<'a, 'b, 'c>(
-    digraph: &'b mut Scope<'a, 'c>,
-    help: Option<&str>
-) -> Node<'b, 'c> {
+fn make_rule_node<'a, 'b, 'c>(digraph: &'b mut Scope<'a, 'c>, help: Option<&str>) -> Node<'b, 'c> {
     let mut rule_node = digraph.node_auto();
     if let Some(help) = help {
         rule_node.set("tooltip", help, true);

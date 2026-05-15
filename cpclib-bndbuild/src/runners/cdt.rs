@@ -121,8 +121,7 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
             .map(|ext| TapeDataFileType::from(ext))
             .unwrap_or_default();
 
-        let tape_data = TapeDataFile::read_as(&mut file, file_type)
-            .map_err(|e| e.to_string())?;
+        let tape_data = TapeDataFile::read_as(&mut file, file_type).map_err(|e| e.to_string())?;
 
         match &cli.command {
             Some(Commands::Inspect(args)) => {

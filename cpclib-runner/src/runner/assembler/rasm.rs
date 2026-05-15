@@ -11,7 +11,7 @@ pub const RASM_CMD: &str = "rasm";
 pub enum RasmVersion {
     #[default]
     Atlas, // 3.2.3
-    Polaris, // 3.
+    Polaris,           // 3.
     Beacon2025,        // 2.3.6
     Consolidation2024  // V2_2_5
 }
@@ -99,6 +99,4 @@ impl DownloadableInformation for RasmVersion {
         #[cfg(target_os = "macos")]
         return ArchiveFormat::Raw;
     }
-
-
 }
