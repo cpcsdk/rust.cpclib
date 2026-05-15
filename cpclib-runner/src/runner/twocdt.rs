@@ -34,28 +34,60 @@ impl TwoCdtVersion {
                     use std::os::unix::fs::PermissionsExt;
                     
                     let cache_folder = desc.cache_folder();
-                    let src_folder = cache_folder.join("2cdt/src");
+                    let src_folder = cache_folder.join("src");
                     
-                    // Compile 2cdt using cc (standard C compiler on macOS)
-                    let mut cmd = Command::new("cc");
-                    cmd.current_dir(&src_folder);
-                    cmd.arg("2cdt.c");
-                    cmd.arg("tzxfile.c");
-                    cmd.arg("opth.c");
-                    cmd.arg("-o");
-                    cmd.arg(cache_folder.join("2cdt.compiled"));
+                    // Patch 2cdt.c for macOS compatibility: replace io.h with unistd.h
+                    let source_file = src_folder.join("2cdt.c");
+                    let source_content = fs_err::read_to_string(&source_file)
+                        .map_err(|e| e.to_string())?;
+                    let patched_content = source_content
+                        .replace("#include <sys/io.h>", "/* #include <sys/io.h> */")
+                        .replace("#include <io.h>", "#include <unistd.h>");
+                    fs_err::write(&source_file, patched_content)
+                        .map_err(|e| e.to_string())?;
                     
-                    let output = cmd.output()
-                        .map_err(|e| format!("Failed to compile with cc: {}", e))?;
+                    // Use the full path to clang from Xcode Command Line Tools
+                    let clang_paths = vec![
+                        "/Library/Developer/CommandLineTools/usr/bin/clang",
+                        "/usr/bin/clang",
+                    ];
                     
-                    if !output.status.success() {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        return Err(format!("Compilation failed: {}", stderr));
+                    let mut compilation_result = Err("No C compiler found".to_string());
+                    
+                    for clang_path in clang_paths {
+                        let mut cmd = Command::new(clang_path);
+                        cmd.arg("2cdt.c");
+                        cmd.arg("tzxfile.c");
+                        cmd.arg("opth.c");
+                        cmd.arg("-o");
+                        cmd.arg(cache_folder.join("2cdt.compiled"));
+                        // Use -isysroot to specify the CommandLineTools SDK path
+                        cmd.arg("-isysroot");
+                        cmd.arg("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk");
+                        cmd.current_dir(&src_folder);
+                        
+                        match cmd.output() {
+                            Ok(output) if output.status.success() => {
+                                compilation_result = Ok(());
+                                break;
+                            }
+                            Ok(output) => {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                compilation_result = Err(format!("Compilation failed: {}", stderr));
+                                break; // Found the compiler but it failed, don't try others
+                            }
+                            Err(_) => {
+                                // Compiler not found, try next path
+                                continue;
+                            }
+                        }
                     }
                     
-                    // Move the compiled binary to 2cdt/2cdt (replacing the Linux binary)
+                    compilation_result?;
+                    
+                    // Move the compiled binary to 2cdt (replacing the Linux binary)
                     let compiled_binary = cache_folder.join("2cdt.compiled");
-                    let target_path = cache_folder.join("2cdt/2cdt");
+                    let target_path = cache_folder.join("2cdt");
                     fs_err::remove_file(&target_path)
                         .ok(); // Ignore error if file doesn't exist
                     fs_err::rename(&compiled_binary, &target_path)
@@ -77,7 +109,7 @@ impl TwoCdtVersion {
                 .download_fn_url("https://cpctech.cpcwiki.de/download/2cdt.zip")
                 .folder("2cdt")
                 .archive_format(ArchiveFormat::Zip)
-                .exec_fname("2cdt/2cdt")
+                .exec_fname("2cdt")
                 .post_install(post_install)
                 .build()
         }
