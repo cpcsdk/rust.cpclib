@@ -26,6 +26,8 @@ impl Grafx2Version {
             Self::V2_9 => DOWNLOAD_URL_V2_P_APPIMAGE,
             #[cfg(target_os = "macos")]
             Self::V2_9 => DOWNLOAD_URL_V2_9_MACOS,
+            #[cfg(target_os = "haiku")]
+            Self::V2_9 => "cmd:grafx2",
             #[allow(unreachable_patterns)]
             _ => unreachable!()
         };
@@ -40,6 +42,8 @@ impl Grafx2Version {
         let exec = "GrafX2-2.9.3245-x86_64.AppImage";
         #[cfg(target_os = "macos")]
         let exec = "GrafX2";
+        #[cfg(target_os = "haiku")]
+        let exec = "grafx2";
 
         #[cfg(target_os = "windows")]
         let archive_format = ArchiveFormat::Zip;
@@ -47,6 +51,8 @@ impl Grafx2Version {
         let archive_format = ArchiveFormat::Raw;
         #[cfg(target_os = "macos")]
         let archive_format = ArchiveFormat::Zip;
+        #[cfg(target_os = "haiku")]
+        let archive_format = ArchiveFormat::Raw;
 
         let builder = DelegateApplicationDescription::builder()
             .download_fn_url(url) // we assume a modern CPU

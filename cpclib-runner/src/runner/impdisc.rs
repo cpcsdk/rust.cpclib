@@ -18,9 +18,7 @@ impl ImpDskVersion {
     }
 }
 
-cfg_select! {
-    target_os = "linux" =>
-    {
+#[cfg(any(target_os = "linux", target_os = "haiku"))]
         impl ImpDskVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
@@ -31,9 +29,8 @@ cfg_select! {
                                     }
             }
         }
-    }
-    target_os = "windows" =>
-    {
+
+#[cfg(target_os = "windows")]
         impl ImpDskVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
@@ -76,9 +73,7 @@ cfg_select! {
             }
         }
 
-    }
-    target_os = "macos" =>
-    {
+#[cfg(target_os = "macos")]
         impl ImpDskVersion {
             pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
                 match self {
@@ -125,7 +120,3 @@ cfg_select! {
                 }
             }
         }
-    }
-    _ => {
-    }
-}

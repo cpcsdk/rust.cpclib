@@ -29,6 +29,8 @@ impl DownloadableInformation for AceVersion {
         return ArchiveFormat::Zip;
         #[cfg(target_os = "linux")]
         return ArchiveFormat::TarGz;
+        #[cfg(target_os = "haiku")]
+        return ArchiveFormat::Zip;
         #[cfg(target_os = "macos")]
         return ArchiveFormat::Zip;
     }
@@ -66,28 +68,32 @@ impl DynamicUrlInformation for AceVersion {
                 Ok(MutiplatformUrls {
                     linux,
                     windows,
-                    macos
+                    macos,
+                    haiku: None
                 })
             },
             AceVersion::Bnd4 => {
                 Ok(MutiplatformUrls {
                     linux: Some("https://roudoudou.com/ACE-DL/BZen.tar.gz".to_string()),
                     windows: Some("https://roudoudou.com/ACE-DL/W64bnd4.zip".to_string()),
-                    macos: None
+                    macos: None,
+                    haiku: None
                 })
             },
             AceVersion::ZenSummer => {
                 Ok(MutiplatformUrls {
                     linux: Some("https://roudoudou.com/ACE-DL/LinuxZenSummer.tar.gz".to_string()),
                     windows: Some("https://roudoudou.com/ACE-DL/Win64Summer.zip".to_string()),
-                    macos: None
+                    macos: None,
+                    haiku: None
                 })
             },
             AceVersion::WakePoint => {
                 Ok(MutiplatformUrls {
                     linux: Some("https://roudoudou.com/ACE-DL/BZen.tar.gz".to_string()),
                     windows: Some("https://roudoudou.com/ACE-DL/BWIN64.zip".to_string()),
-                    macos: Some("https://roudoudou.com/ACE-DL/BMAC.zip".to_string())
+                    macos: Some("https://roudoudou.com/ACE-DL/BMAC.zip".to_string()),
+                    haiku: None
                 })
             },
         }
@@ -109,6 +115,8 @@ impl ExecutableInformation for AceVersion {
         return "AceDL.exe";
         #[cfg(target_os = "linux")]
         return "AceDL";
+        #[cfg(target_os = "haiku")]
+        return "ACE";
         #[cfg(target_os = "macos")]
         return "AceDL.app/Contents/MacOS/AceDL";
     }

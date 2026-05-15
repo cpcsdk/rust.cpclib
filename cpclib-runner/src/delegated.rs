@@ -62,7 +62,8 @@ pub fn github_get_assets_for_version_url<GI: GithubInformation>(
 pub struct MutiplatformUrls {
     pub linux: Option<String>,
     pub windows: Option<String>,
-    pub macos: Option<String>
+    pub macos: Option<String>,
+    pub haiku: Option<String>
 }
 
 impl MutiplatformUrls {
@@ -71,6 +72,7 @@ impl MutiplatformUrls {
             .linux(url)
             .windows(url)
             .macos(url)
+            .haiku(url)
             .build()
     }
 
@@ -81,6 +83,8 @@ impl MutiplatformUrls {
         return self.macos.as_ref();
         #[cfg(target_os = "linux")]
         return self.linux.as_ref();
+        #[cfg(target_os = "haiku")]
+        return self.haiku.as_ref();
     }
 }
 

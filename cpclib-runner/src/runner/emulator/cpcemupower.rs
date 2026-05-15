@@ -35,6 +35,8 @@ impl ExecutableInformation for CpcEmuPowerVersion {
                 return "CPCEPower_SDL_Linux_x64";
                 #[cfg(target_os = "macos")]
                 return "CPCEPower_SDL_MacOS";
+                #[cfg(target_os = "haiku")]
+                return "CPCEPower_SDL_Haiku";
             }
         }
     }

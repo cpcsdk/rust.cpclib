@@ -21,7 +21,7 @@ impl DownloadableInformation for VasmVersion {
             VasmVersion::V2021_03_19 => {
                 #[cfg(target_os = "windows")]
                 return ArchiveFormat::Zip;
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "haiku"))]
                 todo!("VASM archive format not defined for macOS");
                 #[cfg(target_os = "linux")]
                 return ArchiveFormat::Tar; // XXX yep extension is wrong
@@ -39,7 +39,8 @@ impl StaticInformation for VasmVersion {
                     MutiplatformUrls {
                         linux: Some("http://www.ibaug.de/vbcc/vbcc_linux_x64.tar.gz".to_owned()),
                         windows: Some("http://www.ibaug.de/vbcc/vbcc_win_x64.zip".to_owned()),
-                        macos: None
+                        macos: None,
+                        haiku: None,
                     }
                 })
             }
@@ -59,7 +60,7 @@ impl ExecutableInformation for VasmVersion {
         return "bin/vasmz80_oldstyle.exe";
         #[cfg(target_os = "macos")]
         todo!("VASM executable not defined for macOS");
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "haiku"))]
         return "vbcc/bin/vasmz80_oldstyle";
     }
 }

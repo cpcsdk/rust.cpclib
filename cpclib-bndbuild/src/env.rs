@@ -23,7 +23,7 @@ pub fn create_template_env<P: AsRef<Utf8Path>, S1: AsRef<str>, S2: AsRef<str>>(
         }
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "haiku"))]
     fn basm_escape_path(path: String) -> Result<String, Error> {
         Ok(path)
     }
