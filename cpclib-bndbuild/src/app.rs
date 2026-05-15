@@ -30,7 +30,7 @@ use crate::runners::xfer::XferRunner;
 use crate::task::{
     Task, is_amspirit_cmd, is_basm_cmd, is_cp_cmd, is_disc_cmd, is_echo_cmd, is_emuctrl_cmd,
     is_extern_cmd, is_hideur_cmd, is_img2cpc_cmd, is_orgams_cmd, is_rm_cmd, is_two_cdt_cmd,
-    is_winape_cmd, is_xfer_cmd
+    is_winape_cmd, is_xfer_cmd, is_cpcemu_cmd, is_retrovm_cmd
 };
 use crate::{
     ALL_APPLICATIONS, BndBuilder, BndBuilderError, EXPECTED_FILENAMES, execute, init_project
@@ -608,6 +608,32 @@ WinAPE frogger.zip\:frogger.dsk /a:frogger
             
             ".to_owned()
         }
+    else if is_cpcemu_cmd(runner) {
+        r"CPCemu can be started from the command line.
+
+Usage: cpcemu [/t <type>] [file]
+
+Arguments:
+  /t <type>
+      Set the CPC type (0=464, 1=664, 2=6128)
+  [file]
+      Optional snapshot (.sna) or disc image (.dsk) to open
+
+Examples:
+  cpcemu test3.sna
+  cpcemu /t 2 game.dsk"
+        .to_owned()
+    }
+    else if is_retrovm_cmd(runner) {
+        r"Retro Virtual Machine can be started from the command line.
+
+Usage: retrovm [file]
+
+Arguments:
+  [file]
+      Optional snapshot (.sna) or disc image (.dsk) to open"
+        .to_owned()
+    }
         else if is_rm_cmd(runner) {
             RmRunner::<()>::render_help()
         }

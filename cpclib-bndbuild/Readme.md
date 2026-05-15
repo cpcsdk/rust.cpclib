@@ -3,7 +3,7 @@
 ## Synopsis
 
 Makefile-like tool tailored to build Amstrad CPC project.
-It embeds various cpclib tools such as basm, m4, img2cpc but can still execute external programs such as rasm, winape.
+It embeds various cpclib tools such as basm, m4, img2cpc but can still execute external programs such as rasm, winape, cpcemu, retrovm.
 
 The rules are described in a `yaml` file. Check for example the test project in <tests/dummy> folder.
 
@@ -23,7 +23,7 @@ Options:
           Show the help of the given subcommand CMD.
 
           [default: bndbuild]
-          [possible values: img2cpc, basm, rm, bndbuild, xfer]
+          [possible values: img2cpc, basm, rm, bndbuild, xfer, cpcemu, retrovm]
 
   -V, --version
           Print version
@@ -66,4 +66,6 @@ They are:
 - `img2cpc` to make [image conversion](../cpclib-imgconverter)
 - `rm` to delete files
 - `xfer` to transfer to the CPC with the M4 card
+- `cpcemu` to launch the CPCemu emulator
+- `retrovm` to launch Retro Virtual Machine
 - `extern` to launch any command available on the machine
