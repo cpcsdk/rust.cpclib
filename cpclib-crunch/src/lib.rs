@@ -198,7 +198,7 @@ pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
         Cruncher::Zx0 => CompressMethod::Zx0,
         #[cfg(feature = "upkr")]
         Cruncher::Upkr => CompressMethod::Upkr,
-        #[cfg(feature = "backward_zx0")]
+        #[cfg(feature = "zx0")]
         Cruncher::BackwardZx0 => CompressMethod::BackwardZx0
     };
 
