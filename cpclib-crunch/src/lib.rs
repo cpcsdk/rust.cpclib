@@ -69,6 +69,7 @@ pub enum Cruncher {
     Lz49,
     Lzsa1,
     Lzsa2,
+    Pucrunch,
     Shrinkler,
     Upkr,
     Zx0
@@ -85,6 +86,7 @@ impl Cruncher {
             Cruncher::Lz49 => "inner://lz49decrunch.asm",
             Cruncher::Lzsa1 => "inner://unlzsa1_fast.asm",
             Cruncher::Lzsa2 => "inner://unlzsa1_fast.asm",
+            Cruncher::Pucrunch => "inner://uncrunch/pucrunch_z80.asm",
             Cruncher::Shrinkler => "inner://deshrink.asm",
             Cruncher::Zx0 => "inner://dzx0_fast.asm",
             Cruncher::Upkr => "inner://uncrunch/upkr.asm"
@@ -149,6 +151,7 @@ pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
         Cruncher::Lz49 => CompressMethod::Lz49,
         Cruncher::Lzsa1 => CompressMethod::Lzsa(LzsaVersion::V1, None),
         Cruncher::Lzsa2 => CompressMethod::Lzsa(LzsaVersion::V1, None),
+        Cruncher::Pucrunch => CompressMethod::Pucrunch,
         Cruncher::Shrinkler => CompressMethod::Shrinkler(Default::default()),
         Cruncher::Zx0 => CompressMethod::Zx0,
         Cruncher::Upkr => CompressMethod::Upkr,

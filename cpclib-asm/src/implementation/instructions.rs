@@ -134,6 +134,8 @@ impl Compressor for CompressionType {
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default())),
             #[cfg(not(target_arch = "wasm32"))]
+            CompressionType::Pucrunch => Ok(CompressMethod::Pucrunch),
+            #[cfg(not(target_arch = "wasm32"))]
             CompressionType::Upkr => Ok(CompressMethod::Upkr) /* #[cfg(target_arch = "wasm32")]
                                                                * CrunchType::LZ4 => {
                                                                * Err(AssemblerError::AssemblingError {

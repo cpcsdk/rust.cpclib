@@ -909,6 +909,10 @@ pub fn parse_crunched_section(
         alt((
             #[cfg(not(target_arch = "wasm32"))]
             parse_directive_word(b"LZAPU").value(CrunchType::LZAPU),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZPUCRUNCH").value(CrunchType::Pucrunch),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"PUCRUNCH").value(CrunchType::Pucrunch),
             parse_directive_word(b"LZSA1").value(CrunchType::LZSA1),
             parse_directive_word(b"LZSA2").value(CrunchType::LZSA2)
         ))
@@ -1943,6 +1947,10 @@ fn parse_directive_of_size_7(
         #[cfg(not(target_arch = "wasm32"))]
         h if hashed_choice!(h, word, b"INCUPKR") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Upkr)).parse_next(input)
+        },
+        #[cfg(not(target_arch = "wasm32"))]
+        h if hashed_choice!(h, word, b"INCPUC") => {
+            parse_incbin(BinaryTransformation::Crunch(CrunchType::Pucrunch)).parse_next(input)
         },
         _ => {
             input.reset(input_start);

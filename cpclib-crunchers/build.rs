@@ -4,6 +4,7 @@ fn build_others() {
     built::write_built_file().expect("Failed to acquire build-time information");
 
     // apultra crunch
+    #[cfg(feature = "apultra")]
     cc::Build::new()
         .warnings(false)
         .file("extra/apultra.c")
@@ -12,6 +13,7 @@ fn build_others() {
         .compile("apultra");
 
     // exomizer crunch
+    #[cfg(feature = "exomizer")]
     cc::Build::new()
         .warnings(false)
         .file("extra/exomizer.c")
@@ -22,6 +24,7 @@ fn build_others() {
         .compile("exomizer");
 
     // lz4 crunch
+    #[cfg(feature = "lz4")]
     cc::Build::new()
         .warnings(false)
         .file("extra/lz4_embedded.c")
@@ -29,7 +32,18 @@ fn build_others() {
         .cargo_metadata(true)
         .compile("lz4");
 
+    // pucrunch crunch
+    #[cfg(feature = "pucrunch")]
+    cc::Build::new()
+        .warnings(false)
+        .file("extra/pucrunch.c")
+        .file("extra/pucrunch_ffi.c")
+        .opt_level(3)
+        .cargo_metadata(true)
+        .compile("pucrunch");
+
     // zx7 crunch
+    #[cfg(feature = "zx7")]
     cc::Build::new()
         .warnings(false)
         .file("extra/zx7/zx7.c")
@@ -38,6 +52,7 @@ fn build_others() {
         .compile("zx7");
 }
 
+#[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
 fn build_shrinkler() {
     cxx_build::bridge("src/shrinkler.rs")
         .file("extra/Shrinkler4.6NoParityContext//basm_bridge.cpp")
@@ -49,6 +64,7 @@ fn build_shrinkler() {
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.h");
 }
 
+#[cfg(feature = "lzsa")]
 fn build_lzsa() {
     cc::Build::new()
         .include("extra/lzsa/lzsa-master/src/libdivsufsort/include")
@@ -75,7 +91,9 @@ fn main() {
         .contains("wasm32")
     {
         build_others();
+        #[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
         build_shrinkler();
+        #[cfg(feature = "lzsa")]
         build_lzsa();
     }
 }

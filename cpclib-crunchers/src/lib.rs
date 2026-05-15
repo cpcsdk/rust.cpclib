@@ -1,48 +1,70 @@
 use std::ops::Deref;
 
+
+#[cfg(feature = "lz49")]
 use lz49::lz49_encode_legacy;
+
+#[cfg(feature = "lzsa")]
 use lzsa::{LzsaMinMatch, LzsaVersion};
-#[cfg(not(target_arch = "wasm32"))]
+
+#[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
 use shrinkler::ShrinklerConfiguration;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "apultra", not(target_arch = "wasm32")))]
 pub mod apultra;
-#[cfg(not(target_arch = "wasm32"))]
+
+#[cfg(all(feature = "exomizer", not(target_arch = "wasm32")))]
 pub mod exomizer;
-#[cfg(not(target_arch = "wasm32"))]
+
+#[cfg(all(feature = "lz4", not(target_arch = "wasm32")))]
 pub mod lz4;
+
+#[cfg(all(feature = "pucrunch", not(target_arch = "wasm32")))]
+pub mod pucrunch;
+
+#[cfg(all(feature = "lz48"))]
 pub mod lz48;
+#[cfg(all(feature = "lz49"))]
 pub mod lz49;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "zx0", not(target_arch = "wasm32")))]
 pub mod zx0;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
 pub mod shrinkler;
-#[cfg(not(target_arch = "wasm32"))]
+
+#[cfg(all(feature = "zx7", not(target_arch = "wasm32")  ))]
 pub mod zx7;
 
+#[cfg(feature = "lzsa")]
 pub mod lzsa;
 
 pub enum CompressMethod {
-    #[cfg(not(target_arch = "wasm32"))]
+    // No compression at all
+    None,
+    #[cfg(all(feature = "apultra", not(target_arch = "wasm32")))]
     Apultra,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "exomizer", not(target_arch = "wasm32")))]
     Exomizer,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "lz4", not(target_arch = "wasm32")))]
     Lz4,
+    #[cfg(all(feature = "lz48"))]
     Lz48,
+    #[cfg(all(feature = "lz49"))]
     Lz49,
+    #[cfg(all(feature = "lzsa"))]
     Lzsa(LzsaVersion, Option<LzsaMinMatch>),
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
     Shrinkler(ShrinklerConfiguration),
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "pucrunch", not(target_arch = "wasm32")))]
+    Pucrunch,
+    #[cfg(all(feature = "upkr", not(target_arch = "wasm32")))]
     Upkr,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "zx0", not(target_arch = "wasm32")))]
     Zx0,
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "zx0", not(target_arch = "wasm32")))]
     BackwardZx0,
-    #[cfg(not(target_arch = "wasm32"))]
-    Zx7
+    #[cfg(all(feature = "zx7", not(target_arch = "wasm32")))]
+    Zx7,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,22 +110,28 @@ pub enum CrunchersError {
 impl CompressMethod {
     pub fn compress(&self, data: &[u8]) -> Result<CompressionResult, CrunchersError> {
         match self {
-            #[cfg(not(target_arch = "wasm32"))]
+            CompressMethod::None => Ok(data.to_vec().into()),
+            #[cfg(all(feature = "apultra", not(target_arch = "wasm32")))]
             CompressMethod::Apultra => Ok(apultra::compress(data).into()),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "exomizer", not(target_arch = "wasm32")))]
             CompressMethod::Exomizer => Ok(exomizer::compress(data).into()),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "lz4", not(target_arch = "wasm32")))]
             CompressMethod::Lz4 => Ok(lz4::compress(data).into()),
+            #[cfg(all(feature = "lz48"))]
             CompressMethod::Lz48 => Ok(lz48::lz48_encode_legacy(data).into()),
+            #[cfg(all(feature = "lz49"))]
             CompressMethod::Lz49 => Ok(lz49_encode_legacy(data).into()),
+            #[cfg(all(feature = "lzsa"))]
             CompressMethod::Lzsa(version, minmatch) => {
                 lzsa::compress(data, *version, *minmatch)
                     .map(|r| r.into())
                     .map_err(|_| CrunchersError::CompressionFailed)
             },
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
             CompressMethod::Shrinkler(conf) => Ok(conf.compress(data).into()),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "pucrunch", not(target_arch = "wasm32")))]
+            CompressMethod::Pucrunch => pucrunch::compress(data),
+            #[cfg(all(feature = "upkr", not(target_arch = "wasm32")))]
             CompressMethod::Upkr => {
                 let config = upkr::Config {
                     use_bitstream: true,
@@ -115,12 +143,12 @@ impl CompressMethod {
                 let level = 9;
                 Ok(upkr::pack(data, level, &config, None).into())
             },
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "zx0", not(target_arch = "wasm32")))]
             CompressMethod::Zx0 => Ok(zx0::compress(data)),
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "zx0", not(target_arch = "wasm32")))]
             CompressMethod::BackwardZx0 => Ok(zx0::compress_backward(data)),
 
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "zx7", not(target_arch = "wasm32")))]
             CompressMethod::Zx7 => Ok(zx7::compress(data).into())
         }
     }
