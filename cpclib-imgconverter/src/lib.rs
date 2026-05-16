@@ -24,8 +24,8 @@ use cpclib::{ExtendedDsk, Ink, Pen, sna};
 use fs_err::File;
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use nu_ansi_term::Color::Rgb;
-use nu_ansi_term::Style;
+use owo_colors::OwoColorize;
+use owo_colors::DynColors;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -1600,8 +1600,8 @@ fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
 fn fade_display_preview(palettes: &[Palette]) {
     for palette in palettes {
         for ink in palette.inks() {
-            let (r, g, b) = (ink.color()[0], ink.color()[1], ink.color()[2]);
-            print!("{}", Style::new().on(Rgb(r, g, b)).paint("   "));
+            let dyncolor = DynColors::Rgb(ink.color()[0], ink.color()[1], ink.color()[2]);
+            print!("{}", "   ".on_color(dyncolor));
         }
         println!()
     }
