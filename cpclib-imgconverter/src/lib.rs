@@ -24,6 +24,8 @@ use cpclib::{ExtendedDsk, Ink, Pen, sna};
 use fs_err::File;
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use nu_ansi_term::Color::Rgb;
+use nu_ansi_term::Style;
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -1544,6 +1546,13 @@ pub fn fade_build_args() -> Command {
                 .long("symbols")
         )
         .arg(
+            Arg::new("PREVIEW")
+                .help("Preview the generated palette in the terminal")
+                .action(ArgAction::SetTrue)
+                .required(false)
+                .long("preview")
+        )
+        .arg(
             Arg::new("OUTPUT")
                 .help("Filename to store the result. Console otherwise")
                 .required(false)
@@ -1571,7 +1580,7 @@ fn fade_output_ga_assembly(palettes: &[Palette]) -> String {
                 .join(",");
             format!("\tdb {repr}")
         })
-        .join("\n")
+        .join("\n") + "\n"
 }
 
 fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
@@ -1585,7 +1594,17 @@ fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
                 .join(",");
             format!("\tdb {repr}")
         })
-        .join("\n")
+        .join("\n") + "\n"
+}
+
+fn fade_display_preview(palettes: &[Palette]) {
+    for palette in palettes {
+        for ink in palette.inks() {
+            let (r, g, b) = (ink.color()[0], ink.color()[1], ink.color()[2]);
+            print!("{}", Style::new().on(Rgb(r, g, b)).paint("   "));
+        }
+        println!()
+    }
 }
 
 pub fn fade_handle_matches(matches: &ArgMatches, o: &dyn EventObserver) -> Result<(), String> {
@@ -1610,6 +1629,10 @@ pub fn fade_handle_matches(matches: &ArgMatches, o: &dyn EventObserver) -> Resul
     }
     else {
         o.emit_stdout(&content);
+    }
+
+    if matches.get_flag("PREVIEW") {
+        fade_display_preview(&fades)
     }
 
     Ok(())

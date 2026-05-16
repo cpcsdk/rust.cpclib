@@ -24,6 +24,7 @@ crossbeam-channel.workspace = true
 exitcode.workspace = true
 camino-tempfile.workspace = true
 fs-err.workspace = true
+nu-ansi-term.workspace = true
 
 notify = {workspace = true, optional = true}
 
