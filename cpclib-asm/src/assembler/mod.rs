@@ -4156,6 +4156,19 @@ impl Env {
     ) -> Result<(), Box<AssemblerError>> {
         for (count, val) in l.iter() {
             let bytes = self.assemble_defs_item(count, val.as_ref())?;
+            // Update stable ticker counters when active
+            if !self.stable_counters.is_empty() {
+                if bytes.iter().all(|&b| b == 0) {
+                    self.stable_counters.update_counters(bytes.len());
+                }
+                else {
+                    return Err(Box::new(AssemblerError::AssemblingError {
+                        msg: format!(
+                            "TICKER cannot compute timing for DEFS with non-zero fill value"
+                        )
+                    }));
+                }
+            }
             self.output_bytes(&bytes)?;
         }
         Ok(())

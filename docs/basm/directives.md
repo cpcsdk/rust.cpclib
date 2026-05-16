@@ -443,11 +443,13 @@ Example:
 Synopsis:
 
 ```
-CHARSET "filename"
+CHARSET "characters", start
+CHARSET
 ```
 
 Description:
-Load a character set definition from a file for use in subsequent character encoding.
+Specify the value to be used when writting chars to memory.
+
 
 Example:
 
