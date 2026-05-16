@@ -8,7 +8,6 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::smol_str::ToSmolStr;
 use cpclib_common::strsim;
-use delegate::delegate;
 use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree};
 
 use crate::symbols::{
@@ -218,11 +217,10 @@ impl Iterator for BalancedBracedSegmentsIter<'_> {
                     }
 
                     self.depth -= 1;
-                    if self.depth == 0 {
-                        if let Some(begin) = self.start.take() {
+                    if self.depth == 0
+                        && let Some(begin) = self.start.take() {
                             return Some((begin, idx + 1));
                         }
-                    }
                 },
                 _ => {}
             }

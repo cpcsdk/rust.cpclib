@@ -1,7 +1,6 @@
 use std::fmt::Display;
 use std::process::Command;
 use std::fs;
-use std::path::Path;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
@@ -16,7 +15,7 @@ impl Vlink {
         VLINK_CMD
     }
 
-    fn build_vlink<E: EventObserver>(desc: &DelegateApplicationDescription<E>, archive_format: ArchiveFormat, exec_fname: &str) -> Result<(), String> {
+    fn build_vlink<E: EventObserver>(desc: &DelegateApplicationDescription<E>, _archive_format: ArchiveFormat, exec_fname: &str) -> Result<(), String> {
         let cache_folder = desc.cache_folder();
         
         // The tarball extracts with a top-level 'vlink' directory
@@ -61,14 +60,14 @@ impl Vlink {
                 return Ok(());
             }
             // Otherwise remove the directory
-            fs::remove_dir_all(&target_path)
+            fs_err::remove_dir_all(&target_path)
                 .map_err(|e| format!("Failed to remove directory: {}", e))?;
         } else if target_path.exists() {
-            fs::remove_file(&target_path)
+            fs_err::remove_file(&target_path)
                 .map_err(|e| format!("Failed to remove file: {}", e))?;
         }
 
-        fs::copy(&vlink_binary, &target_path)
+        fs_err::copy(&vlink_binary, &target_path)
             .map_err(|e| format!("Failed to copy vlink binary: {}", e))?;
 
         // Make the binary executable using chmod command

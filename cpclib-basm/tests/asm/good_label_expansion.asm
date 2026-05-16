@@ -1,0 +1,5 @@
+VAR1='c'
+VAR2=1
+LABEL_{VAR1}_{VAR2}
+
+print LABEL_c_1

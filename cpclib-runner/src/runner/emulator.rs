@@ -19,9 +19,7 @@ use cpcemupower::{CPCEMUPOWER_CMD, CpcEmuPowerVersion};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::event::EventObserver;
 use retrovm::{RETROVM_CMD, RetroVmVersion};
-pub use cpcemu::*;
 pub use sugarbox::*;
-pub use retrovm::*;
 pub use winape::*;
 
 use crate::delegated::{

@@ -152,9 +152,7 @@ impl DownloadableInformation for RetroVmVersion {
                     ));
                 }
 
-                let launcher = format!(
-                    "#!/bin/sh\nexec \"$(dirname \"$0\")/Retro Virtual Machine 2.app/Contents/MacOS/Retro Virtual Machine 2\" \"$@\"\n"
-                );
+                let launcher = "#!/bin/sh\nexec \"$(dirname \"$0\")/Retro Virtual Machine 2.app/Contents/MacOS/Retro Virtual Machine 2\" \"$@\"\n".to_string();
 
                 fs_err::write(&exec_path, launcher)
                     .map_err(|e| format!("Failed to write launcher {}: {}", exec_path, e))?;

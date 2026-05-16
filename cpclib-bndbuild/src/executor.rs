@@ -91,7 +91,7 @@ impl InnerTask {
             },
             InnerTask::Martine(_) => Some(MartineVersion::default().configuration()),
             InnerTask::Tracker(t, _) => Some(t.configuration()),
-            InnerTask::Vlink(_) => Some(Vlink::default().configuration()),
+            InnerTask::Vlink(_) => Some(Vlink.configuration()),
 
             _ => None
         }
@@ -249,7 +249,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Vlink(_) => {
             DelegatedRunner::<E>::new(
                 task.configuration().unwrap(),
-                Vlink::default().get_command().to_owned()
+                Vlink.get_command().to_owned()
             )
             .run(task.args(), observer)
         },

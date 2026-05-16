@@ -118,7 +118,7 @@ impl<E: EventObserver> Runner for RtzxRunner<E> {
         let file_type = file_name
             .extension()
             .and_then(|ext| ext.to_str())
-            .map(|ext| TapeDataFileType::from(ext))
+            .map(TapeDataFileType::from)
             .unwrap_or_default();
 
         let tape_data = TapeDataFile::read_as(&mut file, file_type).map_err(|e| e.to_string())?;
