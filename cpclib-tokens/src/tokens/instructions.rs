@@ -379,7 +379,15 @@ pub enum CrunchType {
     LZSA2,
     Shrinkler,
     Pucrunch,
-    Upkr
+    Upkr,
+    BzLzm,
+    BackwardBzLzm,
+    BzEf8,
+    BackwardBzEf8,
+    BzBx0,
+    BackwardBzBx0,
+    BzBx2,
+    BackwardBzBx2
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
@@ -1144,6 +1152,22 @@ impl fmt::Display for Token {
                                 CrunchType::Pucrunch => "INCPUC",
                                 #[cfg(not(target_arch = "wasm32"))]
                                 CrunchType::Upkr => "INCUPKR",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BzLzm => "INCLZM",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BackwardBzLzm => "INCLZM_BACKWARD",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BzEf8 => "INCEF8",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BackwardBzEf8 => "INCEF8_BACKWARD",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BzBx0 => "INCBX0",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BackwardBzBx0 => "INCBX0_BACKWARD",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BzBx2 => "INCBX2",
+                                #[cfg(not(target_arch = "wasm32"))]
+                                CrunchType::BackwardBzBx2 => "INCBX2_BACKWARD",
                             }
                         }
                     };

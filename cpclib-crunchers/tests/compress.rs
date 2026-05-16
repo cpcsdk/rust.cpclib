@@ -97,3 +97,16 @@ fn crunch_lzsa() {
         Some(LzsaMinMatch::Val4)
     ));
 }
+
+#[test]
+#[cfg(feature = "bzpack")]
+fn crunch_bzpack() {
+    crunch_any(CompressMethod::Lzm);
+    crunch_any(CompressMethod::BackwardLzm);
+    crunch_any(CompressMethod::Ef8);
+    crunch_any(CompressMethod::BackwardEf8);
+    crunch_any(CompressMethod::Bx0);
+    crunch_any(CompressMethod::BackwardBx0);
+    crunch_any(CompressMethod::Bx2);
+    crunch_any(CompressMethod::BackwardBx2);
+}

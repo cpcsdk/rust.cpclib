@@ -86,11 +86,27 @@ pub enum Cruncher {
     #[cfg(feature = "upkr")]
     Upkr,
     #[cfg(feature = "zx0")]
-    Zx0
+    Zx0,
+    #[cfg(feature = "bzpack")]
+    BackwardBx0,
+    #[cfg(feature = "bzpack")]
+    BackwardBx2,
+    #[cfg(feature = "bzpack")]
+    BackwardEf8,
+    #[cfg(feature = "bzpack")]
+    BackwardLzm,
+    #[cfg(feature = "bzpack")]
+    Bx0,
+    #[cfg(feature = "bzpack")]
+    Bx2,
+    #[cfg(feature = "bzpack")]
+    Ef8,
+    #[cfg(feature = "bzpack")]
+    Lzm
 }
 
 impl Cruncher {
-    #[cfg(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0"))]
+    #[cfg(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0", feature = "bzpack"))]
     pub fn z80(&self) -> &Utf8Path {
         let fname: &str = match self {
             #[cfg(feature = "apultra")]
@@ -116,7 +132,19 @@ impl Cruncher {
             #[cfg(feature = "zx0")]
             Cruncher::Zx0 => "inner://dzx0_fast.asm",
             #[cfg(feature = "upkr")]
-            Cruncher::Upkr => "inner://uncrunch/upkr.asm"
+            Cruncher::Upkr => "inner://uncrunch/upkr.asm",
+            #[cfg(feature = "bzpack")]
+            Cruncher::BackwardBx0 => "inner://uncrunch/bzpack_backward_bx0.asm",
+            #[cfg(feature = "bzpack")]
+            Cruncher::BackwardBx2 => "inner://uncrunch/bzpack_backward_bx2.asm",
+            #[cfg(feature = "bzpack")]
+            Cruncher::BackwardEf8 => "inner://uncrunch/bzpack_backward_ef8.asm",
+            #[cfg(feature = "bzpack")]
+            Cruncher::BackwardLzm => "inner://uncrunch/bzpack_backward_lzm.asm",
+            #[cfg(feature = "bzpack")]
+            Cruncher::Bx0 | Cruncher::Bx2 | Cruncher::Ef8 | Cruncher::Lzm => {
+                panic!("No Z80 uncrunch routine available for forward bzpack formats. Use the Backward variant instead.")
+            }
         };
         fname.into()
     }
@@ -128,10 +156,10 @@ pub fn command() -> clap::Command {
 
 pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
     if args.z80 {
-        #[cfg(not(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0")))]
+        #[cfg(not(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0", feature = "bzpack")))]
         panic!("This is a bug, please report it. The z80 option should not be available if no cruncher is enabled");
 
-        #[cfg(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0"))]
+        #[cfg(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0", feature = "bzpack"))]
         {let fname = args.cruncher.z80();
         let content = cpclib_asm::file::load_file(fname, &Default::default())
             .unwrap()
@@ -199,7 +227,23 @@ pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
         #[cfg(feature = "upkr")]
         Cruncher::Upkr => CompressMethod::Upkr,
         #[cfg(feature = "zx0")]
-        Cruncher::BackwardZx0 => CompressMethod::BackwardZx0
+        Cruncher::BackwardZx0 => CompressMethod::BackwardZx0,
+        #[cfg(feature = "bzpack")]
+        Cruncher::Lzm => CompressMethod::Lzm,
+        #[cfg(feature = "bzpack")]
+        Cruncher::BackwardLzm => CompressMethod::BackwardLzm,
+        #[cfg(feature = "bzpack")]
+        Cruncher::Ef8 => CompressMethod::Ef8,
+        #[cfg(feature = "bzpack")]
+        Cruncher::BackwardEf8 => CompressMethod::BackwardEf8,
+        #[cfg(feature = "bzpack")]
+        Cruncher::Bx0 => CompressMethod::Bx0,
+        #[cfg(feature = "bzpack")]
+        Cruncher::BackwardBx0 => CompressMethod::BackwardBx0,
+        #[cfg(feature = "bzpack")]
+        Cruncher::Bx2 => CompressMethod::Bx2,
+        #[cfg(feature = "bzpack")]
+        Cruncher::BackwardBx2 => CompressMethod::BackwardBx2
     };
 
     let crunched = cruncher

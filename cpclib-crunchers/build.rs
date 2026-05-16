@@ -64,6 +64,31 @@ fn build_shrinkler() {
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.h");
 }
 
+#[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+fn build_bzpack() {
+    cxx_build::bridge("src/bzpack.rs")
+        .file("extra/bzpack/bzpack_bridge.cpp")
+        .file("extra/bzpack/BitStream.cpp")
+        .file("extra/bzpack/Compressor.cpp")
+        .file("extra/bzpack/Decompressor.cpp")
+        .file("extra/bzpack/ExhaustiveParser.cpp")
+        .file("extra/bzpack/Formats.cpp")
+        .file("extra/bzpack/OptimalParser.cpp")
+        .file("extra/bzpack/PrefixMatcher.cpp")
+        .file("extra/bzpack/UniversalCodes.cpp")
+        .include("extra/bzpack")
+        .std("c++17")
+        .warnings(false)
+        .opt_level(3)
+        .compile("cpclib-crunchers-bzpack");
+
+    println!("cargo:rerun-if-changed=src/bzpack.rs");
+    println!("cargo:rerun-if-changed=extra/bzpack/bzpack_bridge.cpp");
+    println!("cargo:rerun-if-changed=extra/bzpack/bzpack_bridge.h");
+    println!("cargo:rerun-if-changed=extra/bzpack/Compressor.cpp");
+    println!("cargo:rerun-if-changed=extra/bzpack/Formats.cpp");
+}
+
 #[cfg(feature = "lzsa")]
 fn build_lzsa() {
     cc::Build::new()
@@ -93,6 +118,8 @@ fn main() {
         build_others();
         #[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
         build_shrinkler();
+        #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+        build_bzpack();
         #[cfg(feature = "lzsa")]
         build_lzsa();
     }

@@ -915,6 +915,24 @@ pub fn parse_crunched_section(
             parse_directive_word(b"PUCRUNCH").value(CrunchType::Pucrunch),
             parse_directive_word(b"LZSA1").value(CrunchType::LZSA1),
             parse_directive_word(b"LZSA2").value(CrunchType::LZSA2)
+        )),
+        alt((
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZLZM_BACKWARD").value(CrunchType::BackwardBzLzm),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZLZM").value(CrunchType::BzLzm),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZEF8_BACKWARD").value(CrunchType::BackwardBzEf8),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZEF8").value(CrunchType::BzEf8),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZBX0_BACKWARD").value(CrunchType::BackwardBzBx0),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZBX0").value(CrunchType::BzBx0),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZBX2_BACKWARD").value(CrunchType::BackwardBzBx2),
+            #[cfg(not(target_arch = "wasm32"))]
+            parse_directive_word(b"LZBX2").value(CrunchType::BzBx2)
         ))
     ))
     .parse_next(input)?;
@@ -1819,12 +1837,14 @@ pub fn parse_directive_new(
 
         let input_start = input.checkpoint();
 
-        // Get the first word that will drive the rest of parsing
+        // Get the first word that will drive the rest of parsing.
+        // '.' must not immediately follow the word, but '_' is allowed so that
+        // size-dispatch functions can inspect and consume optional _BACKWARD suffixes.
         let word = delimited(
             my_space0,
             terminated(
                 alphanumeric1,
-                alt((eof.value(()), not(alt((b'.', b'_'))).value(())))
+                alt((eof.value(()), not(b'.').value(())))
             ),
             my_space0
         )
@@ -1864,10 +1884,7 @@ fn parse_directive_of_size_others(
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler)).parse_next(input)
         },
 
-        // 15
-        b"INCZX0_BACKWARD" => {
-            parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
-        },
+
 
 
         // 13
@@ -1999,10 +2016,43 @@ fn parse_directive_of_size_6(
         },
 
         h if hashed_choice!(h, word, b"INCZX0") => {
-            parse_incbin(BinaryTransformation::Crunch(CrunchType::Zx0)).parse_next(input)
+            if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
+            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::Zx0)).parse_next(input)
+            }
         },
         h if hashed_choice!(h, word, b"INCPUC") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Pucrunch)).parse_next(input)
+        },
+
+        h if hashed_choice!(h, word, b"INCLZM") => {
+            if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzLzm)).parse_next(input)
+            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BzLzm)).parse_next(input)
+            }
+        },
+        h if hashed_choice!(h, word, b"INCEF8") => {
+            if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzEf8)).parse_next(input)
+            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BzEf8)).parse_next(input)
+            }
+        },
+        h if hashed_choice!(h, word, b"INCBX0") => {
+            if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzBx0)).parse_next(input)
+            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BzBx0)).parse_next(input)
+            }
+        },
+        h if hashed_choice!(h, word, b"INCBX2") => {
+            if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzBx2)).parse_next(input)
+            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BzBx2)).parse_next(input)
+            }
         },
 
 

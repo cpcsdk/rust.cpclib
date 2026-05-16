@@ -221,7 +221,63 @@ impl Compressor for CompressionType {
                 Err(Box::new(AssemblerError::AssemblingError {
                     msg: "upkr compression not available".to_owned()
                 }))
-            } 
+            },
+
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressionType::BzLzm => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Lzm),
+            #[cfg(not(all(feature = "bzpack", not(target_arch = "wasm32"))))]
+            CompressionType::BzLzm => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "bzpack compression not available".to_owned()
+            })),
+
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressionType::BackwardBzLzm => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::BackwardLzm),
+            #[cfg(not(all(feature = "bzpack", not(target_arch = "wasm32"))))]
+            CompressionType::BackwardBzLzm => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "bzpack compression not available".to_owned()
+            })),
+
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressionType::BzEf8 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Ef8),
+            #[cfg(not(all(feature = "bzpack", not(target_arch = "wasm32"))))]
+            CompressionType::BzEf8 => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "bzpack compression not available".to_owned()
+            })),
+
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressionType::BackwardBzEf8 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::BackwardEf8),
+            #[cfg(not(all(feature = "bzpack", not(target_arch = "wasm32"))))]
+            CompressionType::BackwardBzEf8 => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "bzpack compression not available".to_owned()
+            })),
+
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressionType::BzBx0 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Bx0),
+            #[cfg(not(all(feature = "bzpack", not(target_arch = "wasm32"))))]
+            CompressionType::BzBx0 => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "bzpack compression not available".to_owned()
+            })),
+
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressionType::BackwardBzBx0 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::BackwardBx0),
+            #[cfg(not(all(feature = "bzpack", not(target_arch = "wasm32"))))]
+            CompressionType::BackwardBzBx0 => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "bzpack compression not available".to_owned()
+            })),
+
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressionType::BzBx2 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Bx2),
+            #[cfg(not(all(feature = "bzpack", not(target_arch = "wasm32"))))]
+            CompressionType::BzBx2 => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "bzpack compression not available".to_owned()
+            })),
+
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressionType::BackwardBzBx2 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::BackwardBx2),
+            #[cfg(not(all(feature = "bzpack", not(target_arch = "wasm32"))))]
+            CompressionType::BackwardBzBx2 => Err(Box::new(AssemblerError::AssemblingError {
+                msg: "bzpack compression not available".to_owned()
+            }))
         }?;
 
         Ok(method

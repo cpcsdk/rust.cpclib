@@ -769,6 +769,22 @@ impl HardCodedFunction {
                     b"LZAPU" => CrunchType::LZAPU,
                     #[cfg(not(target_arch = "wasm32"))]
                     b"LZPUCRUNCH" => CrunchType::Pucrunch,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    b"LZLZM" => CrunchType::BzLzm,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    b"LZLZM_BACKWARD" => CrunchType::BackwardBzLzm,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    b"LZEF8" => CrunchType::BzEf8,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    b"LZEF8_BACKWARD" => CrunchType::BackwardBzEf8,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    b"LZBX0" => CrunchType::BzBx0,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    b"LZBX0_BACKWARD" => CrunchType::BackwardBzBx0,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    b"LZBX2" => CrunchType::BzBx2,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    b"LZBX2_BACKWARD" => CrunchType::BackwardBzBx2,
                     _ => {
                         return Err(Box::new(AssemblerError::AssemblingError {
                             msg: format!("{crunch_type} is not a valid crunch")

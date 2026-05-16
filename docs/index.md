@@ -26,9 +26,3 @@ There are more are less able to do:
   - Only reset and run file have been coded at the moment
   - In opposite to the original xfer tool, cpclib one is able to start snapshots V3 (there are simply converted as snapshot v2 on the fly)
 - create basic tokens from basic source (WIP)
-
-# Tools
-
-## Assemblers
-
-- **vlink**: A versatile linker tool. For Linux and macOS, it can be built from source using the provided Makefile. For Windows, a prebuilt binary is available for download. This tool is categorized under assemblers for simplicity.

@@ -24,8 +24,10 @@ workspace = true
 
 
 [features]
-all = ["apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0"]
+default = ["apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0"]
+all = ["apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "upkr", "zx0"]
 apultra = ["cpclib-crunchers/apultra"]
+bzpack = ["cpclib-crunchers/bzpack"]
 exomizer = ["cpclib-crunchers/exomizer"]
 lz4 = ["cpclib-crunchers/lz4"]
 lz48 = ["cpclib-crunchers/lz48"]

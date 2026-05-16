@@ -90,7 +90,7 @@ path = "src/main.rs"
 [features]
 
 default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe", "screenshot",
-"apultra", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0"]
+"apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0"]
 colored_errors = ["cpclib-basm/colored_errors"]
 fap = ["cpclib-runner/fap"]
 screenshot = ["cpclib-runner/screenshot"]
@@ -102,6 +102,7 @@ self-update =["self_update"]
 
 
 apultra = ["cpclib-crunch/apultra", "cpclib-asm/apultra", "cpclib-basm/apultra"]
+bzpack = ["cpclib-crunch/bzpack", "cpclib-asm/bzpack", "cpclib-basm/bzpack"]
 exomizer = ["cpclib-crunch/exomizer", "cpclib-asm/exomizer", "cpclib-basm/exomizer"]
 lz4 = ["cpclib-crunch/lz4", "cpclib-asm/lz4", "cpclib-basm/lz4"]
 lz48 = ["cpclib-crunch/lz48", "cpclib-asm/lz48", "cpclib-basm/lz48"]

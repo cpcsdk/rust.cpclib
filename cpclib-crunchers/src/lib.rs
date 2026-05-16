@@ -38,6 +38,9 @@ pub mod zx7;
 #[cfg(feature = "lzsa")]
 pub mod lzsa;
 
+#[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+pub mod bzpack;
+
 pub enum CompressMethod {
     // No compression at all
     None,
@@ -65,6 +68,22 @@ pub enum CompressMethod {
     BackwardZx0,
     #[cfg(all(feature = "zx7", not(target_arch = "wasm32")))]
     Zx7,
+    #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+    Lzm,
+    #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+    BackwardLzm,
+    #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+    Ef8,
+    #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+    BackwardEf8,
+    #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+    Bx0,
+    #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+    BackwardBx0,
+    #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+    Bx2,
+    #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+    BackwardBx2,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,7 +168,23 @@ impl CompressMethod {
             CompressMethod::BackwardZx0 => Ok(zx0::compress_backward(data)),
 
             #[cfg(all(feature = "zx7", not(target_arch = "wasm32")))]
-            CompressMethod::Zx7 => Ok(zx7::compress(data).into())
+            CompressMethod::Zx7 => Ok(zx7::compress(data).into()),
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressMethod::Lzm => Ok(bzpack::compress(data, bzpack::BzpackFormat::Lzm).into()),
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressMethod::BackwardLzm => Ok(bzpack::compress_backward(data, bzpack::BzpackFormat::Lzm).into()),
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressMethod::Ef8 => Ok(bzpack::compress(data, bzpack::BzpackFormat::Ef8).into()),
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressMethod::BackwardEf8 => Ok(bzpack::compress_backward(data, bzpack::BzpackFormat::Ef8).into()),
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressMethod::Bx0 => Ok(bzpack::compress(data, bzpack::BzpackFormat::Bx0).into()),
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressMethod::BackwardBx0 => Ok(bzpack::compress_backward(data, bzpack::BzpackFormat::Bx0).into()),
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressMethod::Bx2 => Ok(bzpack::compress(data, bzpack::BzpackFormat::Bx2).into()),
+            #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]
+            CompressMethod::BackwardBx2 => Ok(bzpack::compress_backward(data, bzpack::BzpackFormat::Bx2).into()),
         }
     }
 }
