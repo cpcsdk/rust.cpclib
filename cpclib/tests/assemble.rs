@@ -135,4 +135,20 @@ mod tests {
         assert!(size.is_ok());
         assert_eq!(size.unwrap(), 1 + 1 + 1 + 3 + 60 + 1 + 2);
     }
+
+    /// Verify that a char variable used in a label template does not include
+    /// the surrounding single quotes.  E.g. `VAR = 'c'` followed by
+    /// `LABEL_{VAR}_1` must define the symbol `LABEL_c_1`, not `LABEL_'c'_1`.
+    #[test]
+    pub fn test_char_label_expansion() {
+        use cpclib_asm::{assemble_with_options, EnvOptions};
+
+        let code = "VAR='c'\nLABEL_{VAR}_1\n";
+        let (_bytes, symbols) =
+            assemble_with_options(code, EnvOptions::default()).expect("Assembly failed");
+        assert!(
+            symbols.contains_symbol("LABEL_c_1").unwrap(),
+            "Expected symbol LABEL_c_1 to be defined"
+        );
+    }
 }

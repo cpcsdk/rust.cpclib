@@ -423,7 +423,7 @@ impl Z80 {
     }
 
     /// Replace the current symbol table by a copy of the one in argument
-    pub fn setup_symbol_table(&mut self, symbols: &SymbolsTableCaseDependent) {
+    pub fn setup_symbol_table(&mut self, symbols: &SymbolsTable) {
         *self.context.env.symbols_mut() = symbols.clone()
     }
 
@@ -488,7 +488,7 @@ mod test {
     #[test]
     fn jp_symbol() {
         let mut z80 = Z80::default();
-        let mut symbols = SymbolsTableCaseDependent::default();
+        let mut symbols = SymbolsTable::default();
         let _ = symbols.set_symbol_to_value("LABEL", cpclib_asm::Value::from(0x4000u16));
         z80.setup_symbol_table(&symbols);
 

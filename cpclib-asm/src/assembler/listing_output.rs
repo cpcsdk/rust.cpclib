@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_tokens::symbols::SymbolsTableCaseDependent;
+use cpclib_tokens::symbols::SymbolsTable;
 use cpclib_tokens::ExprResult;
 use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress};
 
@@ -154,7 +154,7 @@ impl ListingOutput {
         address: u32,
         address_kind: AddressKind,
         physical_address: PhysicalAddress,
-        symbols: Option<*const SymbolsTableCaseDependent>
+        symbols: Option<*const SymbolsTable>
     ) {
         if !self.activated {
             return;
@@ -260,7 +260,7 @@ impl ListingOutput {
 
     fn expand_listing_label(
         raw_label: String,
-        symbols: Option<*const SymbolsTableCaseDependent>
+        symbols: Option<*const SymbolsTable>
     ) -> String {
         // Listing expansion is intentionally done only in listing pass to avoid runtime overhead.
         symbols
@@ -450,7 +450,7 @@ pub struct ListingOutputTrigger {
     pub(crate) token: Option<*const LocatedToken>,
     /// the bytes progressively collected
     pub(crate) bytes: Vec<u8>,
-    pub(crate) symbols: Option<*const SymbolsTableCaseDependent>,
+    pub(crate) symbols: Option<*const SymbolsTable>,
     pub(crate) start: u32,
     pub(crate) physical_address: PhysicalAddress,
     pub(crate) builder: Arc<RwLock<ListingOutput>>
@@ -467,7 +467,7 @@ impl ListingOutputTrigger {
         code: u32,
         kind: AddressKind,
         physical_address: PhysicalAddress,
-        symbols: Option<*const SymbolsTableCaseDependent>
+        symbols: Option<*const SymbolsTable>
     ) {
         // Retreive the previous token and handle it
         if let Some(token) = &self.token {

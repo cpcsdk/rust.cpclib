@@ -3,5 +3,5 @@ pub mod tokens {
 }
 pub use tokens::{
     DataAccess, Expr, ExprEvaluationExt, FlagTest, IndexRegister8, IndexRegister16, ListingExt,
-    Mnemonic, SymbolsTableCaseDependent, Token, TokenExt
+    Mnemonic, SymbolsTable, Token, TokenExt
 };

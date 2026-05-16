@@ -445,7 +445,7 @@ pub struct Env {
     /// BUG: should be stored individually in each bank ?
     byte_written: bool,
 
-    symbols: SymbolsTableCaseDependent,
+    symbols: SymbolsTable,
 
     /// Return value of the currently executed function. Is almost always None
     return_value: Option<ExprResult>,
@@ -718,11 +718,11 @@ impl Env {
         &self.options
     }
 
-    pub fn symbols(&self) -> &SymbolsTableCaseDependent {
+    pub fn symbols(&self) -> &SymbolsTable {
         &self.symbols
     }
 
-    pub fn symbols_mut(&mut self) -> &mut SymbolsTableCaseDependent {
+    pub fn symbols_mut(&mut self) -> &mut SymbolsTable {
         &mut self.symbols
     }
 
@@ -1042,14 +1042,6 @@ impl Env {
     /// Mainly used for tests.
     /// TODO use bon here
     pub fn with_table(symbols: &SymbolsTable) -> Self {
-        let mut env = Self::new(Default::default());
-        env.symbols.set_table(symbols.clone());
-        env.pass = AssemblingPass::SecondPass(1);
-        env
-    }
-
-    /// TODO use bon here
-    pub fn with_table_case_dependent(symbols: &SymbolsTableCaseDependent) -> Self {
         let mut env = Self::new(Default::default());
         env.symbols = symbols.clone();
         env.pass = AssemblingPass::SecondPass(1);
@@ -3701,7 +3693,7 @@ impl Env {
 
             cpr: None,
 
-            symbols: SymbolsTableCaseDependent::default(),
+            symbols: SymbolsTable::default(),
             run_options: None,
             byte_written: false,
             output_trigger: None,
@@ -3754,10 +3746,11 @@ impl Env {
             env.sna_version = env.sna.version();
         }
 
-        env.symbols = SymbolsTableCaseDependent::new(
-            env.options().symbols().clone(),
-            env.options().case_sensitive()
-        );
+        env.symbols = env
+            .options()
+            .symbols()
+            .clone()
+            .with_case_sensitive(env.options().case_sensitive());
         env.retrieve_options_symbols();
 
         if let Some(builder) = &env.options().assemble_options().output_builder {

@@ -154,11 +154,11 @@ pub struct EmulationContext {
 }
 
 impl EmulationContext {
-    pub fn symbols(&mut self) -> &SymbolsTableCaseDependent {
+    pub fn symbols(&mut self) -> &SymbolsTable {
         self.env.symbols()
     }
 
-    pub fn symbols_mut(&mut self) -> &mut SymbolsTableCaseDependent {
+    pub fn symbols_mut(&mut self) -> &mut SymbolsTable {
         self.env.symbols_mut()
     }
 }

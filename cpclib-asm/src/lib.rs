@@ -253,7 +253,7 @@ where
 {
     let (_tok, env) = assembler::visit_tokens_all_passes_with_options(tokens, options)
         .map_err(|(_, _, e)| AssemblerError::AlreadyRenderedError(e.to_string()))?;
-    Ok((env.produced_bytes(), env.symbols().into()))
+    Ok((env.produced_bytes(), env.symbols().clone()))
 }
 
 /// Build the code and store it inside a file supposed to be injected in a dsk

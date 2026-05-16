@@ -273,6 +273,8 @@ pub struct SymbolsTable {
     current_pass_map: ModuleSymbolTable,
 
     dummy: bool,
+    /// When true labels are case-sensitive; when false they are normalised to uppercase.
+    case_sensitive: bool,
     current_global_label: Symbol, //  Value of the current label to allow local labels
     // Stack of namespaces
     namespace_stack: Vec<Symbol>,
@@ -298,6 +300,7 @@ impl Default for SymbolsTable {
             map: map.clone(),
             current_pass_map: map.clone(),
             dummy: false,
+            case_sensitive: true,
             current_global_label: "".into(),
             assignable: Default::default(),
             seed_stack: Vec::new(),
@@ -317,6 +320,7 @@ impl Clone for SymbolsTable {
             functions_stack: self.functions_stack.clone(),
             current_pass_map: self.current_pass_map.clone(),
             dummy: self.dummy,
+            case_sensitive: self.case_sensitive,
             current_global_label: self.current_global_label.clone(),
             namespace_stack: self.namespace_stack.clone(),
             assignable: self.assignable.clone(),
@@ -417,6 +421,10 @@ impl SymbolsTable {
 
             let local_value = match self.any_value::<&str>(local_expr)?.map(|vl| vl.value()) {
                 Some(Value::String(s)) => s.to_string(),
+                // Char and String ExprResult must expand to their bare value (no quotes)
+                // because they are embedded inside a label name.
+                Some(Value::Expr(ExprResult::Char(c))) => (*c as char).to_string(),
+                Some(Value::Expr(ExprResult::String(s))) => s.to_string(),
                 Some(Value::Expr(e)) => e.to_string(),
                 Some(Value::Counter(e)) => e.to_string(),
                 _ => {
@@ -506,10 +514,54 @@ impl SymbolsTable {
             symbol = format!("LPR{}OX", counter);
         }
 
-        let symbol: Symbol = symbol.into();
+        // Normalise the fully-expanded symbol for case-insensitive tables.
+        let symbol: Symbol = if self.case_sensitive {
+            symbol.into()
+        }
+        else {
+            symbol.to_uppercase().into()
+        };
         // dbg!("output", &symbol);
 
         Ok(symbol)
+    }
+
+    /// Normalise a symbol name according to the table's case-sensitivity setting.
+    #[inline]
+    pub fn normalize_symbol<S>(&self, symbol: S) -> Symbol
+    where
+        Symbol: From<S>,
+        S: AsRef<str>
+    {
+        if self.case_sensitive {
+            symbol.into()
+        }
+        else {
+            symbol.as_ref().to_uppercase().into()
+        }
+    }
+
+    /// Return whether the table is case-sensitive.
+    #[inline]
+    pub fn is_case_sensitive(&self) -> bool {
+        self.case_sensitive
+    }
+
+    /// Builder-style setter for the case-sensitivity flag.
+    #[inline]
+    pub fn with_case_sensitive(mut self, case_sensitive: bool) -> Self {
+        self.case_sensitive = case_sensitive;
+        self
+    }
+
+    /// Setup the current label for local to global labels conversions (alias of set_current_global_label)
+    #[inline]
+    pub fn set_current_label<S>(&mut self, symbol: S) -> Result<(), SymbolError>
+    where
+        Symbol: From<S>,
+        S: AsRef<str>
+    {
+        self.set_current_global_label(symbol)
     }
 
     /// Increment the proximity label counter. Call this ONCE when encountering a _ label definition.
@@ -631,7 +683,7 @@ impl SymbolsTableTrait for SymbolsTable {
 
     #[inline]
     fn enter_namespace(&mut self, namespace: &str) {
-        self.namespace_stack.push(namespace.into())
+        self.namespace_stack.push(self.normalize_symbol(namespace))
     }
 
     #[inline]
@@ -722,6 +774,7 @@ impl SymbolsTableTrait for SymbolsTable {
 
         // then to the assembler
         let symbol = self.extend_readable_symbol::<Symbol>(symbol)?;
+        self.current_pass_map.remove(&symbol);
         Ok(self.map.remove(&symbol))
     }
 
@@ -787,6 +840,7 @@ impl SymbolsTable {
         map.insert(Symbol::from("$"), Value::Expr(0.into()).into());
         SymbolsTable {
             dummy: true,
+            case_sensitive: false,
             current_global_label: "".into(),
             ..Default::default()
         }
@@ -1154,342 +1208,8 @@ impl SymbolsTable {
     }
 }
 
-/// Wrapper around the Values table in order to easily manage the fact that the assembler is case dependent or independant
-#[derive(Debug, Clone)]
-#[allow(missing_docs)]
-pub struct SymbolsTableCaseDependent {
-    table: SymbolsTable,
-    case_sensitive: bool
-}
-
-/// By default, the assembler is case sensitive
-impl Default for SymbolsTableCaseDependent {
-    fn default() -> Self {
-        Self {
-            table: SymbolsTable::default(),
-            case_sensitive: true
-        }
-    }
-}
-
-impl AsRef<SymbolsTable> for SymbolsTableCaseDependent {
+impl AsRef<SymbolsTable> for SymbolsTable {
     fn as_ref(&self) -> &SymbolsTable {
-        &self.table
-    }
-}
-
-impl From<SymbolsTableCaseDependent> for SymbolsTable {
-    fn from(val: SymbolsTableCaseDependent) -> Self {
-        val.table
-    }
-}
-
-impl From<&SymbolsTableCaseDependent> for SymbolsTable {
-    fn from(val: &SymbolsTableCaseDependent) -> Self {
-        val.table.clone()
-    }
-}
-
-#[allow(missing_docs)]
-impl SymbolsTableCaseDependent {
-    delegate! {
-        to self.table {
-            pub fn current_address(&self) -> Result<u16, SymbolError>;
-            pub fn set_current_address(&mut self, addr: PhysicalAddress);
-            pub fn set_current_output_address(&mut self, addr: PhysicalAddress);
-            pub fn push_seed(&mut self, seed: usize);
-            pub fn pop_seed(&mut self);
-            pub fn pop_counter_value(&mut self);
-            pub fn push_counter_value(&mut self, e: ExprResult);
-            pub fn enter_function(&mut self);
-            pub fn leave_function(&mut self);
-            pub fn increment_proximity_counter(&self);
-        }
-    }
-
-    pub fn new(table: SymbolsTable, case_sensitive: bool) -> Self {
-        Self {
-            table,
-            case_sensitive
-        }
-    }
-
-    #[inline]
-    pub fn is_case_sensitive(&self) -> bool {
-        self.case_sensitive
-    }
-
-    pub fn table(&self) -> &SymbolsTable {
-        &self.table
-    }
-
-    /// Build a laxists vesion of the table : do not care of case and absences of Valuees
-    pub fn laxist() -> Self {
-        Self::new(SymbolsTable::laxist(), false)
-    }
-
-    /// Modify the Value value depending on the case configuration (do nothing, or set uppercase)
-    #[inline]
-    pub fn normalize_symbol<S>(&self, symbol: S) -> Symbol
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        if self.case_sensitive {
-            symbol.into()
-        }
-        else {
-            symbol.as_ref().to_uppercase().into()
-        }
-    }
-
-    pub fn set_table(&mut self, table: SymbolsTable) {
-        self.table = table
-    }
-
-    // Setup the current label for local to global labels conversions
-    #[inline]
-    pub fn set_current_label<S>(&mut self, symbol: S) -> Result<(), SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .set_current_global_label::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    pub fn get_current_label(&self) -> &Symbol {
-        self.table.get_current_label()
-    }
-
-    #[inline]
-    pub fn set_symbol_to_current_address<S>(&mut self, symbol: S) -> Result<(), SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .set_symbol_to_current_address::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    pub fn set_symbol_to_value<S, V: Into<ValueAndSource>>(
-        &mut self,
-        symbol: S,
-        value: V
-    ) -> Result<Option<ValueAndSource>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .set_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value)
-    }
-
-    #[inline]
-    pub fn update_symbol_to_value<S, E: Into<ValueAndSource>>(
-        &mut self,
-        symbol: S,
-        value: E
-    ) -> Result<(), SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .update_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value.into())
-    }
-
-    #[inline]
-    pub fn prefixed_value<S>(
-        &self,
-        prefix: &LabelPrefix,
-        symbol: S
-    ) -> Result<Option<u16>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .prefixed_value::<Symbol>(prefix, self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    pub fn contains_symbol<S>(&self, symbol: S) -> Result<bool, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .contains_symbol::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    pub fn symbol_exist_in_current_pass<S>(&self, symbol: S) -> Result<bool, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .symbol_exist_in_current_pass::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    pub fn new_pass(&mut self) {
-        self.table.new_pass();
-    }
-
-    pub fn kind<S>(&self, symbol: S) -> Result<&'static str, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table.kind(symbol)
-    }
-
-    pub fn closest_symbol<S>(
-        &self,
-        symbol: S,
-        r#for: SymbolFor
-    ) -> Result<Option<&str>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        let symbol = self.normalize_symbol(symbol);
-        self.table.closest_symbol::<Symbol>(symbol, r#for)
-    }
-
-    pub fn extend_local_and_patterns_for_symbol<S>(&self, symbol: S) -> Result<Symbol, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        let symbol = self.normalize_symbol(symbol);
-        self.table
-            .extend_local_and_patterns_for_symbol::<Symbol>(symbol)
-    }
-}
-
-impl SymbolsTableTrait for SymbolsTableCaseDependent {
-    #[inline]
-    fn is_used<S>(&self, symbol: S) -> bool
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table.is_used::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    fn use_symbol<S>(&mut self, symbol: S) -> Result<(), SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .use_symbol::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    fn expression_symbol(&self) -> Vec<(&Symbol, &ValueAndSource)> {
-        self.table.expression_symbol()
-    }
-
-    #[inline]
-    fn int_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .int_value::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    fn counter_value<S>(&self, symbol: S) -> Result<Option<i32>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .counter_value::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    fn macro_value<S>(&self, symbol: S) -> Result<Option<&ValueMacro>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .macro_value::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    fn struct_value<S>(&self, symbol: S) -> Result<Option<&Struct>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .struct_value::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    fn any_value<S>(&self, symbol: S) -> Result<Option<&ValueAndSource>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .any_value::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    fn remove_symbol<S>(&mut self, symbol: S) -> Result<Option<ValueAndSource>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        let normalized = self.normalize_symbol(symbol);
-        let _ = self.table.current_pass_map.remove(&normalized);
-
-        self.table.remove_symbol::<Symbol>(normalized)
-    }
-
-    #[inline]
-    fn address_value<S>(&self, symbol: S) -> Result<Option<&PhysicalAddress>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .address_value::<Symbol>(self.normalize_symbol(symbol))
-    }
-
-    #[inline]
-    fn assign_symbol_to_value<S, V: Into<ValueAndSource>>(
-        &mut self,
-        symbol: S,
-        value: V
-    ) -> Result<Option<ValueAndSource>, SymbolError>
-    where
-        Symbol: From<S>,
-        S: AsRef<str>
-    {
-        self.table
-            .assign_symbol_to_value::<Symbol, _>(self.normalize_symbol(symbol), value)
-    }
-
-    #[inline]
-    fn enter_namespace(&mut self, namespace: &str) {
-        self.table
-            .enter_namespace(self.normalize_symbol(namespace).value())
-    }
-
-    #[inline]
-    fn leave_namespace(&mut self) -> Result<Symbol, SymbolError> {
-        self.table.leave_namespace()
+        self
     }
 }

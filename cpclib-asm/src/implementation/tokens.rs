@@ -55,7 +55,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
     /// Return the number of bytes of the token given the provided context
     fn number_of_bytes_with_context(
         &self,
-        table: &mut SymbolsTableCaseDependent
+        table: &mut SymbolsTable
     ) -> Result<usize, String> {
         let bytes = self.to_bytes_with_context(table);
         if bytes.is_ok() {
@@ -70,7 +70,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
     /// Dummy version that assemble without taking into account the context
     /// TODO find a way to not build a symbol table each time
     fn to_bytes(&self) -> Result<Vec<u8>, Box<AssemblerError>> {
-        let mut table = SymbolsTableCaseDependent::laxist();
+        let mut table = SymbolsTable::laxist();
         let table = &mut table;
         self.to_bytes_with_context(table)
     }
@@ -79,7 +79,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
     #[allow(clippy::match_same_arms)]
     fn to_bytes_with_context(
         &self,
-        table: &mut SymbolsTableCaseDependent
+        table: &mut SymbolsTable
     ) -> Result<Vec<u8>, Box<AssemblerError>> {
         let mut options = if table.is_case_sensitive() {
             AssemblingOptions::new_case_sensitive()
@@ -87,7 +87,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
         else {
             AssemblingOptions::new_case_insensitive()
         };
-        options.set_symbols(table.table());
+        options.set_symbols(table);
 
         let options = EnvOptions::new(Default::default(), options, Arc::new(()));
         self.to_bytes_with_options(options)
