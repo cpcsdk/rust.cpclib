@@ -15,4 +15,5 @@ pub mod tracker;
 
 pub mod extra;
 pub mod twocdt;
+pub mod vlink;
 pub use runner::{ExternRunner, Runner, RunnerWithClap};

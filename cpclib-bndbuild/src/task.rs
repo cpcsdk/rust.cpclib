@@ -94,7 +94,8 @@ pub enum InnerTask {
     SongConverter(SongConverter, StandardTaskArguments),
     Tracker(Tracker, StandardTaskArguments),
     Xfer(StandardTaskArguments),
-    YmCruncher(YmCruncher, StandardTaskArguments)
+    YmCruncher(YmCruncher, StandardTaskArguments),
+    Vlink(StandardTaskArguments)
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -260,6 +261,8 @@ pub const SONG2WAV_CMDS: &[&str] = &[SongToWav::CMD];
 pub const SONG2YM_CMDS: &[&str] = &[SongToYm::CMD];
 pub const Z80PROFILER_CMDS: &[&str] = &[Z80Profiler::CMD];
 
+pub const VLINK_CMDS: &[&str] = &["vlink"];
+
 impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
@@ -296,6 +299,7 @@ impl Display for InnerTask {
             Self::Snapshot(s) => (SNA_CMDS[0], s),
             Self::SongConverter(t, s) => (t.get_command(), s),
             Self::Tracker(t, s) => (t.get_command(), s),
+            Self::Vlink(s) => (VLINK_CMDS[0], s),
             Self::Xfer(s) => (XFER_CMDS[0], s)
         };
 
@@ -344,6 +348,7 @@ is_some_cmd!(
     z80profiler,
     uz80,
     vasm,
+    vlink,
     winape,
     xfer
 );
@@ -518,6 +523,10 @@ impl InnerTask {
 
     pub fn with_xfer(std: StandardTaskArguments) -> Self {
         Self::Xfer(std)
+    }
+
+    pub fn with_vlink(std: StandardTaskArguments) -> Self {
+        Self::Vlink(std)
     }
 
     pub fn with_mkdir(std: StandardTaskArguments) -> Self {
@@ -824,6 +833,9 @@ impl InnerTask {
         else if is_two_cdt_cmd(code) {
             Ok(Self::Cdt(crate::runners::cdt::CdtManager::TwoCdt, std))
         }
+        else if is_vlink_cmd(code) {
+            Ok(Self::with_vlink(std))
+        }
         else {
             Err(format!("{code} is an invalid command"))
         }
@@ -883,7 +895,8 @@ impl InnerTask {
             | InnerTask::Emulator(_, t)
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
-            | InnerTask::Tracker(_, t) => t
+            | InnerTask::Tracker(_, t)
+            | InnerTask::Vlink(t) => t
         }
     }
 
@@ -920,6 +933,7 @@ impl InnerTask {
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
+            | InnerTask::Vlink(t)
             | InnerTask::Xfer(t)
             | InnerTask::Cpr(t)
             | InnerTask::Csl(t) => t
@@ -973,6 +987,7 @@ impl InnerTask {
             InnerTask::Snapshot(_) => false,
             InnerTask::SongConverter(_, _t) => false,
             InnerTask::Tracker(_, _t) => true, // XXX think if false is better
+            InnerTask::Vlink(_) => false,
             InnerTask::Xfer(_) => true,
             InnerTask::Cpr(_) => false,
             InnerTask::Csl(_) => false
@@ -1016,6 +1031,7 @@ impl InnerTask {
             InnerTask::Martine(_) => TaskKind::Delegated,
             InnerTask::SongConverter(..) => TaskKind::Delegated,
             InnerTask::Tracker(..) => TaskKind::Delegated,
+            InnerTask::Vlink(_) => TaskKind::Delegated,
             InnerTask::YmCruncher(..) => TaskKind::Delegated,
 
             // File system operations - could be considered embedded
@@ -1100,6 +1116,7 @@ impl InnerTask {
             Self::Mv(empty_args.clone()),
             Self::Rm(empty_args.clone()),
             Self::Snapshot(empty_args.clone()),
+            Self::Vlink(empty_args.clone()),
             Self::Xfer(empty_args.clone()),
         ]);
 

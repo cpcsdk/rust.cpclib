@@ -15,6 +15,7 @@ use cpclib_runner::runner::hspcompiler::HspCompilerVersion;
 use cpclib_runner::runner::impdisc::ImpDskVersion;
 use cpclib_runner::runner::martine::MartineVersion;
 use cpclib_runner::runner::twocdt::TwoCdtVersion;
+use cpclib_runner::runner::vlink::Vlink;
 use cpclib_runner::runner::{ExternRunner, Runner};
 
 use crate::event::BndBuilderObserver;
@@ -90,6 +91,7 @@ impl InnerTask {
             },
             InnerTask::Martine(_) => Some(MartineVersion::default().configuration()),
             InnerTask::Tracker(t, _) => Some(t.configuration()),
+            InnerTask::Vlink(_) => Some(Vlink::default().configuration()),
 
             _ => None
         }
@@ -244,6 +246,13 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Xfer(_) => XferRunner::default().run(task.args(), observer),
         InnerTask::Cpr(_) => CprCliRunner::default().run(task.args(), observer),
         InnerTask::Csl(_) => CslRunner::default().run(task.args(), observer),
+        InnerTask::Vlink(_) => {
+            DelegatedRunner::<E>::new(
+                task.configuration().unwrap(),
+                Vlink::default().get_command().to_owned()
+            )
+            .run(task.args(), observer)
+        },
 
         InnerTask::Grafx2(_) => {
             DelegatedRunner::<E>::new(

@@ -21,7 +21,7 @@ use task::{
     CPR_CMDS, CSL_CMDS, DISARK_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS, EXTERN_CMDS, HIDEUR_CMDS,
     HSPC_CMDS, HXCFE_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS, MV_CMDS, ORGAMS_CMDS,
     RASM_CMDS, RETROVM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SONG2AKM_CMDS, SUGARBOX_CMDS, UZ80_CMDS,
-    VASM_CMDS,
+    VASM_CMDS, VLINK_CMDS,
     WINAPE_CMDS, XFER_CMDS, Z80PROFILER_CMDS
 };
 use thiserror::Error;
@@ -138,7 +138,8 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (UZ80_CMDS, true),
     (VASM_CMDS, true),
     (WINAPE_CMDS, true),
-    (XFER_CMDS, false)
+    (XFER_CMDS, false),
+    (VLINK_CMDS, true)
 ];
 
 pub fn commands_list() -> &'static (Vec<&'static str>, Vec<&'static str>) {
