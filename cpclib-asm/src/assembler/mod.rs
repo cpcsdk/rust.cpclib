@@ -5262,6 +5262,23 @@ impl Env {
             let _ = env.poke(last_value | 0x80, &last_address);
         }
 
+        // Update stable ticker counters when active
+        if !env.stable_counters.is_empty() {
+            let num_bytes = env.logical_output_address().wrapping_sub(backup_address) as usize;
+            for i in 0..num_bytes {
+                let addr = backup_address.wrapping_add(i as u16);
+                let phy = env.logical_to_physical_address(addr);
+                if env.peek(&phy) != 0 {
+                    return Err(Box::new(AssemblerError::AssemblingError {
+                        msg: format!(
+                            "TICKER cannot compute timing for DB/DW directive with non-zero bytes"
+                        )
+                    }));
+                }
+            }
+            env.stable_counters.update_counters(num_bytes);
+        }
+
         Ok(())
     }
 }
