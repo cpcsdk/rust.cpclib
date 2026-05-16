@@ -104,7 +104,7 @@ impl Compressor for CompressionType {
         let method: CompressMethod = match self {
             #[cfg(feature = "lz48")]
             CompressionType::LZ48 => {
-                Ok(CompressMethod::Lz48)
+                Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Lz48)
             },
             #[cfg(not(feature = "lz48"))]
             CompressionType::LZ48 => {
@@ -115,7 +115,7 @@ impl Compressor for CompressionType {
 
 
             #[cfg(feature = "lz49")]
-            CompressionType::LZ49 => Ok(CompressMethod::Lz49),
+            CompressionType::LZ49 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Lz49),
             #[cfg(not(feature = "lz49"))]
             CompressionType::LZ49 => Err(Box::new(AssemblerError::AssemblingError {
                 msg: "LZ49 compression not available".to_owned()
@@ -123,14 +123,14 @@ impl Compressor for CompressionType {
 
             #[cfg(feature = "lzsa")]
             CompressionType::LZSA1 => {
-                Ok(CompressMethod::Lzsa(
+                Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Lzsa(
                     cpclib_crunchers::lzsa::LzsaVersion::V1,
                     None
                 ))
             },
             #[cfg(feature = "lzsa")]
             CompressionType::LZSA2 => {
-                Ok(CompressMethod::Lzsa(
+                Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Lzsa(
                     cpclib_crunchers::lzsa::LzsaVersion::V2,
                     None
                 ))
@@ -144,7 +144,7 @@ impl Compressor for CompressionType {
 
 
             #[cfg(all(feature = "lz4", not(target_arch = "wasm32")))]
-            CompressionType::LZ4 => Ok(CompressMethod::Lz4),
+            CompressionType::LZ4 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Lz4),
             #[cfg(not(all(feature = "lz4", not(target_arch = "wasm32"))))]
             CompressionType::LZ4 => {
                 Err(Box::new(AssemblerError::AssemblingError {
@@ -153,7 +153,7 @@ impl Compressor for CompressionType {
             },
 
             #[cfg(all(feature = "zx0",not(target_arch = "wasm32")))]
-            CompressionType::Zx0 => Ok(CompressMethod::Zx0),
+            CompressionType::Zx0 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Zx0),
             #[cfg(not(all(feature = "zx0", not(target_arch = "wasm32"))))]
             CompressionType::Zx0 => {
                 Err(Box::new(AssemblerError::AssemblingError {
@@ -161,7 +161,7 @@ impl Compressor for CompressionType {
                 }))
             },
             #[cfg(all(feature = "zx0", not(target_arch = "wasm32")))]
-            CompressionType::BackwardZx0 => Ok(CompressMethod::BackwardZx0),
+            CompressionType::BackwardZx0 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::BackwardZx0),
             #[cfg(not(all(feature = "zx0", not(target_arch = "wasm32"))))]
             CompressionType::BackwardZx0 => {
                 Err(Box::new(AssemblerError::AssemblingError {
@@ -171,7 +171,7 @@ impl Compressor for CompressionType {
 
 
             #[cfg(all(feature = "zx7", not(target_arch = "wasm32")))]
-            CompressionType::LZX7 => Ok(CompressMethod::Zx7),
+            CompressionType::LZX7 => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Zx7),
             #[cfg(not(all(feature = "zx7", not(target_arch = "wasm32"))))]
             CompressionType::LZX7 => {
                 Err(Box::new(AssemblerError::AssemblingError {
@@ -180,9 +180,9 @@ impl Compressor for CompressionType {
             },
 
 
-            #[cfg(all(feature = "exo", not(target_arch = "wasm32")))]
-            CompressionType::LZEXO => Ok(CompressMethod::Exomizer),
-            #[cfg(not(all(feature = "exo", not(target_arch = "wasm32"))))]
+            #[cfg(all(feature = "exomizer", not(target_arch = "wasm32")))]
+            CompressionType::LZEXO => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Exomizer),
+            #[cfg(not(all(feature = "exomizer", not(target_arch = "wasm32"))))]
             CompressionType::LZEXO => {
                 Err(Box::new(AssemblerError::AssemblingError {
                     msg: "exomizer compression not available".to_owned()
@@ -190,7 +190,7 @@ impl Compressor for CompressionType {
             },
 
             #[cfg(all(feature = "apultra", not(target_arch = "wasm32")))]
-            CompressionType::LZAPU => Ok(CompressMethod::Apultra),
+            CompressionType::LZAPU => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Apultra),
             #[cfg(not(all(feature = "apultra", not(target_arch = "wasm32"))))]
             CompressionType::LZAPU => {
                 Err(Box::new(AssemblerError::AssemblingError {
@@ -199,7 +199,7 @@ impl Compressor for CompressionType {
             },
 
             #[cfg(all(feature = "shrinkler", not(target_arch = "wasm32")))]
-            CompressionType::Shrinkler => Ok(CompressMethod::Shrinkler(Default::default())),
+            CompressionType::Shrinkler => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Shrinkler(Default::default())),
             #[cfg(not(all(feature = "shrinkler", not(target_arch = "wasm32"))))]
             CompressionType::Shrinkler => {
                 Err(Box::new(AssemblerError::AssemblingError {
@@ -207,7 +207,7 @@ impl Compressor for CompressionType {
                 }))
             },
             #[cfg(all(feature = "pucrunch", not(target_arch = "wasm32")))]
-            CompressionType::Pucrunch => Ok(CompressMethod::Pucrunch),
+            CompressionType::Pucrunch => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Pucrunch),
             #[cfg(not(all(feature = "pucrunch", not(target_arch = "wasm32"))))]
             CompressionType::Pucrunch => {
                 Err(Box::new(AssemblerError::AssemblingError {
@@ -215,7 +215,7 @@ impl Compressor for CompressionType {
                 }))
             },
             #[cfg(all(feature = "upkr", not(target_arch = "wasm32")))]
-            CompressionType::Upkr => Ok(CompressMethod::Upkr),
+            CompressionType::Upkr => Ok::<CompressMethod, Box<AssemblerError>>(CompressMethod::Upkr),
             #[cfg(not(all(feature = "upkr", not(target_arch = "wasm32"))))]
             CompressionType::Upkr => {
                 Err(Box::new(AssemblerError::AssemblingError {
