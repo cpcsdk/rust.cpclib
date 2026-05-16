@@ -1,8 +1,8 @@
+use cpclib_common::clap::Parser;
 use cpclib_common::event::DiscardObserver;
-use cpclib_imgconverter::{fade_build_args, fade_handle_matches};
+use cpclib_imgconverter::{FadeArgs, fade_process};
 
 fn main() {
-    let cmd = fade_build_args();
-    let matches = cmd.get_matches();
-    fade_handle_matches(&matches, &DiscardObserver).expect("Error in the generation");
+    let args = FadeArgs::parse();
+    fade_process(&args, &DiscardObserver).expect("Error in the generation");
 }

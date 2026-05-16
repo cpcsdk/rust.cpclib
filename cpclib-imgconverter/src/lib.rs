@@ -1535,37 +1535,179 @@ pub fn process_img2cpc(
     Ok(())
 }
 
-pub fn fade_build_args() -> Command {
-    let cmd = Command::new("fade");
-    let cmd = cmd
-        .arg(
-            Arg::new("SYMBOLS")
-                .help("Use symbols in assembly generated code")
-                .action(ArgAction::SetTrue)
-                .required(false)
-                .long("symbols")
-        )
-        .arg(
-            Arg::new("PREVIEW")
-                .help("Preview the generated palette in the terminal")
-                .action(ArgAction::SetTrue)
-                .required(false)
-                .long("preview")
-        )
-        .arg(
-            Arg::new("OUTPUT")
-                .help("Filename to store the result. Console otherwise")
-                .required(false)
-                .short('o')
-                .long("output")
-        );
-    let cmd = specify_palette!(cmd, false);
+/// Palette specification for the fade command (no unlock-pens option).
+#[derive(clap::Args, Clone, Debug)]
+pub struct FadePaletteArgs {
+    /// OCP PAL file. The first palette among 12 is used
+    #[arg(long, value_parser = cpclib::common::existing_utf8pathbuf_value_parser)]
+    pub pal: Option<Utf8PathBuf>,
 
-    cmd.subcommand(
-		Command::new("rgb")
-			.about("Use the algorithm described in http://cpc.sylvestre.org/technique/technique_coul5.html")
-			.alias("superlsy")
-	)
+    /// Separated list of ink numbers. Use ',' as separator
+    #[arg(long, conflicts_with = "pal")]
+    pub pens: Option<String>,
+
+    /// Ink number of pen 0
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen0: Option<u8>,
+    /// Ink number of pen 1
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen1: Option<u8>,
+    /// Ink number of pen 2
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen2: Option<u8>,
+    /// Ink number of pen 3
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen3: Option<u8>,
+    /// Ink number of pen 4
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen4: Option<u8>,
+    /// Ink number of pen 5
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen5: Option<u8>,
+    /// Ink number of pen 6
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen6: Option<u8>,
+    /// Ink number of pen 7
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen7: Option<u8>,
+    /// Ink number of pen 8
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen8: Option<u8>,
+    /// Ink number of pen 9
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen9: Option<u8>,
+    /// Ink number of pen 10
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen10: Option<u8>,
+    /// Ink number of pen 11
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen11: Option<u8>,
+    /// Ink number of pen 12
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen12: Option<u8>,
+    /// Ink number of pen 13
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen13: Option<u8>,
+    /// Ink number of pen 14
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen14: Option<u8>,
+    /// Ink number of pen 15
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen15: Option<u8>,
+    /// Ink number of pen 16 (border)
+    #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
+    pub pen16: Option<u8>,
+}
+
+impl FadePaletteArgs {
+    pub fn to_lockable_palette(&self) -> Result<LockablePalette, AmsdosError> {
+        if let Some(pens) = &self.pens {
+            let numbers = pens
+                .split(',')
+                .map(|ink| {
+                    cpclib::common::parse_value::<_, ()>
+                        .parse(BStr::new(ink))
+                        .unwrap_or_else(|_| {
+                            Ink::from(ink.replace("GA_", "")).gate_array_value() as _
+                        })
+                })
+                .collect::<Vec<_>>();
+            Ok(LockablePalette::unlocked(numbers.into()))
+        }
+        else if let Some(fname) = &self.pal {
+            let (mut data, _header) = cpclib::disc::read(fname)?;
+            let data = data.make_contiguous();
+            let pal = OcpPalette::from_buffer(data);
+            Ok(LockablePalette::unlocked(pal.palette(0).clone()))
+        }
+        else {
+            let mut palette = Palette::empty();
+            let mut one_pen_set = false;
+            let pen_values = [
+                self.pen0, self.pen1, self.pen2, self.pen3,
+                self.pen4, self.pen5, self.pen6, self.pen7,
+                self.pen8, self.pen9, self.pen10, self.pen11,
+                self.pen12, self.pen13, self.pen14, self.pen15,
+            ];
+            for (i, pen) in pen_values.iter().enumerate() {
+                if let Some(ink) = pen {
+                    one_pen_set = true;
+                    palette.set(i as i32, *ink);
+                }
+            }
+            if one_pen_set {
+                Ok(LockablePalette::locked(palette))
+            }
+            else {
+                Ok(LockablePalette::unlocked(palette))
+            }
+        }
+    }
+}
+
+/// Algorithm to use for fade generation.
+#[derive(clap::Subcommand, Clone, Debug)]
+pub enum FadeAlgorithm {
+    /// Use the algorithm described in http://cpc.sylvestre.org/technique/technique_coul5.html
+    #[command(alias = "superlsy")]
+    Rgb
+}
+
+/// Arguments for the fade tool.
+#[derive(clap::Parser, Clone, Debug)]
+#[command(name = "fade")]
+pub struct FadeArgs {
+    /// Use symbols in assembly generated code
+    #[arg(long)]
+    pub symbols: bool,
+
+    /// Preview the generated palette in the terminal
+    #[arg(long)]
+    pub preview: bool,
+
+    /// Filename to store the result. Console otherwise
+    #[arg(short = 'o', long)]
+    pub output: Option<String>,
+
+    #[command(flatten)]
+    pub palette: FadePaletteArgs,
+
+    #[command(subcommand)]
+    pub algorithm: FadeAlgorithm
+}
+
+/// Process the fade command with the given parsed arguments.
+pub fn fade_process(args: &FadeArgs, o: &dyn EventObserver) -> Result<(), String> {
+    let palette = args.palette.to_lockable_palette().map_err(|e| e.to_string())?;
+
+    let fades = match &args.algorithm {
+        FadeAlgorithm::Rgb => palette.rgb_fadout()
+    };
+
+    let content = if args.symbols {
+        fade_output_symbols_assembly(&fades)
+    }
+    else {
+        fade_output_ga_assembly(&fades)
+    };
+
+    if let Some(fname) = &args.output {
+        fs_err::write(fname, &content).expect("Error while saving file");
+    }
+    else {
+        o.emit_stdout(&content);
+    }
+
+    if args.preview {
+        fade_display_preview(&fades);
+    }
+
+    Ok(())
+}
+
+pub fn fade_build_args() -> Command {
+    use clap::CommandFactory;
+    FadeArgs::command()
 }
 
 fn fade_output_ga_assembly(palettes: &[Palette]) -> String {
@@ -1608,32 +1750,7 @@ fn fade_display_preview(palettes: &[Palette]) {
 }
 
 pub fn fade_handle_matches(matches: &ArgMatches, o: &dyn EventObserver) -> Result<(), String> {
-    let palette = get_requested_palette(matches).map_err(|e| e.to_string())?;
-
-    let fades = if let Some(_rgb) = matches.subcommand_matches("rgb") {
-        palette.rgb_fadout()
-    }
-    else {
-        return Err("A command is expected".to_owned());
-    };
-
-    let content = if matches.get_flag("SYMBOLS") {
-        fade_output_symbols_assembly(&fades)
-    }
-    else {
-        fade_output_ga_assembly(&fades)
-    };
-
-    if let Some(fname) = matches.get_one::<String>("OUTPUT") {
-        fs_err::write(fname, content).expect("Error while saving file");
-    }
-    else {
-        o.emit_stdout(&content);
-    }
-
-    if matches.get_flag("PREVIEW") {
-        fade_display_preview(&fades)
-    }
-
-    Ok(())
+    use clap::FromArgMatches;
+    let args = FadeArgs::from_arg_matches(matches).map_err(|e| e.to_string())?;
+    fade_process(&args, o)
 }
