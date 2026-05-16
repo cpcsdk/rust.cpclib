@@ -896,12 +896,16 @@ These string can do expansion of formulas embedded in {}.
 
 basm embeds some files in its executable, they are access under the name "inner://" :
 
-### LZAPU, LZ4, LZ48, LZ49, LZEXO, LZSA1, LZSA2, LZUPKR, LZSHRINKLER, LZX0, LZX0_BACKWARD, LZX7, INCSHRINKLER, INCUPKR, INCZX0, INCZX0_BACKWARD
+### LZAPU, LZ4, LZ48, LZ49, LZEXO, LZSA1, LZSA2, LZUPKR, LZSHRINKLER, LZX0, LZX0_BACKWARD, LZX7, LZPUCRUNCH, PUCRUNCH, LZLZM, LZLZM_BACKWARD, LZEF8, LZEF8_BACKWARD, LZBX0, LZBX0_BACKWARD, LZBX2, LZBX2_BACKWARD, INCAPU, INCLZ4, INCL48, INCL49, INCEXO, INCLZSA1, INCLZSA2, INCUPKR, INCSHRINKLER, INCZX0, INCZX0_BACKWARD, INCPUC, INCLZM, INCLZM_BACKWARD, INCEF8, INCEF8_BACKWARD, INCBX0, INCBX0_BACKWARD, INCBX2, INCBX2_BACKWARD
 
 Synopsis (as block directives):
 
 ```
-LZ4|LZ48|LZ49|LZAPU|LZEXO|LZX0|LZX7|LZSHRINKLER
+LZ4|LZ48|LZ49|LZAPU|LZEXO|LZSA1|LZSA2|LZUPKR|LZSHRINKLER|LZX0|LZX7|LZPUCRUNCH|PUCRUNCH|LZLZM|LZEF8|LZBX0|LZBX2
+  ... data to crunch ...
+LZCLOSE
+
+LZX0_BACKWARD|LZLZM_BACKWARD|LZEF8_BACKWARD|LZBX0_BACKWARD|LZBX2_BACKWARD
   ... data to crunch ...
 LZCLOSE
 ```
@@ -909,8 +913,8 @@ LZCLOSE
 Synopsis (as include directives):
 
 ```
-INCAPU|INCLZ4|INCL48|INCL49|INCEXO|INCLZSA1|INCLZSA2|INCUPKR|INCSHRINKLER|INCZX0 "filename" [[, SKIP], AMOUNT]
-INCZX0_BACKWARD "filename" [[, SKIP], AMOUNT]
+INCAPU|INCLZ4|INCL48|INCL49|INCEXO|INCLZSA1|INCLZSA2|INCUPKR|INCSHRINKLER|INCZX0|INCPUC|INCLZM|INCEF8|INCBX0|INCBX2 "filename" [[, SKIP], AMOUNT]
+INCZX0_BACKWARD|INCLZM_BACKWARD|INCEF8_BACKWARD|INCBX0_BACKWARD|INCBX2_BACKWARD "filename" [[, SKIP], AMOUNT]
 ```
 
 Description:
@@ -918,11 +922,11 @@ Crunch (compress) data using various compression algorithms. Can be used as bloc
 
 Supported crunchers:
 
-- **LZ4** - LZ4 compression
-- **LZ48** - LZ4 variant optimized for Z80
-- **LZ49** - Another LZ4 variant
+- **LZ4** / **INCLZ4** - LZ4 compression
+- **LZ48** / **INCL48** - LZ4 variant optimized for Z80
+- **LZ49** / **INCL49** - Another LZ4 variant
 - **LZAPU** / **INCAPU** - Aplib compression
-- **LZEXO** / **INCEXO** - Exomizer compression  
+- **LZEXO** / **INCEXO** - Exomizer compression
 - **LZSA1** / **INCLZSA1** - LZSA1 compression
 - **LZSA2** / **INCLZSA2** - LZSA2 compression
 - **LZUPKR** / **INCUPKR** - Upkr compression
@@ -930,6 +934,15 @@ Supported crunchers:
 - **LZX0** / **INCZX0** - ZX0 compression (forward)
 - **LZX0_BACKWARD** / **INCZX0_BACKWARD** - ZX0 compression (backward)
 - **LZX7** - ZX7 compression
+- **LZPUCRUNCH** / **PUCRUNCH** / **INCPUC** - Pucrunch compression
+- **LZLZM** / **INCLZM** - BZ LZM compression (forward)
+- **LZLZM_BACKWARD** / **INCLZM_BACKWARD** - BZ LZM compression (backward)
+- **LZEF8** / **INCEF8** - BZ EF8 compression (forward)
+- **LZEF8_BACKWARD** / **INCEF8_BACKWARD** - BZ EF8 compression (backward)
+- **LZBX0** / **INCBX0** - BZ BX0 compression (forward)
+- **LZBX0_BACKWARD** / **INCBX0_BACKWARD** - BZ BX0 compression (backward)
+- **LZBX2** / **INCBX2** - BZ BX2 compression (forward)
+- **LZBX2_BACKWARD** / **INCBX2_BACKWARD** - BZ BX2 compression (backward)
 
 Example:
 ```z80
