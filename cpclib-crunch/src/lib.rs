@@ -63,44 +63,64 @@ pub struct CrunchArgs {
 #[derive(Debug, ValueEnum, Clone)]
 pub enum Cruncher {
     #[cfg(feature = "apultra")]
+    #[value(help = "Apultra (BSD 3-Clause, Emmanuel Marty 2019)")]
     Apultra,
     #[cfg(feature = "zx0")]
+    #[value(help = "Backward ZX0 (BSD 3-Clause, Einar Saukas 2021)")]
     BackwardZx0,
     #[cfg(feature = "exomizer")]
+    #[value(help = "Exomizer (Non-commercial license, Magnus Lind 2005)")]
     Exomizer,
     #[cfg(feature = "lz4")]
+    #[value(help = "LZ4 (BSD 2-Clause, Yann Collet 2011-2017)")]
     Lz4,
     #[cfg(feature = "lz48")]
+    #[value(help = "LZ48 (No explicit license, Roudoudou)")]
     Lz48,
     #[cfg(feature = "lz49")]
+    #[value(help = "LZ49 (No explicit license, Roudoudou)")]
     Lz49,
     #[cfg(feature = "lzsa")]
+    #[value(help = "LZSA v1 (Zlib/CC0 dual, Emmanuel Marty)")]
     Lzsa1,
     #[cfg(feature = "lzsa")]
+    #[value(help = "LZSA v2 (Zlib/CC0 dual, Emmanuel Marty)")]
     Lzsa2,
     #[cfg(feature = "pucrunch")]
+    #[value(help = "PuCrunch (LGPL, Pasi Ojala 1997-2008)")]
     Pucrunch,
     #[cfg(feature = "shrinkler")]
+    #[value(help = "Shrinkler (Custom/Proprietary, Aske Simon Christensen 1999-2020)")]
     Shrinkler,
     #[cfg(feature = "upkr")]
+    #[value(help = "UPKR (Public Domain, exoticorn)")]
     Upkr,
     #[cfg(feature = "zx0")]
+    #[value(help = "ZX0 (BSD 3-Clause, Einar Saukas 2021)")]
     Zx0,
     #[cfg(feature = "bzpack")]
+    #[value(help = "Backward BX0 (BSD 2-Clause, Milos Bazelides 2021)")]
     BackwardBx0,
     #[cfg(feature = "bzpack")]
+    #[value(help = "Backward BX2 (BSD 2-Clause, Milos Bazelides 2021)")]
     BackwardBx2,
     #[cfg(feature = "bzpack")]
+    #[value(help = "Backward EF8 (BSD 2-Clause, Milos Bazelides 2021)")]
     BackwardEf8,
     #[cfg(feature = "bzpack")]
+    #[value(help = "Backward LZM (BSD 2-Clause, Milos Bazelides 2021)")]
     BackwardLzm,
     #[cfg(feature = "bzpack")]
+    #[value(help = "BX0 - No Z80 decompressor (BSD 2-Clause, Milos Bazelides 2021)")]
     Bx0,
     #[cfg(feature = "bzpack")]
+    #[value(help = "BX2 - No Z80 decompressor (BSD 2-Clause, Milos Bazelides 2021)")]
     Bx2,
     #[cfg(feature = "bzpack")]
+    #[value(help = "EF8 - No Z80 decompressor (BSD 2-Clause, Milos Bazelides 2021)")]
     Ef8,
     #[cfg(feature = "bzpack")]
+    #[value(help = "LZM - No Z80 decompressor (BSD 2-Clause, Milos Bazelides 2021)")]
     Lzm
 }
 
