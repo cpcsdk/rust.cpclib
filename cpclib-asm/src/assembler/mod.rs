@@ -4184,9 +4184,7 @@ impl Env {
                 }
                 else {
                     return Err(Box::new(AssemblerError::AssemblingError {
-                        msg: format!(
-                            "TICKER cannot compute timing for DEFS with non-zero fill value"
-                        )
+                        msg: "TICKER cannot compute timing for DEFS with non-zero fill value".to_string()
                     }));
                 }
             }
@@ -5291,9 +5289,7 @@ impl Env {
                 let phy = env.logical_to_physical_address(addr);
                 if env.peek(&phy) != 0 {
                     return Err(Box::new(AssemblerError::AssemblingError {
-                        msg: format!(
-                            "TICKER cannot compute timing for DB/DW directive with non-zero bytes"
-                        )
+                        msg: "TICKER cannot compute timing for DB/DW directive with non-zero bytes".to_string()
                     }));
                 }
             }

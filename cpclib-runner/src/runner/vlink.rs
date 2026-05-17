@@ -1,6 +1,5 @@
 use std::fmt::Display;
 use std::process::Command;
-use std::fs;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription};
 use crate::event::EventObserver;
