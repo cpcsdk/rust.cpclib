@@ -7345,15 +7345,23 @@ impl Env {
     ) -> Result<(), Box<AssemblerError>> {
         match stable {
             StableTickerAction::Start(name) => {
-                self.stable_counters.add_counter(name)?;
+                let expanded = self
+                    .symbols()
+                    .extend_local_and_patterns_for_symbol(name.as_ref())?;
+                self.stable_counters.add_counter(&expanded)?;
                 Ok(())
             },
             StableTickerAction::Stop(stop) => {
-                if let Some((label, count)) = stop
-                    .as_ref()
-                    .map(|stop| self.stable_counters.release_counter(stop.as_ref()))
-                    .unwrap_or_else(|| self.stable_counters.release_last_counter())
-                {
+                let release_result = if let Some(stop) = stop {
+                    let expanded = self
+                        .symbols()
+                        .extend_local_and_patterns_for_symbol(stop.as_ref())?;
+                    self.stable_counters.release_counter(expanded.value())
+                }
+                else {
+                    self.stable_counters.release_last_counter()
+                };
+                if let Some((label, count)) = release_result {
                     if !self.pass.is_listing_pass() && self.symbols().contains_symbol(&label)? {
                         self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(
                             format!("Symbol {label} has been overwritten")
