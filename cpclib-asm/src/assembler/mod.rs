@@ -3428,7 +3428,7 @@ impl Env {
     pub fn visit_charset(&mut self, format: &CharsetFormat) -> Result<(), Box<AssemblerError>> {
         let mut new_charset = CharsetEncoding::new();
         std::mem::swap(&mut new_charset, &mut self.charset_encoding);
-        new_charset.update(format, self)?;
+        new_charset.update(&format.strengthen(&self.symbols), self)?;
         std::mem::swap(&mut new_charset, &mut self.charset_encoding); // XXX lost in case of error
         Ok(())
     }

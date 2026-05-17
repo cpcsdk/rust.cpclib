@@ -699,15 +699,26 @@ impl SymbolsTableTrait for SymbolsTable {
         Symbol: From<S>,
         S: AsRef<str>
     {
-        let symbol = self.extend_readable_symbol(symbol)?;
-        let res = if let Some(frame) = self.functions_stack.current_frame() {
-            frame.get(&symbol).or_else(|| self.map.get(&symbol))
-        }
-        else {
-            self.map.get(&symbol)
-        };
+        let raw_symbol = symbol.as_ref().to_owned();
+        let raw_symbol_for_lookup: Symbol = raw_symbol.as_str().into();
+        let symbol = self.extend_readable_symbol::<Symbol>(raw_symbol_for_lookup)?;
 
-        Ok(res)
+        if let Some(value) = self.lookup_symbol_in_visible_maps(&symbol) {
+            return Ok(Some(value));
+        }
+
+        // In nested REPEAT/MACRO scopes, @symbols may be defined with an outer seed
+        // and read from an inner one. Fallback to older seeds.
+        if raw_symbol.starts_with('@') {
+            for seed in self.seed_stack.iter().rev() {
+                let seeded_symbol = self.resolve_hidden_seeded_symbol(raw_symbol.as_str(), *seed);
+                if let Some(value) = self.lookup_symbol_in_visible_maps(&seeded_symbol) {
+                    return Ok(Some(value));
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     #[inline]
@@ -833,6 +844,22 @@ impl SymbolsTable {
 }
 
 impl SymbolsTable {
+    #[inline]
+    fn resolve_hidden_seeded_symbol(&self, raw_symbol: &str, seed: usize) -> Symbol {
+        let hidden = format!(".__hidden__{}__{}", seed, &raw_symbol[1..]);
+        self.normalize_symbol(hidden)
+    }
+
+    #[inline]
+    fn lookup_symbol_in_visible_maps(&self, symbol: &Symbol) -> Option<&ValueAndSource> {
+        if let Some(frame) = self.functions_stack.current_frame() {
+            frame.get(symbol).or_else(|| self.map.get(symbol))
+        }
+        else {
+            self.map.get(symbol)
+        }
+    }
+
     pub fn laxist() -> Self {
         let mut map = ModuleSymbolTable::default();
         map.insert(Symbol::from("$"), Value::Expr(0.into()).into());
@@ -1103,9 +1130,35 @@ impl SymbolsTable {
             return Ok(true);
         }
 
-        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
+        let raw_symbol = symbol.as_ref().to_owned();
+        let raw_symbol_for_lookup: Symbol = raw_symbol.as_str().into();
+        let symbol = self.extend_local_and_patterns_for_symbol::<Symbol>(raw_symbol_for_lookup)?;
+
         let symbols = self.get_potential_candidates(symbol);
-        Ok(symbols.iter().any(|symbol| self.map.contains_key(symbol)))
+        if symbols.iter().any(|symbol| self.map.contains_key(symbol)) {
+            return Ok(true);
+        }
+
+        if raw_symbol.starts_with('@') {
+            for seed in self.seed_stack.iter().rev() {
+                let seeded_symbol = self.resolve_hidden_seeded_symbol(raw_symbol.as_str(), *seed);
+                if let Some(frame) = self.functions_stack.current_frame()
+                    && frame.contains_key(&seeded_symbol)
+                {
+                    return Ok(true);
+                }
+
+                let seeded_candidates = self.get_potential_candidates(seeded_symbol);
+                if seeded_candidates
+                    .iter()
+                    .any(|symbol| self.map.contains_key(symbol))
+                {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
     }
 
     /// Check if the symbol table contains the expected symbol, added during the current pass
@@ -1117,11 +1170,31 @@ impl SymbolsTable {
     {
         // TODO check if there is something to do with functions symbols
 
-        let symbol = self.extend_local_and_patterns_for_symbol(symbol)?;
+        let raw_symbol = symbol.as_ref().to_owned();
+        let raw_symbol_for_lookup: Symbol = raw_symbol.as_str().into();
+        let symbol = self.extend_local_and_patterns_for_symbol::<Symbol>(raw_symbol_for_lookup)?;
         let symbols = self.get_potential_candidates(symbol);
-        Ok(symbols
+        if symbols
             .iter()
-            .any(|symbol| self.current_pass_map.contains_key(symbol)))
+            .any(|symbol| self.current_pass_map.contains_key(symbol))
+        {
+            return Ok(true);
+        }
+
+        if raw_symbol.starts_with('@') {
+            for seed in self.seed_stack.iter().rev() {
+                let seeded_symbol = self.resolve_hidden_seeded_symbol(raw_symbol.as_str(), *seed);
+                let candidates = self.get_potential_candidates(seeded_symbol);
+                if candidates
+                    .iter()
+                    .any(|symbol| self.current_pass_map.contains_key(symbol))
+                {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
     }
 
     /// Returns the closest Value

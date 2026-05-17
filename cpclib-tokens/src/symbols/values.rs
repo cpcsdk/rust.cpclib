@@ -326,6 +326,15 @@ impl Value {
             None
         }
     }
+
+    pub fn string(&self) -> Option<&str> {
+        if let Value::String(s) = self {
+            Some(s.as_str())
+        }
+        else {
+            None
+        }
+    }
 }
 
 impl From<PhysicalAddress> for Value {

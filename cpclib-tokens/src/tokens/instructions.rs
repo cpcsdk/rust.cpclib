@@ -8,6 +8,9 @@ use cpclib_sna::{
 };
 
 use crate::macro_segment::TokenizedMacroContent;
+use crate::symbols::SymbolsTable;
+use crate::symbols::SymbolsTableTrait;
+use crate::symbols::Value;
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::tokens::listing::ListingElement;
@@ -534,6 +537,61 @@ pub enum CharsetFormat {
     Char(Expr, Expr),
     /// Specify for a given interval
     Interval(Expr, Expr, Expr)
+}
+
+
+impl CharsetFormat {
+    pub fn is_reset(&self) -> bool {
+        matches!(self, CharsetFormat::Reset)
+    }
+
+    pub fn is_chars_list(&self) -> bool {
+        matches!(self, CharsetFormat::CharsList(..))
+    }
+
+    pub fn is_char(&self) -> bool {
+        matches!(self, CharsetFormat::Char(..))
+    }
+
+    pub fn is_interval(&self) -> bool {
+        matches!(self, CharsetFormat::Interval(..))
+    }
+
+    /// The parser may sometimes think the format is char wheras it is actually an expression
+    pub fn strengthen(&self, sym: &SymbolsTable) -> Self {
+        match self {
+            CharsetFormat::Reset => CharsetFormat::Reset,
+            CharsetFormat::CharsList(chars, expr) => CharsetFormat::CharsList(chars.clone(), expr.clone()),
+            CharsetFormat::Char(expr1, expr2) => {
+                if expr1.is_char() {
+                    CharsetFormat::Char(expr1.clone(), expr2.clone())
+                } else if expr1.is_string() {
+                    CharsetFormat::CharsList(expr1.string().chars().collect_vec(), expr2.clone())
+                } else if expr1.is_label() {
+                    let label = expr1.label();
+                    let value = sym.any_value(label)
+                        .unwrap_or_else(|_| panic!("Label {} not found in symbol table", label))
+                        .unwrap();
+                    match value.value() {
+                        Value::Expr(ExprResult::Char(c)) => {
+                            CharsetFormat::Char(Expr::Char(*c as char), expr2.clone())
+                        },
+                        Value::Expr(ExprResult::String(s)) | Value::String(s) => {
+                            CharsetFormat::CharsList(s.chars().collect_vec(), expr2.clone())
+                        },
+                        _ => {
+                            unimplemented!("There is a bug to handle here")
+                        }
+                    }
+                }
+                else {
+                    unimplemented!("There is a bug to handle here")
+                }
+
+            },
+            CharsetFormat::Interval(expr1, expr2, expr3) => CharsetFormat::Interval(expr1.clone(), expr2.clone(), expr3.clone())
+        }
+    }
 }
 
 pub trait ToSimpleToken {
