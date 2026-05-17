@@ -376,6 +376,18 @@ impl TokenExt for Token {
                                 }
                             },
 
+                            // IndexRegister8 destination (IXH/IXL/IYH/IYL)
+                            Some(DataAccess::IndexRegister8(_dst)) => {
+                                match arg2 {
+                                    Some(DataAccess::Register8(_)) => 2,      // DD + opcode
+                                    Some(DataAccess::IndexRegister8(_)) => 2, // DD + opcode
+                                    Some(DataAccess::Expression(_)) => 3,     // DD + opcode + imm
+                                    _ => {
+                                        panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
+                                    }
+                                }
+                            },
+
                             _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },
@@ -445,6 +457,46 @@ impl TokenExt for Token {
                             Some(DataAccess::Expression(_)) => 2,
                             Some(DataAccess::MemoryRegister16(Register16::Hl)) => 2,
                             Some(DataAccess::IndexRegister16WithIndex(..)) => 5,
+                            _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
+                        }
+                    },
+
+                    // SRL8 rr: LD low,high : LD high,0
+                    // Delegate to estimated duration of each underlying LD token.
+                    &Mnemonic::Srl8 => {
+                        match arg1 {
+                            Some(DataAccess::Register16(reg)) => {
+                                Token::OpCode(
+                                    Mnemonic::Ld,
+                                    Some(DataAccess::Register8(reg.low().unwrap())),
+                                    Some(DataAccess::Register8(reg.high().unwrap())),
+                                    None
+                                )
+                                .estimated_duration()?
+                                    + Token::OpCode(
+                                        Mnemonic::Ld,
+                                        Some(DataAccess::Register8(reg.high().unwrap())),
+                                        Some(DataAccess::Expression(Expr::Value(0))),
+                                        None
+                                    )
+                                    .estimated_duration()?
+                            },
+                            Some(DataAccess::IndexRegister16(reg)) => {
+                                Token::OpCode(
+                                    Mnemonic::Ld,
+                                    Some(DataAccess::IndexRegister8(reg.low())),
+                                    Some(DataAccess::IndexRegister8(reg.high())),
+                                    None
+                                )
+                                .estimated_duration()?
+                                    + Token::OpCode(
+                                        Mnemonic::Ld,
+                                        Some(DataAccess::IndexRegister8(reg.high())),
+                                        Some(DataAccess::Expression(Expr::Value(0))),
+                                        None
+                                    )
+                                    .estimated_duration()?
+                            },
                             _ => panic!("Impossible case {mnemonic:?}, {arg1:?}, {arg2:?}")
                         }
                     },

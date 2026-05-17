@@ -5587,7 +5587,8 @@ impl Env {
             | Mnemonic::Rl
             | Mnemonic::Rr
             | Mnemonic::Rlc
-            | Mnemonic::Rrc => self.assemble_shift(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref())
+            | Mnemonic::Rrc => self.assemble_shift(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref()),
+            Mnemonic::Srl8 => self.assemble_srl8(arg1.as_ref().unwrap())
         }
     }
 }
@@ -6000,6 +6001,47 @@ impl Env {
             bytes.push(byte);
         }
 
+        Ok(bytes)
+    }
+
+    /// Assemble SRL8 rr (fake instruction): shifts rr right by 8 bits.
+    /// For Register16 (BC/DE/HL): LD low,high : LD high,0
+    /// For IndexRegister16 (IX/IY): LD IxL,IxH : LD IxH,0
+    pub fn assemble_srl8<D: DataAccessElem + Debug>(
+        &mut self,
+        arg: &D
+    ) -> Result<Bytes, Box<AssemblerError>>
+    where
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+    {
+        let mut bytes = Bytes::new();
+        if arg.is_register16() {
+            let reg = arg.get_register16().unwrap();
+            bytes.extend(self.assemble_ld(
+                &DataAccess::Register8(reg.low().unwrap()),
+                &DataAccess::Register8(reg.high().unwrap())
+            )?);
+            bytes.extend(self.assemble_ld(
+                &DataAccess::Register8(reg.high().unwrap()),
+                &DataAccess::Expression(Expr::Value(0))
+            )?);
+        }
+        else if arg.is_indexregister16() {
+            let reg = arg.get_indexregister16().unwrap();
+            bytes.extend(self.assemble_ld(
+                &DataAccess::IndexRegister8(reg.low()),
+                &DataAccess::IndexRegister8(reg.high())
+            )?);
+            bytes.extend(self.assemble_ld(
+                &DataAccess::IndexRegister8(reg.high()),
+                &DataAccess::Expression(Expr::Value(0))
+            )?);
+        }
+        else {
+            return Err(Box::new(AssemblerError::InvalidArgument {
+                msg: format!("SRL8 requires a 16-bit register pair, got {:?}", arg)
+            }));
+        }
         Ok(bytes)
     }
 

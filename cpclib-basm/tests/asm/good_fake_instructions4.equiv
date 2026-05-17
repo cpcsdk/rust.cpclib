@@ -1,0 +1,5 @@
+LD C,B : LD B,0
+LD E,D : LD D,0
+LD L,H : LD H,0
+LD XL,XH : LD XH,0
+LD YL,YH : LD YH,0

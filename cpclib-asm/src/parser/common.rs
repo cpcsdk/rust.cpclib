@@ -205,6 +205,7 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
             parse_shifts_and_rotations_fake(Mnemonic::Sra)
         )).parse_next(input),
         h if hashed_choice!(h, word, b"SRL") => alt((
+            parse_srl8,
             parse_shifts_and_rotations(Mnemonic::Srl),
             parse_shifts_and_rotations_fake(Mnemonic::Srl),
         )).parse_next(input),

@@ -1,0 +1,9 @@
+LD c,c : LD b,b ; oui, ça ne sert à RIEN, on est d'accord ^_^
+	LD c,e : LD b,d ; BC = DE
+	LD c,l : LD b,h ; BC = HL
+	LD e,c : LD d,b ; DE = BC
+	LD e,e : LD d,d ; DE = DE
+	LD e,l : LD d,h ; DE = HL
+	LD l,c : LD h,b ; HL = BC
+	LD l,e : LD h,d ; HL = DE
+	LD l,l : LD h,h ; HL = HL

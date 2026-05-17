@@ -182,6 +182,7 @@ pub enum Mnemonic {
     Sla,
     Sra,
     Srl,
+    Srl8,
     Sub,
     Xor
 }
@@ -260,6 +261,7 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Sla => write!(f, "SLA"),
             Mnemonic::Sra => write!(f, "SRA"),
             Mnemonic::Srl => write!(f, "SRL"),
+            Mnemonic::Srl8 => write!(f, "SRL8"),
             Mnemonic::Sub => write!(f, "SUB"),
             Mnemonic::Xor => write!(f, "XOR")
         }
@@ -351,6 +353,7 @@ is_mnemonic!(
     Sl1
     Sra
     Srl
+    Srl8
     Sub
     Xor
 );

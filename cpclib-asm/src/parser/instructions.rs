@@ -915,6 +915,18 @@ pub fn parse_shifts_and_rotations_fake(
     }
 }
 
+/// Parse SRL8 rr -- fake instruction: SRL8 BC/DE/HL/IX/IY
+pub fn parse_srl8(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    let _ = ('8', my_space0).parse_next(input)?;
+    let arg = alt((parse_register16, parse_indexregister16)).parse_next(input)?;
+    let token = LocatedTokenInner::new_opcode(Mnemonic::Srl8, Some(arg), None);
+    let warning = LocatedTokenInner::WarningWrapper(
+        Box::new(token),
+        "This is a fake instruction assembled using several opcodes".into()
+    );
+    Ok(warning)
+}
+
 /// TODO reduce the flag space for jr"],
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]

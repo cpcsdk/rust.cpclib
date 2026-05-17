@@ -1,0 +1,13 @@
+
+ 	LD C,(IX+3) : LD B,(IX+3+1)
+	LD E,(IX+3) : LD D,(IX+3+1) 
+	LD L,(IX+3) : LD H,(IX+3+1) 
+	LD (IX+3),C : LD (IX+3+1),B 
+	LD (IX+3),E : LD (IX+3+1),D 
+	LD (IX+3),L : LD (IX+3+1),H 
+	LD C,(IY+3) : LD B,(IY+3+1)   ; version avec IY
+	LD E,(IY+3) : LD D,(IY+3+1) 
+	LD L,(IY+3) : LD H,(IY+3+1)  
+	LD (IY+3),C : LD (IY+3+1),B 
+	LD (IY+3),E : LD (IY+3+1),D 
+	LD (IY+3),L : LD (IY+3+1),H 

@@ -221,7 +221,7 @@ const INSTRUCTIONS: &[&[u8]] = &[
     b"INC", b"IND", b"INDR", b"INI", b"INIR", b"JP", b"JR", b"LD", b"LDD", b"LDDR", b"LDI",
     b"LDIR", b"NEG", b"NOP", b"OR", b"OTDR", b"OTIR", b"OUT", b"OUTD", b"OUTI", b"POP", b"PUSH",
     b"RES", b"RET", b"RETI", b"RETN", b"RL", b"RLA", b"RLC", b"RLCA", b"RLD", b"RR", b"RRA",
-    b"RRC", b"RRCA", b"RRD", b"RST", b"SBC", b"SCF", b"SET", b"SLA", b"SLL", b"SRA", b"SRL",
+    b"RRC", b"RRCA", b"RRD", b"RST", b"SBC", b"SCF", b"SET", b"SLA", b"SLL", b"SRA", b"SRL", b"SRL8",
     b"SUB", b"XOR"
 ];
 
