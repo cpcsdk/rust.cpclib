@@ -240,6 +240,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
         "string_from_list": Function::HardCoded(HardCodedFunction::StringFromList),
         "string_len": Function::HardCoded(HardCodedFunction::ListLen),
+        "string_get": Function::HardCoded(HardCodedFunction::ListGet),
 
 
         "assemble": Function::HardCoded(HardCodedFunction::Assemble),

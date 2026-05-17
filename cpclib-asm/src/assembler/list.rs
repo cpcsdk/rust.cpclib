@@ -71,7 +71,7 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
                     ExpressionError::InvalidSize(s.len(), index)
                 )));
             }
-            Ok(ExprResult::Value(s.chars().nth(index).unwrap() as _))
+            Ok(ExprResult::Char(s.chars().nth(index).unwrap() as _))
         },
         ExprResult::List(_) => {
             if index >= list.list_len() {
