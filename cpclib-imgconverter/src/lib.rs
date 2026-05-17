@@ -1708,6 +1708,8 @@ pub fn fade_process(args: &FadeArgs, o: &dyn EventObserver) -> Result<(), String
 pub fn fade_build_args() -> Command {
     use clap::CommandFactory;
     FadeArgs::command()
+        // subcommand_required(true) would forbid the use of --help
+        .subcommand_required(false)
 }
 
 fn fade_output_ga_assembly(palettes: &[Palette]) -> String {
