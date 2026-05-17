@@ -2677,6 +2677,27 @@ impl Env {
             }));
         }
 
+        // Warn if the body looks like it contains a swallowed MACRO definition.
+        // When ENDM/MEND is missing, the byte-level body scanner grabs the ENDM of the
+        // *next* macro, silently swallowing that macro's definition into this body.
+        let has_swallowed_macro = code.lines().any(|line| {
+            let t = line.trim().to_ascii_uppercase();
+            t.starts_with("MACRO ")
+                || t.starts_with("MACRO\t")
+                || t == "MACRO"
+                || t.contains(" MACRO ")
+                || t.contains("\tMACRO ")
+                || t.contains(" MACRO\t")
+                || t.ends_with(" MACRO")
+                || t.ends_with("\tMACRO")
+        });
+        if has_swallowed_macro {
+            self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(format!(
+                "Macro `{name}` body contains what looks like another MACRO definition — \
+                 likely caused by a missing ENDM/MEND before `{name}`."
+            ))));
+        }
+
         let location: Option<SourceLocation> = source.map(|s| s.into());
         let source = source.map(|s| s.into());
 
