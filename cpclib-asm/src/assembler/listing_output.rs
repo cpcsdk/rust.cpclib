@@ -5,9 +5,8 @@ use std::sync::{Arc, RwLock};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_tokens::symbols::SymbolsTable;
 use cpclib_tokens::ExprResult;
-use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress};
+use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress, SymbolsTable};
 
 use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString};
 /// Generate an output listing.
@@ -258,10 +257,7 @@ impl ListingOutput {
         };
     }
 
-    fn expand_listing_label(
-        raw_label: String,
-        symbols: Option<*const SymbolsTable>
-    ) -> String {
+    fn expand_listing_label(raw_label: String, symbols: Option<*const SymbolsTable>) -> String {
         // Listing expansion is intentionally done only in listing pass to avoid runtime overhead.
         symbols
             .and_then(|symbols| {

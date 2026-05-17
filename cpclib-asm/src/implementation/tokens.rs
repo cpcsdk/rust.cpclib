@@ -53,10 +53,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
     fn fallback_number_of_bytes(&self) -> Result<usize, String>;
 
     /// Return the number of bytes of the token given the provided context
-    fn number_of_bytes_with_context(
-        &self,
-        table: &mut SymbolsTable
-    ) -> Result<usize, String> {
+    fn number_of_bytes_with_context(&self, table: &mut SymbolsTable) -> Result<usize, String> {
         let bytes = self.to_bytes_with_context(table);
         if bytes.is_ok() {
             Ok(bytes.ok().unwrap().len())

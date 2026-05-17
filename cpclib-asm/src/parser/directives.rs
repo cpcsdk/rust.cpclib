@@ -1842,10 +1842,7 @@ pub fn parse_directive_new(
         // size-dispatch functions can inspect and consume optional _BACKWARD suffixes.
         let word = delimited(
             my_space0,
-            terminated(
-                alphanumeric1,
-                alt((eof.value(()), not(b'.').value(())))
-            ),
+            terminated(alphanumeric1, alt((eof.value(()), not(b'.').value(())))),
             my_space0
         )
         .parse_next(input)?;
@@ -1883,9 +1880,6 @@ fn parse_directive_of_size_others(
         b"INCSHRINKLER" => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Shrinkler)).parse_next(input)
         },
-
-
-
 
         // 13
         b"STARTINGINDEX" => parse_startingindex.parse_next(input),
@@ -1969,7 +1963,7 @@ fn parse_directive_of_size_7(
         h if hashed_choice!(h, word, b"INCUPKR") => {
             parse_incbin(BinaryTransformation::Crunch(CrunchType::Upkr)).parse_next(input)
         },
-   
+
         _ => {
             input.reset(input_start);
             Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
@@ -2017,8 +2011,10 @@ fn parse_directive_of_size_6(
 
         h if hashed_choice!(h, word, b"INCZX0") => {
             if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0)).parse_next(input)
-            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardZx0))
+                    .parse_next(input)
+            }
+            else {
                 parse_incbin(BinaryTransformation::Crunch(CrunchType::Zx0)).parse_next(input)
             }
         },
@@ -2028,33 +2024,40 @@ fn parse_directive_of_size_6(
 
         h if hashed_choice!(h, word, b"INCLZM") => {
             if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzLzm)).parse_next(input)
-            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzLzm))
+                    .parse_next(input)
+            }
+            else {
                 parse_incbin(BinaryTransformation::Crunch(CrunchType::BzLzm)).parse_next(input)
             }
         },
         h if hashed_choice!(h, word, b"INCEF8") => {
             if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzEf8)).parse_next(input)
-            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzEf8))
+                    .parse_next(input)
+            }
+            else {
                 parse_incbin(BinaryTransformation::Crunch(CrunchType::BzEf8)).parse_next(input)
             }
         },
         h if hashed_choice!(h, word, b"INCBX0") => {
             if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzBx0)).parse_next(input)
-            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzBx0))
+                    .parse_next(input)
+            }
+            else {
                 parse_incbin(BinaryTransformation::Crunch(CrunchType::BzBx0)).parse_next(input)
             }
         },
         h if hashed_choice!(h, word, b"INCBX2") => {
             if parse_word(b"_BACKWARD").parse_next(input).is_ok() {
-                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzBx2)).parse_next(input)
-            } else {
+                parse_incbin(BinaryTransformation::Crunch(CrunchType::BackwardBzBx2))
+                    .parse_next(input)
+            }
+            else {
                 parse_incbin(BinaryTransformation::Crunch(CrunchType::BzBx2)).parse_next(input)
             }
         },
-
 
         h if hashed_choice!(h, word, b"OUTPUT") => parse_output.parse_next(input),
         h if hashed_choice!(h, word, b"RETURN") => parse_return.parse_next(input),

@@ -24,8 +24,7 @@ use cpclib::{ExtendedDsk, Ink, Pen, sna};
 use fs_err::File;
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use owo_colors::OwoColorize;
-use owo_colors::DynColors;
+use owo_colors::{DynColors, OwoColorize};
 
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -1596,7 +1595,7 @@ pub struct FadePaletteArgs {
     pub pen15: Option<u8>,
     /// Ink number of pen 16 (border)
     #[arg(long, conflicts_with = "pens", conflicts_with = "pal")]
-    pub pen16: Option<u8>,
+    pub pen16: Option<u8>
 }
 
 impl FadePaletteArgs {
@@ -1624,10 +1623,9 @@ impl FadePaletteArgs {
             let mut palette = Palette::empty();
             let mut one_pen_set = false;
             let pen_values = [
-                self.pen0, self.pen1, self.pen2, self.pen3,
-                self.pen4, self.pen5, self.pen6, self.pen7,
-                self.pen8, self.pen9, self.pen10, self.pen11,
-                self.pen12, self.pen13, self.pen14, self.pen15,
+                self.pen0, self.pen1, self.pen2, self.pen3, self.pen4, self.pen5, self.pen6,
+                self.pen7, self.pen8, self.pen9, self.pen10, self.pen11, self.pen12, self.pen13,
+                self.pen14, self.pen15
             ];
             for (i, pen) in pen_values.iter().enumerate() {
                 if let Some(ink) = pen {
@@ -1678,7 +1676,10 @@ pub struct FadeArgs {
 
 /// Process the fade command with the given parsed arguments.
 pub fn fade_process(args: &FadeArgs, o: &dyn EventObserver) -> Result<(), String> {
-    let palette = args.palette.to_lockable_palette().map_err(|e| e.to_string())?;
+    let palette = args
+        .palette
+        .to_lockable_palette()
+        .map_err(|e| e.to_string())?;
 
     let fades = match &args.algorithm {
         FadeAlgorithm::Rgb => palette.rgb_fadout()
@@ -1724,7 +1725,8 @@ fn fade_output_ga_assembly(palettes: &[Palette]) -> String {
                 .join(",");
             format!("\tdb {repr}")
         })
-        .join("\n") + "\n"
+        .join("\n")
+        + "\n"
 }
 
 fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
@@ -1738,7 +1740,8 @@ fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
                 .join(",");
             format!("\tdb {repr}")
         })
-        .join("\n") + "\n"
+        .join("\n")
+        + "\n"
 }
 
 fn fade_display_preview(palettes: &[Palette]) {

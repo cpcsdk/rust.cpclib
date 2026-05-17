@@ -141,7 +141,7 @@ mod tests {
     /// `LABEL_{VAR}_1` must define the symbol `LABEL_c_1`, not `LABEL_'c'_1`.
     #[test]
     pub fn test_char_label_expansion() {
-        use cpclib_asm::{assemble_with_options, EnvOptions};
+        use cpclib_asm::{EnvOptions, assemble_with_options};
 
         let code = "VAR='c'\nLABEL_{VAR}_1\n";
         let (_bytes, symbols) =

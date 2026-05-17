@@ -72,17 +72,18 @@ impl DownloadableInformation for RetroVmVersion {
     fn target_os_postinstall<E: cpclib_common::event::EventObserver>(
         &self
     ) -> Option<crate::delegated::PostInstall<E>> {
-        let post_install: Box<dyn Fn(&crate::delegated::DelegateApplicationDescription<E>) -> Result<(), String>> =
-            Box::new(|d| {
-                use std::os::unix::fs::PermissionsExt;
+        let post_install: Box<
+            dyn Fn(&crate::delegated::DelegateApplicationDescription<E>) -> Result<(), String>
+        > = Box::new(|d| {
+            use std::os::unix::fs::PermissionsExt;
 
-                let fname = d.exec_fname();
-                let mut perms = fs_err::metadata(&fname)
-                    .map_err(|e| format!("Failed to inspect {}: {}", fname, e))?
-                    .permissions();
-                perms.set_mode(perms.mode() | 0o111);
-                fs_err::set_permissions(&fname, perms).map_err(|e| e.to_string())
-            });
+            let fname = d.exec_fname();
+            let mut perms = fs_err::metadata(&fname)
+                .map_err(|e| format!("Failed to inspect {}: {}", fname, e))?
+                .permissions();
+            perms.set_mode(perms.mode() | 0o111);
+            fs_err::set_permissions(&fname, perms).map_err(|e| e.to_string())
+        });
 
         Some(post_install.into())
     }
@@ -91,86 +92,89 @@ impl DownloadableInformation for RetroVmVersion {
     fn target_os_postinstall<E: cpclib_common::event::EventObserver>(
         &self
     ) -> Option<crate::delegated::PostInstall<E>> {
-        let post_install: Box<dyn Fn(&crate::delegated::DelegateApplicationDescription<E>) -> Result<(), String>> =
-            Box::new(|d| {
-                use std::process::Command;
+        let post_install: Box<
+            dyn Fn(&crate::delegated::DelegateApplicationDescription<E>) -> Result<(), String>
+        > = Box::new(|d| {
+            use std::process::Command;
 
-                let exec_path = d.exec_fname();
-                let dmg_path = d.cache_folder().join("RetroVirtualMachine.2.0.beta-1.r7.macos.dmg");
-                let app_path = d.cache_folder().join("Retro Virtual Machine 2.app");
+            let exec_path = d.exec_fname();
+            let dmg_path = d
+                .cache_folder()
+                .join("RetroVirtualMachine.2.0.beta-1.r7.macos.dmg");
+            let app_path = d.cache_folder().join("Retro Virtual Machine 2.app");
 
-                fs_err::rename(&exec_path, &dmg_path).map_err(|e| {
-                    format!(
-                        "Failed to rename downloaded DMG from {} to {}: {}",
-                        exec_path, dmg_path, e
-                    )
+            fs_err::rename(&exec_path, &dmg_path).map_err(|e| {
+                format!(
+                    "Failed to rename downloaded DMG from {} to {}: {}",
+                    exec_path, dmg_path, e
+                )
+            })?;
+
+            let attach = Command::new("hdiutil")
+                .args(["attach", "-nobrowse", "-readonly", dmg_path.as_str()])
+                .output()
+                .map_err(|e| format!("Failed to mount DMG: {}", e))?;
+
+            if !attach.status.success() {
+                return Err(format!(
+                    "hdiutil attach failed: {}",
+                    String::from_utf8_lossy(&attach.stderr)
+                ));
+            }
+
+            let attach_out = String::from_utf8_lossy(&attach.stdout);
+            let mount_line = attach_out
+                .lines()
+                .find(|line| line.contains("/Volumes/"))
+                .ok_or_else(|| "Unable to detect DMG mount point".to_owned())?;
+            let mount_idx = mount_line
+                .find("/Volumes/")
+                .ok_or_else(|| "Unable to parse DMG mount point".to_owned())?;
+            let mount_point = &mount_line[mount_idx..];
+
+            let source_app = Utf8PathBuf::from(mount_point).join("Retro Virtual Machine 2.app");
+
+            if app_path.exists() {
+                fs_err::remove_dir_all(&app_path).map_err(|e| {
+                    format!("Failed to remove existing app bundle {}: {}", app_path, e)
                 })?;
+            }
 
-                let attach = Command::new("hdiutil")
-                    .args(["attach", "-nobrowse", "-readonly", dmg_path.as_str()])
-                    .output()
-                    .map_err(|e| format!("Failed to mount DMG: {}", e))?;
+            let copy = Command::new("cp")
+                .args(["-R", source_app.as_str(), app_path.as_str()])
+                .output()
+                .map_err(|e| format!("Failed to copy app from DMG: {}", e))?;
 
-                if !attach.status.success() {
-                    return Err(format!(
-                        "hdiutil attach failed: {}",
-                        String::from_utf8_lossy(&attach.stderr)
-                    ));
-                }
+            let _ = Command::new("hdiutil")
+                .args(["detach", mount_point])
+                .output();
 
-                let attach_out = String::from_utf8_lossy(&attach.stdout);
-                let mount_line = attach_out
-                    .lines()
-                    .find(|line| line.contains("/Volumes/"))
-                    .ok_or_else(|| "Unable to detect DMG mount point".to_owned())?;
-                let mount_idx = mount_line
-                    .find("/Volumes/")
-                    .ok_or_else(|| "Unable to parse DMG mount point".to_owned())?;
-                let mount_point = &mount_line[mount_idx..];
+            if !copy.status.success() {
+                return Err(format!(
+                    "Failed to copy RetroVM app bundle: {}",
+                    String::from_utf8_lossy(&copy.stderr)
+                ));
+            }
 
-                let source_app = Utf8PathBuf::from(mount_point).join("Retro Virtual Machine 2.app");
+            let launcher = "#!/bin/sh\nexec \"$(dirname \"$0\")/Retro Virtual Machine 2.app/Contents/MacOS/Retro Virtual Machine 2\" \"$@\"\n".to_string();
 
-                if app_path.exists() {
-                    fs_err::remove_dir_all(&app_path).map_err(|e| {
-                        format!("Failed to remove existing app bundle {}: {}", app_path, e)
-                    })?;
-                }
+            fs_err::write(&exec_path, launcher)
+                .map_err(|e| format!("Failed to write launcher {}: {}", exec_path, e))?;
 
-                let copy = Command::new("cp")
-                    .args(["-R", source_app.as_str(), app_path.as_str()])
-                    .output()
-                    .map_err(|e| format!("Failed to copy app from DMG: {}", e))?;
+            let chmod = Command::new("chmod")
+                .args(["+x", exec_path.as_str()])
+                .output()
+                .map_err(|e| format!("Failed to chmod launcher: {}", e))?;
 
-                let _ = Command::new("hdiutil")
-                    .args(["detach", mount_point])
-                    .output();
+            if !chmod.status.success() {
+                return Err(format!(
+                    "chmod failed for launcher: {}",
+                    String::from_utf8_lossy(&chmod.stderr)
+                ));
+            }
 
-                if !copy.status.success() {
-                    return Err(format!(
-                        "Failed to copy RetroVM app bundle: {}",
-                        String::from_utf8_lossy(&copy.stderr)
-                    ));
-                }
-
-                let launcher = "#!/bin/sh\nexec \"$(dirname \"$0\")/Retro Virtual Machine 2.app/Contents/MacOS/Retro Virtual Machine 2\" \"$@\"\n".to_string();
-
-                fs_err::write(&exec_path, launcher)
-                    .map_err(|e| format!("Failed to write launcher {}: {}", exec_path, e))?;
-
-                let chmod = Command::new("chmod")
-                    .args(["+x", exec_path.as_str()])
-                    .output()
-                    .map_err(|e| format!("Failed to chmod launcher: {}", e))?;
-
-                if !chmod.status.success() {
-                    return Err(format!(
-                        "chmod failed for launcher: {}",
-                        String::from_utf8_lossy(&chmod.stderr)
-                    ));
-                }
-
-                Ok(())
-            });
+            Ok(())
+        });
 
         Some(post_install.into())
     }

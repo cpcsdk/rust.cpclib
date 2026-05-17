@@ -1144,17 +1144,27 @@ add_to_a(3)\n\
     /// The assembler emits a warning when it detects the swallowed definition.
     #[test]
     fn test_unclosed_macro_steals_next_endm() {
-        use crate::assembler::{visit_tokens_all_passes_with_options, EnvOptions};
+        use crate::assembler::{EnvOptions, visit_tokens_all_passes_with_options};
 
         let code = "macro m1\n  ld a, 0\nmacro m2\n  endm\n";
-        let listing = parse_z80_str(code)
-            .expect("Should parse ok (m1 steals m2's endm)");
+        let listing = parse_z80_str(code).expect("Should parse ok (m1 steals m2's endm)");
 
         // Only one macro token: m1 (m2 is swallowed into m1's body)
-        let macros: Vec<_> = listing.listing().iter().filter(|t| t.is_macro_definition()).collect();
-        assert_eq!(macros.len(), 1, "Only m1 should be defined; m2 is inside m1's body");
+        let macros: Vec<_> = listing
+            .listing()
+            .iter()
+            .filter(|t| t.is_macro_definition())
+            .collect();
+        assert_eq!(
+            macros.len(),
+            1,
+            "Only m1 should be defined; m2 is inside m1's body"
+        );
         let m1_body = macros[0].macro_definition_code();
-        assert!(m1_body.contains("macro m2"), "m2 definition is swallowed into m1's body: {m1_body}");
+        assert!(
+            m1_body.contains("macro m2"),
+            "m2 definition is swallowed into m1's body: {m1_body}"
+        );
 
         // Assembling should succeed AND emit a warning about the swallowed macro
         let result = visit_tokens_all_passes_with_options(listing.listing(), EnvOptions::default());
@@ -1162,10 +1172,15 @@ add_to_a(3)\n\
             Ok((_, env)) => env,
             Err((_, env, _)) => env
         };
-        let has_stolen_warning = env.warnings().iter().any(|w| {
-            w.to_string().contains("m1") && w.to_string().contains("MACRO")
-        });
-        assert!(has_stolen_warning, "Expected a warning about stolen ENDM, got: {:?}", env.warnings());
+        let has_stolen_warning = env
+            .warnings()
+            .iter()
+            .any(|w| w.to_string().contains("m1") && w.to_string().contains("MACRO"));
+        assert!(
+            has_stolen_warning,
+            "Expected a warning about stolen ENDM, got: {:?}",
+            env.warnings()
+        );
     }
 
     #[test]

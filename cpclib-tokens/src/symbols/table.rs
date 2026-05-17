@@ -218,9 +218,10 @@ impl Iterator for BalancedBracedSegmentsIter<'_> {
 
                     self.depth -= 1;
                     if self.depth == 0
-                        && let Some(begin) = self.start.take() {
-                            return Some((begin, idx + 1));
-                        }
+                        && let Some(begin) = self.start.take()
+                    {
+                        return Some((begin, idx + 1));
+                    }
                 },
                 _ => {}
             }
@@ -438,16 +439,17 @@ impl SymbolsTable {
                     // Fill the variable values to allow an evaluation
                     let mut context = HashMapContext::new();
                     for variable in tree.iter_variable_identifiers() {
-                        let variable_value = if let Some(value) = self.any_value::<&str>(variable)? {
-                            value
-                        }
-                        else {
-                            let braced = format!("{{{variable}}}");
-                            self.any_value::<&str>(&braced)?
-                                .ok_or_else(|| SymbolError::WrongSymbol(variable.into()))?
-                        };
+                        let variable_value =
+                            if let Some(value) = self.any_value::<&str>(variable)? {
+                                value
+                            }
+                            else {
+                                let braced = format!("{{{variable}}}");
+                                self.any_value::<&str>(&braced)?
+                                    .ok_or_else(|| SymbolError::WrongSymbol(variable.into()))?
+                            };
                         context
-                                .set_value(variable.to_owned(), variable_value.into())
+                            .set_value(variable.to_owned(), variable_value.into())
                             .unwrap();
                     }
 

@@ -40,7 +40,7 @@ impl StaticInformation for VasmVersion {
                         linux: Some("http://www.ibaug.de/vbcc/vbcc_linux_x64.tar.gz".to_owned()),
                         windows: Some("http://www.ibaug.de/vbcc/vbcc_win_x64.zip".to_owned()),
                         macos: None,
-                        haiku: None,
+                        haiku: None
                     }
                 })
             }

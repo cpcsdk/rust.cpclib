@@ -17,9 +17,9 @@ impl MartineVersion {
 }
 
 #[cfg(any(target_os = "linux", target_os = "haiku"))]
-        impl MartineVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-                match self {
+impl MartineVersion {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        match self {
                     MartineVersion::V0_41_4 =>
                         DelegateApplicationDescription::builder()
                             .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.41.4/martine-0.41.4-linux-amd64.zip")
@@ -35,13 +35,13 @@ impl MartineVersion {
                             .exec_fname("martine.linux")
                             .build()
                 }
-            }
-        }
+    }
+}
 
 #[cfg(target_os = "windows")]
-        impl MartineVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-                match self {
+impl MartineVersion {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        match self {
                     MartineVersion::V0_41_4 =>
                         DelegateApplicationDescription::builder()
                             .download_fn_url("https://github.com/jeromelesaux/martine/releases/download/v0.41.4/martine-0.41.4-windows-amd64.zip")
@@ -57,13 +57,13 @@ impl MartineVersion {
                             .exec_fname("martine.exe")
                             .build()
                     }
-            }
-        }
+    }
+}
 
 #[cfg(target_os = "macos")]
-        impl MartineVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-                match self {
+impl MartineVersion {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        match self {
                     MartineVersion::V0_41_4 => {
                         let post_install: Box<
                             dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
@@ -133,5 +133,5 @@ exec "$MARTINE_EXEC" "$@"
                             .build()
                     },
                 }
-            }
-        }
+    }
+}

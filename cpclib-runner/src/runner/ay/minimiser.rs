@@ -18,9 +18,9 @@ impl MinimiserVersion {
 }
 
 #[cfg(target_os = "windows")]
-        impl MinimiserVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-                match self {
+impl MinimiserVersion {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        match self {
                     MinimiserVersion::V0_4  =>
                         DelegateApplicationDescription::builder()
                             .download_fn_url("https://github.com/tattlemuss/minymiser/releases/download/release-v0.4/minymiser-release-v0.4.zip") // we assume a modern CPU
@@ -29,13 +29,13 @@ impl MinimiserVersion {
                             .exec_fname("packer\\bin\\miny-amd64-win.exe")
                             .build()
                 }
-            }
-        }
+    }
+}
 
 #[cfg(target_os = "linux")]
-        impl MinimiserVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-                match self {
+impl MinimiserVersion {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        match self {
                     MinimiserVersion::V0_4  =>
                         DelegateApplicationDescription::builder()
                             .download_fn_url("https://github.com/tattlemuss/minymiser/releases/download/release-v0.4/minymiser-release-v0.4.zip") // we assume a modern CPU
@@ -44,12 +44,12 @@ impl MinimiserVersion {
                             .exec_fname("packer\\bin\\miny-amd64-win.exe")
                             .build()
                 }
-            }
-        }
+    }
+}
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-        impl MinimiserVersion {
-            pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-                unimplemented!()
-            }
-        }
+impl MinimiserVersion {
+    pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
+        unimplemented!()
+    }
+}

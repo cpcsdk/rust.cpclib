@@ -5,7 +5,7 @@ unsafe extern "C" {
         input: *const u8,
         input_len: usize,
         output: *mut u8,
-        output_len: *mut usize,
+        output_len: *mut usize
     ) -> i32;
 }
 
@@ -18,16 +18,17 @@ pub fn compress(data: &[u8]) -> Result<CompressionResult, CrunchersError> {
             data.as_ptr(),
             data.len(),
             out.as_mut_ptr(),
-            &mut out_len as *mut usize,
+            &mut out_len as *mut usize
         )
     };
     if res == 0 {
         out.truncate(out_len);
         Ok(CompressionResult {
             stream: out,
-            delta: None,
+            delta: None
         })
-    } else {
+    }
+    else {
         Err(CrunchersError::CompressionFailed)
     }
 }

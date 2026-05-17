@@ -1,5 +1,4 @@
 use cpclib_crunchers::CompressMethod;
-
 #[cfg(feature = "lzsa")]
 use cpclib_crunchers::lzsa::LzsaMinMatch;
 #[cfg(feature = "shrinkler")]

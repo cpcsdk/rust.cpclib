@@ -8,9 +8,7 @@ use cpclib_sna::{
 };
 
 use crate::macro_segment::TokenizedMacroContent;
-use crate::symbols::SymbolsTable;
-use crate::symbols::SymbolsTableTrait;
-use crate::symbols::Value;
+use crate::symbols::{SymbolsTable, SymbolsTableTrait, Value};
 use crate::tokens::data_access::*;
 use crate::tokens::expression::*;
 use crate::tokens::listing::ListingElement;
@@ -539,7 +537,6 @@ pub enum CharsetFormat {
     Interval(Expr, Expr, Expr)
 }
 
-
 impl CharsetFormat {
     pub fn is_reset(&self) -> bool {
         matches!(self, CharsetFormat::Reset)
@@ -561,15 +558,20 @@ impl CharsetFormat {
     pub fn strengthen(&self, sym: &SymbolsTable) -> Self {
         match self {
             CharsetFormat::Reset => CharsetFormat::Reset,
-            CharsetFormat::CharsList(chars, expr) => CharsetFormat::CharsList(chars.clone(), expr.clone()),
+            CharsetFormat::CharsList(chars, expr) => {
+                CharsetFormat::CharsList(chars.clone(), expr.clone())
+            },
             CharsetFormat::Char(expr1, expr2) => {
                 if expr1.is_char() {
                     CharsetFormat::Char(expr1.clone(), expr2.clone())
-                } else if expr1.is_string() {
+                }
+                else if expr1.is_string() {
                     CharsetFormat::CharsList(expr1.string().chars().collect_vec(), expr2.clone())
-                } else if expr1.is_label() {
+                }
+                else if expr1.is_label() {
                     let label = expr1.label();
-                    let value = sym.any_value(label)
+                    let value = sym
+                        .any_value(label)
                         .unwrap_or_else(|_| panic!("Label {} not found in symbol table", label))
                         .unwrap();
                     match value.value() {
@@ -587,9 +589,10 @@ impl CharsetFormat {
                 else {
                     unimplemented!("There is a bug to handle here")
                 }
-
             },
-            CharsetFormat::Interval(expr1, expr2, expr3) => CharsetFormat::Interval(expr1.clone(), expr2.clone(), expr3.clone())
+            CharsetFormat::Interval(expr1, expr2, expr3) => {
+                CharsetFormat::Interval(expr1.clone(), expr2.clone(), expr3.clone())
+            },
         }
     }
 }

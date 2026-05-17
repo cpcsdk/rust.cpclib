@@ -4,7 +4,6 @@ use cpclib_common::clap;
 use cpclib_common::clap::CommandFactory;
 use cpclib_common::event::EventObserver;
 use cpclib_crunchers::CompressMethod;
-
 #[cfg(feature = "lzsa")]
 use cpclib_crunchers::lzsa::LzsaVersion;
 use cpclib_disc::amsdos::AmsdosAddBehavior;
@@ -106,7 +105,20 @@ pub enum Cruncher {
 }
 
 impl Cruncher {
-    #[cfg(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0", feature = "bzpack"))]
+    #[cfg(any(
+        feature = "apultra",
+        feature = "exomizer",
+        feature = "lz4",
+        feature = "lz48",
+        feature = "lz49",
+        feature = "lzsa",
+        feature = "pucrunch",
+        feature = "shrinkler",
+        feature = "zx7",
+        feature = "upkr",
+        feature = "zx0",
+        feature = "bzpack"
+    ))]
     pub fn z80(&self) -> &Utf8Path {
         let fname: &str = match self {
             #[cfg(feature = "apultra")]
@@ -143,7 +155,9 @@ impl Cruncher {
             Cruncher::BackwardLzm => "inner://uncrunch/bzpack_backward_lzm.asm",
             #[cfg(feature = "bzpack")]
             Cruncher::Bx0 | Cruncher::Bx2 | Cruncher::Ef8 | Cruncher::Lzm => {
-                panic!("No Z80 uncrunch routine available for forward bzpack formats. Use the Backward variant instead.")
+                panic!(
+                    "No Z80 uncrunch routine available for forward bzpack formats. Use the Backward variant instead."
+                )
             }
         };
         fname.into()
@@ -156,20 +170,49 @@ pub fn command() -> clap::Command {
 
 pub fn process(args: CrunchArgs, o: &dyn EventObserver) -> Result<(), String> {
     if args.z80 {
-        #[cfg(not(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0", feature = "bzpack")))]
-        panic!("This is a bug, please report it. The z80 option should not be available if no cruncher is enabled");
+        #[cfg(not(any(
+            feature = "apultra",
+            feature = "exomizer",
+            feature = "lz4",
+            feature = "lz48",
+            feature = "lz49",
+            feature = "lzsa",
+            feature = "pucrunch",
+            feature = "shrinkler",
+            feature = "zx7",
+            feature = "upkr",
+            feature = "zx0",
+            feature = "bzpack"
+        )))]
+        panic!(
+            "This is a bug, please report it. The z80 option should not be available if no cruncher is enabled"
+        );
 
-        #[cfg(any(feature = "apultra", feature = "exomizer", feature = "lz4", feature = "lz48", feature = "lz49", feature = "lzsa", feature = "pucrunch", feature = "shrinkler", feature = "zx7", feature = "upkr", feature = "zx0", feature = "bzpack"))]
-        {let fname = args.cruncher.z80();
-        let content = cpclib_asm::file::load_file(fname, &Default::default())
-            .unwrap()
-            .0;
-        let content = Vec::from(content);
-        let content = String::from_utf8(content).unwrap();
-        o.emit_stdout(&format!(
-            "; Import \"{fname}\" in basm or include the following content:\n{content}"
-        ));
-        return Ok(());
+        #[cfg(any(
+            feature = "apultra",
+            feature = "exomizer",
+            feature = "lz4",
+            feature = "lz48",
+            feature = "lz49",
+            feature = "lzsa",
+            feature = "pucrunch",
+            feature = "shrinkler",
+            feature = "zx7",
+            feature = "upkr",
+            feature = "zx0",
+            feature = "bzpack"
+        ))]
+        {
+            let fname = args.cruncher.z80();
+            let content = cpclib_asm::file::load_file(fname, &Default::default())
+                .unwrap()
+                .0;
+            let content = Vec::from(content);
+            let content = String::from_utf8(content).unwrap();
+            o.emit_stdout(&format!(
+                "; Import \"{fname}\" in basm or include the following content:\n{content}"
+            ));
+            return Ok(());
         }
     }
 

@@ -618,9 +618,10 @@ impl EmulatorConf {
 
         if let Some(drive_a) = &drive_a {
             match emu {
-                Emulator::Ace(_) | Emulator::CpcEmu(_) | Emulator::Cpcec(_) | Emulator::RetroVm(_) => {
-                    args.push(drive_a.to_string())
-                },
+                Emulator::Ace(_)
+                | Emulator::CpcEmu(_)
+                | Emulator::Cpcec(_)
+                | Emulator::RetroVm(_) => args.push(drive_a.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) | Emulator::Amspirit(_) => {
                     args.push(emu.wine_compatible_fname(drive_a)?.to_string())
@@ -795,7 +796,7 @@ impl EmulatorConf {
                 },
                 Emulator::RetroVm(_) => {
                     eprintln!("auto_run is currently ignored for RetroVM");
-                },
+                }
             }
         }
 

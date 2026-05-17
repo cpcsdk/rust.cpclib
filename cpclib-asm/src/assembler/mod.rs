@@ -2539,28 +2539,28 @@ impl Env {
         // Try to fallback on a macro call - parser is not that much great
         if let Err(err) = &res
             && let AssemblerError::AlreadyDefinedSymbol { kind, .. } = err.as_ref()
-                && (kind == "macro" || kind == "struct")
-            {
-                let message = AssemblerError::AssemblingError {
+            && (kind == "macro" || kind == "struct")
+        {
+            let message = AssemblerError::AssemblingError {
                     msg:
                         "Use (void) for macros or structs with no parameters to disambiguate them with labels"
                             .to_owned()
                 };
-                if self.options().assemble_options().force_void() {
-                    return Err(Box::new(message));
-                }
-                else {
-                    // self.add_warning(message);
-                }
-
-                // I'm really unsure of memory safety in case of bugs
-                let macro_token = Token::MacroCall(label.into(), Default::default());
-                let mut processed_token = build_processed_token(
-                    &macro_token,
-                    std::sync::Arc::new(std::sync::RwLock::new(self))
-                )?;
-                return processed_token.visited(self);
+            if self.options().assemble_options().force_void() {
+                return Err(Box::new(message));
             }
+            else {
+                // self.add_warning(message);
+            }
+
+            // I'm really unsure of memory safety in case of bugs
+            let macro_token = Token::MacroCall(label.into(), Default::default());
+            let mut processed_token = build_processed_token(
+                &macro_token,
+                std::sync::Arc::new(std::sync::RwLock::new(self))
+            )?;
+            return processed_token.visited(self);
+        }
 
         res
     }
@@ -4184,7 +4184,8 @@ impl Env {
                 }
                 else {
                     return Err(Box::new(AssemblerError::AssemblingError {
-                        msg: "TICKER cannot compute timing for DEFS with non-zero fill value".to_string()
+                        msg: "TICKER cannot compute timing for DEFS with non-zero fill value"
+                            .to_string()
                     }));
                 }
             }
@@ -4888,10 +4889,10 @@ impl Env {
                         &mut *self.warnings[previous_warning_idx]
                         && let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
                             warning.as_mut()
-                        {
-                            *prev_size = new_size;
-                            *span = new_span;
-                        }
+                    {
+                        *prev_size = new_size;
+                        *span = new_span;
+                    }
                 }
                 else if let AssemblerWarning::OverrideMemory(_prev_addr, prev_size) =
                     &mut *self.warnings[previous_warning_idx]
@@ -5289,7 +5290,8 @@ impl Env {
                 let phy = env.logical_to_physical_address(addr);
                 if env.peek(&phy) != 0 {
                     return Err(Box::new(AssemblerError::AssemblingError {
-                        msg: "TICKER cannot compute timing for DB/DW directive with non-zero bytes".to_string()
+                        msg: "TICKER cannot compute timing for DB/DW directive with non-zero bytes"
+                            .to_string()
                     }));
                 }
             }
@@ -7379,7 +7381,10 @@ impl Env {
                     self.stable_counters.release_last_counter()
                 };
                 if let Some((label, count)) = release_result {
-                    if !self.pass.is_listing_pass() && self.symbols().contains_symbol(&label)? && self.symbols().int_value(&label).unwrap().unwrap() != count as _ {
+                    if !self.pass.is_listing_pass()
+                        && self.symbols().contains_symbol(&label)?
+                        && self.symbols().int_value(&label).unwrap().unwrap() != count as _
+                    {
                         self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(
                             format!("Symbol {label} has been overwritten")
                         )));
