@@ -574,77 +574,73 @@ where Self: Debug + Sized + Sync
             return false;
         }
 
-        match mnemonic {
-            Mnemonic::Add | Mnemonic::Adc | Mnemonic::Sbc => {
-                arg1.as_ref().map(|a| a.is_register_de()).unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false)
-            },
+        let arg1_is_de = arg1.as_ref().map(|a| a.is_register_de()).unwrap_or(false);
+        let arg1_is_hl = arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false);
+        let arg1_is_reg16 = arg1.as_ref().map(|a| a.is_register16()).unwrap_or(false);
+        let arg1_is_ix16 = arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false);
+        let arg1_is_reg16_or_ix16 = arg1_is_reg16 || arg1_is_ix16;
 
-            Mnemonic::Sub => {
-                arg1
-                    .as_ref()
-                    .map(|a| a.is_register_de() || a.is_register_hl())
-                    .unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false)
-            },
+        let arg2_is_reg16 = arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false);
+        let arg2_is_sp = arg2.as_ref().map(|a| a.is_register_sp()).unwrap_or(false);
+        let arg2_is_ix16 = arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false);
+        let arg2_is_hl_mem = arg2.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false);
+        let arg2_is_reg16_or_ix16 = arg2_is_reg16 || arg2_is_ix16;
+
+        match mnemonic {
+            Mnemonic::Add | Mnemonic::Adc | Mnemonic::Sbc => arg1_is_de && arg2_is_reg16,
+
+            Mnemonic::Sub => (arg1_is_de || arg1_is_hl) && arg2_is_reg16,
 
             Mnemonic::Ld => {
-                (arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_register_sp()).unwrap_or(false))
+                let fake_hl_sp = arg1_is_hl && arg2_is_sp;
+
+                let fake_reg16_pair = arg1
+                    .as_ref()
+                    .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                    .unwrap_or(false)
+                    && arg2
+                        .as_ref()
+                        .map(|a| {
+                            a.is_register_bc()
+                                || a.is_register_de()
+                                || a.is_register_hl()
+                                || a.is_indexregister_with_index()
+                        })
+                        .unwrap_or(false);
+
+                let fake_indexed_load = arg1.as_ref().map(|a| a.is_indexregister_with_index()).unwrap_or(false)
+                    && arg2
+                        .as_ref()
+                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                        .unwrap_or(false);
+
+                let fake_indexed16_transfer = (arg1_is_hl && arg2_is_ix16)
+                    || (arg1_is_ix16 && arg2_is_hl_mem)
+                    || (arg1_is_ix16 && arg2_is_ix16)
                     || (arg1
                         .as_ref()
                         .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
                         .unwrap_or(false)
-                        && arg2
-                            .as_ref()
-                            .map(|a| {
-                                a.is_register_bc()
-                                    || a.is_register_de()
-                                    || a.is_register_hl()
-                                    || a.is_indexregister_with_index()
-                            })
-                            .unwrap_or(false))
-                    || (arg1.as_ref().map(|a| a.is_indexregister_with_index()).unwrap_or(false)
+                        && arg2_is_ix16)
+                    || (arg1_is_ix16
                         && arg2
                             .as_ref()
                             .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
                             .unwrap_or(false))
-                    || ((arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false)
-                        && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false))
-                        || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
-                            && arg2.as_ref().map(|a| a.is_register_hl()).unwrap_or(false))
-                        || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
-                            && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false))
-                        || (arg1
-                            .as_ref()
-                            .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
-                            .unwrap_or(false)
-                            && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false))
-                        || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
-                            && arg2
-                                .as_ref()
-                                .map(|a| {
-                                    a.is_register_bc() || a.is_register_de() || a.is_register_hl()
-                                })
-                                .unwrap_or(false))
-                        || (arg1
-                            .as_ref()
-                            .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
-                            .unwrap_or(false)
-                            && arg2.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false))
-                        || (arg1.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false)
-                            && arg2
-                                .as_ref()
-                                .map(|a| {
-                                    a.is_register_bc() || a.is_register_de() || a.is_register_hl()
-                                })
-                                .unwrap_or(false)))
+                    || (arg1
+                        .as_ref()
+                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                        .unwrap_or(false)
+                        && arg2_is_hl_mem)
+                    || (arg1.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false) && arg2
+                        .as_ref()
+                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                        .unwrap_or(false));
+
+                fake_hl_sp || fake_reg16_pair || fake_indexed_load || fake_indexed16_transfer
             },
 
-            Mnemonic::Srl8 => arg1
-                .as_ref()
-                .map(|a| a.is_register16() || a.is_indexregister16())
-                .unwrap_or(false),
+            Mnemonic::Srl8 => arg1_is_reg16_or_ix16,
 
             Mnemonic::Srl
             | Mnemonic::Sra
@@ -653,7 +649,7 @@ where Self: Debug + Sized + Sync
             | Mnemonic::Rl
             | Mnemonic::Rr
             | Mnemonic::Rlc
-            | Mnemonic::Rrc => arg1.as_ref().map(|a| a.is_register16()).unwrap_or(false),
+            | Mnemonic::Rrc => arg1_is_reg16,
 
             _ => false
         }
