@@ -6,8 +6,9 @@ use std::ops::{Deref, DerefMut};
 use cpclib_common::smallvec::SmallVec;
 
 use crate::{
-    AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, CrunchType, DataAccessElem,
-    ExprElement, MacroParamElement, Mnemonic, TestKindElement
+    AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, CrunchType, DataAccess,
+    DataAccessElem, ExprElement, MacroParamElement, Mnemonic, Register16, Register8,
+    TestKindElement
 };
 
 //
@@ -176,6 +177,488 @@ where Self: Debug + Sized + Sync
         self.is_label() || self.is_assign() || self.is_equ() || self.is_set()
     }
 
+    #[inline]
+    fn fake_to_listing_from_access<DA: DataAccessElem>(
+        mnemonic: Mnemonic,
+        arg1: Option<&DA>,
+        arg2: Option<&DA>,
+        arg3: Option<Register8>
+    ) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>>
+    {
+        if arg3.is_some() {
+            return None;
+        }
+
+        let mut listing = Vec::new();
+
+        match mnemonic {
+            Mnemonic::Add | Mnemonic::Adc
+                if arg1.as_ref().map(|a| a.is_register_de()).unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) => {
+                let rhs = arg2.unwrap().get_register16().unwrap();
+                let mapped_rhs = rhs.swap_de_hl();
+                listing.push((Mnemonic::ExHlDe, None, None));
+                listing.push((
+                    mnemonic,
+                    Some(DataAccess::Register16(Register16::Hl)),
+                    Some(DataAccess::Register16(mapped_rhs))
+                ));
+                listing.push((Mnemonic::ExHlDe, None, None));
+                Some(listing)
+            },
+
+            Mnemonic::Sbc
+                if arg1.as_ref().map(|a| a.is_register_de()).unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) => {
+                let rhs = arg2.unwrap().get_register16().unwrap();
+                let mapped_rhs = rhs.swap_de_hl();
+                listing.push((Mnemonic::ExHlDe, None, None));
+                listing.push((
+                    Mnemonic::Sbc,
+                    Some(DataAccess::Register16(Register16::Hl)),
+                    Some(DataAccess::Register16(mapped_rhs))
+                ));
+                listing.push((Mnemonic::ExHlDe, None, None));
+                Some(listing)
+            },
+
+            Mnemonic::Sub
+                if arg1
+                    .as_ref()
+                    .map(|a| a.is_register_de() || a.is_register_hl())
+                    .unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) => {
+                let lhs = arg1.unwrap();
+                let rhs = arg2.unwrap().get_register16().unwrap();
+                listing.push((Mnemonic::Or, Some(DataAccess::Register8(Register8::A)), None));
+
+                if lhs.is_register_de() {
+                    let mapped_rhs = rhs.swap_de_hl();
+                    listing.push((Mnemonic::ExHlDe, None, None));
+                    listing.push((
+                        Mnemonic::Sbc,
+                        Some(DataAccess::Register16(Register16::Hl)),
+                        Some(DataAccess::Register16(mapped_rhs))
+                    ));
+                    listing.push((Mnemonic::ExHlDe, None, None));
+                }
+                else {
+                    listing.push((
+                        Mnemonic::Sbc,
+                        Some(DataAccess::Register16(Register16::Hl)),
+                        Some(DataAccess::Register16(rhs))
+                    ));
+                }
+
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_register_sp()).unwrap_or(false) => {
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register16(Register16::Hl)),
+                    Some(DataAccess::Expression(0u8.into()))
+                ));
+                listing.push((
+                    Mnemonic::Add,
+                    Some(DataAccess::Register16(Register16::Hl)),
+                    Some(DataAccess::Register16(Register16::Sp))
+                ));
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if arg1
+                    .as_ref()
+                    .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                    .unwrap_or(false)
+                    && arg2
+                        .as_ref()
+                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                        .unwrap_or(false) => {
+                let lhs = arg1.unwrap().get_register16().unwrap();
+                let rhs = arg2.unwrap().get_register16().unwrap();
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register8(lhs.low().unwrap())),
+                    Some(DataAccess::Register8(rhs.low().unwrap()))
+                ));
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register8(lhs.high().unwrap())),
+                    Some(DataAccess::Register8(rhs.high().unwrap()))
+                ));
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if arg1
+                    .as_ref()
+                    .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                    .unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_indexregister_with_index()).unwrap_or(false) => {
+                let dst = arg1.unwrap().get_register16().unwrap();
+                let src = arg2.unwrap().get_indexregister16().unwrap();
+                let idx = arg2.unwrap().get_index().unwrap();
+
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register8(dst.low().unwrap())),
+                    Some(DataAccess::IndexRegister16WithIndex(
+                        src,
+                        idx.0,
+                        idx.1.to_expr().into_owned()
+                    ))
+                ));
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register8(dst.high().unwrap())),
+                    Some(DataAccess::IndexRegister16WithIndex(
+                        src,
+                        idx.0,
+                        idx.1.to_expr().into_owned().add(1)
+                    ))
+                ));
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if arg1.as_ref().map(|a| a.is_indexregister_with_index()).unwrap_or(false)
+                    && arg2
+                        .as_ref()
+                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                        .unwrap_or(false) => {
+                let dst = arg1.unwrap().get_indexregister16().unwrap();
+                let idx = arg1.unwrap().get_index().unwrap();
+                let src = arg2.unwrap().get_register16().unwrap();
+
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::IndexRegister16WithIndex(
+                        dst,
+                        idx.0,
+                        idx.1.to_expr().into_owned()
+                    )),
+                    Some(DataAccess::Register8(src.low().unwrap()))
+                ));
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::IndexRegister16WithIndex(
+                        dst,
+                        idx.0,
+                        idx.1.to_expr().into_owned().add(1)
+                    )),
+                    Some(DataAccess::Register8(src.high().unwrap()))
+                ));
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if (arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false))
+                    || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
+                        && arg2.as_ref().map(|a| a.is_register_hl()).unwrap_or(false))
+                    || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
+                        && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)) => {
+                let dst = if arg1.unwrap().is_register16() {
+                    DataAccess::Register16(arg1.unwrap().get_register16().unwrap())
+                }
+                else {
+                    DataAccess::IndexRegister16(arg1.unwrap().get_indexregister16().unwrap())
+                };
+
+                let src = if arg2.unwrap().is_register16() {
+                    DataAccess::Register16(arg2.unwrap().get_register16().unwrap())
+                }
+                else {
+                    DataAccess::IndexRegister16(arg2.unwrap().get_indexregister16().unwrap())
+                };
+
+                listing.push((Mnemonic::Push, Some(src), None));
+                listing.push((Mnemonic::Pop, Some(dst), None));
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if arg1
+                    .as_ref()
+                    .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                    .unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false) => {
+                let dst = arg1.unwrap().get_register16().unwrap();
+                let src = arg2.unwrap().get_indexregister16().unwrap();
+
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register8(dst.low().unwrap())),
+                    Some(DataAccess::IndexRegister8(src.low()))
+                ));
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register8(dst.high().unwrap())),
+                    Some(DataAccess::IndexRegister8(src.high()))
+                ));
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
+                    && arg2
+                        .as_ref()
+                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                        .unwrap_or(false) => {
+                let dst = arg1.unwrap().get_indexregister16().unwrap();
+                let src = arg2.unwrap().get_register16().unwrap();
+
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::IndexRegister8(dst.low())),
+                    Some(DataAccess::Register8(src.low().unwrap()))
+                ));
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::IndexRegister8(dst.high())),
+                    Some(DataAccess::Register8(src.high().unwrap()))
+                ));
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if arg1
+                    .as_ref()
+                    .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                    .unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false) => {
+                let dst = arg1.unwrap().get_register16().unwrap();
+
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register8(dst.low().unwrap())),
+                    Some(DataAccess::MemoryRegister16(Register16::Hl))
+                ));
+                listing.push((
+                    Mnemonic::Inc,
+                    Some(DataAccess::Register16(Register16::Hl)),
+                    None
+                ));
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::Register8(dst.high().unwrap())),
+                    Some(DataAccess::MemoryRegister16(Register16::Hl))
+                ));
+                listing.push((
+                    Mnemonic::Dec,
+                    Some(DataAccess::Register16(Register16::Hl)),
+                    None
+                ));
+                Some(listing)
+            },
+
+            Mnemonic::Ld
+                if arg1.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false)
+                    && arg2
+                        .as_ref()
+                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                        .unwrap_or(false) => {
+                let src = arg2.unwrap().get_register16().unwrap();
+
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::MemoryRegister16(Register16::Hl)),
+                    Some(DataAccess::Register8(src.low().unwrap()))
+                ));
+                listing.push((
+                    Mnemonic::Inc,
+                    Some(DataAccess::Register16(Register16::Hl)),
+                    None
+                ));
+                listing.push((
+                    Mnemonic::Ld,
+                    Some(DataAccess::MemoryRegister16(Register16::Hl)),
+                    Some(DataAccess::Register8(src.high().unwrap()))
+                ));
+                listing.push((
+                    Mnemonic::Dec,
+                    Some(DataAccess::Register16(Register16::Hl)),
+                    None
+                ));
+                Some(listing)
+            },
+
+            Mnemonic::Srl8
+                if arg1
+                    .as_ref()
+                    .map(|a| a.is_register16() || a.is_indexregister16())
+                    .unwrap_or(false) => {
+                if arg1.unwrap().is_register16() {
+                    let reg = arg1.unwrap().get_register16().unwrap();
+                    listing.push((
+                        Mnemonic::Ld,
+                        Some(DataAccess::Register8(reg.low().unwrap())),
+                        Some(DataAccess::Register8(reg.high().unwrap()))
+                    ));
+                    listing.push((
+                        Mnemonic::Ld,
+                        Some(DataAccess::Register8(reg.high().unwrap())),
+                        Some(DataAccess::Expression(0u8.into()))
+                    ));
+                }
+                else {
+                    let reg = arg1.unwrap().get_indexregister16().unwrap();
+                    listing.push((
+                        Mnemonic::Ld,
+                        Some(DataAccess::IndexRegister8(reg.low())),
+                        Some(DataAccess::IndexRegister8(reg.high()))
+                    ));
+                    listing.push((
+                        Mnemonic::Ld,
+                        Some(DataAccess::IndexRegister8(reg.high())),
+                        Some(DataAccess::Expression(0u8.into()))
+                    ));
+                }
+                Some(listing)
+            },
+
+            Mnemonic::Srl
+            | Mnemonic::Sra
+            | Mnemonic::Sl1
+            | Mnemonic::Sla
+            | Mnemonic::Rl
+            | Mnemonic::Rr
+            | Mnemonic::Rlc
+            | Mnemonic::Rrc
+                if arg1.as_ref().map(|a| a.is_register16()).unwrap_or(false) => {
+                let reg16 = arg1.unwrap().get_register16().unwrap();
+                let opcodes: &[(Mnemonic, Option<Register8>)] = match mnemonic {
+                    Mnemonic::Srl => &[(Mnemonic::Srl, reg16.high()), (Mnemonic::Rr, reg16.low())],
+                    Mnemonic::Sra => &[(Mnemonic::Sra, reg16.high()), (Mnemonic::Rr, reg16.low())],
+                    Mnemonic::Sl1 => &[(Mnemonic::Sl1, reg16.low()), (Mnemonic::Rl, reg16.high())],
+                    Mnemonic::Sla => &[(Mnemonic::Sla, reg16.low()), (Mnemonic::Rl, reg16.high())],
+                    Mnemonic::Rr => &[(Mnemonic::Rr, reg16.high()), (Mnemonic::Rr, reg16.low())],
+                    Mnemonic::Rl => &[(Mnemonic::Rl, reg16.low()), (Mnemonic::Rl, reg16.high())],
+                    Mnemonic::Rlc => &[
+                        (Mnemonic::Sla, reg16.high()),
+                        (Mnemonic::Rl, reg16.low()),
+                        (Mnemonic::Rr, reg16.high()),
+                        (Mnemonic::Rlc, reg16.high())
+                    ],
+                    Mnemonic::Rrc => &[
+                        (Mnemonic::Srl, reg16.high()),
+                        (Mnemonic::Rr, reg16.low()),
+                        (Mnemonic::Rl, reg16.high()),
+                        (Mnemonic::Rrc, reg16.high())
+                    ],
+                    _ => unreachable!()
+                };
+
+                for (op, reg8) in opcodes {
+                    listing.push((*op, reg8.map(DataAccess::Register8), None));
+                }
+                Some(listing)
+            },
+
+            _ => None
+        }
+    }
+
+    #[inline]
+    fn is_fake_instruction_from_access<DA: DataAccessElem>(
+        mnemonic: Mnemonic,
+        arg1: Option<&DA>,
+        arg2: Option<&DA>,
+        arg3: Option<Register8>
+    ) -> bool {
+        if arg3.is_some() {
+            return false;
+        }
+
+        match mnemonic {
+            Mnemonic::Add | Mnemonic::Adc | Mnemonic::Sbc => {
+                arg1.as_ref().map(|a| a.is_register_de()).unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false)
+            },
+
+            Mnemonic::Sub => {
+                arg1
+                    .as_ref()
+                    .map(|a| a.is_register_de() || a.is_register_hl())
+                    .unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false)
+            },
+
+            Mnemonic::Ld => {
+                (arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false)
+                    && arg2.as_ref().map(|a| a.is_register_sp()).unwrap_or(false))
+                    || (arg1
+                        .as_ref()
+                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                        .unwrap_or(false)
+                        && arg2
+                            .as_ref()
+                            .map(|a| {
+                                a.is_register_bc()
+                                    || a.is_register_de()
+                                    || a.is_register_hl()
+                                    || a.is_indexregister_with_index()
+                            })
+                            .unwrap_or(false))
+                    || (arg1.as_ref().map(|a| a.is_indexregister_with_index()).unwrap_or(false)
+                        && arg2
+                            .as_ref()
+                            .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                            .unwrap_or(false))
+                    || ((arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false)
+                        && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false))
+                        || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
+                            && arg2.as_ref().map(|a| a.is_register_hl()).unwrap_or(false))
+                        || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
+                            && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false))
+                        || (arg1
+                            .as_ref()
+                            .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                            .unwrap_or(false)
+                            && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false))
+                        || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
+                            && arg2
+                                .as_ref()
+                                .map(|a| {
+                                    a.is_register_bc() || a.is_register_de() || a.is_register_hl()
+                                })
+                                .unwrap_or(false))
+                        || (arg1
+                            .as_ref()
+                            .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                            .unwrap_or(false)
+                            && arg2.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false))
+                        || (arg1.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false)
+                            && arg2
+                                .as_ref()
+                                .map(|a| {
+                                    a.is_register_bc() || a.is_register_de() || a.is_register_hl()
+                                })
+                                .unwrap_or(false)))
+            },
+
+            Mnemonic::Srl8 => arg1
+                .as_ref()
+                .map(|a| a.is_register16() || a.is_indexregister16())
+                .unwrap_or(false),
+
+            Mnemonic::Srl
+            | Mnemonic::Sra
+            | Mnemonic::Sl1
+            | Mnemonic::Sla
+            | Mnemonic::Rl
+            | Mnemonic::Rr
+            | Mnemonic::Rlc
+            | Mnemonic::Rrc => arg1.as_ref().map(|a| a.is_register16()).unwrap_or(false),
+
+            _ => false
+        }
+    }
+
     /// Returns all symbol names (labels) used in this token's expressions
     fn symbols(&self) -> std::collections::HashSet<String> {
         use std::collections::HashSet;
@@ -297,6 +780,128 @@ where Self: Debug + Sized + Sync
         symbols
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::ListingElement;
+    use crate::{DataAccess, Mnemonic, Register16, Register8, Token};
+
+    #[test]
+    fn fake_predicate_and_expansion_are_aligned() {
+        let fake_cases = vec![
+            (
+                Mnemonic::Add,
+                Some(DataAccess::Register16(Register16::De)),
+                Some(DataAccess::Register16(Register16::Bc)),
+                None
+            ),
+            (
+                Mnemonic::Adc,
+                Some(DataAccess::Register16(Register16::De)),
+                Some(DataAccess::Register16(Register16::Hl)),
+                None
+            ),
+            (
+                Mnemonic::Sbc,
+                Some(DataAccess::Register16(Register16::De)),
+                Some(DataAccess::Register16(Register16::Sp)),
+                None
+            ),
+            (
+                Mnemonic::Sub,
+                Some(DataAccess::Register16(Register16::Hl)),
+                Some(DataAccess::Register16(Register16::De)),
+                None
+            ),
+            (
+                Mnemonic::Ld,
+                Some(DataAccess::Register16(Register16::De)),
+                Some(DataAccess::Register16(Register16::Hl)),
+                None
+            ),
+            (
+                Mnemonic::Srl8,
+                Some(DataAccess::Register16(Register16::De)),
+                None,
+                None
+            ),
+            (
+                Mnemonic::Rlc,
+                Some(DataAccess::Register16(Register16::Hl)),
+                None,
+                None
+            )
+        ];
+
+        let non_fake_cases = vec![
+            (
+                Mnemonic::Add,
+                Some(DataAccess::Register16(Register16::Hl)),
+                Some(DataAccess::Register16(Register16::De)),
+                None
+            ),
+            (
+                Mnemonic::Ld,
+                Some(DataAccess::Register8(Register8::A)),
+                Some(DataAccess::Register8(Register8::B)),
+                None
+            ),
+            (
+                Mnemonic::Srl8,
+                Some(DataAccess::Register8(Register8::A)),
+                None,
+                None
+            ),
+            (
+                Mnemonic::Rrc,
+                Some(DataAccess::Register16(Register16::De)),
+                None,
+                Some(Register8::A)
+            )
+        ];
+
+        for (mnemonic, arg1, arg2, arg3) in fake_cases {
+            let pred = <Token as ListingElement>::is_fake_instruction_from_access(
+                mnemonic,
+                arg1.as_ref(),
+                arg2.as_ref(),
+                arg3
+            );
+            let exp = <Token as ListingElement>::fake_to_listing_from_access(
+                mnemonic,
+                arg1.as_ref(),
+                arg2.as_ref(),
+                arg3
+            )
+            .is_some();
+
+            assert!(pred, "expected fake predicate for {mnemonic:?}");
+            assert!(exp, "expected fake expansion for {mnemonic:?}");
+            assert_eq!(pred, exp, "predicate/expansion mismatch for {mnemonic:?}");
+        }
+
+        for (mnemonic, arg1, arg2, arg3) in non_fake_cases {
+            let pred = <Token as ListingElement>::is_fake_instruction_from_access(
+                mnemonic,
+                arg1.as_ref(),
+                arg2.as_ref(),
+                arg3
+            );
+            let exp = <Token as ListingElement>::fake_to_listing_from_access(
+                mnemonic,
+                arg1.as_ref(),
+                arg2.as_ref(),
+                arg3
+            )
+            .is_some();
+
+            assert!(!pred, "unexpected fake predicate for {mnemonic:?}");
+            assert!(!exp, "unexpected fake expansion for {mnemonic:?}");
+            assert_eq!(pred, exp, "predicate/expansion mismatch for {mnemonic:?}");
+        }
+    }
+}
+
 /// A listing is simply a list of things similar to token
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BaseListing<T: Clone + ListingElement> {

@@ -48,6 +48,15 @@ impl Register16 {
     pub fn split(self) -> (Option<Register8>, Option<Register8>) {
         (self.low(), self.high())
     }
+
+    /// Swap DE and HL, keep other registers unchanged.
+    pub fn swap_de_hl(self) -> Self {
+        match self {
+            Register16::De => Register16::Hl,
+            Register16::Hl => Register16::De,
+            _ => self
+        }
+    }
 }
 
 macro_rules! is_reg16 {

@@ -94,6 +94,7 @@ pub trait TokenExt: ListingElement + Debug + Visited {
     fn is_valid(&self) -> bool {
         self.to_bytes().is_ok()
     }
+
 }
 
 // impl<'t> TokenExt for Cow<'t, Token> {

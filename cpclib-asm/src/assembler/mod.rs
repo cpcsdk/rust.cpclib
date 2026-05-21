@@ -5519,7 +5519,11 @@ impl Env {
                 self.assemble_logical_operator(mnemonic, arg1.as_ref().unwrap())
             },
             Mnemonic::Add | Mnemonic::Adc => {
-                self.assemble_add_or_adc(mnemonic, arg1.as_ref(), arg2.as_ref().unwrap())
+                self.assemble_add_or_adc::<_, Token>(
+                    mnemonic,
+                    arg1.as_ref(),
+                    arg2.as_ref().unwrap()
+                )
             },
             Mnemonic::Cp => self.assemble_cp(arg1.as_ref().unwrap()),
             Mnemonic::ExMemSp => self.assemble_ex_memsp(arg1.as_ref().unwrap()),
@@ -5528,7 +5532,7 @@ impl Env {
             },
             Mnemonic::Djnz => self.assemble_djnz(arg1.as_ref().unwrap()),
             Mnemonic::In => self.assemble_in(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
-            Mnemonic::Ld => self.assemble_ld(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
+            Mnemonic::Ld => self.assemble_ld::<_, Token>(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
             Mnemonic::Ldi
             | Mnemonic::Ldd
             | Mnemonic::Ldir
@@ -5596,9 +5600,8 @@ impl Env {
                 )
             },
             Mnemonic::Nop2 => self.assemble_nop::<Expr>(Mnemonic::Nop2, None),
-
-            Mnemonic::Sub => self.assemble_sub(arg1.as_ref().unwrap()),
-            Mnemonic::Sbc => self.assemble_sbc(arg1.as_ref(), arg2.as_ref().unwrap()),
+            Mnemonic::Sub => self.assemble_sub::<_, Token>(arg1.as_ref(), arg2.as_ref()),
+            Mnemonic::Sbc => self.assemble_sbc::<_, Token>(arg1.as_ref(), arg2.as_ref().unwrap()),
             Mnemonic::Sla
             | Mnemonic::Sra
             | Mnemonic::Srl
@@ -5606,8 +5609,10 @@ impl Env {
             | Mnemonic::Rl
             | Mnemonic::Rr
             | Mnemonic::Rlc
-            | Mnemonic::Rrc => self.assemble_shift(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref()),
-            Mnemonic::Srl8 => self.assemble_srl8(arg1.as_ref().unwrap())
+            | Mnemonic::Rrc => {
+                self.assemble_shift::<_, Token>(mnemonic, arg1.as_ref().unwrap(), arg2.as_ref())
+            },
+            Mnemonic::Srl8 => self.assemble_srl8::<_, Token>(arg1.as_ref().unwrap())
         }
     }
 }
@@ -5661,6 +5666,19 @@ impl Env {
         };
 
         Ok(Bytes::from_slice(bytes))
+    }
+
+    fn assemble_fake_listing(
+        &mut self,
+        listing: &[(Mnemonic, Option<DataAccess>, Option<DataAccess>)]
+    ) -> Result<Bytes, Box<AssemblerError>> {
+        let mut bytes = Bytes::new();
+        for (mnemonic, arg1, arg2) in listing {
+            let op_bytes = self.assemble_opcode_impl::<DataAccess>(*mnemonic, arg1, arg2, &None)?;
+            bytes.extend(op_bytes);
+        }
+
+        Ok(bytes)
     }
 }
 
@@ -5746,14 +5764,24 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_sub<D: DataAccessElem>(
+    pub fn assemble_sub<D: DataAccessElem, T: ListingElement>(
         &mut self,
-        arg: &D
+        arg1: Option<&D>,
+        arg2: Option<&D>
     ) -> Result<Bytes, Box<AssemblerError>>
     where
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
         let mut bytes = Bytes::new();
+
+        // Handle normal SUB instruction (8-bit operand only)
+        let arg = arg1.ok_or_else(|| {
+            Box::new(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: "SUB requires at least one argument".into()
+            })
+        })?;
 
         if arg.is_expression() {
             let exp = arg.get_expression().unwrap();
@@ -5795,13 +5823,23 @@ impl Env {
             }
         }
         else {
+            // Try fake instruction expansion (Sub with De|Hl + r16)
+            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
+                Mnemonic::Sub,
+                arg1,
+                arg2,
+                None
+            ) {
+                return self.assemble_fake_listing(&listing);
+            }
+            
             unreachable!();
         }
 
         Ok(bytes)
     }
 
-    pub fn assemble_sbc<D: DataAccessElem>(
+    pub fn assemble_sbc<D: DataAccessElem, T: ListingElement>(
         &mut self,
         arg1: Option<&D>,
         arg2: &D
@@ -5854,6 +5892,17 @@ impl Env {
             }
         }
         else {
+            // Try fake instruction expansion (Sbc with De + r16)
+            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
+                Mnemonic::Sbc,
+                arg1,
+                Some(arg2),
+                None
+            ) {
+                return self.assemble_fake_listing(&listing);
+            }
+            
+            // If not a fake, must be HL + r16
             assert!(arg1.unwrap().is_register_hl());
             assert!(arg2.is_register16());
             let reg = arg2.get_register16().unwrap();
@@ -5864,7 +5913,7 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_shift<D: DataAccessElem>(
+    pub fn assemble_shift<D: DataAccessElem, T: ListingElement>(
         &mut self,
         mne: Mnemonic,
         target: &D,
@@ -5908,41 +5957,16 @@ impl Env {
             add_byte(&mut bytes, byte);
         }
         else if target.is_register16() {
-            // here we handle a fake instruction
-            let reg16 = target.get_register16().unwrap();
-            let opcodes: &[(Mnemonic, Option<Register8>)] = match mne {
-                Mnemonic::Srl => &[(Mnemonic::Srl, reg16.high()), (Mnemonic::Rr, reg16.low())],
-                Mnemonic::Sra => &[(Mnemonic::Sra, reg16.high()), (Mnemonic::Rr, reg16.low())],
-                Mnemonic::Sl1 => &[(Mnemonic::Sl1, reg16.low()), (Mnemonic::Rl, reg16.high())],
-                Mnemonic::Sla => &[(Mnemonic::Sla, reg16.low()), (Mnemonic::Rl, reg16.high())],
-                Mnemonic::Rr => &[(Mnemonic::Rr, reg16.high()), (Mnemonic::Rr, reg16.low())],
-                Mnemonic::Rl => &[(Mnemonic::Rl, reg16.low()), (Mnemonic::Rl, reg16.high())],
-                Mnemonic::Rlc => {
-                    &[
-                        (Mnemonic::Sla, reg16.high()),
-                        (Mnemonic::Rl, reg16.low()),
-                        (Mnemonic::Rr, reg16.high()),
-                        (Mnemonic::Rlc, reg16.high())
-                    ]
-                },
-                Mnemonic::Rrc => {
-                    &[
-                        (Mnemonic::Srl, reg16.high()),
-                        (Mnemonic::Rr, reg16.low()),
-                        (Mnemonic::Rl, reg16.high()),
-                        (Mnemonic::Rrc, reg16.high())
-                    ]
-                },
-
-                _ => unreachable!()
-            };
-
-            for instruction in opcodes
-                .iter()
-                .map(|op| Token::OpCode(op.0, Some(op.1.unwrap().into()), None, None))
-            {
-                instruction.visited(self)?;
+            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
+                mne,
+                Some(target),
+                None,
+                None
+            ) {
+                return self.assemble_fake_listing(&listing);
             }
+
+            unreachable!();
         }
         else {
             assert!(target.is_address_in_register16() || target.is_indexregister_with_index());
@@ -6024,44 +6048,25 @@ impl Env {
     }
 
     /// Assemble SRL8 rr (fake instruction): shifts rr right by 8 bits.
-    /// For Register16 (BC/DE/HL): LD low,high : LD high,0
-    /// For IndexRegister16 (IX/IY): LD IxL,IxH : LD IxH,0
-    pub fn assemble_srl8<D: DataAccessElem + Debug>(
+    /// Delegates to fake_to_listing_from_access for consistent expansion logic.
+    pub fn assemble_srl8<D: DataAccessElem + Debug, T: ListingElement>(
         &mut self,
         arg: &D
     ) -> Result<Bytes, Box<AssemblerError>>
     where
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
-        let mut bytes = Bytes::new();
-        if arg.is_register16() {
-            let reg = arg.get_register16().unwrap();
-            bytes.extend(self.assemble_ld(
-                &DataAccess::Register8(reg.low().unwrap()),
-                &DataAccess::Register8(reg.high().unwrap())
-            )?);
-            bytes.extend(self.assemble_ld(
-                &DataAccess::Register8(reg.high().unwrap()),
-                &DataAccess::Expression(Expr::Value(0))
-            )?);
+        // Try fake instruction expansion
+        if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
+            Mnemonic::Srl8,
+            Some(arg),
+            None,
+            None
+        ) {
+            return self.assemble_fake_listing(&listing);
         }
-        else if arg.is_indexregister16() {
-            let reg = arg.get_indexregister16().unwrap();
-            bytes.extend(self.assemble_ld(
-                &DataAccess::IndexRegister8(reg.low()),
-                &DataAccess::IndexRegister8(reg.high())
-            )?);
-            bytes.extend(self.assemble_ld(
-                &DataAccess::IndexRegister8(reg.high()),
-                &DataAccess::Expression(Expr::Value(0))
-            )?);
-        }
-        else {
-            return Err(Box::new(AssemblerError::InvalidArgument {
-                msg: format!("SRL8 requires a 16-bit register pair, got {:?}", arg)
-            }));
-        }
-        Ok(bytes)
+        
+        unreachable!()
     }
 
     pub fn assemble_ex_memsp<D: DataAccessElem>(
@@ -6320,7 +6325,7 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_add_or_adc<D: DataAccessElem>(
+    pub fn assemble_add_or_adc<D: DataAccessElem, T: ListingElement>(
         &mut self,
         mnemonic: Mnemonic,
         arg1: Option<&D>,
@@ -6451,16 +6456,25 @@ impl Env {
             }
         }
 
+        // Try fake instruction expansion as a fallback
         if bytes.is_empty() {
-            Err(Box::new(AssemblerError::BugInAssembler {
+            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
+                mnemonic,
+                arg1,
+                Some(arg2),
+                None
+            ) {
+                return self.assemble_fake_listing(&listing);
+            }
+            
+            return Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: format!("{mnemonic:?} not implemented for {arg1:?} {arg2:?}")
-            }))
+            }));
         }
-        else {
-            Ok(bytes)
-        }
+        
+        Ok(bytes)
     }
 
     pub fn assemble_in<D: DataAccessElem>(
@@ -6737,7 +6751,7 @@ impl Env {
         Ok(bytes)
     }
 
-    pub fn assemble_ld<D: DataAccessElem + Debug>(
+    pub fn assemble_ld<D: DataAccessElem + Debug, T: ListingElement>(
         &mut self,
         arg1: &D,
         arg2: &D
@@ -6752,39 +6766,30 @@ impl Env {
             let dst = register8_to_code(arg1.get_register8().unwrap());
             if arg2.is_register8() {
                 let src = arg2.get_register8().unwrap();
-                {
-                    // R. Zaks p 297
-                    let src = register8_to_code(src);
-                    let code = 0b0100_0000 + (dst << 3) + src;
-                    bytes.push(code);
-                }
+                let src = register8_to_code(src);
+                let code = 0b0100_0000 + (dst << 3) + src;
+                bytes.push(code);
             }
             else if arg2.is_indexregister8() {
                 let src = arg2.get_indexregister8().unwrap();
-                {
-                    bytes.push(indexed_register16_to_code(src.complete()));
-                    let src = indexregister8_to_code(src);
-                    let code = 0b0100_0000 + (dst << 3) + src;
-                    bytes.push(code);
-                }
+                bytes.push(indexed_register16_to_code(src.complete()));
+                let src = indexregister8_to_code(src);
+                let code = 0b0100_0000 + (dst << 3) + src;
+                bytes.push(code);
             }
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                {
-                    let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
-                    bytes.push(0b0000_0110 | (dst << 3));
-                    bytes.push(val);
-                }
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                bytes.push(0b0000_0110 | (dst << 3));
+                bytes.push(val);
             }
             else if arg2.is_indexregister_with_index() {
                 let reg = arg2.get_indexregister16().unwrap();
                 let idx = arg2.get_index().unwrap();
-                {
-                    let val = self.resolve_index_may_fail_in_first_pass(idx)?.int()?;
-                    add_index_register_code(&mut bytes, reg);
-                    add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
-                    add_index(&mut bytes, val)?;
-                }
+                let val = self.resolve_index_may_fail_in_first_pass(idx)?.int()?;
+                add_index_register_code(&mut bytes, reg);
+                add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
+                add_index(&mut bytes, val)?;
             }
             else if arg2.is_address_in_register16() {
                 match arg2.get_register16().unwrap() {
@@ -6804,40 +6809,25 @@ impl Env {
             }
             else if arg2.is_address_in_indexregister16() {
                 let reg = arg2.get_indexregister16().unwrap();
-                {
-                    add_index_register_code(&mut bytes, reg);
-                    add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
-                }
+                add_index_register_code(&mut bytes, reg);
+                add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
             }
             else if arg2.is_memory() {
+                // dst is A
                 let expr = arg2.get_expression().unwrap();
-                {
-                    // dst is A
-                    let val = self.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
-                    add_byte(&mut bytes, 0x3A);
-                    add_word(&mut bytes, val as _);
-                }
+                let val = self.resolve_expr_may_fail_in_first_pass(expr)?.int()?;
+                add_byte(&mut bytes, 0x3A);
+                add_word(&mut bytes, val as _);
             }
             else if arg2.is_register_i() {
-                {
-                    assert!(arg1.is_register_a());
-                    bytes.push(0xED);
-                    bytes.push(0x57);
-                }
+                assert!(arg1.is_register_a());
+                bytes.push(0xED);
+                bytes.push(0x57);
             }
             else if arg2.is_register_r() {
-                {
-                    assert!(arg1.is_register_a());
-                    bytes.push(0xED);
-                    bytes.push(0x5F);
-                }
-            }
-            else {
-                return Err(Box::new(AssemblerError::BugInAssembler {
-                    file: file!(),
-                    line: line!(),
-                    msg: format!("LD: not properly implemented for '{arg1:?}, {arg2:?}'")
-                }));
+                assert!(arg1.is_register_a());
+                bytes.push(0xED);
+                bytes.push(0x5F);
             }
         }
         // Destination is 16 bits register
@@ -6847,73 +6837,33 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                {
-                    let val =
-                        (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
-                    add_byte(&mut bytes, 0b0000_0001 | (dst_code << 4));
-                    add_word(&mut bytes, val);
-                }
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                add_byte(&mut bytes, 0b0000_0001 | (dst_code << 4));
+                add_word(&mut bytes, val);
             }
             else if arg2.is_register_hl() && dst.is_sp() {
                 add_byte(&mut bytes, 0xF9);
             }
             else if arg2.is_indexregister16() && dst.is_sp() {
                 let reg = arg2.get_indexregister16().unwrap();
-                {
-                    add_byte(&mut bytes, indexed_register16_to_code(reg));
-                    add_byte(&mut bytes, 0xF9);
-                }
-            }
-            else if arg2.is_register16() {
-                let src = arg2.get_register16().unwrap();
-
-                if src.is_sp() {
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::Register16(Register16::Hl),
-                        &DataAccess::Expression(Expr::Value(0))
-                    )?);
-                    bytes.extend(self.assemble_add_or_adc(
-                        Mnemonic::Add,
-                        Some(&DataAccess::Register16(Register16::Hl)),
-                        &DataAccess::Register16(Register16::Sp)
-                    )?);
-                }
-                else {
-                    let bytes_high = self
-                        .assemble_ld(
-                            &DataAccess::Register8(dst.high().unwrap()),
-                            &DataAccess::Register8(src.high().unwrap())
-                        )
-                        .unwrap();
-                    let bytes_low = self
-                        .assemble_ld(
-                            &DataAccess::Register8(dst.low().unwrap()),
-                            &DataAccess::Register8(src.low().unwrap())
-                        )
-                        .unwrap();
-
-                    bytes.extend_from_slice(&bytes_low);
-                    bytes.extend_from_slice(&bytes_high);
-                }
+                add_byte(&mut bytes, indexed_register16_to_code(reg));
+                add_byte(&mut bytes, 0xF9);
             }
             else if arg2.is_memory() {
                 let expr = arg2.get_expression().unwrap();
-                {
-                    let val =
-                        (self.resolve_expr_may_fail_in_first_pass(expr)?.int()? & 0xFFFF) as u16;
+                let val = (self.resolve_expr_may_fail_in_first_pass(expr)?.int()? & 0xFFFF) as u16;
 
-                    if let Register16::Hl = dst {
-                        add_byte(&mut bytes, 0x2A);
-                        add_word(&mut bytes, val);
-                    }
-                    else {
-                        add_byte(&mut bytes, 0xED);
-                        add_byte(
-                            &mut bytes,
-                            (register16_to_code_with_sp(dst) << 4) + 0b0100_1011
-                        );
-                        add_word(&mut bytes, val);
-                    }
+                if let Register16::Hl = dst {
+                    add_byte(&mut bytes, 0x2A);
+                    add_word(&mut bytes, val);
+                }
+                else {
+                    add_byte(&mut bytes, 0xED);
+                    add_byte(
+                        &mut bytes,
+                        (register16_to_code_with_sp(dst) << 4) + 0b0100_1011
+                    );
+                    add_word(&mut bytes, val);
                 }
             }
         }
@@ -6923,43 +6873,28 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                {
-                    let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
-                    bytes.push(0b0000_0110 | (indexregister8_to_code(dst) << 3));
-                    bytes.push(val);
-                }
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                bytes.push(0b0000_0110 | (indexregister8_to_code(dst) << 3));
+                bytes.push(val);
             }
             else if arg2.is_register8() {
                 let src = arg2.get_register8().unwrap();
+                let code = register8_to_code(src);
 
-                {
-                    let code = register8_to_code(src);
-
-                    let code = if dst.is_high() {
-                        0b0110_0000 + code
-                    }
-                    else {
-                        0x68 + code
-                    };
-                    bytes.push(code);
-                }
+                let code = if dst.is_high() { 0b0110_0000 + code } else { 0x68 + code };
+                bytes.push(code);
             }
             else if arg2.is_indexregister8() {
                 let src = arg2.get_indexregister8().unwrap();
-                {
-                    assert_eq!(dst.complete(), src.complete());
+                assert_eq!(dst.complete(), src.complete());
 
-                    let byte = match (dst.is_low(), src.is_low()) {
-                        (false, false) => 0x64,
-                        (false, true) => 0x65,
-                        (true, false) => 0x6C,
-                        (true, true) => 0x6D
-                    };
-                    bytes.push(byte)
-                }
-            }
-            else {
-                unreachable!()
+                let byte = match (dst.is_low(), src.is_low()) {
+                    (false, false) => 0x64,
+                    (false, true) => 0x65,
+                    (true, false) => 0x6C,
+                    (true, true) => 0x6D
+                };
+                bytes.push(byte)
             }
         }
         // Destination  is 16 bits indexed register
@@ -6969,24 +6904,18 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                {
-                    let val =
-                        (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
-                    add_byte(&mut bytes, code);
-                    add_byte(&mut bytes, 0x21);
-                    add_word(&mut bytes, val);
-                }
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                add_byte(&mut bytes, code);
+                add_byte(&mut bytes, 0x21);
+                add_word(&mut bytes, val);
             }
             else if arg2.is_memory() {
                 let exp = arg2.get_expression().unwrap();
 
-                {
-                    let val =
-                        (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
-                    add_byte(&mut bytes, code);
-                    add_byte(&mut bytes, 0x2A);
-                    add_word(&mut bytes, val);
-                }
+                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                add_byte(&mut bytes, code);
+                add_byte(&mut bytes, 0x2A);
+                add_word(&mut bytes, val);
             }
         }
         // Destination is memory indexed by register
@@ -7043,30 +6972,22 @@ impl Env {
         else if arg1.is_indexregister_with_index() {
             let reg = arg1.get_indexregister16().unwrap();
             let idx = arg1.get_index().unwrap();
-            add_byte(&mut bytes, indexed_register16_to_code(reg));
-            let delta = (self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF) as u8;
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                {
-                    let value =
-                        (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
-                    add_byte(&mut bytes, 0x36);
-                    add_byte(&mut bytes, delta);
-                    add_byte(&mut bytes, value);
-                }
+                let value = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                add_byte(&mut bytes, indexed_register16_to_code(reg));
+                let delta = (self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF) as u8;
+                add_byte(&mut bytes, 0x36);
+                add_byte(&mut bytes, delta);
+                add_byte(&mut bytes, value);
             }
             else if arg2.is_register8() {
                 let src = arg2.get_register8().unwrap();
-
-                {
-                    add_byte(&mut bytes, 0x70 + register8_to_code(src));
-                    add_byte(&mut bytes, delta);
-                }
-            }
-            else {
-                // possible fake instruction
-                bytes.clear();
+                add_byte(&mut bytes, indexed_register16_to_code(reg));
+                let delta = (self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF) as u8;
+                add_byte(&mut bytes, 0x70 + register8_to_code(src));
+                add_byte(&mut bytes, delta);
             }
         }
         // Destination is memory
@@ -7094,11 +7015,9 @@ impl Env {
             }
             else if arg2.is_register16() {
                 let reg = arg2.get_register16().unwrap();
-                {
-                    bytes.push(0xED);
-                    bytes.push(0b0100_0011 | (register16_to_code(reg) << 4));
-                    add_word(&mut bytes, address as _);
-                }
+                bytes.push(0xED);
+                bytes.push(0b0100_0011 | (register16_to_code(reg) << 4));
+                add_word(&mut bytes, address as _);
             }
             else if arg2.is_register_a() {
                 bytes.push(0x32);
@@ -7107,189 +7026,24 @@ impl Env {
         }
         else if arg1.is_register_i() {
             assert!(arg2.is_register_a());
-            {
-                bytes.push(0xED);
-                bytes.push(0x47)
-            }
+            bytes.push(0xED);
+            bytes.push(0x47)
         }
         else if arg1.is_register_r() {
             assert!(arg2.is_register_a());
-            {
-                bytes.push(0xED);
-                bytes.push(0x4F)
-            }
+            bytes.push(0xED);
+            bytes.push(0x4F)
         }
 
         // handle fake instructions
-        // TODO I bet there are duplicated code to be removed here
         if bytes.is_empty() {
-            if arg1.is_register_hl() && arg2.is_register_sp() {
-            }
-            else if arg1.is_register16() && arg2.is_register16() {
-                let dst = arg1.get_register16().unwrap();
-                let src = arg2.get_register16().unwrap();
-                {
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::Register8(dst.low().unwrap()),
-                        &DataAccess::Register8(src.low().unwrap())
-                    )?);
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::Register8(dst.high().unwrap()),
-                        &DataAccess::Register8(src.high().unwrap())
-                    )?);
-                }
-            }
-            else if (arg1.is_register_hl() && arg2.is_indexregister16())
-                || (arg1.is_indexregister16() && arg2.is_register_hl())
-                || (arg1.is_indexregister16() && arg2.is_indexregister16())
-            {
-                bytes.extend(self.assemble_push(arg2)?);
-                bytes.extend(self.assemble_pop(arg1)?);
-            }
-            else if arg1.is_register16() && arg2.is_indexregister16() {
-                let dst = arg1.get_register16().unwrap();
-                let src = arg2.get_indexregister16().unwrap();
-
-                bytes.extend(
-                    self.assemble_ld(
-                        &DataAccess::Register8(dst.low().unwrap()),
-                        &DataAccess::IndexRegister8(src.low())
-                    )?
-                    .iter()
-                    .cloned()
-                );
-                bytes.extend(
-                    self.assemble_ld(
-                        &DataAccess::Register8(dst.high().unwrap()),
-                        &DataAccess::IndexRegister8(src.high())
-                    )?
-                    .iter()
-                    .cloned()
-                );
-            }
-            else if arg1.is_indexregister16() && arg2.is_register16() {
-                let dst = arg1.get_indexregister16().unwrap();
-                let _res = arg2.get_register16().unwrap();
-                let src = arg2.get_register16().unwrap();
-
-                // general > indexed
-                {
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::IndexRegister8(dst.low()),
-                        &DataAccess::Register8(src.low().unwrap())
-                    )?);
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::IndexRegister8(dst.high()),
-                        &DataAccess::Register8(src.high().unwrap())
-                    )?);
-                }
-            }
-            else if arg1.is_register16() && arg2.is_indexregister_with_index() {
-                let dst = arg1.get_register16().unwrap();
-                let src = arg2.get_indexregister16().unwrap();
-                let idx = arg2.get_index().unwrap();
-
-                {
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::Register8(dst.low().unwrap()),
-                        &DataAccess::IndexRegister16WithIndex(
-                            src,
-                            idx.0,
-                            idx.1.to_expr().into_owned()
-                        )
-                    )?);
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::Register8(dst.high().unwrap()),
-                        &DataAccess::IndexRegister16WithIndex(
-                            src,
-                            idx.0,
-                            idx.1.to_expr().into_owned().add(1)
-                        )
-                    )?);
-                }
-            }
-            else if arg1.is_indexregister_with_index() && arg2.is_register16() {
-                let dst = arg1.get_indexregister16().unwrap();
-                let index = arg1.get_index().unwrap();
-                let src = arg2.get_register16().unwrap();
-                {
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::IndexRegister16WithIndex(
-                            dst,
-                            index.0,
-                            index.1.to_expr().into_owned()
-                        ),
-                        &DataAccess::Register8(src.low().unwrap())
-                    )?);
-                    bytes.extend(self.assemble_ld(
-                        &DataAccess::IndexRegister16WithIndex(
-                            dst,
-                            index.0,
-                            index.1.to_expr().into_owned().add(1)
-                        ),
-                        &DataAccess::Register8(src.high().unwrap())
-                    )?);
-                }
-            }
-            else if arg1.is_register16()
-                && arg2.is_address_in_indexregister16()
-                && arg2.get_register16().unwrap() == Register16::Hl
-            {
-                let dst = arg1.get_register16().unwrap();
-                {
-                    bytes.extend(
-                        self.assemble_ld(
-                            &DataAccess::Register8(dst.low().unwrap()),
-                            &DataAccess::MemoryRegister16(Register16::Hl)
-                        )?
-                        .iter()
-                        .cloned()
-                    );
-                    bytes.extend(self.assemble_inc_dec(
-                        Mnemonic::Inc,
-                        &DataAccess::Register16(Register16::Hl)
-                    )?);
-                    bytes.extend(
-                        self.assemble_ld(
-                            &DataAccess::Register8(dst.high().unwrap()),
-                            &DataAccess::MemoryRegister16(Register16::Hl)
-                        )?
-                        .iter()
-                        .cloned()
-                    );
-                    bytes.extend(self.assemble_inc_dec(
-                        Mnemonic::Dec,
-                        &DataAccess::Register16(Register16::Hl)
-                    )?);
-                }
-            }
-            else if arg2.is_register16()
-                && arg1.is_address_in_indexregister16()
-                && arg1.get_register16().unwrap() == Register16::Hl
-            {
-                let src = arg2.get_register16().unwrap();
-                bytes.extend(
-                    self.assemble_ld(
-                        &DataAccess::MemoryRegister16(Register16::Hl),
-                        &DataAccess::Register8(src.low().unwrap())
-                    )?
-                    .iter()
-                    .cloned()
-                );
-                bytes.extend(
-                    self.assemble_inc_dec(Mnemonic::Inc, &DataAccess::Register16(Register16::Hl))?
-                );
-                bytes.extend(
-                    self.assemble_ld(
-                        &DataAccess::MemoryRegister16(Register16::Hl),
-                        &DataAccess::Register8(src.high().unwrap())
-                    )?
-                    .iter()
-                    .cloned()
-                );
-                bytes.extend(
-                    self.assemble_inc_dec(Mnemonic::Dec, &DataAccess::Register16(Register16::Hl))?
-                );
+            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
+                Mnemonic::Ld,
+                Some(arg1),
+                Some(arg2),
+                None
+            ) {
+                return self.assemble_fake_listing(&listing);
             }
         }
 

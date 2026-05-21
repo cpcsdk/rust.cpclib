@@ -537,22 +537,47 @@ pub fn parse_sub(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
     //  let _ =Caseless("SUB").parse_next(input)?;
     //  let _ =space1(input)?;
 
-    let _first = opt(terminated(parse_register_a, parse_comma)).parse_next(input)?;
-
-    let operand = alt((
-        parse_register8,
-        parse_indexregister8,
-        parse_hl_address,
-        parse_indexregister_with_index,
-        parse_expr
+    let first = opt(terminated(
+        alt((parse_register_de, parse_register_hl)),
+        parse_comma
     ))
     .parse_next(input)?;
 
-    Ok(LocatedTokenInner::new_opcode(
-        Mnemonic::Sub,
-        Some(operand),
-        None
-    ))
+    if first.is_some() {
+        // Fake instruction: sub de,rr or sub hl,rr
+        let operand = alt((parse_register16, parse_register_sp)).parse_next(input)?;
+
+        let token = LocatedTokenInner::new_opcode(
+            Mnemonic::Sub,
+            first,
+            Some(operand)
+        );
+
+        let result = LocatedTokenInner::WarningWrapper(
+            Box::new(token),
+            "This is a fake instruction assembled using several opcodes".into()
+        );
+
+        Ok(result)
+    } else {
+        // Normal SUB: sub A,operand or sub operand
+        let _a_opt = opt(terminated(parse_register_a, parse_comma)).parse_next(input)?;
+
+        let operand = alt((
+            parse_register8,
+            parse_indexregister8,
+            parse_hl_address,
+            parse_indexregister_with_index,
+            parse_expr
+        ))
+        .parse_next(input)?;
+
+        Ok(LocatedTokenInner::new_opcode(
+            Mnemonic::Sub,
+            Some(operand),
+            None
+        ))
+    }
 }
 
 /// Par se the SBC instruction
@@ -563,7 +588,7 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
     //   let _ =space1(input)?;
 
     let opera = opt(terminated(
-        alt((parse_register_a, parse_register_hl)),
+        alt((parse_register_a, parse_register_hl, parse_register_de)),
         parse_comma
     ))
     .parse_next(input)?;
@@ -582,11 +607,25 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
         alt((parse_register16, parse_register_sp)).parse_next(input)
     }?;
 
-    Ok(LocatedTokenInner::new_opcode(
+    // Check if this is a fake instruction (sbc de,rr)
+    let is_fake = opera.as_ref().map(|o| o.is_register_de()).unwrap_or(false) && operb.is_register16();
+
+    let token = LocatedTokenInner::new_opcode(
         Mnemonic::Sbc,
         opera,
         Some(operb)
-    ))
+    );
+
+    let result = if is_fake {
+        LocatedTokenInner::WarningWrapper(
+            Box::new(token),
+            "This is a fake instruction assembled using several opcodes".into()
+        )
+    } else {
+        token
+    };
+
+    Ok(result)
 }
 
 /// Parse ADC and ADD instructions
@@ -597,7 +636,7 @@ pub fn parse_add_or_adc(
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let first = opt(terminated(
-            alt((parse_register_a, parse_register_hl, parse_indexregister16)),
+            alt((parse_register_a, parse_register_hl, parse_indexregister16, parse_register_de)),
             parse_comma
         ))
         .parse_next(input)?;
@@ -630,11 +669,25 @@ pub fn parse_add_or_adc(
             return Err(ErrMode::Cut(Z80ParserError::from_input(input)));
         }?;
 
-        Ok(LocatedTokenInner::new_opcode(
+        // Check if this is a fake instruction (adc de,rr or add de,rr)
+        let is_fake = first.as_ref().map(|f| f.is_register_de()).unwrap_or(false) && second.is_register16();
+        
+        let token = LocatedTokenInner::new_opcode(
             add_or_adc,
             first,
             Some(second)
-        ))
+        );
+
+        let result = if is_fake {
+            LocatedTokenInner::WarningWrapper(
+                Box::new(token),
+                "This is a fake instruction assembled using several opcodes".into()
+            )
+        } else {
+            token
+        };
+
+        Ok(result)
     }
 }
 

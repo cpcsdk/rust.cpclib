@@ -1,0 +1,23 @@
+  ex de,hl : adc hl,bc : ex de,hl
+  ex de,hl : adc hl,hl : ex de,hl         ;; consider alternative: rl de (-7T)
+  ex de,hl : adc hl,de : ex de,hl
+  ex de,hl : adc hl,sp : ex de,hl
+
+  ex de,hl : add hl,bc : ex de,hl
+  ex de,hl : add hl,hl : ex de,hl         ;; consider alternative: sla de (-3T)
+  ex de,hl : add hl,de : ex de,hl
+  ex de,hl : add hl,sp : ex de,hl
+
+  ex de,hl : sbc hl,bc : ex de,hl
+  ex de,hl : sbc hl,hl : ex de,hl
+  ex de,hl : sbc hl,de : ex de,hl
+  ex de,hl : sbc hl,sp : ex de,hl
+
+  or a : ex de,hl : sbc hl,bc : ex de,hl
+  or a : ex de,hl : sbc hl,hl : ex de,hl  ;; consider alternative: ld de,0 (-17T)
+  or a : ex de,hl : sbc hl,de : ex de,hl
+  or a : ex de,hl : sbc hl,sp : ex de,hl
+  or a : sbc hl,bc
+  or a : sbc hl,de
+  or a : sbc hl,hl                        ;; consider alternative: ld hl,0 (-9T)
+  or a : sbc hl,sp
