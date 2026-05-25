@@ -13,6 +13,9 @@ use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString
 /// Generate an output listing.
 /// Can be useful to detect issues
 
+pub const MAX_RENDERED_SOURCE_COLUMN_CHARS: usize = 80;
+pub const DEFAULT_LISTING_LINE_TEMPLATE: &str = "{A} {P} {C} {L4} {S} | {SR}";
+
 #[derive(Clone, Debug)]
 pub enum ListingAddressRadix {
     Hex,
@@ -53,7 +56,7 @@ impl Default for ListingOutputFormat {
             line_number_width: 4,
             show_line_numbers: true,
             show_context_header: true,
-            listing_line_template: "{A} {P} {C} {L4} {S}".to_string(),
+            listing_line_template: DEFAULT_LISTING_LINE_TEMPLATE.to_string(),
             source_file_output_mode: ListingSourceFileOutputMode::Header
         }
     }
@@ -86,8 +89,8 @@ pub struct ListingOutput {
     current_line_bytes: SmallVec<[u8; 4]>,
     /// Complete source
     current_source: Option<&'static str>,
-    /// Line number and line content.
-    current_line_group: Option<(u32, String)>, // clone view of the line XXX avoid this clone
+    /// Line number and raw/expanded line content.
+    current_line_group: Option<(u32, String, String)>, // clone view of the line XXX avoid this clone
 
     current_first_address: u32,
     current_address_kind: AddressKind,
@@ -230,13 +233,24 @@ impl ListingOutput {
         format!("{rendered:<fixed_width$}")
     }
 
+    fn render_source_column(line: Option<&str>) -> String {
+        line.map(|line| {
+            line.trim_start()
+                .chars()
+                .take(MAX_RENDERED_SOURCE_COLUMN_CHARS)
+                .collect()
+        })
+        .unwrap_or_default()
+    }
+
     fn format_line_with_template(
         &self,
         logical_address: Option<u32>,
         physical_address_repr: &str,
         bytes: &[u8],
         line_number: Option<u32>,
-        source_line: Option<&str>
+        source_line_raw: Option<&str>,
+        source_line_expanded: Option<&str>
     ) -> String {
         let template = self.format.listing_line_template.as_str();
         let mut output = String::with_capacity(template.len() + 32);
@@ -317,7 +331,8 @@ impl ListingOutput {
                         String::new()
                     }
                 },
-                "S" => source_line.map(|line| line.trim_start().to_string()).unwrap_or_default(),
+                "S" => Self::render_source_column(source_line_expanded),
+                "SR" => Self::render_source_column(source_line_raw),
                 _ => format!("{{{placeholder}}}")
             };
 
@@ -331,27 +346,35 @@ impl ListingOutput {
         &self,
         specific_content: &str,
         line_number: Option<u32>,
-        source_line: &str
+        source_line_raw: &str,
+        source_line_expanded: &str
     ) -> Vec<String> {
-        let source_marker = "\u{1f}SOURCE\u{1f}";
+        let source_marker_raw = "\u{1f}SOURCE_RAW\u{1f}";
+        let source_marker_expanded = "\u{1f}SOURCE_EXPANDED\u{1f}";
         let rendered = self.format_line_with_template(
             None,
             &Self::blank(self.physical_field_width()),
             &[],
             line_number,
-            Some(source_marker)
+            Some(source_marker_raw),
+            Some(source_marker_expanded)
         );
 
         let anchor = if self.format.show_line_numbers {
             line_number
                 .and_then(|value| rendered.find(&value.to_string()))
-                .or_else(|| rendered.find(source_marker))
+                .or_else(|| rendered.find(source_marker_expanded))
+                .or_else(|| rendered.find(source_marker_raw))
         }
         else {
-            rendered.find(source_marker)
+            rendered
+                .find(source_marker_expanded)
+                .or_else(|| rendered.find(source_marker_raw))
         };
 
-        let rendered = rendered.replace(source_marker, source_line.trim_start());
+        let rendered = rendered
+            .replace(source_marker_raw, source_line_raw.trim_start())
+            .replace(source_marker_expanded, source_line_expanded.trim_start());
 
         match anchor {
             Some(anchor) => {
@@ -414,10 +437,18 @@ impl ListingOutput {
         }
     }
 
-    fn begin_current_line(&mut self, token: &LocatedToken, address: u32, physical_address: PhysicalAddress) {
+    fn begin_current_line(
+        &mut self,
+        token: &LocatedToken,
+        address: u32,
+        physical_address: PhysicalAddress,
+        symbols: Option<*const SymbolsTable>
+    ) {
         // keep the source pointer stable, but avoid copying the source string itself
         self.current_source = Some(unsafe { std::mem::transmute(token.context().complete_source()) });
-        self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
+        let raw_line = Self::extract_code(token);
+        let expanded_line = Self::expand_source_line_patterns(&raw_line, symbols);
+        self.current_line_group = Some((token.span().location_line(), raw_line, expanded_line));
         self.current_first_address = address;
         self.current_physical_address = physical_address;
         self.current_address_kind = AddressKind::None;
@@ -467,7 +498,7 @@ impl ListingOutput {
     /// Check if the token is for the same line than the previous token
     fn token_is_on_same_line(&self, token: &LocatedToken) -> bool {
         match &self.current_line_group {
-            Some((current_location, _current_line)) => {
+            Some((current_location, _current_line, _current_line_expanded)) => {
                 self.token_is_on_same_source(token)
                     && *current_location == token.span().location_line()
             },
@@ -516,10 +547,12 @@ impl ListingOutput {
 
         if !self.token_is_on_same_line(token) {
             self.process_current_line();
-            self.begin_current_line(token, address, physical_address);
+            self.begin_current_line(token, address, physical_address, symbols);
         }
         else {
-            self.current_line_group = Some((token.span().location_line(), Self::extract_code(token)));
+            let raw_line = Self::extract_code(token);
+            let expanded_line = Self::expand_source_line_patterns(&raw_line, symbols);
+            self.current_line_group = Some((token.span().location_line(), raw_line, expanded_line));
         }
 
         self.append_current_line_bytes(bytes, address_kind);
@@ -531,28 +564,38 @@ impl ListingOutput {
         self.update_current_token_kind(token, symbols);
     }
 
-    fn expand_listing_label(raw_label: String, symbols: Option<*const SymbolsTable>) -> String {
+    fn expand_symbol_with_listing_context(raw: &str, symbols: Option<*const SymbolsTable>) -> String {
         // Listing expansion is intentionally done only in listing pass to avoid runtime overhead.
         symbols
             .and_then(|symbols| {
                 let symbols = unsafe { symbols.as_ref() }?;
                 symbols
-                    .extend_local_and_patterns_for_symbol(&raw_label)
+                    .extend_local_and_patterns_for_symbol(raw)
                     .ok()
                     .map(|symbol| symbol.to_string())
             })
-            .unwrap_or(raw_label)
+            .unwrap_or_else(|| raw.to_string())
+    }
+
+    fn expand_source_line_patterns(raw_line: &str, symbols: Option<*const SymbolsTable>) -> String {
+        let normalized = raw_line.replace("{{", "{").replace("}}", "}");
+        Self::expand_symbol_with_listing_context(&normalized, symbols)
+    }
+
+    fn expand_listing_label(raw_label: String, symbols: Option<*const SymbolsTable>) -> String {
+        Self::expand_symbol_with_listing_context(&raw_label, symbols)
     }
 
     pub fn process_current_line(&mut self) {
         // retrieve the line
-        let (line_number, line) = match &self.current_line_group {
-            Some((idx, line)) => (idx, line),
+        let (line_number, line_raw, line_expanded) = match &self.current_line_group {
+            Some((idx, line_raw, line_expanded)) => (idx, line_raw, line_expanded),
             None => return
         };
 
         // build the line representation for source and generated bytes
-        let line_representation = line.split('\n').collect_vec();
+        let line_representation_raw = line_raw.split('\n').collect_vec();
+        let line_representation_expanded = line_expanded.split('\n').collect_vec();
         let data_chunks = self
             .current_line_bytes
             .chunks(self.bytes_per_line())
@@ -564,16 +607,20 @@ impl ListingOutput {
 
         // TODO manage missing end of files/blocks if needed
 
-        let delta = line_representation.len();
+        let delta = line_representation_raw.len();
         // TODO add the line representation ?
         for specific_content in self.deferred_for_line.iter() {
-            let lines = line.split('\n').collect_vec();
-            let lines_count = lines.len(); // line number corresponds to the VERY LAST line and not the FIRST one
-            for (line_delta, line) in lines.into_iter().enumerate() {
+            let lines_count = line_representation_raw.len(); // line number corresponds to the VERY LAST line and not the FIRST one
+            for (line_delta, line_raw) in line_representation_raw.iter().copied().enumerate() {
+                let line_expanded = line_representation_expanded
+                    .get(line_delta)
+                    .copied()
+                    .unwrap_or(line_raw);
                 let rendered_lines = self.format_deferred_line_with_template(
                     if line_delta == 0 { specific_content } else { "" },
                     Some(line_number + delta as u32 + line_delta as u32 - lines_count as u32),
-                    line
+                    line_raw,
+                    line_expanded
                 );
                 for rendered in rendered_lines {
                     writeln!(self.writer, "{rendered}").unwrap();
@@ -584,21 +631,24 @@ impl ListingOutput {
 
         // draw all lines that correspond to the instructions to output
         let mut byte_offset = 0usize;
-        let render_lines = line_representation.len().max(data_representation.len());
+        let render_lines = line_representation_raw.len().max(data_representation.len());
         for idx in 0..render_lines {
-            let current_inner_line = line_representation.get(idx).copied();
+            let current_inner_line_raw = line_representation_raw.get(idx).copied();
+            let current_inner_line_expanded = line_representation_expanded
+                .get(idx)
+                .copied();
             let current_inner_data = data_representation.get(idx);
             let current_chunk = data_chunks.get(idx).copied().unwrap_or(&[]);
             let current_data_len = data_chunks.get(idx).map(|chunk| chunk.len()).unwrap_or(0);
             let is_multiline_continuation =
-                idx > 0 && line_representation.len() > 1 && current_inner_line.is_some();
+                idx > 0 && line_representation_raw.len() > 1 && current_inner_line_raw.is_some();
             let is_continuation_without_data = is_multiline_continuation && current_inner_data.is_none();
 
             let logical_address = self.current_first_address.wrapping_add(byte_offset as u32);
             let logical_representation = if is_continuation_without_data {
                 None
             }
-            else if current_inner_line.is_none() && current_inner_data.is_none() {
+            else if current_inner_line_raw.is_none() && current_inner_data.is_none() {
                 None
             }
             else {
@@ -618,7 +668,7 @@ impl ListingOutput {
             else if !self.format.show_physical_address {
                 Self::blank(self.physical_field_width())
             }
-            else if current_inner_line.is_none() && current_inner_data.is_none() {
+            else if current_inner_line_raw.is_none() && current_inner_data.is_none() {
                 Self::blank(self.physical_field_width())
             }
             else if current_offset == logical_address && self.current_address_kind == AddressKind::Address {
@@ -631,44 +681,45 @@ impl ListingOutput {
                     self.current_address_kind
                 )
             };
-            let rendered_line_number = current_inner_line.map(|_| line_number + idx as u32);
+            let rendered_line_number = current_inner_line_raw.map(|_| line_number + idx as u32);
 
             // missing instruction must be added manually using TokenKind
             if self.has_current_line_output() {
-                let fallback_source = current_inner_line.map(|line| line.trim_end()).unwrap_or("");
+                let fallback_source_expanded =
+                    current_inner_line_expanded.map(|line| line.trim_end()).unwrap_or("");
+                let fallback_source_raw =
+                    current_inner_line_raw.map(|line| line.trim_end()).unwrap_or("");
                 let fallback_bytes = current_inner_data.cloned().unwrap_or_default();
                 let rendered = self.format_line_with_template(
                     logical_representation,
                     &phys_addr_representation,
                     current_chunk,
                     rendered_line_number,
-                    Some(fallback_source)
+                    Some(fallback_source_raw),
+                    Some(fallback_source_expanded)
                 );
-                if rendered.trim().is_empty() {
-                    let fallback_rendered = format!(
+                let rendered = if rendered.trim().is_empty() {
+                    format!(
                         "{} {} {:bytes_width$} {}",
                         logical_representation
                             .map(|value| self.format_address(value, self.logical_address_width()))
                             .unwrap_or_else(|| Self::blank(self.logical_address_width())),
                         phys_addr_representation,
                         fallback_bytes,
-                        fallback_source,
+                        fallback_source_expanded,
                         bytes_width = self.bytes_per_line() * 3
-                    );
-                    if is_multiline_continuation {
-                        writeln!(self.writer, ">{fallback_rendered}").unwrap();
-                    }
-                    else {
-                        writeln!(self.writer, "{fallback_rendered}").unwrap();
-                    }
+                    )
                 }
                 else {
-                    if is_multiline_continuation {
-                        writeln!(self.writer, ">{rendered}").unwrap();
-                    }
-                    else {
-                        writeln!(self.writer, "{rendered}").unwrap();
-                    }
+                    rendered
+                };
+
+                if is_multiline_continuation {
+                    let rendered = rendered.strip_prefix(' ').unwrap_or(&rendered);
+                    writeln!(self.writer, ">{rendered}").unwrap();
+                }
+                else {
+                    writeln!(self.writer, "{rendered}").unwrap();
                 }
             }
 
@@ -917,14 +968,15 @@ mod tests {
     use std::io::Write;
     use std::sync::{Arc, Mutex};
 
-    use cpclib_tokens::symbols::MemoryPhysicalAddress;
+    use cpclib_tokens::{ExprResult};
+    use cpclib_tokens::symbols::{MemoryPhysicalAddress, SymbolsTable, SymbolsTableTrait};
 
     use crate::preamble::{LocatedTokenInner, ParserContextBuilder};
     use crate::parse_z80_with_context_builder;
 
     use super::{
-        ListingAddressRadix, ListingOutput, ListingOutputFormat, ListingSourceFileOutputMode,
-        TokenKind
+        DEFAULT_LISTING_LINE_TEMPLATE, ListingAddressRadix, ListingOutput, ListingOutputFormat,
+        ListingSourceFileOutputMode, MAX_RENDERED_SOURCE_COLUMN_CHARS, TokenKind
     };
 
     #[derive(Clone, Default)]
@@ -955,7 +1007,7 @@ mod tests {
         let mut output = ListingOutput::new(writer.clone());
         output.on();
 
-        output.current_line_group = Some((12, "    ld a,0x12".to_string()));
+        output.current_line_group = Some((12, "    ld a,0x12".to_string(), "    ld a,0x12".to_string()));
         output.current_line_bytes.extend_from_slice(&[0x3E, 0x12]);
         output.current_first_address = 0x100;
         output.current_physical_address = MemoryPhysicalAddress::new(0x100, 0).into();
@@ -975,7 +1027,7 @@ mod tests {
         let mut output = ListingOutput::new(writer.clone());
         output.on();
 
-        output.current_line_group = Some((20, "label: nop".to_string()));
+        output.current_line_group = Some((20, "label: nop".to_string(), "label: nop".to_string()));
         output.current_first_address = 0x200;
         output.current_physical_address = MemoryPhysicalAddress::new(0x200, 0).into();
         output.current_token_kind = TokenKind::Displayable;
@@ -997,7 +1049,11 @@ mod tests {
         let mut output = ListingOutput::new(writer.clone());
         output.on();
 
-        output.current_line_group = Some((30, "macro SWITCH_VALUES addr1, addr2\n\tld hl, ({addr1})".to_string()));
+        output.current_line_group = Some((
+            30,
+            "macro SWITCH_VALUES addr1, addr2\n\tld hl, ({addr1})".to_string(),
+            "macro SWITCH_VALUES addr1, addr2\n\tld hl, ({addr1})".to_string()
+        ));
         output.current_first_address = 0x4000;
         output.current_physical_address = MemoryPhysicalAddress::new(0x4000, 0).into();
         output.current_token_kind = TokenKind::Displayable;
@@ -1024,7 +1080,11 @@ mod tests {
         );
         output.on();
 
-        output.current_line_group = Some((202, "scroller_generate_initial_code".to_string()));
+        output.current_line_group = Some((
+            202,
+            "scroller_generate_initial_code".to_string(),
+            "scroller_generate_initial_code".to_string()
+        ));
         output.current_first_address = 0x428B;
         output.current_physical_address = MemoryPhysicalAddress::new(0x428B, 0).into();
         output.current_token_kind = TokenKind::Displayable;
@@ -1093,12 +1153,94 @@ endm\n";
     }
 
     #[test]
+    fn expand_source_line_patterns_uses_shared_symbol_expansion() {
+        let mut symbols = SymbolsTable::default();
+        symbols.assign_symbol_to_value("line", ExprResult::Value(0)).unwrap();
+
+        let rendered = ListingOutput::expand_source_line_patterns(
+            "dw SCROLLER_CODE_{{line}}_a",
+            Some(&symbols as *const _)
+        );
+
+        assert_eq!(rendered, "dw SCROLLER_CODE_0_a");
+    }
+
+    #[test]
+    fn process_current_line_can_render_expanded_and_raw_source_columns() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new_with_format(
+            writer.clone(),
+            ListingOutputFormat {
+                listing_line_template: "{L4} {S} | {SR}".to_string(),
+                source_file_output_mode: ListingSourceFileOutputMode::None,
+                ..Default::default()
+            }
+        );
+        output.on();
+
+        let mut symbols = SymbolsTable::default();
+        symbols.assign_symbol_to_value("line", ExprResult::Value(0)).unwrap();
+
+        output.current_line_group = Some((
+            293,
+            "dw SCROLLER_CODE_{{line}}_a".to_string(),
+            "dw SCROLLER_CODE_0_a".to_string()
+        ));
+        output.current_first_address = 0x436B;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x436B, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+
+        output.process_current_line();
+
+        let listing = writer.snapshot();
+        assert!(
+            listing.contains(" 293 dw SCROLLER_CODE_0_a | dw SCROLLER_CODE_{{line}}_a"),
+            "listing={listing}"
+        );
+    }
+
+    #[test]
+    fn default_listing_template_contains_both_source_columns() {
+        assert_eq!(
+            ListingOutputFormat::default().listing_line_template,
+            DEFAULT_LISTING_LINE_TEMPLATE
+        );
+    }
+
+    #[test]
+    fn source_columns_are_capped_to_80_chars() {
+        let output = ListingOutput::new(SharedBufferWriter::default());
+        let raw = format!(" {}", "R".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 5));
+        let expanded = format!(" {}", "E".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 7));
+
+        let rendered = output.format_line_with_template(
+            Some(0x1234),
+            "",
+            &[],
+            Some(1),
+            Some(&raw),
+            Some(&expanded)
+        );
+
+        let expected_expanded = "E".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS);
+        let expected_raw = "R".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS);
+        assert!(rendered.contains(&expected_expanded), "rendered={rendered}");
+        assert!(rendered.contains(&expected_raw), "rendered={rendered}");
+        assert!(!rendered.contains(&"E".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 1)), "rendered={rendered}");
+        assert!(!rendered.contains(&"R".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 1)), "rendered={rendered}");
+    }
+
+    #[test]
     fn process_current_line_marks_multiline_continuation_with_gt() {
         let writer = SharedBufferWriter::default();
         let mut output = ListingOutput::new(writer.clone());
         output.on();
 
-        output.current_line_group = Some((227, "SWITCH_VALUES(\n\ta,\n\tb\n)".to_string()));
+        output.current_line_group = Some((
+            227,
+            "SWITCH_VALUES(\n\ta,\n\tb\n)".to_string(),
+            "SWITCH_VALUES(\n\ta,\n\tb\n)".to_string()
+        ));
         output.current_first_address = 0x42A2;
         output.current_physical_address = MemoryPhysicalAddress::new(0x42A2, 0).into();
         output.current_token_kind = TokenKind::Displayable;
@@ -1118,7 +1260,11 @@ endm\n";
         let mut output = ListingOutput::new(writer.clone());
         output.on();
 
-        output.current_line_group = Some((257, "repeat 3\nline2\nline3\nendr".to_string()));
+        output.current_line_group = Some((
+            257,
+            "repeat 3\nline2\nline3\nendr".to_string(),
+            "repeat 3\nline2\nline3\nendr".to_string()
+        ));
         output.current_first_address = 0x42CC;
         output.current_physical_address = MemoryPhysicalAddress::new(0x42CC, 0).into();
         output.current_token_kind = TokenKind::Displayable;
@@ -1137,7 +1283,11 @@ endm\n";
         let mut output = ListingOutput::new(writer.clone());
         output.on();
 
-        output.current_line_group = Some((257, "repeat 2\nline2\nendr".to_string()));
+        output.current_line_group = Some((
+            257,
+            "repeat 2\nline2\nendr".to_string(),
+            "repeat 2\nline2\nendr".to_string()
+        ));
         output.current_first_address = 0x42CC;
         output.current_physical_address = MemoryPhysicalAddress::new(0x42CC, 0).into();
         output.current_token_kind = TokenKind::Displayable;
@@ -1157,7 +1307,11 @@ endm\n";
         let mut output = ListingOutput::new(writer.clone());
         output.on();
 
-        output.current_line_group = Some((30, "db 0,1,2,3,4,5,6,7,8,9".to_string()));
+        output.current_line_group = Some((
+            30,
+            "db 0,1,2,3,4,5,6,7,8,9".to_string(),
+            "db 0,1,2,3,4,5,6,7,8,9".to_string()
+        ));
         output.current_line_bytes
             .extend_from_slice(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         output.current_first_address = 0x4000;
@@ -1187,7 +1341,11 @@ endm\n";
         );
         output.on();
 
-        output.current_line_group = Some((40, "db 0xAA,0xBB,0xCC,0xDD,0xEE".to_string()));
+        output.current_line_group = Some((
+            40,
+            "db 0xAA,0xBB,0xCC,0xDD,0xEE".to_string(),
+            "db 0xAA,0xBB,0xCC,0xDD,0xEE".to_string()
+        ));
         output
             .current_line_bytes
             .extend_from_slice(&[0xAA, 0xBB, 0xCC, 0xDD, 0xEE]);
@@ -1224,7 +1382,7 @@ endm\n";
         );
         output.on();
 
-        output.current_line_group = Some((7, "db 1,2,3".to_string()));
+        output.current_line_group = Some((7, "db 1,2,3".to_string(), "db 1,2,3".to_string()));
         output.current_line_bytes.extend_from_slice(&[1, 2, 3]);
         output.current_first_address = 100;
         output.current_physical_address = MemoryPhysicalAddress::new(100, 0).into();
@@ -1253,7 +1411,7 @@ endm\n";
         );
         output.on();
 
-        output.current_line_group = Some((9, "  nop".to_string()));
+        output.current_line_group = Some((9, "  nop".to_string(), "  nop".to_string()));
         output.current_line_bytes.extend_from_slice(&[0x00]);
         output.current_first_address = 0x4321;
         output.current_physical_address = MemoryPhysicalAddress::new(0x4321, 0).into();
@@ -1279,7 +1437,11 @@ endm\n";
         );
         output.on();
 
-        output.current_line_group = Some((45, "ld bc, 0xbc00 + 13 : out (c),c : ld bc, 0xbd00 : out (c), l".to_string()));
+        output.current_line_group = Some((
+            45,
+            "ld bc, 0xbc00 + 13 : out (c),c : ld bc, 0xbd00 : out (c), l".to_string(),
+            "ld bc, 0xbc00 + 13 : out (c),c : ld bc, 0xbd00 : out (c), l".to_string()
+        ));
         output
             .current_line_bytes
             .extend_from_slice(&[0x01, 0x0D, 0xBC, 0xED, 0x49, 0x01, 0x00, 0xBD]);
@@ -1288,7 +1450,7 @@ endm\n";
         output.current_token_kind = TokenKind::Displayable;
         output.process_current_line();
 
-        output.current_line_group = Some((50, "ld sp, $".to_string()));
+        output.current_line_group = Some((50, "ld sp, $".to_string(), "ld sp, $".to_string()));
         output.current_line_bytes.extend_from_slice(&[0x31, 0x55, 0x40]);
         output.current_first_address = 0x4055;
         output.current_physical_address = MemoryPhysicalAddress::new(0x4055, 0).into();

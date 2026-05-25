@@ -8,7 +8,8 @@ use std::sync::{Arc, LazyLock};
 use cpclib_asm::AssemblingOptionFlags;
 use cpclib_asm::assembler::file::get_filename_to_read;
 use cpclib_asm::assembler::listing_output::{
-    ListingAddressRadix, ListingOutputFormat, ListingSourceFileOutputMode
+    DEFAULT_LISTING_LINE_TEMPLATE, ListingAddressRadix, ListingOutputFormat,
+    ListingSourceFileOutputMode
 };
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
@@ -796,7 +797,10 @@ pub fn build_args_parser() -> clap::Command {
                     )
                     .arg(Arg::new("LISTING_LINE_TEMPLATE")
                         .help("Template used to render listing lines")
-                        .long_help("Template used to render listing lines. Supported placeholders:\n\
+                        .long_help("Template used to render listing lines. When omitted, the default template is:\n\
+{A} {P} {C} {L4} {S} | {SR}\n\
+\n\
+Supported placeholders:\n\
 {A}: Instruction address (formatted with --lst-address-radix and width settings).\n\
 {P}: Physical address column (empty when --lst-no-physical-address is used).\n\
 {C}: Emitted opcodes for the current rendered chunk, as hex bytes separated by spaces.\n\
@@ -808,10 +812,12 @@ pub fn build_args_parser() -> clap::Command {
 {L3}: Like {L}, right-aligned on width 3.\n\
 {L4}: Like {L}, right-aligned on width 4.\n\
 {L5}: Like {L}, right-aligned on width 5.\n\
-{S}: Source code text for the emitted line, trimmed on the left.\n\
+{S}: Source code text for the emitted line after listing-time pattern expansion (for example {{line}} -> 0), trimmed on the left and capped to 80 characters.\n\
+{SR}: Raw source code text for the emitted line (before expansion), trimmed on the left and capped to 80 characters.\n\
 \n\
 If a placeholder appears multiple times in the template, only the first occurrence is rendered and subsequent occurrences are ignored.")
                         .long("lst-template")
+                        .default_value(DEFAULT_LISTING_LINE_TEMPLATE)
                         .requires("LISTING_OUTPUT")
                     )
                     .arg(Arg::new("LISTING_SOURCE_MODE")
