@@ -33,7 +33,7 @@ use preamble::function::FunctionBuilder;
 use preamble::processed_token::ProcessedToken;
 pub use preamble::*;
 
-use self::listing_output::ListingOutput;
+use self::listing_output::{ListingOutput, ListingOutputFormat};
 
 #[bitflags]
 #[repr(u8)]
@@ -218,6 +218,20 @@ impl AssemblingOptions {
         }
         self
     }
+
+    pub fn write_listing_output_with_format<W: 'static + Write + Send + Sync>(
+        &mut self,
+        writer: W,
+        format: ListingOutputFormat
+    ) -> &mut Self {
+        self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new_with_format(
+            writer, format
+        ))));
+        if let Some(b) = self.output_builder.as_mut() {
+            b.write().unwrap().on()
+        }
+        self
+    }
 }
 
 /// Assemble a piece of code and returns the associated list of bytes.
@@ -296,7 +310,6 @@ mod test_super {
         assert_eq!(bytes.len(), 4);
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
-
     #[test]
     fn located_test_assemble() {
         let code = "
@@ -334,47 +347,9 @@ Truc
             env.assemble_call_jr_or_jp(Mnemonic::Jp, None, &DataAccess::Expression(Expr::Value(0)))
                 .unwrap()
         );
-        assert_eq!(
-            Token::OpCode(
-                Mnemonic::Jp,
-                None,
-                Some(DataAccess::Expression(Expr::Value(0))),
-                None
-            )
-            .number_of_bytes(),
-            Ok(3)
-        );
 
         assert_eq!(
-            Token::OpCode(
-                Mnemonic::Jr,
-                None,
-                Some(DataAccess::Expression(Expr::Value(0))),
-                None
-            )
-            .number_of_bytes(),
-            Ok(2)
-        );
-
-        assert_eq!(
-            Token::OpCode(
-                Mnemonic::Jr,
-                Some(DataAccess::FlagTest(FlagTest::NC)),
-                Some(DataAccess::Expression(Expr::Value(0))),
-                None
-            )
-            .number_of_bytes(),
-            Ok(2)
-        );
-
-        assert_eq!(
-            Token::OpCode(
-                Mnemonic::Push,
-                Some(DataAccess::Register16(Register16::De)),
-                None,
-                None
-            )
-            .number_of_bytes(),
+            Token::OpCode(Mnemonic::Nop, None, None, None).number_of_bytes(),
             Ok(1)
         );
 

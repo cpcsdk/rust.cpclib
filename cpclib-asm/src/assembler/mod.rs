@@ -135,6 +135,12 @@ impl EnvOptions {
                 writer: W
             ) -> &mut AssemblingOptions;
 
+            pub fn write_listing_output_with_format<W: 'static + Write + Send + Sync>(
+                &mut self,
+                writer: W,
+                format: ListingOutputFormat
+            ) -> &mut AssemblingOptions;
+
         }
     }
 
