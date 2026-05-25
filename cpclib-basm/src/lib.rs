@@ -9,6 +9,7 @@ use cpclib_asm::AssemblingOptionFlags;
 use cpclib_asm::assembler::file::get_filename_to_read;
 use cpclib_asm::assembler::listing_output::{
     DEFAULT_LISTING_LINE_TEMPLATE, ListingAddressRadix, ListingOutputFormat,
+    ListingOutputKind,
     ListingSourceFileOutputMode
 };
 use cpclib_asm::preamble::file::read_source;
@@ -343,7 +344,10 @@ pub fn assemble(
     }
 
     if let Some(dest) = matches.get_one::<String>("LISTING_OUTPUT") {
-        let listing_format = listing_format_from_matches(matches)?;
+        let mut listing_format = listing_format_from_matches(matches)?;
+        if listing_output_uses_html(dest) {
+            listing_format.output_kind = ListingOutputKind::Html;
+        }
         if dest == "-" {
             assemble_options.write_listing_output_with_format(std::io::stdout(), listing_format);
         }
@@ -765,6 +769,10 @@ fn listing_format_from_matches(matches: &ArgMatches) -> Result<ListingOutputForm
     Ok(format)
 }
 
+fn listing_output_uses_html(dest: &str) -> bool {
+    dest.to_ascii_lowercase().ends_with(".html")
+}
+
 /// Generated the clap Commands
 pub fn build_args_parser() -> clap::Command {
     let cmd = Command::new("basm")
@@ -1067,4 +1075,21 @@ If a placeholder appears multiple times in the template, only the first occurren
             //  .required(true)
           //  .conflicts_with("version")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::listing_output_uses_html;
+
+    #[test]
+    fn html_listing_destination_is_detected_case_insensitively() {
+        assert!(listing_output_uses_html("demo.HTML"));
+        assert!(listing_output_uses_html("demo.listing.html"));
+    }
+
+    #[test]
+    fn non_html_listing_destination_keeps_text_renderer() {
+        assert!(!listing_output_uses_html("demo.lst"));
+        assert!(!listing_output_uses_html("-"));
+    }
 }

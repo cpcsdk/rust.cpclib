@@ -1295,6 +1295,10 @@ impl Env {
             processed_token::visit_processed_tokens(&mut tokens, self)
                 .map_err(|e| eprintln!("{e}"))
                 .expect("No error can arise in listing output mode; there is a bug somewhere");
+
+            if let Some(trigger) = self.output_trigger.as_mut() {
+                trigger.finish();
+            }
         }
 
         // BUG this is definitevely a bug
@@ -3895,10 +3899,6 @@ where
 
     env.cleanup_warnings();
 
-    if let Some(trigger) = env.output_trigger.as_mut() {
-        trigger.finish()
-    }
-
     Ok((tokens, env))
 }
 
@@ -4127,8 +4127,8 @@ impl Env {
         // cheat on the lifetime of tokens
         let outer_token = unsafe { (outer_token as *const LocatedToken).as_ref().unwrap() };
 
-        // XXX Maybe we have to uncomment it if some tokens are not included within the listing
-        // env.handle_output_trigger(outer_token);
+        // Listing trigger is handled in ProcessedToken::visited to preserve
+        // deferred/non-deferred token ordering.
 
         let span = Some(outer_token.span());
 

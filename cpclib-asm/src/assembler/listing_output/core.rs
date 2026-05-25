@@ -1,8 +1,8 @@
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::Write;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
-use std::collections::{HashMap, HashSet};
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
@@ -10,57 +10,9 @@ use cpclib_tokens::ExprResult;
 use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress, SymbolsTable};
 
 use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString};
-/// Generate an output listing.
-/// Can be useful to detect issues
 
-pub const MAX_RENDERED_SOURCE_COLUMN_CHARS: usize = 80;
-pub const DEFAULT_LISTING_LINE_TEMPLATE: &str = "{A} {P} {C} {L4} {S} | {SR}";
-
-#[derive(Clone, Debug)]
-pub enum ListingAddressRadix {
-    Hex,
-    Dec
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ListingSourceFileOutputMode {
-    None,
-    Header,
-    FileMap
-}
-
-#[derive(Clone, Debug)]
-pub struct ListingOutputFormat {
-    pub bytes_per_line: usize,
-    pub show_physical_address: bool,
-    pub uppercase_hex: bool,
-    pub address_radix: ListingAddressRadix,
-    pub logical_address_width: usize,
-    pub physical_address_width: usize,
-    pub line_number_width: usize,
-    pub show_line_numbers: bool,
-    pub show_context_header: bool,
-    pub listing_line_template: String,
-    pub source_file_output_mode: ListingSourceFileOutputMode
-}
-
-impl Default for ListingOutputFormat {
-    fn default() -> Self {
-        Self {
-            bytes_per_line: 8,
-            show_physical_address: true,
-            uppercase_hex: true,
-            address_radix: ListingAddressRadix::Hex,
-            logical_address_width: 4,
-            physical_address_width: 5,
-            line_number_width: 4,
-            show_line_numbers: true,
-            show_context_header: true,
-            listing_line_template: DEFAULT_LISTING_LINE_TEMPLATE.to_string(),
-            source_file_output_mode: ListingSourceFileOutputMode::Header
-        }
-    }
-}
+use super::format::*;
+use super::render::*;
 
 #[derive(PartialEq)]
 pub enum TokenKind {
@@ -101,6 +53,7 @@ pub struct ListingOutput {
     counter_update: Vec<String>,
     delayed_counter_update: Vec<String>,
     format: ListingOutputFormat,
+    renderer: ListingRenderer,
     current_file_index: usize,
     file_indices: HashMap<String, usize>,
     file_order: Vec<String>,
@@ -145,6 +98,7 @@ impl ListingOutput {
         writer: W,
         format: ListingOutputFormat
     ) -> Self {
+        let renderer = ListingRenderer::from_format(&format);
         Self {
             writer: Box::new(writer),
             current_fname: None,
@@ -161,6 +115,7 @@ impl ListingOutput {
             counter_update: Vec::new(),
             delayed_counter_update: Vec::new(),
             format,
+            renderer,
             current_file_index: 0,
             file_indices: HashMap::new(),
             file_order: Vec::new(),
@@ -170,6 +125,7 @@ impl ListingOutput {
 
     pub fn set_format(&mut self, format: ListingOutputFormat) {
         self.format = format;
+        self.renderer = ListingRenderer::from_format(&self.format);
     }
 
     fn bytes_per_line(&self) -> usize {
@@ -177,33 +133,23 @@ impl ListingOutput {
     }
 
     fn logical_address_width(&self) -> usize {
-        self.format.logical_address_width.max(1)
+        logical_address_width(&self.format)
     }
 
     fn physical_address_width(&self) -> usize {
-        self.format.physical_address_width.max(1)
+        physical_address_width(&self.format)
     }
 
     fn physical_field_width(&self) -> usize {
-        self.physical_address_width() + 1
+        physical_field_width(&self.format)
     }
 
     fn format_address(&self, value: u32, width: usize) -> String {
-        match self.format.address_radix {
-            ListingAddressRadix::Hex => {
-                if self.format.uppercase_hex {
-                    format!("{:0width$X}", value, width = width)
-                }
-                else {
-                    format!("{:0width$x}", value, width = width)
-                }
-            },
-            ListingAddressRadix::Dec => format!("{:0width$}", value, width = width)
-        }
+        format_address_for(&self.format, value, width)
     }
 
     fn blank(width: usize) -> String {
-        " ".repeat(width)
+        blank(width)
     }
 
     fn register_source_file_name(&mut self, fname: &str) -> (usize, bool) {
@@ -217,32 +163,27 @@ impl ListingOutput {
         (index, true)
     }
 
+    #[cfg(test)]
     fn format_bytes_raw(&self, bytes: &[u8]) -> String {
-        bytes.iter().map(|b| self.hex_byte(*b)).join(" ")
+        format_bytes_raw_for(&self.format, bytes)
     }
 
+    #[cfg(test)]
     fn format_bytes(&self, bytes: &[u8]) -> String {
-        let rendered = self.format_bytes_raw(bytes);
-        let full_width = self.bytes_per_line() * 3;
-        format!("{rendered:<full_width$}")
+        format_bytes_for(&self.format, self.bytes_per_line(), bytes)
     }
 
+    #[cfg(test)]
     fn format_bytes_x(&self, bytes: &[u8]) -> String {
-        let rendered = self.format_bytes_raw(bytes);
-        let fixed_width = self.bytes_per_line() * 3;
-        format!("{rendered:<fixed_width$}")
+        format_bytes_for(&self.format, self.bytes_per_line(), bytes)
     }
 
+    #[cfg(test)]
     fn render_source_column(line: Option<&str>) -> String {
-        line.map(|line| {
-            line.trim_start()
-                .chars()
-                .take(MAX_RENDERED_SOURCE_COLUMN_CHARS)
-                .collect()
-        })
-        .unwrap_or_default()
+        render_source_column(line)
     }
 
+    #[cfg(test)]
     fn format_line_with_template(
         &self,
         logical_address: Option<u32>,
@@ -252,96 +193,20 @@ impl ListingOutput {
         source_line_raw: Option<&str>,
         source_line_expanded: Option<&str>
     ) -> String {
-        let template = self.format.listing_line_template.as_str();
-        let mut output = String::with_capacity(template.len() + 32);
-        let mut consumed = HashSet::<String>::new();
-        let mut chars = template.chars().peekable();
-
-        while let Some(ch) = chars.next() {
-            if ch != '{' {
-                output.push(ch);
-                continue;
-            }
-
-            let mut placeholder = String::new();
-            while let Some(&next) = chars.peek() {
-                chars.next();
-                if next == '}' {
-                    break;
-                }
-                placeholder.push(next);
-            }
-
-            if placeholder.is_empty() {
-                output.push('{');
-                output.push('}');
-                continue;
-            }
-
-            if !consumed.insert(placeholder.clone()) {
-                continue;
-            }
-
-            let rendered = match placeholder.as_str() {
-                "A" => logical_address
-                    .map(|value| self.format_address(value, self.logical_address_width()))
-                    .unwrap_or_else(|| Self::blank(self.logical_address_width())),
-                "P" => {
-                    if self.format.show_physical_address {
-                        physical_address_repr.to_string()
-                    }
-                    else {
-                        String::new()
-                    }
-                },
-                "C" => self.format_bytes(bytes),
-                "CX" => self.format_bytes_x(bytes),
-                "F" => self.current_file_index.to_string(),
-                "F2" => format!("{:>2}", self.current_file_index),
-                "F3" => format!("{:>3}", self.current_file_index),
-                "L" => {
-                    if self.format.show_line_numbers {
-                        line_number.map(|value| value.to_string()).unwrap_or_default()
-                    }
-                    else {
-                        String::new()
-                    }
-                },
-                "L3" => {
-                    if self.format.show_line_numbers {
-                        line_number.map(|value| format!("{:>3}", value)).unwrap_or_default()
-                    }
-                    else {
-                        String::new()
-                    }
-                },
-                "L4" => {
-                    if self.format.show_line_numbers {
-                        line_number.map(|value| format!("{:>4}", value)).unwrap_or_default()
-                    }
-                    else {
-                        String::new()
-                    }
-                },
-                "L5" => {
-                    if self.format.show_line_numbers {
-                        line_number.map(|value| format!("{:>5}", value)).unwrap_or_default()
-                    }
-                    else {
-                        String::new()
-                    }
-                },
-                "S" => Self::render_source_column(source_line_expanded),
-                "SR" => Self::render_source_column(source_line_raw),
-                _ => format!("{{{placeholder}}}")
-            };
-
-            output.push_str(&rendered);
-        }
-
-        output
+        format_line_with_template_for(
+            &self.format,
+            self.bytes_per_line(),
+            self.current_file_index,
+            logical_address,
+            physical_address_repr,
+            bytes,
+            line_number,
+            source_line_raw,
+            source_line_expanded
+        )
     }
 
+    #[cfg(test)]
     fn format_deferred_line_with_template(
         &self,
         specific_content: &str,
@@ -349,60 +214,19 @@ impl ListingOutput {
         source_line_raw: &str,
         source_line_expanded: &str
     ) -> Vec<String> {
-        let source_marker_raw = "\u{1f}SOURCE_RAW\u{1f}";
-        let source_marker_expanded = "\u{1f}SOURCE_EXPANDED\u{1f}";
-        let rendered = self.format_line_with_template(
-            None,
-            &Self::blank(self.physical_field_width()),
-            &[],
+        format_deferred_line_with_template_for(
+            &self.format,
+            self.bytes_per_line(),
+            self.current_file_index,
+            specific_content,
             line_number,
-            Some(source_marker_raw),
-            Some(source_marker_expanded)
-        );
-
-        let anchor = if self.format.show_line_numbers {
-            line_number
-                .and_then(|value| rendered.find(&value.to_string()))
-                .or_else(|| rendered.find(source_marker_expanded))
-                .or_else(|| rendered.find(source_marker_raw))
-        }
-        else {
-            rendered
-                .find(source_marker_expanded)
-                .or_else(|| rendered.find(source_marker_raw))
-        };
-
-        let rendered = rendered
-            .replace(source_marker_raw, source_line_raw.trim_start())
-            .replace(source_marker_expanded, source_line_expanded.trim_start());
-
-        match anchor {
-            Some(anchor) => {
-                let suffix = &rendered[anchor..];
-                if !specific_content.is_empty() && specific_content.len() > anchor {
-                    let continuation_prefix = anchor.saturating_sub(1);
-                    vec![
-                        specific_content.to_string(),
-                        format!(">{:continuation_prefix$}{suffix}", "")
-                    ]
-                }
-                else {
-                    vec![format!("{specific_content:<anchor$}{suffix}")]
-                }
-            },
-            None if rendered.trim().is_empty() => vec![specific_content.to_string()],
-            None if specific_content.is_empty() => vec![rendered],
-            None => vec![format!("{specific_content} {rendered}")]
-        }
+            source_line_raw,
+            source_line_expanded
+        )
     }
 
     fn hex_byte(&self, b: u8) -> String {
-        if self.format.uppercase_hex {
-            format!("{b:02X}")
-        }
-        else {
-            format!("{b:02x}")
-        }
+        hex_byte_for(&self.format, b)
     }
 
     fn has_current_line_output(&self) -> bool {
@@ -540,7 +364,7 @@ impl ListingOutput {
 
         // dbg!(token);
 
-        let fname_handling = self.manage_fname(token);
+        self.manage_fname(token);
         if let Some(specific_content) = self.current_token_specific_content() {
             self.deferred_for_line.push(specific_content.clone());
         }
@@ -556,10 +380,6 @@ impl ListingOutput {
         }
 
         self.append_current_line_bytes(bytes, address_kind);
-
-        if let Some(line) = fname_handling {
-            writeln!(self.writer, "{line}").unwrap();
-        }
 
         self.update_current_token_kind(token, symbols);
     }
@@ -596,9 +416,10 @@ impl ListingOutput {
         // build the line representation for source and generated bytes
         let line_representation_raw = line_raw.split('\n').collect_vec();
         let line_representation_expanded = line_expanded.split('\n').collect_vec();
+        let bytes_per_line = self.bytes_per_line();
         let data_chunks = self
             .current_line_bytes
-            .chunks(self.bytes_per_line())
+            .chunks(bytes_per_line)
             .collect_vec();
         let data_representation = data_chunks
             .iter()
@@ -616,15 +437,24 @@ impl ListingOutput {
                     .get(line_delta)
                     .copied()
                     .unwrap_or(line_raw);
-                let rendered_lines = self.format_deferred_line_with_template(
-                    if line_delta == 0 { specific_content } else { "" },
-                    Some(line_number + delta as u32 + line_delta as u32 - lines_count as u32),
-                    line_raw,
-                    line_expanded
+                self.renderer.render_deferred(
+                    &mut *self.writer,
+                    &self.format,
+                    bytes_per_line,
+                    ListingDeferredRender {
+                        row_id: 0,
+                        file_index: self.current_file_index,
+                        specific_content: if line_delta == 0 { specific_content } else { "" },
+                        line_number: Some(line_number + delta as u32 + line_delta as u32 - lines_count as u32),
+                        source_line_raw: line_raw,
+                        source_line_expanded: line_expanded,
+                        token_kind: &self.current_token_kind,
+                        definition_target: None,
+                        highlighted_symbols: &[],
+                        collapsible: false,
+                        collapsed_block: false
+                    }
                 );
-                for rendered in rendered_lines {
-                    writeln!(self.writer, "{rendered}").unwrap();
-                }
             }
         }
         self.deferred_for_line.clear();
@@ -690,37 +520,28 @@ impl ListingOutput {
                 let fallback_source_raw =
                     current_inner_line_raw.map(|line| line.trim_end()).unwrap_or("");
                 let fallback_bytes = current_inner_data.cloned().unwrap_or_default();
-                let rendered = self.format_line_with_template(
-                    logical_representation,
-                    &phys_addr_representation,
-                    current_chunk,
-                    rendered_line_number,
-                    Some(fallback_source_raw),
-                    Some(fallback_source_expanded)
+                self.renderer.render_line(
+                    &mut *self.writer,
+                    &self.format,
+                    bytes_per_line,
+                    ListingLineRender {
+                        row_id: 0,
+                        file_index: self.current_file_index,
+                        logical_address: logical_representation,
+                        physical_address_repr: &phys_addr_representation,
+                        bytes: current_chunk,
+                        fallback_bytes: &fallback_bytes,
+                        line_number: rendered_line_number,
+                        source_line_raw: fallback_source_raw,
+                        source_line_expanded: fallback_source_expanded,
+                        is_multiline_continuation,
+                        token_kind: &self.current_token_kind,
+                        definition_target: None,
+                        highlighted_symbols: &[],
+                        collapsible: false,
+                        collapsed_block: false
+                    }
                 );
-                let rendered = if rendered.trim().is_empty() {
-                    format!(
-                        "{} {} {:bytes_width$} {}",
-                        logical_representation
-                            .map(|value| self.format_address(value, self.logical_address_width()))
-                            .unwrap_or_else(|| Self::blank(self.logical_address_width())),
-                        phys_addr_representation,
-                        fallback_bytes,
-                        fallback_source_expanded,
-                        bytes_width = self.bytes_per_line() * 3
-                    )
-                }
-                else {
-                    rendered
-                };
-
-                if is_multiline_continuation {
-                    let rendered = rendered.strip_prefix(' ').unwrap_or(&rendered);
-                    writeln!(self.writer, ">{rendered}").unwrap();
-                }
-                else {
-                    writeln!(self.writer, "{rendered}").unwrap();
-                }
             }
 
             byte_offset += current_data_len;
@@ -728,9 +549,8 @@ impl ListingOutput {
 
         if self.has_current_line_output() {
             for counter in self.delayed_counter_update.iter() {
-                self.writer
-                    .write_all(format!("{counter}\n").as_bytes())
-                    .unwrap();
+                self.renderer
+                    .render_notice(&mut *self.writer, ListingNotice::RawLine(counter));
             }
             self.delayed_counter_update.clear();
 
@@ -746,24 +566,23 @@ impl ListingOutput {
     pub fn finish(&mut self) {
         self.process_current_line();
         for counter in self.delayed_counter_update.iter() {
-            self.writer
-                .write_all(format!("{counter}\n").as_bytes())
-                .unwrap();
+            self.renderer
+                .render_notice(&mut *self.writer, ListingNotice::RawLine(counter));
         }
         self.delayed_counter_update.clear();
         for counter in self.counter_update.iter() {
-            self.writer
-                .write_all(format!("{counter}\n").as_bytes())
-                .unwrap();
+            self.renderer
+                .render_notice(&mut *self.writer, ListingNotice::RawLine(counter));
         }
         self.counter_update.clear();
         if !self.deferred_for_line.is_empty() {
             panic!()
         }
+        self.renderer.finish(&mut *self.writer);
     }
 
     /// Print filename if needed
-    pub fn manage_fname(&mut self, token: &LocatedToken) -> Option<String> {
+    pub fn manage_fname(&mut self, token: &LocatedToken) {
         // 	dbg!(token);
 
         let ctx = &token.span().state;
@@ -779,7 +598,7 @@ impl ListingOutput {
 
                 if self.format.source_file_output_mode == ListingSourceFileOutputMode::None {
                     self.current_fname = Some(fname);
-                    return None;
+                    return;
                 }
 
                 if self.format.source_file_output_mode == ListingSourceFileOutputMode::FileMap {
@@ -787,19 +606,26 @@ impl ListingOutput {
 
                     if !self.file_map_header_printed {
                         self.file_map_header_printed = true;
-                        return Some(format!("Source file map:\n  [{file_index}] {fname}"));
+                        self.renderer.render_notice(
+                            &mut *self.writer,
+                            ListingNotice::FileMapHeader { file_index, fname: &fname }
+                        );
+                        return;
                     }
 
                     if is_new_file {
-                        return Some(format!("  [{file_index}] {fname}"));
+                        self.renderer.render_notice(
+                            &mut *self.writer,
+                            ListingNotice::FileMapEntry { file_index, fname: &fname }
+                        );
                     }
 
-                    return None;
+                    return;
                 }
 
                 if !self.format.show_context_header {
                     self.current_fname = Some(fname);
-                    return None;
+                    return;
                 }
 
                 let print = match self.current_fname.as_ref() {
@@ -809,17 +635,18 @@ impl ListingOutput {
 
                 if print {
                     self.current_fname = Some(fname.clone());
-                    Some(format!("Context [{file_index}]: {fname}"))
-                }
-                else {
-                    None
+                    self.renderer.render_notice(
+                        &mut *self.writer,
+                        ListingNotice::ContextHeader { file_index, fname: &fname }
+                    );
                 }
             },
-            None => None
+            None => {}
         }
     }
 
     pub fn on(&mut self) {
+        self.renderer.start(&mut *self.writer);
         self.activated = true;
     }
 
@@ -925,6 +752,8 @@ impl ListingOutputTrigger {
                 self.physical_address,
                 self.symbols
             );
+            self.token = None;
+            self.bytes.clear();
         }
         self.builder.write().unwrap().finish();
     }
@@ -976,7 +805,8 @@ mod tests {
 
     use super::{
         DEFAULT_LISTING_LINE_TEMPLATE, ListingAddressRadix, ListingOutput, ListingOutputFormat,
-        ListingSourceFileOutputMode, MAX_RENDERED_SOURCE_COLUMN_CHARS, TokenKind
+        ListingOutputKind, ListingSourceFileOutputMode, MAX_RENDERED_SOURCE_COLUMN_CHARS,
+        TokenKind
     };
 
     #[derive(Clone, Default)]
@@ -1075,6 +905,7 @@ mod tests {
             writer.clone(),
             ListingOutputFormat {
                 listing_line_template: "{A} {P} {C} {L4} {S}".to_string(),
+                output_kind: ListingOutputKind::Text,
                 ..Default::default()
             }
         );
@@ -1173,6 +1004,7 @@ endm\n";
             ListingOutputFormat {
                 listing_line_template: "{L4} {S} | {SR}".to_string(),
                 source_file_output_mode: ListingSourceFileOutputMode::None,
+                output_kind: ListingOutputKind::Text,
                 ..Default::default()
             }
         );
@@ -1225,9 +1057,62 @@ endm\n";
         let expected_expanded = "E".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS);
         let expected_raw = "R".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS);
         assert!(rendered.contains(&expected_expanded), "rendered={rendered}");
-        assert!(rendered.contains(&expected_raw), "rendered={rendered}");
+        assert!(!rendered.contains(&expected_raw), "rendered={rendered}");
         assert!(!rendered.contains(&"E".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 1)), "rendered={rendered}");
         assert!(!rendered.contains(&"R".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 1)), "rendered={rendered}");
+    }
+
+    #[test]
+    fn html_renderer_outputs_listing_rows() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new_with_format(
+            writer.clone(),
+            ListingOutputFormat {
+                output_kind: ListingOutputKind::Html,
+                source_file_output_mode: ListingSourceFileOutputMode::None,
+                ..Default::default()
+            }
+        );
+        output.on();
+
+        output.current_line_group = Some((12, "nop".to_string(), "nop".to_string()));
+        output.current_line_bytes.extend_from_slice(&[0x00]);
+        output.current_first_address = 0x0100;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x0100, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+
+        output.finish();
+
+        let listing = writer.snapshot();
+        assert!(listing.contains("<!DOCTYPE html>"), "listing={listing}");
+        assert!(listing.contains("class=\"row\""), "listing={listing}");
+        assert!(listing.contains("cell source-expanded interactive"), "listing={listing}");
+        assert!(!listing.contains("cell source-raw interactive"), "listing={listing}");
+        assert!(listing.contains("token byte\" data-hover-row=\"row-0\">00</span>"), "listing={listing}");
+    }
+
+    #[test]
+    fn html_renderer_marks_macro_definitions_as_collapsible() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new_with_format(
+            writer.clone(),
+            ListingOutputFormat {
+                output_kind: ListingOutputKind::Html,
+                source_file_output_mode: ListingSourceFileOutputMode::None,
+                ..Default::default()
+            }
+        );
+        output.on();
+
+        output.current_line_group = Some((30, "macro SWITCH_VALUES addr1, addr2".to_string(), "macro SWITCH_VALUES addr1, addr2".to_string()));
+        output.current_token_kind = TokenKind::MacroDefine("SWITCH_VALUES".to_string());
+        output.deferred_for_line.push("MACRO      SWITCH_VALUES".to_string());
+
+        output.finish();
+
+        let listing = writer.snapshot();
+        assert!(listing.contains("data-block-kind=\"macro\""), "listing={listing}");
+        assert!(listing.contains("row deferred block-start"), "listing={listing}");
     }
 
     #[test]
@@ -1377,7 +1262,8 @@ endm\n";
                 show_line_numbers: false,
                 show_context_header: false,
                 listing_line_template: "{A} {C} {S}".to_string(),
-                source_file_output_mode: ListingSourceFileOutputMode::None
+                source_file_output_mode: ListingSourceFileOutputMode::None,
+                output_kind: ListingOutputKind::Text
             }
         );
         output.on();
@@ -1406,6 +1292,7 @@ endm\n";
             ListingOutputFormat {
                 listing_line_template: "{A}|{A}|{L4}|{L4}|{S}|{S}".to_string(),
                 source_file_output_mode: ListingSourceFileOutputMode::None,
+                output_kind: ListingOutputKind::Text,
                 ..Default::default()
             }
         );
@@ -1432,6 +1319,7 @@ endm\n";
                 bytes_per_line: 8,
                 listing_line_template: "{A} {CX} {L4} {S}".to_string(),
                 source_file_output_mode: ListingSourceFileOutputMode::None,
+                output_kind: ListingOutputKind::Text,
                 ..Default::default()
             }
         );
