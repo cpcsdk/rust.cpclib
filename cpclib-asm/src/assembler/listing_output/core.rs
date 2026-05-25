@@ -14,7 +14,7 @@ use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString
 use super::format::*;
 use super::render::*;
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum TokenKind {
     Hidden,
     Label(String),
@@ -29,6 +29,15 @@ impl TokenKind {
         self == &TokenKind::Displayable
     }
 }
+
+#[derive(Clone)]
+struct ListingTokenItem {
+    raw: String,
+    expanded: String,
+    bytes: Vec<u8>,
+    token_kind: TokenKind
+}
+
 pub struct ListingOutput {
     /// Writer that will contains the listing/
     /// The listing is produced line by line and not token per token
@@ -49,6 +58,10 @@ pub struct ListingOutput {
     current_physical_address: PhysicalAddress,
     crunched_section_counter: usize,
     current_token_kind: TokenKind,
+    current_token_bytes: Vec<u8>,
+    current_token_raw: String,
+    current_token_expanded: String,
+    current_line_tokens: Vec<ListingTokenItem>,
     deferred_for_line: Vec<String>,
     counter_update: Vec<String>,
     delayed_counter_update: Vec<String>,
@@ -111,6 +124,10 @@ impl ListingOutput {
             crunched_section_counter: 0,
             current_physical_address: MemoryPhysicalAddress::new(0, 0).into(),
             current_token_kind: TokenKind::Hidden,
+            current_token_bytes: Vec::new(),
+            current_token_raw: String::new(),
+            current_token_expanded: String::new(),
+            current_line_tokens: Vec::new(),
             deferred_for_line: Default::default(),
             counter_update: Vec::new(),
             delayed_counter_update: Vec::new(),
@@ -276,10 +293,15 @@ impl ListingOutput {
         self.current_first_address = address;
         self.current_physical_address = physical_address;
         self.current_address_kind = AddressKind::None;
+        self.current_line_tokens.clear();
+        self.current_token_raw.clear();
+        self.current_token_expanded.clear();
+        self.current_token_bytes.clear();
     }
 
     fn append_current_line_bytes(&mut self, bytes: &[u8], address_kind: AddressKind) {
         self.current_line_bytes.extend_from_slice(bytes);
+        self.current_token_bytes.extend_from_slice(bytes);
         self.current_address_kind = if self.current_address_kind == AddressKind::None {
             address_kind
         }
@@ -307,6 +329,32 @@ impl ListingOutput {
             | LocatedTokenInner::Repeat(..) => TokenKind::Displayable,
             _ => TokenKind::Hidden
         };
+    }
+
+    fn flush_current_token(&mut self) {
+        if self.current_line_group.is_none() {
+            self.current_token_bytes.clear();
+            self.current_token_raw.clear();
+            self.current_token_expanded.clear();
+            return;
+        }
+
+        if self.current_token_raw.is_empty()
+            && self.current_token_expanded.is_empty()
+            && self.current_token_bytes.is_empty()
+        {
+            return;
+        }
+
+        self.current_line_tokens.push(ListingTokenItem {
+            raw: self.current_token_raw.clone(),
+            expanded: self.current_token_expanded.clone(),
+            bytes: self.current_token_bytes.clone(),
+            token_kind: self.current_token_kind.clone()
+        });
+        self.current_token_bytes.clear();
+        self.current_token_raw.clear();
+        self.current_token_expanded.clear();
     }
 
     /// Check if the token is for the same source
@@ -364,6 +412,8 @@ impl ListingOutput {
 
         // dbg!(token);
 
+        self.flush_current_token();
+
         self.manage_fname(token);
         if let Some(specific_content) = self.current_token_specific_content() {
             self.deferred_for_line.push(specific_content.clone());
@@ -379,9 +429,12 @@ impl ListingOutput {
             self.current_line_group = Some((token.span().location_line(), raw_line, expanded_line));
         }
 
-        self.append_current_line_bytes(bytes, address_kind);
-
         self.update_current_token_kind(token, symbols);
+        self.current_token_raw = token.span().as_str().to_string();
+        self.current_token_expanded =
+            Self::expand_source_line_patterns(&self.current_token_raw, symbols);
+        self.current_token_bytes.clear();
+        self.append_current_line_bytes(bytes, address_kind);
     }
 
     fn expand_symbol_with_listing_context(raw: &str, symbols: Option<*const SymbolsTable>) -> String {
@@ -407,6 +460,8 @@ impl ListingOutput {
     }
 
     pub fn process_current_line(&mut self) {
+        self.flush_current_token();
+
         // retrieve the line
         let (line_number, line_raw, line_expanded) = match &self.current_line_group {
             Some((idx, line_raw, line_expanded)) => (idx, line_raw, line_expanded),
@@ -425,6 +480,39 @@ impl ListingOutput {
             .iter()
             .map(|chunk| chunk.iter().map(|b| self.hex_byte(*b)).join(" "))
             .collect_vec();
+        let mut tokens_remaining = self.current_line_tokens.clone();
+
+        let mut token_chunks: Vec<Vec<ListingTokenItem>> = Vec::with_capacity(data_chunks.len());
+        for chunk in data_chunks.iter() {
+            let mut expected = chunk.len();
+            let mut current = Vec::new();
+            while expected > 0 {
+                if tokens_remaining.is_empty() {
+                    break;
+                }
+                let mut token = tokens_remaining.remove(0);
+
+                if token.bytes.is_empty() {
+                    current.push(token);
+                    continue;
+                }
+
+                if token.bytes.len() <= expected {
+                    expected -= token.bytes.len();
+                    current.push(token);
+                }
+                else {
+                    let right_bytes = token.bytes.split_off(expected);
+                    let mut right = token.clone();
+                    right.bytes = right_bytes;
+                    token.bytes.truncate(expected);
+                    current.push(token);
+                    tokens_remaining.insert(0, right);
+                    expected = 0;
+                }
+            }
+            token_chunks.push(current);
+        }
 
         // TODO manage missing end of files/blocks if needed
 
@@ -520,6 +608,18 @@ impl ListingOutput {
                 let fallback_source_raw =
                     current_inner_line_raw.map(|line| line.trim_end()).unwrap_or("");
                 let fallback_bytes = current_inner_data.cloned().unwrap_or_default();
+                let token_renders = token_chunks
+                    .get(idx)
+                    .into_iter()
+                    .flat_map(|tokens| tokens.iter())
+                    .map(|token| ListingTokenRender {
+                        raw_text: token.raw.as_str(),
+                        expanded_text: token.expanded.as_str(),
+                        bytes: token.bytes.as_slice(),
+                        token_kind: &token.token_kind
+                    })
+                    .collect_vec();
+
                 self.renderer.render_line(
                     &mut *self.writer,
                     &self.format,
@@ -536,6 +636,7 @@ impl ListingOutput {
                         source_line_expanded: fallback_source_expanded,
                         is_multiline_continuation,
                         token_kind: &self.current_token_kind,
+                        tokens: token_renders.as_slice(),
                         definition_target: None,
                         highlighted_symbols: &[],
                         collapsible: false,
@@ -561,6 +662,10 @@ impl ListingOutput {
         self.current_line_group = None;
         self.current_source = None;
         self.current_line_bytes.clear();
+        self.current_line_tokens.clear();
+        self.current_token_bytes.clear();
+        self.current_token_raw.clear();
+        self.current_token_expanded.clear();
     }
 
     pub fn finish(&mut self) {
@@ -805,8 +910,8 @@ mod tests {
 
     use super::{
         DEFAULT_LISTING_LINE_TEMPLATE, ListingAddressRadix, ListingOutput, ListingOutputFormat,
-        ListingOutputKind, ListingSourceFileOutputMode, MAX_RENDERED_SOURCE_COLUMN_CHARS,
-        TokenKind
+        ListingOutputKind, ListingSourceFileOutputMode, ListingTokenItem,
+        MAX_RENDERED_SOURCE_COLUMN_CHARS, TokenKind
     };
 
     #[derive(Clone, Default)]
@@ -1113,6 +1218,102 @@ endm\n";
         let listing = writer.snapshot();
         assert!(listing.contains("data-block-kind=\"macro\""), "listing={listing}");
         assert!(listing.contains("row deferred block-start"), "listing={listing}");
+    }
+
+    #[test]
+    fn html_renderer_links_token_and_bytes_with_same_hover_group() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new_with_format(
+            writer.clone(),
+            ListingOutputFormat {
+                output_kind: ListingOutputKind::Html,
+                source_file_output_mode: ListingSourceFileOutputMode::None,
+                ..Default::default()
+            }
+        );
+        output.on();
+
+        output.current_line_group = Some((12, "ld a, 1".to_string(), "ld a, 1".to_string()));
+        output.current_line_bytes.extend_from_slice(&[0x3E, 0x01]);
+        output.current_first_address = 0x0100;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x0100, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+        output.current_line_tokens = vec![
+            ListingTokenItem {
+                raw: "ld".to_string(),
+                expanded: "ld".to_string(),
+                bytes: vec![0x3E],
+                token_kind: TokenKind::Displayable
+            },
+            ListingTokenItem {
+                raw: "1".to_string(),
+                expanded: "1".to_string(),
+                bytes: vec![0x01],
+                token_kind: TokenKind::Displayable
+            }
+        ];
+
+        output.finish();
+
+        let listing = writer.snapshot();
+        assert!(
+            listing.contains("<span class=\"token\" data-hover-row=\"row-0-tok-0\">ld</span>"),
+            "listing={listing}"
+        );
+        assert!(
+            listing.contains("token byte\" data-hover-row=\"row-0-tok-0\">3E</span>"),
+            "listing={listing}"
+        );
+        assert!(
+            listing.contains("<span class=\"token\" data-hover-row=\"row-0-tok-1\">1</span>"),
+            "listing={listing}"
+        );
+        assert!(
+            listing.contains("token byte\" data-hover-row=\"row-0-tok-1\">01</span>"),
+            "listing={listing}"
+        );
+    }
+
+    #[test]
+    fn html_renderer_can_link_to_symbol_defined_on_deferred_row() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new_with_format(
+            writer.clone(),
+            ListingOutputFormat {
+                output_kind: ListingOutputKind::Html,
+                source_file_output_mode: ListingSourceFileOutputMode::None,
+                ..Default::default()
+            }
+        );
+        output.on();
+
+        output.current_line_group = Some((10, "start:".to_string(), "start:".to_string()));
+        output.current_first_address = 0x0100;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x0100, 0).into();
+        output.current_token_kind = TokenKind::Label("start".to_string());
+        output.deferred_for_line.push("0100 0100 start".to_string());
+        output.process_current_line();
+
+        output.current_line_group = Some((11, "jp start".to_string(), "jp start".to_string()));
+        output.current_line_bytes.extend_from_slice(&[0xC3, 0x00, 0x01]);
+        output.current_first_address = 0x0101;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x0101, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+        output.current_line_tokens = vec![ListingTokenItem {
+            raw: "start".to_string(),
+            expanded: "start".to_string(),
+            bytes: vec![0x00, 0x01],
+            token_kind: TokenKind::Displayable
+        }];
+
+        output.finish();
+
+        let listing = writer.snapshot();
+        assert!(
+            listing.contains("data-target-row=\"row-0\""),
+            "listing={listing}"
+        );
+        assert!(listing.contains("href=\"#row-0\""), "listing={listing}");
     }
 
     #[test]

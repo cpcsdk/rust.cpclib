@@ -1,6 +1,59 @@
-use super::*;
+use std::io::Write;
+
+use super::{
+    escape_html, is_identifier_char, render_html_bytes_for_row, HtmlBlockKind,
+    HtmlListingRenderer, ListingDeferredRender, ListingLineRender, ListingNotice,
+    ListingTokenRender
+};
+use super::super::format::{format_address_for, hex_byte_for, logical_address_width, render_source_column, ListingOutputFormat};
+use super::super::TokenKind;
 
 impl HtmlListingRenderer {
+    fn normalize_symbol_key(text: &str) -> Option<String> {
+        let trimmed = text.trim().trim_end_matches(':');
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        let start = trimmed
+            .char_indices()
+            .find_map(|(idx, ch)| is_identifier_char(ch).then_some(idx))?;
+        let suffix = &trimmed[start..];
+        let end = suffix
+            .char_indices()
+            .find_map(|(idx, ch)| (!is_identifier_char(ch)).then_some(idx))
+            .unwrap_or(suffix.len());
+
+        if end == 0 {
+            return None;
+        }
+
+        Some(suffix[..end].to_ascii_lowercase())
+    }
+
+    fn insert_symbol_target(&mut self, symbol: &str, row_id: usize) {
+        self.symbol_targets.insert(symbol.to_string(), row_id);
+        self.symbol_targets.insert(symbol.to_ascii_lowercase(), row_id);
+        if let Some(normalized) = Self::normalize_symbol_key(symbol) {
+            self.symbol_targets.insert(normalized, row_id);
+        }
+    }
+
+    fn find_symbol_target(&self, token_text: &str) -> Option<usize> {
+        self.symbol_targets
+            .get(token_text)
+            .copied()
+            .or_else(|| self.symbol_targets.get(&token_text.to_ascii_lowercase()).copied())
+            .or_else(|| {
+                Self::normalize_symbol_key(token_text)
+                    .and_then(|key| self.symbol_targets.get(&key).copied())
+            })
+    }
+
+    fn row_hover_attr_for_key(hover_key: &str) -> String {
+        format!(" data-hover-row=\"{hover_key}\"")
+    }
+
     fn template_shows_source_expanded(format: &ListingOutputFormat) -> bool {
         format.listing_line_template.contains("{S}")
     }
@@ -10,7 +63,113 @@ impl HtmlListingRenderer {
     }
 
     fn row_hover_attr(row_id: usize) -> String {
-        format!(" data-hover-row=\"row-{row_id}\"")
+        Self::row_hover_attr_for_key(&format!("row-{row_id}"))
+    }
+
+    fn token_hover_key(row_id: usize, token_idx: usize) -> String {
+        format!("row-{row_id}-tok-{token_idx}")
+    }
+
+    fn render_token_source_html(&self, token_text: &str, hover_key: &str) -> String {
+        let hover_attr = Self::row_hover_attr_for_key(hover_key);
+        if let Some(target) = self.find_symbol_target(token_text) {
+            format!(
+                "<span class=\"token symbol\"{hover_attr}><a href=\"#row-{target}\" data-target-row=\"row-{target}\">{}</a></span>",
+                escape_html(token_text)
+            )
+        }
+        else {
+            format!("<span class=\"token\"{hover_attr}>{}</span>", escape_html(token_text))
+        }
+    }
+
+    fn highlight_source_html_precise(
+        &self,
+        text: &str,
+        row_id: usize,
+        tokens: &[ListingTokenRender<'_>],
+        expanded: bool
+    ) -> String {
+        if tokens.is_empty() {
+            return self.highlight_source_html(text, row_id);
+        }
+
+        let mut out = String::new();
+        let mut cursor = 0usize;
+
+        for (idx, token) in tokens.iter().enumerate() {
+            if token.raw_text.trim_start().starts_with(';')
+                || token.expanded_text.trim_start().starts_with(';')
+            {
+                continue;
+            }
+
+            let token_text = if expanded {
+                token.expanded_text.trim()
+            }
+            else {
+                token.raw_text.trim()
+            };
+
+            if token_text.is_empty() {
+                continue;
+            }
+
+            if let Some(pos) = text[cursor..].find(token_text) {
+                out.push_str(&escape_html(&text[cursor..cursor + pos]));
+                let hover_key = Self::token_hover_key(row_id, idx);
+                out.push_str(&self.render_token_source_html(token_text, &hover_key));
+                cursor += pos + token_text.len();
+            }
+        }
+
+        if cursor < text.len() {
+            out.push_str(&escape_html(&text[cursor..]));
+        }
+
+        out
+    }
+
+    fn render_token_bytes_html(
+        &self,
+        format: &ListingOutputFormat,
+        row_id: usize,
+        line: &ListingLineRender<'_>
+    ) -> String {
+        if line.tokens.is_empty() {
+            return render_html_bytes_for_row(format, line.bytes, Some(row_id));
+        }
+
+        let mut rendered = Vec::new();
+        let mut consumed = 0usize;
+
+        for (idx, token) in line.tokens.iter().enumerate() {
+            if token.bytes.is_empty() {
+                continue;
+            }
+
+            let hover_key = Self::token_hover_key(row_id, idx);
+            let hover_attr = Self::row_hover_attr_for_key(&hover_key);
+            for byte in token.bytes {
+                rendered.push(format!(
+                    "<span class=\"token byte\"{hover_attr}>{}</span>",
+                    hex_byte_for(format, *byte)
+                ));
+                consumed += 1;
+            }
+        }
+
+        if consumed < line.bytes.len() {
+            let hover_attr = Self::row_hover_attr(row_id);
+            for byte in line.bytes.iter().skip(consumed) {
+                rendered.push(format!(
+                    "<span class=\"token byte\"{hover_attr}>{}</span>",
+                    hex_byte_for(format, *byte)
+                ));
+            }
+        }
+
+        rendered.join(" ")
     }
 
     pub(crate) fn start(&mut self, writer: &mut dyn Write) {
@@ -31,6 +190,7 @@ body { margin:0; font-family:var(--mono); background:linear-gradient(180deg,#efe
 .row.is-collapsed { opacity:.55; }
 .row.block-start { cursor:pointer; }
 .cell { white-space:pre-wrap; overflow-wrap:anywhere; padding:0; margin:0; }
+.bytes { white-space:pre; overflow-wrap:normal; }
 .marker, .addr, .phys, .line { color:var(--muted); }
 .bytes { color:#0d5f8c; }
 .source-expanded { color:#8b2e00; }
@@ -87,20 +247,25 @@ function hoveredGroupFromEventTarget(target) {
     return hoverTarget ? hoverTarget.dataset.hoverRow : null;
 }
 
-document.addEventListener('mouseover', (event) => {
-    const rowId = hoveredGroupFromEventTarget(event.target);
-    if (!rowId) return;
-    const relatedRowId = hoveredGroupFromEventTarget(event.relatedTarget);
-    if (relatedRowId === rowId) return;
-    setHoverGroup(rowId, true);
+let activeHoverKey = null;
+
+function setActiveHoverKey(nextKey) {
+    if (activeHoverKey === nextKey) return;
+    if (activeHoverKey) {
+        setHoverGroup(activeHoverKey, false);
+    }
+    activeHoverKey = nextKey;
+    if (activeHoverKey) {
+        setHoverGroup(activeHoverKey, true);
+    }
+}
+
+document.addEventListener('mousemove', (event) => {
+    setActiveHoverKey(hoveredGroupFromEventTarget(event.target));
 });
 
-document.addEventListener('mouseout', (event) => {
-    const rowId = hoveredGroupFromEventTarget(event.target);
-    if (!rowId) return;
-    const relatedRowId = hoveredGroupFromEventTarget(event.relatedTarget);
-    if (relatedRowId === rowId) return;
-    setHoverGroup(rowId, false);
+document.addEventListener('mouseleave', () => {
+    setActiveHoverKey(null);
 });
 
 document.addEventListener('click', (event) => {
@@ -162,7 +327,7 @@ document.addEventListener('click', (event) => {
             if ch == ';' {
                 let mut comment = String::from(ch);
                 comment.extend(chars.by_ref());
-                output.push_str(&format!("<span class=\"token comment\"{hover_attr}>{}</span>", escape_html(&comment)));
+                output.push_str(&format!("<span class=\"token comment\">{}</span>", escape_html(&comment)));
                 break;
             }
 
@@ -196,7 +361,7 @@ document.addEventListener('click', (event) => {
                 else if token.starts_with("0x") || token.starts_with('#') || token.chars().all(|c| c.is_ascii_digit()) {
                     ("number", escape_html(&token))
                 }
-                else if let Some(target) = self.symbol_targets.get(&token) {
+                else if let Some(target) = self.find_symbol_target(&token) {
                     (
                         "symbol",
                         format!("<a href=\"#row-{target}\" data-target-row=\"row-{target}\">{}</a>", escape_html(&token))
@@ -262,6 +427,11 @@ document.addEventListener('click', (event) => {
     pub(crate) fn render_deferred(&mut self, writer: &mut dyn Write, format: &ListingOutputFormat, deferred: ListingDeferredRender<'_>) {
         let row_id = self.next_row_id;
         self.next_row_id += 1;
+        if !deferred.specific_content.is_empty() {
+            if let Some(symbol) = Self::extract_definition_symbol(deferred.token_kind) {
+                self.insert_symbol_target(&symbol, row_id);
+            }
+        }
         let block_kind = self
             .classify_block(deferred.token_kind, deferred.source_line_expanded)
             .or_else(|| self.classify_block(deferred.token_kind, deferred.source_line_raw));
@@ -271,7 +441,7 @@ document.addEventListener('click', (event) => {
         }).unwrap_or("");
         let block_start_attrs = block_kind
             .as_ref()
-            .map(|kind| format!(" data-block-kind=\"{}\"", block_kind_name))
+            .map(|_| format!(" data-block-kind=\"{}\"", block_kind_name))
             .unwrap_or_default();
         let block_end_attrs = if matches!(deferred.source_line_expanded.trim_start().to_ascii_lowercase().as_str(), "endm" | "endr") {
             match deferred.source_line_expanded.trim_start().to_ascii_lowercase().as_str() {
@@ -282,17 +452,18 @@ document.addEventListener('click', (event) => {
         else {
             ""
         };
-        let row_classes = if block_kind.is_some() { "row deferred block-start" } else { "row deferred" };
-        let collapsible_toggle = if block_kind.is_some() { "<span class=\"toggle\">▸</span>" } else { "" };
+        let show_toggle = block_kind.is_some() && !deferred.specific_content.is_empty();
+        let row_classes = if show_toggle { "row deferred block-start" } else { "row deferred" };
+        let collapsible_toggle = if show_toggle { "<span class=\"toggle\">▸</span>" } else { "" };
         let show_expanded = Self::template_shows_source_expanded(format);
         let show_raw = Self::template_shows_source_raw(format);
         writeln!(
             writer,
-            "<div id=\"row-{row_id}\" class=\"{row_classes}\" data-row-id=\"row-{row_id}\" data-kind=\"{}\"{block_start_attrs}{block_end_attrs}><span class=\"cell marker\">{collapsible_toggle}</span><span class=\"cell addr\"></span><span class=\"cell phys\"></span><span class=\"cell bytes\"></span><span class=\"cell line\">{}</span><span class=\"cell specific\"{}>{}</span>{}{}</div>",
+            "<div id=\"row-{row_id}\" class=\"{row_classes}\" data-row-id=\"row-{row_id}\" data-kind=\"{}\"{block_start_attrs}{block_end_attrs}><span class=\"cell marker\">{collapsible_toggle}</span><span class=\"cell addr\"></span><span class=\"cell phys\"></span><span class=\"cell bytes\"></span><span class=\"cell specific\"{}>{}</span><span class=\"cell line\">{}</span>{}{}</div>",
             Self::token_kind_name(deferred.token_kind),
-            deferred.line_number.map(|v| v.to_string()).unwrap_or_default(),
             Self::row_hover_attr(row_id),
             escape_html(deferred.specific_content),
+            deferred.line_number.map(|v| v.to_string()).unwrap_or_default(),
             if show_expanded {
                 format!("<span class=\"cell source-expanded\"{}>{}</span>", Self::row_hover_attr(row_id), self.highlight_source_html(&render_source_column(Some(deferred.source_line_expanded)), row_id))
             } else { String::new() },
@@ -311,7 +482,7 @@ document.addEventListener('click', (event) => {
             .map(|value| format_address_for(format, value, logical_address_width(format)))
             .unwrap_or_default();
         if let Some(symbol) = Self::extract_definition_symbol(line.token_kind) {
-            self.symbol_targets.insert(symbol, row_id);
+            self.insert_symbol_target(&symbol, row_id);
         }
         let block_kind = self.classify_block(line.token_kind, line.source_line_expanded)
             .or_else(|| self.classify_block(line.token_kind, line.source_line_raw));
@@ -321,7 +492,7 @@ document.addEventListener('click', (event) => {
         }).unwrap_or("");
         let block_start_attrs = block_kind
             .as_ref()
-            .map(|kind| format!(" data-block-kind=\"{}\"", block_kind_name))
+            .map(|_| format!(" data-block-kind=\"{}\"", block_kind_name))
             .unwrap_or_default();
         let block_end_attrs = if matches!(line.source_line_expanded.trim_start().to_ascii_lowercase().as_str(), "endm" | "endr") {
             match line.source_line_expanded.trim_start().to_ascii_lowercase().as_str() {
@@ -332,8 +503,9 @@ document.addEventListener('click', (event) => {
         else {
             ""
         };
-        let row_classes = if block_kind.is_some() { "row block-start" } else { "row" };
-        let collapsible_toggle = if block_kind.is_some() { "<span class=\"toggle\">▸</span>" } else { "" };
+        let show_toggle = block_kind.is_some() && !line.is_multiline_continuation;
+        let row_classes = if show_toggle { "row block-start" } else { "row" };
+        let collapsible_toggle = if show_toggle { "<span class=\"toggle\">▸</span>" } else { "" };
         let show_expanded = Self::template_shows_source_expanded(format);
         let show_raw = Self::template_shows_source_raw(format);
         writeln!(
@@ -343,13 +515,13 @@ document.addEventListener('click', (event) => {
             escape_html(&logical),
             escape_html(line.physical_address_repr),
             Self::row_hover_attr(row_id),
-            render_html_bytes_for_row(format, line.bytes, Some(row_id)),
+            self.render_token_bytes_html(format, row_id, &line),
             line.line_number.map(|value| value.to_string()).unwrap_or_default(),
             if show_expanded {
-                format!("<span class=\"cell source-expanded interactive\"{}>{}</span>", Self::row_hover_attr(row_id), self.highlight_source_html(&render_source_column(Some(line.source_line_expanded)), row_id))
+                format!("<span class=\"cell source-expanded interactive\"{}>{}</span>", Self::row_hover_attr(row_id), self.highlight_source_html_precise(&render_source_column(Some(line.source_line_expanded)), row_id, line.tokens, true))
             } else { String::new() },
             if show_raw {
-                format!("<span class=\"cell source-raw interactive\"{}>{}</span>", Self::row_hover_attr(row_id), self.highlight_source_html(&render_source_column(Some(line.source_line_raw)), row_id))
+                format!("<span class=\"cell source-raw interactive\"{}>{}</span>", Self::row_hover_attr(row_id), self.highlight_source_html_precise(&render_source_column(Some(line.source_line_raw)), row_id, line.tokens, false))
             } else { String::new() }
         ).unwrap();
     }

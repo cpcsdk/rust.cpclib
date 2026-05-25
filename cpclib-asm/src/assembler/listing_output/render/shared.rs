@@ -3,11 +3,11 @@ use std::io::Write;
 
 use cpclib_common::itertools::Itertools;
 
-use super::*;
-use super::format::{
+use super::super::TokenKind;
+use super::super::format::{
     blank, format_address_for, format_deferred_line_with_template_for,
     format_line_with_template_for, hex_byte_for, logical_address_width,
-    render_source_column
+    render_source_column, ListingOutputFormat, ListingOutputKind
 };
 
 pub(crate) struct ListingLineRender<'a> {
@@ -22,10 +22,18 @@ pub(crate) struct ListingLineRender<'a> {
     pub(crate) source_line_expanded: &'a str,
     pub(crate) is_multiline_continuation: bool,
     pub(crate) token_kind: &'a TokenKind,
+    pub(crate) tokens: &'a [ListingTokenRender<'a>],
     pub(crate) definition_target: Option<usize>,
     pub(crate) highlighted_symbols: &'a [String],
     pub(crate) collapsible: bool,
     pub(crate) collapsed_block: bool
+}
+
+pub(crate) struct ListingTokenRender<'a> {
+    pub(crate) raw_text: &'a str,
+    pub(crate) expanded_text: &'a str,
+    pub(crate) bytes: &'a [u8],
+    pub(crate) token_kind: &'a TokenKind
 }
 
 pub(crate) struct ListingDeferredRender<'a> {

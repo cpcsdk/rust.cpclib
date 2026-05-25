@@ -7143,7 +7143,7 @@ impl Env {
                 if let Some((label, count)) = release_result {
                     if !self.pass.is_listing_pass()
                         && self.symbols().contains_symbol(&label)?
-                        && self.symbols().int_value(&label).unwrap().unwrap() != count as _
+                        && self.symbols().int_value(&label).unwrap().unwrap() != count as i32
                     {
                         self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(
                             format!("Symbol {label} has been overwritten")

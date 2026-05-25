@@ -1,4 +1,7 @@
-use super::*;
+use std::io::Write;
+
+use super::super::format::{blank, format_address_for, format_deferred_line_with_template_for, format_line_with_template_for, logical_address_width, ListingOutputFormat};
+use super::shared::{ListingDeferredRender, ListingLineRender, ListingNotice, TextListingRenderer};
 
 impl TextListingRenderer {
     pub(crate) fn render_notice(&mut self, writer: &mut dyn Write, notice: ListingNotice<'_>) {
