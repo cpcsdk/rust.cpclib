@@ -96,6 +96,7 @@ pub struct ListingOutput {
     current_token_kind: TokenKind,
     deferred_for_line: Vec<String>,
     counter_update: Vec<String>,
+    delayed_counter_update: Vec<String>,
     format: ListingOutputFormat,
     current_file_index: usize,
     file_indices: HashMap<String, usize>,
@@ -155,6 +156,7 @@ impl ListingOutput {
             current_token_kind: TokenKind::Hidden,
             deferred_for_line: Default::default(),
             counter_update: Vec::new(),
+            delayed_counter_update: Vec::new(),
             format,
             current_file_index: 0,
             file_indices: HashMap::new(),
@@ -474,23 +476,20 @@ impl ListingOutput {
     }
 
     fn extract_code(token: &LocatedToken) -> String {
-        match token {
-            LocatedToken {
-                inner: either::Left(LocatedTokenInner::Macro { .. } | LocatedTokenInner::Repeat(..)),
-                span,
-                ..
-            } => {
-                // 		self.need_to_cut = true;
-                span.as_str().to_string()
-            },
-
-            _ => {
-                // 			self.need_to_cut = false;
-                unsafe {
-                    std::str::from_utf8_unchecked(token.span().get_line_beginning().as_bytes())
-                }
-                .to_owned()
+        if matches!(
+            token.deref(),
+            LocatedTokenInner::Macro { .. }
+                | LocatedTokenInner::MacroCall(..)
+                | LocatedTokenInner::Repeat(..)
+        ) {
+            // keep complete multiline source for macro/repeat style constructs
+            token.span().as_str().to_string()
+        }
+        else {
+            unsafe {
+                std::str::from_utf8_unchecked(token.span().get_line_beginning().as_bytes())
             }
+            .to_owned()
         }
     }
 
@@ -591,9 +590,15 @@ impl ListingOutput {
             let current_inner_data = data_representation.get(idx);
             let current_chunk = data_chunks.get(idx).copied().unwrap_or(&[]);
             let current_data_len = data_chunks.get(idx).map(|chunk| chunk.len()).unwrap_or(0);
+            let is_multiline_continuation =
+                idx > 0 && line_representation.len() > 1 && current_inner_line.is_some();
+            let is_continuation_without_data = is_multiline_continuation && current_inner_data.is_none();
 
             let logical_address = self.current_first_address.wrapping_add(byte_offset as u32);
-            let logical_representation = if current_inner_line.is_none() && current_inner_data.is_none() {
+            let logical_representation = if is_continuation_without_data {
+                None
+            }
+            else if current_inner_line.is_none() && current_inner_data.is_none() {
                 None
             }
             else {
@@ -607,7 +612,10 @@ impl ListingOutput {
                 PhysicalAddress::Cpr(adr) => adr.address() as _
             };
             let current_offset = base_offset.wrapping_add(byte_offset as u32);
-            let phys_addr_representation = if !self.format.show_physical_address {
+            let phys_addr_representation = if is_continuation_without_data {
+                Self::blank(self.physical_field_width())
+            }
+            else if !self.format.show_physical_address {
                 Self::blank(self.physical_field_width())
             }
             else if current_inner_line.is_none() && current_inner_data.is_none() {
@@ -637,8 +645,7 @@ impl ListingOutput {
                     Some(fallback_source)
                 );
                 if rendered.trim().is_empty() {
-                    writeln!(
-                        self.writer,
+                    let fallback_rendered = format!(
                         "{} {} {:bytes_width$} {}",
                         logical_representation
                             .map(|value| self.format_address(value, self.logical_address_width()))
@@ -647,11 +654,21 @@ impl ListingOutput {
                         fallback_bytes,
                         fallback_source,
                         bytes_width = self.bytes_per_line() * 3
-                    )
-                    .unwrap();
+                    );
+                    if is_multiline_continuation {
+                        writeln!(self.writer, ">{fallback_rendered}").unwrap();
+                    }
+                    else {
+                        writeln!(self.writer, "{fallback_rendered}").unwrap();
+                    }
                 }
                 else {
-                    writeln!(self.writer, "{rendered}").unwrap();
+                    if is_multiline_continuation {
+                        writeln!(self.writer, ">{rendered}").unwrap();
+                    }
+                    else {
+                        writeln!(self.writer, "{rendered}").unwrap();
+                    }
                 }
             }
 
@@ -659,12 +676,14 @@ impl ListingOutput {
         }
 
         if self.has_current_line_output() {
-            for counter in self.counter_update.iter() {
+            for counter in self.delayed_counter_update.iter() {
                 self.writer
                     .write_all(format!("{counter}\n").as_bytes())
                     .unwrap();
             }
-            self.counter_update.clear();
+            self.delayed_counter_update.clear();
+
+            self.delayed_counter_update.append(&mut self.counter_update);
         }
 
         // cleanup all the fields of the current line
@@ -675,6 +694,18 @@ impl ListingOutput {
 
     pub fn finish(&mut self) {
         self.process_current_line();
+        for counter in self.delayed_counter_update.iter() {
+            self.writer
+                .write_all(format!("{counter}\n").as_bytes())
+                .unwrap();
+        }
+        self.delayed_counter_update.clear();
+        for counter in self.counter_update.iter() {
+            self.writer
+                .write_all(format!("{counter}\n").as_bytes())
+                .unwrap();
+        }
+        self.counter_update.clear();
         if !self.deferred_for_line.is_empty() {
             panic!()
         }
@@ -888,6 +919,9 @@ mod tests {
 
     use cpclib_tokens::symbols::MemoryPhysicalAddress;
 
+    use crate::preamble::{LocatedTokenInner, ParserContextBuilder};
+    use crate::parse_z80_with_context_builder;
+
     use super::{
         ListingAddressRadix, ListingOutput, ListingOutputFormat, ListingSourceFileOutputMode,
         TokenKind
@@ -949,6 +983,7 @@ mod tests {
         output.counter_update.push("0201 ????? <new iteration>".to_string());
 
         output.process_current_line();
+        output.finish();
 
         let listing = writer.snapshot();
         assert!(listing.contains("my_label"), "listing={listing}");
@@ -1002,6 +1037,118 @@ mod tests {
         let listing = writer.snapshot();
         assert!(listing.contains("428B 0428B scroller_generate_initial_code\n>"), "listing={listing}");
         assert!(listing.contains(" 202 scroller_generate_initial_code"), "listing={listing}");
+    }
+
+    #[test]
+    fn extract_code_keeps_multiline_macro_call_span() {
+        let source = "\
+SWITCH_VALUES(\n\
+    scroller_configuration_table.current_generating_code_table,\n\
+    scroller_configuration_table.next_generating_code_table\n\
+)\n";
+
+        let listing = parse_z80_with_context_builder(source, ParserContextBuilder::default())
+            .expect("parse should succeed");
+        let token = listing
+            .iter()
+            .find(|token| matches!(&token.inner, either::Left(LocatedTokenInner::MacroCall(..))))
+            .expect("macro call token expected");
+
+        let extracted = ListingOutput::extract_code(token);
+        assert!(extracted.contains("SWITCH_VALUES("), "extracted={extracted:?}");
+        assert!(
+            extracted.contains("scroller_configuration_table.current_generating_code_table"),
+            "extracted={extracted:?}"
+        );
+        assert!(
+            extracted.contains("scroller_configuration_table.next_generating_code_table"),
+            "extracted={extracted:?}"
+        );
+        assert!(extracted.contains('\n'), "extracted={extracted:?}");
+    }
+
+    #[test]
+    fn extract_code_keeps_multiline_macro_definition_span() {
+        let source = "\
+macro SWITCH_VALUES addr1, addr2\n\
+    ld hl, ({addr1})\n\
+    ld de, ({addr2})\n\
+endm\n";
+
+        let listing = parse_z80_with_context_builder(source, ParserContextBuilder::default())
+            .expect("parse should succeed");
+        let token = listing
+            .iter()
+            .find(|token| matches!(&token.inner, either::Left(LocatedTokenInner::Macro { .. })))
+            .expect("macro definition token expected");
+
+        let extracted = ListingOutput::extract_code(token);
+        assert!(
+            extracted.contains("macro SWITCH_VALUES addr1, addr2"),
+            "extracted={extracted:?}"
+        );
+        assert!(extracted.contains("ld hl, ({addr1})"), "extracted={extracted:?}");
+        assert!(extracted.contains("ld de, ({addr2})"), "extracted={extracted:?}");
+        assert!(extracted.contains("endm"), "extracted={extracted:?}");
+    }
+
+    #[test]
+    fn process_current_line_marks_multiline_continuation_with_gt() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new(writer.clone());
+        output.on();
+
+        output.current_line_group = Some((227, "SWITCH_VALUES(\n\ta,\n\tb\n)".to_string()));
+        output.current_first_address = 0x42A2;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x42A2, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+
+        output.process_current_line();
+
+        let listing = writer.snapshot();
+        let mut lines = listing.lines();
+        let _first = lines.next().unwrap_or_default();
+        let second = lines.next().unwrap_or_default();
+        assert!(second.starts_with('>'), "listing={listing}");
+    }
+
+    #[test]
+    fn process_current_line_multiline_without_data_uses_dot_marker() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new(writer.clone());
+        output.on();
+
+        output.current_line_group = Some((257, "repeat 3\nline2\nline3\nendr".to_string()));
+        output.current_first_address = 0x42CC;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x42CC, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+
+        output.process_current_line();
+
+        let listing = writer.snapshot();
+        let second = listing.lines().nth(1).unwrap_or_default();
+        assert!(second.contains("                            258"), "listing={listing}");
+        assert!(!second.contains('.'), "listing={listing}");
+    }
+
+    #[test]
+    fn finish_flushes_iteration_counter_after_block_content() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new(writer.clone());
+        output.on();
+
+        output.current_line_group = Some((257, "repeat 2\nline2\nendr".to_string()));
+        output.current_first_address = 0x42CC;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x42CC, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+        output.counter_update.push("0001 ????? <new iteration>".to_string());
+
+        output.finish();
+
+        let listing = writer.snapshot();
+        let block_pos = listing.find("42CC").unwrap_or(usize::MAX);
+        let counter_pos = listing.find("0001 ????? <new iteration>").unwrap_or(0);
+        assert!(counter_pos > block_pos, "listing={listing}");
     }
 
     #[test]
