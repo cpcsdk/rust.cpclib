@@ -7,6 +7,9 @@ use std::sync::{Arc, LazyLock};
 
 use cpclib_asm::AssemblingOptionFlags;
 use cpclib_asm::assembler::file::get_filename_to_read;
+use cpclib_asm::assembler::listing_output::{
+    ListingAddressRadix, ListingOutputFormat, ListingSourceFileOutputMode
+};
 use cpclib_asm::preamble::file::read_source;
 use cpclib_asm::preamble::symbols_output::SymbolOutputFormat;
 use cpclib_asm::preamble::*;
@@ -339,8 +342,9 @@ pub fn assemble(
     }
 
     if let Some(dest) = matches.get_one::<String>("LISTING_OUTPUT") {
+        let listing_format = listing_format_from_matches(matches)?;
         if dest == "-" {
-            assemble_options.write_listing_output(std::io::stdout());
+            assemble_options.write_listing_output_with_format(std::io::stdout(), listing_format);
         }
         else {
             let file = File::create(dest).map_err(|e| {
@@ -349,7 +353,7 @@ pub fn assemble(
                     ctx: format!("creating {dest}")
                 }
             })?;
-            assemble_options.write_listing_output(file);
+            assemble_options.write_listing_output_with_format(file, listing_format);
         }
     }
 
@@ -713,6 +717,53 @@ static EMBEDDED_FILES: LazyLock<Vec<PossibleValue>> = LazyLock::new(|| {
         .collect_vec()
 });
 
+fn listing_format_from_matches(matches: &ArgMatches) -> Result<ListingOutputFormat, BasmError> {
+    let mut format = ListingOutputFormat::default();
+
+    if let Some(template) = matches.get_one::<String>("LISTING_LINE_TEMPLATE") {
+        format.listing_line_template = template.to_string();
+    }
+
+    if let Some(radix) = matches.get_one::<String>("LISTING_ADDRESS_RADIX") {
+        format.address_radix = match radix.as_str() {
+            "hex" => ListingAddressRadix::Hex,
+            "dec" => ListingAddressRadix::Dec,
+            value => {
+                return Err(BasmError::InvalidArgument(format!(
+                    "Invalid listing address radix {value}. Expected hex or dec"
+                )));
+            }
+        };
+    }
+
+    if let Some(bytes_per_line) = matches.get_one::<usize>("LISTING_BYTES_PER_LINE") {
+        format.bytes_per_line = *bytes_per_line;
+    }
+
+    if matches.get_flag("LISTING_NO_LINE_NUMBERS") {
+        format.show_line_numbers = false;
+    }
+
+    if matches.get_flag("LISTING_NO_PHYSICAL_ADDRESS") {
+        format.show_physical_address = false;
+    }
+
+    if let Some(source_mode) = matches.get_one::<String>("LISTING_SOURCE_MODE") {
+        format.source_file_output_mode = match source_mode.as_str() {
+            "none" => ListingSourceFileOutputMode::None,
+            "header" => ListingSourceFileOutputMode::Header,
+            "filemap" => ListingSourceFileOutputMode::FileMap,
+            value => {
+                return Err(BasmError::InvalidArgument(format!(
+                    "Invalid listing source mode {value}. Expected none, header or filemap"
+                )));
+            }
+        };
+    }
+
+    Ok(format)
+}
+
 /// Generated the clap Commands
 pub fn build_args_parser() -> clap::Command {
     let cmd = Command::new("basm")
@@ -742,6 +793,58 @@ pub fn build_args_parser() -> clap::Command {
                         .help("Filename of the listing output.")
                         .long("lst")
                         .value_hint(ValueHint::FilePath)
+                    )
+                    .arg(Arg::new("LISTING_LINE_TEMPLATE")
+                        .help("Template used to render listing lines")
+                        .long_help("Template used to render listing lines. Supported placeholders:\n\
+{A}: Instruction address (formatted with --lst-address-radix and width settings).\n\
+{P}: Physical address column (empty when --lst-no-physical-address is used).\n\
+{C}: Emitted opcodes for the current rendered chunk, as hex bytes separated by spaces.\n\
+{CX}: Like {C}, padded with spaces up to --lst-bytes-per-line width (8 by default).\n\
+{F}: Zero-based source file index (root source file is 0, then include order).\n\
+{F2}: Like {F}, right-aligned on width 2.\n\
+{F3}: Like {F}, right-aligned on width 3.\n\
+{L}: Source line number (starting at 1). Empty when --lst-no-line-numbers is used.\n\
+{L3}: Like {L}, right-aligned on width 3.\n\
+{L4}: Like {L}, right-aligned on width 4.\n\
+{L5}: Like {L}, right-aligned on width 5.\n\
+{S}: Source code text for the emitted line, trimmed on the left.\n\
+\n\
+If a placeholder appears multiple times in the template, only the first occurrence is rendered and subsequent occurrences are ignored.")
+                        .long("lst-template")
+                        .requires("LISTING_OUTPUT")
+                    )
+                    .arg(Arg::new("LISTING_SOURCE_MODE")
+                        .help("How source file names are rendered in listing output")
+                        .long("lst-source-mode")
+                        .value_parser(["none", "header", "filemap"])
+                        .default_value("header")
+                        .requires("LISTING_OUTPUT")
+                    )
+                    .arg(Arg::new("LISTING_ADDRESS_RADIX")
+                        .help("Radix used to format listing addresses")
+                        .long("lst-address-radix")
+                        .value_parser(["hex", "dec"])
+                        .default_value("hex")
+                        .requires("LISTING_OUTPUT")
+                    )
+                    .arg(Arg::new("LISTING_BYTES_PER_LINE")
+                        .help("Number of machine-code bytes emitted per listing line")
+                        .long("lst-bytes-per-line")
+                        .value_parser(clap::value_parser!(usize))
+                        .requires("LISTING_OUTPUT")
+                    )
+                    .arg(Arg::new("LISTING_NO_LINE_NUMBERS")
+                        .help("Hide source line numbers in listing output")
+                        .long("lst-no-line-numbers")
+                        .action(ArgAction::SetTrue)
+                        .requires("LISTING_OUTPUT")
+                    )
+                    .arg(Arg::new("LISTING_NO_PHYSICAL_ADDRESS")
+                        .help("Hide physical address column in listing output")
+                        .long("lst-no-physical-address")
+                        .action(ArgAction::SetTrue)
+                        .requires("LISTING_OUTPUT")
                     )
                     .arg(Arg::new("REMU_OUTPUT")
                         .help("Filename to store the remu file used by Ace to import label and debug information")
