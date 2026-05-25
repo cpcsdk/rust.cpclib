@@ -330,7 +330,7 @@ impl ListingOutput {
         specific_content: &str,
         line_number: Option<u32>,
         source_line: &str
-    ) -> String {
+    ) -> Vec<String> {
         let source_marker = "\u{1f}SOURCE\u{1f}";
         let rendered = self.format_line_with_template(
             None,
@@ -354,11 +354,20 @@ impl ListingOutput {
         match anchor {
             Some(anchor) => {
                 let suffix = &rendered[anchor..];
-                format!("{specific_content:<anchor$}{suffix}")
+                if !specific_content.is_empty() && specific_content.len() > anchor {
+                    let continuation_prefix = anchor.saturating_sub(1);
+                    vec![
+                        specific_content.to_string(),
+                        format!(">{:continuation_prefix$}{suffix}", "")
+                    ]
+                }
+                else {
+                    vec![format!("{specific_content:<anchor$}{suffix}")]
+                }
             },
-            None if rendered.trim().is_empty() => specific_content.to_string(),
-            None if specific_content.is_empty() => rendered,
-            None => format!("{specific_content} {rendered}")
+            None if rendered.trim().is_empty() => vec![specific_content.to_string()],
+            None if specific_content.is_empty() => vec![rendered],
+            None => vec![format!("{specific_content} {rendered}")]
         }
     }
 
@@ -562,12 +571,14 @@ impl ListingOutput {
             let lines = line.split('\n').collect_vec();
             let lines_count = lines.len(); // line number corresponds to the VERY LAST line and not the FIRST one
             for (line_delta, line) in lines.into_iter().enumerate() {
-                let rendered = self.format_deferred_line_with_template(
+                let rendered_lines = self.format_deferred_line_with_template(
                     if line_delta == 0 { specific_content } else { "" },
                     Some(line_number + delta as u32 + line_delta as u32 - lines_count as u32),
                     line
                 );
-                writeln!(self.writer, "{rendered}").unwrap();
+                for rendered in rendered_lines {
+                    writeln!(self.writer, "{rendered}").unwrap();
+                }
             }
         }
         self.deferred_for_line.clear();
@@ -964,6 +975,33 @@ mod tests {
         let listing = writer.snapshot();
         assert!(listing.contains("MACRO      SWITCH_VALUES               30 macro SWITCH_VALUES addr1, addr2"), "listing={listing}");
         assert!(listing.contains("                                       31 ld hl, ({addr1})"), "listing={listing}");
+    }
+
+    #[test]
+    fn process_current_line_wraps_overlong_deferred_label() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new_with_format(
+            writer.clone(),
+            ListingOutputFormat {
+                listing_line_template: "{A} {P} {C} {L4} {S}".to_string(),
+                ..Default::default()
+            }
+        );
+        output.on();
+
+        output.current_line_group = Some((202, "scroller_generate_initial_code".to_string()));
+        output.current_first_address = 0x428B;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x428B, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+        output
+            .deferred_for_line
+            .push("428B 0428B scroller_generate_initial_code".to_string());
+
+        output.process_current_line();
+
+        let listing = writer.snapshot();
+        assert!(listing.contains("428B 0428B scroller_generate_initial_code\n>"), "listing={listing}");
+        assert!(listing.contains(" 202 scroller_generate_initial_code"), "listing={listing}");
     }
 
     #[test]
