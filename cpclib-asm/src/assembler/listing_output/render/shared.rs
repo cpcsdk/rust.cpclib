@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use cpclib_common::itertools::Itertools;
-
 use super::super::TokenKind;
 use super::super::format::{
     blank, format_address_for, format_deferred_line_with_template_for,
@@ -30,6 +28,7 @@ pub(crate) struct ListingLineRender<'a> {
 }
 
 pub(crate) struct ListingTokenRender<'a> {
+    pub(crate) token_id: usize,
     pub(crate) raw_text: &'a str,
     pub(crate) expanded_text: &'a str,
     pub(crate) bytes: &'a [u8],
@@ -76,14 +75,19 @@ pub(crate) enum ListingRenderer {
     Html(HtmlListingRenderer)
 }
 
-pub(crate) struct TextListingRenderer;
+#[derive(Default)]
+pub(crate) struct TextListingRenderer {
+    pub(crate) current_global_symbol: Option<String>
+}
 
 #[derive(Default)]
 pub(crate) struct HtmlListingRenderer {
     pub(crate) next_row_id: usize,
     pub(crate) active_block: Option<HtmlBlock>,
     pub(crate) blocks: Vec<HtmlBlock>,
-    pub(crate) symbol_targets: HashMap<String, usize>
+    pub(crate) symbol_targets: HashMap<String, usize>,
+    pub(crate) symbol_names_by_row: HashMap<usize, String>,
+    pub(crate) current_global_symbol: Option<String>
 }
 
 pub(crate) fn render_html_bytes(format: &ListingOutputFormat, bytes: &[u8]) -> String {
@@ -95,10 +99,17 @@ pub(crate) fn render_html_bytes_for_row(format: &ListingOutputFormat, bytes: &[u
         .map(|row_id| format!(" data-hover-row=\"row-{row_id}\""))
         .unwrap_or_default();
 
-    bytes
-        .iter()
-        .map(|byte| format!("<span class=\"token byte\"{hover_attr}>{}</span>", hex_byte_for(format, *byte)))
-        .join(" ")
+    let mut out = String::new();
+    for (idx, byte) in bytes.iter().enumerate() {
+        out.push_str(&format!(
+            "<span class=\"token byte\"{hover_attr}>{}</span>",
+            hex_byte_for(format, *byte)
+        ));
+        if idx + 1 < bytes.len() {
+            out.push_str(&format!("<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"));
+        }
+    }
+    out
 }
 
 pub(crate) fn escape_html(text: &str) -> String {
@@ -155,10 +166,27 @@ pub(crate) fn is_identifier_char(ch: char) -> bool {
     ch.is_alphanumeric() || matches!(ch, '_' | '.' | '@' | '?')
 }
 
+pub(crate) fn global_prefix_for_symbol(symbol: &str) -> Option<&str> {
+    symbol
+        .rsplit_once('.')
+        .map(|(prefix, _)| prefix)
+        .filter(|prefix| !prefix.is_empty())
+}
+
+pub(crate) fn qualify_local_symbol(token_text: &str, current_global: Option<&str>) -> String {
+    if token_text.starts_with('.') {
+        if let Some(global) = current_global {
+            return format!("{global}{token_text}");
+        }
+    }
+
+    token_text.to_string()
+}
+
 impl ListingRenderer {
     pub(crate) fn from_format(format: &ListingOutputFormat) -> Self {
         match format.output_kind {
-            ListingOutputKind::Text => Self::Text(TextListingRenderer),
+            ListingOutputKind::Text => Self::Text(TextListingRenderer::default()),
             ListingOutputKind::Html => Self::Html(HtmlListingRenderer::default())
         }
     }
