@@ -4684,16 +4684,21 @@ impl Env {
             self.symbols_mut()
                 .set_symbol_to_value(counter_name, counter_value.clone().unwrap())?;
 
+            let depth = self.symbols().counter_depth() + 1;
+
             if self.pass.is_listing_pass()
                 && let Some(trigger) = self.output_trigger.as_mut()
             {
-                trigger.repeat_iteration(counter_name, counter_value.as_ref())
+                trigger.repeat_iteration(counter_name, counter_value.as_ref(), depth)
             }
         }
-        else if self.pass.is_listing_pass()
-            && let Some(trigger) = self.output_trigger.as_mut()
-        {
-            trigger.repeat_iteration("<new iteration>", counter_value.as_ref())
+        else {
+            let depth = self.symbols().counter_depth() + 1;
+            if self.pass.is_listing_pass()
+                && let Some(trigger) = self.output_trigger.as_mut()
+            {
+                trigger.repeat_iteration("<new iteration>", counter_value.as_ref(), depth)
+            }
         }
 
         if let Some(counter_value) = &counter_value {

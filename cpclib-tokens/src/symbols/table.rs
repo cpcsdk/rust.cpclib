@@ -812,6 +812,11 @@ impl SymbolsTableTrait for SymbolsTable {
 }
 
 impl SymbolsTable {
+    #[inline]
+    pub fn counter_depth(&self) -> usize {
+        self.counters.len()
+    }
+
     /// We are leaving the inner loop and remove its value
     pub fn pop_counter_value(&mut self) -> ExprResult {
         self.clear_counters_lut();
