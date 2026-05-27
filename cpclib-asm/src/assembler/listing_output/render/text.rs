@@ -111,7 +111,10 @@ impl TextListingRenderer {
             rendered
         };
 
-        if line.is_multiline_continuation {
+        let needs_continuation_marker =
+            line.is_multiline_continuation && !matches!(line.token_kind, TokenKind::Hidden);
+
+        if needs_continuation_marker {
             let rendered = rendered.strip_prefix(' ').unwrap_or(&rendered);
             writeln!(writer, ">{rendered}").unwrap();
         }

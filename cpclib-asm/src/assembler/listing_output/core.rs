@@ -431,6 +431,7 @@ impl ListingOutput {
             token.deref(),
             LocatedTokenInner::Macro { .. }
                 | LocatedTokenInner::MacroCall(..)
+                | LocatedTokenInner::Basic(..)
                 | LocatedTokenInner::Repeat(..)
         ) {
             // keep complete multiline source for macro/repeat style constructs

@@ -709,7 +709,14 @@ document.addEventListener('click', (event) => {
         let row_id = self.next_row_id;
         self.next_row_id += 1;
         self.update_current_global_symbol(line.token_kind);
-        let marker = if line.is_multiline_continuation { "&gt;" } else { "" };
+        let marker = if line.is_multiline_continuation
+            && !matches!(line.token_kind, TokenKind::Hidden)
+        {
+            "&gt;"
+        }
+        else {
+            ""
+        };
         let logical = line
             .logical_address
             .map(|value| format_address_for(format, value, logical_address_width(format)))

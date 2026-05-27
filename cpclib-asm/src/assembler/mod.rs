@@ -5372,6 +5372,17 @@ impl Env {
             self.active_page_info_mut().logical_codeadr = self.logical_output_address();
             self.active_page_info_mut().startadr = Some(self.logical_output_address());
             self.output_address = 0x170;
+
+            // Keep listing token start/end addresses aligned with the effective
+            // BASIC load address when LOCOMOTIVE is the first emitted content.
+            if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+                let code_adr = self.logical_code_address();
+                let output_adr = self.logical_to_physical_address(self.logical_output_address());
+                let trigger = self.output_trigger.as_mut().unwrap();
+
+                trigger.replace_code_address(&code_adr.into());
+                trigger.replace_physical_address(output_adr);
+            }
         }
 
         self.output_bytes(&bytes)

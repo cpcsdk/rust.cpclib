@@ -219,7 +219,6 @@ fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
             | "good_assembler_control_with_org.asm"
             | "good_bank.asm"
             | "good_bankset.asm"
-            | "good_basic.asm"
             | "good_bzpack_bx0_backward_crunched_section.asm"
             | "good_bzpack_bx0_crunched_section.asm"
             | "good_bzpack_bx2_backward_crunched_section.asm"
@@ -228,7 +227,6 @@ fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
             | "good_bzpack_ef8_crunched_section.asm"
             | "good_bzpack_lzm_backward_crunched_section.asm"
             | "good_bzpack_lzm_crunched_section.asm"
-            | "good_charset.asm"
             | "good_crunched_section2.asm"
             | "good_crunched_section3.asm"
             | "good_crunched_section4.asm"
@@ -320,6 +318,7 @@ fn extract_rows_from_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow>
     listing
         .lines()
         .filter_map(|line| {
+            let line = line.strip_prefix('>').unwrap_or(line);
             let mut parts = line.split_whitespace();
             let addr = parts.next()?;
             if addr.len() != 4 || !addr.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -539,6 +538,38 @@ fn listing_contains_good_str_directives_and_escaped_quotes() {
         vec![0x68, 0x65, 0x6C, 0x6C, 0xEF],
         "STR bytes in code-only listing should match emitted bytes (last char with bit 7 set)."
     );
+}
+
+#[test]
+fn listing_contains_full_good_basic_locomotive_source_block() {
+    let _lock = LOCK.lock();
+    manual_cleanup();
+
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+    let listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
+
+    let res = run_basm_once_with_listing("good_basic.asm", output_fname, listing_fname);
+    if !res.status.success() {
+        panic!(
+            "Failure to assemble good_basic.asm.\n{}",
+            format_basm_failure(&res)
+        );
+    }
+
+    let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
+
+    let listing_lower = listing.to_ascii_lowercase();
+    assert!(listing_lower.contains("locomotive"));
+    assert!(listing_lower.contains("10 rem basic loader of binary exec"));
+    assert!(listing_lower.contains("20 rem yeah !!"));
+    assert!(listing_lower.contains("30 call"));
+    assert!(listing_lower.contains("endlocomotive"));
+    assert!(!listing.contains(">0178"));
 }
 
 fn specific_test(folder: &str, fname: &str) {
