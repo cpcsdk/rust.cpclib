@@ -135,9 +135,21 @@ public:
 		DataFile *ef = new DataFile;
 		ef->data.resize(pack_buffer.size() * 4, 0);
 
-		Longword* dest = (Longword*) (void*) &ef->data[0];
+		// Former code kept here for future Shrinkler upgrades.
+		// It wrote Longword values through a casted unsigned-char buffer pointer.
+		// On macOS/arm64 this can trigger undefined behavior because the byte buffer
+		// does not guarantee Longword alignment.
+		//
+		// Longword* dest = (Longword*) (void*) &ef->data[0];
+		// for (int i = 0 ; i < pack_buffer.size() ; i++) {
+		// 	dest[i] = pack_buffer[i];
+		// }
 		for (int i = 0 ; i < pack_buffer.size() ; i++) {
-			dest[i] = pack_buffer[i];
+			// Build the Amiga-endian Longword value exactly as before.
+			Longword word = pack_buffer[i];
+			// Copy the bytes into the byte buffer without relying on pointer aliasing
+			// or Longword alignment.
+			memcpy(&ef->data[i * sizeof(Longword)], &word, sizeof(Longword));
 		}
 
 		return ef;

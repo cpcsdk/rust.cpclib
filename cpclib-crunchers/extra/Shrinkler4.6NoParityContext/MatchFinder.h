@@ -82,7 +82,15 @@ class MatchFinder {
 			int r = rev_suffix_array[i];
 			if (r < length) {
 				int j = suffix_array[r + 1];
-				while (data[i + h] == data[j + h]) {
+				// Former code kept here for future Shrinkler upgrades.
+				// The sentinel exists in rev_suffix_array, not in the original byte buffer,
+				// so the old loop could read past data[length - 1] while building the LCP.
+				//
+				// while (data[i + h] == data[j + h]) {
+				// 	h = h + 1;
+				// }
+				// Stop at the end of the real input buffer before comparing bytes.
+				while (i + h < length && j + h < length && data[i + h] == data[j + h]) {
 					h = h + 1;
 				}
 				longest_common_prefix[r] = h;
