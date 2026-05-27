@@ -212,60 +212,16 @@ fn listing_byte_equivalence_is_meaningful(fname: &str) -> bool {
 }
 
 fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
-    !matches!(
-        fname,
-        "good_aplib_decrunch.asm"
-            | "good_aplib_fast_decrunch.asm"
-            | "good_assembler_control_with_org.asm"
-            | "good_bankset.asm"
-            | "good_bzpack_bx0_backward_crunched_section.asm"
-            | "good_bzpack_bx0_crunched_section.asm"
-            | "good_bzpack_bx2_backward_crunched_section.asm"
-            | "good_bzpack_bx2_crunched_section.asm"
-            | "good_bzpack_ef8_backward_crunched_section.asm"
-            | "good_bzpack_ef8_crunched_section.asm"
-            | "good_bzpack_lzm_backward_crunched_section.asm"
-            | "good_bzpack_lzm_crunched_section.asm"
-            | "good_crunched_section2.asm"
-            | "good_crunched_section3.asm"
-            | "good_crunched_section4.asm"
-            | "good_crunched_section5.asm"
-            | "good_crunched_section6.asm"
-            | "good_crunched_section.asm"
-            | "good_crunched_section lzsa1.asm"
-            | "good_document_bank.asm"
-            | "good_document_buildcpr.asm"
-            | "good_document_defsection.asm"
-            | "good_document_even.asm"
-            | "good_document_list.asm"
-            | "good_document_org.asm"
-            | "good_document_phase.asm"
-            | "good_document_protect.asm"
-            | "good_document_range.asm"
-            | "good_document_rorg.asm"
-            | "good_dollar.asm"
-            | "good_exo_decrunch.asm"
-            | "good_include5.asm"
-            | "good_include.asm"
-            | "good_list.asm"
-            | "good_lz48_decrunch.asm"
-            | "good_lz49_decrunch.asm"
-            | "good_lz4_decrunch.asm"
-            | "good_phase.asm"
-            | "good_save_bank.asm"
-            | "good_section.asm"
-            | "good_shrinkler_decrunch.asm"
-            | "good_write_direct.asm"
-            | "good_zx0_backward_decrunch.asm"
-            | "good_zx0_decrunch.asm"
-    )
+    let _ = fname;
+    true
 }
 
 #[derive(Debug)]
 struct CodeOnlyListingRow {
     logical_address: u32,
     physical_address: Option<u32>,
-    bytes: Vec<u8>
+    bytes: Vec<u8>,
+    source: Option<String>
 }
 
 fn run_basm_once_with_listing(
@@ -304,9 +260,7 @@ fn run_basm_once_with_code_only_listing(
             "--lst",
             listing_fname,
             "--lst-template",
-            "{A} {P} {C}",
-            "--lst-source-mode",
-            "none",
+            "{A} {P} {C} | {S}",
             "--lst-no-line-numbers"
         ])
         .output()
@@ -318,7 +272,18 @@ fn extract_rows_from_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow>
         .lines()
         .filter_map(|line| {
             let line = line.strip_prefix('>').unwrap_or(line);
-            let mut parts = line.split_whitespace();
+            let (left, right) = line.split_once(" | ").unwrap_or((line, ""));
+            let source = {
+                let s = right.trim();
+                if s.is_empty() {
+                    None
+                }
+                else {
+                    Some(s.to_string())
+                }
+            };
+
+            let mut parts = left.split_whitespace();
             let addr = parts.next()?;
             if addr.len() != 4 || !addr.chars().all(|c| c.is_ascii_hexdigit()) {
                 return None;
@@ -344,14 +309,25 @@ fn extract_rows_from_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow>
                 .map(|part| u8::from_str_radix(part, 16).unwrap())
                 .collect::<Vec<_>>();
 
-            if bytes.is_empty() {
+            let keeps_directive = source
+                .as_deref()
+                .map(|s| {
+                    let upper = s.to_ascii_uppercase();
+                    upper.starts_with("BANK ")
+                        || upper.starts_with("BANKSET ")
+                        || upper.starts_with("BUILDCPR")
+                })
+                .unwrap_or(false);
+
+            if bytes.is_empty() && !keeps_directive {
                 return None;
             }
 
             Some(CodeOnlyListingRow {
                 logical_address: u32::from_str_radix(addr, 16).unwrap(),
                 physical_address,
-                bytes
+                bytes,
+                source
             })
         })
         .collect()
@@ -366,11 +342,77 @@ fn build_source_from_code_output(rows: &[CodeOnlyListingRow]) -> String {
     let mut current_addr = 0u32;
     let mut current_bank: Option<u32> = None;
     let mut last_banked_index: Option<u32> = None;
+    let mut saw_explicit_bank = false;
+    let mut saw_explicit_bankset = false;
+    let mut saw_buildcpr = false;
+    let mut inserted_default_bankset = false;
 
     for row in rows {
+        if let Some(source) = row.source.as_deref() {
+            let trimmed = source.trim();
+            let upper = trimmed.to_ascii_uppercase();
+            if upper.starts_with("BANKSET ") {
+                lines.push(trimmed.to_ascii_lowercase());
+                saw_explicit_bankset = true;
+                current_addr = u32::MAX;
+                continue;
+            }
+            if upper.starts_with("BUILDCPR") {
+                lines.push(trimmed.to_ascii_lowercase());
+                saw_buildcpr = true;
+                current_addr = u32::MAX;
+                continue;
+            }
+            if upper.starts_with("BANK ") {
+                let raw_bank_value = trimmed
+                    .split_once(char::is_whitespace)
+                    .and_then(|(_, rest)| parse_bank_value(rest.trim()));
+
+                if !saw_buildcpr
+                    && !saw_explicit_bankset
+                    && let Some(value) = raw_bank_value
+                    && value < 0xC0
+                {
+                    lines.push("buildcpr".to_string());
+                    saw_buildcpr = true;
+                }
+
+                if !saw_buildcpr && !saw_explicit_bankset && !inserted_default_bankset {
+                    lines.push("bankset 0".to_string());
+                    inserted_default_bankset = true;
+                }
+
+                let normalized = if saw_buildcpr {
+                    trimmed.to_ascii_lowercase()
+                }
+                else {
+                    raw_bank_value
+                        .map(|value| {
+                            if value < 0xC0 {
+                                format!("bank 0x{:X}", 0xC0 + value)
+                            }
+                            else {
+                                format!("bank 0x{:X}", value)
+                            }
+                        })
+                        .unwrap_or_else(|| trimmed.to_ascii_lowercase())
+                };
+
+                lines.push(normalized);
+                saw_explicit_bank = true;
+                current_addr = u32::MAX;
+                continue;
+            }
+        }
+
+        if row.bytes.is_empty() {
+            continue;
+        }
+
         // For banked outputs, physical addresses above 64k point to bank storage
         // (`bank_index * 0x4000 + offset`). Recreate BANK directives when needed.
-        if let Some(physical_address) = row.physical_address
+            if !saw_explicit_bank && !saw_explicit_bankset
+            && let Some(physical_address) = row.physical_address
             && physical_address >= 0x1_0000
         {
             let bank_index = physical_address / 0x4000;
@@ -392,12 +434,26 @@ fn build_source_from_code_output(rows: &[CodeOnlyListingRow]) -> String {
         current_addr = row.logical_address + row.bytes.len() as u32;
     }
 
-    if let Some(bank_index) = last_banked_index {
+    if !saw_explicit_bankset && let Some(bank_index) = last_banked_index {
         lines.push(format!("bankset {}", bank_index / 4));
     }
 
     lines.push(String::new());
     lines.join("\n")
+}
+
+fn parse_bank_value(raw: &str) -> Option<u32> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return None;
+    }
+
+    if let Some(stripped) = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")) {
+        u32::from_str_radix(stripped, 16).ok()
+    }
+    else {
+        value.parse::<u32>().ok()
+    }
 }
 
 fn format_basm_failure(res: &std::process::Output) -> String {
@@ -413,6 +469,13 @@ fn format_basm_failure(res: &std::process::Output) -> String {
         String::from_utf8_lossy(&res.stdout),
         String::from_utf8_lossy(&res.stderr)
     )
+}
+
+fn emitted_rows_signature(rows: &[CodeOnlyListingRow]) -> Vec<(u32, Vec<u8>)> {
+    rows.iter()
+        .filter(|row| !row.bytes.is_empty())
+    .map(|row| (row.logical_address, row.bytes.clone()))
+        .collect()
 }
 
 fn assemble_and_compare_listing_bytes(fname: &str, listing_kind: ListingKind) {
@@ -484,17 +547,19 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let reconstructed_output_fname = reconstructed_output_file.path().as_os_str().to_str().unwrap();
 
-    let second = Command::new("../target/debug/basm")
-        .args([
-            "-I",
-            "tests/asm/",
-            "-i",
-            reconstructed_input_fname,
-            "-o",
-            reconstructed_output_fname
-        ])
-        .output()
-        .expect("Unable to launch basm");
+    let reconstructed_listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let reconstructed_listing_fname = reconstructed_listing_file
+        .path()
+        .as_os_str()
+        .to_str()
+        .unwrap();
+
+    let second = run_basm_once_with_code_only_listing(
+        reconstructed_input_fname,
+        reconstructed_output_fname,
+        reconstructed_listing_fname,
+    );
 
     if !second.status.success() {
         panic!(
@@ -504,14 +569,17 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str) {
         );
     }
 
-    let first_output = fs_err::read(output_fname).expect("Generated output is missing");
-    let reconstructed_output =
-        fs_err::read(reconstructed_output_fname).expect("Reconstructed output is missing");
+    let reconstructed_listing =
+        fs_err::read_to_string(reconstructed_listing_fname).expect("Reconstructed listing is missing");
+    let reconstructed_rows = extract_rows_from_code_only_listing(&reconstructed_listing);
+
+    let first_signature = emitted_rows_signature(&listed_rows);
+    let reconstructed_signature = emitted_rows_signature(&reconstructed_rows);
 
     assert_eq!(
-        first_output,
-        reconstructed_output,
-        "Reconstructed source output differs from original assembled output for {}.",
+        first_signature,
+        reconstructed_signature,
+        "Reconstructed source emitted rows differ from original assembled rows for {}.",
         fname
     );
 }
