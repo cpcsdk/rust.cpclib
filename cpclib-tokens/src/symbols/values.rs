@@ -205,24 +205,34 @@ pub enum Value {
     Counter(i32)
 }
 
+impl From<&ExprResult> for evalexpr::Value {
+    fn from(expr: &ExprResult) -> Self {
+        match expr {
+            ExprResult::Float(f) => evalexpr::Value::Float((*f).into()),
+            ExprResult::Value(v) => evalexpr::Value::Int(*v as _),
+            ExprResult::Char(c) => evalexpr::Value::Int(*c as _),
+            ExprResult::Bool(b) => evalexpr::Value::Boolean(*b),
+            ExprResult::String(s) => evalexpr::Value::String(s.to_string()),
+            ExprResult::List(items) => {
+                evalexpr::Value::Tuple(items.iter().map(evalexpr::Value::from).collect::<Vec<_>>())
+            },
+            ExprResult::Matrix { content, .. } => {
+                evalexpr::Value::Tuple(content.iter().map(evalexpr::Value::from).collect::<Vec<_>>())
+            }
+        }
+    }
+}
+
+impl From<ExprResult> for evalexpr::Value {
+    fn from(expr: ExprResult) -> Self {
+        (&expr).into()
+    }
+}
+
 impl From<Value> for evalexpr::Value {
     fn from(val: Value) -> Self {
         match val {
-            Value::Expr(e) => {
-                match e {
-                    ExprResult::Float(f) => evalexpr::Value::Float(f.into()),
-                    ExprResult::Value(v) => evalexpr::Value::Int(v as _),
-                    ExprResult::Char(c) => evalexpr::Value::Int(c as _),
-                    ExprResult::Bool(b) => evalexpr::Value::Boolean(b),
-                    ExprResult::String(s) => evalexpr::Value::String(s.into()),
-                    ExprResult::List(_l) => unimplemented!(),
-                    ExprResult::Matrix {
-                        width: _,
-                        height: _,
-                        content: _
-                    } => unimplemented!()
-                }
-            },
+            Value::Expr(e) => (&e).into(),
             Value::String(s) => evalexpr::Value::String(s.into()),
             Value::Address(v) => evalexpr::Value::Int(v.address() as _),
             Value::Macro(m) => evalexpr::Value::String(m.name.into()),
@@ -235,21 +245,7 @@ impl From<Value> for evalexpr::Value {
 impl From<&Value> for evalexpr::Value {
     fn from(val: &Value) -> Self {
         match val {
-            Value::Expr(e) => {
-                match e {
-                    ExprResult::Float(f) => evalexpr::Value::Float((*f).into()),
-                    ExprResult::Value(v) => evalexpr::Value::Int(*v as _),
-                    ExprResult::Char(c) => evalexpr::Value::Int(*c as _),
-                    ExprResult::Bool(b) => evalexpr::Value::Boolean(*b),
-                    ExprResult::String(s) => evalexpr::Value::String(s.to_string()),
-                    ExprResult::List(_l) => unimplemented!(),
-                    ExprResult::Matrix {
-                        width: _,
-                        height: _,
-                        content: _
-                    } => unimplemented!()
-                }
-            },
+            Value::Expr(e) => e.into(),
             Value::String(s) => evalexpr::Value::String(s.to_string()),
             Value::Address(v) => evalexpr::Value::Int(v.address() as _),
             Value::Macro(m) => evalexpr::Value::String(m.name.to_string()),

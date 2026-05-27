@@ -5964,9 +5964,9 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
 name = "hxcfe"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13a42f8ad5773f531659184fa722468c9e92ca1dff55dea6f4fd44b12160e808"
+checksum = "7d8d482974aa009ffeff79d4d6599ce905aaac2be08fd0a1dd49ce79e72900aa"
 dependencies = [
  "enumn",
  "hxcfe-sys",
@@ -5976,9 +5976,9 @@ dependencies = [
 
 [[package]]
 name = "hxcfe-sys"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9809b590c2d3f892a1df4304c44856cdbb86867a38d641c819d87be56450cde8"
+checksum = "28959f9026ce7a2c81f57643a3f39d3f7e2c05b07da453e4c70d8d7488331e80"
 dependencies = [
  "bindgen",
  "cc",
@@ -5992,9 +5992,9 @@ dependencies = [
 
 [[package]]
 name = "hxcfe_cli"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5bb1820db0dee89191b1ad2b9ec4a6f03a21b950d2414904c24878704d2a4e5"
+checksum = "34306abee4d7c14aa630b55fa0774cda479e2e165d2da9061339fc073911b00b"
 dependencies = [
  "anyhow",
  "clap",
