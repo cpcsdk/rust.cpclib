@@ -211,6 +211,56 @@ fn listing_byte_equivalence_is_meaningful(fname: &str) -> bool {
     )
 }
 
+fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
+    !matches!(
+        fname,
+        "good_aplib_decrunch.asm"
+            | "good_aplib_fast_decrunch.asm"
+            | "good_assembler_control_with_org.asm"
+            | "good_bank.asm"
+            | "good_bankset.asm"
+            | "good_bzpack_bx0_backward_crunched_section.asm"
+            | "good_bzpack_bx0_crunched_section.asm"
+            | "good_bzpack_bx2_backward_crunched_section.asm"
+            | "good_bzpack_bx2_crunched_section.asm"
+            | "good_bzpack_ef8_backward_crunched_section.asm"
+            | "good_bzpack_ef8_crunched_section.asm"
+            | "good_bzpack_lzm_backward_crunched_section.asm"
+            | "good_bzpack_lzm_crunched_section.asm"
+            | "good_charset.asm"
+            | "good_crunched_section2.asm"
+            | "good_crunched_section3.asm"
+            | "good_crunched_section4.asm"
+            | "good_crunched_section5.asm"
+            | "good_crunched_section6.asm"
+            | "good_crunched_section.asm"
+            | "good_crunched_section lzsa1.asm"
+            | "good_document_bank.asm"
+            | "good_document_buildcpr.asm"
+            | "good_document_defsection.asm"
+            | "good_document_even.asm"
+            | "good_document_list.asm"
+            | "good_document_org.asm"
+            | "good_document_protect.asm"
+            | "good_document_range.asm"
+            | "good_dollar.asm"
+            | "good_exo_decrunch.asm"
+            | "good_include5.asm"
+            | "good_include.asm"
+            | "good_list.asm"
+            | "good_lz48_decrunch.asm"
+            | "good_lz49_decrunch.asm"
+            | "good_lz4_decrunch.asm"
+            | "good_save_bank.asm"
+            | "good_section.asm"
+            | "good_shrinkler_decrunch.asm"
+            | "good_str.asm"
+            | "good_write_direct.asm"
+            | "good_zx0_backward_decrunch.asm"
+            | "good_zx0_decrunch.asm"
+    )
+}
+
 fn run_basm_once_with_listing(
     fname: &str,
     output_fname: &str,
@@ -229,6 +279,74 @@ fn run_basm_once_with_listing(
         ])
         .output()
         .expect("Unable to launch basm")
+}
+
+fn run_basm_once_with_code_only_listing(
+    fname: &str,
+    output_fname: &str,
+    listing_fname: &str
+) -> std::process::Output {
+    Command::new("../target/debug/basm")
+        .args([
+            "-I",
+            "tests/asm/",
+            "-i",
+            fname,
+            "-o",
+            output_fname,
+            "--lst",
+            listing_fname,
+            "--lst-template",
+            "{C}",
+            "--lst-source-mode",
+            "none",
+            "--lst-no-line-numbers",
+            "--lst-no-physical-address"
+        ])
+        .output()
+        .expect("Unable to launch basm")
+}
+
+fn extract_bytes_from_code_only_listing(listing: &str) -> Vec<u8> {
+    listing
+        .lines()
+        .flat_map(|line| {
+            let mut bytes = Vec::new();
+            let mut saw_first_non_empty = false;
+
+            for part in line.split_whitespace() {
+                let is_byte = part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit());
+
+                if !saw_first_non_empty {
+                    saw_first_non_empty = true;
+                    if !is_byte {
+                        return Vec::new();
+                    }
+                }
+
+                if is_byte {
+                    bytes.push(u8::from_str_radix(part, 16).unwrap());
+                }
+                else {
+                    break;
+                }
+            }
+
+            bytes
+        })
+        .collect()
+}
+
+fn build_source_from_code_output(bytes: &[u8]) -> String {
+    let mut lines = vec!["org 0".to_owned()];
+
+    for chunk in bytes.chunks(16) {
+        let db_values = chunk.iter().map(|b| format!("0x{b:02X}")).join(", ");
+        lines.push(format!("db {db_values}"));
+    }
+
+    lines.push(String::new());
+    lines.join("\n")
 }
 
 fn format_basm_failure(res: &std::process::Output) -> String {
@@ -280,6 +398,70 @@ fn assemble_and_compare_listing_bytes(fname: &str, listing_kind: ListingKind) {
         output,
         listed_bytes,
         "Generated output differs from bytes shown in {listing_kind_name} listing for {fname}."
+    );
+}
+
+fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str) {
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+    let listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
+
+    let first = run_basm_once_with_code_only_listing(fname, output_fname, listing_fname);
+    if !first.status.success() {
+        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&first));
+    }
+
+    let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
+    let listed_bytes = extract_bytes_from_code_only_listing(&listing);
+    if listed_bytes.is_empty() {
+        return;
+    }
+
+    let reconstructed_source = build_source_from_code_output(&listed_bytes);
+
+    let reconstructed_input_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let reconstructed_input_fname = reconstructed_input_file.path().as_os_str().to_str().unwrap();
+    fs_err::write(reconstructed_input_fname, reconstructed_source)
+        .expect("Unable to write reconstructed source");
+
+    let reconstructed_output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let reconstructed_output_fname = reconstructed_output_file.path().as_os_str().to_str().unwrap();
+
+    let second = Command::new("../target/debug/basm")
+        .args([
+            "-I",
+            "tests/asm/",
+            "-i",
+            reconstructed_input_fname,
+            "-o",
+            reconstructed_output_fname
+        ])
+        .output()
+        .expect("Unable to launch basm");
+
+    if !second.status.success() {
+        panic!(
+            "Failure to assemble reconstructed source for {}.\n{}",
+            fname,
+            format_basm_failure(&second)
+        );
+    }
+
+    let first_output = fs_err::read(output_fname).expect("Generated output is missing");
+    let reconstructed_output =
+        fs_err::read(reconstructed_output_fname).expect("Reconstructed output is missing");
+
+    assert_eq!(
+        first_output,
+        reconstructed_output,
+        "Reconstructed source output differs from original assembled output for {}.",
+        fname
     );
 }
 
@@ -582,6 +764,20 @@ fn expect_html_listing_bytes_match_generated_output(fname: &str) {
     }
 
     assemble_and_compare_listing_bytes(fname, ListingKind::Html);
+}
+
+#[test_resources("cpclib-basm/tests/asm/good_*.asm")]
+fn expect_reconstructed_source_from_code_listing_assembles(fname: &str) {
+    let _lock = LOCK.lock();
+
+    manual_cleanup();
+
+    let fname = &fname["cpclib-basm/tests/asm/".len()..];
+    if !reconstructed_binary_equivalence_is_meaningful(fname) {
+        return;
+    }
+
+    assemble_and_check_reconstructed_source_from_code_listing(fname);
 }
 
 //#[test_resources("basm/tests/asm/good_*.sym")]
