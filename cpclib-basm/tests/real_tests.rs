@@ -28,6 +28,8 @@ fn manual_cleanup() {
         "good_bankset_1_3.o",
         "good_save_txt.bin",
         "good_save_whole_inner.bin",
+        "HELLO.BIN",
+        "HELLO.TXT",
         "hello.bin",
         "hello.dsk",
         "hello.hfe",
@@ -326,6 +328,96 @@ fn extract_rows_from_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow>
         .collect()
 }
 
+fn extract_rows_from_html_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow> {
+    static ROW_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?s)<div[^>]*class=\"row[^\"]*\"[^>]*>.*?</div>"#).unwrap()
+    });
+    static ADDR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"<span class=\"cell addr\">\s*([0-9A-Fa-f]{4})\s*</span>"#).unwrap()
+    });
+    static PHYS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"<span class=\"cell phys\">(.*?)</span>"#).unwrap()
+    });
+    static BYTES_CELL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?s)<span class=\"cell bytes[^\"]*\"[^>]*>(.*?)</span>"#).unwrap()
+    });
+    static BYTE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"<span class=\"token byte\"[^>]*>\s*([0-9A-Fa-f]{2})\s*</span>"#)
+            .unwrap()
+    });
+    static SOURCE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?s)<span class=\"cell source\">(.*?)</span>"#).unwrap()
+    });
+    static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"<[^>]+>"#).unwrap());
+
+    ROW_RE
+        .captures_iter(listing)
+        .filter_map(|row_cap| {
+            let row = row_cap.get(0)?.as_str();
+            let logical_address = u32::from_str_radix(ADDR_RE.captures(row)?.get(1)?.as_str(), 16).ok()?;
+
+            let physical_address = PHYS_RE
+                .captures(row)
+                .and_then(|cap| cap.get(1))
+                .map(|m| strip_html_spaces(m.as_str()))
+                .filter(|s| !s.is_empty())
+                .and_then(|s| u32::from_str_radix(&s, 16).ok());
+
+            let bytes_cell = BYTES_CELL_RE
+                .captures(row)
+                .and_then(|cap| cap.get(1))
+                .map(|m| m.as_str())
+                .unwrap_or("");
+
+            let bytes = BYTE_RE
+                .captures_iter(bytes_cell)
+                .filter_map(|cap| cap.get(1))
+                .map(|m| u8::from_str_radix(m.as_str(), 16).unwrap())
+                .collect::<Vec<_>>();
+
+            let source = SOURCE_RE
+                .captures(row)
+                .and_then(|cap| cap.get(1))
+                .map(|m| m.as_str())
+                .map(|src| TAG_RE.replace_all(src, "").to_string())
+                .map(|src| src.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&"))
+                .map(|src| src.trim().to_string())
+                .filter(|src| !src.is_empty());
+
+            let keeps_directive = source
+                .as_deref()
+                .map(|s| {
+                    let upper = s.to_ascii_uppercase();
+                    upper.starts_with("BANK ")
+                        || upper.starts_with("BANKSET ")
+                        || upper.starts_with("BUILDCPR")
+                })
+                .unwrap_or(false);
+
+            if bytes.is_empty() && !keeps_directive {
+                return None;
+            }
+
+            Some(CodeOnlyListingRow {
+                logical_address,
+                physical_address,
+                bytes,
+                source
+            })
+        })
+        .collect()
+}
+
+fn extract_rows_from_code_only_listing_for_kind(
+    listing: &str,
+    listing_kind: ListingKind
+) -> Vec<CodeOnlyListingRow> {
+    match listing_kind {
+        ListingKind::Text => extract_rows_from_code_only_listing(listing),
+        ListingKind::Html => extract_rows_from_html_code_only_listing(listing)
+    }
+}
+
 fn build_source_from_code_output(rows: &[CodeOnlyListingRow]) -> String {
     if rows.is_empty() {
         return String::new();
@@ -576,22 +668,26 @@ fn assemble_and_compare_listing_bytes(fname: &str, listing_kind: ListingKind) {
     }
 }
 
-fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str) {
+fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str, listing_kind: ListingKind) {
     let output_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
 
-    let listing_file =
+    let listing_stem_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
+    let listing_stem = listing_stem_file.path().as_os_str().to_str().unwrap();
+    let listing_fname = match listing_kind {
+        ListingKind::Text => format!("{listing_stem}.lst"),
+        ListingKind::Html => format!("{listing_stem}.html")
+    };
 
-    let first = run_basm_once_with_code_only_listing(fname, output_fname, listing_fname);
+    let first = run_basm_once_with_code_only_listing(fname, output_fname, &listing_fname);
     if !first.status.success() {
         panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&first));
     }
 
-    let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
-    let listed_rows = extract_rows_from_code_only_listing(&listing);
+    let listing = fs_err::read_to_string(&listing_fname).expect("Listing is missing");
+    let listed_rows = extract_rows_from_code_only_listing_for_kind(&listing, listing_kind);
     if listed_rows.is_empty() {
         return;
     }
@@ -608,18 +704,22 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let reconstructed_output_fname = reconstructed_output_file.path().as_os_str().to_str().unwrap();
 
-    let reconstructed_listing_file =
+    let reconstructed_listing_stem_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let reconstructed_listing_fname = reconstructed_listing_file
+    let reconstructed_listing_stem = reconstructed_listing_stem_file
         .path()
         .as_os_str()
         .to_str()
         .unwrap();
+    let reconstructed_listing_fname = match listing_kind {
+        ListingKind::Text => format!("{reconstructed_listing_stem}.lst"),
+        ListingKind::Html => format!("{reconstructed_listing_stem}.html")
+    };
 
     let second = run_basm_once_with_code_only_listing(
         reconstructed_input_fname,
         reconstructed_output_fname,
-        reconstructed_listing_fname,
+        &reconstructed_listing_fname,
     );
 
     if !second.status.success() {
@@ -630,9 +730,10 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str) {
         );
     }
 
-    let reconstructed_listing =
-        fs_err::read_to_string(reconstructed_listing_fname).expect("Reconstructed listing is missing");
-    let reconstructed_rows = extract_rows_from_code_only_listing(&reconstructed_listing);
+    let reconstructed_listing = fs_err::read_to_string(&reconstructed_listing_fname)
+        .expect("Reconstructed listing is missing");
+    let reconstructed_rows =
+        extract_rows_from_code_only_listing_for_kind(&reconstructed_listing, listing_kind);
 
     let first_signature = emitted_rows_signature(&listed_rows);
     let reconstructed_signature = emitted_rows_signature(&reconstructed_rows);
@@ -1048,7 +1149,9 @@ fn expect_reconstructed_source_from_code_listing_assembles(fname: &str) {
         return;
     }
 
-    assemble_and_check_reconstructed_source_from_code_listing(fname);
+    assemble_and_check_reconstructed_source_from_code_listing(fname, ListingKind::Text);
+    manual_cleanup();
+    assemble_and_check_reconstructed_source_from_code_listing(fname, ListingKind::Html);
 }
 
 //#[test_resources("basm/tests/asm/good_*.sym")]
