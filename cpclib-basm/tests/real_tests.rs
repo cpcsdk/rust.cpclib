@@ -55,6 +55,234 @@ fn command_for_generated_test(
     process(&args, Arc::new(()))
 }
 
+#[derive(Debug)]
+struct ListingBytesRow {
+    logical_address: u32,
+    has_remapped_physical_address: bool,
+    bytes: Vec<u8>
+}
+
+#[derive(Copy, Clone)]
+enum ListingKind {
+    Text,
+    Html
+}
+
+fn extract_byte_rows_from_text_listing(listing: &str) -> Vec<ListingBytesRow> {
+    const LOGICAL_WIDTH: usize = 4;
+    const PHYSICAL_WIDTH: usize = 6;
+    const BYTES_WIDTH: usize = 24;
+
+    listing
+        .lines()
+        .filter_map(|line| {
+            let line = line.strip_prefix('>').unwrap_or(line);
+            if line.len() < LOGICAL_WIDTH + 1 + PHYSICAL_WIDTH + 1 {
+                return None;
+            }
+
+            let logical_field = &line[..LOGICAL_WIDTH];
+            if !logical_field.chars().all(|c| c.is_ascii_hexdigit()) {
+                return None;
+            }
+
+            let logical_address = u32::from_str_radix(logical_field, 16).ok()?;
+            let physical_start = LOGICAL_WIDTH + 1;
+            let bytes_start = physical_start + PHYSICAL_WIDTH + 1;
+            let physical_field = &line[physical_start..physical_start + PHYSICAL_WIDTH];
+            let bytes_end = (bytes_start + BYTES_WIDTH).min(line.len());
+            let bytes_field = &line[bytes_start..bytes_end];
+
+            let bytes = bytes_field
+                .split_whitespace()
+                .filter(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit()))
+                .map(|part| u8::from_str_radix(part, 16).unwrap())
+                .collect::<Vec<_>>();
+
+            if bytes.is_empty() {
+                return None;
+            }
+
+            Some(ListingBytesRow {
+                logical_address,
+                has_remapped_physical_address: !physical_field.trim().is_empty(),
+                bytes
+            })
+        })
+        .collect()
+}
+
+fn strip_html_spaces(input: &str) -> String {
+    input
+        .replace("&nbsp;", " ")
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect()
+}
+
+fn extract_byte_rows_from_html_listing(listing: &str) -> Vec<ListingBytesRow> {
+    static ROW_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?s)<div[^>]*class=\"row[^\"]*\"[^>]*>.*?</div>"#).unwrap()
+    });
+    static ADDR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"<span class=\"cell addr\">\s*([0-9A-Fa-f]{4})\s*</span>"#).unwrap()
+    });
+    static PHYS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"<span class=\"cell phys\">(.*?)</span>"#).unwrap()
+    });
+    static BYTES_CELL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?s)<span class=\"cell bytes[^\"]*\"[^>]*>(.*?)</span>"#).unwrap()
+    });
+    static BYTE_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"<span class=\"token byte\"[^>]*>\s*([0-9A-Fa-f]{2})\s*</span>"#)
+            .unwrap()
+    });
+
+    ROW_RE
+        .captures_iter(listing)
+        .filter_map(|row_cap| {
+            let row = row_cap.get(0)?.as_str();
+            let logical_address = u32::from_str_radix(ADDR_RE.captures(row)?.get(1)?.as_str(), 16).ok()?;
+
+            let physical_field = PHYS_RE
+                .captures(row)
+                .and_then(|cap| cap.get(1))
+                .map(|m| strip_html_spaces(m.as_str()))
+                .unwrap_or_default();
+
+            let bytes_cell = BYTES_CELL_RE
+                .captures(row)
+                .and_then(|cap| cap.get(1))
+                .map(|m| m.as_str())
+                .unwrap_or("");
+
+            let bytes = BYTE_RE
+                .captures_iter(bytes_cell)
+                .filter_map(|cap| cap.get(1))
+                .map(|m| u8::from_str_radix(m.as_str(), 16).unwrap())
+                .collect::<Vec<_>>();
+
+            if bytes.is_empty() {
+                return None;
+            }
+
+            Some(ListingBytesRow {
+                logical_address,
+                has_remapped_physical_address: !physical_field.is_empty(),
+                bytes
+            })
+        })
+        .collect()
+}
+
+fn reconstruct_linear_output_from_listing(listing: &str, kind: ListingKind) -> Option<Vec<u8>> {
+    let rows = match kind {
+        ListingKind::Text => extract_byte_rows_from_text_listing(listing),
+        ListingKind::Html => extract_byte_rows_from_html_listing(listing)
+    };
+    if rows.is_empty() || rows.iter().any(|row| row.has_remapped_physical_address) {
+        return None;
+    }
+
+    let start = rows.iter().map(|row| row.logical_address).min()?;
+    let end = rows
+        .iter()
+        .map(|row| row.logical_address + row.bytes.len() as u32)
+        .max()?;
+
+    let mut output = vec![0; (end - start) as usize];
+    for row in rows {
+        let offset = (row.logical_address - start) as usize;
+        output[offset..offset + row.bytes.len()].copy_from_slice(&row.bytes);
+    }
+
+    Some(output)
+}
+
+fn listing_byte_equivalence_is_meaningful(fname: &str) -> bool {
+    !matches!(
+        fname,
+        "good_basic.asm"
+            | "good_document_buildcpr.asm"
+            | "good_document_list.asm"
+            | "good_document_protect.asm"
+            | "good_list.asm"
+            | "good_str.asm"
+    )
+}
+
+fn run_basm_once_with_listing(
+    fname: &str,
+    output_fname: &str,
+    listing_fname: &str
+) -> std::process::Output {
+    Command::new("../target/debug/basm")
+        .args([
+            "-I",
+            "tests/asm/",
+            "-i",
+            fname,
+            "-o",
+            output_fname,
+            "--lst",
+            listing_fname
+        ])
+        .output()
+        .expect("Unable to launch basm")
+}
+
+fn format_basm_failure(res: &std::process::Output) -> String {
+    #[cfg(unix)]
+    let signal = std::os::unix::process::ExitStatusExt::signal(&res.status);
+    #[cfg(not(unix))]
+    let signal: Option<i32> = None;
+
+    format!(
+        "status_code: {:?}\nsignal: {:?}\nstdout:\n{}\nstderr:\n{}",
+        res.status.code(),
+        signal,
+        String::from_utf8_lossy(&res.stdout),
+        String::from_utf8_lossy(&res.stderr)
+    )
+}
+
+fn assemble_and_compare_listing_bytes(fname: &str, listing_kind: ListingKind) {
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+    let listing_stem_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let listing_stem = listing_stem_file.path().as_os_str().to_str().unwrap();
+    let listing_fname = match listing_kind {
+        ListingKind::Text => format!("{listing_stem}.lst"),
+        ListingKind::Html => format!("{listing_stem}.html")
+    };
+
+    let res = run_basm_once_with_listing(fname, output_fname, &listing_fname);
+    if !res.status.success() {
+        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&res));
+    }
+
+    let output = fs_err::read(output_fname).expect("Generated output is missing");
+    let listing = fs_err::read_to_string(&listing_fname).expect("Listing is missing");
+    let listed_bytes = match reconstruct_linear_output_from_listing(&listing, listing_kind) {
+        Some(bytes) => bytes,
+        None => return
+    };
+
+    let listing_kind_name = match listing_kind {
+        ListingKind::Text => "text",
+        ListingKind::Html => "html"
+    };
+
+    assert_eq!(
+        output,
+        listed_bytes,
+        "Generated output differs from bytes shown in {listing_kind_name} listing for {fname}."
+    );
+}
+
 fn specific_test(folder: &str, fname: &str) {
     let output_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
@@ -66,11 +294,7 @@ fn specific_test(folder: &str, fname: &str) {
         .expect("Unable to launch basm");
 
     if !res.status.success() {
-        panic!(
-            "Failure to assemble {}.\n{}",
-            fname,
-            String::from_utf8_lossy(&res.stderr)
-        );
+        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&res));
     }
 }
 
@@ -326,27 +550,38 @@ fn expect_listing_success(fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
 
-    let res = Command::new("../target/debug/basm")
-        .args([
-            "-I",
-            "tests/asm/",
-            "-i",
-            fname,
-            "-o",
-            output_fname,
-            "--lst",
-            listing_fname
-        ])
-        .output()
-        .expect("Unable to launch basm");
-
+    let res = run_basm_once_with_listing(fname, output_fname, listing_fname);
     if !res.status.success() {
-        panic!(
-            "Failure to assemble {}.\n{}",
-            fname,
-            String::from_utf8_lossy(&res.stderr)
-        );
+        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&res));
     }
+}
+
+#[test_resources("cpclib-basm/tests/asm/good_*.asm")]
+fn expect_listing_bytes_match_generated_output(fname: &str) {
+    let _lock = LOCK.lock();
+
+    manual_cleanup();
+
+    let fname = &fname["cpclib-basm/tests/asm/".len()..];
+    if !listing_byte_equivalence_is_meaningful(fname) {
+        return;
+    }
+
+    assemble_and_compare_listing_bytes(fname, ListingKind::Text);
+}
+
+#[test_resources("cpclib-basm/tests/asm/good_*.asm")]
+fn expect_html_listing_bytes_match_generated_output(fname: &str) {
+    let _lock = LOCK.lock();
+
+    manual_cleanup();
+
+    let fname = &fname["cpclib-basm/tests/asm/".len()..];
+    if !listing_byte_equivalence_is_meaningful(fname) {
+        return;
+    }
+
+    assemble_and_compare_listing_bytes(fname, ListingKind::Html);
 }
 
 //#[test_resources("basm/tests/asm/good_*.sym")]

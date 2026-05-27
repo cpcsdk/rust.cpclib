@@ -3102,7 +3102,6 @@ dependencies = [
  "cpclib-sna",
  "delegate",
  "either",
- "evalexpr",
  "memchr",
  "ordered-float 5.3.0",
  "paste",
@@ -4605,12 +4604,6 @@ checksum = "ad9cdb4b747e485a12abb0e6566612956c7a1bafa3bdb8d682c5b6d403589e48"
 dependencies = [
  "num-traits",
 ]
-
-[[package]]
-name = "evalexpr"
-version = "13.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25929004897f2bbab309121a60400d36992f6d911d09baa6c172f6cc55706601"
 
 [[package]]
 name = "event-listener"

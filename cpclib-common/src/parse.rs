@@ -1,9 +1,9 @@
 use winnow::ascii::{alphanumeric1, space0};
-use winnow::combinator::{alt, not, opt, terminated};
-use winnow::error::{AddContext, ParserError, StrContext};
+use winnow::combinator::{alt, delimited, not, opt, preceded, terminated};
+use winnow::error::{AddContext, ContextError, ParserError, StrContext};
 use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial};
-use winnow::token::take_while;
-use winnow::{ModalResult, Parser};
+use winnow::token::{any, one_of, take_while};
+use winnow::{BStr, ModalResult, Parser};
 
 #[inline]
 ///  (prefix) space number suffix
@@ -142,4 +142,507 @@ where
     }
 
     Ok(number)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatternExprUnaryOp {
+    Not,
+    BinaryNot,
+    Neg
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatternExprBinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    ShiftLeft,
+    ShiftRight,
+    BitAnd,
+    BitXor,
+    BitOr,
+    Equal,
+    Different,
+    LowerOrEqual,
+    StrictlyLower,
+    GreaterOrEqual,
+    StrictlyGreater,
+    BooleanAnd,
+    BooleanOr
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatternExpr {
+    Number(i32),
+    Bool(bool),
+    Char(u8),
+    Identifier(String),
+    Unary {
+        op: PatternExprUnaryOp,
+        expr: Box<PatternExpr>
+    },
+    Binary {
+        op: PatternExprBinaryOp,
+        left: Box<PatternExpr>,
+        right: Box<PatternExpr>
+    }
+}
+
+pub fn parse_pattern_number_literal(text: &str) -> Option<i32> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    let value = parse_value::<_, ContextError>.parse(BStr::new(text.as_bytes())).ok()?;
+    i32::try_from(value).ok()
+}
+
+pub fn parse_pattern_expr(input: &str) -> Result<PatternExpr, String> {
+    let mut input = input;
+    let expr = parse_pattern_boolean_or(&mut input).map_err(|_| "Invalid pattern expression")?;
+    input = input.trim_start();
+    if input.is_empty() {
+        Ok(expr)
+    }
+    else {
+        Err("Invalid pattern expression".to_string())
+    }
+}
+
+fn parse_pattern_boolean_or(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_boolean_and(input)?;
+    while opt(preceded(space0, "||")).parse_next(input)?.is_some() {
+        let rhs = parse_pattern_boolean_and(input)?;
+        lhs = PatternExpr::Binary {
+            op: PatternExprBinaryOp::BooleanOr,
+            left: Box::new(lhs),
+            right: Box::new(rhs)
+        };
+    }
+    Ok(lhs)
+}
+
+fn parse_pattern_boolean_and(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_bit_or(input)?;
+    while opt(preceded(space0, "&&")).parse_next(input)?.is_some() {
+        let rhs = parse_pattern_bit_or(input)?;
+        lhs = PatternExpr::Binary {
+            op: PatternExprBinaryOp::BooleanAnd,
+            left: Box::new(lhs),
+            right: Box::new(rhs)
+        };
+    }
+    Ok(lhs)
+}
+
+fn parse_pattern_bit_or(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_bit_xor(input)?;
+    while opt(preceded(space0, terminated("|", not("|"))))
+        .parse_next(input)?
+        .is_some()
+    {
+        let rhs = parse_pattern_bit_xor(input)?;
+        lhs = PatternExpr::Binary {
+            op: PatternExprBinaryOp::BitOr,
+            left: Box::new(lhs),
+            right: Box::new(rhs)
+        };
+    }
+    Ok(lhs)
+}
+
+fn parse_pattern_bit_xor(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_bit_and(input)?;
+    while opt(preceded(space0, "^")).parse_next(input)?.is_some() {
+        let rhs = parse_pattern_bit_and(input)?;
+        lhs = PatternExpr::Binary {
+            op: PatternExprBinaryOp::BitXor,
+            left: Box::new(lhs),
+            right: Box::new(rhs)
+        };
+    }
+    Ok(lhs)
+}
+
+fn parse_pattern_bit_and(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_equality(input)?;
+    while opt(preceded(space0, terminated("&", not("&"))))
+        .parse_next(input)?
+        .is_some()
+    {
+        let rhs = parse_pattern_equality(input)?;
+        lhs = PatternExpr::Binary {
+            op: PatternExprBinaryOp::BitAnd,
+            left: Box::new(lhs),
+            right: Box::new(rhs)
+        };
+    }
+    Ok(lhs)
+}
+
+fn parse_pattern_equality(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_comparison(input)?;
+    loop {
+        if opt(preceded(space0, "==")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_comparison(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::Equal,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else if opt(preceded(space0, "!=")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_comparison(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::Different,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else {
+            return Ok(lhs);
+        }
+    }
+}
+
+fn parse_pattern_comparison(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_shift(input)?;
+    loop {
+        if opt(preceded(space0, "<=")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_shift(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::LowerOrEqual,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else if opt(preceded(space0, ">=")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_shift(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::GreaterOrEqual,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else if opt(preceded(space0, "<")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_shift(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::StrictlyLower,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else if opt(preceded(space0, ">")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_shift(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::StrictlyGreater,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else {
+            return Ok(lhs);
+        }
+    }
+}
+
+fn parse_pattern_shift(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_add_sub(input)?;
+    loop {
+        if opt(preceded(space0, "<<")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_add_sub(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::ShiftLeft,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else if opt(preceded(space0, ">>")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_add_sub(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::ShiftRight,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else {
+            return Ok(lhs);
+        }
+    }
+}
+
+fn parse_pattern_add_sub(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_mul_div_mod(input)?;
+    loop {
+        if opt(preceded(space0, "+")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_mul_div_mod(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::Add,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else if opt(preceded(space0, "-")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_mul_div_mod(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::Sub,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else {
+            return Ok(lhs);
+        }
+    }
+}
+
+fn parse_pattern_mul_div_mod(input: &mut &str) -> ModalResult<PatternExpr> {
+    let mut lhs = parse_pattern_unary(input)?;
+    loop {
+        if opt(preceded(space0, "*")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_unary(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::Mul,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else if opt(preceded(space0, "/")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_unary(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::Div,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else if opt(preceded(space0, "%")).parse_next(input)?.is_some() {
+            let rhs = parse_pattern_unary(input)?;
+            lhs = PatternExpr::Binary {
+                op: PatternExprBinaryOp::Mod,
+                left: Box::new(lhs),
+                right: Box::new(rhs)
+            };
+        }
+        else {
+            return Ok(lhs);
+        }
+    }
+}
+
+fn parse_pattern_unary(input: &mut &str) -> ModalResult<PatternExpr> {
+    if opt(preceded(space0, "!")).parse_next(input)?.is_some() {
+        return Ok(PatternExpr::Unary {
+            op: PatternExprUnaryOp::Not,
+            expr: Box::new(parse_pattern_unary(input)?)
+        });
+    }
+    if opt(preceded(space0, "~")).parse_next(input)?.is_some() {
+        return Ok(PatternExpr::Unary {
+            op: PatternExprUnaryOp::BinaryNot,
+            expr: Box::new(parse_pattern_unary(input)?)
+        });
+    }
+    if opt(preceded(space0, "-")).parse_next(input)?.is_some() {
+        return Ok(PatternExpr::Unary {
+            op: PatternExprUnaryOp::Neg,
+            expr: Box::new(parse_pattern_unary(input)?)
+        });
+    }
+
+    parse_pattern_primary(input)
+}
+
+fn parse_pattern_primary(input: &mut &str) -> ModalResult<PatternExpr> {
+    alt((
+        delimited(preceded(space0, '('), parse_pattern_boolean_or, preceded(space0, ')')),
+        parse_pattern_char,
+        parse_pattern_number,
+        parse_pattern_identifier
+    ))
+    .parse_next(input)
+}
+
+fn parse_pattern_char(input: &mut &str) -> ModalResult<PatternExpr> {
+    let value = delimited(preceded(space0, '\''), any, '\'').parse_next(input)?;
+    Ok(PatternExpr::Char(value as u8))
+}
+
+fn parse_pattern_number(input: &mut &str) -> ModalResult<PatternExpr> {
+    let checkpoint = input.checkpoint();
+    let token = preceded(
+        space0,
+        take_while(1.., |c: char| {
+            c.is_ascii_alphanumeric() || matches!(c, '_' | '$' | '#' | '@' | '%')
+        })
+    )
+    .parse_next(input)?;
+
+    if token
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_digit() || matches!(c, '$' | '#' | '@' | '%' | '&'))
+        && let Some(value) = parse_pattern_number_literal(token)
+    {
+        return Ok(PatternExpr::Number(value));
+    }
+
+    input.reset(&checkpoint);
+    Err(winnow::error::ErrMode::Backtrack(winnow::error::ContextError::default()))
+}
+
+fn parse_pattern_identifier(input: &mut &str) -> ModalResult<PatternExpr> {
+    let first = preceded(
+        space0,
+        one_of(('a'..='z', 'A'..='Z', '_', '.', '@'))
+    )
+    .parse_next(input)?;
+    let rest: &str = take_while(0.., |c: char| {
+        c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@')
+    })
+    .parse_next(input)?;
+
+    let mut ident = String::with_capacity(1 + rest.len());
+    ident.push(first);
+    ident.push_str(rest);
+
+    if ident.eq_ignore_ascii_case("true") {
+        return Ok(PatternExpr::Bool(true));
+    }
+    if ident.eq_ignore_ascii_case("false") {
+        return Ok(PatternExpr::Bool(false));
+    }
+
+    Ok(PatternExpr::Identifier(ident))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_pattern_number_literal_handles_project_formats() {
+        assert_eq!(parse_pattern_number_literal("42"), Some(42));
+        assert_eq!(parse_pattern_number_literal("1_60"), Some(160));
+        assert_eq!(parse_pattern_number_literal("0x12"), Some(0x12));
+        assert_eq!(parse_pattern_number_literal("$12"), Some(0x12));
+        assert_eq!(parse_pattern_number_literal("0b0100101"), Some(0b0100101));
+        assert_eq!(parse_pattern_number_literal("0100101b"), Some(0b0100101));
+        assert_eq!(parse_pattern_number_literal("0b0h"), Some(0x0B0));
+        assert_eq!(parse_pattern_number_literal("0bh"), Some(0x0B));
+        assert_eq!(parse_pattern_number_literal("CH"), Some(0x0C));
+        assert_eq!(parse_pattern_number_literal("CHECK"), None);
+    }
+
+    #[test]
+    fn parse_pattern_expr_honors_precedence() {
+        assert_eq!(
+            parse_pattern_expr("1 + 2 * 3"),
+            Ok(PatternExpr::Binary {
+                op: PatternExprBinaryOp::Add,
+                left: Box::new(PatternExpr::Number(1)),
+                right: Box::new(PatternExpr::Binary {
+                    op: PatternExprBinaryOp::Mul,
+                    left: Box::new(PatternExpr::Number(2)),
+                    right: Box::new(PatternExpr::Number(3))
+                })
+            })
+        );
+    }
+
+    #[test]
+    fn parse_pattern_expr_parses_identifiers_and_unary_ops() {
+        assert_eq!(
+            parse_pattern_expr("-foo + ~'A'"),
+            Ok(PatternExpr::Binary {
+                op: PatternExprBinaryOp::Add,
+                left: Box::new(PatternExpr::Unary {
+                    op: PatternExprUnaryOp::Neg,
+                    expr: Box::new(PatternExpr::Identifier("foo".to_string()))
+                }),
+                right: Box::new(PatternExpr::Unary {
+                    op: PatternExprUnaryOp::BinaryNot,
+                    expr: Box::new(PatternExpr::Char(b'A'))
+                })
+            })
+        );
+    }
+
+    #[test]
+    fn parse_pattern_expr_parses_boolean_structure() {
+        assert_eq!(
+            parse_pattern_expr("true && value != 0"),
+            Ok(PatternExpr::Binary {
+                op: PatternExprBinaryOp::BooleanAnd,
+                left: Box::new(PatternExpr::Bool(true)),
+                right: Box::new(PatternExpr::Binary {
+                    op: PatternExprBinaryOp::Different,
+                    left: Box::new(PatternExpr::Identifier("value".to_string())),
+                    right: Box::new(PatternExpr::Number(0))
+                })
+            })
+        );
+    }
+
+    #[test]
+    fn parse_pattern_expr_parses_parenthesized_shift_and_bitand() {
+        assert_eq!(
+            parse_pattern_expr("(1 + 2) << 3 & 7"),
+            Ok(PatternExpr::Binary {
+                op: PatternExprBinaryOp::BitAnd,
+                left: Box::new(PatternExpr::Binary {
+                    op: PatternExprBinaryOp::ShiftLeft,
+                    left: Box::new(PatternExpr::Binary {
+                        op: PatternExprBinaryOp::Add,
+                        left: Box::new(PatternExpr::Number(1)),
+                        right: Box::new(PatternExpr::Number(2))
+                    }),
+                    right: Box::new(PatternExpr::Number(3))
+                }),
+                right: Box::new(PatternExpr::Number(7))
+            })
+        );
+    }
+
+    #[test]
+    fn parse_pattern_expr_mixes_bitwise_and_boolean_operators() {
+        assert_eq!(
+            parse_pattern_expr("a | b || c & d"),
+            Ok(PatternExpr::Binary {
+                op: PatternExprBinaryOp::BooleanOr,
+                left: Box::new(PatternExpr::Binary {
+                    op: PatternExprBinaryOp::BitOr,
+                    left: Box::new(PatternExpr::Identifier("a".to_string())),
+                    right: Box::new(PatternExpr::Identifier("b".to_string()))
+                }),
+                right: Box::new(PatternExpr::Binary {
+                    op: PatternExprBinaryOp::BitAnd,
+                    left: Box::new(PatternExpr::Identifier("c".to_string())),
+                    right: Box::new(PatternExpr::Identifier("d".to_string()))
+                })
+            })
+        );
+    }
+
+    #[test]
+    fn parse_pattern_expr_mixes_shift_and_comparison() {
+        assert_eq!(
+            parse_pattern_expr("value << 1 < limit + 2"),
+            Ok(PatternExpr::Binary {
+                op: PatternExprBinaryOp::StrictlyLower,
+                left: Box::new(PatternExpr::Binary {
+                    op: PatternExprBinaryOp::ShiftLeft,
+                    left: Box::new(PatternExpr::Identifier("value".to_string())),
+                    right: Box::new(PatternExpr::Number(1))
+                }),
+                right: Box::new(PatternExpr::Binary {
+                    op: PatternExprBinaryOp::Add,
+                    left: Box::new(PatternExpr::Identifier("limit".to_string())),
+                    right: Box::new(PatternExpr::Number(2))
+                })
+            })
+        );
+    }
 }

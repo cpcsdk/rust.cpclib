@@ -62,6 +62,7 @@ fn build_shrinkler() {
     println!("cargo:rerun-if-changed=src/shrinkler.rs");
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.cpp");
     println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext//basm_bridge.h");
+    println!("cargo:rerun-if-changed=extra/Shrinkler4.6NoParityContext");
 }
 
 #[cfg(all(feature = "bzpack", not(target_arch = "wasm32")))]

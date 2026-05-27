@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Neg};
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::AHashMap as HashMap;
@@ -8,12 +8,55 @@ use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::smol_str::ToSmolStr;
 use cpclib_common::strsim;
-use evalexpr::{ContextWithMutableVariables, HashMapContext, build_operator_tree};
+use cpclib_common::{
+    PatternExpr, PatternExprBinaryOp, PatternExprUnaryOp, parse_pattern_expr,
+    parse_pattern_number_literal
+};
 
 use crate::symbols::{
     PhysicalAddress, Struct, Symbol, SymbolError, SymbolFor, Value, ValueAndSource, ValueMacro
 };
 use crate::{ExprResult, LabelPrefix};
+
+fn ast_to_error_label(ast: &PatternExpr) -> String {
+    match ast {
+        PatternExpr::Number(v) => v.to_string(),
+        PatternExpr::Bool(v) => v.to_string(),
+        PatternExpr::Char(v) => format!("'{}'", *v as char),
+        PatternExpr::Identifier(v) => v.clone(),
+        PatternExpr::Unary { op, expr } => {
+            let op = match op {
+                PatternExprUnaryOp::Not => "!",
+                PatternExprUnaryOp::BinaryNot => "~",
+                PatternExprUnaryOp::Neg => "-"
+            };
+            format!("{op}{}", ast_to_error_label(expr))
+        },
+        PatternExpr::Binary { op, left, right } => {
+            let op = match op {
+                PatternExprBinaryOp::Add => "+",
+                PatternExprBinaryOp::Sub => "-",
+                PatternExprBinaryOp::Mul => "*",
+                PatternExprBinaryOp::Div => "/",
+                PatternExprBinaryOp::Mod => "%",
+                PatternExprBinaryOp::ShiftLeft => "<<",
+                PatternExprBinaryOp::ShiftRight => ">>",
+                PatternExprBinaryOp::BitAnd => "&",
+                PatternExprBinaryOp::BitXor => "^",
+                PatternExprBinaryOp::BitOr => "|",
+                PatternExprBinaryOp::Equal => "==",
+                PatternExprBinaryOp::Different => "!=",
+                PatternExprBinaryOp::LowerOrEqual => "<=",
+                PatternExprBinaryOp::StrictlyLower => "<",
+                PatternExprBinaryOp::GreaterOrEqual => ">=",
+                PatternExprBinaryOp::StrictlyGreater => ">",
+                PatternExprBinaryOp::BooleanAnd => "&&",
+                PatternExprBinaryOp::BooleanOr => "||"
+            };
+            format!("({} {op} {})", ast_to_error_label(left), ast_to_error_label(right))
+        }
+    }
+}
 
 /// Public signature of symbols functions
 /// TODO add all the other methods
@@ -345,6 +388,113 @@ impl SymbolsTable {
         BalancedBracedSegmentsIter::new(text)
     }
 
+    fn eval_pattern_expression(&self, expression: &str) -> Result<ExprResult, SymbolError> {
+        let parsed = parse_pattern_expr(expression)
+            .map_err(|_| SymbolError::CannotModify(expression.to_string().into()))?;
+        self.eval_pattern_ast(&parsed)
+    }
+
+    fn eval_pattern_ast(&self, ast: &PatternExpr) -> Result<ExprResult, SymbolError> {
+        match ast {
+            PatternExpr::Number(v) => Ok((*v).into()),
+            PatternExpr::Bool(v) => Ok((*v).into()),
+            PatternExpr::Char(v) => Ok((*v).into()),
+            PatternExpr::Identifier(ident) => self.resolve_pattern_identifier(ident),
+            PatternExpr::Unary { op, expr } => {
+                let value = self.eval_pattern_ast(expr)?;
+                match op {
+                    PatternExprUnaryOp::Not => value.not().map_err(|_| {
+                        SymbolError::CannotModify(ast_to_error_label(ast).into())
+                    }),
+                    PatternExprUnaryOp::BinaryNot => value.binary_not().map_err(|_| {
+                        SymbolError::CannotModify(ast_to_error_label(ast).into())
+                    }),
+                    PatternExprUnaryOp::Neg => {
+                        value.neg().map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    }
+                }
+            },
+            PatternExpr::Binary { op, left, right } => {
+                let lhs = self.eval_pattern_ast(left)?;
+                let rhs = self.eval_pattern_ast(right)?;
+                match op {
+                    PatternExprBinaryOp::Add => {
+                        (lhs + rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::Sub => {
+                        (lhs - rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::Mul => {
+                        (lhs * rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::Div => {
+                        (lhs / rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::Mod => {
+                        (lhs % rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::ShiftLeft => {
+                        (lhs << rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::ShiftRight => {
+                        (lhs >> rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::BitAnd => {
+                        (lhs & rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::BitXor => {
+                        (lhs ^ rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::BitOr => {
+                        (lhs | rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprBinaryOp::Equal => Ok((lhs == rhs).into()),
+                    PatternExprBinaryOp::Different => Ok((lhs != rhs).into()),
+                    PatternExprBinaryOp::LowerOrEqual => Ok((lhs <= rhs).into()),
+                    PatternExprBinaryOp::StrictlyLower => Ok((lhs < rhs).into()),
+                    PatternExprBinaryOp::GreaterOrEqual => Ok((lhs >= rhs).into()),
+                    PatternExprBinaryOp::StrictlyGreater => Ok((lhs > rhs).into()),
+                    PatternExprBinaryOp::BooleanAnd => Ok(
+                        (lhs.bool().map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))?
+                            && rhs
+                                .bool()
+                                .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))?)
+                        .into()
+                    ),
+                    PatternExprBinaryOp::BooleanOr => Ok(
+                        (lhs.bool().map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))?
+                            || rhs
+                                .bool()
+                                .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))?)
+                        .into()
+                    )
+                }
+            }
+        }
+    }
+
+    fn resolve_pattern_identifier(&self, identifier: &str) -> Result<ExprResult, SymbolError> {
+        let value = if let Some(value) = self.any_value::<&str>(identifier)? {
+            Some(value)
+        }
+        else {
+            let braced = format!("{{{identifier}}}");
+            self.any_value::<&str>(&braced)?
+        };
+
+        match value.map(|vl| vl.value()) {
+            Some(Value::Expr(val)) => Ok(val.clone()),
+            Some(Value::Address(val)) => Ok(val.address().into()),
+            Some(Value::Struct(s)) => Ok(s.len(self).into()),
+            Some(Value::String(val)) => Ok(val.into()),
+            Some(Value::Counter(val)) => Ok((*val).into()),
+            Some(_) => Err(SymbolError::CannotModify(identifier.to_string().into())),
+            None => parse_pattern_number_literal(identifier)
+                .map(ExprResult::from)
+                .ok_or_else(|| SymbolError::WrongSymbol(identifier.to_string().into()))
+        }
+    }
+
     pub fn enter_function(&mut self) {
         self.functions_stack.enter_function();
     }
@@ -433,32 +583,7 @@ impl SymbolsTable {
                         .value()
                         .to_owned();
 
-                    let tree = build_operator_tree(&local_expr_for_eval)
-                        .expect("Expression should be valid here. There is a bug in the assembler");
-
-                    // Fill the variable values to allow an evaluation
-                    let mut context = HashMapContext::new();
-                    for variable in tree.iter_variable_identifiers() {
-                        let variable_value =
-                            if let Some(value) = self.any_value::<&str>(variable)? {
-                                value
-                            }
-                            else {
-                                let braced = format!("{{{variable}}}");
-                                self.any_value::<&str>(&braced)?
-                                    .ok_or_else(|| SymbolError::WrongSymbol(variable.into()))?
-                            };
-                        context
-                            .set_value(variable.to_owned(), variable_value.into())
-                            .unwrap();
-                    }
-
-                    // evaluate the expression
-                    let res = tree
-                        .eval_with_context(&context)
-                        .map_err(|_e| SymbolError::CannotModify(local_expr_for_eval.into()))?;
-
-                    res.to_string()
+                    self.eval_pattern_expression(&local_expr_for_eval)?.to_string()
                 }
             };
 

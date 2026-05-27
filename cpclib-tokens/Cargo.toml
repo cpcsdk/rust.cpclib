@@ -22,7 +22,6 @@ beef.workspace = true
 cfg-if.workspace = true
 delegate.workspace = true
 either.workspace = true
-evalexpr.workspace = true
 ordered-float.workspace = true
 memchr.workspace = true
 paste.workspace = true

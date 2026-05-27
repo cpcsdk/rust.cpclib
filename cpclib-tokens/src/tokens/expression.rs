@@ -1032,6 +1032,101 @@ impl Display for ExpressionTypeError {
     }
 }
 
+impl std::error::Error for ExpressionTypeError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PureExprEvalError {
+    NeedsContext,
+    HasSideEffects,
+    Type(ExpressionTypeError)
+}
+
+impl Display for PureExprEvalError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            PureExprEvalError::NeedsContext => {
+                write!(f, "Expression evaluation requires symbol/context resolution")
+            },
+            PureExprEvalError::HasSideEffects => {
+                write!(f, "Expression evaluation requires side-effecting assembler state")
+            },
+            PureExprEvalError::Type(err) => write!(f, "{err}")
+        }
+    }
+}
+
+impl std::error::Error for PureExprEvalError {}
+
+impl From<ExpressionTypeError> for PureExprEvalError {
+    fn from(value: ExpressionTypeError) -> Self {
+        Self::Type(value)
+    }
+}
+
+pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExprEvalError> {
+    use std::ops::Neg;
+
+    match expr {
+        Expr::RelativeDelta(_) => Err(PureExprEvalError::NeedsContext),
+        Expr::Value(v) => Ok((*v).into()),
+        Expr::Float(v) => Ok((*v).into()),
+        Expr::Char(v) => Ok((*v).into()),
+        Expr::Bool(v) => Ok((*v).into()),
+        Expr::String(v) => Ok(v.clone().into()),
+        Expr::Label(_) | Expr::PrefixedLabel(_, _) => Err(PureExprEvalError::NeedsContext),
+        Expr::List(items) => Ok(ExprResult::List(
+            items
+                .iter()
+                .map(try_eval_expr_without_context)
+                .collect::<Result<Vec<_>, _>>()?
+        )),
+        Expr::Paren(inner) => try_eval_expr_without_context(inner),
+        Expr::UnaryOperation(op, inner) => {
+            let value = try_eval_expr_without_context(inner)?;
+            match op {
+                UnaryOperation::BinaryNot => value.binary_not().map_err(PureExprEvalError::from),
+                UnaryOperation::Not => value.not().map_err(PureExprEvalError::from),
+                UnaryOperation::Neg => value.neg().map_err(PureExprEvalError::from)
+            }
+        },
+        Expr::UnaryTokenOperation(_, _) => Err(PureExprEvalError::HasSideEffects),
+        Expr::BinaryOperation(op, left, right) => {
+            let a = try_eval_expr_without_context(left)?;
+            let b = try_eval_expr_without_context(right)?;
+            match op {
+                BinaryOperation::Add => (a + b).map_err(PureExprEvalError::from),
+                BinaryOperation::Sub => (a - b).map_err(PureExprEvalError::from),
+                BinaryOperation::Div => (a / b).map_err(PureExprEvalError::from),
+                BinaryOperation::Mod => (a % b).map_err(PureExprEvalError::from),
+                BinaryOperation::Mul => (a * b).map_err(PureExprEvalError::from),
+                BinaryOperation::RightShift => (a >> b).map_err(PureExprEvalError::from),
+                BinaryOperation::LeftShift => (a << b).map_err(PureExprEvalError::from),
+                BinaryOperation::BinaryAnd => (a & b).map_err(PureExprEvalError::from),
+                BinaryOperation::BinaryOr => (a | b).map_err(PureExprEvalError::from),
+                BinaryOperation::BinaryXor => (a ^ b).map_err(PureExprEvalError::from),
+                BinaryOperation::BooleanAnd => Ok(ExprResult::from(a.bool()? && b.bool()?)),
+                BinaryOperation::BooleanOr => Ok(ExprResult::from(a.bool()? || b.bool()?)),
+                BinaryOperation::Equal => Ok((a == b).into()),
+                BinaryOperation::Different => Ok((a != b).into()),
+                BinaryOperation::LowerOrEqual => Ok((a <= b).into()),
+                BinaryOperation::StrictlyLower => Ok((a < b).into()),
+                BinaryOperation::GreaterOrEqual => Ok((a >= b).into()),
+                BinaryOperation::StrictlyGreater => Ok((a > b).into())
+            }
+        },
+        Expr::Ternary(cond, when_true, when_false) => {
+            if try_eval_expr_without_context(cond)?.bool()? {
+                try_eval_expr_without_context(when_true)
+            }
+            else {
+                try_eval_expr_without_context(when_false)
+            }
+        },
+        Expr::AnyFunction(_, _) => Err(PureExprEvalError::HasSideEffects),
+        Expr::Rnd => Err(PureExprEvalError::HasSideEffects)
+    }
+}
+
 /// The successful result of an evaluation.
 /// Embeds  a real,  an integer or a string
 #[derive(Eq, Debug, Clone)]

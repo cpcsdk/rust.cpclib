@@ -78,6 +78,10 @@ macro_rules! resolve_impl {
         use std::ops::Neg;
         use cpclib_tokens::symbols::SymbolsTableTrait;
 
+ //       if let Ok(value) = cpclib_tokens::tokens::try_eval_expr_without_context($self.to_expr().as_ref()) {
+ //           return Ok(value);
+ //       }
+
         let mut binary_operation = |left: &Self, right: &Self, oper: cpclib_tokens::BinaryOperation| -> Result<ExprResult, Box<AssemblerError>> {
             let res_left = left.resolve($env);
             let res_right = right.resolve($env);
