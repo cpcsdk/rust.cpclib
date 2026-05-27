@@ -219,6 +219,7 @@ fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
             | "good_assembler_control_with_org.asm"
             | "good_bank.asm"
             | "good_bankset.asm"
+            | "good_basic.asm"
             | "good_bzpack_bx0_backward_crunched_section.asm"
             | "good_bzpack_bx0_crunched_section.asm"
             | "good_bzpack_bx2_backward_crunched_section.asm"
@@ -241,8 +242,10 @@ fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
             | "good_document_even.asm"
             | "good_document_list.asm"
             | "good_document_org.asm"
+            | "good_document_phase.asm"
             | "good_document_protect.asm"
             | "good_document_range.asm"
+            | "good_document_rorg.asm"
             | "good_dollar.asm"
             | "good_exo_decrunch.asm"
             | "good_include5.asm"
@@ -251,14 +254,20 @@ fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
             | "good_lz48_decrunch.asm"
             | "good_lz49_decrunch.asm"
             | "good_lz4_decrunch.asm"
+            | "good_phase.asm"
             | "good_save_bank.asm"
             | "good_section.asm"
             | "good_shrinkler_decrunch.asm"
-            | "good_str.asm"
             | "good_write_direct.asm"
             | "good_zx0_backward_decrunch.asm"
             | "good_zx0_decrunch.asm"
     )
+}
+
+#[derive(Debug)]
+struct CodeOnlyListingRow {
+    logical_address: u32,
+    bytes: Vec<u8>
 }
 
 fn run_basm_once_with_listing(
@@ -297,7 +306,7 @@ fn run_basm_once_with_code_only_listing(
             "--lst",
             listing_fname,
             "--lst-template",
-            "{C}",
+            "{A} {C}",
             "--lst-source-mode",
             "none",
             "--lst-no-line-numbers",
@@ -307,42 +316,50 @@ fn run_basm_once_with_code_only_listing(
         .expect("Unable to launch basm")
 }
 
-fn extract_bytes_from_code_only_listing(listing: &str) -> Vec<u8> {
+fn extract_rows_from_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow> {
     listing
         .lines()
-        .flat_map(|line| {
-            let mut bytes = Vec::new();
-            let mut saw_first_non_empty = false;
-
-            for part in line.split_whitespace() {
-                let is_byte = part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit());
-
-                if !saw_first_non_empty {
-                    saw_first_non_empty = true;
-                    if !is_byte {
-                        return Vec::new();
-                    }
-                }
-
-                if is_byte {
-                    bytes.push(u8::from_str_radix(part, 16).unwrap());
-                }
-                else {
-                    break;
-                }
+        .filter_map(|line| {
+            let mut parts = line.split_whitespace();
+            let addr = parts.next()?;
+            if addr.len() != 4 || !addr.chars().all(|c| c.is_ascii_hexdigit()) {
+                return None;
             }
 
-            bytes
+            let bytes = parts
+                .take_while(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit()))
+                .map(|part| u8::from_str_radix(part, 16).unwrap())
+                .collect::<Vec<_>>();
+
+            if bytes.is_empty() {
+                return None;
+            }
+
+            Some(CodeOnlyListingRow {
+                logical_address: u32::from_str_radix(addr, 16).unwrap(),
+                bytes
+            })
         })
         .collect()
 }
 
-fn build_source_from_code_output(bytes: &[u8]) -> String {
-    let mut lines = vec!["org 0".to_owned()];
+fn build_source_from_code_output(rows: &[CodeOnlyListingRow]) -> String {
+    if rows.is_empty() {
+        return String::new();
+    }
 
-    for chunk in bytes.chunks(16) {
-        let db_values = chunk.iter().map(|b| format!("0x{b:02X}")).join(", ");
+    let mut lines = Vec::new();
+    let mut current_addr = 0u32;
+
+    for row in rows {
+        if lines.is_empty() || current_addr != row.logical_address {
+            lines.push(format!("org 0x{:X}", row.logical_address));
+        }
+
+        let db_values = row.bytes.iter().map(|b| format!("0x{b:02X}")).join(", ");
         lines.push(format!("db {db_values}"));
+
+        current_addr = row.logical_address + row.bytes.len() as u32;
     }
 
     lines.push(String::new());
@@ -416,12 +433,12 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str) {
     }
 
     let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
-    let listed_bytes = extract_bytes_from_code_only_listing(&listing);
-    if listed_bytes.is_empty() {
+    let listed_rows = extract_rows_from_code_only_listing(&listing);
+    if listed_rows.is_empty() {
         return;
     }
 
-    let reconstructed_source = build_source_from_code_output(&listed_bytes);
+    let reconstructed_source = build_source_from_code_output(&listed_rows);
 
     let reconstructed_input_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
@@ -462,6 +479,65 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str) {
         reconstructed_output,
         "Reconstructed source output differs from original assembled output for {}.",
         fname
+    );
+}
+
+#[test]
+fn listing_contains_good_str_directives_and_escaped_quotes() {
+    let _lock = LOCK.lock();
+    manual_cleanup();
+
+    let output_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let output_fname = output_file.path().as_os_str().to_str().unwrap();
+
+    let listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
+
+    let res = run_basm_once_with_listing("good_str.asm", output_fname, listing_fname);
+    if !res.status.success() {
+        panic!(
+            "Failure to assemble good_str.asm.\n{}",
+            format_basm_failure(&res)
+        );
+    }
+
+    let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
+
+    assert!(listing.contains("ORG 0X1000"));
+    assert!(listing.contains("DEFB \"HELL\""));
+    assert!(listing.contains("STR \"HELLO\""));
+    assert!(listing.contains("DB \"   \\\" ET VOILA\""));
+    assert!(listing.contains("DB \" \\\" ET VOILA\""));
+    assert!(listing.contains("DB \"\\\" ET VOILA\""));
+
+    let code_only_listing_file =
+        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
+    let code_only_listing_fname = code_only_listing_file.path().as_os_str().to_str().unwrap();
+    let res_code_only = run_basm_once_with_code_only_listing(
+        "good_str.asm",
+        output_fname,
+        code_only_listing_fname,
+    );
+    if !res_code_only.status.success() {
+        panic!(
+            "Failure to assemble good_str.asm with code-only listing.\n{}",
+            format_basm_failure(&res_code_only)
+        );
+    }
+
+    let code_only_listing =
+        fs_err::read_to_string(code_only_listing_fname).expect("Code-only listing is missing");
+    let rows = extract_rows_from_code_only_listing(&code_only_listing);
+    let str_row = rows
+        .iter()
+        .find(|row| row.logical_address == 0x2000)
+        .expect("Missing row for STR at 0x2000 in code-only listing");
+    assert_eq!(
+        str_row.bytes,
+        vec![0x68, 0x65, 0x6C, 0x6C, 0xEF],
+        "STR bytes in code-only listing should match emitted bytes (last char with bit 7 set)."
     );
 }
 

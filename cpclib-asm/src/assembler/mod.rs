@@ -5290,7 +5290,19 @@ impl Env {
             let last_address = env.logical_output_address() - 1;
             let last_address = env.logical_to_physical_address(last_address as _);
             let last_value = env.peek(&last_address);
-            let _ = env.poke(last_value | 0x80, &last_address);
+            let patched_last_value = last_value | 0x80;
+            let _ = env.poke(patched_last_value, &last_address);
+
+            // Keep listing bytes aligned with actual emitted bytes when STR patches
+            // the last character with bit 7 set.
+            if env.pass.is_listing_pass()
+                && let Some(last) = env
+                    .output_trigger
+                    .as_mut()
+                    .and_then(|trigger| trigger.bytes.last_mut())
+            {
+                *last = patched_last_value;
+            }
         }
 
         // Update stable ticker counters when active
