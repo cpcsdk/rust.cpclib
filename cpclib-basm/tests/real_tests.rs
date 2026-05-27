@@ -217,7 +217,6 @@ fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
         "good_aplib_decrunch.asm"
             | "good_aplib_fast_decrunch.asm"
             | "good_assembler_control_with_org.asm"
-            | "good_bank.asm"
             | "good_bankset.asm"
             | "good_bzpack_bx0_backward_crunched_section.asm"
             | "good_bzpack_bx0_crunched_section.asm"
@@ -265,6 +264,7 @@ fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
 #[derive(Debug)]
 struct CodeOnlyListingRow {
     logical_address: u32,
+    physical_address: Option<u32>,
     bytes: Vec<u8>
 }
 
@@ -304,11 +304,10 @@ fn run_basm_once_with_code_only_listing(
             "--lst",
             listing_fname,
             "--lst-template",
-            "{A} {C}",
+            "{A} {P} {C}",
             "--lst-source-mode",
             "none",
-            "--lst-no-line-numbers",
-            "--lst-no-physical-address"
+            "--lst-no-line-numbers"
         ])
         .output()
         .expect("Unable to launch basm")
@@ -325,7 +324,22 @@ fn extract_rows_from_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow>
                 return None;
             }
 
-            let bytes = parts
+            let mut physical_address = None;
+            let mut remaining_parts = Vec::new();
+
+            if let Some(next) = parts.next() {
+                // With `{A} {P} {C}`, `{P}` is either omitted/blank or a non-byte hex address.
+                if next.len() != 2 && next.chars().all(|c| c.is_ascii_hexdigit()) {
+                    physical_address = u32::from_str_radix(next, 16).ok();
+                }
+                else {
+                    remaining_parts.push(next);
+                }
+            }
+            remaining_parts.extend(parts);
+
+            let bytes = remaining_parts
+                .iter()
                 .take_while(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit()))
                 .map(|part| u8::from_str_radix(part, 16).unwrap())
                 .collect::<Vec<_>>();
@@ -336,6 +350,7 @@ fn extract_rows_from_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow>
 
             Some(CodeOnlyListingRow {
                 logical_address: u32::from_str_radix(addr, 16).unwrap(),
+                physical_address,
                 bytes
             })
         })
@@ -349,8 +364,24 @@ fn build_source_from_code_output(rows: &[CodeOnlyListingRow]) -> String {
 
     let mut lines = Vec::new();
     let mut current_addr = 0u32;
+    let mut current_bank: Option<u32> = None;
+    let mut last_banked_index: Option<u32> = None;
 
     for row in rows {
+        // For banked outputs, physical addresses above 64k point to bank storage
+        // (`bank_index * 0x4000 + offset`). Recreate BANK directives when needed.
+        if let Some(physical_address) = row.physical_address
+            && physical_address >= 0x1_0000
+        {
+            let bank_index = physical_address / 0x4000;
+            last_banked_index = Some(bank_index);
+            if current_bank != Some(bank_index) {
+                lines.push(format!("bank 0x{:X}", 0xC0 + bank_index));
+                current_bank = Some(bank_index);
+                current_addr = u32::MAX;
+            }
+        }
+
         if lines.is_empty() || current_addr != row.logical_address {
             lines.push(format!("org 0x{:X}", row.logical_address));
         }
@@ -359,6 +390,10 @@ fn build_source_from_code_output(rows: &[CodeOnlyListingRow]) -> String {
         lines.push(format!("db {db_values}"));
 
         current_addr = row.logical_address + row.bytes.len() as u32;
+    }
+
+    if let Some(bank_index) = last_banked_index {
+        lines.push(format!("bankset {}", bank_index / 4));
     }
 
     lines.push(String::new());

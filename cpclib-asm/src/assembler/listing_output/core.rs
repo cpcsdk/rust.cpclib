@@ -370,6 +370,8 @@ impl ListingOutput {
             LocatedTokenInner::Macro { name, .. } => TokenKind::MacroDefine(name.to_string()),
             LocatedTokenInner::MacroCall(..)
             | LocatedTokenInner::Org { .. }
+            | LocatedTokenInner::Bank(..)
+            | LocatedTokenInner::Bankset(..)
             | LocatedTokenInner::Comment(..)
             | LocatedTokenInner::Include(..)
             | LocatedTokenInner::Repeat(..) => TokenKind::Displayable,
