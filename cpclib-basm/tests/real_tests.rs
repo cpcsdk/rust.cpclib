@@ -1,3 +1,5 @@
+mod common;
+
 use std::process::Command;
 use std::sync::{Arc, LazyLock};
 
@@ -8,43 +10,7 @@ use cpclib_common::itertools::Itertools;
 use pretty_assertions::assert_eq;
 use regex::Regex;
 use test_generator::test_resources;
-
-static LOCK: LazyLock<parking_lot::Mutex<()>> = LazyLock::new(parking_lot::Mutex::default);
-
-fn manual_cleanup() {
-    for fname in &[
-        "BANK_C0.TXT",
-        "BANK_C4.TXT",
-        "BANK_C5.TXT",
-        "BANK_C6.TXT",
-        "BANK_C7.TXT",
-        "good_bankset_0_0.o",
-        "good_bankset_0_1.o",
-        "good_bankset_0_2.o",
-        "good_bankset_0_3.o",
-        "good_bankset_1_0.o",
-        "good_bankset_1_1.o",
-        "good_bankset_1_2.o",
-        "good_bankset_1_3.o",
-        "good_save_txt.bin",
-        "good_save_whole_inner.bin",
-        "HELLO.BIN",
-        "HELLO.TXT",
-        "hello.bin",
-        "hello.dsk",
-        "hello.hfe",
-        "hello1.bin",
-        "hello2.bin",
-        "hello3.bin",
-        "lst.tmp",
-        "TESTASCII.DSK"
-    ] {
-        let p = std::path::Path::new(fname);
-        if p.exists() {
-            fs_err::remove_file(p).unwrap()
-        }
-    }
-}
+use common::{GLOBAL_TEST_LOCK, manual_cleanup};
 
 fn command_for_generated_test(
     fname: &str,
@@ -209,6 +175,10 @@ fn listing_byte_equivalence_is_meaningful(fname: &str) -> bool {
 fn reconstructed_binary_equivalence_is_meaningful(fname: &str) -> bool {
     let _ = fname;
     true
+}
+
+fn acquire_lock() -> parking_lot::lock_api::MutexGuard<'static, parking_lot::RawMutex, ()> {
+    GLOBAL_TEST_LOCK.lock()
 }
 
 #[derive(Debug)]
@@ -746,97 +716,6 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str, listin
     );
 }
 
-#[test]
-fn listing_contains_good_str_directives_and_escaped_quotes() {
-    let _lock = LOCK.lock();
-    manual_cleanup();
-
-    let output_file =
-        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let output_fname = output_file.path().as_os_str().to_str().unwrap();
-
-    let listing_file =
-        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
-
-    let res = run_basm_once_with_listing("good_str.asm", output_fname, listing_fname);
-    if !res.status.success() {
-        panic!(
-            "Failure to assemble good_str.asm.\n{}",
-            format_basm_failure(&res)
-        );
-    }
-
-    let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
-
-    assert!(listing.contains("ORG 0X1000"));
-    assert!(listing.contains("DEFB \"HELL\""));
-    assert!(listing.contains("STR \"HELLO\""));
-    assert!(listing.contains("DB \"   \\\" ET VOILA\""));
-    assert!(listing.contains("DB \" \\\" ET VOILA\""));
-    assert!(listing.contains("DB \"\\\" ET VOILA\""));
-
-    let code_only_listing_file =
-        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let code_only_listing_fname = code_only_listing_file.path().as_os_str().to_str().unwrap();
-    let res_code_only = run_basm_once_with_code_only_listing(
-        "good_str.asm",
-        output_fname,
-        code_only_listing_fname,
-    );
-    if !res_code_only.status.success() {
-        panic!(
-            "Failure to assemble good_str.asm with code-only listing.\n{}",
-            format_basm_failure(&res_code_only)
-        );
-    }
-
-    let code_only_listing =
-        fs_err::read_to_string(code_only_listing_fname).expect("Code-only listing is missing");
-    let rows = extract_rows_from_code_only_listing(&code_only_listing);
-    let str_row = rows
-        .iter()
-        .find(|row| row.logical_address == 0x2000)
-        .expect("Missing row for STR at 0x2000 in code-only listing");
-    assert_eq!(
-        str_row.bytes,
-        vec![0x68, 0x65, 0x6C, 0x6C, 0xEF],
-        "STR bytes in code-only listing should match emitted bytes (last char with bit 7 set)."
-    );
-}
-
-#[test]
-fn listing_contains_full_good_basic_locomotive_source_block() {
-    let _lock = LOCK.lock();
-    manual_cleanup();
-
-    let output_file =
-        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let output_fname = output_file.path().as_os_str().to_str().unwrap();
-
-    let listing_file =
-        camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let listing_fname = listing_file.path().as_os_str().to_str().unwrap();
-
-    let res = run_basm_once_with_listing("good_basic.asm", output_fname, listing_fname);
-    if !res.status.success() {
-        panic!(
-            "Failure to assemble good_basic.asm.\n{}",
-            format_basm_failure(&res)
-        );
-    }
-
-    let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
-
-    let listing_lower = listing.to_ascii_lowercase();
-    assert!(listing_lower.contains("locomotive"));
-    assert!(listing_lower.contains("10 rem basic loader of binary exec"));
-    assert!(listing_lower.contains("20 rem yeah !!"));
-    assert!(listing_lower.contains("30 call"));
-    assert!(listing_lower.contains("endlocomotive"));
-    assert!(!listing.contains(">0178"));
-}
-
 fn specific_test(folder: &str, fname: &str) {
     let output_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
@@ -862,7 +741,7 @@ fn test_roudoudou_generated_code() {
 
 #[test_resources("cpclib-basm/tests/asm/warning_*.asm")]
 fn expect_warning_but_success(real_fname: &str) {
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
     manual_cleanup();
 
     let fname = &real_fname["cpclib-basm/tests/asm/".len()..];
@@ -950,7 +829,7 @@ fn expect_one_line_success(real_fname: &str) {
     {
         return;
     }
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
     manual_cleanup();
 
     manual_cleanup();
@@ -1030,7 +909,7 @@ fn expect_several_empty_lines_success(real_fname: &str) {
     if real_fname.contains("basic") {
         return;
     }
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
 
     manual_cleanup();
 
@@ -1092,7 +971,7 @@ fn expect_several_empty_lines_success(real_fname: &str) {
 /// TODO write tests specifics for this purpose
 fn expect_listing_success(fname: &str) {
     let fname = &fname["cpclib-basm/tests/asm/".len()..];
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
 
     manual_cleanup();
 
@@ -1111,22 +990,8 @@ fn expect_listing_success(fname: &str) {
 }
 
 #[test_resources("cpclib-basm/tests/asm/good_*.asm")]
-fn expect_listing_bytes_match_generated_output(fname: &str) {
-    let _lock = LOCK.lock();
-
-    manual_cleanup();
-
-    let fname = &fname["cpclib-basm/tests/asm/".len()..];
-    if !listing_byte_equivalence_is_meaningful(fname) {
-        return;
-    }
-
-    assemble_and_compare_listing_bytes(fname, ListingKind::Text);
-}
-
-#[test_resources("cpclib-basm/tests/asm/good_*.asm")]
 fn expect_html_listing_bytes_match_generated_output(fname: &str) {
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
 
     manual_cleanup();
 
@@ -1140,7 +1005,7 @@ fn expect_html_listing_bytes_match_generated_output(fname: &str) {
 
 #[test_resources("cpclib-basm/tests/asm/good_*.asm")]
 fn expect_reconstructed_source_from_code_listing_assembles(fname: &str) {
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
 
     manual_cleanup();
 
@@ -1157,7 +1022,7 @@ fn expect_reconstructed_source_from_code_listing_assembles(fname: &str) {
 //#[test_resources("basm/tests/asm/good_*.sym")]
 /// TODO write tests specifics for this purpose
 fn expect_symbols_success(fname: &str) {
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
 
     manual_cleanup();
 
@@ -1202,7 +1067,7 @@ fn expect_symbols_success(fname: &str) {
 
 #[test_resources("cpclib-basm/tests/asm/good_*.asm")]
 fn expect_success(fname: &str) {
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
 
     manual_cleanup();
 
@@ -1256,7 +1121,7 @@ fn expect_success(fname: &str) {
 
 #[test_resources("cpclib-basm/tests/asm/bad_*.asm")]
 fn expect_failure(fname: &str) {
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
 
     manual_cleanup();
 
@@ -1290,7 +1155,7 @@ fn test_at2_akm() {
 
 #[test]
 fn test_output_directive() {
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
     manual_cleanup();
 
     // Clean up any pre-existing testoutput.bin
@@ -1332,7 +1197,7 @@ fn test_output_directive() {
 
 #[test]
 fn test_output_directive_with_command_line() {
-    let _lock = LOCK.lock();
+    let _lock = acquire_lock();
     manual_cleanup();
 
     // Clean up any pre-existing files
