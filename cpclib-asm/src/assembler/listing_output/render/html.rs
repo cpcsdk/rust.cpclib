@@ -61,25 +61,31 @@ impl HtmlListingRenderer {
 
     fn insert_symbol_target(&mut self, symbol: &str, row_id: usize) {
         self.symbol_names_by_row.entry(row_id).or_insert_with(|| symbol.to_string());
-        self.symbol_targets.insert(symbol.to_string(), row_id);
-        self.symbol_targets.insert(symbol.to_ascii_lowercase(), row_id);
+        self.symbol_targets.entry(symbol.to_string()).or_insert(row_id);
+        self.symbol_targets
+            .entry(symbol.to_ascii_lowercase())
+            .or_insert(row_id);
         if let Some(normalized) = Self::normalize_symbol_key(symbol) {
-            self.symbol_targets.insert(normalized, row_id);
+            self.symbol_targets.entry(normalized).or_insert(row_id);
         }
 
         if let Some(last_dot) = symbol.rfind('.') {
             if last_dot > 0 && last_dot + 1 < symbol.len() {
                 let short_local = format!(".{}", &symbol[last_dot + 1..]);
-                self.symbol_targets.insert(short_local.clone(), row_id);
+                self.symbol_targets.entry(short_local.clone()).or_insert(row_id);
                 self.symbol_targets
-                    .insert(short_local.to_ascii_lowercase(), row_id);
+                    .entry(short_local.to_ascii_lowercase())
+                    .or_insert(row_id);
             }
         }
 
         if let Some(prefix) = global_prefix_for_symbol(symbol) {
-            self.symbol_targets.insert(prefix.to_string(), row_id);
             self.symbol_targets
-                .insert(prefix.to_ascii_lowercase(), row_id);
+                .entry(prefix.to_string())
+                .or_insert(row_id);
+            self.symbol_targets
+                .entry(prefix.to_ascii_lowercase())
+                .or_insert(row_id);
         }
     }
 
@@ -408,11 +414,6 @@ function attachSymbolLinks(symbolTargets) {
         const raw = node.dataset.symbolCandidate || node.textContent || '';
         const target = resolveSymbolTarget(symbolTargets, raw);
         if (target === null || target === undefined) return;
-
-        const row = node.closest('.row');
-        if (row && row.id === `row-${target}`) {
-            return;
-        }
 
         const link = document.createElement('a');
         link.href = `#row-${target}`;

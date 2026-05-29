@@ -1602,6 +1602,50 @@ endm\n";
             listing.contains("['start', 0]"),
             "listing={listing}"
         );
+        assert!(
+            !listing.contains("if (row && row.id === `row-${target}`)"),
+            "listing={listing}"
+        );
+    }
+
+    #[test]
+    fn html_renderer_uses_first_destination_for_duplicate_labels() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new_with_format(
+            writer.clone(),
+            ListingOutputFormat {
+                output_kind: ListingOutputKind::Html,
+                source_file_output_mode: ListingSourceFileOutputMode::None,
+                ..Default::default()
+            }
+        );
+        output.on();
+
+        output.current_line_group = Some((10, "dup_label:".to_string(), "dup_label:".to_string()));
+        output.current_first_address = 0x0100;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x0100, 0).into();
+        output.current_token_kind = TokenKind::Label("dup_label".to_string());
+        output.deferred_for_line.push("0100 0100 dup_label".to_string());
+        output.process_current_line();
+
+        output.current_line_group = Some((20, "dup_label:".to_string(), "dup_label:".to_string()));
+        output.current_first_address = 0x0200;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x0200, 0).into();
+        output.current_token_kind = TokenKind::Label("dup_label".to_string());
+        output.deferred_for_line.push("0200 0200 dup_label".to_string());
+        output.process_current_line();
+
+        output.finish();
+
+        let listing = writer.snapshot();
+        assert!(
+            listing.contains("['dup_label', 0]"),
+            "listing={listing}"
+        );
+        assert!(
+            !listing.contains("['dup_label', 1]"),
+            "listing={listing}"
+        );
     }
 
     #[test]
