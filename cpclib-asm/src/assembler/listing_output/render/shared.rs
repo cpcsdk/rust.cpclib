@@ -21,6 +21,7 @@ pub(crate) struct ListingLineRender<'a> {
     pub(crate) is_multiline_continuation: bool,
     pub(crate) token_kind: &'a TokenKind,
     pub(crate) tokens: &'a [ListingTokenRender<'a>],
+    pub(crate) source_tokens: &'a [ListingTokenRender<'a>],
     pub(crate) definition_target: Option<usize>,
     pub(crate) highlighted_symbols: &'a [String],
     pub(crate) collapsible: bool,

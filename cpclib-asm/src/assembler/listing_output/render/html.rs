@@ -763,10 +763,10 @@ document.addEventListener('click', (event) => {
             self.render_token_bytes_html(format, row_id, &line),
             line.line_number.map(|value| value.to_string()).unwrap_or_default(),
             if show_expanded {
-                format!("<span class=\"{source_expanded_class}\"{}>{}</span>", &hover_attr, self.highlight_source_html_precise(&render_source_column(Some(line.source_line_expanded)), row_id, line.tokens, true))
+                format!("<span class=\"{source_expanded_class}\"{}>{}</span>", &hover_attr, self.highlight_source_html_precise(&render_source_column(Some(line.source_line_expanded)), row_id, line.source_tokens, true))
             } else { String::new() },
             if show_raw {
-                format!("<span class=\"{source_raw_class}\"{}>{}</span>", &hover_attr, self.highlight_source_html_precise(&render_source_column(Some(line.source_line_raw)), row_id, line.tokens, false))
+                format!("<span class=\"{source_raw_class}\"{}>{}</span>", &hover_attr, self.highlight_source_html_precise(&render_source_column(Some(line.source_line_raw)), row_id, line.source_tokens, false))
             } else { String::new() }
         ).unwrap();
     }

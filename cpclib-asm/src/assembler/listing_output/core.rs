@@ -617,6 +617,18 @@ impl ListingOutput {
             token_chunks.push(current);
         }
 
+        let source_token_renders = self
+            .current_line_tokens
+            .iter()
+            .map(|token| ListingTokenRender {
+                token_id: token.token_id,
+                raw_text: token.raw.as_str(),
+                expanded_text: token.expanded.as_str(),
+                bytes: token.bytes.as_slice(),
+                token_kind: &token.token_kind
+            })
+            .collect_vec();
+
         // TODO manage missing end of files/blocks if needed
 
         let delta = line_representation_raw.len();
@@ -741,6 +753,7 @@ impl ListingOutput {
                         is_multiline_continuation,
                         token_kind: &self.current_token_kind,
                         tokens: token_renders.as_slice(),
+                        source_tokens: source_token_renders.as_slice(),
                         definition_target: None,
                         highlighted_symbols: &[],
                         collapsible: false,
@@ -1444,6 +1457,68 @@ endm\n";
         );
         assert!(
             listing.contains("class=\"byte-sep\" data-hover-row=\"tok-0\""),
+            "listing={listing}"
+        );
+    }
+
+    #[test]
+    fn html_renderer_highlights_source_tokens_on_wrapped_byte_rows() {
+        let writer = SharedBufferWriter::default();
+        let mut output = ListingOutput::new_with_format(
+            writer.clone(),
+            ListingOutputFormat {
+                output_kind: ListingOutputKind::Html,
+                source_file_output_mode: ListingSourceFileOutputMode::None,
+                ..Default::default()
+            }
+        );
+        output.on();
+
+        output.current_line_group = Some((39, "ld bc, 0xbc00 + 1 : out (c), c : ld bc, 0xbd00 + 96/2 : out (c), c".to_string(), "ld bc, 0xbc00 + 1 : out (c), c : ld bc, 0xbd00 + 96/2 : out (c), c".to_string()));
+        output.current_line_bytes.extend_from_slice(&[0x01, 0x01, 0xBC, 0xED, 0x49, 0x01, 0x30, 0xBD, 0xED, 0x49]);
+        output.current_first_address = 0x4007;
+        output.current_physical_address = MemoryPhysicalAddress::new(0x4007, 0).into();
+        output.current_token_kind = TokenKind::Displayable;
+        output.current_line_tokens = vec![
+            ListingTokenItem {
+                token_id: 29,
+                raw: "ld bc, 0xbc00 + 1".to_string(),
+                expanded: "ld bc, 0xbc00 + 1".to_string(),
+                bytes: vec![0x01, 0x01, 0xBC],
+                token_kind: TokenKind::Displayable
+            },
+            ListingTokenItem {
+                token_id: 30,
+                raw: "out (c), c".to_string(),
+                expanded: "out (c), c".to_string(),
+                bytes: vec![0xED, 0x49],
+                token_kind: TokenKind::Displayable
+            },
+            ListingTokenItem {
+                token_id: 31,
+                raw: "ld bc, 0xbd00 + 96/2".to_string(),
+                expanded: "ld bc, 0xbd00 + 96/2".to_string(),
+                bytes: vec![0x01, 0x30, 0xBD],
+                token_kind: TokenKind::Displayable
+            },
+            ListingTokenItem {
+                token_id: 32,
+                raw: "out (c), c".to_string(),
+                expanded: "out (c), c".to_string(),
+                bytes: vec![0xED, 0x49],
+                token_kind: TokenKind::Displayable
+            }
+        ];
+
+        output.finish();
+
+        let listing = writer.snapshot();
+        assert!(
+            listing.contains("<span class=\"token fragment\" data-hover-row=\"tok-32\"><span class=\"token\" data-symbol-candidate=\"out\">out</span>&nbsp;(<span class=\"token\" data-symbol-candidate=\"c\">c</span>),&nbsp;<span class=\"token\" data-symbol-candidate=\"c\">c</span></span>"),
+            "listing={listing}"
+        );
+        assert!(
+            listing.contains("token byte\" data-hover-row=\"tok-32\">ED</span>"),
             "listing={listing}"
         );
     }
