@@ -5,6 +5,7 @@ pub mod caprice_forever;
 pub mod cpcec;
 pub mod cpcemu;
 pub mod cpcemupower;
+pub mod emulator1984;
 pub mod retrovm;
 pub mod sugarbox;
 pub mod winape;
@@ -18,6 +19,7 @@ use caprice_forever::{CAPRICEFOREVER_CMD, CapriceForeverVersion};
 pub use cpcec::*;
 use cpcemu::{CPCEMU_CMD, CpcEmuVersion};
 use cpcemupower::{CPCEMUPOWER_CMD, CpcEmuPowerVersion};
+use emulator1984::{EMULATOR_1984_CMD, Emulator1984Version};
 use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
 use cpclib_common::event::EventObserver;
 use retrovm::{RETROVM_CMD, RetroVmVersion};
@@ -38,6 +40,7 @@ pub enum Emulator {
     CpcEmu(CpcEmuVersion),
     Cpcec(CpcecVersion),
     CpcEmuPower(CpcEmuPowerVersion),
+    Emulator1984(Emulator1984Version),
     RetroVm(RetroVmVersion),
     Winape(WinapeVersion),
     SugarBoxV2(SugarBoxV2Version)
@@ -92,6 +95,7 @@ impl Emulator {
             Emulator::Winape(_) => WINAPE_CMD,
             Emulator::SugarBoxV2(_) => SUGARBOX_V2_CMD,
             Emulator::CpcEmuPower(_cpc_emu_power_version) => CPCEMUPOWER_CMD,
+            Emulator::Emulator1984(_) => EMULATOR_1984_CMD,
             Emulator::RetroVm(_) => RETROVM_CMD
         }
     }
@@ -110,6 +114,7 @@ impl Emulator {
             Emulator::CapriceForever(_caprice_forever_version) => {
                 window_name.starts_with("CaPriCe Forever")
             },
+            Emulator::Emulator1984(_) => window_name.starts_with("1984"),
             Emulator::RetroVm(_) => window_name.starts_with("Retro Virtual Machine")
         }
     }
@@ -166,6 +171,7 @@ impl Emulator {
             Emulator::Winape(v) => v.configuration(),
             Emulator::Amspirit(v) => v.configuration(),
             Emulator::Cadence(v) => v.configuration(),
+            Emulator::Emulator1984(v) => v.configuration(),
             Emulator::SugarBoxV2(v) => v.configuration(),
             Emulator::CpcEmuPower(v) => v.configuration(),
             Emulator::CapriceForever(v) => v.configuration(),

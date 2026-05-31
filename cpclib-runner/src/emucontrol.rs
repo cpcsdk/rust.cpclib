@@ -633,6 +633,9 @@ impl EmulatorConf {
                 Emulator::CapriceForever(_) => {
                     args.push(format!("/DriveA={}", emu.wine_compatible_fname(drive_a)?))
                 },
+                Emulator::Emulator1984(_) => {
+                    args.push(format!("--disk-a={drive_a}"));
+                },
             }
         }
 
@@ -649,7 +652,8 @@ impl EmulatorConf {
                 },
                 Emulator::CapriceForever(_) => args.push(format!("/DriveB={drive_b}")),
                 Emulator::RetroVm(_) => return Err("Drive B not yet handled".to_owned()),
-                Emulator::Cadence(_) => return Err("Drive B not yet handled".to_owned())
+                Emulator::Cadence(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::Emulator1984(_) => args.push(format!("--disk-b={drive_b}"))
             }
         }
 
@@ -674,7 +678,10 @@ impl EmulatorConf {
                     args.push(format!("/SNA=\"{sna}\""));
                 },
                 Emulator::RetroVm(_) => args.push(sna.to_string()),
-                Emulator::Cadence(_) => args.push(sna.to_string())
+                Emulator::Cadence(_) => args.push(sna.to_string()),
+                Emulator::Emulator1984(_) => {
+                    eprintln!("snapshot loading is currently ignored for 1984");
+                }
             }
         }
 
@@ -696,7 +703,8 @@ impl EmulatorConf {
                 Emulator::CpcEmuPower(_cpc_emu_power_version) => todo!(),
                 Emulator::CapriceForever(_caprice_forever_version) => todo!(),
                 Emulator::RetroVm(_) => todo!(),
-                Emulator::Cadence(_) => todo!()
+                Emulator::Cadence(_) => todo!(),
+                Emulator::Emulator1984(_) => todo!()
             }
         }
 
@@ -766,6 +774,12 @@ impl EmulatorConf {
                         return Err(format!("`{ftype}` should end by .txt"));
                     }
                 },
+                Emulator::Emulator1984(_) => {
+                    let text = fs_err::read_to_string(ftype)
+                        .map_err(|e| format!("Failed to read auto-type file `{ftype}`: {e}"))?;
+                    let text = text.replace('\n', "\\n");
+                    args.push(format!("--paste={text}"));
+                },
                 _ => {
                     eprintln!(
                         "Auto type file is currently ignored for this emulator {:?}",
@@ -803,6 +817,9 @@ impl EmulatorConf {
                 },
                 Emulator::Cadence(_) => {
                     eprintln!("auto_run is currently ignored for Cadence");
+                },
+                Emulator::Emulator1984(_) => {
+                    args.push(format!("--autostart={run}"));
                 }
             }
         }
@@ -1096,6 +1113,7 @@ struct RetroVmUsedEmulator {}
 
 struct CapriceForeverUsedEmulator {}
 struct CadenceUsedEmulator {}
+struct Emulator1984UsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -1146,6 +1164,7 @@ impl UsedEmulator for CpcEmuUsedEmulator {}
 impl UsedEmulator for RetroVmUsedEmulator {}
 impl UsedEmulator for CapriceForeverUsedEmulator {}
 impl UsedEmulator for CadenceUsedEmulator {}
+impl UsedEmulator for Emulator1984UsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Option<EmuWindow>,
@@ -1178,7 +1197,8 @@ pub enum Robot {
     CpcEmu(RobotImpl<CpcEmuUsedEmulator>),
     RetroVm(RobotImpl<RetroVmUsedEmulator>),
     CapriceForever(RobotImpl<CapriceForeverUsedEmulator>),
-    Cadence(RobotImpl<CadenceUsedEmulator>)
+    Cadence(RobotImpl<CadenceUsedEmulator>),
+    Emulator1984(RobotImpl<Emulator1984UsedEmulator>)
 }
 
 impl From<RobotImpl<AceUsedEmulator>> for Robot {
@@ -1238,6 +1258,12 @@ impl From<RobotImpl<CapriceForeverUsedEmulator>> for Robot {
 impl From<RobotImpl<CadenceUsedEmulator>> for Robot {
     fn from(value: RobotImpl<CadenceUsedEmulator>) -> Self {
         Self::Cadence(value)
+    }
+}
+
+impl From<RobotImpl<Emulator1984UsedEmulator>> for Robot {
+    fn from(value: RobotImpl<Emulator1984UsedEmulator>) -> Self {
+        Self::Emulator1984(value)
     }
 }
 
@@ -1375,6 +1401,7 @@ impl Robot {
             Robot::RetroVm(r) => r,
             Robot::CapriceForever(r) => r,
             Robot::Cadence(r) => r,
+            Robot::Emulator1984(r) => r,
         } {
             #[cfg(feature = "screenshot")]
             fn handle_orgams(
@@ -1425,6 +1452,9 @@ impl Robot {
             },
             Emulator::Cadence(_) => {
                 RobotImpl::<CadenceUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
+            Emulator::Emulator1984(_) => {
+                RobotImpl::<Emulator1984UsedEmulator>::from((window, eventsManager, emu)).into()
             },
         }
     }
@@ -1858,6 +1888,8 @@ pub enum Emu {
     Cpcemu,
     Caprice,
     Cadence,
+    #[value(alias = "1984")]
+    Emulator1984,
     #[value(alias = "retrovm")]
     Rvm
 }
@@ -2007,6 +2039,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
         Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
         Emu::Cadence => Emulator::Cadence(Default::default()),
+        Emu::Emulator1984 => Emulator::Emulator1984(Default::default()),
         Emu::Rvm => Emulator::RetroVm(Default::default())
     };
 

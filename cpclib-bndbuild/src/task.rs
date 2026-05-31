@@ -19,6 +19,7 @@ use cpclib_runner::runner::emulator::caprice_forever::CAPRICEFOREVER_CMD;
 use cpclib_runner::runner::emulator::cadence::CADENCE_CMD;
 use cpclib_runner::runner::emulator::cpcemu::CPCEMU_CMD;
 use cpclib_runner::runner::emulator::cpcemupower::CPCEMUPOWER_CMD;
+use cpclib_runner::runner::emulator::emulator1984::EMULATOR_1984_CMD;
 use cpclib_runner::runner::emulator::retrovm::RETROVM_CMD;
 use cpclib_runner::runner::emulator::{
     ACE_CMD, AMSPIRIT_CMD, CPCEC_CMD, SUGARBOX_V2_CMD, WINAPE_CMD
@@ -196,6 +197,7 @@ pub const CPCEMU_CMDS: &[&str] = &[CPCEMU_CMD, "cpc-emu"];
 pub const CPCEMUPOWER_CMDS: &[&str] = &[CPCEMUPOWER_CMD];
 pub const CAPRICEFOREVER_CMDS: &[&str] = &[CAPRICEFOREVER_CMD];
 pub const CADENCE_CMDS: &[&str] = &[CADENCE_CMD];
+pub const EMULATOR_1984_CMDS: &[&str] = &[EMULATOR_1984_CMD];
 pub const RETROVM_CMDS: &[&str] = &[RETROVM_CMD, "rvm"];
 
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
@@ -334,7 +336,7 @@ is_some_cmd!(
     ace, amspirit, at, ayt, archive,
     basm, basmdoc, bdasm, bndbuild,
     catalog, capriceforever, chipnsfx, convgeneric, cpcemu, cpr, csl, crunch, cp, cpcec, cpcemupower, cpc2img,
-    cadence,
+    cadence, emulator_1984,
     disark, disc,
     echo, emuctrl, r#extern,
     fade,
@@ -695,6 +697,9 @@ impl InnerTask {
         }
         else if is_cadence_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_cadence_default(), std))
+        }
+        else if is_emulator_1984_cmd(code) {
+            Ok(Self::with_emulator(Emulator::new_1984_default(), std))
         }
         else if is_retrovm_cmd(code) {
             Ok(Self::with_emulator(Emulator::new_retrovm_default(), std))
