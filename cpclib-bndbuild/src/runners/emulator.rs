@@ -40,6 +40,12 @@ impl Emulator {
         ))
     }
 
+    pub fn new_cadence_default() -> Self {
+        Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::Cadence(
+            Default::default()
+        ))
+    }
+
     pub fn new_winape_default() -> Self {
         Self::EmulatorProxy(cpclib_runner::runner::emulator::Emulator::Winape(
             Default::default()
@@ -85,6 +91,7 @@ impl Emulator {
             Self::new_cpcemupower_default(),
             Self::new_cpcemu_default(),
             Self::new_capriceforever_default(),
+            Self::new_cadence_default(),
             Self::new_retrovm_default(),
             Self::new_facade()
         ]

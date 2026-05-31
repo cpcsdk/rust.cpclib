@@ -621,7 +621,8 @@ impl EmulatorConf {
                 Emulator::Ace(_)
                 | Emulator::CpcEmu(_)
                 | Emulator::Cpcec(_)
-                | Emulator::RetroVm(_) => args.push(drive_a.to_string()),
+                | Emulator::RetroVm(_)
+                | Emulator::Cadence(_) => args.push(drive_a.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) | Emulator::Amspirit(_) => {
                     args.push(emu.wine_compatible_fname(drive_a)?.to_string())
@@ -647,7 +648,8 @@ impl EmulatorConf {
                     args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?))
                 },
                 Emulator::CapriceForever(_) => args.push(format!("/DriveB={drive_b}")),
-                Emulator::RetroVm(_) => return Err("Drive B not yet handled".to_owned())
+                Emulator::RetroVm(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::Cadence(_) => return Err("Drive B not yet handled".to_owned())
             }
         }
 
@@ -671,7 +673,8 @@ impl EmulatorConf {
                 Emulator::CapriceForever(_v) => {
                     args.push(format!("/SNA=\"{sna}\""));
                 },
-                Emulator::RetroVm(_) => args.push(sna.to_string())
+                Emulator::RetroVm(_) => args.push(sna.to_string()),
+                Emulator::Cadence(_) => args.push(sna.to_string())
             }
         }
 
@@ -692,7 +695,8 @@ impl EmulatorConf {
                 Emulator::SugarBoxV2(_) => todo!(),
                 Emulator::CpcEmuPower(_cpc_emu_power_version) => todo!(),
                 Emulator::CapriceForever(_caprice_forever_version) => todo!(),
-                Emulator::RetroVm(_) => todo!()
+                Emulator::RetroVm(_) => todo!(),
+                Emulator::Cadence(_) => todo!()
             }
         }
 
@@ -796,6 +800,9 @@ impl EmulatorConf {
                 },
                 Emulator::RetroVm(_) => {
                     eprintln!("auto_run is currently ignored for RetroVM");
+                },
+                Emulator::Cadence(_) => {
+                    eprintln!("auto_run is currently ignored for Cadence");
                 }
             }
         }
@@ -1088,6 +1095,7 @@ struct CpcEmuUsedEmulator {}
 struct RetroVmUsedEmulator {}
 
 struct CapriceForeverUsedEmulator {}
+struct CadenceUsedEmulator {}
 
 impl UsedEmulator for AceUsedEmulator {
     // here we delegate the creation of screenshot to Ace to avoid some issues i do not understand
@@ -1137,6 +1145,7 @@ impl UsedEmulator for CpcEmuPowerUsedEmulator {}
 impl UsedEmulator for CpcEmuUsedEmulator {}
 impl UsedEmulator for RetroVmUsedEmulator {}
 impl UsedEmulator for CapriceForeverUsedEmulator {}
+impl UsedEmulator for CadenceUsedEmulator {}
 
 struct RobotImpl<E: UsedEmulator> {
     pub(crate) window: Option<EmuWindow>,
@@ -1168,7 +1177,8 @@ pub enum Robot {
     CpcEmuPower(RobotImpl<CpcEmuPowerUsedEmulator>),
     CpcEmu(RobotImpl<CpcEmuUsedEmulator>),
     RetroVm(RobotImpl<RetroVmUsedEmulator>),
-    CapriceForever(RobotImpl<CapriceForeverUsedEmulator>)
+    CapriceForever(RobotImpl<CapriceForeverUsedEmulator>),
+    Cadence(RobotImpl<CadenceUsedEmulator>)
 }
 
 impl From<RobotImpl<AceUsedEmulator>> for Robot {
@@ -1222,6 +1232,12 @@ impl From<RobotImpl<RetroVmUsedEmulator>> for Robot {
 impl From<RobotImpl<CapriceForeverUsedEmulator>> for Robot {
     fn from(value: RobotImpl<CapriceForeverUsedEmulator>) -> Self {
         Self::CapriceForever(value)
+    }
+}
+
+impl From<RobotImpl<CadenceUsedEmulator>> for Robot {
+    fn from(value: RobotImpl<CadenceUsedEmulator>) -> Self {
+        Self::Cadence(value)
     }
 }
 
@@ -1358,6 +1374,7 @@ impl Robot {
             Robot::CpcEmu(r) => r,
             Robot::RetroVm(r) => r,
             Robot::CapriceForever(r) => r,
+            Robot::Cadence(r) => r,
         } {
             #[cfg(feature = "screenshot")]
             fn handle_orgams(
@@ -1405,6 +1422,9 @@ impl Robot {
             },
             Emulator::CapriceForever(_caprice_forever_version) => {
                 RobotImpl::<CapriceForeverUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
+            Emulator::Cadence(_) => {
+                RobotImpl::<CadenceUsedEmulator>::from((window, eventsManager, emu)).into()
             },
         }
     }
@@ -1837,6 +1857,7 @@ pub enum Emu {
     Cpcemupower,
     Cpcemu,
     Caprice,
+    Cadence,
     #[value(alias = "retrovm")]
     Rvm
 }
@@ -1985,6 +2006,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
         Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
         Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
+        Emu::Cadence => Emulator::Cadence(Default::default()),
         Emu::Rvm => Emulator::RetroVm(Default::default())
     };
 
