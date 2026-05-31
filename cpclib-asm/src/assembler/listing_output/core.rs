@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::ExprResult;
-use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress, SymbolsTable};
+use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress, SymbolsTable, SymbolsTableTrait, Value};
 
 use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString};
 
@@ -465,16 +465,17 @@ impl ListingOutput {
 
         self.flush_current_token();
 
-        self.manage_fname(token);
         if let Some(specific_content) = self.current_token_specific_content() {
             self.deferred_for_line.push(specific_content.clone());
         }
 
         if !self.token_is_on_same_line(token) {
             self.process_current_line();
+            self.manage_fname(token);
             self.begin_current_line(token, address, physical_address, symbols);
         }
         else {
+            self.manage_fname(token);
             let raw_line = Self::extract_code(token);
             let expanded_line = if !Self::should_expand_source_for_token(token) {
                 raw_line.clone()
@@ -514,16 +515,24 @@ impl ListingOutput {
     fn expand_source_line_patterns(raw_line: &str, symbols: Option<*const SymbolsTable>) -> String {
         let normalized = raw_line.replace("{{", "{").replace("}}", "}");
 
+        // Keep string literals untouched. Expanding `.` / local placeholders inside quoted
+        // text corrupts glyph-like data such as "###." and ".#.." in macro arguments.
+        let has_string_literal = normalized.chars().any(|ch| ch == '"' || ch == '\'');
+
         // First keep the fast path for lines that can be expanded as a whole.
-        let whole = Self::expand_symbol_with_listing_context(&normalized, symbols);
-        if whole != normalized {
-            return whole;
+        if !has_string_literal {
+            let whole = Self::expand_symbol_with_listing_context(&normalized, symbols);
+            if whole != normalized {
+                return Self::expand_embedded_braces(&whole, symbols);
+            }
         }
 
         // Fallback: expand each lexical chunk separately so inline expressions like
         // `jr z, .has_nops{nb_nops}` are resolved even when full-line expansion fails.
         let mut out = String::with_capacity(normalized.len());
         let mut current = String::new();
+        let mut in_string: Option<char> = None;
+        let mut prev_escape = false;
 
         let flush_chunk = |chunk: &mut String, dst: &mut String| {
             if chunk.is_empty() {
@@ -535,6 +544,30 @@ impl ListingOutput {
         };
 
         for ch in normalized.chars() {
+            if let Some(quote) = in_string {
+                out.push(ch);
+                if prev_escape {
+                    prev_escape = false;
+                    continue;
+                }
+                if ch == '\\' {
+                    prev_escape = true;
+                    continue;
+                }
+                if ch == quote {
+                    in_string = None;
+                }
+                continue;
+            }
+
+            if ch == '"' || ch == '\'' {
+                flush_chunk(&mut current, &mut out);
+                out.push(ch);
+                in_string = Some(ch);
+                prev_escape = false;
+                continue;
+            }
+
             let chunk_char = ch.is_ascii_alphanumeric()
                 || matches!(ch, '.' | '_' | '@' | '{' | '}');
 
@@ -548,7 +581,106 @@ impl ListingOutput {
         }
 
         flush_chunk(&mut current, &mut out);
+        Self::expand_embedded_braces(&out, symbols)
+    }
+
+    fn expand_embedded_braces(text: &str, symbols: Option<*const SymbolsTable>) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut cursor = 0usize;
+
+        while let Some(open_rel) = text[cursor..].find('{') {
+            let open = cursor + open_rel;
+            out.push_str(&text[cursor..open]);
+
+            let Some(close_rel) = text[open + 1..].find('}') else {
+                out.push_str(&text[open..]);
+                return out;
+            };
+            let close = open + 1 + close_rel;
+
+            let inner = &text[open + 1..close];
+            let expanded_inner = Self::expand_symbol_with_listing_context(inner, symbols);
+            if expanded_inner != inner {
+                out.push_str(&Self::resolve_expanded_symbol_value(&expanded_inner, symbols));
+            }
+            else {
+                let wrapped = format!("__BASM_WRAP_BEGIN__{{{inner}}}__BASM_WRAP_END__");
+                let expanded_wrapped = Self::expand_symbol_with_listing_context(&wrapped, symbols);
+                if expanded_wrapped != wrapped {
+                    if let Some(stripped) = expanded_wrapped
+                        .strip_prefix("__BASM_WRAP_BEGIN__")
+                        .and_then(|s| s.strip_suffix("__BASM_WRAP_END__"))
+                    {
+                        out.push_str(&Self::resolve_expanded_symbol_value(stripped, symbols));
+                    }
+                    else {
+                        out.push_str(&Self::resolve_expanded_symbol_value(&expanded_wrapped, symbols));
+                    }
+                }
+                else {
+                    out.push('{');
+                    out.push_str(inner);
+                    out.push('}');
+                }
+            }
+
+            cursor = close + 1;
+        }
+
+        if cursor < text.len() {
+            out.push_str(&text[cursor..]);
+        }
+
         out
+    }
+
+    fn resolve_expanded_symbol_value(expanded: &str, symbols: Option<*const SymbolsTable>) -> String {
+        let Some(symbols_ptr) = symbols else {
+            return expanded.to_string();
+        };
+        let Some(symbols) = (unsafe { symbols_ptr.as_ref() }) else {
+            return expanded.to_string();
+        };
+
+        let lookup_value = |symbol: &str| {
+            let Ok(Some(value)) = symbols.any_value::<&str>(symbol) else {
+                return None;
+            };
+
+            Some(match value.value() {
+                Value::String(s) => s.to_string(),
+                Value::Expr(ExprResult::Char(c)) => (*c as char).to_string(),
+                Value::Expr(ExprResult::String(s)) => s.to_string(),
+                Value::Expr(other) => other.to_string(),
+                Value::Counter(counter) => counter.to_string(),
+                _ => symbol.to_string()
+            })
+        };
+
+        if let Some(resolved) = lookup_value(expanded) {
+            return resolved;
+        }
+
+        let qualified = Self::expand_symbol_with_listing_context(expanded, Some(symbols as *const _));
+        if qualified != expanded {
+            if let Some(resolved) = lookup_value(&qualified) {
+                return resolved;
+            }
+        }
+
+        if expanded.starts_with('.') {
+            let needle = expanded.trim_start_matches('.');
+            for symbol in symbols.available_symbols() {
+                let candidate = symbol.value();
+                if candidate.ends_with(needle) {
+                    if let Some(resolved) = lookup_value(candidate) {
+                        return resolved;
+                    }
+                }
+            }
+        }
+
+        expanded.to_string()
     }
 
     fn expand_listing_label(&self, raw_label: &str, symbols: Option<*const SymbolsTable>) -> String {
@@ -1262,6 +1394,40 @@ endm\n";
         );
 
         assert_eq!(rendered, "jr z, .has_nops0");
+    }
+
+    #[test]
+    fn expand_source_line_patterns_expands_embedded_braced_symbol_name() {
+        let rendered = ListingOutput::expand_source_line_patterns("dw letter_ipm{@letter}", None);
+        assert_eq!(rendered, "dw letter_ipm{@letter}");
+    }
+
+    #[test]
+    fn resolve_expanded_symbol_value_dereferences_hidden_symbol_by_suffix() {
+        let mut symbols = SymbolsTable::default();
+        symbols
+            .assign_symbol_to_value("FONT_CHAR_TABLE.__hidden__2012__letter", ExprResult::String("r".into()))
+            .unwrap();
+
+        let rendered = ListingOutput::resolve_expanded_symbol_value(
+            ".__hidden__2012__letter",
+            Some(&symbols as *const _)
+        );
+
+        assert_eq!(rendered, "r");
+    }
+
+    #[test]
+    fn expand_source_line_patterns_preserves_hash_glyph_strings() {
+        let mut symbols = SymbolsTable::default();
+        symbols.set_current_global_label("letter_ipms_line_7").unwrap();
+
+        let rendered = ListingOutput::expand_source_line_patterns(
+            "FONT_CREATE_IPM_CHAR( t, \"###.\", \".#..\")",
+            Some(&symbols as *const _)
+        );
+
+        assert_eq!(rendered, "FONT_CREATE_IPM_CHAR( t, \"###.\", \".#..\")");
     }
 
     #[test]
