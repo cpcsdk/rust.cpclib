@@ -59,12 +59,17 @@ impl HtmlListingRenderer {
         Some(suffix[..end].to_ascii_lowercase())
     }
 
-    fn insert_symbol_target(&mut self, symbol: &str, row_id: usize) {
+    fn insert_symbol_target(&mut self, symbol: &str, row_id: usize, value: Option<&str>) {
         self.symbol_names_by_row.entry(row_id).or_insert_with(|| symbol.to_string());
         self.symbol_targets.entry(symbol.to_string()).or_insert(row_id);
         self.symbol_targets
             .entry(symbol.to_ascii_lowercase())
             .or_insert(row_id);
+        if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+            self.symbol_values
+                .entry(row_id)
+                .or_insert_with(|| value.to_string());
+        }
         if let Some(normalized) = Self::normalize_symbol_key(symbol) {
             self.symbol_targets.entry(normalized).or_insert(row_id);
         }
@@ -348,6 +353,14 @@ body { margin:0; font-family:var(--mono); background:linear-gradient(180deg,#efe
 .row.deferred .line.line-next-line { grid-row: 2; }
 .row.deferred .source-expanded.source-next-line { grid-row: 2; }
 .row.deferred .source-raw.source-next-line { grid-row: 2; }
+.symbols-panel { margin:18px 0 8px; padding:12px; background:var(--panel); border-top:1px solid var(--line); }
+.symbols-title { margin:0 0 8px; color:var(--ink); font-size:13px; }
+.symbols-search { width:min(560px,100%); margin:0 0 10px; padding:6px 8px; border:1px solid var(--line); background:#fff; color:var(--ink); font-family:var(--mono); }
+.symbols-table { width:100%; border-collapse:collapse; font-size:12px; }
+.symbols-table thead th { text-align:left; color:var(--muted); border-bottom:1px solid var(--line); padding:4px 6px; }
+.symbols-table tbody td { padding:3px 6px; border-bottom:1px solid #eee5d7; }
+.symbols-row.is-hidden { display:none; }
+.symbols-link { color:#8b2e00; text-decoration:underline dotted; }
 @media (max-width: 1100px) { .row { grid-template-columns: 2ch 7ch 8ch minmax(0,1fr); } .line, .source-raw { display:none; } }
 </style>
 </head>
@@ -423,6 +436,24 @@ function attachSymbolLinks(symbolTargets) {
         node.appendChild(link);
         node.classList.add('linked-symbol');
     });
+}
+
+function applySymbolFilter() {
+    const input = document.getElementById('symbol-search');
+    const query = (input ? input.value : '').trim().toLowerCase();
+    document.querySelectorAll('.symbols-row').forEach((row) => {
+        const name = (row.getAttribute('data-symbol-name') || '').toLowerCase();
+        const value = (row.getAttribute('data-symbol-value') || '').toLowerCase();
+        const visible = !query || name.includes(query) || value.includes(query);
+        row.classList.toggle('is-hidden', !visible);
+    });
+}
+
+function initializeSymbolFilter() {
+    const input = document.getElementById('symbol-search');
+    if (!input) return;
+    input.addEventListener('input', applySymbolFilter);
+    applySymbolFilter();
 }
 
 function initializeCollapsedBlocks() {
@@ -635,9 +666,20 @@ document.addEventListener('click', (event) => {
         let row_id = self.next_row_id;
         self.next_row_id += 1;
         self.update_current_global_symbol(deferred.token_kind);
+        let (deferred_addr, deferred_phys, deferred_specific) =
+            Self::split_deferred_specific_columns(deferred.token_kind, deferred.specific_content);
         if !deferred.specific_content.is_empty() {
             if let Some(symbol) = Self::extract_definition_symbol(deferred.token_kind) {
-                self.insert_symbol_target(&symbol, row_id);
+                let value = if !deferred_addr.is_empty() {
+                    Some(deferred_addr.as_str())
+                }
+                else if !deferred_phys.is_empty() {
+                    Some(deferred_phys.as_str())
+                }
+                else {
+                    None
+                };
+                self.insert_symbol_target(&symbol, row_id, value);
             }
         }
         let block_kind = self
@@ -663,8 +705,6 @@ document.addEventListener('click', (event) => {
         let show_toggle = block_kind.is_some() && !deferred.specific_content.is_empty();
         let row_classes = if show_toggle { "row deferred block-start" } else { "row deferred" };
         let collapsible_toggle = if show_toggle { "<span class=\"toggle\">▸</span>" } else { "" };
-        let (deferred_addr, deferred_phys, deferred_specific) =
-            Self::split_deferred_specific_columns(deferred.token_kind, deferred.specific_content);
         let specific_in_bytes = Self::deferred_symbol_uses_bytes_column(deferred.token_kind);
         let source_on_next_line = specific_in_bytes
             && deferred_specific.chars().count() > Self::BYTES_COLUMN_CHARS;
@@ -723,7 +763,13 @@ document.addEventListener('click', (event) => {
             .map(|value| format_address_for(format, value, logical_address_width(format)))
             .unwrap_or_default();
         if let Some(symbol) = Self::extract_definition_symbol(line.token_kind) {
-            self.insert_symbol_target(&symbol, row_id);
+            let value = if !logical.is_empty() {
+                Some(logical.as_str())
+            }
+            else {
+                Some(line.physical_address_repr)
+            };
+            self.insert_symbol_target(&symbol, row_id, value);
         }
         let block_kind = self.classify_block(line.token_kind, line.source_line_expanded)
             .or_else(|| self.classify_block(line.token_kind, line.source_line_raw));
@@ -773,6 +819,51 @@ document.addEventListener('click', (event) => {
     }
 
     pub(crate) fn finish(&mut self, writer: &mut dyn Write) {
+        let mut symbol_rows = self
+            .symbol_names_by_row
+            .iter()
+            .map(|(row, symbol)| {
+                let value = self
+                    .symbol_values
+                    .get(row)
+                    .cloned()
+                    .unwrap_or_default();
+                (*row, symbol.clone(), value)
+            })
+            .collect::<Vec<_>>();
+        symbol_rows.sort_by(|left, right| {
+            left.1
+                .cmp(&right.1)
+                .then_with(|| left.0.cmp(&right.0))
+        });
+
+        writer.write_all(br#"</div>
+<div class="symbols-panel">
+<h2 class="symbols-title">Symbols</h2>
+<input id="symbol-search" class="symbols-search" type="search" placeholder="Filter symbols by name or value" aria-label="Filter symbols">
+<table class="symbols-table">
+<thead><tr><th>Symbol</th><th>Value</th></tr></thead>
+<tbody>
+"#).unwrap();
+
+        for (row, symbol, value) in symbol_rows {
+            writeln!(
+                writer,
+                "<tr class=\"symbols-row\" data-symbol-name=\"{}\" data-symbol-value=\"{}\"><td><a class=\"symbols-link\" href=\"#row-{}\" data-target-row=\"row-{}\">{}</a></td><td>{}</td></tr>",
+                escape_html(&symbol),
+                escape_html(&value),
+                row,
+                row,
+                escape_html(&symbol),
+                escape_html(&value)
+            ).unwrap();
+        }
+
+        writer.write_all(br#"</tbody>
+</table>
+</div>
+"#).unwrap();
+
         let mut symbol_entries = self
             .symbol_targets
             .iter()
@@ -788,7 +879,7 @@ document.addEventListener('click', (event) => {
                 row
             ));
         }
-        symbol_map_script.push_str("]);\nattachSymbolLinks(BASM_SYMBOL_TARGETS);\ninitializeCollapsedBlocks();\n</script>\n");
+        symbol_map_script.push_str("]);\nattachSymbolLinks(BASM_SYMBOL_TARGETS);\ninitializeCollapsedBlocks();\ninitializeSymbolFilter();\n</script>\n");
         writer.write_all(symbol_map_script.as_bytes()).unwrap();
 
         writer.write_all(br#"</div>

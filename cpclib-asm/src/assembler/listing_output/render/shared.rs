@@ -88,6 +88,7 @@ pub(crate) struct HtmlListingRenderer {
     pub(crate) blocks: Vec<HtmlBlock>,
     pub(crate) symbol_targets: HashMap<String, usize>,
     pub(crate) symbol_names_by_row: HashMap<usize, String>,
+    pub(crate) symbol_values: HashMap<usize, String>,
     pub(crate) current_global_symbol: Option<String>
 }
 
