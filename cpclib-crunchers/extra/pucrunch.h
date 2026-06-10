@@ -2,8 +2,8 @@
 extern "C" {
 #endif
 
-extern unsigned char *indata;
-extern int inlen;
+extern unsigned char *pucrunch_indata;
+extern int pucrunch_inlen;
 extern unsigned char outBuffer[65536];
 extern int outPointer;
 

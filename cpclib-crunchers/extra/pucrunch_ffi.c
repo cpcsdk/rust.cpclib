@@ -4,18 +4,18 @@
 
 // Minimal declarations needed by the FFI wrapper.
 int PackLz77(int lzlen, int flags, int *startEscape, int endAddr, int memEnd, int type);
-extern unsigned char *indata;
-extern int inlen;
+extern unsigned char *pucrunch_indata;
+extern int pucrunch_inlen;
 extern unsigned char outBuffer[65536];
 extern int outPointer;
 
 // Minimal FFI wrapper: compresses input to output buffer, returns output size or -1 on error
 int pucrunch_compress(const uint8_t* input, size_t input_len, uint8_t* output, size_t* output_len) {
     // Setup global input
-    indata = (unsigned char*)malloc(input_len);
-    if (!indata) return -1;
-    memcpy(indata, input, input_len);
-    inlen = (int)input_len;
+    pucrunch_indata = (unsigned char*)malloc(input_len);
+    if (!pucrunch_indata) return -1;
+    memcpy(pucrunch_indata, input, input_len);
+    pucrunch_inlen = (int)input_len;
     outPointer = 0;
 
     // Use default pucrunch settings (raw, no load address, C64 mode)
@@ -28,12 +28,12 @@ int pucrunch_compress(const uint8_t* input, size_t input_len, uint8_t* output, s
 
     int res = PackLz77(lzlen, flags, &startEscape, endAddr, memEnd, type);
     if (res != 0) {
-        free(indata);
+        free(pucrunch_indata);
         return -1;
     }
     // Copy output from static outBuffer
     memcpy(output, outBuffer, outPointer);
     *output_len = outPointer;
-    free(indata);
+    free(pucrunch_indata);
     return 0;
 }

@@ -950,8 +950,8 @@ static unsigned short *rle, *elr, *lzlen, *lzpos, *lzmlen, *lzmpos;
 #ifdef DELTA
 static unsigned short *lzlen2, *lzpos2;
 #endif
-int *length, inlen;
-unsigned char *indata, *mode, *newesc;
+int *length, pucrunch_inlen;
+unsigned char *pucrunch_indata, *mode, *newesc;
 unsigned short *backSkip;
 
 
@@ -967,13 +967,13 @@ enum MODE {
 
 static int lzopt = 0;
 /* Non-recursive version */
-/* NOTE! IMPORTANT! the "length" array length must be inlen+1 */
+/* NOTE! IMPORTANT! the "length" array length must be pucrunch_inlen+1 */
 
 int OptimizeLength(int optimize) {
     int i;
 
-    length[inlen] = 0;		/* one off the end, our 'target' */
-    for (i=inlen-1; i>=0; i--) {
+    length[pucrunch_inlen] = 0;		/* one off the end, our 'target' */
+    for (i=pucrunch_inlen-1; i>=0; i--) {
     	int r1 = 8 + length[i+1], r2, r3;
 
 	if (!lzlen[i] && !rle[i]
@@ -992,7 +992,7 @@ int OptimizeLength(int optimize) {
 
 	    i -= elr[i];
 
-	    r2 = LenRle(rle[i], indata[i]) + length[i+ rle[i]];
+	    r2 = LenRle(rle[i], pucrunch_indata[i]) + length[i+ rle[i]];
 	    if (optimize) {
 		int ii, mini = rle[i], minv = r2;
 
@@ -1001,7 +1001,7 @@ int OptimizeLength(int optimize) {
 		    bot = 2;
 
 		for (ii=mini-1; ii>=bot; ii--) {
-		    int v = LenRle(ii, indata[i]) + length[i + ii];
+		    int v = LenRle(ii, pucrunch_indata[i]) + length[i + ii];
 		    if (v < minv) {
 			minv = v;
 			mini = ii;
@@ -1025,7 +1025,7 @@ int OptimizeLength(int optimize) {
 	r3 = r2 = r1 + 1000; /* r3 >= r2 > r1 */
 
 	if (rle[i]) {
-	    r2 = LenRle(rle[i], indata[i]) + length[i+ rle[i]];
+	    r2 = LenRle(rle[i], pucrunch_indata[i]) + length[i+ rle[i]];
 
 	    if (optimize) {
 		int ii, mini = rle[i], minv = r2;
@@ -1036,7 +1036,7 @@ int OptimizeLength(int optimize) {
 		    bot = 2;
 
 		for (ii=mini-1; ii>=bot; ii--) {
-		    int v = LenRle(ii, indata[i]) + length[i + ii];
+		    int v = LenRle(ii, pucrunch_indata[i]) + length[i + ii];
 		    if (v < minv) {
 			minv = v;
 			mini = ii;
@@ -1053,7 +1053,7 @@ int OptimizeLength(int optimize) {
 		   used, i.e. values of the form 2^n are 'optimal' */
 		ii = 2;
 		while (rle[i] > ii) {
-		    int v = LenRle(ii, indata[i]) + length[i + ii];
+		    int v = LenRle(ii, pucrunch_indata[i]) + length[i + ii];
 		    if (v < minv) {
 			minv = v;
 			mini = ii;
@@ -1223,7 +1223,7 @@ int OptimizeEscape(int *startEscape, int *nonNormal) {
     }
 
     /* Mark those bytes that are actually outputted */
-    for (i=0; i<inlen; ) {
+    for (i=0; i<pucrunch_inlen; ) {
 	switch (mode[i]) {
 #ifdef DELTA
 	case DLZ:
@@ -1249,10 +1249,10 @@ int OptimizeEscape(int *startEscape, int *nonNormal) {
 	}
     }
 
-    for (i=inlen-1; i>=0; i--) {
+    for (i=pucrunch_inlen-1; i>=0; i--) {
 	/* Using a table to skip non-normal bytes does not help.. */
 	if (mode[i] == MMARK) {
-	    int k = (indata[i] >> esc8);
+	    int k = (pucrunch_indata[i] >> esc8);
 
 	    /* Change the tag values back to normal */
 	    mode[i] = LITERAL;
@@ -1288,7 +1288,7 @@ int OptimizeEscape(int *startEscape, int *nonNormal) {
 
     /* Select the best value for the initial escape */
     if (startEscape) {
-	i = inlen;	/* make it big enough */
+	i = pucrunch_inlen;	/* make it big enough */
 	for (j=states-1; j>=0; j--) {
 	    if (a[j] <= i) {
 		*startEscape = (j << esc8);
@@ -1343,7 +1343,7 @@ void OptimizeRle(int flags) {
     for (p=0; p<256; p++)
 	rleHist[p] = 0;
 
-    for (p=0; p<inlen; ) {
+    for (p=0; p<pucrunch_inlen; ) {
 	switch (mode[p]) {
 #ifdef DELTA
 	case DLZ: /* lz */
@@ -1355,7 +1355,7 @@ void OptimizeRle(int flags) {
 	    break;
 
 	case RLE: /* rle */
-	    rleHist[indata[p]]++;
+	    rleHist[pucrunch_indata[p]]++;
 	    p += rle[p];
 	    break;
 
@@ -1824,30 +1824,30 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	fprintf(stderr, "Warning: zero LZ range. Only RLE packing used.\n");
 
     InitRleLen();
-    length = (int *)calloc(sizeof(int), inlen + 1);
-    mode   = (unsigned char *)calloc(sizeof(unsigned char), inlen);
-    rle    = (unsigned short *)calloc(sizeof(unsigned short), inlen);
-    elr    = (unsigned short *)calloc(sizeof(unsigned short), inlen);
-    lzlen  = (unsigned short *)calloc(sizeof(unsigned short), inlen);
-    lzpos  = (unsigned short *)calloc(sizeof(unsigned short), inlen);
-    lzmlen = (unsigned short *)calloc(sizeof(unsigned short), inlen);
-    lzmpos = (unsigned short *)calloc(sizeof(unsigned short), inlen);
+    length = (int *)calloc(sizeof(int), pucrunch_inlen + 1);
+    mode   = (unsigned char *)calloc(sizeof(unsigned char), pucrunch_inlen);
+    rle    = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
+    elr    = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
+    lzlen  = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
+    lzpos  = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
+    lzmlen = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
+    lzmpos = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
 #ifdef DELTA
     if ((type & FIXF_DLZ)) {
-	lzlen2  = (unsigned short *)calloc(sizeof(unsigned short), inlen);
-	lzpos2  = (unsigned short *)calloc(sizeof(unsigned short), inlen);
+	lzlen2  = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
+	lzpos2  = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
     } else {
 	lzlen2 = lzpos2 = NULL;
     }
 #endif
-    newesc = (unsigned char *)calloc(sizeof(unsigned char), inlen);
+    newesc = (unsigned char *)calloc(sizeof(unsigned char), pucrunch_inlen);
 #ifdef BACKSKIP_FULL
-    backSkip  = (unsigned short *)calloc(sizeof(unsigned short), inlen);
+    backSkip  = (unsigned short *)calloc(sizeof(unsigned short), pucrunch_inlen);
 #else
     backSkip  = (unsigned short *)calloc(sizeof(unsigned short), 65536);
 #endif /* BACKSKIP_FULL */
 #ifdef HASH_COMPARE
-    hashValue = (unsigned char *)malloc(inlen);
+    hashValue = (unsigned char *)malloc(pucrunch_inlen);
 #endif /* HASH_COMPARE */
 #ifdef BIG
     lastPair  = (unsigned int *)calloc(sizeof(unsigned int), 256*256);
@@ -1873,8 +1873,8 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #ifdef HASH_COMPARE
     i = 0;
     j = 0;
-    a = indata + inlen;
-    for (p=inlen-1; p>=0; p--) {
+    a = pucrunch_indata + pucrunch_inlen;
+    for (p=pucrunch_inlen-1; p>=0; p--) {
 	k = j;
 	j = i;
 	i = *--a;	/* Only one read per position */
@@ -1890,7 +1890,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
     }
 #endif /* HASH_COMPARE */
     /* Detect all RLE and LZ77 jump possibilities */
-    for (p=0; p<inlen; p++) {
+    for (p=0; p<pucrunch_inlen; p++) {
 #ifndef BIG
 	if (!(p & 2047)) {
 	    fprintf(stderr, "\r%d ", p);
@@ -1903,9 +1903,9 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		There are so few RLE's and especially so few
 		long RLE's that byte-by-byte is good enough.
 	     */
-	    unsigned char *a = indata + p;
+	    unsigned char *a = pucrunch_indata + p;
 	    int val = *a++; /* if this were uchar, it would go to stack..*/
-	    int top = inlen - p;
+	    int top = pucrunch_inlen - p;
 	    int rlelen = 1;
 
 	    /* Loop for the whole RLE */
@@ -1921,7 +1921,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #endif /* HASH_STAT */
 
 	    if (rlelen>=2) {
-		rleHist[indata[p]]++;
+		rleHist[pucrunch_indata[p]]++;
 
 		for (i=rlelen-1; i>=0; i--) {
 		    rle[p+i] = rlelen-i;
@@ -1938,12 +1938,12 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	}
 
 	/* check LZ77 code */
-	if (p+rle[p]+1<inlen) {
+	if (p+rle[p]+1<pucrunch_inlen) {
 	    int bot = p - lzsz, maxval, maxpos, rlep = rle[p];
 #ifdef HASH_COMPARE
 	    unsigned char hashCompare = hashValue[p];
 #else
-	    unsigned char valueCompare = indata[p+2];
+	    unsigned char valueCompare = pucrunch_indata[p+2];
 #endif /* HASH_COMPARE */
 
 	    /*
@@ -1961,7 +1961,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		If there is no 2-byte match, don't look further,
 		because there can't be a longer match.
 	     */
-	    i = (int)lastPair[ (indata[p]<<8) | indata[p+1] ] -1;
+	    i = (int)lastPair[ (pucrunch_indata[p]<<8) | pucrunch_indata[p+1] ] -1;
 	    if (i>=0 && i>=bot) {
 		/* Got a 2-byte match at least */
 		maxval = 2;
@@ -1982,7 +1982,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		    longest match there is.
 		 */
 
-		i = (int)lastPair[(indata[p+(rlep-1)]<<8) | indata[p+rlep]] -1;
+		i = (int)lastPair[(pucrunch_indata[p+(rlep-1)]<<8) | pucrunch_indata[p+rlep]] -1;
 		while (i>=bot /* && i>=rlep-1 */) {   /* bot>=rlep-1, i>=bot  ==> i>=rlep-1 */
 
 		    /* Equal number of A's ? */
@@ -2005,12 +2005,12 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #ifdef HASH_COMPARE
 			    hashValue[i+maxval-rlep-1] == hashCompare
 #else
-			    indata[i+maxval-rlep+1] == valueCompare
+			    pucrunch_indata[i+maxval-rlep+1] == valueCompare
 #endif /* HASH_COMPARE */
 			   ) {
-			    unsigned char *a = indata + i+2;	/* match  */
-			    unsigned char *b = indata + p+rlep-1+2;/* curpos */
-			    int topindex = inlen-(p+rlep-1);
+			    unsigned char *a = pucrunch_indata + i+2;	/* match  */
+			    unsigned char *b = pucrunch_indata + p+rlep-1+2;/* curpos */
+			    int topindex = pucrunch_inlen-(p+rlep-1);
 
 			    /* the 2 first bytes ARE the same.. */
 			    j = 2;
@@ -2039,7 +2039,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #ifdef HASH_COMPARE
 				    hashCompare = hashValue[p+maxval-2];
 #else
-				    valueCompare = indata[p+maxval];
+				    valueCompare = pucrunch_indata[p+maxval];
 #endif /* HASH_COMPARE */
 				}
 #if 0
@@ -2086,8 +2086,8 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		    if (bot < 0)
 			bot = 0;
 
-		    /* Note: indata[p] == indata[p+1] */
-		    i = (int)lastPair[indata[p]*257] -1;
+		    /* Note: pucrunch_indata[p] == pucrunch_indata[p+1] */
+		    i = (int)lastPair[pucrunch_indata[p]*257] -1;
 		    while (/* i>= rlep-2 &&*/ i>=bot) {
 			if (elr[i] + 2 > maxval) {
 			    maxval = min(elr[i] + 2, rlep);
@@ -2107,11 +2107,11 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #endif /* BACKSKIP_FULL */
 		    }
 		}
-		if (p+maxval > inlen) {
+		if (p+maxval > pucrunch_inlen) {
 		    fprintf(stderr,
-			    "Error @ %d, lzlen %d, pos %d - exceeds inlen\n",
+			    "Error @ %d, lzlen %d, pos %d - exceeds pucrunch_inlen\n",
 			    p, maxval, maxpos);
-		    maxval = inlen - p;
+		    maxval = pucrunch_inlen - p;
 		}
 		if (lzmlen[p] < maxval) {
 		    lzmlen[p] = maxval;
@@ -2128,12 +2128,12 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	}
 #ifdef DELTA
 	/* check LZ77 code again, ROT1..255 */
-	if ((type & FIXF_DLZ) && /* rle[p]<maxlzlen && */ p+rle[p]+1<inlen) {
+	if ((type & FIXF_DLZ) && /* rle[p]<maxlzlen && */ p+rle[p]+1<pucrunch_inlen) {
 	int rot;
 
 	for (rot = 1; rot < 255/*BUG:?should be 256?*/; rot++) {
 	    int bot = p - /*lzsz*/256, maxval, maxpos, rlep = rle[p];
-	    unsigned char valueCompare = (indata[p+2] DELTA_OP rot) & 0xff;
+	    unsigned char valueCompare = (pucrunch_indata[p+2] DELTA_OP rot) & 0xff;
 
 	    /*
 		There's always 1 equal byte, although it may
@@ -2150,8 +2150,8 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		If there is no 2-byte match, don't look further,
 		because there can't be a longer match.
 	     */
-	    i = (int)lastPair[ (((indata[p] DELTA_OP rot) & 0xff)<<8) |
-				((indata[p+1] DELTA_OP rot) & 0xff) ] -1;
+	    i = (int)lastPair[ (((pucrunch_indata[p] DELTA_OP rot) & 0xff)<<8) |
+				((pucrunch_indata[p+1] DELTA_OP rot) & 0xff) ] -1;
 	    if (i>=0 && i>=bot) {
 		/* Got a 2-byte match at least */
 		maxval = 2;
@@ -2172,8 +2172,8 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		    longest match there is.
 		 */
 
-		i = (int)lastPair[(((indata[p+(rlep-1)] DELTA_OP rot) & 0xff)<<8) |
-				   ((indata[p+rlep] DELTA_OP rot) & 0xff)] -1;
+		i = (int)lastPair[(((pucrunch_indata[p+(rlep-1)] DELTA_OP rot) & 0xff)<<8) |
+				   ((pucrunch_indata[p+rlep] DELTA_OP rot) & 0xff)] -1;
 		while (i>=bot /* && i>=rlep-1 */) {   /* bot>=rlep-1, i>=bot  ==> i>=rlep-1 */
 
 		    /* Equal number of A's ? */
@@ -2192,10 +2192,10 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #ifdef HASH_STAT
 			hashChecks++;
 #endif /* HASH_STAT */
-			if (indata[i+maxval-rlep+1] == valueCompare) {
-			    unsigned char *a = indata + i+2;	/* match  */
-			    unsigned char *b = indata + p+rlep-1+2;/* curpos */
-			    int topindex = inlen-(p+rlep-1);
+			if (pucrunch_indata[i+maxval-rlep+1] == valueCompare) {
+			    unsigned char *a = pucrunch_indata + i+2;	/* match  */
+			    unsigned char *b = pucrunch_indata + p+rlep-1+2;/* curpos */
+			    int topindex = pucrunch_inlen-(p+rlep-1);
 
 			    /* the 2 first bytes ARE the same.. */
 			    j = 2;
@@ -2218,7 +2218,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 				    maxval = tmplen;
 				    maxpos = tmppos;
 
-				    valueCompare = (indata[p+maxval] DELTA_OP rot) & 0xff;
+				    valueCompare = (pucrunch_indata[p+maxval] DELTA_OP rot) & 0xff;
 				}
 #if 0
 				else {
@@ -2246,11 +2246,11 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #endif /* BACKSKIP_FULL */
 		}
 
-		if (p+maxval > inlen) {
+		if (p+maxval > pucrunch_inlen) {
 		    fprintf(stderr,
-			    "Error @ %d, lzlen %d, pos %d - exceeds inlen\n",
+			    "Error @ %d, lzlen %d, pos %d - exceeds pucrunch_inlen\n",
 			    p, maxval, maxpos);
-		    maxval = inlen - p;
+		    maxval = pucrunch_inlen - p;
 		}
 		if (maxval > 3 && maxpos <= 256 &&
 		    (maxval > lzlen2[p] ||
@@ -2271,8 +2271,8 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 
 	/* Update the two-byte history ('hash table') &
 	   backSkip ('linked list') */
-	if (p+1<inlen) {
-	    int index = (indata[p]<<8) | indata[p+1];
+	if (p+1<pucrunch_inlen) {
+	    int index = (pucrunch_indata[p]<<8) | pucrunch_indata[p+1];
 	    int ptr = p - (lastPair[index]-1);
 
 	    if (ptr > p || ptr > 0xffff)
@@ -2287,13 +2287,13 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	}
     }
     if ((flags & F_NORLE)) {
-	for (p=1; p<inlen; p++) {
+	for (p=1; p<pucrunch_inlen; p++) {
 	    if (rle[p-1]-1 > lzlen[p]) {
 		lzlen[p] = (rle[p]<maxlzlen)?rle[p]:maxlzlen;
 		lzpos[p] = 1;
 	    }
 	}
-	for (p=0; p<inlen; p++) {
+	for (p=0; p<pucrunch_inlen; p++) {
 	    rle[p] = 0;
 	}
     }
@@ -2397,7 +2397,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	fprintf(stderr, "Selecting LZPOS LO length.. ");
 	fflush(stderr);	/* for SAS/C */
 
-	for (p=0; p<inlen; ) {
+	for (p=0; p<pucrunch_inlen; ) {
 	    switch (mode[p]) {
 	    case LZ77: /* lz */
 		extraLZPosBits = 0;
@@ -2453,7 +2453,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
     if (1) {
 	long stat[4] = {0,0,0,0};
 
-	for (p=0; p<inlen; ) {
+	for (p=0; p<pucrunch_inlen; ) {
 	    switch (mode[p]) {
 	    case LZ77: /* lz */
 		if ((lzpos[p] >> 8)+1 > (1<<maxGamma))
@@ -2508,7 +2508,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	int oldEscape = escape;
 	printf("normal RLE  LZLEN LZPOS(absolute)\n\n");
 
-	for (p=0; p<inlen; ) {
+	for (p=0; p<pucrunch_inlen; ) {
 	    switch (mode[p]) {
 	    case LZ77:
 		mode[p - lzpos[p]] |= MMARK; /* Was referred to by lz77 */
@@ -2532,7 +2532,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	}
 
 	j = 0;
-	for (p=0; p<inlen; p++) {
+	for (p=0; p<pucrunch_inlen; p++) {
 	    switch (mode[p]) {
 #ifdef DELTA
 	    case MMARK | DLZ:
@@ -2544,10 +2544,10 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		    printf(" ");
 		if (lzpos2) {
 		    printf(" %04x*%03d*+%02x", lzpos2[p], lzlen2[p],
-			   (indata[p] - indata[p-lzpos2[p]]) & 0xff);
+			   (pucrunch_indata[p] - pucrunch_indata[p-lzpos2[p]]) & 0xff);
 		}
 		printf(" 001   %03d   %03d  %04x(%04x)  %02x %s\n",
-			rle[p], lzlen[p], lzpos[p], p-lzpos[p], indata[p],
+			rle[p], lzlen[p], lzpos[p], p-lzpos[p], pucrunch_indata[p],
 			(mode[p] & MMARK)?"#":" ");
 		break;
 #endif
@@ -2560,14 +2560,14 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #ifdef DELTA
 		if (lzpos2) {
 		    printf(" %04x %03d +%02x", lzpos2[p], lzlen2[p],
-			   (indata[p] - indata[p-lzpos2[p]]) & 0xff);
+			   (pucrunch_indata[p] - pucrunch_indata[p-lzpos2[p]]) & 0xff);
 		}
 #endif
 		if (j==p) {
 		    printf("*001*  %03d   %03d  %04x(%04x)  %02x %s %02x",
-			   rle[p], lzlen[p], lzpos[p], p-lzpos[p], indata[p],
+			   rle[p], lzlen[p], lzpos[p], p-lzpos[p], pucrunch_indata[p],
 			   (mode[p] & MMARK)?"#":" ", newesc[p]);
-		    if ((indata[p] & escMask) == escape) {
+		    if ((pucrunch_indata[p] & escMask) == escape) {
 			escape = newesc[p];
 			printf("�");
 		    }
@@ -2575,7 +2575,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		    j += 1;
 		} else {
 		    printf("*001*  %03d   %03d  %04x(%04x)  %02x %s %02x\n",
-			   rle[p], lzlen[p], lzpos[p], p-lzpos[p], indata[p],
+			   rle[p], lzlen[p], lzpos[p], p-lzpos[p], pucrunch_indata[p],
 			   (mode[p] & MMARK)?"#":" ", newesc[p]);
 		}
 		break;
@@ -2589,11 +2589,11 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #ifdef DELTA
 		if (lzpos2) {
 		    printf(" %04x %03d +%02x", lzpos2[p], lzlen2[p],
-			   (indata[p] - indata[p-lzpos2[p]]) & 0xff);
+			   (pucrunch_indata[p] - pucrunch_indata[p-lzpos2[p]]) & 0xff);
 		}
 #endif
 		printf(" 001   %03d  *%03d* %04x(%04x)  %02x %s",
-			rle[p], lzlen[p], lzpos[p], p-lzpos[p], indata[p],
+			rle[p], lzlen[p], lzpos[p], p-lzpos[p], pucrunch_indata[p],
 			(mode[p] & MMARK)?"#":" ");
 
 		printf("\n");
@@ -2609,11 +2609,11 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 #ifdef DELTA
 		if (lzpos2) {
 		    printf(" %04x %03d +%02x", lzpos2[p], lzlen2[p],
-			   (indata[p] - indata[p-lzpos2[p]]) & 0xff);
+			   (pucrunch_indata[p] - pucrunch_indata[p-lzpos2[p]]) & 0xff);
 		}
 #endif
 		printf(" 001  *%03d*  %03d  %04x(%04x)  %02x %s\n",
-			rle[p], lzlen[p], lzpos[p], p-lzpos[p], indata[p],
+			rle[p], lzlen[p], lzpos[p], p-lzpos[p], pucrunch_indata[p],
 			(mode[p] & MMARK)?"#":" ");
 		break;
 	    default:
@@ -2631,10 +2631,10 @@ int PackLz77(int lzsz, int flags, int *startEscape,
     {
 	int esc = escape;
 
-    for (p=0; p<inlen; ) {
+    for (p=0; p<pucrunch_inlen; ) {
 	switch (mode[p]) {
 	case LITERAL: /* normal */
-	    if ((indata[p] & escMask) == esc) {
+	    if ((pucrunch_indata[p] & escMask) == esc) {
 		esc = newesc[p];
 	    }
 	    p++;
@@ -2668,9 +2668,9 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 		while (i>=bot /* && i>=rlep-1 */) {
 		    /* Equal number of A's ? */
 		    if (rlep==1 || rle[i-rlep+1]==rlep) {	/* 'head' matches */
-			unsigned char *a = indata + i+1;	/* match  */
-			unsigned char *b = indata + p+rlep-1+1;	/* curpos */
-			int topindex = inlen-(p+rlep-1);
+			unsigned char *a = pucrunch_indata + i+1;	/* match  */
+			unsigned char *b = pucrunch_indata + p+rlep-1+1;	/* curpos */
+			int topindex = pucrunch_inlen-(p+rlep-1);
 
 			j = 1;
 			while (j < topindex && *a++==*b++)
@@ -2687,8 +2687,8 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 				    p, lzlen[p], lzpos[p], tmppos);
 			    for (i=-1; i<=lzlen[p]; i++) {
 				printf("%02x %02x %02x  ",
-				       indata[p+i], indata[p-lzpos[p]+i],
-				       indata[p-tmppos+i]);
+				       pucrunch_indata[p+i], pucrunch_indata[p-lzpos[p]+i],
+				       pucrunch_indata[p-tmppos+i]);
 			    }
 			    printf("\n");
 #endif
@@ -2722,12 +2722,12 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 
     /* start of output */
 
-    for (p=0; p<inlen; ) {
+    for (p=0; p<pucrunch_inlen; ) {
 	switch (mode[p]) {
 	case LITERAL: /* normal */
 	    length[p] = outPointer;
 
-	    OutputNormal(&escape, indata+p, newesc[p]);
+	    OutputNormal(&escape, pucrunch_indata+p, newesc[p]);
 	    p++;
 	    break;
 
@@ -2736,7 +2736,7 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	    for (i=0; i<lzlen2[p]; i++)
 		length[p+i] = outPointer;
 	    OutputDLz(&escape, lzlen2[p], lzpos2[p],
-			(indata[p] - indata[p-lzpos2[p]]) & 0xff);
+			(pucrunch_indata[p] - pucrunch_indata[p-lzpos2[p]]) & 0xff);
 	    p += lzlen2[p];
 	    break;
 #endif
@@ -2744,14 +2744,14 @@ int PackLz77(int lzsz, int flags, int *startEscape,
 	case LZ77: /* lz77 */
 	    for (i=0; i<lzlen[p]; i++)
 		length[p+i] = outPointer;
-	    OutputLz(&escape, lzlen[p], lzpos[p], indata+p-lzpos[p], p);
+	    OutputLz(&escape, lzlen[p], lzpos[p], pucrunch_indata+p-lzpos[p], p);
 	    p += lzlen[p];
 	    break;
 
 	case RLE: /* rle */
 	    for (i=0; i<rle[p]; i++)
 		length[p+i] = outPointer;
-	    OutputRle(&escape, indata+p, rle[p]);
+	    OutputRle(&escape, pucrunch_indata+p, rle[p]);
 	    p += rle[p];
 	    break;
 
@@ -2768,9 +2768,9 @@ int PackLz77(int lzsz, int flags, int *startEscape,
     /*   yyyyyyyyyyyyyyyyy compressed */
     /* zzzz                */
 
-    i = inlen;
-    for (p=0; p<inlen; p++) {
-	int pos = (inlen - outPointer) + (int)length[p] - p;
+    i = pucrunch_inlen;
+    for (p=0; p<pucrunch_inlen; p++) {
+	int pos = (pucrunch_inlen - outPointer) + (int)length[p] - p;
 	i = min(i, pos);
     }
     if (i<0)
@@ -2794,10 +2794,10 @@ int PackLz77(int lzsz, int flags, int *startEscape,
     outlen = outPointer + headerSize;	/* unpack code */
     fprintf(stderr, "In: %d, out: %d, ratio: %5.2f%% (%4.2f[%4.2f] b/B)"
 	    ", gained: %5.2f%%\n",
-	    inlen, outlen, (double)outlen*100.0/(double)inlen + 0.005,
-	    8.0*(double)outlen/(double)inlen + 0.005,
-	    8.0*(double)(outlen-headerSize+rleUsed+4)/(double)inlen + 0.005,
-	    100.0 - (double)outlen*100.0/(double)inlen + 0.005);
+	    pucrunch_inlen, outlen, (double)outlen*100.0/(double)pucrunch_inlen + 0.005,
+	    8.0*(double)outlen/(double)pucrunch_inlen + 0.005,
+	    8.0*(double)(outlen-headerSize+rleUsed+4)/(double)pucrunch_inlen + 0.005,
+	    100.0 - (double)outlen*100.0/(double)pucrunch_inlen + 0.005);
 
 #ifdef DELTA
     if ((type & FIXF_DLZ)) {
@@ -3167,45 +3167,45 @@ maxrlelen = MAXRLELEN;
 	startAddr = 0x258;
 
     /* Read in the data */
-    inlen = 0;
+    pucrunch_inlen = 0;
     buflen = 0;
-    indata = NULL;
+    pucrunch_indata = NULL;
     while (1) {
-	if (buflen < inlen + lrange) {
-	    unsigned char *tmp = realloc(indata, buflen + lrange);
+	if (buflen < pucrunch_inlen + lrange) {
+	    unsigned char *tmp = realloc(pucrunch_indata, buflen + lrange);
 	    if (!tmp) {
-		free(indata);
+		free(pucrunch_indata);
 		return 20;
 	    }
-	    indata = tmp;
+	    pucrunch_indata = tmp;
 	    buflen += lrange;
 	}
-	newlen = fread(indata + inlen, 1, lrange, infp);
+	newlen = fread(pucrunch_indata + pucrunch_inlen, 1, lrange, infp);
 	if (newlen <= 0)
 	    break;
-	inlen += newlen;
+	pucrunch_inlen += newlen;
     }
     if (infp != stdin)
 	fclose(infp);
 
     if ((flags & F_UNPACK)) {
-	n = UnPack(startAddr, indata, fileOut, flags);
-	if (indata)
-	    free(indata);
+	n = UnPack(startAddr, pucrunch_indata, fileOut, flags);
+	if (pucrunch_indata)
+	    free(pucrunch_indata);
 	return n;
     }
 
     if (startAddr < 0x258
 #ifndef BIG
-	|| startAddr + inlen -1 > 0xffff
+	|| startAddr + pucrunch_inlen -1 > 0xffff
 #endif /* BIG */
        ) {
 	fprintf(stderr,
 		"Only programs from 0x0258 to 0xffff can be compressed\n");
 	fprintf(stderr, "(the input file is from 0x%04x to 0x%04x)\n",
-		startAddr, startAddr+inlen-1);
-	if (indata)
-	    free(indata);
+		startAddr, startAddr+pucrunch_inlen-1);
+	if (pucrunch_indata)
+	    free(pucrunch_indata);
 	return EXIT_FAILURE;
     }
 
@@ -3216,49 +3216,49 @@ maxrlelen = MAXRLELEN;
 	memEnd = 0x4000;
 	type |= FIXF_VIC20 | FIXF_WRAP;
 
-	if (startAddr+inlen > 0x8000) {
+	if (startAddr+pucrunch_inlen > 0x8000) {
 	    fprintf(stderr, "Original file exceeds 0x8000 (0x%04x), "
-		    "not a valid VIC20 file!\n", startAddr+inlen-1);
+		    "not a valid VIC20 file!\n", startAddr+pucrunch_inlen-1);
 	    n = EXIT_FAILURE;
 	    goto errexit;
-	} else if (startAddr+inlen > 0x6000) {
+	} else if (startAddr+pucrunch_inlen > 0x6000) {
 	    if (startAddr < 0x1000) {
 		fprintf(stderr, "Original file exceeds 0x6000 (0x%04x), "
 			"3kB+24kB memory expansions assumed\n",
-			startAddr+inlen-1);
+			startAddr+pucrunch_inlen-1);
 		machineTypeTxt = "VIC20 with 3k+24k expansion memory";
 	    } else {
 		fprintf(stderr, "Original file exceeds 0x6000 (0x%04x), "
 			"24kB memory expansion assumed\n",
-			startAddr+inlen-1);
+			startAddr+pucrunch_inlen-1);
 		machineTypeTxt = "VIC20 with 24k expansion memory";
 	    }
 	    memEnd = 0x8000;
-	} else if (startAddr+inlen > 0x4000) {
+	} else if (startAddr+pucrunch_inlen > 0x4000) {
 	    if (startAddr < 0x1000) {
 		fprintf(stderr, "Original file exceeds 0x4000 (0x%04x), "
 			"3kB+16kB memory expansion assumed\n",
-			startAddr+inlen-1);
+			startAddr+pucrunch_inlen-1);
 		machineTypeTxt =
 		    "VIC20 with 3k+16k (or 3k+24k) expansion memory";
 	    } else {
 		fprintf(stderr, "Original file exceeds 0x4000 (0x%04x), "
 			"16kB memory expansion assumed\n",
-			startAddr+inlen-1);
+			startAddr+pucrunch_inlen-1);
 		machineTypeTxt = "VIC20 with 16k (or 24k) expansion memory";
 	    }
 	    memEnd = 0x6000;
-	} else if (startAddr+inlen > 0x2000) {
+	} else if (startAddr+pucrunch_inlen > 0x2000) {
 	    if (startAddr < 0x1000) {
 		fprintf(stderr, "Original file exceeds 0x2000 (0x%04x), "
 			"3kB+8kB memory expansion assumed\n",
-			startAddr+inlen-1);
+			startAddr+pucrunch_inlen-1);
 		machineTypeTxt =
 		    "VIC20 with 3k+8k (or 3k+16k, or 3k+24k) expansion memory";
 	    } else {
 		fprintf(stderr, "Original file exceeds 0x2000 (0x%04x), "
 			"8kB memory expansion assumed\n",
-			startAddr+inlen-1);
+			startAddr+pucrunch_inlen-1);
 	    }
 	    /* memEnd = 0x4000; */
 	} else {
@@ -3278,7 +3278,7 @@ maxrlelen = MAXRLELEN;
     case 16:
     case 4:
    	type |= FIXF_C16 | FIXF_WRAP;
-	if (startAddr+inlen > 0x4000) {
+	if (startAddr+pucrunch_inlen > 0x4000) {
 	    fprintf(stderr, "Original file exceeds 0x4000, 61k RAM assumed\n");
 	    memStart = 0x1001;
 	    memEnd = 0xfd00;
@@ -3312,15 +3312,15 @@ maxrlelen = MAXRLELEN;
 
     if (startAddr <= memStart) {
 	for (n=memStart-startAddr; n<memStart-startAddr+60; n++) {
-	    if (indata[n]==0x9e) {	/* SYS token */
+	    if (pucrunch_indata[n]==0x9e) {	/* SYS token */
 		execAddr = 0;
 		n++;
 		/* Skip spaces and parens */
-		while (indata[n]=='(' || indata[n]==' ')
+		while (pucrunch_indata[n]=='(' || pucrunch_indata[n]==' ')
 		   n++;
 
-		while (indata[n]>='0' && indata[n]<='9') {
-		    execAddr = execAddr * 10 + indata[n++] - '0';
+		while (pucrunch_indata[n]>='0' && pucrunch_indata[n]<='9') {
+		    execAddr = execAddr * 10 + pucrunch_indata[n++] - '0';
 		}
 		break;
 	    }
@@ -3331,7 +3331,7 @@ maxrlelen = MAXRLELEN;
 	    fprintf(stderr, "Discarding execution address 0x%04x=%d\n",
 		    execAddr, execAddr);
 	execAddr = ea;
-    } else if (execAddr < startAddr || execAddr >= startAddr+inlen) {
+    } else if (execAddr < startAddr || execAddr >= startAddr+pucrunch_inlen) {
 	if ((type & FIXF_BASIC)) {
 	    execAddr = 0xa7ae;
 	} else {
@@ -3342,7 +3342,7 @@ maxrlelen = MAXRLELEN;
 	}
     }
     fprintf(stderr, "Load address 0x%04x=%d, Last byte 0x%04x=%d\n",
-	    startAddr, startAddr, startAddr+inlen-1, startAddr+inlen-1);
+	    startAddr, startAddr, startAddr+pucrunch_inlen-1, startAddr+pucrunch_inlen-1);
     fprintf(stderr, "Exec address 0x%04x=%d\n", execAddr, execAddr);
     fprintf(stderr, "New load address 0x%04x=%d\n", memStart, memStart);
     if (machineType == 64) {
@@ -3361,9 +3361,9 @@ maxrlelen = MAXRLELEN;
     if ((flags & F_2MHZ))
 	type |= FIXF_FAST;
 #endif
-    n = PackLz77(lzlen, flags, &startEscape, startAddr + inlen, memEnd, type);
+    n = PackLz77(lzlen, flags, &startEscape, startAddr + pucrunch_inlen, memEnd, type);
     if (!n) {
-	int endAddr = startAddr + inlen; /* end for uncompressed data */
+	int endAddr = startAddr + pucrunch_inlen; /* end for uncompressed data */
 	int hDeCall, progEnd = endAddr;
 
 	if (GetHeaderSize(type, &hDeCall) == 0) {
@@ -3407,13 +3407,13 @@ maxrlelen = MAXRLELEN;
 	    timeused++;
 	fprintf(stderr,
 		"Compressed %d bytes in %4.2f seconds (%4.2f kB/sec)\n",
-		inlen,
+		pucrunch_inlen,
 		(double)timeused/CLOCKS_PER_SEC,
-		(double)CLOCKS_PER_SEC*inlen/timeused/1024.0);
+		(double)CLOCKS_PER_SEC*pucrunch_inlen/timeused/1024.0);
     }
 errexit:
-    if (indata)
-	free(indata);
+    if (pucrunch_indata)
+	free(pucrunch_indata);
     return n;
 }
 #endif
