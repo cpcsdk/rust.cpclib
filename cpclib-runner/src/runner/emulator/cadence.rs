@@ -16,12 +16,19 @@ pub const DOWNLOAD_URL_V1_1_MACOS: &str =
     "https://github.com/abalore/Cadence-releases/releases/download/v1.1/Cadence-1.1-macOS-arm64.dmg";
 pub const DOWNLOAD_URL_V1_1_WINDOWS: &str =
     "https://github.com/abalore/Cadence-releases/releases/download/v1.1/cadence-windows-x64.zip";
+pub const DOWNLOAD_URL_V1_4_LINUX: &str =
+    "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-x86_64.AppImage";
+pub const DOWNLOAD_URL_V1_4_MACOS: &str =
+    "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-macOS-arm64.dmg";
+pub const DOWNLOAD_URL_V1_4_WINDOWS: &str =
+    "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-windows-x64.zip";
 
 #[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CadenceVersion {
     V0_3a,
+    V1_1,
     #[default]
-    V1_1
+    V1_4
 }
 
 impl CadenceVersion {
@@ -32,7 +39,8 @@ impl CadenceVersion {
     fn target_folder(&self) -> &'static str {
         match self {
             CadenceVersion::V0_3a => "cadence_0.3a",
-            CadenceVersion::V1_1 => "cadence_1.1"
+            CadenceVersion::V1_1 => "cadence_1.1",
+            CadenceVersion::V1_4 => "cadence_1.4"
         }
     }
 
@@ -44,7 +52,8 @@ impl CadenceVersion {
                     Box::new(|| Err("Cadence v0.3a is not available on Windows".to_owned()));
                 deferred.into()
             },
-            CadenceVersion::V1_1 => DOWNLOAD_URL_V1_1_WINDOWS.into()
+            CadenceVersion::V1_1 => DOWNLOAD_URL_V1_1_WINDOWS.into(),
+            CadenceVersion::V1_4 => DOWNLOAD_URL_V1_4_WINDOWS.into()
         }
     }
 
@@ -52,7 +61,8 @@ impl CadenceVersion {
     fn target_url_generator(&self) -> UrlGenerator {
         match self {
             CadenceVersion::V0_3a => DOWNLOAD_URL_V0_3A_LINUX,
-            CadenceVersion::V1_1 => DOWNLOAD_URL_V1_1_LINUX
+            CadenceVersion::V1_1 => DOWNLOAD_URL_V1_1_LINUX,
+            CadenceVersion::V1_4 => DOWNLOAD_URL_V1_4_LINUX
         }
         .into()
     }
@@ -61,7 +71,8 @@ impl CadenceVersion {
     fn target_url_generator(&self) -> UrlGenerator {
         match self {
             CadenceVersion::V0_3a => DOWNLOAD_URL_V0_3A_MACOS,
-            CadenceVersion::V1_1 => DOWNLOAD_URL_V1_1_MACOS
+            CadenceVersion::V1_1 => DOWNLOAD_URL_V1_1_MACOS,
+            CadenceVersion::V1_4 => DOWNLOAD_URL_V1_4_MACOS
         }
         .into()
     }
@@ -76,7 +87,8 @@ impl CadenceVersion {
         {
             return match self {
                 CadenceVersion::V0_3a => "Cadence-0.3a-x86_64.AppImage",
-                CadenceVersion::V1_1 => "Cadence-1.1-x86_64.AppImage"
+                CadenceVersion::V1_1 => "Cadence-1.1-x86_64.AppImage",
+                CadenceVersion::V1_4 => "Cadence-1.4-x86_64.AppImage"
             };
         }
 
@@ -84,7 +96,8 @@ impl CadenceVersion {
         {
             return match self {
                 CadenceVersion::V0_3a => "cadence.app/Contents/MacOS/cadence",
-                CadenceVersion::V1_1 => "cadence"
+                CadenceVersion::V1_1 => "cadence",
+                CadenceVersion::V1_4 => "cadence"
             };
         }
     }
@@ -94,7 +107,8 @@ impl CadenceVersion {
         {
             return match self {
                 CadenceVersion::V0_3a => ArchiveFormat::Raw,
-                CadenceVersion::V1_1 => ArchiveFormat::Zip
+                CadenceVersion::V1_1 => ArchiveFormat::Zip,
+                CadenceVersion::V1_4 => ArchiveFormat::Zip
             };
         }
 
@@ -107,7 +121,8 @@ impl CadenceVersion {
         {
             return match self {
                 CadenceVersion::V0_3a => ArchiveFormat::Zip,
-                CadenceVersion::V1_1 => ArchiveFormat::Raw
+                CadenceVersion::V1_1 => ArchiveFormat::Raw,
+                CadenceVersion::V1_4 => ArchiveFormat::Raw
             };
         }
     }
@@ -138,7 +153,7 @@ impl CadenceVersion {
 
                     match &version {
                         CadenceVersion::V0_3a => install_macos_source_release(&cache_folder)?,
-                        CadenceVersion::V1_1 => install_macos_dmg_release(&cache_folder, &desc.exec_fname())?
+                        CadenceVersion::V1_1 | CadenceVersion::V1_4 => install_macos_dmg_release(&cache_folder, &desc.exec_fname())?
                     }
 
                     Ok(())
