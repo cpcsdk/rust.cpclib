@@ -28,8 +28,10 @@ impl Display for SugarBoxV2Version {
 
 impl DownloadableInformation for SugarBoxV2Version {
     fn target_os_archive_format(&self) -> ArchiveFormat {
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "archive-7z"))]
         return ArchiveFormat::SevenZ;
+        #[cfg(all(target_os = "windows", not(feature = "archive-7z")))]
+        return ArchiveFormat::Zip;
         #[cfg(any(target_os = "macos", target_os = "linux", target_os = "haiku"))]
         return ArchiveFormat::TarGz;
     }

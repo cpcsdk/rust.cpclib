@@ -21,6 +21,7 @@ mod crunchers;
 
 pub mod orgams;
 pub mod progress;
+pub mod lsp;
 
 use std::fmt::Debug;
 use std::io::Write;

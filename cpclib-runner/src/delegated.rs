@@ -409,6 +409,7 @@ pub enum ArchiveFormat {
     TarGz,
     TarXz,
     Zip,
+    #[cfg(feature = "archive-7z")]
     SevenZ
 }
 
@@ -519,6 +520,7 @@ impl<E: EventObserver> DelegateApplicationDescription<E> {
                 zip_extract::extract(Cursor::new(buffer), dest.as_std_path(), true)
                     .map_err(|e| e.to_string())?;
             },
+            #[cfg(feature = "archive-7z")]
             ArchiveFormat::SevenZ => {
                 o.emit_stdout(">> Open 7z archive\n");
                 let mut buffer = Vec::new();

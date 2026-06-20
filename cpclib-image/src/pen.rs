@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::ops::{Add, Sub};
 
-use cpclib_common::num::Integer;
+use cpclib_common::num::{Integer, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
 use crate::image::Mode;
@@ -34,25 +34,28 @@ pub enum Pen {
     Border
 }
 
-// Constructor of Pen from an integer
-impl<T: Integer> From<T> for Pen
-where i32: From<T>
-{
-    fn from(item: T) -> Self {
-        let pen: &Pen = <&Pen>::from(item);
-        *pen
+// Macro to generate From implementations for Pen and &Pen from integer types
+macro_rules! impl_pen_from_integer {
+    ( $($ty:ty),+ ) => {
+        $(
+            impl From<$ty> for Pen {
+                fn from(item: $ty) -> Self {
+                    let pen: &Pen = <&Pen>::from(item);
+                    *pen
+                }
+            }
+
+            impl From<$ty> for &'static Pen {
+                fn from(item: $ty) -> Self {
+                    let pos: i32 = item as i32;
+                    &Pen::PENS[pos as usize % 17]
+                }
+            }
+        )+
     }
 }
 
-// Constructor of Pen reference from an integer
-impl<T: Integer> From<T> for &Pen
-where i32: From<T>
-{
-    fn from(item: T) -> Self {
-        let pos: i32 = item.into();
-        &Pen::PENS[pos as usize % 17]
-    }
-}
+impl_pen_from_integer!(u8, u16, u32, usize, i8, i16, i32, isize);
 
 macro_rules! into_integer {
     ( $($ty:ty),+ ) => {
@@ -96,11 +99,10 @@ impl Pen {
         Self::Border
     }
 
-    pub fn new_pen<T: Integer>(v: T) -> Self
-    where i32: From<T> {
-        let mut p = Pen::from(v);
-        p.limit(Mode::Zero); // ensure border is not set
-        p
+    pub fn new_pen<T: Integer + ToPrimitive>(v: T) -> Self {
+        // Convert to i32 by going through i64 to handle all integer types
+        let pos: i32 = v.to_i64().unwrap_or(0) as i32 & 15; // Mask to 0-15 (no border)
+        Pen::PENS[pos as usize]
     }
 
     /// Get the number of the pen

@@ -54,8 +54,14 @@ impl StaticInformation for CapriceForeverVersion {
 }
 
 impl DownloadableInformation for CapriceForeverVersion {
+    #[cfg(feature = "archive-7z")]
     fn target_os_archive_format(&self) -> ArchiveFormat {
         ArchiveFormat::SevenZ
+    }
+
+    #[cfg(not(feature = "archive-7z"))]
+    fn target_os_archive_format(&self) -> ArchiveFormat {
+        ArchiveFormat::Zip
     }
 
     // fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {

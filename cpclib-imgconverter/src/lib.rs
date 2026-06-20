@@ -246,6 +246,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
                     .parse(BStr::new(ink))
                     .unwrap_or_else(|_| Ink::from(ink.replace("GA_", "")).gate_array_value() as _)
             })
+            .map(|n: u32| Ink::from(n))
             .collect::<Vec<_>>();
         Ok(LockablePalette::unlocked(numbers.into()))
     }
@@ -1430,7 +1431,7 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
             data.chunks(17)
                 .map(|p| {
                     let inks = p.iter().map(|b| Ink::from(*b));
-                    Palette::from(inks)
+                    Palette::from_iter(inks)
                 })
                 .collect_vec()
         }
@@ -1610,6 +1611,7 @@ impl FadePaletteArgs {
                             Ink::from(ink.replace("GA_", "")).gate_array_value() as _
                         })
                 })
+                .map(|n: u32| Ink::from(n))
                 .collect::<Vec<_>>();
             Ok(LockablePalette::unlocked(numbers.into()))
         }

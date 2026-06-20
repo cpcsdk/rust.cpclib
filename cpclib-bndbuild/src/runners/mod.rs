@@ -9,6 +9,7 @@ pub mod assembler;
 pub mod ay;
 pub mod basmdoc;
 pub mod bndbuild;
+#[cfg(feature = "tape")]
 pub mod cdt;
 pub mod cpc2img;
 pub mod cprcli;

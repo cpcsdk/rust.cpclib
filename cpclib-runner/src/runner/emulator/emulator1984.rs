@@ -14,11 +14,33 @@ pub const DOWNLOAD_URL_V0_4_3_WINDOWS: &str =
     "https://github.com/salvogendut/1984/releases/download/v0.4.3/1984-v0.4.3-windows-x86_64.zip";
 pub const DOWNLOAD_URL_V0_4_3_SOURCE: &str =
     "https://github.com/salvogendut/1984/archive/refs/tags/v0.4.3.zip";
+pub const DOWNLOAD_URL_V0_4_5_LINUX: &str =
+    "https://github.com/salvogendut/1984/releases/download/v0.4.5/1984-v0.4.5-linux-x86_64";
+pub const DOWNLOAD_URL_V0_4_5_WINDOWS: &str =
+    "https://github.com/salvogendut/1984/releases/download/v0.4.5/1984-v0.4.5-windows-x86_64.zip";
+pub const DOWNLOAD_URL_V0_4_5_SOURCE: &str =
+    "https://github.com/salvogendut/1984/archive/refs/tags/v0.4.5.zip";
+
+// ROM files required by 1984 emulator (from INSTALL.md)
+// - OS_464.ROM: CPC 464 OS ROM (16 KB)
+// - BASIC_1.0.ROM: CPC 464 Locomotive BASIC 1.0 (16 KB)
+// - OS_6128.ROM: CPC 6128 OS ROM (16 KB)
+// - BASIC_1.1.ROM: CPC 6128 Locomotive BASIC 1.1 (16 KB)
+// - AMSDOS.ROM: AMSDOS disk filing system (16 KB)
+pub const ROM_BASE_URL: &str = "https://raw.githubusercontent.com/salvogendut/1984/main/roms";
+pub const ROM_FILES: &[&str] = &[
+    "OS_464.ROM",
+    "BASIC_1.0.ROM",
+    "OS_6128.ROM",
+    "BASIC_1.1.ROM",
+    "AMSDOS.ROM"
+];
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Emulator1984Version {
+    V0_4_3,
     #[default]
-    V0_4_3
+    V0_4_5
 }
 
 impl Emulator1984Version {
@@ -28,17 +50,27 @@ impl Emulator1984Version {
 
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
         let folder = match self {
-            Self::V0_4_3 => "1984_0.4.3"
+            Self::V0_4_3 => "1984_0.4.3",
+            Self::V0_4_5 => "1984_0.4.5"
         };
 
         #[cfg(target_os = "windows")]
-        let url = DOWNLOAD_URL_V0_4_3_WINDOWS;
+        let url = match self {
+            Self::V0_4_3 => DOWNLOAD_URL_V0_4_3_WINDOWS,
+            Self::V0_4_5 => DOWNLOAD_URL_V0_4_5_WINDOWS
+        };
 
         #[cfg(target_os = "linux")]
-        let url = DOWNLOAD_URL_V0_4_3_LINUX;
+        let url = match self {
+            Self::V0_4_3 => DOWNLOAD_URL_V0_4_3_LINUX,
+            Self::V0_4_5 => DOWNLOAD_URL_V0_4_5_LINUX
+        };
 
         #[cfg(any(target_os = "macos", target_os = "openbsd"))]
-        let url = DOWNLOAD_URL_V0_4_3_SOURCE;
+        let url = match self {
+            Self::V0_4_3 => DOWNLOAD_URL_V0_4_3_SOURCE,
+            Self::V0_4_5 => DOWNLOAD_URL_V0_4_5_SOURCE
+        };
 
         #[cfg(target_os = "windows")]
         let exec = "1984.exe";
@@ -73,7 +105,30 @@ impl Emulator1984Version {
                         .permissions();
                     perms.set_mode(perms.mode() | 0o111);
                     fs_err::set_permissions(&app_image, perms)
-                        .map_err(|e| format!("Unable to set execute bit on {app_image}: {e}"))
+                        .map_err(|e| format!("Unable to set execute bit on {app_image}: {e}"))?;
+
+                    // Check if SDL3 is available system-wide
+                    if !is_sdl3_available_system() {
+                        eprintln!("⚠️  WARNING: SDL3 is not installed on your system.");
+                        eprintln!("The 1984 emulator requires SDL3 to run.");
+                        eprintln!();
+                        eprintln!("To install SDL3 on Ubuntu/Debian:");
+                        eprintln!("  wget https://github.com/libsdl-org/SDL/releases/download/release-3.4.10/SDL3-3.4.10.tar.gz");
+                        eprintln!("  tar xzf SDL3-3.4.10.tar.gz");
+                        eprintln!("  cd SDL3-3.4.10");
+                        eprintln!("  cmake -B build -DCMAKE_BUILD_TYPE=Release");
+                        eprintln!("  cmake --build build");
+                        eprintln!("  sudo cmake --install build");
+                        eprintln!("  sudo ldconfig");
+                        eprintln!();
+                        eprintln!("Emulator downloaded but will not run until SDL3 is installed.");
+                    }
+
+                    // Download required ROM files
+                    let rom_dir = desc.cache_folder();
+                    download_roms(&rom_dir)?;
+
+                    Ok(())
                 });
             builder.post_install(post_install)
         };
@@ -116,6 +171,23 @@ impl Emulator1984Version {
                         })?;
                     }
 
+                    // Download required ROM files
+                    let rom_dir = desc.cache_folder();
+                    download_roms(&rom_dir)?;
+
+                    Ok(())
+                });
+            builder.post_install(post_install)
+        };
+
+        #[cfg(target_os = "windows")]
+        let builder = {
+            let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
+                Box::new(|desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                    // Download required ROM files
+                    let rom_dir = desc.cache_folder();
+                    download_roms(&rom_dir)?;
+
                     Ok(())
                 });
             builder.post_install(post_install)
@@ -130,7 +202,8 @@ impl crate::delegated::InternetStaticCompiledApplication for Emulator1984Version
 impl crate::delegated::ExecutableInformation for Emulator1984Version {
     fn target_os_folder(&self) -> &'static str {
         match self {
-            Self::V0_4_3 => "1984_0.4.3"
+            Self::V0_4_3 => "1984_0.4.3",
+            Self::V0_4_5 => "1984_0.4.5"
         }
     }
 
@@ -156,9 +229,9 @@ impl crate::delegated::StaticInformation for Emulator1984Version {
 
         URLS.get_or_init(|| {
             MutiplatformUrls::builder()
-                .linux(DOWNLOAD_URL_V0_4_3_LINUX)
-                .windows(DOWNLOAD_URL_V0_4_3_WINDOWS)
-                .macos(DOWNLOAD_URL_V0_4_3_SOURCE)
+                .linux(DOWNLOAD_URL_V0_4_5_LINUX)
+                .windows(DOWNLOAD_URL_V0_4_5_WINDOWS)
+                .macos(DOWNLOAD_URL_V0_4_5_SOURCE)
                 .build()
         })
     }
@@ -283,7 +356,7 @@ fn ensure_sdl3_available() -> Result<(), String> {
 
 #[cfg(any(target_os = "macos", target_os = "openbsd"))]
 fn locate_source_root(base: &Utf8Path) -> Result<Utf8PathBuf, String> {
-    let preferred = base.join("1984-0.4.3");
+    let preferred = base.join("1984-0.4.5");
     if preferred.exists() {
         return Ok(preferred);
     }
@@ -332,4 +405,56 @@ fn run_command<const N: usize>(
     else {
         Err(format!("{label} failed: {}", String::from_utf8_lossy(&output.stderr)))
     }
+}
+
+#[cfg(target_os = "linux")]
+fn is_sdl3_available_system() -> bool {
+    Command::new("pkg-config")
+        .args(["--exists", "sdl3"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Download required ROM files for the 1984 emulator
+fn download_roms(target_dir: &Utf8Path) -> Result<(), String> {
+    eprintln!("Downloading required ROM files for 1984 emulator...");
+    
+    for rom_file in ROM_FILES {
+        let rom_path = target_dir.join(rom_file);
+        
+        // Skip if ROM already exists
+        if rom_path.exists() {
+            eprintln!("  ✓ {} already exists", rom_file);
+            continue;
+        }
+        
+        let rom_url = format!("{}/{}", ROM_BASE_URL, rom_file);
+        eprintln!("  Downloading {}...", rom_file);
+        
+        // Try curl first, then wget
+        let result = Command::new("curl")
+            .args(["-L", "-o", rom_path.as_str(), &rom_url, "--silent", "--show-error"])
+            .status()
+            .and_then(|s| if s.success() { Ok(()) } else { Err(std::io::Error::new(std::io::ErrorKind::Other, "curl failed")) })
+            .or_else(|_| {
+                Command::new("wget")
+                    .args(["-q", "-O", rom_path.as_str(), &rom_url])
+                    .status()
+                    .and_then(|s| if s.success() { Ok(()) } else { Err(std::io::Error::new(std::io::ErrorKind::Other, "wget failed")) })
+            });
+        
+        match result {
+            Ok(_) => eprintln!("  ✓ {} downloaded successfully", rom_file),
+            Err(e) => {
+                return Err(format!(
+                    "Failed to download {} from {}: {}. Please install curl or wget.",
+                    rom_file, rom_url, e
+                ));
+            }
+        }
+    }
+    
+    eprintln!("✓ All ROM files downloaded successfully");
+    Ok(())
 }

@@ -19,8 +19,8 @@ use task::{
     CADENCE_CMDS, CAPRICEFOREVER_CMDS, CHIPNSFX_CMDS, CONVGENERIC_CMDS, CP_CMDS, CPCEC_CMDS, CPCEMU_CMDS,
     CPCEMUPOWER_CMDS, CPR_CMDS, CSL_CMDS, DISARK_CMDS, DISC_CMDS, ECHO_CMDS, EMUCTRL_CMDS,
     EMULATOR_1984_CMDS, EXTERN_CMDS, HIDEUR_CMDS, HSPC_CMDS, HXCFE_CMDS, IMG2CPC_CMDS, IMPDISC_CMDS, MARTINE_CMDS,
-    MV_CMDS, ORGAMS_CMDS, RASM_CMDS, RETROVM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SONG2AKM_CMDS,
-    SUGARBOX_CMDS, UZ80_CMDS, VASM_CMDS, VLINK_CMDS, WINAPE_CMDS, XFER_CMDS, Z80PROFILER_CMDS
+    MKDIR_CMDS, MV_CMDS, ORGAMS_CMDS, RASM_CMDS, RETROVM_CMDS, RM_CMDS, SJASMPLUS_CMDS, SNA_CMDS, 
+    SONG2AKM_CMDS, SUGARBOX_CMDS, UZ80_CMDS, VASM_CMDS, VLINK_CMDS, WINAPE_CMDS, XFER_CMDS, Z80PROFILER_CMDS
 };
 use thiserror::Error;
 
@@ -38,6 +38,7 @@ pub mod constraints;
 pub mod env;
 pub mod event;
 pub mod executor;
+pub mod lsp;
 pub mod rules;
 pub mod runners;
 pub mod task;
@@ -113,6 +114,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (DISC_CMDS, false),
     (DISARK_CMDS, true),
     (ECHO_CMDS, false),
+    (MKDIR_CMDS, false),
     (EMUCTRL_CMDS, false),
     (EXTERN_CMDS, false),
     #[cfg(feature = "fap")]
@@ -132,6 +134,7 @@ pub const ALL_APPLICATIONS: &[(&[&str], bool)] = &[
     (RTZX_CMDS, true),
     (TWO_CDT_CMDS, true),
     (SJASMPLUS_CMDS, true),
+    (SNA_CMDS, false),
     (SONG2AKM_CMDS, true),
     (Z80PROFILER_CMDS, true),
     (SUGARBOX_CMDS, true),

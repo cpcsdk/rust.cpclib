@@ -30,7 +30,7 @@ self_cell.workspace = true
 serde.workspace = true
 
 [build-dependencies]
-built = { version = "0.8.0", features = ["chrono"] }
+built = { version = "0.8.1", features = ["chrono"] }
 static_vcruntime = "3.0"
 
 [features]

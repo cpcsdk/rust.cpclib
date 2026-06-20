@@ -86,6 +86,7 @@ impl InnerTask {
 
             InnerTask::HspCompiler(_) => Some(HspCompilerVersion::default().configuration()),
             InnerTask::ImpDsk(_) => Some(ImpDskVersion::default().configuration()),
+            #[cfg(feature = "tape")]
             InnerTask::Cdt(crate::runners::cdt::CdtManager::TwoCdt, _) => {
                 Some(TwoCdtVersion::default().configuration())
             },
@@ -124,6 +125,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Locomotive(_args) => {
             crate::runners::locomotive::LocomotiveRunner::<E>::default().run(task.args(), observer)
         },
+        #[cfg(feature = "tape")]
         InnerTask::Cdt(cdt, _args) => {
             match cdt {
                 crate::runners::cdt::CdtManager::Rtzx => {

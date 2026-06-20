@@ -25,6 +25,7 @@ members = [
   "cpclib-image",
   "cpclib-imgconverter",
   "cpclib-locomotive",
+  "cpclib-lsp",
   "cpclib-macros",
   "cpclib-orgams-ascii",
   "cpclib-runner", 
@@ -67,6 +68,7 @@ default-members = [
   "cpclib-image",
   "cpclib-imgconverter",
   "cpclib-locomotive",
+  "cpclib-lsp",
   "cpclib-macros",
   "cpclib-orgams-ascii",
   "cpclib-runner", 
@@ -78,6 +80,10 @@ default-members = [
   "cpclib-xfer",
   "cpclib-xfertool",
   "cpclib-python",
+]
+
+exclude = [
+  "cpclib-lsp-zed"
 ]
 
 resolver = "2"
@@ -134,14 +140,14 @@ arrayref = "0.3.9"
 as-slice = "0.2.1"
 beef = "0.5.2"
 bitfield = "0.19.4"
-bitflags = "2.11.1"
+bitflags = "2.13.0"
 bitvec = "1.0.1"
-bon = "3.9.1"
+bon = "3.9.2"
 built = { version = "0.8.0", features = ["chrono"] }
 camino = "1.2.2"
 camino-tempfile = "1.4.1"
 walkdir = "2.5.0"
-cc = "1.2.62"
+cc = "1.2.64"
 cfg-if = "1.0.4"
 chardetng = { version = "1.0.0", features = ["multithreading"] }
 clap = { version="4.5.61", features=["color", "derive"]}
@@ -153,7 +159,7 @@ custom_error = "1.9.2"
 dbg = "1.0.4"
 delegate = "0.13.5"
 dircpy = "0.3.20"
-either = "1.15.0"
+either = "1.16.0"
 #encoding_rs = { version = "0.8.34", default-features = false, features = [   "alloc", ] }
 enigo = "0.6.1"
 enumn = "0.1.14"
@@ -161,8 +167,8 @@ env_logger = "0.11"
 exitcode = "1.1.2"
 fs-err = "3.3.0"
 gag = "1.0.0"
-getset = "0.1.6"
-gif = "^0.14.1" # XXX may be compatible with gif-dispose
+getset = "0.1.7"
+gif = "^0.14.2" # XXX may be compatible with gif-dispose
 gif-dispose = "6.0.0"
 glob = "0.3.3"
 globset = "0.4.18"
@@ -174,10 +180,10 @@ image = "0.25.10"
 indicatif = "0.18.4"
 itertools = "0.14"
 libc = "0.2.186"
-minijinja = "2.19.0"
-log = "0.4.29"
+minijinja = "2.20.0"
+log = "0.4.32"
 memchr = "2"
-minus = { version = "5.7.0", features = ["static_output"] }
+minus = { version = "5.7.1", features = ["static_output"] }
 notify = "8.2.0"
 num = "0.4.3"
 num-bigint = "0.4.6"
@@ -195,7 +201,7 @@ proc-macro2 = "1.0.106"
 quote = "1.0.45"
 #ratatui = "0.28.1"
 rayon = "1.12.0"
-regex = "1.12.3"
+regex = "1.12.4"
 remain = "0.2.15"
 rand = "0.9"
 rtzx = "0.5.0"
@@ -210,12 +216,12 @@ self_cell = "1.2.2"
 self_update = "0.42.0"
 semver = "1.0.28"
 serde = { version = "1.0.228", features = ["derive"] }
-serial_test = "3.4.0"
+serial_test = "3.5.0"
 sevenz-rust = "0.6.1"
 shlex = "1.3.0"
 similar-asserts = "1.7.0"
 simple_logger = { version = "5.2.0" }
-smallvec = "1.15.1"
+smallvec = "1.15.2"
 smol_str = "0.3.6"
 strsim = "0.11.1"
 strum = { version = "0.28", features = ["derive"] }
@@ -231,7 +237,7 @@ transparent = "0.4.2"
 utf8-chars = "3.0.7"
 velcro = "0.5.4"
 winnow = { version = "1.0.3", features = ["simd","parser","binary","ascii"] }
-xcap = "0.9.4"
+xcap = "0.9.6"
 zip-extract = "=0.1.3"
 
 # gui based dependencies

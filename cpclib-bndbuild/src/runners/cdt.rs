@@ -1,3 +1,5 @@
+#![cfg(feature = "tape")]
+
 use std::marker::PhantomData;
 
 use clap::{Arg, ArgAction, FromArgMatches};

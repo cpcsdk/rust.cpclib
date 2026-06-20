@@ -18,7 +18,7 @@ glob.workspace = true
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
-serial_test = "3.4.0"
+serial_test = "3.5.0"
 ntest = "0.9.5"
 
 [[bin]]

@@ -68,12 +68,13 @@ impl Default for Palette {
 // }
 // }
 
-impl<S, T> From<S> for Palette
-where
-    S: IntoIterator<Item = T>,
-    Ink: From<T>
-{
-    fn from(items: S) -> Self {
+impl Palette {
+    /// Create a palette from an iterator of items that can convert to Ink
+    pub fn from_iter<S, T>(items: S) -> Self
+    where
+        S: IntoIterator<Item = T>,
+        Ink: From<T>
+    {
         let mut p = Self::empty();
         let items = items.into_iter();
 
@@ -82,6 +83,12 @@ where
         }
 
         p
+    }
+}
+
+impl From<Vec<Ink>> for Palette {
+    fn from(items: Vec<Ink>) -> Self {
+        Self::from_iter(items)
     }
 }
 
@@ -140,7 +147,7 @@ impl Serialize for Palette {
 impl<'de> Deserialize<'de> for Palette {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let inks: Vec<Ink> = Vec::<Ink>::deserialize(deserializer)?;
-        let palette: Self = inks.into_iter().into();
+        let palette: Self = Self::from_iter(inks);
         Ok(palette)
     }
 }

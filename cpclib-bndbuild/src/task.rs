@@ -43,6 +43,7 @@ use crate::execute;
 use crate::runners::assembler::Assembler;
 use crate::runners::ay::YmCruncher;
 use crate::runners::basmdoc::BASMDOC_CMD;
+#[cfg(feature = "tape")]
 use crate::runners::cdt::CdtManager;
 use crate::runners::disassembler::Disassembler;
 use crate::runners::emulator::Emulator;
@@ -76,6 +77,7 @@ pub enum InnerTask {
     Crunch(StandardTaskArguments),
     Disassembler(Disassembler, StandardTaskArguments),
     Disc(StandardTaskArguments),
+    #[cfg(feature = "tape")]
     Cdt(CdtManager, StandardTaskArguments),
     Echo(StandardTaskArguments),
     Emulator(Emulator, StandardTaskArguments),
@@ -271,6 +273,7 @@ impl Display for InnerTask {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (cmd, s) = match self {
             Self::Assembler(a, s) => (a.get_command(), s),
+            #[cfg(feature = "tape")]
             Self::Cdt(c, s) => (c.get_command(), s),
             Self::YmCruncher(t, s) => (t.get_command(), s),
             Self::BasmDoc(s) => (BASMDOC_CMDS[0], s),
@@ -578,6 +581,7 @@ impl InnerTask {
         Self::Fade(std)
     }
 
+    #[cfg(feature = "tape")]
     pub fn with_rtzx(std: StandardTaskArguments) -> Self {
         Self::Cdt(CdtManager::Rtzx, std)
     }
@@ -838,11 +842,17 @@ impl InnerTask {
         else if is_archive_cmd(code) {
             Ok(Self::with_archive(std))
         }
-        else if is_rtzx_cmd(code) {
-            Ok(Self::with_rtzx(std))
+        else if cfg!(feature = "tape") && is_rtzx_cmd(code) {
+            #[cfg(feature = "tape")]
+            {Ok(Self::with_rtzx(std))}
+            #[cfg(not(feature = "tape"))]
+            {Err(format!("{code} is an invalid command"))}
         }
-        else if is_two_cdt_cmd(code) {
-            Ok(Self::Cdt(crate::runners::cdt::CdtManager::TwoCdt, std))
+        else if cfg!(feature = "tape") && is_two_cdt_cmd(code) {
+            #[cfg(feature = "tape")]
+            {Ok(Self::Cdt(crate::runners::cdt::CdtManager::TwoCdt, std))}
+            #[cfg(not(feature = "tape"))]
+            {Err(format!("{code} is an invalid command"))}
         }
         else if is_vlink_cmd(code) {
             Ok(Self::with_vlink(std))
@@ -874,8 +884,7 @@ impl InnerTask {
     fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
-            | InnerTask::Cdt(_, t)
-            | InnerTask::Catalog(t)
+                    | InnerTask::Catalog(t)
             | InnerTask::Locomotive(t)
             | InnerTask::YmCruncher(_, t)
             | InnerTask::BasmDoc(t)
@@ -907,15 +916,17 @@ impl InnerTask {
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
-            | InnerTask::Vlink(t) => t
+            | InnerTask::Vlink(t) => t,
+
+            #[cfg(feature = "tape")]
+            InnerTask::Cdt(_, t) => t
         }
     }
 
     fn standard_task_arguments_mut(&mut self) -> &mut StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
-            | InnerTask::Cdt(_, t)
-            | InnerTask::YmCruncher(_, t)
+                    | InnerTask::YmCruncher(_, t)
             | InnerTask::BasmDoc(t)
             | InnerTask::BndBuild(t)
             | InnerTask::Convgeneric(t)
@@ -947,7 +958,11 @@ impl InnerTask {
             | InnerTask::Vlink(t)
             | InnerTask::Xfer(t)
             | InnerTask::Cpr(t)
-            | InnerTask::Csl(t) => t
+            | InnerTask::Csl(t) => t,
+
+            #[cfg(feature = "tape")]
+            InnerTask::Cdt(_, t) => t
+
         }
     }
 
@@ -971,6 +986,7 @@ impl InnerTask {
             InnerTask::BndBuild(_) => false,
             InnerTask::BasmDoc(_) => false,
             InnerTask::Convgeneric(_) => false,
+            #[cfg(feature = "tape")]
             InnerTask::Cdt(..) => false,
             InnerTask::Catalog(_) => false,
             InnerTask::Locomotive(_) => false,
@@ -1026,6 +1042,7 @@ impl InnerTask {
             InnerTask::Locomotive(_) => TaskKind::Embedded,
             InnerTask::Snapshot(_) => TaskKind::Embedded,
             InnerTask::Xfer(_) => TaskKind::Embedded,
+            #[cfg(feature = "tape")]
             InnerTask::Cdt(..) => TaskKind::Embedded,
 
             // Emulated tasks - run through an emulator
@@ -1081,6 +1098,7 @@ impl InnerTask {
         }
 
         // Add all CDT managers
+        #[cfg(feature = "tape")]
         for cdt in CdtManager::all() {
             tasks.push(Self::Cdt(cdt, empty_args.clone()));
         }

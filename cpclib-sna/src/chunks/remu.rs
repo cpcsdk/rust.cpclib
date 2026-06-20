@@ -137,10 +137,15 @@ pub enum RemuEntry {
     Alias(String, u16)
 }
 
-impl<T: Into<RemuBreakPoint>> From<T> for RemuEntry {
-    fn from(value: T) -> Self {
-        let brk = value.into();
-        Self::BreakPoint(brk)
+impl From<RemuBreakPoint> for RemuEntry {
+    fn from(value: RemuBreakPoint) -> Self {
+        Self::BreakPoint(value)
+    }
+}
+
+impl From<AdvancedRemuBreakPoint> for RemuEntry {
+    fn from(value: AdvancedRemuBreakPoint) -> Self {
+        Self::BreakPoint(value.into())
     }
 }
 

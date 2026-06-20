@@ -301,13 +301,90 @@ impl From<ValueMacro> for Value {
     }
 }
 
-impl<I: Into<ExprResult>> From<I> for Value {
-    fn from(i: I) -> Self {
-        let value = i.into();
+impl From<ExprResult> for Value {
+    fn from(value: ExprResult) -> Self {
         match value {
             ExprResult::String(s) => Value::String(s),
             v => Value::Expr(v)
         }
+    }
+}
+
+impl From<String> for Value {
+    fn from(i: String) -> Self {
+        let value: ExprResult = i.into();
+        match value {
+            ExprResult::String(s) => Value::String(s),
+            v => Value::Expr(v)
+        }
+    }
+}
+
+impl From<SmolStr> for Value {
+    fn from(i: SmolStr) -> Self {
+        let value: ExprResult = i.into();
+        match value {
+            ExprResult::String(s) => Value::String(s),
+            v => Value::Expr(v)
+        }
+    }
+}
+
+impl From<&SmolStr> for Value {
+    fn from(i: &SmolStr) -> Self {
+        let value: ExprResult = i.into();
+        match value {
+            ExprResult::String(s) => Value::String(s),
+            v => Value::Expr(v)
+        }
+    }
+}
+
+impl From<f64> for Value {
+    fn from(i: f64) -> Self {
+        Value::Expr(i.into())
+    }
+}
+
+impl From<bool> for Value {
+    fn from(i: bool) -> Self {
+        Value::Expr(i.into())
+    }
+}
+
+impl From<usize> for Value {
+    fn from(i: usize) -> Self {
+        Value::Expr(i.into())
+    }
+}
+
+impl From<i32> for Value {
+    fn from(i: i32) -> Self {
+        Value::Expr(i.into())
+    }
+}
+
+impl From<u16> for Value {
+    fn from(i: u16) -> Self {
+        Value::Expr(i.into())
+    }
+}
+
+impl From<u8> for Value {
+    fn from(i: u8) -> Self {
+        Value::Expr(i.into())
+    }
+}
+
+impl From<i8> for Value {
+    fn from(i: i8) -> Self {
+        Value::Expr(i.into())
+    }
+}
+
+impl From<char> for Value {
+    fn from(i: char) -> Self {
+        Value::Expr(i.into())
     }
 }
 

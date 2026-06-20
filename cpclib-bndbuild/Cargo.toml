@@ -58,7 +58,7 @@ lazy-regex = "3.6.0"
 memchr.workspace = true
 minijinja = { workspace = true, features = ["loader", "debug"] }
 paste.workspace = true
-rtzx.workspace = true
+rtzx = { workspace = true, optional = true }
 self_cell = "1.2.2"
 self_update = {workspace = true, optional = true}
 serde_yaml = "0.9.34"
@@ -78,7 +78,7 @@ build-deps = "0.1.4"
 
 [dev-dependencies]
 test-generator = "0.3.1"
-serial_test = "3.4.0"
+serial_test = "3.5.0"
 camino-tempfile = { workspace = true }
 assert_cmd = "2.2.2"
 predicates = "3.1"
@@ -89,9 +89,11 @@ path = "src/main.rs"
 
 [features]
 
-default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe", "screenshot",
-"apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0"]
+default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe", "screenshot", "archive-7z",
+"apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0", "tape"]
 colored_errors = ["cpclib-basm/colored_errors"]
+tape = ["dep:rtzx"]
+archive-7z = ["cpclib-runner/archive-7z"]
 fap = ["cpclib-runner/fap"]
 screenshot = ["cpclib-runner/screenshot"]
 hfe = ["cpclib-asm/hfe", "cpclib-disc/hfe", "cpclib-basm/hfe", "cpclib-bdasm/hfe", "cpclib-runner/hfe"]
