@@ -27,6 +27,26 @@ impl DocumentType {
             Self::Unknown
         }
     }
+
+    pub fn from_language_id(language_id: &str) -> Self {
+        match language_id {
+            "basm" | "asm" | "z80" => Self::Assembly,
+            "bndbuild" => Self::BuildFile,
+            "locomotive-basic" => Self::Basic,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Prefer the language_id classification; fall back to URI extension.
+    pub fn detect(uri: &Url, language_id: Option<&str>) -> Self {
+        if let Some(lid) = language_id {
+            let from_lid = Self::from_language_id(lid);
+            if from_lid != Self::Unknown {
+                return from_lid;
+            }
+        }
+        Self::from_uri(uri)
+    }
 }
 
 /// Represents a document managed by the LSP
@@ -40,9 +60,12 @@ pub struct Document {
 
 impl Document {
     pub fn new(uri: Url, text: String, version: i32) -> Self {
-        let doc_type = DocumentType::from_uri(&uri);
+        Self::new_with_language(uri, text, version, None)
+    }
+
+    pub fn new_with_language(uri: Url, text: String, version: i32, language_id: Option<&str>) -> Self {
+        let doc_type = DocumentType::detect(&uri, language_id);
         let rope = Rope::from_str(&text);
-        
         Self {
             uri,
             doc_type,

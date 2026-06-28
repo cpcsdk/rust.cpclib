@@ -149,11 +149,21 @@ impl BasicAnalyzer {
         match &tok.kind {
             // ── NEXT keyword: find matching FOR ─────────────────────────────
             LocatedTokenKind::Keyword(BasicTokenNoPrefix::Next) => {
-                // Optionally: what variable does NEXT name?
                 let next_var = skip_spaces_then_var_name(&bline.tokens, tok_idx + 1);
+                let (target, for_col) =
+                    find_for_matching_next(&prog, bline.source_line, next_var.as_deref())?;
+                Some(Location {
+                    uri: document.uri.clone(),
+                    range: single_pos(target.source_line, for_col),
+                })
+            }
 
-                // Walk backwards through ALL lines to find unmatched FOR.
-                let target = find_for_matching_next(&prog, bline.source_line, next_var.as_deref())?;
+            // ── GOTO/GOSUB keyword: jump to the named line ───────────────────
+            LocatedTokenKind::Keyword(BasicTokenNoPrefix::Goto)
+            | LocatedTokenKind::Keyword(BasicTokenNoPrefix::Gosub) => {
+                let num_text = skip_spaces_then_number(&bline.tokens, tok_idx + 1)?;
+                let target_num: u16 = num_text.parse().ok()?;
+                let target = prog.find_line(target_num)?;
                 Some(Location {
                     uri: document.uri.clone(),
                     range: single_pos(target.source_line, 0),
@@ -370,47 +380,33 @@ fn is_jump_target(tokens: &[cpclib_basic::located::LocatedBasicToken], tok_idx: 
     false
 }
 
-/// Find the FOR line that matches a NEXT on `next_source_line`.
+/// Find the FOR that matches a NEXT on `next_source_line`.
+/// Returns `(line, for_col)` — the source line containing FOR and the column of the FOR token.
 /// If `next_var` is Some, only match FORs with that variable (case-insensitive).
 fn find_for_matching_next<'a>(
     prog: &'a LocatedBasicProgram,
     next_source_line: u32,
     next_var: Option<&str>,
-) -> Option<&'a LocatedBasicLine> {
-    // Collect all FOR/NEXT pairs up to (but not including) our NEXT line.
-    // We need a simple stack approach: walk all lines before the NEXT,
-    // track a stack of open FORs, skip matched NEXT/FOR pairs.
+) -> Option<(&'a LocatedBasicLine, u32)> {
+    // Stack of (var_name_upper, line, for_col).
+    let mut stack: Vec<(String, &LocatedBasicLine, u32)> = Vec::new();
 
-    // Lines that appear before our NEXT (by source_line).
-    let before: Vec<&LocatedBasicLine> = prog
-        .lines
-        .iter()
-        .filter(|l| l.source_line < next_source_line)
-        .collect();
-
-    // Stack of (var_name_upper, &LocatedBasicLine) for open FOR loops.
-    let mut stack: Vec<(String, &LocatedBasicLine)> = Vec::new();
-
-    for bline in &before {
+    for bline in prog.lines.iter().filter(|l| l.source_line < next_source_line) {
         for tok in &bline.tokens {
             match &tok.kind {
                 LocatedTokenKind::Keyword(BasicTokenNoPrefix::For) => {
-                    // Find variable immediately after FOR.
-                    let var_name = skip_spaces_then_var_name(&bline.tokens, {
-                        bline.tokens.iter().position(|t| std::ptr::eq(t, tok)).unwrap_or(0) + 1
-                    })
-                    .unwrap_or_default()
-                    .to_uppercase();
-                    stack.push((var_name, bline));
+                    let tok_pos = bline.tokens.iter().position(|t| std::ptr::eq(t, tok)).unwrap_or(0);
+                    let var_name = skip_spaces_then_var_name(&bline.tokens, tok_pos + 1)
+                        .unwrap_or_default()
+                        .to_uppercase();
+                    stack.push((var_name, bline, tok.span.col));
                 }
                 LocatedTokenKind::Keyword(BasicTokenNoPrefix::Next) => {
                     let tok_pos = bline.tokens.iter().position(|t| std::ptr::eq(t, tok)).unwrap_or(0);
                     let nv = skip_spaces_then_var_name(&bline.tokens, tok_pos + 1)
                         .map(|s| s.to_uppercase())
                         .unwrap_or_default();
-
-                    // Pop matching FOR from stack.
-                    if let Some(pos) = stack.iter().rposition(|(v, _)| {
+                    if let Some(pos) = stack.iter().rposition(|(v, _, _)| {
                         nv.is_empty() || v.is_empty() || *v == nv
                     }) {
                         stack.remove(pos);
@@ -421,19 +417,16 @@ fn find_for_matching_next<'a>(
         }
     }
 
-    // The top of the stack is the innermost unmatched FOR.
-    // If next_var is given, find the topmost matching one.
     if let Some(nv) = next_var {
         let nv_upper = nv.to_uppercase();
-        // Search from the top (innermost) downwards.
-        for (var, line) in stack.iter().rev() {
+        for (var, line, col) in stack.iter().rev() {
             if var.is_empty() || var == &nv_upper {
-                return Some(line);
+                return Some((line, *col));
             }
         }
         None
     } else {
-        stack.last().map(|(_, l)| *l)
+        stack.last().map(|(_, l, c)| (*l, *c))
     }
 }
 
@@ -506,6 +499,19 @@ fn skip_spaces_then_var(toks: &[LocatedBasicToken], from: usize) -> Option<&Loca
         match &toks[i].kind {
             LocatedTokenKind::Space => { i += 1; }
             LocatedTokenKind::Variable(_) => return Some(&toks[i]),
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Skip spaces starting at `from` and return the number text if a Number token follows.
+fn skip_spaces_then_number<'a>(toks: &'a [LocatedBasicToken], from: usize) -> Option<&'a str> {
+    let mut i = from;
+    while i < toks.len() {
+        match &toks[i].kind {
+            LocatedTokenKind::Space => { i += 1; }
+            LocatedTokenKind::Number(n) => return Some(n.as_str()),
             _ => return None,
         }
     }

@@ -123,11 +123,12 @@ impl LanguageServer for CpcLspBackend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         tracing::info!("Document opened: {}", params.text_document.uri);
-        
-        let document = Document::new(
+
+        let document = Document::new_with_language(
             params.text_document.uri.clone(),
             params.text_document.text,
             params.text_document.version,
+            Some(params.text_document.language_id.as_str()),
         );
 
         self.analyze_document(&document).await;
