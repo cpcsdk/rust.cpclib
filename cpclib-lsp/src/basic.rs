@@ -1,17 +1,31 @@
 use std::collections::HashMap;
 
 use cpclib_basic::BasicProgram;
+use cpclib_basic::located::{
+    LocatedBasicLine, LocatedBasicProgram, LocatedTokenKind,
+};
+use cpclib_basic::tokens::BasicTokenNoPrefix;
 use tower_lsp::lsp_types::*;
 
 use crate::document::Document;
 
 pub struct BasicAnalyzer;
 
+// ─── Semantic-token type indices (must match asm.rs legend) ───────────────────
+const TT_KEYWORD: u32 = 0;
+const TT_FUNCTION: u32 = 2;
+const TT_VARIABLE: u32 = 4;
+const TT_NUMBER: u32 = 5;
+const TT_STRING: u32 = 6;
+const TT_COMMENT: u32 = 7;
+const TT_OPERATOR: u32 = 8;
+
 impl BasicAnalyzer {
     pub fn new() -> Self { Self }
 
     pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
-        match BasicProgram::parse(document.text()) {
+        let text = document.text();
+        match BasicProgram::parse(&text) {
             Ok(_) => vec![],
             Err(e) => vec![Diagnostic {
                 range: Range {
@@ -27,25 +41,77 @@ impl BasicAnalyzer {
     }
 
     pub fn document_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
-        // Return first-assignment location for every variable found in the program.
-        let mut seen: HashMap<String, u32> = HashMap::new();
-        for (line_idx, line) in document.text().lines().enumerate() {
-            let rest = strip_line_number(line);
-            for var in extract_assigned_vars(rest) {
-                let key = var.to_uppercase();
-                seen.entry(key).or_insert(line_idx as u32);
+        let text = document.text();
+        let prog = match LocatedBasicProgram::parse(&text) {
+            Ok(p) => p,
+            Err(_) => return vec![],
+        };
+
+        // Track first-assignment location for each variable (key: uppercase).
+        // "Assignment context" means:
+        //   - After LET  → variable immediately follows
+        //   - After FOR  → variable immediately follows
+        //   - After INPUT / READ → one or more variables follow
+        //   - Bare assignment: variable is followed (through spaces) by `=`
+        let mut seen: HashMap<String, (String, u32, u32)> = HashMap::new(); // key→(original_name, line, col)
+
+        for bline in &prog.lines {
+            let toks = &bline.tokens;
+            let n = toks.len();
+            let mut i = 0;
+
+            while i < n {
+                let tok = &toks[i];
+                match &tok.kind {
+                    LocatedTokenKind::Keyword(BasicTokenNoPrefix::Let) => {
+                        // Skip spaces, then expect variable.
+                        if let Some(var_tok) = skip_spaces_then_var(toks, i + 1) {
+                            record_var(&mut seen, var_tok);
+                        }
+                        i += 1;
+                    }
+                    LocatedTokenKind::Keyword(BasicTokenNoPrefix::For) => {
+                        if let Some(var_tok) = skip_spaces_then_var(toks, i + 1) {
+                            record_var(&mut seen, var_tok);
+                        }
+                        i += 1;
+                    }
+                    LocatedTokenKind::Keyword(BasicTokenNoPrefix::Input) => {
+                        // Collect all variables that follow (skipping prompt string).
+                        collect_vars_after_input(toks, i + 1, &mut seen);
+                        i += 1;
+                    }
+                    LocatedTokenKind::Keyword(BasicTokenNoPrefix::Read) => {
+                        collect_comma_separated_vars(toks, i + 1, &mut seen);
+                        i += 1;
+                    }
+                    LocatedTokenKind::Variable(name) => {
+                        // Bare assignment: var followed by optional spaces then `=`.
+                        if is_followed_by_eq(toks, i + 1) {
+                            let key = name.to_uppercase();
+                            seen.entry(key).or_insert_with(|| {
+                                (name.clone(), tok.span.line, tok.span.col)
+                            });
+                        }
+                        i += 1;
+                    }
+                    _ => { i += 1; }
+                }
             }
         }
 
-        let mut entries: Vec<(String, u32)> = seen.into_iter().collect();
-        entries.sort_by_key(|(_, ln)| *ln);
+        let mut entries: Vec<(String, String, u32, u32)> = seen
+            .into_values()
+            .map(|(orig, line, col)| (orig.to_uppercase(), orig, line, col))
+            .collect();
+        entries.sort_by(|a, b| a.2.cmp(&b.2).then(a.3.cmp(&b.3)));
 
         entries
             .into_iter()
-            .map(|(name, line_idx)| {
-                let end_char = name.len() as u32;
+            .map(|(_, name, line_idx, col)| {
+                let end_char = col + name.len() as u32;
                 let pos = Range {
-                    start: Position { line: line_idx, character: 0 },
+                    start: Position { line: line_idx, character: col },
                     end:   Position { line: line_idx, character: end_char },
                 };
                 #[allow(deprecated)]
@@ -64,34 +130,68 @@ impl BasicAnalyzer {
     }
 
     pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
-        let source_line = document.line(position.line as usize)?;
-        let col = position.character as usize;
+        let text = document.text();
+        let prog = LocatedBasicProgram::parse(&text).ok()?;
 
-        // Word under cursor must be a decimal integer.
-        let word = digit_word_at(source_line.trim_end_matches(|c| c == '\n' || c == '\r'), col)?;
-        let target_num: u16 = word.parse().ok()?;
+        // Find which token the cursor is on.
+        let cursor_line = position.line;
+        let cursor_col = position.character;
 
-        // Verify the number is a GOTO/GOSUB/RESTORE/RESUME/RUN target on this line.
-        if !is_line_number_target(&source_line, col) {
-            return None;
+        let bline = prog.lines.iter().find(|l| l.source_line == cursor_line)?;
+
+        // Find the token at the cursor.
+        let tok_idx = bline.tokens.iter().position(|t| {
+            t.span.col <= cursor_col && cursor_col < t.span.col + t.span.len
+        })?;
+
+        let tok = &bline.tokens[tok_idx];
+
+        match &tok.kind {
+            // ── NEXT keyword: find matching FOR ─────────────────────────────
+            LocatedTokenKind::Keyword(BasicTokenNoPrefix::Next) => {
+                // Optionally: what variable does NEXT name?
+                let next_var = skip_spaces_then_var_name(&bline.tokens, tok_idx + 1);
+
+                // Walk backwards through ALL lines to find unmatched FOR.
+                let target = find_for_matching_next(&prog, bline.source_line, next_var.as_deref())?;
+                Some(Location {
+                    uri: document.uri.clone(),
+                    range: single_pos(target.source_line, 0),
+                })
+            }
+
+            // ── Variable: goto first assignment ─────────────────────────────
+            LocatedTokenKind::Variable(name) => {
+                let key = name.to_uppercase();
+                // Find first assignment of this variable.
+                let target_line = first_assignment_line(&prog, &key)?;
+                Some(Location {
+                    uri: document.uri.clone(),
+                    range: single_pos(target_line.source_line, target_line.tokens.iter()
+                        .find(|t| if let LocatedTokenKind::Variable(n) = &t.kind {
+                            n.to_uppercase() == key
+                        } else { false })
+                        .map(|t| t.span.col)
+                        .unwrap_or(0)),
+                })
+            }
+
+            // ── Number after GOTO/GOSUB/RESTORE/RESUME/RUN ──────────────────
+            LocatedTokenKind::Number(text) => {
+                // Check that a line-jump keyword precedes this number.
+                if !is_jump_target(&bline.tokens, tok_idx) {
+                    return None;
+                }
+                let target_num: u16 = text.parse().ok()?;
+                let target = prog.find_line(target_num)?;
+                Some(Location {
+                    uri: document.uri.clone(),
+                    range: single_pos(target.source_line, 0),
+                })
+            }
+
+            _ => None,
         }
-
-        // Use cpclib-basic to parse the program and find the target line index.
-        let prog = BasicProgram::parse(document.text()).ok()?;
-        let (target_idx, _) = prog
-            .lines()
-            .iter()
-            .enumerate()
-            .find(|(_, l)| l.line_number() == target_num)?;
-
-        let tgt = target_idx as u32;
-        Some(Location {
-            uri: document.uri.clone(),
-            range: Range {
-                start: Position { line: tgt, character: 0 },
-                end:   Position { line: tgt, character: 0 },
-            },
-        })
     }
 
     pub fn hover(&self, document: &Document, position: Position) -> Option<Hover> {
@@ -130,12 +230,101 @@ impl BasicAnalyzer {
             .collect()
     }
 
-    pub fn find_references(&self, _document: &Document, _position: Position) -> Vec<Location> {
-        vec![]
+    pub fn find_references(&self, document: &Document, position: Position) -> Vec<Location> {
+        let text = document.text();
+        let prog = match LocatedBasicProgram::parse(&text) {
+            Ok(p) => p,
+            Err(_) => return vec![],
+        };
+
+        let cursor_line = position.line;
+        let cursor_col = position.character;
+
+        // Determine what the cursor is on.
+        let bline = match prog.lines.iter().find(|l| l.source_line == cursor_line) {
+            Some(l) => l,
+            None => return vec![],
+        };
+        let tok = bline.tokens.iter().find(|t| {
+            t.span.col <= cursor_col && cursor_col < t.span.col + t.span.len
+        });
+        let var_key = match tok {
+            Some(t) => match &t.kind {
+                LocatedTokenKind::Variable(n) => n.to_uppercase(),
+                _ => return vec![],
+            },
+            None => return vec![],
+        };
+
+        // Collect all occurrences of this variable across the whole program.
+        let mut refs = Vec::new();
+        for bline in &prog.lines {
+            for t in &bline.tokens {
+                if let LocatedTokenKind::Variable(n) = &t.kind {
+                    if n.to_uppercase() == var_key {
+                        refs.push(Location {
+                            uri: document.uri.clone(),
+                            range: Range {
+                                start: Position { line: t.span.line, character: t.span.col },
+                                end: Position { line: t.span.line, character: t.span.col + t.span.len },
+                            },
+                        });
+                    }
+                }
+            }
+        }
+        refs
     }
 
-    pub fn semantic_tokens(&self, _document: &Document) -> Vec<SemanticToken> {
-        vec![]
+    pub fn semantic_tokens(&self, document: &Document) -> Vec<SemanticToken> {
+        let text = document.text();
+        let prog = match LocatedBasicProgram::parse(&text) {
+            Ok(p) => p,
+            Err(_) => return vec![],
+        };
+
+        let mut result: Vec<SemanticToken> = Vec::new();
+        let mut prev_line: u32 = 0;
+        let mut prev_col: u32 = 0;
+
+        for bline in &prog.lines {
+            for tok in &bline.tokens {
+                let tt = match &tok.kind {
+                    LocatedTokenKind::Keyword(_)  => TT_KEYWORD,
+                    LocatedTokenKind::Function(_) => TT_FUNCTION,
+                    LocatedTokenKind::Variable(_) => TT_VARIABLE,
+                    LocatedTokenKind::Number(_)   => TT_NUMBER,
+                    LocatedTokenKind::StringLit(_)=> TT_STRING,
+                    LocatedTokenKind::Comment(_)  => TT_COMMENT,
+                    LocatedTokenKind::Operator(_) => TT_OPERATOR,
+                    // Skip Space, Separator, Other, LineNumber
+                    _ => continue,
+                };
+
+                if tok.span.len == 0 {
+                    continue;
+                }
+
+                let (delta_line, delta_start) = if tok.span.line == prev_line {
+                    (0, tok.span.col - prev_col)
+                } else {
+                    (tok.span.line - prev_line, tok.span.col)
+                };
+
+                result.push(SemanticToken {
+                    delta_line,
+                    delta_start,
+                    length: tok.span.len,
+                    token_type: tt,
+                    token_modifiers_bitset: 0,
+                });
+
+                prev_line = tok.span.line;
+                prev_col = tok.span.col;
+            }
+        }
+
+        result
     }
 
     pub fn code_lens(&self, _document: &Document) -> Vec<CodeLens> {
@@ -143,24 +332,288 @@ impl BasicAnalyzer {
     }
 }
 
-// ── Text helpers ──────────────────────────────────────────────────────────────
+// ─── Goto-definition helpers ──────────────────────────────────────────────────
 
-/// Strip the BASIC line-number prefix (`"100 "` → `"PRINT …"`).
-fn strip_line_number(line: &str) -> &str {
-    let s = line.trim_start_matches(|c: char| c.is_ascii_digit());
-    s.trim_start_matches(' ')
-}
-
-/// Return the sequence of ASCII digits that spans column `col` in `line`.
-fn digit_word_at(line: &str, col: usize) -> Option<&str> {
-    let bytes = line.as_bytes();
-    if col >= bytes.len() || !bytes[col].is_ascii_digit() {
-        return None;
+/// Returns a `Range` pointing at a single character position.
+fn single_pos(line: u32, col: u32) -> Range {
+    Range {
+        start: Position { line, character: col },
+        end:   Position { line, character: col },
     }
-    let start = (0..col).rev().take_while(|&i| bytes[i].is_ascii_digit()).last().unwrap_or(col);
-    let end   = (col..bytes.len()).take_while(|&i| bytes[i].is_ascii_digit()).last().unwrap_or(col) + 1;
-    Some(&line[start..end])
 }
+
+/// Returns true if the token at `tok_idx` is preceded (ignoring spaces) by a
+/// line-jump keyword (GOTO, GOSUB, RESTORE, RESUME, RUN, MERGE, CHAIN, etc.).
+fn is_jump_target(tokens: &[cpclib_basic::located::LocatedBasicToken], tok_idx: usize) -> bool {
+    use cpclib_basic::located::LocatedBasicToken;
+
+    // Walk backwards, skipping spaces, commas (ON n GOTO x,y lists).
+    let mut i = tok_idx;
+    while i > 0 {
+        i -= 1;
+        let kind = &tokens[i].kind;
+        match kind {
+            LocatedTokenKind::Space => continue,
+            LocatedTokenKind::Number(_) => continue,       // other numbers in a list
+            LocatedTokenKind::Other(',') => continue,      // comma in ON…GOTO list
+            LocatedTokenKind::Keyword(k) => {
+                use BasicTokenNoPrefix::*;
+                return matches!(
+                    k,
+                    Goto | Gosub | Restore | Resume | Run | Merge | Chain
+                    | Delete | List | Renum | Auto | OnErrorGoto
+                );
+            }
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Find the FOR line that matches a NEXT on `next_source_line`.
+/// If `next_var` is Some, only match FORs with that variable (case-insensitive).
+fn find_for_matching_next<'a>(
+    prog: &'a LocatedBasicProgram,
+    next_source_line: u32,
+    next_var: Option<&str>,
+) -> Option<&'a LocatedBasicLine> {
+    // Collect all FOR/NEXT pairs up to (but not including) our NEXT line.
+    // We need a simple stack approach: walk all lines before the NEXT,
+    // track a stack of open FORs, skip matched NEXT/FOR pairs.
+
+    // Lines that appear before our NEXT (by source_line).
+    let before: Vec<&LocatedBasicLine> = prog
+        .lines
+        .iter()
+        .filter(|l| l.source_line < next_source_line)
+        .collect();
+
+    // Stack of (var_name_upper, &LocatedBasicLine) for open FOR loops.
+    let mut stack: Vec<(String, &LocatedBasicLine)> = Vec::new();
+
+    for bline in &before {
+        for tok in &bline.tokens {
+            match &tok.kind {
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::For) => {
+                    // Find variable immediately after FOR.
+                    let var_name = skip_spaces_then_var_name(&bline.tokens, {
+                        bline.tokens.iter().position(|t| std::ptr::eq(t, tok)).unwrap_or(0) + 1
+                    })
+                    .unwrap_or_default()
+                    .to_uppercase();
+                    stack.push((var_name, bline));
+                }
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::Next) => {
+                    let tok_pos = bline.tokens.iter().position(|t| std::ptr::eq(t, tok)).unwrap_or(0);
+                    let nv = skip_spaces_then_var_name(&bline.tokens, tok_pos + 1)
+                        .map(|s| s.to_uppercase())
+                        .unwrap_or_default();
+
+                    // Pop matching FOR from stack.
+                    if let Some(pos) = stack.iter().rposition(|(v, _)| {
+                        nv.is_empty() || v.is_empty() || *v == nv
+                    }) {
+                        stack.remove(pos);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // The top of the stack is the innermost unmatched FOR.
+    // If next_var is given, find the topmost matching one.
+    if let Some(nv) = next_var {
+        let nv_upper = nv.to_uppercase();
+        // Search from the top (innermost) downwards.
+        for (var, line) in stack.iter().rev() {
+            if var.is_empty() || var == &nv_upper {
+                return Some(line);
+            }
+        }
+        None
+    } else {
+        stack.last().map(|(_, l)| *l)
+    }
+}
+
+/// Find the BASIC line on which `var_key` (uppercase) is first assigned.
+fn first_assignment_line<'a>(
+    prog: &'a LocatedBasicProgram,
+    var_key: &str,
+) -> Option<&'a LocatedBasicLine> {
+    for bline in &prog.lines {
+        let toks = &bline.tokens;
+        let n = toks.len();
+        let mut i = 0;
+
+        while i < n {
+            match &toks[i].kind {
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::Let)
+                | LocatedTokenKind::Keyword(BasicTokenNoPrefix::For) => {
+                    if let Some(vt) = skip_spaces_then_var(toks, i + 1) {
+                        if let LocatedTokenKind::Variable(name) = &vt.kind {
+                            if name.to_uppercase() == var_key {
+                                return Some(bline);
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::Input)
+                | LocatedTokenKind::Keyword(BasicTokenNoPrefix::Read) => {
+                    // Scan for all variables after the keyword.
+                    let mut j = i + 1;
+                    while j < n {
+                        match &toks[j].kind {
+                            LocatedTokenKind::Space | LocatedTokenKind::Other(',')
+                            | LocatedTokenKind::Other(';')
+                            | LocatedTokenKind::StringLit(_) => {}
+                            LocatedTokenKind::Variable(name) => {
+                                if name.to_uppercase() == var_key {
+                                    return Some(bline);
+                                }
+                            }
+                            LocatedTokenKind::Separator => break,
+                            _ => {}
+                        }
+                        j += 1;
+                    }
+                    i += 1;
+                }
+                LocatedTokenKind::Variable(name) => {
+                    if name.to_uppercase() == var_key && is_followed_by_eq(toks, i + 1) {
+                        return Some(bline);
+                    }
+                    i += 1;
+                }
+                _ => { i += 1; }
+            }
+        }
+    }
+    None
+}
+
+// ─── Token navigation helpers ─────────────────────────────────────────────────
+
+use cpclib_basic::located::LocatedBasicToken;
+
+/// Skip space tokens starting at index `from` and return the first non-space
+/// token if it is a Variable.
+fn skip_spaces_then_var(toks: &[LocatedBasicToken], from: usize) -> Option<&LocatedBasicToken> {
+    let mut i = from;
+    while i < toks.len() {
+        match &toks[i].kind {
+            LocatedTokenKind::Space => { i += 1; }
+            LocatedTokenKind::Variable(_) => return Some(&toks[i]),
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// Skip spaces starting at `from` and return the variable name if a Variable token follows.
+fn skip_spaces_then_var_name(toks: &[LocatedBasicToken], from: usize) -> Option<String> {
+    skip_spaces_then_var(toks, from).and_then(|t| {
+        if let LocatedTokenKind::Variable(n) = &t.kind {
+            Some(n.clone())
+        } else {
+            None
+        }
+    })
+}
+
+/// Returns true if, starting at index `from` (skipping spaces), the first
+/// meaningful token is `=`.
+fn is_followed_by_eq(toks: &[LocatedBasicToken], from: usize) -> bool {
+    let mut i = from;
+    while i < toks.len() {
+        match &toks[i].kind {
+            LocatedTokenKind::Space => { i += 1; }
+            LocatedTokenKind::Other('(') => {
+                // Skip subscript `(…)` then check for `=`.
+                i += 1;
+                let mut depth = 1usize;
+                while i < toks.len() && depth > 0 {
+                    match &toks[i].kind {
+                        LocatedTokenKind::Other('(') => { depth += 1; i += 1; }
+                        LocatedTokenKind::Other(')') => { depth -= 1; i += 1; }
+                        _ => { i += 1; }
+                    }
+                }
+                // After closing paren, look for `=`.
+            }
+            LocatedTokenKind::Operator(BasicTokenNoPrefix::Equal) => return true,
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Record the first occurrence of a variable in `seen`.
+fn record_var(
+    seen: &mut HashMap<String, (String, u32, u32)>,
+    tok: &LocatedBasicToken,
+) {
+    if let LocatedTokenKind::Variable(name) = &tok.kind {
+        let key = name.to_uppercase();
+        seen.entry(key).or_insert_with(|| (name.clone(), tok.span.line, tok.span.col));
+    }
+}
+
+/// Collect variables from a comma-separated list starting at `from`.
+fn collect_comma_separated_vars(
+    toks: &[LocatedBasicToken],
+    from: usize,
+    seen: &mut HashMap<String, (String, u32, u32)>,
+) {
+    let mut i = from;
+    while i < toks.len() {
+        match &toks[i].kind {
+            LocatedTokenKind::Space | LocatedTokenKind::Other(',') => { i += 1; }
+            LocatedTokenKind::Variable(_) => {
+                record_var(seen, &toks[i]);
+                i += 1;
+            }
+            LocatedTokenKind::Separator => break, // `:` ends the statement
+            _ => { i += 1; }
+        }
+    }
+}
+
+/// Collect variables after INPUT (skip optional stream # and prompt string).
+fn collect_vars_after_input(
+    toks: &[LocatedBasicToken],
+    from: usize,
+    seen: &mut HashMap<String, (String, u32, u32)>,
+) {
+    let mut i = from;
+    // Skip optional stream: `#n,`
+    if i < toks.len() && matches!(&toks[i].kind, LocatedTokenKind::Other('#')) {
+        // skip # digit ,
+        while i < toks.len() && !matches!(&toks[i].kind, LocatedTokenKind::Other(',')) {
+            i += 1;
+        }
+        if i < toks.len() { i += 1; } // skip comma
+    }
+    // Skip optional prompt string followed by `;` or `,`.
+    if i < toks.len() {
+        if let LocatedTokenKind::StringLit(_) = &toks[i].kind {
+            i += 1;
+            // Skip the `;` or `,` separator.
+            while i < toks.len()
+                && matches!(&toks[i].kind, LocatedTokenKind::Space
+                    | LocatedTokenKind::Other(';')
+                    | LocatedTokenKind::Other(','))
+            {
+                i += 1;
+            }
+        }
+    }
+    collect_comma_separated_vars(toks, i, seen);
+}
+
+// ─── Text helpers (hover still works on raw text) ─────────────────────────────
 
 /// Return the alphabetic/alphanumeric word (including `$` and `%` suffixes) at column `col`.
 fn alpha_word_at(line: &str, col: usize) -> Option<String> {
@@ -172,7 +625,11 @@ fn alpha_word_at(line: &str, col: usize) -> Option<String> {
     if !is_word_char(bytes[col]) {
         return None;
     }
-    let start = (0..col).rev().take_while(|&i| bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_').last().unwrap_or(col);
+    let start = (0..col)
+        .rev()
+        .take_while(|&i| bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
+        .last()
+        .unwrap_or(col);
     let mut end = col;
     while end < bytes.len() && is_word_char(bytes[end]) {
         end += 1;
@@ -180,203 +637,7 @@ fn alpha_word_at(line: &str, col: usize) -> Option<String> {
     Some(line[start..end].to_string())
 }
 
-/// True when column `col` (which holds a digit) is a line-number argument of
-/// GOTO / GOSUB / ON…GOTO / ON…GOSUB / RESTORE / RESUME / RUN.
-fn is_line_number_target(line: &str, col: usize) -> bool {
-    // Walk backwards from col, skip digits and spaces, then check for keyword.
-    let bytes = line.as_bytes();
-    let mut i = col;
-    // skip current number and any leading spaces
-    while i > 0 && (bytes[i - 1].is_ascii_digit() || bytes[i - 1] == b' ') {
-        i -= 1;
-    }
-    // skip commas in ON…GOTO lists
-    if i > 0 && bytes[i - 1] == b',' {
-        // could be ON n GOTO x,y – just check for GOTO/GOSUB somewhere earlier
-    }
-    let prefix = line[..i].trim_end().to_uppercase();
-    prefix.ends_with("GOTO")
-        || prefix.ends_with("GOSUB")
-        || prefix.ends_with("RESTORE")
-        || prefix.ends_with("RESUME")
-        || prefix.ends_with("RUN")
-        || prefix.ends_with("MERGE")
-        || prefix.ends_with("CHAIN")
-        || prefix.ends_with("DELETE")
-        || prefix.ends_with("LIST")
-        || prefix.ends_with("RENUM")
-        || prefix.ends_with("AUTO")
-}
-
-// ── Variable assignment extraction ───────────────────────────────────────────
-
-/// Walk through the statement-level text of a BASIC line (after stripping the
-/// line number) and return variable names that are being assigned.
-fn extract_assigned_vars(line: &str) -> Vec<String> {
-    let mut results = Vec::new();
-    for stmt in split_statements(line) {
-        let s = stmt.trim();
-        if let Some(rest) = prefix_ci(s, "FOR") {
-            if let Some(var) = var_before_eq(rest.trim_start()) {
-                results.push(var);
-            }
-        } else if let Some(rest) = prefix_ci(s, "INPUT") {
-            results.extend(vars_after_prompt(rest.trim_start()));
-        } else if let Some(rest) = prefix_ci(s, "LINE INPUT") {
-            results.extend(vars_after_prompt(rest.trim_start()));
-        } else if let Some(rest) = prefix_ci(s, "READ") {
-            results.extend(comma_separated_vars(rest.trim_start()));
-        } else {
-            // LET (optional) var = …
-            let s2 = prefix_ci(s, "LET").map(|r| r.trim_start()).unwrap_or(s);
-            if let Some(var) = var_before_eq(s2) {
-                results.push(var);
-            }
-        }
-    }
-    results
-}
-
-/// Split a BASIC statement-block at `:` separators, respecting string literals.
-fn split_statements(s: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut start = 0;
-    let mut in_str = false;
-    for (i, ch) in s.char_indices() {
-        match ch {
-            '"' => in_str = !in_str,
-            ':' if !in_str => {
-                parts.push(&s[start..i]);
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    parts.push(&s[start..]);
-    parts
-}
-
-/// If `s` starts with `prefix` (case-insensitive, whole-word), return the remainder.
-fn prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
-    if s.len() < prefix.len() {
-        return None;
-    }
-    let candidate = &s[..prefix.len()];
-    if !candidate.eq_ignore_ascii_case(prefix) {
-        return None;
-    }
-    // Must be followed by a space, `(`, `=`, or end-of-string.
-    let rest = &s[prefix.len()..];
-    if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t') {
-        Some(rest)
-    } else {
-        None
-    }
-}
-
-/// Extract a variable name immediately before a `=` sign (assignment).
-fn var_before_eq(s: &str) -> Option<String> {
-    // var name: letter followed by letters/digits, then optional `$` or `%`,
-    // then optional array index `(…)`, then optional spaces then `=`.
-    let s = s.trim_start();
-    let var = read_var_name(s)?;
-    let after = s[var.len()..].trim_start();
-    // Skip optional array subscript.
-    let after = if after.starts_with('(') {
-        skip_parens(after)
-    } else {
-        after
-    };
-    if after.trim_start().starts_with('=') { Some(var) } else { None }
-}
-
-/// Extract variable name(s) from an INPUT argument list (skip optional prompt).
-fn vars_after_prompt(s: &str) -> Vec<String> {
-    // Optional stream: `#n,`
-    let s = skip_stream_prefix(s);
-    // Optional prompt ending with `;` or `,`
-    let s = if s.starts_with('"') {
-        let end = s[1..].find('"').map(|i| i + 2).unwrap_or(s.len());
-        let rest = &s[end..].trim_start();
-        if rest.starts_with(';') || rest.starts_with(',') { &rest[1..] } else { rest }
-    } else {
-        s
-    };
-    comma_separated_vars(s.trim_start())
-}
-
-/// Extract comma-separated variable names.
-fn comma_separated_vars(s: &str) -> Vec<String> {
-    let mut vars = Vec::new();
-    let mut rest = s.trim_start();
-    loop {
-        if let Some(var) = read_var_name(rest) {
-            let after = rest[var.len()..].trim_start();
-            let after = if after.starts_with('(') { skip_parens(after) } else { after };
-            vars.push(var);
-            rest = after.trim_start();
-            if rest.starts_with(',') {
-                rest = rest[1..].trim_start();
-            } else {
-                break;
-            }
-        } else {
-            break;
-        }
-    }
-    vars
-}
-
-/// Read a variable name from the start of `s`.  Returns `None` if `s` doesn't
-/// start with a valid variable name.
-fn read_var_name(s: &str) -> Option<String> {
-    let mut chars = s.chars();
-    let first = chars.next()?;
-    if !first.is_ascii_alphabetic() {
-        return None;
-    }
-    let mut name = String::from(first);
-    for ch in chars {
-        if ch.is_ascii_alphanumeric() {
-            name.push(ch);
-        } else if ch == '$' || ch == '%' {
-            name.push(ch);
-            break;
-        } else {
-            break;
-        }
-    }
-    Some(name)
-}
-
-fn skip_parens(s: &str) -> &str {
-    let mut depth = 0usize;
-    let mut in_str = false;
-    for (i, ch) in s.char_indices() {
-        match ch {
-            '"' => in_str = !in_str,
-            '(' if !in_str => depth += 1,
-            ')' if !in_str => {
-                depth -= 1;
-                if depth == 0 {
-                    return &s[i + 1..];
-                }
-            }
-            _ => {}
-        }
-    }
-    s
-}
-
-fn skip_stream_prefix(s: &str) -> &str {
-    if !s.starts_with('#') {
-        return s;
-    }
-    let rest = s[1..].trim_start_matches(|c: char| c.is_ascii_digit());
-    if rest.starts_with(',') { &rest[1..] } else { s }
-}
-
-// ── Keyword documentation ─────────────────────────────────────────────────────
+// ─── Keyword documentation ────────────────────────────────────────────────────
 
 pub static KEYWORD_DOCS: &[(&str, &str)] = &[
     // ── Control flow ──────────────────────────────────────────────────────────

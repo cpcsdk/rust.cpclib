@@ -1,4 +1,6 @@
 pub mod binary_parser;
+/// Located (position-aware) token types used by the LSP.
+pub mod located;
 /// Paring related functions for basic.
 pub mod string_parser;
 /// Basic token encoding.
