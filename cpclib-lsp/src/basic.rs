@@ -209,20 +209,48 @@ impl BasicAnalyzer {
         let col = position.character as usize;
         let line = source_line.trim_end_matches(|c| c == '\n' || c == '\r');
 
-        // Try longest match first so e.g. "INKEY$" beats "INKEY".
-        let word_upper = alpha_word_at(line, col)?.to_uppercase();
-        let doc = KEYWORD_DOCS
-            .iter()
-            .find(|(kw, _)| kw.to_uppercase() == word_upper)
-            .map(|(_, d)| *d)?;
+        // Try keyword hover first (alphabetic words).
+        if let Some(word_upper) = alpha_word_at(line, col).map(|w| w.to_uppercase()) {
+            if let Some(&(_, doc)) = KEYWORD_DOCS.iter().find(|(kw, _)| kw.to_uppercase() == word_upper) {
+                return Some(Hover {
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: doc.to_string(),
+                    }),
+                    range: None,
+                });
+            }
+        }
 
-        Some(Hover {
-            contents: HoverContents::Markup(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: doc.to_string(),
-            }),
-            range: None,
-        })
+        // Number hover: find a Number token at the cursor and show base conversions.
+        let text = document.text();
+        let prog = LocatedBasicProgram::parse(&text).ok()?;
+        let bline = prog.lines.iter().find(|l| l.source_line == position.line)?;
+        let tok = bline.tokens.iter().find(|t| {
+            t.span.col <= position.character && position.character < t.span.col + t.span.len
+        })?;
+        if let LocatedTokenKind::Number(num_text) = &tok.kind {
+            if let Some(value) = parse_basic_integer(num_text) {
+                let bin = format_basic_binary(value);
+                let md = format!(
+                    "**`{num_text}`**\n\n\
+                    | Base | Value |\n\
+                    |------|-------|\n\
+                    | Decimal | `{value}` |\n\
+                    | Hex | `&{value:X}` |\n\
+                    | Binary | `&X{bin}` |"
+                );
+                return Some(Hover {
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: md,
+                    }),
+                    range: None,
+                });
+            }
+        }
+
+        None
     }
 
     pub fn completion(&self, _document: &Document, _position: Position) -> Vec<CompletionItem> {
@@ -306,8 +334,9 @@ impl BasicAnalyzer {
                     LocatedTokenKind::Number(_)   => TT_NUMBER,
                     LocatedTokenKind::StringLit(_)=> TT_STRING,
                     LocatedTokenKind::Comment(_)  => TT_COMMENT,
-                    LocatedTokenKind::Operator(_) => TT_OPERATOR,
-                    // Skip Space, Separator, Other, LineNumber
+                    LocatedTokenKind::Operator(_)   => TT_OPERATOR,
+                    LocatedTokenKind::LineNumber(_) => TT_NUMBER,
+                    // Skip Space, Separator, Other
                     _ => continue,
                 };
 
@@ -619,6 +648,36 @@ fn collect_vars_after_input(
     collect_comma_separated_vars(toks, i, seen);
 }
 
+// ─── Number helpers ───────────────────────────────────────────────────────────
+
+/// Parse a BASIC integer literal to i64.
+/// Handles `&XX` (hex), `&HXX` (explicit hex), `&X...` (binary), and decimal.
+/// Returns None for floats or unrecognised forms.
+fn parse_basic_integer(text: &str) -> Option<i64> {
+    if let Some(rest) = text.strip_prefix('&') {
+        if let Some(bin_str) = rest.strip_prefix(['X', 'x']) {
+            i64::from_str_radix(bin_str, 2).ok()
+        } else if let Some(hex_str) = rest.strip_prefix(['H', 'h']) {
+            i64::from_str_radix(hex_str, 16).ok()
+        } else {
+            i64::from_str_radix(rest, 16).ok()
+        }
+    } else {
+        text.parse::<i64>().ok()
+    }
+}
+
+/// Format an i64 as `0` and `1` groups of 4, sized to 8 or 16 bits.
+fn format_basic_binary(value: i64) -> String {
+    let bits: u32 = if value >= 0 && value <= 0xFF { 8 } else { 16 };
+    let mut s = String::with_capacity(bits as usize + bits as usize / 4);
+    for i in (0..bits).rev() {
+        if i < bits - 1 && i % 4 == 3 { s.push('_'); }
+        s.push(if value & (1 << i) != 0 { '1' } else { '0' });
+    }
+    s
+}
+
 // ─── Text helpers (hover still works on raw text) ─────────────────────────────
 
 /// Return the alphabetic/alphanumeric word (including `$` and `%` suffixes) at column `col`.
@@ -827,3 +886,129 @@ pub static KEYWORD_DOCS: &[(&str, &str)] = &[
     ("NOT",     "**NOT** *expr* — Bitwise/logical NOT (one's complement)."),
     ("MOD",     "*a* **MOD** *b* — Integer modulo: remainder of integer division of *a* by *b*."),
 ];
+
+// ─── Locomotive-embedded hover ────────────────────────────────────────────────
+
+/// Hover logic for BASIC content embedded inside another document (LOCOMOTIVE block).
+///
+/// - `line_text`  — the raw document line at the cursor (for keyword lookup)
+/// - `basic_text` — the extracted BASIC source text (lines joined with `\n`, 0-indexed)
+/// - `basic_line` — 0-based line within `basic_text` (= position.line - block_start_line)
+/// - `col`        — character column of the cursor
+pub(crate) fn locomotive_basic_hover(
+    line_text: &str,
+    basic_text: &str,
+    basic_line: u32,
+    col: u32,
+) -> Option<Hover> {
+    let col_usize = col as usize;
+
+    // 1. Keyword hover (text-based, no parse needed)
+    if let Some(word_upper) = alpha_word_at(line_text, col_usize).map(|w| w.to_uppercase()) {
+        if let Some(&(_, doc)) = KEYWORD_DOCS.iter().find(|(kw, _)| kw.to_uppercase() == word_upper) {
+            return Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: doc.to_string(),
+                }),
+                range: None,
+            });
+        }
+    }
+
+    // 2. Number hover (parse the BASIC block, find token under cursor)
+    if let Ok(prog) = LocatedBasicProgram::parse(basic_text) {
+        if let Some(bline) = prog.lines.iter().find(|l| l.source_line == basic_line) {
+            if let Some(tok) = bline.tokens.iter().find(|t| {
+                t.span.col <= col && col < t.span.col + t.span.len
+            }) {
+                if let LocatedTokenKind::Number(num_text) = &tok.kind {
+                    if let Some(value) = parse_basic_integer(num_text) {
+                        let bin = format_basic_binary(value);
+                        let md = format!(
+                            "**`{num_text}`**\n\n\
+                            | Base | Value |\n\
+                            |------|-------|\n\
+                            | Decimal | `{value}` |\n\
+                            | Hex | `&{value:X}` |\n\
+                            | Binary | `&X{bin}` |"
+                        );
+                        return Some(Hover {
+                            contents: HoverContents::Markup(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: md,
+                            }),
+                            range: None,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Goto-definition for BASIC content embedded inside a LOCOMOTIVE block.
+///
+/// - `basic_text`       — BASIC source lines joined with `\n` (0-indexed within the block)
+/// - `position`         — cursor position in **document** coordinates
+/// - `block_start_line` — document line index of the first BASIC content line
+/// - `document_uri`     — URI to use in the returned `Location`
+pub(crate) fn locomotive_basic_goto_definition(
+    basic_text: &str,
+    position: Position,
+    block_start_line: u32,
+    document_uri: &Url,
+) -> Option<Location> {
+    let prog = LocatedBasicProgram::parse(basic_text).ok()?;
+
+    let cursor_line = position.line.checked_sub(block_start_line)?;
+    let cursor_col  = position.character;
+
+    let bline = prog.lines.iter().find(|l| l.source_line == cursor_line)?;
+
+    let tok_idx = bline.tokens.iter().position(|t| {
+        t.span.col <= cursor_col && cursor_col < t.span.col + t.span.len
+    })?;
+    let tok = &bline.tokens[tok_idx];
+
+    let to_loc = |src_line: u32, col: u32| Location {
+        uri: document_uri.clone(),
+        range: single_pos(block_start_line + src_line, col),
+    };
+
+    match &tok.kind {
+        LocatedTokenKind::Keyword(BasicTokenNoPrefix::Next) => {
+            let next_var = skip_spaces_then_var_name(&bline.tokens, tok_idx + 1);
+            let (target, for_col) =
+                find_for_matching_next(&prog, cursor_line, next_var.as_deref())?;
+            Some(to_loc(target.source_line, for_col))
+        }
+        LocatedTokenKind::Keyword(BasicTokenNoPrefix::Goto)
+        | LocatedTokenKind::Keyword(BasicTokenNoPrefix::Gosub) => {
+            let num_text = skip_spaces_then_number(&bline.tokens, tok_idx + 1)?;
+            let target_num: u16 = num_text.parse().ok()?;
+            let target = prog.find_line(target_num)?;
+            Some(to_loc(target.source_line, 0))
+        }
+        LocatedTokenKind::Number(text) => {
+            if !is_jump_target(&bline.tokens, tok_idx) {
+                return None;
+            }
+            let target_num: u16 = text.parse().ok()?;
+            let target = prog.find_line(target_num)?;
+            Some(to_loc(target.source_line, 0))
+        }
+        LocatedTokenKind::Variable(name) => {
+            let key = name.to_uppercase();
+            let target_line = first_assignment_line(&prog, &key)?;
+            let col = target_line.tokens.iter()
+                .find(|t| matches!(&t.kind, LocatedTokenKind::Variable(n) if n.to_uppercase() == key))
+                .map(|t| t.span.col)
+                .unwrap_or(0);
+            Some(to_loc(target_line.source_line, col))
+        }
+        _ => None,
+    }
+}

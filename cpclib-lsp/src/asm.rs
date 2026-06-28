@@ -4,6 +4,7 @@ use tower_lsp::lsp_types::*;
 use cpclib_asm::parser::context::ParserContextBuilder;
 use cpclib_asm::parser::obtained::{LocatedListing, MayHaveSpan};
 use cpclib_tokens::ListingElement;
+use cpclib_basic::located::{LocatedBasicProgram, LocatedTokenKind};
 use crate::document::Document;
 
 // Semantic token type indices — must match `semantic_tokens_legend()` order
@@ -133,6 +134,27 @@ impl AssemblyAnalyzer {
         let line = document.line(line_idx)?;
         let col = position.character as usize;
 
+        // Delegate to BASIC hover when the cursor is inside a LOCOMOTIVE block.
+        {
+            let text = document.text();
+            let loco_blocks = extract_locomotive_blocks(&text);
+            if let Some(block) = loco_blocks.iter().find(|b| b.basic_range.contains(&line_idx)) {
+                let all_lines: Vec<&str> = text.lines().collect();
+                let basic_text: String = block.basic_range.clone()
+                    .map(|i| all_lines[i])
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let basic_line = position.line - block.basic_range.start as u32;
+                let line_trimmed = line.trim_end_matches(|c: char| c == '\n' || c == '\r');
+                return crate::basic::locomotive_basic_hover(
+                    line_trimmed,
+                    &basic_text,
+                    basic_line,
+                    position.character,
+                );
+            }
+        }
+
         // Numeric literal — show all bases
         if let Some((num_str, value)) = extract_number_at_position(&line, col) {
             let bin = format_binary(value);
@@ -260,7 +282,40 @@ impl AssemblyAnalyzer {
     /// Find the definition of a symbol — looks up the word under the cursor in the parsed listing.
     pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
         let line = document.line(position.line as usize)?;
-        let word = self.extract_word_at_position(&line, position.character as usize)?;
+        let col = position.character as usize;
+
+        // CTRL+CLICK on a filename string inside INCLUDE / INCBIN / BINCLUDE.
+        if let Some(target_uri) = resolve_include_at(&line, col, &document.uri) {
+            return Some(Location {
+                uri: target_uri,
+                range: Range {
+                    start: Position { line: 0, character: 0 },
+                    end:   Position { line: 0, character: 0 },
+                },
+            });
+        }
+
+        // Delegate to BASIC goto-definition for LOCOMOTIVE block content.
+        {
+            let text = document.text();
+            let loco_blocks = extract_locomotive_blocks(&text);
+            let line_idx = position.line as usize;
+            if let Some(block) = loco_blocks.iter().find(|b| b.basic_range.contains(&line_idx)) {
+                let all_lines: Vec<&str> = text.lines().collect();
+                let basic_text: String = block.basic_range.clone()
+                    .map(|i| all_lines[i])
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                return crate::basic::locomotive_basic_goto_definition(
+                    &basic_text,
+                    position,
+                    block.basic_range.start as u32,
+                    &document.uri,
+                );
+            }
+        }
+
+        let word = self.extract_word_at_position(&line, col)?;
         let word_upper = word.to_uppercase();
 
         if let Ok(listing) = self.parse_document(document) {
@@ -406,8 +461,21 @@ impl AssemblyAnalyzer {
         // Raw tokens collected in document order: (line, col, len, type, modifiers)
         let mut raw: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
         let text = document.text();
+        let all_lines: Vec<&str> = text.lines().collect();
+
+        // Detect LOCOMOTIVE blocks — their lines receive BASIC tokens, not ASM tokens.
+        let loco_blocks = extract_locomotive_blocks(&text);
+        let mut loco_lines: HashSet<usize> = HashSet::new();
+        for block in &loco_blocks {
+            loco_lines.insert(block.directive_line);
+            if let Some(hl) = block.hide_lines_line { loco_lines.insert(hl); }
+            for i in block.basic_range.clone() { loco_lines.insert(i); }
+            loco_lines.insert(block.end_line);
+        }
 
         'line: for (line_idx, line) in text.lines().enumerate() {
+            // LOCOMOTIVE block lines are tokenised as BASIC below.
+            if loco_lines.contains(&line_idx) { continue; }
             let line_u = line_idx as u32;
             let bytes = line.as_bytes();
             let mut col: usize = 0;
@@ -583,6 +651,14 @@ impl AssemblyAnalyzer {
                 col += 1;
             }
         }
+
+        // Emit BASIC semantic tokens for LOCOMOTIVE blocks.
+        for block in &loco_blocks {
+            push_locomotive_basic_tokens(block, &all_lines, &mut raw);
+        }
+
+        // Sort by (line, col) — LOCOMOTIVE tokens were appended out of document order.
+        raw.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
 
         // Convert raw (line, col, len, type, mods) to LSP delta-encoded SemanticToken
         let mut result = Vec::with_capacity(raw.len());
@@ -781,4 +857,198 @@ fn register_description(upper: &str) -> Option<String> {
         _     => return None,
     };
     Some(desc.to_string())
+}
+
+// ─── Include file navigation ──────────────────────────────────────────────────
+
+const INCLUDE_DIRECTIVES: &[&str] = &["INCLUDE", "INCBIN", "BINCLUDE"];
+
+/// If `col` is inside a double-quoted string on a line that starts with an
+/// include-like directive, return the resolved file URI.
+fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
+    let bytes = line.as_bytes();
+    if col >= bytes.len() {
+        return None;
+    }
+
+    // Find the `"..."` string that contains (or starts at) `col`.
+    let (str_start, str_end) = find_quoted_string(bytes, col)?;
+    let filename = &line[str_start + 1..str_end]; // strip surrounding quotes
+
+    // The part before the string must end with a recognised include keyword.
+    let before = line[..str_start].trim().to_uppercase();
+    let is_include = INCLUDE_DIRECTIVES.iter().any(|d| {
+        before == *d || before.ends_with(&format!(" {d}")) || before.ends_with(&format!("\t{d}"))
+    });
+    if !is_include {
+        return None;
+    }
+
+    let doc_path = doc_uri.to_file_path().ok()?;
+    let doc_dir = doc_path.parent()?;
+    let target = doc_dir.join(filename);
+    if target.exists() {
+        Url::from_file_path(target).ok()
+    } else {
+        None
+    }
+}
+
+/// Find the byte range of the quoted string `"..."` that covers position `col`.
+/// Returns `(open_quote_pos, close_quote_pos)` where both positions are byte indices.
+fn find_quoted_string(bytes: &[u8], col: usize) -> Option<(usize, usize)> {
+    // Scan leftward to find the opening quote.
+    let open = (0..=col).rev().find(|&i| bytes[i] == b'"')?;
+    // Scan rightward to find the closing quote.
+    let close = (col + 1..bytes.len()).find(|&i| bytes[i] == b'"')?;
+    // `col` must be inside or on the opening/closing quote.
+    if col >= open && col <= close {
+        Some((open, close))
+    } else {
+        None
+    }
+}
+
+// ─── LOCOMOTIVE block detection ───────────────────────────────────────────────
+
+struct LocomotiveBlock {
+    directive_line: usize,
+    hide_lines_line: Option<usize>,
+    basic_range: std::ops::Range<usize>,
+    end_line: usize,
+}
+
+fn extract_locomotive_blocks(text: &str) -> Vec<LocomotiveBlock> {
+    let mut blocks = Vec::new();
+    let lines: Vec<&str> = text.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let upper = lines[i].trim().to_uppercase();
+        if upper == "LOCOMOTIVE"
+            || (upper.starts_with("LOCOMOTIVE")
+                && upper.as_bytes().get(10).map(|b| b.is_ascii_whitespace()).unwrap_or(false))
+        {
+            let directive_line = i;
+            i += 1;
+
+            // Optional HIDE_LINES directive on the very next line.
+            let hide_lines_line = if i < lines.len() {
+                let u = lines[i].trim().to_uppercase();
+                if u.starts_with("HIDE_LINES") {
+                    let hl = i;
+                    i += 1;
+                    Some(hl)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let basic_start = i;
+
+            // Scan until ENDLOCOMOTIVE.
+            while i < lines.len() {
+                let u = lines[i].trim().to_uppercase();
+                if u == "ENDLOCOMOTIVE" || u.starts_with("ENDLOCOMOTIVE") {
+                    blocks.push(LocomotiveBlock {
+                        directive_line,
+                        hide_lines_line,
+                        basic_range: basic_start..i,
+                        end_line: i,
+                    });
+                    break;
+                }
+                i += 1;
+            }
+        }
+        i += 1;
+    }
+
+    blocks
+}
+
+/// Emit semantic tokens for a LOCOMOTIVE block's BASIC content.
+/// Appends raw `(line, col, len, token_type, modifiers)` tuples into `raw`.
+fn push_locomotive_basic_tokens(
+    block: &LocomotiveBlock,
+    lines: &[&str],
+    raw: &mut Vec<(u32, u32, u32, u32, u32)>,
+) {
+    // Highlight the LOCOMOTIVE directive line itself (keyword + label).
+    {
+        let src_line = block.directive_line as u32;
+        let line = lines[block.directive_line];
+        let bytes = line.as_bytes();
+        // Find "LOCOMOTIVE" in the line (case-insensitive).
+        if let Some(pos) = line.to_uppercase().find("LOCOMOTIVE") {
+            raw.push((src_line, pos as u32, 10, TT_MACRO, 0));
+            // Everything after the keyword (trimmed) is the label.
+            let after = line[pos + 10..].trim_start();
+            if !after.is_empty() {
+                let label_col = bytes.len() - after.len();
+                let label_len = after.split_whitespace().next().unwrap_or("").len();
+                if label_len > 0 {
+                    raw.push((src_line, label_col as u32, label_len as u32, TT_FUNCTION, 0));
+                }
+            }
+        }
+    }
+
+    // Highlight optional HIDE_LINES line.
+    if let Some(hl_line_idx) = block.hide_lines_line {
+        let src_line = hl_line_idx as u32;
+        let line = lines[hl_line_idx];
+        if let Some(pos) = line.to_uppercase().find("HIDE_LINES") {
+            raw.push((src_line, pos as u32, 10, TT_MACRO, 0));
+            let after = line[pos + 10..].trim_start();
+            if !after.is_empty() {
+                let num_col = line.len() - after.len();
+                let num_len = after.split_whitespace().next().unwrap_or("").len();
+                if num_len > 0 {
+                    raw.push((src_line, num_col as u32, num_len as u32, TT_NUMBER, 0));
+                }
+            }
+        }
+    }
+
+    // Parse the BASIC content lines and emit BASIC tokens.
+    let basic_source: String = block
+        .basic_range
+        .clone()
+        .map(|i| lines[i])
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if let Ok(prog) = LocatedBasicProgram::parse(&basic_source) {
+        for bline in &prog.lines {
+            let src_line = block.basic_range.start as u32 + bline.source_line;
+            for tok in &bline.tokens {
+                let tt = match &tok.kind {
+                    LocatedTokenKind::Keyword(_)   => TT_KEYWORD,
+                    LocatedTokenKind::Function(_)  => TT_FUNCTION,
+                    LocatedTokenKind::Variable(_)  => TT_VARIABLE,
+                    LocatedTokenKind::Number(_)    => TT_NUMBER,
+                    LocatedTokenKind::StringLit(_) => TT_STRING,
+                    LocatedTokenKind::Comment(_)   => TT_COMMENT,
+                    LocatedTokenKind::Operator(_)  => TT_OPERATOR,
+                    LocatedTokenKind::LineNumber(_) => TT_NUMBER,
+                    _ => continue,
+                };
+                if tok.span.len > 0 {
+                    raw.push((src_line, tok.span.col, tok.span.len, tt, 0));
+                }
+            }
+        }
+    }
+
+    // Highlight the ENDLOCOMOTIVE line.
+    {
+        let src_line = block.end_line as u32;
+        let line = lines[block.end_line];
+        if let Some(pos) = line.to_uppercase().find("ENDLOCOMOTIVE") {
+            raw.push((src_line, pos as u32, 13, TT_MACRO, 0));
+        }
+    }
 }
