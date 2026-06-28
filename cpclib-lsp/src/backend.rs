@@ -82,6 +82,10 @@ impl LanguageServer for CpcLspBackend {
                 code_lens_provider: Some(CodeLensOptions {
                     resolve_provider: Some(false),
                 }),
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: vec!["cpclib.getTargets".to_string()],
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                }),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -313,6 +317,44 @@ impl LanguageServer for CpcLspBackend {
             }
         }
         Ok(None)
+    }
+
+    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<serde_json::Value>> {
+        if params.command != "cpclib.getTargets" {
+            return Ok(None);
+        }
+
+        let uri_str = params.arguments
+            .into_iter()
+            .next()
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+        let Some(uri_str) = uri_str else { return Ok(Some(serde_json::json!([]))); };
+        let Ok(uri) = uri_str.parse::<Url>() else { return Ok(Some(serde_json::json!([]))); };
+
+        // Use cached document if available; otherwise read from disk.
+        let targets: Vec<String> = if let Some(entry) = self.documents.get(&uri) {
+            self.build_analyzer
+                .document_symbols(entry.value())
+                .into_iter()
+                .map(|s| s.name)
+                .collect()
+        } else if let Ok(path) = uri.to_file_path() {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                let doc = Document::new(uri, text, 0);
+                self.build_analyzer
+                    .document_symbols(&doc)
+                    .into_iter()
+                    .map(|s| s.name)
+                    .collect()
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
+        Ok(Some(serde_json::json!(targets)))
     }
 
     async fn semantic_tokens_full(

@@ -41,6 +41,22 @@
         "category": "CPClib"
       }
     ],
+    "taskDefinitions": [
+      {
+        "type": "bndbuild",
+        "required": ["target"],
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "The bndbuild target to build"
+          },
+          "file": {
+            "type": "string",
+            "description": "Absolute path to the .bnd/.build file (optional, inferred from workspace if omitted)"
+          }
+        }
+      }
+    ],
     "configuration": {
       "title": "CPClib LSP",
       "properties": {
