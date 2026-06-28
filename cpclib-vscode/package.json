@@ -32,6 +32,15 @@
         "language": "basm",
         "scopeName": "source.z80",
         "path": "./syntaxes/z80-asm.tmLanguage.json"
+      },
+      {
+        "language": "bndbuild",
+        "scopeName": "source.bndbuild",
+        "path": "./syntaxes/bndbuild.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.jinja":  "jinja",
+          "meta.embedded.inline.jinja": "jinja"
+        }
       }
     ],
     "commands": [

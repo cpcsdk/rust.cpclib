@@ -223,15 +223,29 @@ impl BuildFileAnalyzer {
             }
 
             while col < len {
-                // Inline comment
-                if bytes[col] == b'#' {
+                // Inline YAML comment — but only if not inside a Jinja construct.
+                // A bare `#` that follows `{` or `%` is handled by the Jinja branches below.
+                if bytes[col] == b'#'
+                    && (col == 0 || !matches!(bytes[col - 1], b'{' | b'%'))
+                {
                     raw.push((line_u, col as u32, (len - col) as u32, TT_COMMENT, 0));
                     break;
                 }
 
-                // Jinja {{ expression }}
+                // Jinja {# comment #} — skip entirely; TM grammar handles it.
+                if col + 1 < len && bytes[col] == b'{' && bytes[col + 1] == b'#' {
+                    col += 2;
+                    while col + 1 < len
+                        && !(bytes[col] == b'#' && bytes[col + 1] == b'}')
+                    {
+                        col += 1;
+                    }
+                    col = if col + 1 < len { col + 2 } else { len };
+                    continue;
+                }
+
+                // Jinja {{ expression }} — skip; TM grammar colors the internals.
                 if col + 1 < len && bytes[col] == b'{' && bytes[col + 1] == b'{' {
-                    let start = col;
                     col += 2;
                     while col + 1 < len
                         && !(bytes[col] == b'}' && bytes[col + 1] == b'}')
@@ -239,13 +253,11 @@ impl BuildFileAnalyzer {
                         col += 1;
                     }
                     col = if col + 1 < len { col + 2 } else { len };
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_VARIABLE, 0));
                     continue;
                 }
 
-                // Jinja {% statement %}
+                // Jinja {% statement %} — skip; TM grammar colors keywords inside.
                 if col + 1 < len && bytes[col] == b'{' && bytes[col + 1] == b'%' {
-                    let start = col;
                     col += 2;
                     while col + 1 < len
                         && !(bytes[col] == b'%' && bytes[col + 1] == b'}')
@@ -253,7 +265,6 @@ impl BuildFileAnalyzer {
                         col += 1;
                     }
                     col = if col + 1 < len { col + 2 } else { len };
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_KEYWORD, 0));
                     continue;
                 }
 
@@ -328,15 +339,14 @@ impl BuildFileAnalyzer {
                     continue;
                 }
 
-                // Number
+                // Numbers in bndbuild are almost always part of filenames, version strings,
+                // or build arguments — don't color them to avoid visual noise.
                 if bytes[col].is_ascii_digit() {
-                    let start = col;
                     while col < len
                         && (bytes[col].is_ascii_alphanumeric() || bytes[col] == b'.')
                     {
                         col += 1;
                     }
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_NUMBER, 0));
                     continue;
                 }
 
@@ -391,8 +401,135 @@ impl BuildFileAnalyzer {
             .collect()
     }
 
-    pub fn goto_definition(&self, _document: &Document, _position: Position) -> Option<Location> {
-        // TODO: Implement navigation to target definitions, included files, etc.
+    pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
+        let line = document.line(position.line as usize)?;
+        let col = position.character as usize;
+        let bytes = line.as_bytes();
+        let len = bytes.len();
+
+        // Scan for every {% include "…" %} / {% include '…' %} on this line
+        // and check whether the cursor falls inside a filename string.
+        let mut i = 0;
+        while i + 1 < len {
+            // Find {%
+            if bytes[i] != b'{' || bytes[i + 1] != b'%' {
+                i += 1;
+                continue;
+            }
+            i += 2;
+            if i < len && bytes[i] == b'-' { i += 1; } // {%-
+
+            // Skip whitespace
+            while i < len && bytes[i] == b' ' { i += 1; }
+
+            // Must be the "include" keyword
+            if !line[i..].starts_with("include") {
+                // Skip to end of this tag
+                while i + 1 < len && !(bytes[i] == b'%' && bytes[i + 1] == b'}') { i += 1; }
+                continue;
+            }
+            i += 7; // len("include")
+
+            // Skip whitespace between keyword and filename
+            while i < len && bytes[i] == b' ' { i += 1; }
+
+            // Filename must be a quoted string
+            if i >= len || !matches!(bytes[i], b'"' | b'\'') { continue; }
+            let delim = bytes[i];
+            i += 1;
+            let fname_start = i;
+            while i < len && bytes[i] != delim { i += 1; }
+            let fname_end = i;
+
+            // Is the cursor inside [fname_start, fname_end)?
+            if col >= fname_start && col < fname_end {
+                let filename = &line[fname_start..fname_end];
+                let base_dir = document.uri
+                    .to_file_path().ok()
+                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))?;
+                let target = base_dir.join(filename);
+                if target.exists() {
+                    let target_uri = Url::from_file_path(target).ok()?;
+                    return Some(Location {
+                        uri:   target_uri,
+                        range: Range::default(),
+                    });
+                }
+            }
+
+            i = fname_end + 1; // past closing quote
+        }
+
+        // ── tgt / dep field navigation ───────────────────────────────────────
+        // Collect all key aliases that carry file paths.
+        let file_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
+            .iter()
+            .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
+            .flat_map(|k| k.names.iter().copied())
+            .collect();
+
+        if let Some(filename) = Self::filename_under_cursor(&line, &file_key_names, col) {
+            // Skip Jinja expressions — they can't be resolved to a path here.
+            if !filename.contains("{{") {
+                if let Some(base_dir) = document.uri
+                    .to_file_path().ok()
+                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+                {
+                    let target = base_dir.join(filename);
+                    if target.exists() {
+                        if let Ok(uri) = Url::from_file_path(target) {
+                            return Some(Location { uri, range: Range::default() });
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Return the space-separated token at column `col` in the value part of
+    /// `key: value` when `key` is one of `key_names`.  Handles the inline
+    /// `- key: value` list-item form and strips trailing YAML comments.
+    fn filename_under_cursor<'a>(
+        line: &'a str,
+        key_names: &[&str],
+        col: usize,
+    ) -> Option<&'a str> {
+        let bytes = line.as_bytes();
+        let len   = bytes.len();
+
+        // Skip leading whitespace and optional `- ` list marker.
+        let mut i = 0;
+        while i < len && matches!(bytes[i], b' ' | b'\t') { i += 1; }
+        if i + 1 < len && bytes[i] == b'-' && bytes[i + 1] == b' ' {
+            i += 2;
+            while i < len && bytes[i] == b' ' { i += 1; }
+        }
+
+        for &key in key_names {
+            let prefix = format!("{}:", key);
+            if !line[i..].starts_with(prefix.as_str()) { continue; }
+
+            let mut v = i + prefix.len();
+            // Skip spaces after colon.
+            while v < len && bytes[v] == b' ' { v += 1; }
+            // Skip block-scalar indicators — no inline filename to navigate.
+            if v < len && matches!(bytes[v], b'>' | b'|') { return None; }
+
+            // Walk space-separated tokens until end-of-line or YAML comment.
+            while v < len && bytes[v] != b'#' {
+                while v < len && bytes[v] == b' ' { v += 1; }
+                if v >= len || bytes[v] == b'#' { break; }
+                let tok_start = v;
+                while v < len && bytes[v] != b' ' && bytes[v] != b'#' { v += 1; }
+                let tok_end = v;
+                if col >= tok_start && col < tok_end {
+                    return Some(&line[tok_start..tok_end]);
+                }
+            }
+            return None; // key matched but cursor not on any token
+        }
         None
     }
 
