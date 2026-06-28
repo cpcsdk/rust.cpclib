@@ -1,0 +1,124 @@
+{
+  "Kill system": {
+    "prefix": "kill",
+    "description": "Inject EI:RET at &38",
+    "body": [
+      "di : ld hl, 0xc9fb : ld (0x38), hl : ei",
+      "$0"
+    ]
+  },
+  "Create macro": {
+    "prefix": "macro",
+    "description": "Create a new macro",
+    "body": [
+      "macro ${1:NAME} ${2:ARGS}",
+      "    $0",
+      "endm"
+    ]
+  },
+  "Create a strcut": {
+    "prefix": "struct",
+    "description": "Create a new struct",
+    "body": [
+      "struct ${1:NAME}",
+      "    $0",
+      "endstruct"
+    ]
+  },
+  "Create a function": {
+    "prefix": "function",
+    "description": "Create a new function",
+    "body": [
+      "function ${1:NAME} ${2:ARGS}",
+      "    $0",
+      "endfunction"
+    ]
+  },
+  "Repeat a loop": {
+    "prefix": "rep",
+    "description": "Create a repeted code",
+    "body": [
+      "repeat ${1:COUNT}",
+      "    $0",
+      "endrepeat"
+    ]
+  },
+  "Repeat a loop with a name": {
+    "prefix": "repn",
+    "description": "Create a repeted code while naming the variable",
+    "body": [
+      "repeat ${1:COUNT}, ${2:NAME}",
+      "    $0",
+      "endrepeat"
+    ]
+  },
+  "Repeat a loop with a name and start": {
+    "prefix": "repns",
+    "description": "Create a repeted code while nameing the variable and giving a start value",
+    "body": [
+      "repeat ${1:COUNT}, ${2:NAME}, ${3:START}",
+      "    $0",
+      "endrepeat"
+    ]
+  },
+  "Iterator on list of items": {
+    "prefix": "iter",
+    "body": [
+      "iterate ${1:NAME} ${2:VALUE}",
+      "    $0",
+      "enditerate"
+    ]
+  },
+  "CONFINED": {
+    "prefix": "confined",
+    "body": [
+      "confined",
+      "    $0",
+      "endconfined"
+    ]
+  },
+  "PHASE": {
+    "prefix": "phase",
+    "body": [
+      "phase ${1:ADDRESS}",
+      "    $0",
+      "dephase"
+    ]
+  },
+  "RORG": {
+    "prefix": "rorg",
+    "body": [
+      "rorg ${1:ADDRESS}",
+      "    $0",
+      "rend"
+    ]
+  },
+  "LIMIT": {
+    "prefix": "limit",
+    "body": [
+      "limit ${1:ADDRESS}"
+    ]
+  },
+  "PROTECT": {
+    "prefix": "protect",
+    "body": "protect ${1:START}, ${2:STOP}"
+  },
+  "RANGE": {
+    "prefix": "range",
+    "body": [
+      "range ${1:START}, ${2:STOP}, {3:NAME}"
+    ]
+  },
+  "SECTION": {
+    "prefix": "section",
+    "body": [
+      "section ${1:NAME}"
+    ]
+  },
+  "BANK": {
+    "prefix": "bank",
+    "body": [
+      "bank {$1:EXPR}"
+    ]
+  }
+}

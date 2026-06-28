@@ -1,0 +1,78 @@
+{
+  "name": "cpclib-vscode",
+  "displayName": "CPClib - Amstrad CPC Development",
+  "description": "Language support for Amstrad CPC development: Z80 assembly (basm), bndbuild, Locomotive BASIC",
+  "version": "0.0.1",
+  "publisher": "krusty-benediction",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "basm",
+        "aliases": ["basm", "Z80 Assembly", "Z80"],
+        "extensions": [".asm", ".z80"],
+        "configuration": "./language-configuration-asm.json"
+      },
+      {
+        "id": "bndbuild",
+        "aliases": ["BndBuild", "Bndbuild"],
+        "extensions": [".build", ".bnd"],
+        "configuration": "./language-configuration-bnd.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "basm",
+        "scopeName": "source.z80",
+        "path": "./syntaxes/z80-asm.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "cpclib.runRule",
+        "title": "Run bndbuild Rule",
+        "category": "CPClib"
+      }
+    ],
+    "configuration": {
+      "title": "CPClib LSP",
+      "properties": {
+        "cpclib-lsp.serverPath": {
+          "type": "string",
+          "default": "cpclib-lsp",
+          "description": "Path to the cpclib-lsp binary. Defaults to 'cpclib-lsp' (must be in PATH, e.g. after cargo install)."
+        },
+        "cpclib-lsp.bndbuildPath": {
+          "type": "string",
+          "default": "bndbuild",
+          "description": "Path to the bndbuild binary used when running rules from CodeLens buttons."
+        },
+        "cpclib-lsp.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Trace LSP communication between VS Code and the server (useful for debugging)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}

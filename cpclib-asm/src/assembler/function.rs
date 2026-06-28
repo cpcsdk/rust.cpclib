@@ -24,7 +24,7 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::list::list_extend;
+use crate::list::{list_extend, list_reverse};
 use crate::matrix::matrix_from_list;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
@@ -232,6 +232,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "list_sublist": Function::HardCoded(HardCodedFunction::ListSublist),
         "list_sort": Function::HardCoded(HardCodedFunction::ListSort),
         "list_argsort": Function::HardCoded(HardCodedFunction::ListArgsort),
+        "list_reverse": Function::HardCoded(HardCodedFunction::ListReverse),
         "list_push": Function::HardCoded(HardCodedFunction::ListPush),
         "list_extend": Function::HardCoded(HardCodedFunction::ListExtend),
 
@@ -333,6 +334,7 @@ pub enum HardCodedFunction {
     ListExtend,
     ListSort,
     ListArgsort,
+    ListReverse,
 
     MatrixNew,
     MatrixSet,
@@ -553,7 +555,8 @@ impl HardCodedFunction {
             HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
-            HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2)
+            HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListReverse => ExpectedNbArgs::Fixed(1),
         }
     }
 
@@ -692,6 +695,8 @@ impl HardCodedFunction {
             HardCodedFunction::ListExtend => list_extend(params[0].clone(), params[1].clone()),
             HardCodedFunction::StringNew => string_new(params[0].int()? as _, params[1].clone()),
             HardCodedFunction::ListLen => list_len(&params[0]),
+            HardCodedFunction::ListReverse => list_reverse(params[0].clone()),
+
             HardCodedFunction::ListSublist => {
                 list_sublist(&params[0], params[1].int()? as _, params[2].int()? as _)
             },

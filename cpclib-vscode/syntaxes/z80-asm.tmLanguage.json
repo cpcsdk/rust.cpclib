@@ -1,0 +1,110 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Z80 Assembly (basm)",
+    "scopeName": "source.z80",
+    "patterns": [
+        { "include": "#comment" },
+        { "include": "#label_definition" },
+        { "include": "#directive" },
+        { "include": "#instruction" },
+        { "include": "#register" },
+        { "include": "#string" },
+        { "include": "#number" },
+        { "include": "#operator" }
+    ],
+    "repository": {
+        "comment": {
+            "name": "comment.line.semicolon.z80",
+            "match": ";.*$"
+        },
+        "string": {
+            "patterns": [
+                {
+                    "name": "string.quoted.double.z80",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        { "name": "constant.character.escape.z80", "match": "\\\\." }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.z80",
+                    "begin": "(?<![A-Za-z0-9_])'",
+                    "end": "'",
+                    "patterns": [
+                        { "name": "constant.character.escape.z80", "match": "\\\\." }
+                    ]
+                }
+            ]
+        },
+        "label_definition": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.label.z80",
+                    "match": "^\\s*([A-Za-z_@][A-Za-z0-9_@.]*)\\s*:",
+                    "captures": {
+                        "1": { "name": "entity.name.function.label.z80" }
+                    }
+                },
+                {
+                    "name": "entity.name.function.local-label.z80",
+                    "match": "^\\s*(\\.[A-Za-z_][A-Za-z0-9_]*)\\s*:?",
+                    "captures": {
+                        "1": { "name": "entity.name.function.local-label.z80" }
+                    }
+                },
+                {
+                    "comment": "label without colon at start of line (no leading whitespace)",
+                    "match": "^([A-Za-z_@][A-Za-z0-9_@.]*)(?=\\s)",
+                    "captures": {
+                        "1": { "name": "entity.name.function.label.z80" }
+                    }
+                }
+            ]
+        },
+        "directive": {
+            "name": "keyword.other.directive.z80",
+            "match": "(?i)\\b(ABYTE|ALIGN|ASSERT|BANK|BANKSET|BINCLUDE|BREAK|BREAKPOINT|BUILDCPR|BUILDSNA|BYTE|CHARSET|DB|DEFB|DEFM|DEFS|DEFW|DEFSECTION|DM|DS|DW|ELSE|ELSEIF|ELSEIFDEF|ELSEIFNDEF|ELSEIFNOT|ELSEIFUSED|END|ENDIF|ENT|EQU|EVEN|EXPORT|FAIL|FOR|INCBIN|INCLUDE|LET|LIMIT|LIST|MAP|MODULE|ENDMODULE|MEND|NOP|NOEXPORT|NOLIST|ORG|OUTPUT|PAUSE|PRINT|PROTECT|RANGE|REND|REPEAT|REPT|RETURN|RORG|RUN|SAVE|SECTION|SET|SKIP|SNASET|STABLETICKER|STR|STRUCT|ENDS|SWITCH|CASE|DEFAULT|UNDEF|WARNING|WHILE|WEND|MACRO|ENDM|ITERATE|FOR|NEXT|SECTION|FUNCTION|ENDF)\\b"
+        },
+        "instruction": {
+            "name": "keyword.control.instruction.z80",
+            "match": "(?i)\\b(ADC|ADD|AND|BIT|CALL|CCF|CP|CPD|CPDR|CPI|CPIR|CPL|DAA|DEC|DI|DJNZ|EI|EX|EXA|EXX|HALT|IM|IN|INC|IND|INDR|INI|INIR|JP|JR|LD|LDD|LDDR|LDI|LDIR|NEG|NOP|OR|OTDR|OTIR|OUT|OUTD|OUTI|POP|PUSH|RES|RET|RETI|RETN|RL|RLA|RLC|RLCA|RLD|RR|RRA|RRC|RRCA|RRD|RST|SBC|SCF|SET|SLA|SLL|SRA|SRL|SRL8|SUB|XOR)\\b"
+        },
+        "register": {
+            "name": "variable.language.register.z80",
+            "match": "(?i)(?<![A-Za-z0-9_])(AF'|AF|BC|DE|HL|IX|IY|SP|PC|IXH|IXL|IYH|IYL|A|B|C|D|E|H|L|F|I|R)(?![A-Za-z0-9_])"
+        },
+        "number": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.z80",
+                    "match": "(?i)\\$[0-9A-F]+"
+                },
+                {
+                    "name": "constant.numeric.hex.z80",
+                    "match": "(?i)0x[0-9A-F]+"
+                },
+                {
+                    "name": "constant.numeric.hex.z80",
+                    "match": "(?i)[0-9][0-9A-F]*[Hh]\\b"
+                },
+                {
+                    "name": "constant.numeric.binary.z80",
+                    "match": "%[01]+"
+                },
+                {
+                    "name": "constant.numeric.binary.z80",
+                    "match": "0b[01]+"
+                },
+                {
+                    "name": "constant.numeric.decimal.z80",
+                    "match": "\\b[0-9]+\\b"
+                }
+            ]
+        },
+        "operator": {
+            "name": "keyword.operator.z80",
+            "match": "[+\\-*/<>=!&|^~@#]|\\b(NOT|AND|OR|XOR|SHL|SHR|MOD|HIGH|LOW)\\b"
+        }
+    }
+}

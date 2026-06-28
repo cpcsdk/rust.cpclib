@@ -1,0 +1,5 @@
+name = "Bndbuild"
+path_suffixes = ["bnd", "build"]
+line_comments = ["# "]
+tab_size = 2
+hard_tabs = false

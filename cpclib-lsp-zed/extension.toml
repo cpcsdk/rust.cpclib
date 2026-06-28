@@ -1,0 +1,26 @@
+id = "cpclib-lsp-zed"
+name = "CPClib Extension"
+version = "0.0.1"
+schema_version = 1
+authors = ["Krusty Benediction <krusty.benediction@gmail.com>"]
+description = "Extension for CPC crossdev using the cpclib suite"
+repository = "https://github.com/cpcsdk/rust.cpclib"
+
+snippets = ["./snippets/basm.json", "./snippets/bndbuild.json"]
+
+[language_servers.cpclib-lsp]
+name = "CPClib LSP"
+languages = ["Basm", "Bndbuild"]
+
+[language_servers.cpclib-lsp.language_ids]
+"Basm" = "Assembly"
+"Bndbuild" = "Buildfile"
+
+# XXX : deactivated as it does not compile
+#[grammars.rgbasm]
+#repository = "https://github.com/tobiasvl/tree-sitter-rgbasm"
+#rev = "c769dba"
+
+
+# TODO: add grammar for locomotive basic
+# TODO: add grammar for bndbuild files

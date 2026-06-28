@@ -1,0 +1,54 @@
+[package]
+name = "cpclib-lsp"
+version.workspace = true
+description = "Language Server Protocol implementation for Amstrad CPC development with basm and bndbuild"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "cpclib-lsp"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+cpclib-asm.workspace = true
+cpclib-bndbuild = { workspace = true, default-features = false }
+cpclib-common.workspace = true
+cpclib-tokens.workspace = true
+camino.workspace = true
+
+# LSP
+tower-lsp = "0.19"
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Text processing
+ropey = "1.6"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Parsing
+winnow = "0.6"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Collections
+dashmap = "6"
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }
+
+[features]
+default = []

@@ -1,0 +1,7 @@
+name = "Basm"
+#grammar = "rgbasm" # TODO replace by BASM one ASAP BTW rgbasam does not work
+path_suffixes = ["asm", "z80"]
+line_comments = ["; "]
+tab_size = 4
+hard_tabs = false
+auto_indent = true

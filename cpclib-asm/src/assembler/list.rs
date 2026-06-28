@@ -213,6 +213,27 @@ pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, Box<AssemblerError>
     }
 }
 
+
+pub fn list_reverse(mut list: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    match list {
+        ExprResult::List(mut l) => {
+            l.reverse(); // inplace reverse
+            Ok(ExprResult::List(l))
+        },
+        ExprResult::String(s) => {
+            let s = s.chars().rev().collect::<SmolStr>();
+            Ok(s.into())
+        },
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a list")
+                }))
+            )))
+        },
+    }
+}
+
 pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(l) => {
