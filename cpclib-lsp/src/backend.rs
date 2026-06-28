@@ -90,6 +90,16 @@ impl LanguageServer for CpcLspBackend {
                 references_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Options(
+                    CodeActionOptions {
+                        code_action_kinds: Some(vec![
+                            CodeActionKind::REFACTOR_REWRITE,
+                            CodeActionKind::REFACTOR_EXTRACT,
+                        ]),
+                        work_done_progress_options: Default::default(),
+                        resolve_provider: Some(false),
+                    },
+                )),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
@@ -218,49 +228,76 @@ impl LanguageServer for CpcLspBackend {
     ) -> Result<Option<GotoDefinitionResponse>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
-        
+
         tracing::debug!("Goto definition request at {}:{}", uri, position.line);
-        
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
-            
-            let location = match document.doc_type {
-                DocumentType::Assembly  => self.asm_analyzer.goto_definition(document, position),
-                DocumentType::BuildFile => self.build_analyzer.goto_definition(document, position),
-                DocumentType::Basic     => self.basic_analyzer.goto_definition(document, position),
-                DocumentType::Unknown   => None,
+
+        let Some(entry) = self.documents.get(&uri) else { return Ok(None); };
+        let doc_type = entry.value().doc_type;
+
+        // Try the primary document first.
+        let location = match doc_type {
+            DocumentType::Assembly  => self.asm_analyzer.goto_definition(entry.value(), position),
+            DocumentType::BuildFile => self.build_analyzer.goto_definition(entry.value(), position),
+            DocumentType::Basic     => self.basic_analyzer.goto_definition(entry.value(), position),
+            DocumentType::Unknown   => None,
+        };
+        if let Some(loc) = location {
+            return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
+        }
+
+        // For Assembly: if the symbol was not defined locally, search all other
+        // open Assembly documents (cross-file navigation).
+        if doc_type == DocumentType::Assembly {
+            let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
+                Some(w) => w.to_uppercase(),
+                None    => return Ok(None),
             };
-            
-            if let Some(location) = location {
-                return Ok(Some(GotoDefinitionResponse::Scalar(location)));
+            drop(entry); // release the DashMap read guard before iterating
+
+            for other in self.documents.iter() {
+                if *other.key() == uri { continue; }
+                if other.value().doc_type != DocumentType::Assembly { continue; }
+                if let Some(loc) = self.asm_analyzer.find_definition_in(other.value(), &word) {
+                    return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
+                }
             }
         }
-        
+
         Ok(None)
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
-        
+
         tracing::debug!("References request at {}:{}", uri, position.line);
-        
-        if let Some(entry) = self.documents.get(&uri) {
-            let document = entry.value();
-            
-            let references = match document.doc_type {
-                DocumentType::Assembly  => self.asm_analyzer.find_references(document, position),
-                DocumentType::BuildFile => self.build_analyzer.find_references(document, position),
-                DocumentType::Basic     => self.basic_analyzer.find_references(document, position),
-                DocumentType::Unknown   => Vec::new(),
+
+        let Some(entry) = self.documents.get(&uri) else { return Ok(None); };
+        let doc_type = entry.value().doc_type;
+
+        if doc_type != DocumentType::Assembly {
+            let references = match doc_type {
+                DocumentType::BuildFile => self.build_analyzer.find_references(entry.value(), position),
+                DocumentType::Basic     => self.basic_analyzer.find_references(entry.value(), position),
+                _                       => Vec::new(),
             };
-            
-            if !references.is_empty() {
-                return Ok(Some(references));
-            }
+            return if references.is_empty() { Ok(None) } else { Ok(Some(references)) };
         }
-        
-        Ok(None)
+
+        // Assembly: collect references across ALL open Assembly documents.
+        let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
+            Some(w) => w.to_uppercase(),
+            None    => return Ok(None),
+        };
+        drop(entry);
+
+        let mut all_refs: Vec<Location> = Vec::new();
+        for doc_entry in self.documents.iter() {
+            if doc_entry.value().doc_type != DocumentType::Assembly { continue; }
+            all_refs.extend(self.asm_analyzer.find_references_in(doc_entry.value(), &word));
+        }
+
+        if all_refs.is_empty() { Ok(None) } else { Ok(Some(all_refs)) }
     }
 
     async fn document_symbol(
@@ -341,6 +378,27 @@ impl LanguageServer for CpcLspBackend {
         };
 
         Ok(Some(serde_json::json!(targets)))
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri;
+        let range = params.range;
+
+        let Some(entry) = self.documents.get(&uri) else { return Ok(None); };
+        let doc_type = entry.value().doc_type;
+
+        let actions: Vec<CodeAction> = match doc_type {
+            DocumentType::Assembly => self.asm_analyzer.code_actions(entry.value(), range),
+            DocumentType::Basic    => self.basic_analyzer.code_actions(entry.value(), range),
+            _                      => vec![],
+        };
+
+        if actions.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(
+            actions.into_iter().map(CodeActionOrCommand::CodeAction).collect()
+        ))
     }
 
     async fn semantic_tokens_full(

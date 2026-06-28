@@ -8,16 +8,18 @@ use cpclib_basic::located::{LocatedBasicProgram, LocatedTokenKind};
 use crate::document::Document;
 
 // Semantic token type indices — must match `semantic_tokens_legend()` order
-const TT_KEYWORD: u32 = 0;    // Z80 instructions
-const TT_MACRO: u32 = 1;      // assembler directives
-const TT_FUNCTION: u32 = 2;   // labels
-const TT_NAMESPACE: u32 = 3;  // module names
-const TT_VARIABLE: u32 = 4;   // registers / condition codes
-const TT_NUMBER: u32 = 5;     // numeric literals
-const TT_STRING: u32 = 6;     // string literals
-const TT_COMMENT: u32 = 7;    // line comments
-const TT_OPERATOR: u32 = 8;   // operators
+const TT_KEYWORD: u32 = 0;     // Z80 instructions
+const TT_MACRO: u32 = 1;       // assembler directives (EQU, DEFB, MACRO…)
+const TT_FUNCTION: u32 = 2;    // macro invocation names
+const TT_NAMESPACE: u32 = 3;   // module names
+const TT_VARIABLE: u32 = 4;    // registers / condition codes
+const TT_NUMBER: u32 = 5;      // numeric literals
+const TT_STRING: u32 = 6;      // string literals
+const TT_COMMENT: u32 = 7;     // line comments
+const TT_OPERATOR: u32 = 8;    // operators
 const TT_ENUM_MEMBER: u32 = 9; // EQU / assign constants
+const TT_LABEL: u32 = 10;      // jump / procedure labels
+const TT_PARAMETER: u32 = 11;  // macro parameters {param}
 
 const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_READONLY: u32 = 1 << 1;
@@ -51,16 +53,18 @@ static REGISTER_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
 pub fn semantic_tokens_legend() -> SemanticTokensLegend {
     SemanticTokensLegend {
         token_types: vec![
-            SemanticTokenType::KEYWORD,
-            SemanticTokenType::MACRO,
-            SemanticTokenType::FUNCTION,
-            SemanticTokenType::NAMESPACE,
-            SemanticTokenType::VARIABLE,
-            SemanticTokenType::NUMBER,
-            SemanticTokenType::STRING,
-            SemanticTokenType::COMMENT,
-            SemanticTokenType::OPERATOR,
-            SemanticTokenType::ENUM_MEMBER,
+            SemanticTokenType::KEYWORD,          // 0  Z80 instructions
+            SemanticTokenType::MACRO,            // 1  assembler directives
+            SemanticTokenType::FUNCTION,         // 2  macro invocation names
+            SemanticTokenType::NAMESPACE,        // 3  module names
+            SemanticTokenType::VARIABLE,         // 4  registers / condition codes
+            SemanticTokenType::NUMBER,           // 5  numeric literals
+            SemanticTokenType::STRING,           // 6  string literals
+            SemanticTokenType::COMMENT,          // 7  comments
+            SemanticTokenType::OPERATOR,         // 8  operators
+            SemanticTokenType::ENUM_MEMBER,      // 9  EQU / assign constants
+            SemanticTokenType::TYPE,             // 10 jump / procedure labels (teal — avoids theme blue)
+            SemanticTokenType::DECORATOR,        // 11 macro parameters {param}
         ],
         token_modifiers: vec![
             SemanticTokenModifier::DECLARATION,
@@ -318,42 +322,90 @@ impl AssemblyAnalyzer {
         let word = self.extract_word_at_position(&line, col)?;
         let word_upper = word.to_uppercase();
 
-        if let Ok(listing) = self.parse_document(document) {
-            for token in listing.iter() {
-                let source_name: &str = if token.is_label() {
-                    token.label_symbol()
-                } else if token.is_equ() {
-                    token.equ_symbol()
-                } else if token.is_assign() {
-                    token.assign_symbol()
-                } else if token.is_macro_definition() {
-                    token.macro_definition_name()
-                } else if token.is_module() {
-                    token.module_name()
-                } else {
-                    continue;
-                };
+        // The backend will try other open documents if this returns None.
+        self.find_definition_in(document, &word_upper)
+    }
 
-                if source_name.to_uppercase() == word_upper {
-                    let span = token.span();
-                    let (line_1based, col_1based) = span.relative_line_and_column();
-                    let lsp_line = line_1based.saturating_sub(1) as u32;
-                    let lsp_char = col_1based.saturating_sub(1) as u32;
-                    let range = Range {
+    /// Extract the word (ASM identifier) under the cursor, or `None`.
+    pub fn word_at_position(&self, document: &Document, position: Position) -> Option<String> {
+        let line = document.line(position.line as usize)?;
+        self.extract_word_at_position(&line, position.character as usize)
+    }
+
+    /// Search `document` for a definition of `word_upper` (already uppercased).
+    /// Returns the first matching `Location`, or `None`.
+    pub fn find_definition_in(&self, document: &Document, word_upper: &str) -> Option<Location> {
+        let listing = self.parse_document(document).ok()?;
+        for token in listing.iter() {
+            let source_name: &str = if token.is_label() {
+                token.label_symbol()
+            } else if token.is_equ() {
+                token.equ_symbol()
+            } else if token.is_assign() {
+                token.assign_symbol()
+            } else if token.is_macro_definition() {
+                token.macro_definition_name()
+            } else if token.is_module() {
+                token.module_name()
+            } else {
+                continue;
+            };
+            if source_name.to_uppercase() == word_upper {
+                let span = token.span();
+                let (line_1based, col_1based) = span.relative_line_and_column();
+                let lsp_line = line_1based.saturating_sub(1) as u32;
+                let lsp_char = col_1based.saturating_sub(1) as u32;
+                return Some(Location {
+                    uri: document.uri.clone(),
+                    range: Range {
                         start: Position { line: lsp_line, character: lsp_char },
-                        end: Position { line: lsp_line, character: lsp_char + source_name.len() as u32 },
-                    };
-                    return Some(Location { uri: document.uri.clone(), range });
-                }
+                        end:   Position { line: lsp_line, character: lsp_char + source_name.len() as u32 },
+                    },
+                });
             }
         }
         None
     }
 
+    /// Find all occurrences of `word_upper` (already uppercased) as whole words in `document`.
+    pub fn find_references_in(&self, document: &Document, word_upper: &str) -> Vec<Location> {
+        let text = document.text();
+        let mut refs = Vec::new();
+        for (line_idx, line) in text.lines().enumerate() {
+            let line_up = line.to_uppercase();
+            let wlen = word_upper.len();
+            let mut start = 0;
+            while start + wlen <= line_up.len() {
+                if let Some(pos) = line_up[start..].find(word_upper) {
+                    let abs = start + pos;
+                    let before_ok = abs == 0 || !is_ident_byte(line.as_bytes()[abs - 1]);
+                    let after_ok  = abs + wlen >= line.len()
+                        || !is_ident_byte(line.as_bytes()[abs + wlen]);
+                    if before_ok && after_ok {
+                        refs.push(Location {
+                            uri: document.uri.clone(),
+                            range: Range {
+                                start: Position { line: line_idx as u32, character: abs as u32 },
+                                end:   Position { line: line_idx as u32, character: (abs + wlen) as u32 },
+                            },
+                        });
+                    }
+                    start = abs + 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        refs
+    }
+
     /// Find all references to a symbol
-    pub fn find_references(&self, _document: &Document, _position: Position) -> Vec<Location> {
-        // TODO: Implement symbol table tracking to find all references
-        Vec::new()
+    pub fn find_references(&self, document: &Document, position: Position) -> Vec<Location> {
+        let word = match self.word_at_position(document, position) {
+            Some(w) => w.to_uppercase(),
+            None    => return Vec::new(),
+        };
+        self.find_references_in(document, &word)
     }
 
     /// Get document symbols (labels, EQU constants, macros, modules).
@@ -571,6 +623,15 @@ impl AssemblyAnalyzer {
                     continue;
                 }
 
+                // Macro parameter: {identifier}
+                if c == b'{' {
+                    let start = col; col += 1;
+                    while col < bytes.len() && bytes[col] != b'}' { col += 1; }
+                    if col < bytes.len() { col += 1; } // consume '}'
+                    raw.push((line_u, start as u32, (col - start) as u32, TT_PARAMETER, 0));
+                    continue;
+                }
+
                 // Identifier: letter / _ / @ / .
                 if c.is_ascii_alphabetic() || c == b'_' || c == b'@' || c == b'.' {
                     let start = col;
@@ -624,9 +685,9 @@ impl AssemblyAnalyzer {
                         } else if registers.contains(word_upper.as_str()) {
                             (TT_VARIABLE, 0)
                         } else if is_label_def {
-                            (TT_FUNCTION, MOD_DECLARATION)
+                            (TT_LABEL, MOD_DECLARATION)
                         } else {
-                            (TT_FUNCTION, 0) // label reference / unknown symbol
+                            (TT_LABEL, 0) // label reference
                         };
 
                     raw.push((line_u, start as u32, word_len as u32, tok_type, modifiers));
@@ -709,6 +770,177 @@ impl AssemblyAnalyzer {
         }
     }
 
+    // ── Code actions ──────────────────────────────────────────────────────────
+
+    pub fn code_actions(&self, document: &Document, range: Range) -> Vec<CodeAction> {
+        let mut actions = Vec::new();
+        let has_selection = range.start != range.end;
+        if !has_selection {
+            return actions;
+        }
+
+        let text = document.text();
+        let all_lines: Vec<&str> = text.lines().collect();
+        let start_line = range.start.line as usize;
+        // end.line is exclusive when character == 0; include last non-empty line
+        let end_line = if range.end.character == 0 && range.end.line > range.start.line {
+            (range.end.line as usize).saturating_sub(1)
+        } else {
+            range.end.line as usize
+        }.min(all_lines.len().saturating_sub(1));
+
+        if start_line > end_line { return actions; }
+
+        // Wrap in MACRO / ENDM
+        actions.push(self.wrap_action(
+            document, &all_lines, start_line, end_line,
+            "MY_MACRO MACRO", "ENDM",
+            "Wrap selection in MACRO…ENDM (rename MY_MACRO)",
+            CodeActionKind::REFACTOR_EXTRACT,
+        ));
+
+        // Wrap in REPEAT / REND
+        actions.push(self.wrap_action(
+            document, &all_lines, start_line, end_line,
+            "REPEAT 10", "REND",
+            "Wrap selection in REPEAT…REND (replace 10 with count)",
+            CodeActionKind::REFACTOR_EXTRACT,
+        ));
+
+        // Join selected lines into one (instructions separated by " : ")
+        if end_line > start_line {
+            if let Some(a) = self.join_lines_action(document, &all_lines, start_line, end_line) {
+                actions.push(a);
+            }
+        }
+
+        // Split each line at " : " into individual lines
+        if let Some(a) = self.split_lines_action(document, &all_lines, start_line, end_line) {
+            actions.push(a);
+        }
+
+        actions
+    }
+
+    fn wrap_action(
+        &self,
+        document: &Document,
+        lines: &[&str],
+        start_line: usize,
+        end_line: usize,
+        header: &str,
+        footer: &str,
+        title: &str,
+        kind: CodeActionKind,
+    ) -> CodeAction {
+        // Detect minimum indentation of non-empty selected lines.
+        let indent = lines[start_line..=end_line]
+            .iter()
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| l.len() - l.trim_start().len())
+            .min()
+            .unwrap_or(0);
+        let pad: String = lines[start_line..=end_line]
+            .iter()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| &l[..indent])
+            .unwrap_or("")
+            .to_string();
+
+        let mut new_text = format!("{pad}{header}\n");
+        // If selected lines are unindented, add one tab; otherwise preserve.
+        let needs_extra = indent == 0;
+        for &line in &lines[start_line..=end_line] {
+            if needs_extra {
+                new_text.push('\t');
+            }
+            new_text.push_str(line.trim_end());
+            new_text.push('\n');
+        }
+        new_text.push_str(&format!("{pad}{footer}\n"));
+
+        let edit_range = Range {
+            start: Position { line: start_line as u32, character: 0 },
+            end:   Position { line: end_line as u32 + 1, character: 0 },
+        };
+        CodeAction {
+            title: title.to_string(),
+            kind: Some(kind),
+            edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
+            ..Default::default()
+        }
+    }
+
+    fn join_lines_action(
+        &self,
+        document: &Document,
+        lines: &[&str],
+        start_line: usize,
+        end_line: usize,
+    ) -> Option<CodeAction> {
+        // Indentation taken from the first non-empty line.
+        let first = lines[start_line..=end_line]
+            .iter()
+            .find(|l| !l.trim().is_empty())?;
+        let indent_len = first.len() - first.trim_start().len();
+        let indent = &first[..indent_len];
+
+        // Strip inline comments before joining so they don't eat subsequent parts.
+        let parts: Vec<&str> = lines[start_line..=end_line]
+            .iter()
+            .map(|l| strip_asm_comment(l).trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if parts.len() < 2 { return None; }
+
+        let joined = format!("{}{}\n", indent, parts.join(" : "));
+        let edit_range = Range {
+            start: Position { line: start_line as u32, character: 0 },
+            end:   Position { line: end_line as u32 + 1, character: 0 },
+        };
+        Some(CodeAction {
+            title: "Join selected lines (separate with :)".to_string(),
+            kind: Some(CodeActionKind::REFACTOR_REWRITE),
+            edit: Some(single_file_edit(document.uri.clone(), edit_range, joined)),
+            ..Default::default()
+        })
+    }
+
+    fn split_lines_action(
+        &self,
+        document: &Document,
+        lines: &[&str],
+        start_line: usize,
+        end_line: usize,
+    ) -> Option<CodeAction> {
+        let mut new_text = String::new();
+        let mut any_split = false;
+
+        for &line in &lines[start_line..=end_line] {
+            let indent_len = line.len() - line.trim_start().len();
+            let indent = &line[..indent_len];
+            let parts = split_at_colon(line);
+            if parts.len() > 1 { any_split = true; }
+            for part in parts {
+                new_text.push_str(indent);
+                new_text.push_str(part.trim_start());
+                new_text.push('\n');
+            }
+        }
+
+        if !any_split { return None; }
+
+        let edit_range = Range {
+            start: Position { line: start_line as u32, character: 0 },
+            end:   Position { line: end_line as u32 + 1, character: 0 },
+        };
+        Some(CodeAction {
+            title: "Split lines at : (one instruction per line)".to_string(),
+            kind: Some(CodeActionKind::REFACTOR_REWRITE),
+            edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
+            ..Default::default()
+        })
+    }
 }
 
 
@@ -822,6 +1054,10 @@ fn format_binary(value: i64) -> String {
     s
 }
 
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'@'
+}
+
 fn register_description(upper: &str) -> Option<String> {
     let desc = match upper {
         "A"   => "**A** — Accumulator (8-bit). Primary register for arithmetic/logic.",
@@ -863,6 +1099,12 @@ fn register_description(upper: &str) -> Option<String> {
 
 const INCLUDE_DIRECTIVES: &[&str] = &["INCLUDE", "INCBIN", "BINCLUDE"];
 
+/// Directory-level markers that indicate the project root.  We stop walking
+/// up the ancestor tree when we find one of these in the current directory.
+const PROJECT_ROOT_MARKERS: &[&str] = &[
+    ".git", ".hg", "Cargo.toml", "Cargo.lock", "Makefile", "makefile",
+];
+
 /// If `col` is inside a double-quoted string on a line that starts with an
 /// include-like directive, return the resolved file URI.
 fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
@@ -885,13 +1127,23 @@ fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
     }
 
     let doc_path = doc_uri.to_file_path().ok()?;
-    let doc_dir = doc_path.parent()?;
-    let target = doc_dir.join(filename);
-    if target.exists() {
-        Url::from_file_path(target).ok()
-    } else {
-        None
+    let mut dir = doc_path.parent()?;
+
+    // Walk up the ancestor tree: try each directory as a base for `filename`.
+    // Stop once we hit a project-root marker or the filesystem root.
+    loop {
+        let candidate = dir.join(filename);
+        if candidate.exists() {
+            return Url::from_file_path(candidate).ok();
+        }
+        // If this directory contains a project-root marker, don't go further up.
+        let at_root = PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists());
+        match dir.parent() {
+            Some(parent) if !at_root => dir = parent,
+            _ => break,
+        }
     }
+    None
 }
 
 /// Find the byte range of the quoted string `"..."` that covers position `col`.
@@ -1051,4 +1303,60 @@ fn push_locomotive_basic_tokens(
             raw.push((src_line, pos as u32, 13, TT_MACRO, 0));
         }
     }
+}
+
+// ─── Code-action helpers ──────────────────────────────────────────────────────
+
+/// Build a `WorkspaceEdit` that replaces one range in one file.
+fn single_file_edit(uri: Url, range: Range, new_text: String) -> WorkspaceEdit {
+    WorkspaceEdit {
+        changes: Some(std::collections::HashMap::from([(uri, vec![TextEdit { range, new_text }])])),
+        ..Default::default()
+    }
+}
+
+/// Strip a trailing `;`-comment from an ASM line (string-literal aware).
+/// Returns the slice up to (but not including) the `;`.
+fn strip_asm_comment(line: &str) -> &str {
+    let bytes = line.as_bytes();
+    let mut in_str = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'"' => in_str = !in_str,
+            b';' if !in_str => return &line[..i],
+            _ => {}
+        }
+    }
+    line
+}
+
+/// Split an ASM line at `:` statement separators (string-literal aware).
+/// A `:` that immediately follows a bare identifier (label colon) is NOT split.
+fn split_at_colon(line: &str) -> Vec<&str> {
+    let bytes = line.as_bytes();
+    let mut parts: Vec<&str> = Vec::new();
+    let mut in_str = false;
+    let mut start = 0usize;
+
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'"' => in_str = !in_str,
+            b':' if !in_str => {
+                // Label colon: everything before ':' (trimmed) is a bare identifier.
+                let before = line[start..i].trim();
+                let is_label = !before.is_empty()
+                    && before.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '@');
+                if !is_label {
+                    parts.push(&line[start..i]);
+                    start = i + 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    parts.push(&line[start..]);
+    parts.into_iter()
+        .map(|s| s.trim_end())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
