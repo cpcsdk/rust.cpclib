@@ -461,7 +461,6 @@ impl BuildFileAnalyzer {
         }
 
         // ── tgt / dep field navigation ───────────────────────────────────────
-        // Collect all key aliases that carry file paths.
         let file_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
             .iter()
             .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
@@ -469,15 +468,36 @@ impl BuildFileAnalyzer {
             .collect();
 
         if let Some(filename) = Self::filename_under_cursor(&line, &file_key_names, col) {
-            // Skip Jinja expressions — they can't be resolved to a path here.
-            if !filename.contains("{{") {
+            // Skip Jinja expressions — can't resolve them statically.
+            if !filename.contains("{{") && !filename.contains("{%") {
+                let tgt_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
+                    .iter()
+                    .find(|k| k.names.contains(&"targets"))
+                    .map(|k| k.names.to_vec())
+                    .unwrap_or_default();
+
+                // Priority 1: filename matches a target declared in this file.
+                // Use a direct raw-text scan — it's reliable even when Jinja
+                // expansion fails — and navigate to that rule, never opening the file.
+                let raw = document.text();
+                if let Some(tgt_line) = Self::find_target_line(&raw, filename, &tgt_key_names) {
+                    return Some(Location {
+                        uri:   document.uri.clone(),
+                        range: Range {
+                            start: Position { line: tgt_line, character: 0 },
+                            end:   Position { line: tgt_line, character: 0 },
+                        },
+                    });
+                }
+
+                // Priority 2: not a declared target — open the file if it exists.
                 if let Some(base_dir) = document.uri
                     .to_file_path().ok()
                     .and_then(|p| p.parent().map(|d| d.to_path_buf()))
                 {
-                    let target = base_dir.join(filename);
-                    if target.exists() {
-                        if let Ok(uri) = Url::from_file_path(target) {
+                    let path = base_dir.join(filename);
+                    if path.exists() {
+                        if let Ok(uri) = Url::from_file_path(path) {
                             return Some(Location { uri, range: Range::default() });
                         }
                     }
@@ -531,6 +551,82 @@ impl BuildFileAnalyzer {
             return None; // key matched but cursor not on any token
         }
         None
+    }
+
+    /// Scan the raw (unexpanded) text for a rule whose target value contains
+    /// `filename`.  Exact matches take priority; Jinja template patterns
+    /// (e.g., `HBL.{{hbl.nb}}`) are used as a fallback so that clicking
+    /// `HBL.002` in a dep field navigates to the template line.
+    fn find_target_line(text: &str, filename: &str, tgt_key_names: &[&str]) -> Option<u32> {
+        let mut template_match: Option<u32> = None;
+
+        for (line_num, line) in text.lines().enumerate() {
+            let trimmed = line.trim_start();
+            let content = if trimmed.starts_with("- ") {
+                trimmed[2..].trim_start()
+            } else {
+                trimmed
+            };
+
+            for &key in tgt_key_names {
+                let prefix = format!("{}:", key);
+                if let Some(rest) = content.strip_prefix(prefix.as_str()) {
+                    let value = rest.split('#').next().unwrap_or("").trim();
+                    for tok in value.split_whitespace() {
+                        if tok == filename {
+                            return Some(line_num as u32); // exact match wins immediately
+                        }
+                        if template_match.is_none()
+                            && tok.contains("{{")
+                            && Self::matches_jinja_pattern(tok, filename)
+                        {
+                            template_match = Some(line_num as u32);
+                        }
+                    }
+                }
+            }
+        }
+
+        template_match
+    }
+
+    /// Returns `true` if `filename` could have been generated from `template`
+    /// by substituting every `{{ … }}` expression with any string.
+    /// E.g., `"HBL.{{hbl.nb}}"` matches `"HBL.002"`.
+    fn matches_jinja_pattern(template: &str, filename: &str) -> bool {
+        // Split template on {{…}} wildcards into literal segments.
+        let mut segments: Vec<&str> = Vec::new();
+        let mut rem = template;
+        while let Some(open) = rem.find("{{") {
+            segments.push(&rem[..open]);
+            rem = &rem[open + 2..];
+            if let Some(close) = rem.find("}}") {
+                rem = &rem[close + 2..];
+            } else {
+                break; // unclosed {{ — stop here
+            }
+        }
+        segments.push(rem);
+
+        // Match segments against filename left-to-right.
+        let mut fname = filename;
+        for (i, seg) in segments.iter().enumerate() {
+            if seg.is_empty() {
+                continue; // wildcard: matches anything
+            }
+            if i == 0 {
+                if !fname.starts_with(seg) { return false; }
+                fname = &fname[seg.len()..];
+            } else if i == segments.len() - 1 {
+                if !fname.ends_with(seg) { return false; }
+            } else {
+                match fname.find(seg) {
+                    Some(pos) => fname = &fname[pos + seg.len()..],
+                    None => return false,
+                }
+            }
+        }
+        true
     }
 
     pub fn find_references(&self, _document: &Document, _position: Position) -> Vec<Location> {
@@ -605,13 +701,24 @@ impl BuildFileAnalyzer {
             () => {
                 if let Some((tgt_str, tgt_line)) = rule_tgt.take() {
                     for target in tgt_str.split_whitespace() {
+                        let sel_end_char = target.len() as u32;
+
+                        // VS Code requires selectionRange ⊆ fullRange.
+                        // Source-map translation can produce out-of-order line
+                        // numbers (e.g. {% for %} marker maps backwards), so
+                        // build range defensively from the actual sel coordinates.
+                        let range_start = rule_start.min(tgt_line);
+                        let range_end   = rule_end.max(tgt_line);
+                        let range_end_char =
+                            if range_end == tgt_line { sel_end_char } else { 0 };
+
                         let range = Range {
-                            start: Position { line: rule_start, character: 0 },
-                            end:   Position { line: rule_end,   character: 0 },
+                            start: Position { line: range_start, character: 0 },
+                            end:   Position { line: range_end,   character: range_end_char },
                         };
                         let sel = Range {
-                            start: Position { line: tgt_line,  character: 0 },
-                            end:   Position { line: tgt_line,  character: target.len() as u32 },
+                            start: Position { line: tgt_line, character: 0 },
+                            end:   Position { line: tgt_line, character: sel_end_char },
                         };
                         #[allow(deprecated)]
                         symbols.push(DocumentSymbol {

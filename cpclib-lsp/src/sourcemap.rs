@@ -1,4 +1,4 @@
-use minijinja::Environment;
+use minijinja::{Environment, UndefinedBehavior};
 
 const MARKER_PREFIX: &str = "#_SRCL:";
 const MARKER_SUFFIX: &str = "_#";
@@ -44,6 +44,11 @@ pub fn expand_with_source_map(
 
     // Step 2 — render through minijinja.
     let mut env = Environment::new();
+    // Lenient: undefined variables return Undefined instead of aborting.
+    // This lets the expansion proceed even when external build-time variables
+    // (e.g. definitions passed via `bndbuild -D`) are absent.
+    env.set_undefined_behavior(UndefinedBehavior::Chainable);
+
     if let Some(dir) = file_dir {
         let dir = dir.to_path_buf();
         env.set_loader(move |name| {
@@ -60,7 +65,27 @@ pub fn expand_with_source_map(
         });
     }
 
-    // No variable context — we only need structural expansion for LSP purposes.
+    // Register the same custom functions as bndbuild's create_template_env so
+    // templates that call them don't abort the LSP expansion.
+    fn lsp_fail(_msg: String) -> Result<String, minijinja::Error> { Ok(String::new()) }
+    fn lsp_assert(_ok: bool, _msg: String) -> Result<(), minijinja::Error> { Ok(()) }
+    fn lsp_basename(path: String) -> Result<String, minijinja::Error> {
+        Ok(std::path::Path::new(&path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&path)
+            .to_string())
+    }
+    fn lsp_escape(path: String) -> Result<String, minijinja::Error> { Ok(path) }
+
+    env.add_function("fail", lsp_fail);
+    env.add_function("assert", lsp_assert);
+    env.add_function("basename", lsp_basename);
+    env.add_function("basm_escape_path", lsp_escape);
+    env.add_filter("basm_escape_path", |path: String| path);
+
+    // No variable context — variables defined via {% set %} in the template
+    // are sufficient; external definitions resolve to Undefined (lenient).
     let rendered = env.render_str(&annotated, minijinja::context!())?;
 
     // Step 3 — build the source map and strip markers.
@@ -92,20 +117,49 @@ pub fn expand_with_source_map(
 // ─── internal helpers ────────────────────────────────────────────────────────
 
 fn annotate(source: &str) -> String {
-    let mut out = String::with_capacity(source.len() + source.lines().count() * 12);
+    let mut out = String::with_capacity(source.len() + source.lines().count() * 16);
+    let mut in_block_tag = false; // inside a {%…%} that hasn't closed yet
+
     for (i, line) in source.lines().enumerate() {
-        // Strip any existing trailing whitespace so we can cleanly append.
-        let trimmed_end = line.trim_end();
-        // Append the marker as a YAML comment.  Jinja passes comments through,
-        // so the marker survives template expansion for non-control lines.
-        out.push_str(trimmed_end);
-        out.push(' ');
-        out.push_str(MARKER_PREFIX);
-        out.push_str(&i.to_string());
-        out.push_str(MARKER_SUFFIX);
+        let trimmed = line.trim_end();
+        // Decide before annotating: does this line end inside an open block?
+        let ends_in_block = line_ends_in_block_tag(trimmed, in_block_tag);
+
+        if in_block_tag || ends_in_block {
+            // Line is inside or starts a multi-line {% %} tag —
+            // injecting the marker here would corrupt the Jinja expression.
+            out.push_str(trimmed);
+        } else {
+            out.push_str(trimmed);
+            out.push(' ');
+            out.push_str(MARKER_PREFIX);
+            out.push_str(&i.to_string());
+            out.push_str(MARKER_SUFFIX);
+        }
         out.push('\n');
+        in_block_tag = ends_in_block;
     }
     out
+}
+
+/// Returns `true` if `line` ends while still inside an open `{%…%}` block tag.
+/// `starts_inside` carries the state from the previous line.
+fn line_ends_in_block_tag(line: &str, starts_inside: bool) -> bool {
+    let bytes = line.as_bytes();
+    let mut inside = starts_inside;
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if !inside && bytes[i] == b'{' && bytes[i + 1] == b'%' {
+            inside = true;
+            i += 2;
+        } else if inside && bytes[i] == b'%' && bytes[i + 1] == b'}' {
+            inside = false;
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    inside
 }
 
 fn strip_marker(line: &str) -> (String, Option<u32>) {
