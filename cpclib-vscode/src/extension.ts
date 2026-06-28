@@ -43,21 +43,27 @@ export function activate(context: ExtensionContext) {
         clientOptions
     );
 
-    // Register the "Run Rule" command invoked by CodeLens buttons in bndbuild files
-    const runRuleCmd = commands.registerCommand('cpclib.runRule', (target: string) => {
+    // Register the "Run Rule" command invoked by CodeLens buttons in bndbuild files.
+    // Arguments: target (string), buildFilePath (string, absolute path to the .bnd/.build file).
+    const runRuleCmd = commands.registerCommand('cpclib.runRule', (target: string, buildFilePath?: string) => {
         const terminal = getOrCreateTerminal();
         terminal.show(true); // preserve focus
 
-        // Determine the working directory from the active editor's file location
-        const activeFile = window.activeTextEditor?.document.uri;
-        let workDir: string | undefined;
-        if (activeFile && activeFile.scheme === 'file') {
-            workDir = path.dirname(activeFile.fsPath);
-            terminal.sendText(`cd "${workDir}"`);
-        }
-
         const bndbuildPath = config.get<string>('bndbuildPath', 'bndbuild');
-        terminal.sendText(`${bndbuildPath} ${target}`);
+
+        // Prefer the file path passed by the code lens; fall back to the active editor.
+        const filePath = buildFilePath
+            ?? (window.activeTextEditor?.document.uri.scheme === 'file'
+                ? window.activeTextEditor.document.uri.fsPath
+                : undefined);
+
+        if (filePath) {
+            const workDir  = path.dirname(filePath);
+            const fileName = path.basename(filePath);
+            terminal.sendText(`cd "${workDir}" && ${bndbuildPath} -f "${fileName}" ${target}`);
+        } else {
+            terminal.sendText(`${bndbuildPath} ${target}`);
+        }
     });
 
     context.subscriptions.push(runRuleCmd);

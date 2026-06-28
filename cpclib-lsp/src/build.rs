@@ -364,52 +364,31 @@ impl BuildFileAnalyzer {
         result
     }
 
-    /// Emit a CodeLens "Run" button on each line that declares a rule target.
+    /// Emit a CodeLens "▶ Run" button on each target declared in a bndbuild file.
+    /// Delegates target detection to `document_symbols` so that Jinja expansion,
+    /// block scalars, and all key aliases are handled consistently.
     pub fn code_lens(&self, document: &Document) -> Vec<CodeLens> {
-        let mut lenses = Vec::new();
-        let line_count = document.rope.len_lines();
+        let file_path = document.uri
+            .to_file_path()
+            .ok()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
 
-        for line_num in 0..line_count {
-            let line_str = match document.line(line_num) {
-                Some(s) => s,
-                None => continue,
-            };
-            let trimmed = line_str.trim();
-
-            // Look for `tgt:`, `target:`, or `build:` on this line
-            let target = if let Some(v) = trimmed
-                .strip_prefix("tgt:")
-                .or_else(|| trimmed.strip_prefix("target:"))
-                .or_else(|| trimmed.strip_prefix("build:"))
-            {
-                // Strip inline comment and trim
-                let raw = v.split('#').next().unwrap_or("").trim();
-                if raw.is_empty() {
-                    continue;
-                }
-                raw.to_string()
-            } else {
-                continue;
-            };
-
-            let lsp_line = line_num as u32;
-            let range = Range {
-                start: Position { line: lsp_line, character: 0 },
-                end:   Position { line: lsp_line, character: line_str.trim_end().len() as u32 },
-            };
-
-            lenses.push(CodeLens {
-                range,
+        self.document_symbols(document)
+            .into_iter()
+            .map(|sym| CodeLens {
+                range: sym.selection_range,
                 command: Some(Command {
-                    title:     format!("▶ Run: {}", target),
+                    title:     format!("▶ Run: {}", sym.name),
                     command:   "cpclib.runRule".to_string(),
-                    arguments: Some(vec![serde_json::json!(target)]),
+                    arguments: Some(vec![
+                        serde_json::json!(sym.name),
+                        serde_json::json!(file_path),
+                    ]),
                 }),
                 data: None,
-            });
-        }
-
-        lenses
+            })
+            .collect()
     }
 
     pub fn goto_definition(&self, _document: &Document, _position: Position) -> Option<Location> {
