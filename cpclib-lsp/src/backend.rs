@@ -5,6 +5,7 @@ use tower_lsp::{Client, LanguageServer};
 
 use crate::document::{Document, DocumentType};
 use crate::asm::AssemblyAnalyzer;
+use crate::basic::BasicAnalyzer;
 use crate::build::BuildFileAnalyzer;
 
 pub struct CpcLspBackend {
@@ -12,6 +13,7 @@ pub struct CpcLspBackend {
     documents: DashMap<Url, Document>,
     asm_analyzer: AssemblyAnalyzer,
     build_analyzer: BuildFileAnalyzer,
+    basic_analyzer: BasicAnalyzer,
 }
 
 impl CpcLspBackend {
@@ -21,6 +23,7 @@ impl CpcLspBackend {
             documents: DashMap::new(),
             asm_analyzer: AssemblyAnalyzer::new(),
             build_analyzer: BuildFileAnalyzer::new(),
+            basic_analyzer: BasicAnalyzer::new(),
         }
     }
 
@@ -32,13 +35,10 @@ impl CpcLspBackend {
 
     async fn analyze_document(&self, document: &Document) {
         let diagnostics = match document.doc_type {
-            DocumentType::Assembly => {
-                self.asm_analyzer.analyze(document)
-            }
-            DocumentType::BuildFile => {
-                self.build_analyzer.analyze(document)
-            }
-            DocumentType::Unknown => Vec::new(),
+            DocumentType::Assembly  => self.asm_analyzer.analyze(document),
+            DocumentType::BuildFile => self.build_analyzer.analyze(document),
+            DocumentType::Basic     => self.basic_analyzer.analyze(document),
+            DocumentType::Unknown   => Vec::new(),
         };
 
         self.publish_diagnostics(document.uri.clone(), diagnostics).await;
@@ -175,13 +175,10 @@ impl LanguageServer for CpcLspBackend {
             let document = entry.value();
             
             let hover = match document.doc_type {
-                DocumentType::Assembly => {
-                    self.asm_analyzer.hover(document, position)
-                }
-                DocumentType::BuildFile => {
-                    self.build_analyzer.hover(document, position)
-                }
-                DocumentType::Unknown => None,
+                DocumentType::Assembly  => self.asm_analyzer.hover(document, position),
+                DocumentType::BuildFile => self.build_analyzer.hover(document, position),
+                DocumentType::Basic     => self.basic_analyzer.hover(document, position),
+                DocumentType::Unknown   => None,
             };
             
             return Ok(hover);
@@ -200,13 +197,10 @@ impl LanguageServer for CpcLspBackend {
             let document = entry.value();
             
             let completions = match document.doc_type {
-                DocumentType::Assembly => {
-                    self.asm_analyzer.completion(document, position)
-                }
-                DocumentType::BuildFile => {
-                    self.build_analyzer.completion(document, position)
-                }
-                DocumentType::Unknown => Vec::new(),
+                DocumentType::Assembly  => self.asm_analyzer.completion(document, position),
+                DocumentType::BuildFile => self.build_analyzer.completion(document, position),
+                DocumentType::Basic     => self.basic_analyzer.completion(document, position),
+                DocumentType::Unknown   => Vec::new(),
             };
             
             if !completions.is_empty() {
@@ -230,13 +224,10 @@ impl LanguageServer for CpcLspBackend {
             let document = entry.value();
             
             let location = match document.doc_type {
-                DocumentType::Assembly => {
-                    self.asm_analyzer.goto_definition(document, position)
-                }
-                DocumentType::BuildFile => {
-                    self.build_analyzer.goto_definition(document, position)
-                }
-                DocumentType::Unknown => None,
+                DocumentType::Assembly  => self.asm_analyzer.goto_definition(document, position),
+                DocumentType::BuildFile => self.build_analyzer.goto_definition(document, position),
+                DocumentType::Basic     => self.basic_analyzer.goto_definition(document, position),
+                DocumentType::Unknown   => None,
             };
             
             if let Some(location) = location {
@@ -257,13 +248,10 @@ impl LanguageServer for CpcLspBackend {
             let document = entry.value();
             
             let references = match document.doc_type {
-                DocumentType::Assembly => {
-                    self.asm_analyzer.find_references(document, position)
-                }
-                DocumentType::BuildFile => {
-                    self.build_analyzer.find_references(document, position)
-                }
-                DocumentType::Unknown => Vec::new(),
+                DocumentType::Assembly  => self.asm_analyzer.find_references(document, position),
+                DocumentType::BuildFile => self.build_analyzer.find_references(document, position),
+                DocumentType::Basic     => self.basic_analyzer.find_references(document, position),
+                DocumentType::Unknown   => Vec::new(),
             };
             
             if !references.is_empty() {
@@ -286,13 +274,10 @@ impl LanguageServer for CpcLspBackend {
             let document = entry.value();
 
             let symbols = match document.doc_type {
-                DocumentType::Assembly => {
-                    self.asm_analyzer.document_symbols(document)
-                }
-                DocumentType::BuildFile => {
-                    self.build_analyzer.document_symbols(document)
-                }
-                DocumentType::Unknown => Vec::new(),
+                DocumentType::Assembly  => self.asm_analyzer.document_symbols(document),
+                DocumentType::BuildFile => self.build_analyzer.document_symbols(document),
+                DocumentType::Basic     => self.basic_analyzer.document_symbols(document),
+                DocumentType::Unknown   => Vec::new(),
             };
 
             if !symbols.is_empty() {
@@ -369,6 +354,7 @@ impl LanguageServer for CpcLspBackend {
             let data = match document.doc_type {
                 DocumentType::Assembly  => self.asm_analyzer.semantic_tokens(document),
                 DocumentType::BuildFile => self.build_analyzer.semantic_tokens(document),
+                DocumentType::Basic     => self.basic_analyzer.semantic_tokens(document),
                 DocumentType::Unknown   => vec![],
             };
             if !data.is_empty() {

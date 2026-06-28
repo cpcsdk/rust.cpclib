@@ -2997,6 +2997,7 @@ dependencies = [
  "anyhow",
  "camino",
  "cpclib-asm",
+ "cpclib-basic",
  "cpclib-bndbuild",
  "cpclib-common",
  "cpclib-tokens",

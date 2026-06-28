@@ -25,6 +25,12 @@
         "aliases": ["BndBuild", "Bndbuild"],
         "extensions": [".build", ".bnd"],
         "configuration": "./language-configuration-bnd.json"
+      },
+      {
+        "id": "locomotive-basic",
+        "aliases": ["Locomotive BASIC", "CPC BASIC"],
+        "extensions": [".bas", ".BAS"],
+        "configuration": "./language-configuration-bas.json"
       }
     ],
     "grammars": [

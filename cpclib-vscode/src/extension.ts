@@ -30,10 +30,11 @@ export function activate(context: ExtensionContext) {
     const clientOptions: LanguageClientOptions = {
         documentSelector: [
             { scheme: 'file', language: 'basm' },
-            { scheme: 'file', language: 'bndbuild' }
+            { scheme: 'file', language: 'bndbuild' },
+            { scheme: 'file', language: 'locomotive-basic' }
         ],
         synchronize: {
-            fileEvents: workspace.createFileSystemWatcher('**/*.{asm,z80,build,bnd}')
+            fileEvents: workspace.createFileSystemWatcher('**/*.{asm,z80,build,bnd,bas,BAS}')
         }
     };
 

@@ -8,6 +8,8 @@ pub enum DocumentType {
     Assembly,
     /// Build file (.build, .bnd) with Jinja templates
     BuildFile,
+    /// Locomotive BASIC source file (.bas)
+    Basic,
     /// Unknown file type
     Unknown,
 }
@@ -19,6 +21,8 @@ impl DocumentType {
             Self::Assembly
         } else if path.ends_with(".build") || path.ends_with(".bnd") {
             Self::BuildFile
+        } else if path.ends_with(".bas") || path.ends_with(".BAS") {
+            Self::Basic
         } else {
             Self::Unknown
         }
