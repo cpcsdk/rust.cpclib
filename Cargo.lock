@@ -3001,6 +3001,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-tokens",
  "dashmap 6.2.1",
+ "minijinja",
  "ropey",
  "serde",
  "serde_json",
