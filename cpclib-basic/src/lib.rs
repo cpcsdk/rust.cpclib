@@ -1,6 +1,8 @@
 pub mod binary_parser;
 /// Located (position-aware) token types used by the LSP.
 pub mod located;
+/// Renumbering of Locomotive BASIC programs.
+pub mod renum;
 /// Paring related functions for basic.
 pub mod string_parser;
 /// Basic token encoding.

@@ -83,7 +83,10 @@ impl LanguageServer for CpcLspBackend {
                     resolve_provider: Some(false),
                 }),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["cpclib.getTargets".to_string()],
+                    commands: vec![
+                        "cpclib.getTargets".to_string(),
+                        "cpclib.selectRange".to_string(),
+                    ],
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
                 definition_provider: Some(OneOf::Left(true)),
@@ -343,6 +346,22 @@ impl LanguageServer for CpcLspBackend {
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<serde_json::Value>> {
+        if params.command == "cpclib.selectRange" {
+            if let Some(arg) = params.arguments.into_iter().next() {
+                let uri = arg.get("uri").and_then(|v| v.as_str()).and_then(|s| s.parse::<Url>().ok());
+                let range = arg.get("range").and_then(|v| serde_json::from_value::<Range>(v.clone()).ok());
+                if let (Some(uri), Some(range)) = (uri, range) {
+                    let _ = self.client.show_document(ShowDocumentParams {
+                        uri,
+                        external: Some(false),
+                        take_focus: Some(true),
+                        selection: Some(range),
+                    }).await;
+                }
+            }
+            return Ok(None);
+        }
+
         if params.command != "cpclib.getTargets" {
             return Ok(None);
         }

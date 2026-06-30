@@ -774,13 +774,42 @@ impl AssemblyAnalyzer {
 
     pub fn code_actions(&self, document: &Document, range: Range) -> Vec<CodeAction> {
         let mut actions = Vec::new();
+        let text = document.text();
+        let all_lines: Vec<&str> = text.lines().collect();
+
+        // Offer RENUM when cursor/selection is inside a LOCOMOTIVE block.
+        let loco_blocks = extract_locomotive_blocks(&text);
+        let cursor_line = range.start.line as usize;
+        if let Some(block) = loco_blocks.iter().find(|b| b.basic_range.contains(&cursor_line)) {
+            let basic_text: String = block.basic_range.clone()
+                .filter_map(|i| all_lines.get(i).copied())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if let Ok(new_basic) = cpclib_basic::renum::renum_text(&basic_text, 10, 10) {
+                if new_basic != basic_text {
+                    let new_text = if new_basic.ends_with('\n') {
+                        new_basic
+                    } else {
+                        format!("{new_basic}\n")
+                    };
+                    let edit_range = Range {
+                        start: Position { line: block.basic_range.start as u32, character: 0 },
+                        end:   Position { line: block.basic_range.end   as u32, character: 0 },
+                    };
+                    actions.push(CodeAction {
+                        title: "Renumber BASIC lines in LOCOMOTIVE block (10, 20, 30…)".to_string(),
+                        kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                        edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
         let has_selection = range.start != range.end;
         if !has_selection {
             return actions;
         }
-
-        let text = document.text();
-        let all_lines: Vec<&str> = text.lines().collect();
         let start_line = range.start.line as usize;
         // end.line is exclusive when character == 0; include last non-empty line
         let end_line = if range.end.character == 0 && range.end.line > range.start.line {
@@ -794,7 +823,7 @@ impl AssemblyAnalyzer {
         // Wrap in MACRO / ENDM
         actions.push(self.wrap_action(
             document, &all_lines, start_line, end_line,
-            "MY_MACRO MACRO", "ENDM",
+            "MACRO MY_MACRO", "ENDM", "MY_MACRO",
             "Wrap selection in MACRO…ENDM (rename MY_MACRO)",
             CodeActionKind::REFACTOR_EXTRACT,
         ));
@@ -802,7 +831,7 @@ impl AssemblyAnalyzer {
         // Wrap in REPEAT / REND
         actions.push(self.wrap_action(
             document, &all_lines, start_line, end_line,
-            "REPEAT 10", "REND",
+            "REPEAT 10", "REND", "10",
             "Wrap selection in REPEAT…REND (replace 10 with count)",
             CodeActionKind::REFACTOR_EXTRACT,
         ));
@@ -830,6 +859,7 @@ impl AssemblyAnalyzer {
         end_line: usize,
         header: &str,
         footer: &str,
+        placeholder: &str,
         title: &str,
         kind: CodeActionKind,
     ) -> CodeAction {
@@ -840,33 +870,39 @@ impl AssemblyAnalyzer {
             .map(|l| l.len() - l.trim_start().len())
             .min()
             .unwrap_or(0);
-        let pad: String = lines[start_line..=end_line]
-            .iter()
-            .find(|l| !l.trim().is_empty())
-            .map(|l| &l[..indent])
-            .unwrap_or("")
-            .to_string();
 
-        let mut new_text = format!("{pad}{header}\n");
-        // If selected lines are unindented, add one tab; otherwise preserve.
-        let needs_extra = indent == 0;
+        // MACRO/ENDM always at column 0; body gets an extra \t when unindented.
+        let mut new_text = format!("{header}\n");
         for &line in &lines[start_line..=end_line] {
-            if needs_extra {
+            if indent == 0 {
                 new_text.push('\t');
             }
             new_text.push_str(line.trim_end());
             new_text.push('\n');
         }
-        new_text.push_str(&format!("{pad}{footer}\n"));
+        new_text.push_str(&format!("{footer}\n"));
 
         let edit_range = Range {
             start: Position { line: start_line as u32, character: 0 },
             end:   Position { line: end_line as u32 + 1, character: 0 },
         };
+
+        // Select the placeholder text in the header line once the edit is applied,
+        // so the user can immediately type a replacement (e.g. macro name / count).
+        let command = header.find(placeholder).map(|col| {
+            let header_line = start_line as u32;
+            let placeholder_range = Range {
+                start: Position { line: header_line, character: col as u32 },
+                end:   Position { line: header_line, character: (col + placeholder.len()) as u32 },
+            };
+            select_range_command(&document.uri, placeholder_range)
+        });
+
         CodeAction {
             title: title.to_string(),
             kind: Some(kind),
             edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
+            command,
             ..Default::default()
         }
     }
@@ -1315,6 +1351,20 @@ fn single_file_edit(uri: Url, range: Range, new_text: String) -> WorkspaceEdit {
     }
 }
 
+/// Build a `cpclib.selectRange` command that, once the code action's edit has
+/// been applied, asks the client (via `window/showDocument`) to select
+/// `range` so the user can immediately type a replacement.
+fn select_range_command(uri: &Url, range: Range) -> Command {
+    Command {
+        title: "Select placeholder".to_string(),
+        command: "cpclib.selectRange".to_string(),
+        arguments: Some(vec![serde_json::json!({
+            "uri": uri.to_string(),
+            "range": range,
+        })]),
+    }
+}
+
 /// Strip a trailing `;`-comment from an ASM line (string-literal aware).
 /// Returns the slice up to (but not including) the `;`.
 fn strip_asm_comment(line: &str) -> &str {
@@ -1332,31 +1382,81 @@ fn strip_asm_comment(line: &str) -> &str {
 
 /// Split an ASM line at `:` statement separators (string-literal aware).
 /// A `:` that immediately follows a bare identifier (label colon) is NOT split.
-fn split_at_colon(line: &str) -> Vec<&str> {
+/// Split `line` at top-level (non-string) single `:` characters, one
+/// instruction per part. `::` is a label-reference prefix (e.g. `::foo`),
+/// not a statement separator, and is never split. A part that is a bare
+/// label identifier (e.g. `loop`) is re-suffixed with `:` so it becomes its
+/// own `loop:` line instead of staying glued to the following instruction.
+fn split_at_colon(line: &str) -> Vec<String> {
     let bytes = line.as_bytes();
-    let mut parts: Vec<&str> = Vec::new();
+    let mut raw_parts: Vec<&str> = Vec::new();
     let mut in_str = false;
     let mut start = 0usize;
+    let mut i = 0usize;
 
-    for (i, &b) in bytes.iter().enumerate() {
-        match b {
-            b'"' => in_str = !in_str,
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => { in_str = !in_str; i += 1; }
             b':' if !in_str => {
-                // Label colon: everything before ':' (trimmed) is a bare identifier.
-                let before = line[start..i].trim();
-                let is_label = !before.is_empty()
-                    && before.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '@');
-                if !is_label {
-                    parts.push(&line[start..i]);
-                    start = i + 1;
+                if i + 1 < bytes.len() && bytes[i + 1] == b':' {
+                    i += 2;
+                    continue;
                 }
+                raw_parts.push(&line[start..i]);
+                start = i + 1;
+                i += 1;
             }
-            _ => {}
+            _ => { i += 1; }
         }
     }
-    parts.push(&line[start..]);
-    parts.into_iter()
-        .map(|s| s.trim_end())
-        .filter(|s| !s.is_empty())
+    raw_parts.push(&line[start..]);
+
+    let n = raw_parts.len();
+    raw_parts.into_iter()
+        .enumerate()
+        .filter_map(|(idx, part)| {
+            let trimmed = part.trim();
+            if trimmed.is_empty() { return None; }
+            // A part followed by a colon in the source, made up only of
+            // identifier characters, is a label definition.
+            let is_label = idx + 1 < n
+                && trimmed.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '@');
+            Some(if is_label { format!("{trimmed}:") } else { trimmed.to_string() })
+        })
         .collect()
+}
+
+#[cfg(test)]
+mod split_at_colon_tests {
+    use super::split_at_colon;
+
+    #[test]
+    fn splits_label_onto_its_own_line() {
+        let parts = split_at_colon(".loop: ld a,(hl) : inc hl : djnz .loop");
+        assert_eq!(parts, vec![".loop:", "ld a,(hl)", "inc hl", "djnz .loop"]);
+    }
+
+    #[test]
+    fn no_label_just_splits_instructions() {
+        let parts = split_at_colon("ld a,1 : ld b,2");
+        assert_eq!(parts, vec!["ld a,1", "ld b,2"]);
+    }
+
+    #[test]
+    fn double_colon_is_not_a_separator() {
+        let parts = split_at_colon("ld hl,::foo : ret");
+        assert_eq!(parts, vec!["ld hl,::foo", "ret"]);
+    }
+
+    #[test]
+    fn colon_inside_string_is_preserved() {
+        let parts = split_at_colon("ld a,\"x:y\" : ret");
+        assert_eq!(parts, vec!["ld a,\"x:y\"", "ret"]);
+    }
+
+    #[test]
+    fn trailing_label_with_no_following_instruction() {
+        let parts = split_at_colon(".end:");
+        assert_eq!(parts, vec![".end:"]);
+    }
 }

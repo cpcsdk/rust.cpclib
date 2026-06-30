@@ -371,110 +371,44 @@ impl BasicAnalyzer {
     }
 
     pub fn code_actions(&self, document: &Document, _range: Range) -> Vec<CodeAction> {
+        use cpclib_basic::renum::Renumber;
         let mut actions = Vec::new();
-        if let Some(edits) = renum_edits(document) {
-            let edit = WorkspaceEdit {
-                changes: Some(std::collections::HashMap::from([(
-                    document.uri.clone(),
-                    edits,
-                )])),
-                ..Default::default()
-            };
-            actions.push(CodeAction {
-                title: "Renumber BASIC lines (10, 20, 30…)".to_string(),
-                kind: Some(CodeActionKind::REFACTOR_REWRITE),
-                edit: Some(edit),
-                ..Default::default()
-            });
+        let text = document.text();
+        let prog = match LocatedBasicProgram::parse(&text) {
+            Ok(p) => p,
+            Err(_) => return actions,
+        };
+        if prog.lines.is_empty() {
+            return actions;
         }
+        let subs = prog.renum_substitutions(10, 10);
+        if subs.is_empty() {
+            return actions;
+        }
+        let edits: Vec<TextEdit> = subs
+            .iter()
+            .map(|(line, col, len, new_text)| TextEdit {
+                range: Range {
+                    start: Position { line: *line, character: *col },
+                    end:   Position { line: *line, character: col + len },
+                },
+                new_text: new_text.clone(),
+            })
+            .collect();
+        let edit = WorkspaceEdit {
+            changes: Some(std::collections::HashMap::from([(
+                document.uri.clone(),
+                edits,
+            )])),
+            ..Default::default()
+        };
+        actions.push(CodeAction {
+            title: "Renumber BASIC lines (10, 20, 30…)".to_string(),
+            kind: Some(CodeActionKind::REFACTOR_REWRITE),
+            edit: Some(edit),
+            ..Default::default()
+        });
         actions
-    }
-}
-
-// ─── Code-action helpers ──────────────────────────────────────────────────────
-
-/// Build the `TextEdit` list that renumbers all BASIC line numbers to multiples
-/// of 10 (10, 20, 30 …) and updates every GOTO / GOSUB / RESTORE / THEN / ELSE
-/// / RUN target accordingly.  Returns `None` when the document is not valid
-/// BASIC or the numbering is already correct (no edits needed).
-fn renum_edits(document: &Document) -> Option<Vec<TextEdit>> {
-    use cpclib_basic::tokens::BasicTokenNoPrefix as K;
-
-    let text = document.text();
-    let prog = LocatedBasicProgram::parse(&text).ok()?;
-    if prog.lines.is_empty() {
-        return None;
-    }
-
-    // Build old → new mapping.
-    let mapping: HashMap<u16, u16> = prog.lines.iter()
-        .enumerate()
-        .map(|(i, l)| (l.line_number, ((i + 1) * 10) as u16))
-        .collect();
-
-    let mut edits: Vec<TextEdit> = Vec::new();
-
-    for bline in &prog.lines {
-        // `after_jump` is true whenever the next Number token is a line reference.
-        let mut after_jump = false;
-
-        for tok in &bline.tokens {
-            match &tok.kind {
-                // ── line header number ────────────────────────────────────────
-                LocatedTokenKind::LineNumber(old) => {
-                    let new_n = mapping.get(old).copied().unwrap_or(*old);
-                    if new_n != *old {
-                        edits.push(tok_edit(tok, new_n.to_string()));
-                    }
-                    after_jump = false;
-                }
-
-                // ── keywords that precede a line-number argument ──────────────
-                LocatedTokenKind::Keyword(kw) => {
-                    after_jump = matches!(kw,
-                        K::Goto | K::Gosub | K::Restore | K::Run
-                        | K::Then | K::Else | K::OnErrorGoto
-                    );
-                }
-
-                // ── number in jump context → line reference ───────────────────
-                LocatedTokenKind::Number(n) if after_jump => {
-                    if let Ok(old) = n.parse::<u16>() {
-                        if let Some(&new_n) = mapping.get(&old) {
-                            if new_n != old {
-                                edits.push(tok_edit(tok, new_n.to_string()));
-                            }
-                        }
-                    }
-                    // Keep `after_jump` true: comma may follow (ON GOTO n,n,n).
-                }
-
-                // ── comma in a line-number list → keep after_jump ─────────────
-                LocatedTokenKind::Other(',') => {}
-
-                // ── whitespace → keep state ───────────────────────────────────
-                LocatedTokenKind::Space => {}
-
-                // ── ':' resets the state machine ──────────────────────────────
-                LocatedTokenKind::Separator => { after_jump = false; }
-
-                // ── anything else (operator, variable, string, …) resets ──────
-                _ => { after_jump = false; }
-            }
-        }
-    }
-
-    if edits.is_empty() { None } else { Some(edits) }
-}
-
-/// Build a `TextEdit` that replaces the span of `tok` with `new_text`.
-fn tok_edit(tok: &cpclib_basic::located::LocatedBasicToken, new_text: String) -> TextEdit {
-    TextEdit {
-        range: Range {
-            start: Position { line: tok.span.line, character: tok.span.col },
-            end:   Position { line: tok.span.line, character: tok.span.col + tok.span.len },
-        },
-        new_text,
     }
 }
 
@@ -491,8 +425,6 @@ fn single_pos(line: u32, col: u32) -> Range {
 /// Returns true if the token at `tok_idx` is preceded (ignoring spaces) by a
 /// line-jump keyword (GOTO, GOSUB, RESTORE, RESUME, RUN, MERGE, CHAIN, etc.).
 fn is_jump_target(tokens: &[cpclib_basic::located::LocatedBasicToken], tok_idx: usize) -> bool {
-    use cpclib_basic::located::LocatedBasicToken;
-
     // Walk backwards, skipping spaces, commas (ON n GOTO x,y lists).
     let mut i = tok_idx;
     while i > 0 {
