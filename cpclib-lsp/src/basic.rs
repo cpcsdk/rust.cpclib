@@ -305,19 +305,10 @@ impl BasicAnalyzer {
             // Any other number → show base conversions.
             LocatedTokenKind::Number(num_text) => {
                 if let Some(value) = parse_basic_integer(num_text) {
-                    let bin = format_basic_binary(value);
-                    let md = format!(
-                        "**`{num_text}`**\n\n\
-                        | Base | Value |\n\
-                        |------|-------|\n\
-                        | Decimal | `{value}` |\n\
-                        | Hex | `&{value:X}` |\n\
-                        | Binary | `&X{bin}` |"
-                    );
                     return Some(Hover {
                         contents: HoverContents::Markup(MarkupContent {
                             kind: MarkupKind::Markdown,
-                            value: md,
+                            value: crate::utils::format_number_hover(num_text, value),
                         }),
                         range: None,
                     });
@@ -783,17 +774,6 @@ fn parse_basic_integer(text: &str) -> Option<i64> {
     }
 }
 
-/// Format an i64 as `0` and `1` groups of 4, sized to 8 or 16 bits.
-fn format_basic_binary(value: i64) -> String {
-    let bits: u32 = if value >= 0 && value <= 0xFF { 8 } else { 16 };
-    let mut s = String::with_capacity(bits as usize + bits as usize / 4);
-    for i in (0..bits).rev() {
-        if i < bits - 1 && i % 4 == 3 { s.push('_'); }
-        s.push(if value & (1 << i) != 0 { '1' } else { '0' });
-    }
-    s
-}
-
 // ─── Text helpers (hover still works on raw text) ─────────────────────────────
 
 /// Return the alphabetic/alphanumeric word (including `$` and `%` suffixes) at column `col`.
@@ -1040,19 +1020,10 @@ pub(crate) fn locomotive_basic_hover(
             }) {
                 if let LocatedTokenKind::Number(num_text) = &tok.kind {
                     if let Some(value) = parse_basic_integer(num_text) {
-                        let bin = format_basic_binary(value);
-                        let md = format!(
-                            "**`{num_text}`**\n\n\
-                            | Base | Value |\n\
-                            |------|-------|\n\
-                            | Decimal | `{value}` |\n\
-                            | Hex | `&{value:X}` |\n\
-                            | Binary | `&X{bin}` |"
-                        );
                         return Some(Hover {
                             contents: HoverContents::Markup(MarkupContent {
                                 kind: MarkupKind::Markdown,
-                                value: md,
+                                value: crate::utils::format_number_hover(num_text, value),
                             }),
                             range: None,
                         });

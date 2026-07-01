@@ -146,16 +146,7 @@ impl AssemblyAnalyzer {
 
         // Numeric literal — show all bases
         if let Some((num_str, value)) = extract_number_at_position(&line, col) {
-            let bin = format_binary(value);
-            let md = format!(
-                "**`{num_str}`**\n\n\
-                | Base | Value |\n\
-                |------|-------|\n\
-                | Decimal | `{value}` |\n\
-                | Hex | `{value:#X}` |\n\
-                | Binary | `{bin}` |"
-            );
-            return Some(make_hover(md));
+            return Some(make_hover(crate::utils::format_number_hover(&num_str, value)));
         }
 
         let word = self.extract_word_at_position(&line, col)?;
@@ -1066,20 +1057,6 @@ fn extract_number_at_position(line: &str, col: usize) -> Option<(String, i64)> {
     Some((num_str.to_string(), value))
 }
 
-/// Format an i64 as a binary string with `_` every 4 bits.
-/// Width is clamped to 8 or 16 bits for typical Z80 values.
-fn format_binary(value: i64) -> String {
-    let bits: u32 = if value >= 0 && value <= 0xFF { 8 } else { 16 };
-    let mut s = String::with_capacity(bits as usize + bits as usize / 4);
-    for i in (0..bits).rev() {
-        if i < bits - 1 && i % 4 == 3 {
-            s.push('_');
-        }
-        s.push(if value & (1 << i) != 0 { '1' } else { '0' });
-    }
-    s
-}
-
 fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'@'
 }
@@ -1401,10 +1378,10 @@ fn collect_asm_diagnostics(
             let msg = format!("Function {name}: {inner}");
             out.push(asm_diag(parent_span, msg, DiagnosticSeverity::ERROR));
         }
-        AssemblerError::SyntaxError { .. } => {
-            // Syntax errors embed position in the codespan-style Display text.
-            // Emit the stripped text; exact location appears in the message.
-            out.push(asm_diag(parent_span, strip_ansi(&format!("{error}")), DiagnosticSeverity::ERROR));
+        AssemblerError::SyntaxError { error: parse_err } => {
+            let owned_span = parse_err.primary_z80span();
+            let span_ref = owned_span.as_ref().or(parent_span);
+            out.push(asm_diag(span_ref, strip_ansi(&format!("{error}")), DiagnosticSeverity::ERROR));
         }
         AssemblerError::AlreadyRenderedError(s) => {
             out.push(asm_diag(parent_span, strip_ansi(s), DiagnosticSeverity::ERROR));
@@ -1425,7 +1402,9 @@ fn asm_diag(
         let line = line_1.saturating_sub(1) as u32;
         let col  = col_1.saturating_sub(1) as u32;
         let span_text: &str = s.as_ref();
-        let len  = (span_text.len() as u32).max(1).min(120);
+        // Only highlight to end of the current line, not across lines.
+        let first_line = span_text.lines().next().unwrap_or(span_text);
+        let len = (first_line.len() as u32).max(1);
         (Position { line, character: col }, Position { line, character: col + len })
     } else {
         (Position { line: 0, character: 0 }, Position { line: 0, character: 100 })
