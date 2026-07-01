@@ -50,6 +50,20 @@ impl Z80ParserError {
         }
         res
     }
+
+    /// Return the span of the most informative error entry (first non-Winnow,
+    /// non-debug entry; falls back to the first entry of any kind).
+    /// Useful for LSP diagnostics that need a line/column position.
+    pub fn primary_z80span(&self) -> Option<Z80Span> {
+        let errors = self.errors();
+        // Prefer a meaningful, non-noise entry.
+        if let Some((span, _)) = errors.iter().find(|(_, k)| {
+            !matches!(k, Z80ParserErrorKind::Winnow | Z80ParserErrorKind::DebugContext(_))
+        }) {
+            return Some(Z80Span::from((*span).clone()));
+        }
+        errors.first().map(|(span, _)| Z80Span::from((*span).clone()))
+    }
 }
 
 impl Z80ParserErrorKind {

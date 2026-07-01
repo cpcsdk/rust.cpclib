@@ -94,42 +94,27 @@ impl AssemblyAnalyzer {
 
     /// Analyze the document and return diagnostics
     pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
-        let mut diagnostics = Vec::new();
-        
         match self.parse_document(document) {
-            Ok(_listing) => {
-                // Parsing succeeded - no errors to report
-                // TODO: could extract warnings if the API provides them
-            }
+            Ok(_) => vec![],
             Err(listing_with_errors) => {
-                // Parse error - the listing contains the errors
-                // TODO: Extract error details from the listing
-                // For now, create a generic error
-                let diagnostic = Diagnostic {
-                    range: Range {
-                        start: Position {
-                            line: 0,
-                            character: 0,
+                let error = listing_with_errors.cpclib_error_unchecked();
+                let mut diagnostics = Vec::new();
+                collect_asm_diagnostics(error, None, &mut diagnostics);
+                if diagnostics.is_empty() {
+                    diagnostics.push(Diagnostic {
+                        range: Range {
+                            start: Position { line: 0, character: 0 },
+                            end:   Position { line: 0, character: 100 },
                         },
-                        end: Position {
-                            line: 0,
-                            character: 100,
-                        },
-                    },
-                    severity: Some(DiagnosticSeverity::ERROR),
-                    code: None,
-                    code_description: None,
-                    source: Some("basm".to_string()),
-                    message: format!("{}", listing_with_errors.cpclib_error_unchecked()),
-                    related_information: None,
-                    tags: None,
-                    data: None,
-                };
-                diagnostics.push(diagnostic);
+                        severity: Some(DiagnosticSeverity::ERROR),
+                        source: Some("basm".to_string()),
+                        message: strip_ansi(&format!("{error}")),
+                        ..Default::default()
+                    });
+                }
+                diagnostics
             }
         }
-        
-        diagnostics
     }
 
     /// Provide hover information at the given position
@@ -191,6 +176,11 @@ impl AssemblyAnalyzer {
 
         // Register / condition code
         if let Some(md) = register_description(&word_upper) {
+            return Some(make_hover(md));
+        }
+
+        // Assembler directive — look up in documentation generated from directives.md
+        if let Some(md) = directive_hover(&word_upper) {
             return Some(make_hover(md));
         }
 
@@ -1339,6 +1329,127 @@ fn push_locomotive_basic_tokens(
             raw.push((src_line, pos as u32, 13, TT_MACRO, 0));
         }
     }
+}
+
+// ─── Directive documentation (generated from docs/basm/directives.md) ────────
+
+include!(concat!(env!("OUT_DIR"), "/directive_docs_generated.rs"));
+
+/// Look up an assembler directive by name (case-insensitive) and return a
+/// markdown hover string, or `None` if not found.
+fn directive_hover(word_upper: &str) -> Option<String> {
+    DIRECTIVE_DOCS.iter().find(|(names, _)| {
+        names.iter().any(|n| n.to_uppercase() == word_upper)
+    }).map(|(_, doc)| doc.to_string())
+}
+
+// ─── Per-error diagnostics ─────────────────────────────────────────────────────
+
+/// Recursively walk an `AssemblerError` tree, emitting one `Diagnostic` per leaf
+/// error with the closest known source location.
+fn collect_asm_diagnostics(
+    error: &cpclib_asm::AssemblerError,
+    parent_span: Option<&cpclib_asm::parser::Z80Span>,
+    out: &mut Vec<Diagnostic>,
+) {
+    use cpclib_asm::AssemblerError;
+    match error {
+        AssemblerError::MultipleErrors { errors } => {
+            for e in errors { collect_asm_diagnostics(e, parent_span, out); }
+        }
+        AssemblerError::RelocatedError { span, error: inner } => {
+            collect_asm_diagnostics(inner, Some(span), out);
+        }
+        AssemblerError::RelocatedWarning { warning, span } => {
+            out.push(asm_diag(Some(span), format!("{warning}"), DiagnosticSeverity::WARNING));
+        }
+        AssemblerError::RelocatedInfo { info, span } => {
+            out.push(asm_diag(Some(span), format!("{info}"), DiagnosticSeverity::INFORMATION));
+        }
+        AssemblerError::IncludedFileError { span, error: inner } => {
+            out.push(asm_diag(Some(span), format!("In included file: {inner}"), DiagnosticSeverity::ERROR));
+        }
+        AssemblerError::IfIssue { span, error: inner } => {
+            collect_asm_diagnostics(inner, Some(span), out);
+        }
+        AssemblerError::ForIssue { span, error: inner } => {
+            collect_asm_diagnostics(inner, span.as_ref(), out);
+        }
+        AssemblerError::RepeatIssue { span, error: inner, .. } => {
+            collect_asm_diagnostics(inner, span.as_ref(), out);
+        }
+        AssemblerError::WhileIssue { span, error: inner } => {
+            collect_asm_diagnostics(inner, span.as_ref(), out);
+        }
+        AssemblerError::MacroError { name, location, root } => {
+            let prefix = if let Some(loc) = location {
+                format!("Macro {} (defined at {}): ", name, loc)
+            } else {
+                format!("Macro {}: ", name)
+            };
+            let mut sub = Vec::new();
+            collect_asm_diagnostics(root, parent_span, &mut sub);
+            for mut d in sub {
+                d.message = format!("{}{}", prefix, d.message);
+                out.push(d);
+            }
+        }
+        AssemblerError::CrunchedSectionError { error: inner } => {
+            collect_asm_diagnostics(inner, parent_span, out);
+        }
+        AssemblerError::FunctionError(name, inner) => {
+            let msg = format!("Function {name}: {inner}");
+            out.push(asm_diag(parent_span, msg, DiagnosticSeverity::ERROR));
+        }
+        AssemblerError::SyntaxError { .. } => {
+            // Syntax errors embed position in the codespan-style Display text.
+            // Emit the stripped text; exact location appears in the message.
+            out.push(asm_diag(parent_span, strip_ansi(&format!("{error}")), DiagnosticSeverity::ERROR));
+        }
+        AssemblerError::AlreadyRenderedError(s) => {
+            out.push(asm_diag(parent_span, strip_ansi(s), DiagnosticSeverity::ERROR));
+        }
+        other => {
+            out.push(asm_diag(parent_span, format!("{other}"), DiagnosticSeverity::ERROR));
+        }
+    }
+}
+
+fn asm_diag(
+    span: Option<&cpclib_asm::parser::Z80Span>,
+    message: String,
+    severity: DiagnosticSeverity,
+) -> Diagnostic {
+    let (start, end_pos) = if let Some(s) = span {
+        let (line_1, col_1) = s.relative_line_and_column();
+        let line = line_1.saturating_sub(1) as u32;
+        let col  = col_1.saturating_sub(1) as u32;
+        let span_text: &str = s.as_ref();
+        let len  = (span_text.len() as u32).max(1).min(120);
+        (Position { line, character: col }, Position { line, character: col + len })
+    } else {
+        (Position { line: 0, character: 0 }, Position { line: 0, character: 100 })
+    };
+    Diagnostic {
+        range:    Range { start, end: end_pos },
+        severity: Some(severity),
+        source:   Some("basm".to_string()),
+        message,
+        ..Default::default()
+    }
+}
+
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            for c2 in chars.by_ref() { if c2 == 'm' { break; } }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 // ─── Code-action helpers ──────────────────────────────────────────────────────

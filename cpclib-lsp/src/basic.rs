@@ -25,9 +25,10 @@ impl BasicAnalyzer {
 
     pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
         let text = document.text();
-        match BasicProgram::parse(&text) {
-            Ok(_) => vec![],
-            Err(e) => vec![Diagnostic {
+        // Parse error → one diagnostic at line 0.
+        let prog = match LocatedBasicProgram::parse(&text) {
+            Ok(p) => p,
+            Err(e) => return vec![Diagnostic {
                 range: Range {
                     start: Position { line: 0, character: 0 },
                     end:   Position { line: 0, character: 1 },
@@ -37,7 +38,56 @@ impl BasicAnalyzer {
                 source: Some("cpclib-lsp".into()),
                 ..Default::default()
             }],
+        };
+
+        // Build the set of line numbers that actually exist.
+        let defined: std::collections::HashSet<u16> = prog.lines.iter()
+            .map(|l| l.line_number)
+            .collect();
+
+        let mut diagnostics = Vec::new();
+
+        for bline in &prog.lines {
+            let mut after_jump = false;
+            for tok in &bline.tokens {
+                match &tok.kind {
+                    LocatedTokenKind::Keyword(kw) => {
+                        after_jump = matches!(kw,
+                            BasicTokenNoPrefix::Goto
+                            | BasicTokenNoPrefix::Gosub
+                            | BasicTokenNoPrefix::Restore
+                            | BasicTokenNoPrefix::Run
+                            | BasicTokenNoPrefix::Then
+                            | BasicTokenNoPrefix::Else
+                            | BasicTokenNoPrefix::OnErrorGoto
+                        );
+                    }
+                    LocatedTokenKind::Number(n) if after_jump => {
+                        if let Ok(target) = n.parse::<u16>() {
+                            if !defined.contains(&target) {
+                                diagnostics.push(Diagnostic {
+                                    range: Range {
+                                        start: Position { line: tok.span.line, character: tok.span.col },
+                                        end:   Position { line: tok.span.line, character: tok.span.col + tok.span.len },
+                                    },
+                                    severity: Some(DiagnosticSeverity::WARNING),
+                                    message: format!("Undefined BASIC line {target}"),
+                                    source: Some("cpclib-lsp".into()),
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                        // Keep after_jump: comma-separated targets for ON GOTO.
+                    }
+                    LocatedTokenKind::Other(',') => {} // keep state for ON GOTO n,n,n
+                    LocatedTokenKind::Space => {}       // keep state
+                    LocatedTokenKind::Separator => { after_jump = false; }
+                    _ => { after_jump = false; }
+                }
+            }
         }
+
+        diagnostics
     }
 
     pub fn document_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
@@ -229,17 +279,20 @@ impl BasicAnalyzer {
         let tok = bline.tokens.iter().find(|t| {
             t.span.col <= position.character && position.character < t.span.col + t.span.len
         })?;
-        if let LocatedTokenKind::Number(num_text) = &tok.kind {
-            if let Some(value) = parse_basic_integer(num_text) {
-                let bin = format_basic_binary(value);
-                let md = format!(
-                    "**`{num_text}`**\n\n\
-                    | Base | Value |\n\
-                    |------|-------|\n\
-                    | Decimal | `{value}` |\n\
-                    | Hex | `&{value:X}` |\n\
-                    | Binary | `&X{bin}` |"
-                );
+        match &tok.kind {
+            // Line number at the start of a line → show byte size of that line.
+            LocatedTokenKind::LineNumber(n) => {
+                // Look up the compiled byte length from BasicProgram (binary encoding).
+                let byte_size: Option<u16> = BasicProgram::parse(&text).ok().and_then(|mut compiled| {
+                    use cpclib_basic::BasicProgramLineIdx;
+                    let line = compiled.get_line(BasicProgramLineIdx::Number(*n))?;
+                    Some(line.complete_bytes_length())
+                });
+
+                let mut md = format!("**Line {}**", n);
+                if let Some(sz) = byte_size {
+                    md.push_str(&format!("\n\n**Encoded size:** {} bytes", sz));
+                }
                 return Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
@@ -248,6 +301,30 @@ impl BasicAnalyzer {
                     range: None,
                 });
             }
+
+            // Any other number → show base conversions.
+            LocatedTokenKind::Number(num_text) => {
+                if let Some(value) = parse_basic_integer(num_text) {
+                    let bin = format_basic_binary(value);
+                    let md = format!(
+                        "**`{num_text}`**\n\n\
+                        | Base | Value |\n\
+                        |------|-------|\n\
+                        | Decimal | `{value}` |\n\
+                        | Hex | `&{value:X}` |\n\
+                        | Binary | `&X{bin}` |"
+                    );
+                    return Some(Hover {
+                        contents: HoverContents::Markup(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: md,
+                        }),
+                        range: None,
+                    });
+                }
+            }
+
+            _ => {}
         }
 
         None

@@ -2,6 +2,133 @@ use std::{env, fs, io::Write, path::Path};
 
 fn main() {
     println!("cargo:rerun-if-changed=data/timings.txt");
+    println!("cargo:rerun-if-changed=../docs/basm/directives.md");
+    generate_directive_docs();
+    generate_timings();
+}
+
+fn generate_directive_docs() {
+    let md_src = match fs::read_to_string("../docs/basm/directives.md") {
+        Ok(s) => s,
+        Err(_) => {
+            // Docs not present (e.g. when building outside the full workspace).
+            // Emit an empty table so the code still compiles.
+            let out_dir = env::var("OUT_DIR").unwrap();
+            let dest = Path::new(&out_dir).join("directive_docs_generated.rs");
+            fs::write(dest, "pub static DIRECTIVE_DOCS: &[(&[&str], &str)] = &[];\n").unwrap();
+            return;
+        }
+    };
+
+    let entries = parse_directive_md(&md_src);
+
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dest = Path::new(&out_dir).join("directive_docs_generated.rs");
+    let mut out = fs::File::create(dest).unwrap();
+
+    writeln!(out, "// Auto-generated from docs/basm/directives.md — do not edit").unwrap();
+    writeln!(out, "pub static DIRECTIVE_DOCS: &[(&[&str], &str)] = &[").unwrap();
+
+    for (names, doc) in &entries {
+        let names_lit: Vec<String> = names.iter()
+            .map(|n| format!("\"{}\"", esc_str(n)))
+            .collect();
+        writeln!(out, "    (&[{}], \"{}\"),", names_lit.join(", "), esc_str(doc)).unwrap();
+    }
+
+    writeln!(out, "];").unwrap();
+}
+
+/// Parse the directives.md and return `(names, hover_markdown)` pairs.
+fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String)> {
+    #[derive(PartialEq)]
+    enum Sec { None, Synopsis, Desc, Example }
+
+    let mut result: Vec<(Vec<String>, String)> = Vec::new();
+    let mut names:  Vec<String>  = Vec::new();
+    let mut syn:    String       = String::new();
+    let mut desc:   String       = String::new();
+    let mut sec:    Sec          = Sec::None;
+    let mut in_code = false;
+
+    let flush = |names: &mut Vec<String>, syn: &mut String, desc: &mut String,
+                 result: &mut Vec<(Vec<String>, String)>| {
+        if names.is_empty() { return; }
+        let header = names.join(" / ");
+        let mut doc = format!("**{header}**");
+        let s = syn.trim();
+        if !s.is_empty() {
+            doc.push_str(&format!("\n\n**Synopsis:**\n```\n{s}\n```"));
+        }
+        let d = desc.trim();
+        if !d.is_empty() {
+            doc.push_str(&format!("\n\n{d}"));
+        }
+        result.push((std::mem::take(names), doc));
+        syn.clear();
+        desc.clear();
+    };
+
+    for line in md.lines() {
+        if line.starts_with("### ") {
+            flush(&mut names, &mut syn, &mut desc, &mut result);
+            in_code = false;
+            sec = Sec::None;
+            names = line[4..].split(',')
+                .map(|n| n.trim().to_string())
+                .filter(|n| !n.is_empty())
+                .collect();
+        } else if line.starts_with("## ") || line.starts_with("# ") || line.starts_with("#### ") {
+            // Category or sub-header — don't reset the current entry; ignore.
+        } else if names.is_empty() {
+            // Before the first ### entry
+        } else if line.trim() == "Synopsis:" {
+            sec = Sec::Synopsis; in_code = false;
+        } else if line.trim() == "Description:" {
+            sec = Sec::Desc; in_code = false;
+        } else if line.trim() == "Example:" {
+            sec = Sec::Example;
+        } else {
+            match sec {
+                Sec::Synopsis => {
+                    if line.trim_start().starts_with("```") {
+                        in_code = !in_code;
+                    } else if in_code {
+                        if !syn.is_empty() { syn.push('\n'); }
+                        syn.push_str(line);
+                    }
+                }
+                Sec::Desc => {
+                    // Skip mkdocs-style file includes (appear in Example blocks,
+                    // but guard here just in case).
+                    if line.trim().starts_with("--8<--") { continue; }
+                    if line.trim_start().starts_with("```") {
+                        in_code = !in_code;
+                        if !desc.is_empty() { desc.push('\n'); }
+                        desc.push_str(line);
+                    } else if in_code && line.trim().starts_with("--8<--") {
+                        // skip include lines inside code blocks too
+                    } else {
+                        if !desc.is_empty() { desc.push('\n'); }
+                        desc.push_str(line);
+                    }
+                }
+                Sec::Example | Sec::None => {}
+            }
+        }
+    }
+    flush(&mut names, &mut syn, &mut desc, &mut result);
+    result
+}
+
+fn esc_str(s: &str) -> String {
+    s.replace('\\', "\\\\")
+     .replace('"',  "\\\"")
+     .replace('\n', "\\n")
+     .replace('\r', "")
+}
+
+fn generate_timings() {
 
     let src = fs::read_to_string("data/timings.txt")
         .expect("cannot read data/timings.txt");
