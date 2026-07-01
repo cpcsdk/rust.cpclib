@@ -64,6 +64,25 @@ impl Z80ParserError {
         }
         errors.first().map(|(span, _)| Z80Span::from((*span).clone()))
     }
+
+    /// Return (start_span, end_byte_offset) for the most informative error.
+    /// `end_byte_offset` comes from `ContextWithEnd` and is an absolute offset
+    /// from the start of the source file — subtract `start_span.offset_from_start()`
+    /// to get the highlighted length.  Falls back to (span, span_offset + 1) when
+    /// no end offset is available.
+    pub fn primary_span_and_end(&self) -> Option<(Z80Span, usize)> {
+        let errors = self.errors();
+        let found = errors.iter().find(|(_, k)| {
+            !matches!(k, Z80ParserErrorKind::Winnow | Z80ParserErrorKind::DebugContext(_))
+        })?;
+        let span = Z80Span::from((*found.0).clone());
+        let end = if let Z80ParserErrorKind::ContextWithEnd { end_offset, .. } = found.1 {
+            *end_offset
+        } else {
+            span.offset_from_start() + 1
+        };
+        Some((span, end))
+    }
 }
 
 impl Z80ParserErrorKind {
@@ -204,11 +223,15 @@ impl AddContext<InnerZ80Span> for Z80ParserError {
     fn add_context(
         mut self,
         input: &InnerZ80Span,
-        _start: &<InnerZ80Span as Stream>::Checkpoint,
+        start: &<InnerZ80Span as Stream>::Checkpoint,
         ctx: &'static str
     ) -> Self {
-        let kind = self.make_context_kind(input, StrContext::Label(ctx));
-        self.0.push((*input, kind));
+        // Record the START of the construct (before parsing began), not the
+        // current failure position. Failures beyond the start go into end_offset.
+        let mut start_span = *input;
+        start_span.reset(start);
+        let kind = self.make_context_kind(&start_span, StrContext::Label(ctx));
+        self.0.push((start_span, kind));
         self
     }
 }
@@ -217,11 +240,13 @@ impl AddContext<InnerZ80Span, StrContext> for Z80ParserError {
     fn add_context(
         mut self,
         input: &InnerZ80Span,
-        _start: &<InnerZ80Span as Stream>::Checkpoint,
+        start: &<InnerZ80Span as Stream>::Checkpoint,
         ctx: StrContext
     ) -> Self {
-        let kind = self.make_context_kind(input, ctx);
-        self.0.push((*input, kind));
+        let mut start_span = *input;
+        start_span.reset(start);
+        let kind = self.make_context_kind(&start_span, ctx);
+        self.0.push((start_span, kind));
         self
     }
 }

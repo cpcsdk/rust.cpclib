@@ -18,7 +18,7 @@ use crate::{InnerZ80Span, LocatedDataAccess, Z80ParserError};
 pub fn parse_register16(
     input: &mut InnerZ80Span
 ) -> ModalResult<LocatedDataAccess, Z80ParserError> {
-    let _start = input.checkpoint();
+    let start = input.checkpoint();
     let code = terminated(take(2usize), not(alpha1)).parse_next(input)?;
 
     let reg = match code {
@@ -26,7 +26,10 @@ pub fn parse_register16(
         b"BC" | b"bc" | b"Bc" | b"bC" => Register16::Bc,
         b"DE" | b"de" | b"De" | b"dE" => Register16::De,
         b"HL" | b"hl" | b"Hl" | b"hL" => Register16::Hl,
-        _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+        _ => {
+            input.reset(&start);
+            return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+        }
     };
 
     let span = (*input).update_slice(code);

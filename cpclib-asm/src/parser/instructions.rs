@@ -703,6 +703,7 @@ pub fn parse_push_n_pop(
             alt((parse_register16, parse_indexregister16)),
             parse_comma
         )
+        .context(StrContext::Label("expected register pair: BC, DE, HL, AF, IX or IY"))
         .parse_next(input)?;
 
         if registers.len() > 1 {

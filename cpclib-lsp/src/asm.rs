@@ -1390,27 +1390,27 @@ fn collect_asm_diagnostics(
             out.push(asm_diag(parent_span, msg, DiagnosticSeverity::ERROR));
         }
         AssemblerError::SyntaxError { error: parse_err } => {
+            let message = strip_ansi(&format!("{error}"));
+            // primary_span_and_end gives exact source byte offsets — no tab expansion issues.
+            if let Some((span, end_off)) = parse_err.primary_span_and_end() {
+                let (line_1, col_1) = span.relative_line_and_column();
+                let line = line_1.saturating_sub(1) as u32;
+                let col  = col_1.saturating_sub(1) as u32;
+                let len  = end_off.saturating_sub(span.offset_from_start()) as u32;
+                out.push(Diagnostic {
+                    range: Range {
+                        start: Position { line, character: col },
+                        end:   Position { line, character: col + len.max(1) },
+                    },
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    source:   Some("basm".to_string()),
+                    message,
+                    ..Default::default()
+                });
+                return;
+            }
             let owned_span = parse_err.primary_z80span();
             let span_ref = owned_span.as_ref().or(parent_span);
-            let message = strip_ansi(&format!("{error}"));
-            // Use the ^ markers from the codespan output for the precise range.
-            if let Some(s) = span_ref {
-                let (line_1, _) = s.relative_line_and_column();
-                let line = line_1.saturating_sub(1) as u32;
-                if let Some((start_col, len)) = codespan_underline_range(&message) {
-                    out.push(Diagnostic {
-                        range: Range {
-                            start: Position { line, character: start_col },
-                            end:   Position { line, character: start_col + len },
-                        },
-                        severity: Some(DiagnosticSeverity::ERROR),
-                        source:   Some("basm".to_string()),
-                        message,
-                        ..Default::default()
-                    });
-                    return;
-                }
-            }
             out.push(asm_diag(span_ref, message, DiagnosticSeverity::ERROR));
         }
         AssemblerError::AlreadyRenderedError(s) => {
@@ -1473,30 +1473,6 @@ fn strip_ansi(s: &str) -> String {
         }
     }
     out
-}
-
-/// Extract (start_col, length) of the `^` underline from a codespan-formatted
-/// error string (after ANSI stripping).  Returns the first underline found.
-fn codespan_underline_range(formatted: &str) -> Option<(u32, u32)> {
-    let mut prev_was_source = false;
-    for line in formatted.lines() {
-        if prev_was_source {
-            // Marker line looks like: "  | ^^^..." or "   | ^^^..."
-            if let Some(after_pipe) = line.splitn(2, "| ").nth(1) {
-                let spaces = after_pipe.chars().take_while(|&c| c == ' ').count();
-                let carets = after_pipe[spaces..].chars().take_while(|&c| c == '^').count();
-                if carets > 0 {
-                    return Some((spaces as u32, carets as u32));
-                }
-            }
-            prev_was_source = false;
-        }
-        // A source line has a decimal number before " | "
-        prev_was_source = line.splitn(2, " | ").next()
-            .map(|prefix| prefix.trim().parse::<u32>().is_ok())
-            .unwrap_or(false);
-    }
-    None
 }
 
 // ─── Code-action helpers ──────────────────────────────────────────────────────

@@ -1332,6 +1332,88 @@ add_to_a(3)\n\
         )
     ];
 
+    /// `push tg` must fail with an error located at `tg`, not at the start of the line.
+    /// Before the fix (cut_err + context on PUSH/POP), the error was silently swallowed
+    /// by `opt` in `parse_lines` and re-reported as a generic failure at column 1.
+    #[test]
+    fn test_push_invalid_register_location() {
+        let mut tokens = Vec::new();
+        let res = parse_test(parse_z80_line_complete(&mut tokens), "push tg");
+        assert!(res.is_err(), "push tg must be a parse error");
+
+        if let Err(ref err) = res.res {
+            let inner = err.clone().into_inner();
+            // Error must point to `tg` (col ≥ 5 in 0-indexed terms, i.e., ≥ 6 in 1-indexed).
+            // Before the fix it would point to col 1 (start of line).
+            if let Some(span) = inner.primary_z80span() {
+                let (_line, col) = span.relative_line_and_column();
+                assert!(
+                    col >= 5,
+                    "error should point to `tg`, not the start of the line (got col {col})"
+                );
+            }
+            // Error message must mention register, not just "Unknown error".
+            let msg = format!("{}", crate::AssemblerError::SyntaxError { error: inner });
+            assert!(
+                msg.contains("register"),
+                "error message should mention 'register', got: {msg}"
+            );
+        }
+    }
+
+    /// `pop af : push tg : pop af` must fail with the error located in the `push tg`
+    /// portion of the line, not at the start where `pop af` (which is valid) sits.
+    #[test]
+    fn test_push_invalid_register_in_multiinstruction_line() {
+        let mut tokens = Vec::new();
+        let res = parse_test(
+            parse_z80_line_complete(&mut tokens),
+            "pop af : push tg : pop af"
+        );
+        assert!(res.is_err(), "pop af : push tg : pop af must be a parse error");
+
+        if let Err(ref err) = res.res {
+            let inner = err.clone().into_inner();
+            // `push` starts at col 9 (0-indexed) in `pop af : push tg : pop af`.
+            // Before the fix the error was at col 1 (the `pop af` start).
+            if let Some(span) = inner.primary_z80span() {
+                let (_line, col) = span.relative_line_and_column();
+                assert!(
+                    col >= 9,
+                    "error should be in the `push tg` part (col ≥ 9), not at `pop af` (got col {col})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_push_error_column_and_codespan() {
+        // Verify the exact column returned by primary_z80span() for tab + push cases.
+        // This is used by cpclib-lsp to set the LSP diagnostic character position.
+        let cases = [
+            ("push tg", 5u32),            // col 5 (0-indexed): after "push "
+            ("\tpush tg", 6u32),           // col 6: after "\tpush " (tab=1 char)
+            ("pop af : push tg : pop af", 14u32), // col 14: after "pop af : push "
+        ];
+        for (src, expected_col) in cases {
+            let mut tokens = Vec::new();
+            let res = parse_test(parse_z80_line_complete(&mut tokens), src);
+            assert!(res.is_err(), "'{src}' should fail");
+            if let Err(ref err) = res.res {
+                let inner = err.clone().into_inner();
+                if let Some((span, end_off)) = inner.primary_span_and_end() {
+                    let (_line, col_1based) = span.relative_line_and_column();
+                    let col = col_1based.saturating_sub(1) as u32;
+                    let len = end_off.saturating_sub(span.offset_from_start()) as u32;
+                    assert_eq!(col, expected_col,
+                        "'{src}': expected tg at col {expected_col}, got {col}");
+                    assert_eq!(len, 2,
+                        "'{src}': expected len=2 for 'tg', got len={len}");
+                }
+            }
+        }
+    }
+
     #[test]
     fn test_parse_located_expression_robust() {
         for (input, should_succeed) in COMP_CASES
