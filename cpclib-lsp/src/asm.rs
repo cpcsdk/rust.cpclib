@@ -201,6 +201,17 @@ impl AssemblyAnalyzer {
             }
         }
 
+        // Fallback: if the document has an assembly error on this line, show it
+        // in a Markdown code block so the codespan ASCII art renders nicely.
+        if let Err(listing_with_errors) = self.parse_document(document) {
+            let error = listing_with_errors.cpclib_error_unchecked();
+            let mut diags = Vec::new();
+            collect_asm_diagnostics(error, None, &mut diags);
+            if let Some(diag) = diags.iter().find(|d| d.range.start.line == position.line) {
+                return Some(make_hover(format!("```\n{}\n```", diag.message)));
+            }
+        }
+
         None
     }
 
@@ -1381,7 +1392,26 @@ fn collect_asm_diagnostics(
         AssemblerError::SyntaxError { error: parse_err } => {
             let owned_span = parse_err.primary_z80span();
             let span_ref = owned_span.as_ref().or(parent_span);
-            out.push(asm_diag(span_ref, strip_ansi(&format!("{error}")), DiagnosticSeverity::ERROR));
+            let message = strip_ansi(&format!("{error}"));
+            // Use the ^ markers from the codespan output for the precise range.
+            if let Some(s) = span_ref {
+                let (line_1, _) = s.relative_line_and_column();
+                let line = line_1.saturating_sub(1) as u32;
+                if let Some((start_col, len)) = codespan_underline_range(&message) {
+                    out.push(Diagnostic {
+                        range: Range {
+                            start: Position { line, character: start_col },
+                            end:   Position { line, character: start_col + len },
+                        },
+                        severity: Some(DiagnosticSeverity::ERROR),
+                        source:   Some("basm".to_string()),
+                        message,
+                        ..Default::default()
+                    });
+                    return;
+                }
+            }
+            out.push(asm_diag(span_ref, message, DiagnosticSeverity::ERROR));
         }
         AssemblerError::AlreadyRenderedError(s) => {
             out.push(asm_diag(parent_span, strip_ansi(s), DiagnosticSeverity::ERROR));
@@ -1402,9 +1432,11 @@ fn asm_diag(
         let line = line_1.saturating_sub(1) as u32;
         let col  = col_1.saturating_sub(1) as u32;
         let span_text: &str = s.as_ref();
-        // Only highlight to end of the current line, not across lines.
+        // Highlight to end of the current instruction (next `:` separator) or end of line.
         let first_line = span_text.lines().next().unwrap_or(span_text);
-        let len = (first_line.len() as u32).max(1);
+        let len = (first_line.find(':')
+            .unwrap_or(first_line.len()) as u32)
+            .max(1);
         (Position { line, character: col }, Position { line, character: col + len })
     } else {
         (Position { line: 0, character: 0 }, Position { line: 0, character: 100 })
@@ -1423,12 +1455,48 @@ fn strip_ansi(s: &str) -> String {
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '\x1b' {
-            for c2 in chars.by_ref() { if c2 == 'm' { break; } }
+            match chars.peek().copied() {
+                Some('[') => {
+                    chars.next(); // consume '['
+                    // CSI: consume until final byte in 0x40..=0x7E ('@'..='~')
+                    for c2 in chars.by_ref() {
+                        if ('@'..='~').contains(&c2) { break; }
+                    }
+                }
+                Some(c2) if ('\x40'..='\x5F').contains(&c2) => {
+                    chars.next(); // 2-char Fe sequence
+                }
+                _ => {}
+            }
         } else {
             out.push(c);
         }
     }
     out
+}
+
+/// Extract (start_col, length) of the `^` underline from a codespan-formatted
+/// error string (after ANSI stripping).  Returns the first underline found.
+fn codespan_underline_range(formatted: &str) -> Option<(u32, u32)> {
+    let mut prev_was_source = false;
+    for line in formatted.lines() {
+        if prev_was_source {
+            // Marker line looks like: "  | ^^^..." or "   | ^^^..."
+            if let Some(after_pipe) = line.splitn(2, "| ").nth(1) {
+                let spaces = after_pipe.chars().take_while(|&c| c == ' ').count();
+                let carets = after_pipe[spaces..].chars().take_while(|&c| c == '^').count();
+                if carets > 0 {
+                    return Some((spaces as u32, carets as u32));
+                }
+            }
+            prev_was_source = false;
+        }
+        // A source line has a decimal number before " | "
+        prev_was_source = line.splitn(2, " | ").next()
+            .map(|prefix| prefix.trim().parse::<u32>().is_ok())
+            .unwrap_or(false);
+    }
+    None
 }
 
 // ─── Code-action helpers ──────────────────────────────────────────────────────
