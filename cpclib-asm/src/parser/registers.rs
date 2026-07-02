@@ -27,8 +27,12 @@ pub fn parse_register16(
         b"DE" | b"de" | b"De" | b"dE" => Register16::De,
         b"HL" | b"hl" | b"Hl" | b"hL" => Register16::Hl,
         _ => {
+            // Capture error at current position (after take) so ContextWithEnd
+            // records it as the furthest failure; then reset so the error
+            // context entry uses the start-of-token position.
+            let err = Z80ParserError::from_input(input);
             input.reset(&start);
-            return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+            return Err(ErrMode::Backtrack(err))
         }
     };
 
@@ -208,6 +212,7 @@ pub fn parse_indexregister8(
 pub fn parse_indexregister16(
     input: &mut InnerZ80Span
 ) -> ModalResult<LocatedDataAccess, Z80ParserError> {
+    let start = input.checkpoint();
     let code = terminated(take(2usize), not(alpha1))
         .take()
         .parse_next(input)?;
@@ -217,10 +222,18 @@ pub fn parse_indexregister16(
             match code[1] {
                 b'X' | b'x' => IndexRegister16::Ix,
                 b'Y' | b'y' => IndexRegister16::Iy,
-                _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+                _ => {
+                    let err = Z80ParserError::from_input(input);
+                    input.reset(&start);
+                    return Err(ErrMode::Backtrack(err))
+                }
             }
         },
-        _ => return Err(ErrMode::Backtrack(Z80ParserError::from_input(input)))
+        _ => {
+            let err = Z80ParserError::from_input(input);
+            input.reset(&start);
+            return Err(ErrMode::Backtrack(err))
+        }
     };
 
     let span = (*input).update_slice(code);

@@ -202,13 +202,15 @@ impl AssemblyAnalyzer {
         }
 
         // Fallback: if the document has an assembly error on this line, show it
-        // in a Markdown code block so the codespan ASCII art renders nicely.
+        // using an `ansi` code block so ANSI escape codes (colors from codespan)
+        // are rendered — red for `error:` / `^` lines, blue/cyan for line numbers.
+        // The raw (non-stripped) error string is used so colors are preserved.
         if let Err(listing_with_errors) = self.parse_document(document) {
             let error = listing_with_errors.cpclib_error_unchecked();
             let mut diags = Vec::new();
             collect_asm_diagnostics(error, None, &mut diags);
-            if let Some(diag) = diags.iter().find(|d| d.range.start.line == position.line) {
-                return Some(make_hover(format!("```\n{}\n```", diag.message)));
+            if diags.iter().any(|d| d.range.start.line == position.line) {
+                return Some(make_hover(format!("```ansi\n{error}\n```")));
             }
         }
 
