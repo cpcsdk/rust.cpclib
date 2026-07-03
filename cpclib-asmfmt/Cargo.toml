@@ -1,0 +1,18 @@
+[package]
+name = "cpclib-asmfmt"
+version.workspace = true
+description = "Assembly source code formatter for basm Z80 assembly"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[package.metadata.workspaces]
+independent = true
+
+[dependencies]
+cpclib-asm.workspace = true
+serde = { workspace = true, features = ["derive"] }
+toml = "0.8"

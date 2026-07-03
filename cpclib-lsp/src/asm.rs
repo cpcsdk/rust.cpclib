@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 use tower_lsp::lsp_types::*;
+use cpclib_asmfmt;
 use cpclib_asm::parser::context::ParserContextBuilder;
 use cpclib_asm::parser::obtained::{LocatedListing, MayHaveSpan};
 use cpclib_tokens::ListingElement;
@@ -970,6 +971,31 @@ impl AssemblyAnalyzer {
             edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
             ..Default::default()
         })
+    }
+
+    /// Format the entire document and return a single whole-document TextEdit,
+    /// or `None` if the source cannot be parsed or is already correctly formatted.
+    pub fn format(&self, document: &Document, options: &FormattingOptions) -> Option<Vec<TextEdit>> {
+        let source = document.text();
+        // Load project/user config; override indent_size from the editor's tab setting.
+        let indent_size = options.tab_size as usize;
+        let opt = cpclib_asmfmt::AsmFormatOptions {
+            indent_size,
+            ..cpclib_asmfmt::load_config()
+        };
+        let formatted = cpclib_asmfmt::format(&source, &opt).ok()?;
+        if formatted == source {
+            return None;
+        }
+        let line_count = document.line_count() as u32;
+        let last_line_len = document.line(line_count.saturating_sub(1) as usize)
+            .map(|l| l.len() as u32)
+            .unwrap_or(0);
+        let whole_doc = Range {
+            start: Position { line: 0, character: 0 },
+            end: Position { line: line_count, character: last_line_len },
+        };
+        Some(vec![TextEdit { range: whole_doc, new_text: formatted }])
     }
 }
 

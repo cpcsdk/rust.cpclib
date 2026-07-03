@@ -2,6 +2,7 @@
 members = [
   "cpclib",
   "cpclib-asm",
+  "cpclib-asmfmt",
   "cpclib-basic",
   "cpclib-basm", "cpclib-basmdoc",
   "cpclib-bdasm",
@@ -101,6 +102,7 @@ description = "Amstrad CPC crossdev toolchain"
 
 cpclib = { version = "0.11.0", path = "cpclib", default-features = false }
 cpclib-asm = { version = "0.11.0", path = "cpclib-asm", default-features = false }
+cpclib-asmfmt = { version = "0.11.0", path = "cpclib-asmfmt", default-features = false }
 cpclib-basic = { version = "0.11.0", path = "cpclib-basic", default-features = false }
 cpclib-basm = { version = "0.11.0", path = "cpclib-basm", default-features = false }
 cpclib-basmdoc = { version = "0.11.0", path = "cpclib-basmdoc", default-features = false }

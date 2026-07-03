@@ -89,6 +89,7 @@ impl LanguageServer for CpcLspBackend {
                     ],
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
+                document_formatting_provider: Some(OneOf::Left(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -443,6 +444,22 @@ impl LanguageServer for CpcLspBackend {
             }
         }
 
+        Ok(None)
+    }
+
+    async fn formatting(
+        &self,
+        params: DocumentFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+        tracing::debug!("Formatting request for {}", uri);
+
+        if let Some(entry) = self.documents.get(&uri) {
+            let document = entry.value();
+            if document.doc_type == DocumentType::Assembly {
+                return Ok(self.asm_analyzer.format(document, &params.options));
+            }
+        }
         Ok(None)
     }
 }
