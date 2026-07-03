@@ -9,33 +9,36 @@ pub enum CaseStyle {
     Untouched,
 }
 
-// Per-field default functions used by serde so that a partial config file
-// (where only some keys are set) inherits the standard defaults for the rest.
 fn default_indent_size() -> usize { 4 }
 fn default_comment_column() -> usize { 30 }
 fn default_mnemonic_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_directive_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_register_case() -> CaseStyle { CaseStyle::UpperCase }
+fn default_one_instruction_per_line() -> bool { true }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct AsmFormatOptions {
     /// Number of spaces per indentation level (default: 4).
     #[serde(default = "default_indent_size")]
     pub indent_size: usize,
-    /// Minimum column (0-indexed) at which trailing comments start.
-    /// If the content is already past this column, at least 2 spaces are used (default: 30).
+    /// Minimum column (0-indexed) at which trailing comments start (default: 30).
     #[serde(default = "default_comment_column")]
     pub comment_column: usize,
     /// Case transformation applied to Z80 mnemonic keywords (LD, PUSH, …) (default: UpperCase).
     #[serde(default = "default_mnemonic_case")]
     pub mnemonic_case: CaseStyle,
-    /// Case transformation applied to the leading keyword of directives
-    /// (ORG, EQU, DB, DW, INCLUDE, INCBIN, PRINT, ASSERT, …) (default: UpperCase).
+    /// Case transformation applied to directive keywords
+    /// (ORG, EQU, REPEAT, ENDREPEAT, …) (default: UpperCase).
     #[serde(default = "default_directive_case")]
     pub directive_case: CaseStyle,
-    /// Case transformation applied to Z80 register names in operands (AF, BC, IX, …) (default: UpperCase).
+    /// Case transformation applied to Z80 register names in operands (default: UpperCase).
     #[serde(default = "default_register_case")]
     pub register_case: CaseStyle,
+    /// When true, multiple instructions on the same source line (separated by `:`) are
+    /// placed on individual lines. When false the original multi-instruction line is kept
+    /// verbatim (default: true).
+    #[serde(default = "default_one_instruction_per_line")]
+    pub one_instruction_per_line: bool,
 }
 
 impl Default for AsmFormatOptions {
@@ -46,38 +49,23 @@ impl Default for AsmFormatOptions {
             mnemonic_case: default_mnemonic_case(),
             directive_case: default_directive_case(),
             register_case: default_register_case(),
+            one_instruction_per_line: default_one_instruction_per_line(),
         }
     }
 }
 
 // ── Config file loading ──────────────────────────────────────────────────────
 
-/// Name of the formatter config file searched in project directories.
 pub const CONFIG_FILE_NAME: &str = "basm-fmt.toml";
 
-/// Search for a `basm-fmt.toml` config file.
-///
-/// The search order is:
-/// 1. Walk up from the current working directory toward the root.
-/// 2. User-level config: `$XDG_CONFIG_HOME/basm-fmt/basm-fmt.toml`
-///    (falls back to `$HOME/.config/…` on Unix and `%APPDATA%\…` on Windows).
-///
-/// Returns the path of the first file found, or `None`.
 pub fn find_config_file() -> Option<PathBuf> {
-    // Walk upward from cwd
     if let Ok(mut dir) = std::env::current_dir() {
         loop {
             let path = dir.join(CONFIG_FILE_NAME);
-            if path.is_file() {
-                return Some(path);
-            }
-            if !dir.pop() {
-                break;
-            }
+            if path.is_file() { return Some(path); }
+            if !dir.pop() { break; }
         }
     }
-
-    // User-level config directory
     let config_base = std::env::var("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".config")))
@@ -87,10 +75,6 @@ pub fn find_config_file() -> Option<PathBuf> {
     if path.is_file() { Some(path) } else { None }
 }
 
-/// Load `AsmFormatOptions` from a specific TOML file.
-///
-/// Fields not present in the file keep their default values, so a minimal
-/// config like `mnemonic_case = "LowerCase"` is valid.
 pub fn load_config_from(path: &Path) -> Result<AsmFormatOptions, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
@@ -98,14 +82,13 @@ pub fn load_config_from(path: &Path) -> Result<AsmFormatOptions, String> {
         .map_err(|e| format!("invalid config in {}: {e}", path.display()))
 }
 
-/// Load `AsmFormatOptions` by searching for a `basm-fmt.toml` config file.
-///
-/// Returns `AsmFormatOptions::default()` if no file is found or if parsing fails.
 pub fn load_config() -> AsmFormatOptions {
     find_config_file()
         .and_then(|p| load_config_from(&p).ok())
         .unwrap_or_default()
 }
+
+// ── Formatter ────────────────────────────────────────────────────────────────
 
 struct Formatter<'src> {
     source_lines: Vec<&'src str>,
@@ -114,8 +97,14 @@ struct Formatter<'src> {
     mnemonic_case: CaseStyle,
     directive_case: CaseStyle,
     register_case: CaseStyle,
+    one_instruction_per_line: bool,
     current_line: usize,
     output: String,
+    // Per-source-line segment cache (`:` splitting for one_instruction_per_line)
+    seg_line: usize,             // which source line is currently cached (usize::MAX = none)
+    seg_idx: usize,              // next segment to consume
+    seg_items: Vec<String>,      // content segments (before trailing `;` comment)
+    seg_trailing: Option<String>, // the trailing `;` comment of the whole source line
 }
 
 impl<'src> Formatter<'src> {
@@ -127,8 +116,13 @@ impl<'src> Formatter<'src> {
             mnemonic_case: opt.mnemonic_case,
             directive_case: opt.directive_case,
             register_case: opt.register_case,
+            one_instruction_per_line: opt.one_instruction_per_line,
             current_line: 0,
             output: String::new(),
+            seg_line: usize::MAX,
+            seg_idx: 0,
+            seg_items: Vec::new(),
+            seg_trailing: None,
         }
     }
 
@@ -136,7 +130,6 @@ impl<'src> Formatter<'src> {
         " ".repeat(depth * self.indent_size)
     }
 
-    // Emit blank/comment-only source lines up to (not including) target_line
     fn emit_interstitial(&mut self, target_line: usize) {
         while self.current_line < target_line {
             let src = self.source_lines.get(self.current_line).copied().unwrap_or("");
@@ -157,8 +150,7 @@ impl<'src> Formatter<'src> {
         }
     }
 
-    // Apply case to the first whitespace-delimited word, keep the rest unchanged.
-    // Used for directives where only the keyword (ORG, EQU, …) is transformed.
+    // Apply case to the first whitespace-delimited word only; rest is preserved verbatim.
     fn apply_case_to_first_word(content: &str, case: CaseStyle) -> String {
         if matches!(case, CaseStyle::Untouched) {
             return content.to_string();
@@ -170,10 +162,8 @@ impl<'src> Formatter<'src> {
         result
     }
 
-    // Format a mnemonic line: apply case to the mnemonic keyword AND to any Z80
-    // register names found in the operands. Everything else (numeric literals,
-    // labels, operators) is kept exactly as in the source, so `ld a, 1` gives
-    // `LD A, 1` (not `LD A, 0x1`).
+    // Apply case to a mnemonic line: transforms the mnemonic keyword and register names
+    // in operands but leaves numeric literals / labels / expressions unchanged.
     fn apply_mnemonic_case(content: &str, mnemonic_case: CaseStyle, register_case: CaseStyle) -> String {
         let word_end = content.find(|c: char| c.is_ascii_whitespace()).unwrap_or(content.len());
         let mnemonic = Self::apply_case(&content[..word_end], mnemonic_case);
@@ -185,27 +175,19 @@ impl<'src> Formatter<'src> {
         format!("{}{}", mnemonic, operands)
     }
 
-    // Scan `operands` (everything after the mnemonic) and apply `case` to any
-    // substring that is a Z80 register name at a word boundary. All other text
-    // (numbers, labels, parentheses, operators) is passed through unchanged.
     fn apply_register_case(operands: &str, case: CaseStyle) -> String {
-        // Ordered longest-first to ensure correct greedy matching (AF' before AF, IXH before IX).
         const REGISTERS: &[&str] = &[
             "AF'", "IXH", "IXL", "IYH", "IYL",
             "AF", "BC", "DE", "HL", "IX", "IY", "SP", "PC",
             "A", "B", "C", "D", "E", "H", "L", "F", "I", "R",
         ];
-        // Valid identifier characters; a register must not be preceded or followed by one.
         let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
-
         let bytes = operands.as_bytes();
         let mut result = String::with_capacity(operands.len());
         let mut i = 0;
-
         while i < bytes.len() {
             let b = bytes[i];
             let prev_ok = i == 0 || !is_ident(bytes[i - 1]);
-
             if prev_ok && b.is_ascii_alphabetic() {
                 let mut matched = false;
                 for &reg in REGISTERS {
@@ -223,25 +205,67 @@ impl<'src> Formatter<'src> {
                         }
                     }
                 }
-                if !matched {
-                    result.push(b as char);
-                    i += 1;
-                }
+                if !matched { result.push(b as char); i += 1; }
             } else {
-                result.push(b as char);
-                i += 1;
+                result.push(b as char); i += 1;
             }
         }
         result
     }
 
-    // Split "content ; comment" → (content, Option<"; comment">)
-    // Simplified: finds first ';' (does not handle strings)
+    // Split "content ; comment" → (content.trim_end(), Option<"; comment">)
     fn split_comment(line: &str) -> (&str, Option<&str>) {
         match line.find(';') {
             Some(pos) => (line[..pos].trim_end(), Some(line[pos..].trim_end())),
             None => (line, None),
         }
+    }
+
+    // Split `content` (already stripped of trailing comment) into `:` separated instruction
+    // segments. Colons inside parentheses or double-quoted strings are not split points.
+    // Empty segments (e.g. from a trailing `:` on a label) are discarded.
+    fn split_instructions(content: &str) -> Vec<&str> {
+        let mut result = Vec::new();
+        let mut depth = 0i32;
+        let mut in_string = false;
+        let mut start = 0;
+        let bytes = content.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let b = bytes[i];
+            if in_string {
+                if b == b'"' { in_string = false; }
+            } else {
+                match b {
+                    b'"' => in_string = true,
+                    b'(' | b'[' => depth += 1,
+                    b')' | b']' => { depth -= 1; if depth < 0 { depth = 0; } }
+                    b':' if depth == 0 => {
+                        let seg = content[start..i].trim();
+                        if !seg.is_empty() { result.push(seg); }
+                        start = i + 1;
+                    }
+                    _ => {}
+                }
+            }
+            i += 1;
+        }
+        let last = content[start..].trim();
+        if !last.is_empty() { result.push(last); }
+        result
+    }
+
+    // Initialise the per-line segment cache when we move to a new source line.
+    // Must be called at the top of format_token (after warning/comment guards).
+    fn init_segments_for_line(&mut self, line_0: usize) {
+        if self.seg_line == line_0 { return; }
+        let src = self.source_lines.get(line_0).copied().unwrap_or("");
+        let (content, trailing) = Self::split_comment(src.trim());
+        self.seg_items = Self::split_instructions(content)
+            .into_iter().map(str::to_string).collect();
+        self.seg_trailing = trailing.map(str::to_string);
+        self.seg_idx = 0;
+        self.seg_line = line_0;
     }
 
     fn emit_line(&mut self, depth: usize, content: &str, comment: Option<&str>) {
@@ -250,7 +274,6 @@ impl<'src> Formatter<'src> {
         self.output.push_str(content);
         if let Some(c) = comment {
             let current_col = indent.len() + content.len();
-            // Pad to comment_column, but always keep at least 2 spaces.
             let padding = self.comment_column.saturating_sub(current_col).max(2);
             self.output.push_str(&" ".repeat(padding));
             self.output.push_str(c);
@@ -258,15 +281,15 @@ impl<'src> Formatter<'src> {
         self.output.push('\n');
     }
 
-    // Emit source line at source_lines[line_0] with reformatted indentation
+    // Emit a source line with reformatted indentation and directive_case on the first word.
+    // Used for block headers and closers (REPEAT … ENDREPEAT, IF … ENDIF, etc.)
     fn emit_source_line_indented(&mut self, depth: usize, line_0: usize) {
         let src = self.source_lines.get(line_0).copied().unwrap_or("");
         let (content, comment) = Self::split_comment(src.trim());
-        self.emit_line(depth, content, comment);
+        let formatted = Self::apply_case_to_first_word(content, self.directive_case);
+        self.emit_line(depth, &formatted, comment);
     }
 
-    // Find first source line at or after current_line whose trimmed content
-    // starts with `keyword` (case-insensitive)
     fn find_keyword_start(&self, keyword: &str) -> usize {
         let kw = keyword.to_ascii_uppercase();
         for i in self.current_line..self.source_lines.len() {
@@ -283,7 +306,6 @@ impl<'src> Formatter<'src> {
         self.current_line
     }
 
-    // Emit the closer keyword line (found in source) at the given indentation depth
     fn emit_closer(&mut self, depth: usize, keyword: &str) {
         let line = self.find_keyword_start(keyword);
         self.emit_interstitial(line);
@@ -301,21 +323,15 @@ impl<'src> Formatter<'src> {
     }
 
     fn format_token(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
-        // Warning tokens wrap another token with a parse warning message.
-        // Delegate to the inner token so it gets canonical formatting.
         if token.is_warning() {
             self.format_token(token.warning_token(), depth, line_0);
             return;
         }
 
-        // Comment tokens are either:
-        //   - trailing after an instruction on the same source line → the instruction
-        //     handler already emitted the comment via split_comment; skip to avoid duplication
-        //   - standalone comment line → emit with original source indentation
+        // Standalone comment line → emit verbatim; trailing comment (same line as an
+        // instruction already emitted) → skip to avoid duplication.
         if token.is_comment() {
-            if line_0 < self.current_line {
-                return;
-            }
+            if line_0 < self.current_line { return; }
             let src = self.source_lines.get(line_0).copied().unwrap_or("");
             self.output.push_str(src);
             self.output.push('\n');
@@ -323,12 +339,28 @@ impl<'src> Formatter<'src> {
             return;
         }
 
+        // Pre-split the source line into `:` segments so label and instruction branches
+        // can consume them in order.
+        if self.one_instruction_per_line {
+            self.init_segments_for_line(line_0);
+        }
+
         if token.is_label() {
             let name = token.label_symbol();
-            let (_, comment) = Self::split_comment(
-                self.source_lines.get(line_0).copied().unwrap_or("").trim()
-            );
-            self.emit_line(0, &format!("{name}:"), comment);
+            if self.one_instruction_per_line {
+                self.seg_idx += 1; // consume the label segment
+                // Emit trailing comment only if nothing more follows on this line
+                let comment = if self.seg_idx >= self.seg_items.len() {
+                    self.seg_trailing.clone()
+                } else {
+                    None
+                };
+                self.emit_line(0, &format!("{name}:"), comment.as_deref());
+            } else {
+                let src = self.source_lines.get(line_0).copied().unwrap_or("");
+                let (_, comment) = Self::split_comment(src.trim());
+                self.emit_line(0, &format!("{name}:"), comment);
+            }
             self.current_line = line_0 + 1;
         } else if token.is_if() {
             self.format_if(token, depth, line_0);
@@ -357,33 +389,60 @@ impl<'src> Formatter<'src> {
         } else if token.is_macro_definition() {
             self.format_macro_def(token, depth, line_0);
         } else {
-            let src_line = self.source_lines.get(line_0).copied().unwrap_or("");
-            let (content, comment) = Self::split_comment(src_line.trim());
+            // Simple instruction, directive, or macro call.
+            self.format_simple(token, depth, line_0);
+        }
+    }
 
-            if token.mnemonic().is_some() {
-                // Z80 opcode: apply case to the mnemonic keyword and to any register
-                // names in the operands; leave numeric literals as source text so
-                // `ld a, 1` stays `LD A, 1`, not `LD A, 0x1`.
-                self.emit_line(depth, &Self::apply_mnemonic_case(content, self.mnemonic_case, self.register_case), comment);
-            } else if token.is_call_macro_or_build_struct() {
-                // Macro calls: preserve source line (macro names are user-defined).
-                self.emit_line(depth, content, comment);
-            } else {
-                // All other directives (ORG, EQU, DB, DW, DEFB, DEFW, DEFS, INCLUDE,
-                // INCBIN, PRINT, ASSERT, SET, SAVE, RUN, …): apply case to the leading keyword.
-                self.emit_line(depth, &Self::apply_case_to_first_word(content, self.directive_case), comment);
-            }
+    // Format a non-block, non-label token.
+    fn format_simple(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
+        let (content, comment) = if self.one_instruction_per_line {
+            let idx = self.seg_idx;
+            self.seg_idx += 1;
+            let is_last = idx + 1 >= self.seg_items.len();
+            let seg = self.seg_items.get(idx).map(|s| s.as_str()).unwrap_or("");
+            let (c, inline_cmt) = Self::split_comment(seg);
+            let trailing_cmt = if is_last { self.seg_trailing.as_deref() } else { None };
+            // Inline comment on this segment takes priority; fall back to line-level trailing comment.
+            let comment = inline_cmt.or(trailing_cmt).map(str::to_string);
+            (c.to_string(), comment)
+        } else {
+            // Without splitting: skip tokens that land on an already-emitted source line.
+            if line_0 < self.current_line { return; }
+            let src = self.source_lines.get(line_0).copied().unwrap_or("");
+            let (c, cmt) = Self::split_comment(src.trim());
+            (c.to_string(), cmt.map(str::to_string))
+        };
+
+        if token.mnemonic().is_some() {
+            self.emit_line(
+                depth,
+                &Self::apply_mnemonic_case(&content, self.mnemonic_case, self.register_case),
+                comment.as_deref(),
+            );
+        } else if token.is_call_macro_or_build_struct() {
+            // Macro names are user-defined: preserve casing.
+            self.emit_line(depth, &content, comment.as_deref());
+        } else {
+            // All other directives: apply case to the leading keyword.
+            self.emit_line(
+                depth,
+                &Self::apply_case_to_first_word(&content, self.directive_case),
+                comment.as_deref(),
+            );
+        }
+
+        if line_0 >= self.current_line {
             self.current_line = line_0 + 1;
         }
     }
 
-    // Generic block: header from source, inner listing at depth+1, canonical closer
     fn format_block(
         &mut self,
         inner: &[LocatedToken],
         depth: usize,
         line_0: usize,
-        closer: &str
+        closer: &str,
     ) {
         self.emit_source_line_indented(depth, line_0);
         self.current_line = line_0 + 1;
@@ -394,13 +453,11 @@ impl<'src> Formatter<'src> {
     fn format_if(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
         let nb_tests = token.if_nb_tests();
 
-        // First test — header is the IF line in source
         self.emit_source_line_indented(depth, line_0);
         self.current_line = line_0 + 1;
         let (_, inner_0) = token.if_test(0);
         self.format_tokens(inner_0, depth + 1);
 
-        // Remaining tests (ELSE IF / ELSEIF / IFNOT …)
         for i in 1..nb_tests {
             let header = self.find_keyword_start("ELSE");
             self.emit_interstitial(header);
@@ -410,7 +467,6 @@ impl<'src> Formatter<'src> {
             self.format_tokens(inner_i, depth + 1);
         }
 
-        // Optional ELSE (default branch)
         if let Some(else_inner) = token.if_else() {
             let else_line = self.find_keyword_start("ELSE");
             self.emit_interstitial(else_line);
@@ -465,9 +521,6 @@ impl<'src> Formatter<'src> {
     }
 }
 
-/// Format a located listing using the original source for comment and blank-line preservation.
-///
-/// `depth` is the initial indentation depth (0 for top-level code).
 pub fn format_listing(listing: &LocatedListing, source: &str, depth: usize, opt: &AsmFormatOptions) -> String {
     let mut fmt = Formatter::new(source, opt);
     if let Some(first) = listing.iter().next() {
@@ -478,10 +531,6 @@ pub fn format_listing(listing: &LocatedListing, source: &str, depth: usize, opt:
     fmt.output
 }
 
-/// Parse and format Z80 assembly source code.
-///
-/// Top-level instructions are indented one level. Use `format_listing` with `depth = 0`
-/// for no base indentation.
 pub fn format(asm: &str, opt: &AsmFormatOptions) -> Result<String, AssemblerError> {
     let listing = parse_z80_str(asm)?;
     Ok(format_listing(&listing, asm, 1, opt))
@@ -513,8 +562,15 @@ mod tests {
     fn test_repeat_block() {
         let out = fmt("repeat 10\n push af\n endrepeat");
         assert!(out.contains("        PUSH AF\n"), "got: {out:?}");
-        assert!(out.contains("repeat 10"), "got: {out:?}");
-        assert!(out.contains("endrepeat"), "got: {out:?}");
+        assert!(out.contains("REPEAT 10"), "got: {out:?}");
+        assert!(out.contains("ENDREPEAT"), "got: {out:?}");
+    }
+
+    #[test]
+    fn test_block_header_directive_case() {
+        let out = fmt("repeat 5, i, 3\n  ld a, i\nendr");
+        assert!(out.contains("REPEAT 5, i, 3"), "REPEAT not uppercased: {out:?}");
+        assert!(out.contains("ENDR") || out.contains("ENDREPEAT"), "closer not uppercased: {out:?}");
     }
 
     #[test]
@@ -531,8 +587,6 @@ mod tests {
 
     #[test]
     fn test_comment_column() {
-        // With default comment_column=30, the ';' should start at column 30.
-        // depth=1 (4 spaces) + "PUSH AF" (7 chars) = col 11 → pad to 30
         let out = fmt("push af ; save af");
         let line = out.lines().next().unwrap();
         let col = line.find(';').expect("no comment found");
@@ -541,13 +595,12 @@ mod tests {
 
     #[test]
     fn test_comment_column_long_content() {
-        // When content is wider than comment_column, keep at least 2 spaces.
         let long = "ld hl, (some_very_long_symbol_name_that_is_long)";
         let src = format!("{long} ; cmnt");
         let out = fmt(&src);
         let line = out.lines().next().unwrap();
         let col = line.find(';').expect("no comment");
-        let content_end = 4 + long.len(); // depth=1 indent + opcode
+        let content_end = 4 + long.len();
         assert!(col >= content_end + 2, "less than 2 spaces before comment: {line:?}");
     }
 
@@ -593,7 +646,6 @@ mod tests {
 
     #[test]
     fn test_register_case_independent() {
-        // mnemonic uppercase, registers lowercase
         let opt = AsmFormatOptions {
             mnemonic_case: CaseStyle::UpperCase,
             register_case: CaseStyle::LowerCase,
@@ -606,18 +658,15 @@ mod tests {
 
     #[test]
     fn test_literal_not_hex_encoded() {
-        // Numeric literals must keep their source representation, not be re-encoded.
         let out = fmt("ld a, 1\nld hl, 100\nld de, 0x40\nadd a, %00001111");
-        println!("literal test:\n{out}");
-        assert!(out.contains("LD A, 1\n"),   "literal 1 re-encoded: {out:?}");
-        assert!(out.contains("LD HL, 100\n"), "literal 100 re-encoded: {out:?}");
-        assert!(out.contains("LD DE, 0x40\n"), "literal 0x40 re-encoded: {out:?}");
-        assert!(out.contains("ADD A, %00001111\n"), "literal %… re-encoded: {out:?}");
+        assert!(out.contains("LD A, 1\n"),           "literal 1 re-encoded: {out:?}");
+        assert!(out.contains("LD HL, 100\n"),        "literal 100 re-encoded: {out:?}");
+        assert!(out.contains("LD DE, 0x40\n"),       "literal 0x40 re-encoded: {out:?}");
+        assert!(out.contains("ADD A, %00001111\n"),  "literal %… re-encoded: {out:?}");
     }
 
     #[test]
     fn test_registers_uppercased() {
-        // Registers in operands must follow mnemonic_case.
         let out = fmt("ld hl, (ix+2)\npush af\nex af, af'");
         assert!(out.contains("LD HL, (IX+2)\n"),  "registers not uppercased: {out:?}");
         assert!(out.contains("PUSH AF\n"),          "AF not uppercased: {out:?}");
@@ -626,15 +675,10 @@ mod tests {
 
     #[test]
     fn test_label_not_treated_as_register() {
-        // Test apply_register_case directly: labels whose prefix matches a register
-        // name must NOT be uppercased if they are part of a longer identifier.
-        // "bc_label": "bc" followed by '_' → not register BC
         let r1 = Formatter::apply_register_case("hl, bc_label", CaseStyle::UpperCase);
         assert_eq!(r1, "HL, bc_label", "bc_label was altered: {r1:?}");
-        // "hlabel": "h" followed by 'l' (alphanumeric) → not register H
         let r2 = Formatter::apply_register_case("a, hlabel", CaseStyle::UpperCase);
         assert_eq!(r2, "A, hlabel", "hlabel was altered: {r2:?}");
-        // Bare register IS transformed
         let r3 = Formatter::apply_register_case("hl, bc", CaseStyle::UpperCase);
         assert_eq!(r3, "HL, BC", "registers not uppercased: {r3:?}");
     }
@@ -645,6 +689,55 @@ mod tests {
         let out = fmt(src);
         assert_eq!(out.matches("comment 1").count(), 1, "comment 1 duplicated: {out:?}");
         assert_eq!(out.matches("comment 2").count(), 1, "comment 2 duplicated: {out:?}");
+    }
+
+    #[test]
+    fn test_colon_separator_no_duplicate() {
+        // Multiple instructions on one line must not be duplicated.
+        let src = "    pop hl : push af : pop af\n";
+        let out = fmt(src);
+        assert_eq!(out.matches("POP HL").count(),  1, "POP HL duplicated: {out:?}");
+        assert_eq!(out.matches("PUSH AF").count(), 1, "PUSH AF duplicated: {out:?}");
+        assert_eq!(out.matches("POP AF").count(),  1, "POP AF duplicated: {out:?}");
+    }
+
+    #[test]
+    fn test_one_instruction_per_line_splits() {
+        let src = "pop hl : push af : pop af\n";
+        let out = fmt(src);
+        let lines: Vec<&str> = out.lines().collect();
+        // Each instruction on its own line
+        assert!(lines.iter().any(|l| l.trim() == "POP HL"),  "POP HL not on own line: {out:?}");
+        assert!(lines.iter().any(|l| l.trim() == "PUSH AF"), "PUSH AF not on own line: {out:?}");
+        assert!(lines.iter().any(|l| l.trim() == "POP AF"),  "POP AF not on own line: {out:?}");
+    }
+
+    #[test]
+    fn test_one_instruction_per_line_false_keeps_line() {
+        let opt = AsmFormatOptions {
+            one_instruction_per_line: false,
+            ..AsmFormatOptions::default()
+        };
+        let src = "pop hl : push af\n";
+        let out = format(src, &opt).unwrap();
+        // Both instructions must be on a single line (no splitting).
+        // The second mnemonic keyword is not in first-word position so its case is not
+        // transformed; only registers like HL/AF are uppercased within the line.
+        assert!(
+            out.lines().any(|l| l.contains("POP HL") && l.contains("push AF")),
+            "line was split when one_instruction_per_line=false: {out:?}"
+        );
+    }
+
+    #[test]
+    fn test_colon_comment_on_last_instruction() {
+        // Trailing comment must appear once, on the last instruction.
+        let src = "pop hl : push af ; my comment\n";
+        let out = fmt(src);
+        assert_eq!(out.matches("my comment").count(), 1, "comment duplicated: {out:?}");
+        // The comment should be on the PUSH AF line, not the POP HL line.
+        let push_line = out.lines().find(|l| l.contains("PUSH AF")).expect("no PUSH AF line");
+        assert!(push_line.contains("my comment"), "comment not on last instruction: {push_line:?}");
     }
 
     #[test]
