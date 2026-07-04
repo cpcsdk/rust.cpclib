@@ -39,7 +39,7 @@ cpclib-cslcli.workspace = true
 hxcfe_cli.workspace = true
 
 anstyle = "1.0.14"
-anyhow = "1.0.102"
+anyhow = "1.0.103"
 camino = { workspace = true, features = ["serde1"] }
 camino-tempfile.workspace = true
 clap = { workspace = true, features = ["derive"] }
@@ -66,7 +66,7 @@ serde.workspace = true
 shlex.workspace = true
 thiserror = "2.0"
 topologic = "1.1.0"
-clap_complete = "4.6.5"
+clap_complete = "4.6.7"
 query-shell = "0.3.0"
 utf8-chars = "3.0.7"
 fancy-regex = "0.18.0"

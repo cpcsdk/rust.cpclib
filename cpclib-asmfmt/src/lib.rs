@@ -4,9 +4,21 @@ use cpclib_asm::{AssemblerError, ListingElement, LocatedListing, LocatedToken, M
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CaseStyle {
-    UpperCase,
-    LowerCase,
-    Untouched,
+    UpperCase,  // Set in uppercase
+    LowerCase,  // Set in lowercase
+    Untouched,  // Preserve the original case of the source text
+}
+
+/// Controls how spaces are written around `:` instruction separators when
+/// `one_instruction_per_line = false` and a source line has multiple instructions.
+/// Has no effect when `one_instruction_per_line = true` (separators become newlines).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SpaceAroundColumn {
+    None,      // a:b
+    Before,    // a :b
+    After,     // a: b
+    Both,      // a : b
+    Untouched, // preserve original spacing
 }
 
 fn default_indent_size() -> usize { 4 }
@@ -15,6 +27,7 @@ fn default_mnemonic_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_directive_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_register_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_one_instruction_per_line() -> bool { true }
+fn default_space_around_column() -> SpaceAroundColumn { SpaceAroundColumn::Untouched }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, bon::Builder)]
 pub struct AsmFormatOptions {
@@ -45,6 +58,11 @@ pub struct AsmFormatOptions {
     #[serde(default = "default_one_instruction_per_line")]
     #[builder(default = default_one_instruction_per_line())]
     pub one_instruction_per_line: bool,
+    /// How spaces are written around `:` instruction separators when
+    /// `one_instruction_per_line = false` (default: Untouched).
+    #[serde(default = "default_space_around_column")]
+    #[builder(default = default_space_around_column())]
+    pub space_around_column: SpaceAroundColumn,
 }
 
 impl Default for AsmFormatOptions {
@@ -56,6 +74,7 @@ impl Default for AsmFormatOptions {
             directive_case: default_directive_case(),
             register_case: default_register_case(),
             one_instruction_per_line: default_one_instruction_per_line(),
+            space_around_column: default_space_around_column(),
         }
     }
 }
@@ -104,6 +123,7 @@ struct Formatter<'src> {
     directive_case: CaseStyle,
     register_case: CaseStyle,
     one_instruction_per_line: bool,
+    space_around_column: SpaceAroundColumn,
     current_line: usize,
     output: String,
     // Per-source-line segment cache (`:` splitting for one_instruction_per_line)
@@ -123,6 +143,7 @@ impl<'src> Formatter<'src> {
             directive_case: opt.directive_case,
             register_case: opt.register_case,
             one_instruction_per_line: opt.one_instruction_per_line,
+            space_around_column: opt.space_around_column,
             current_line: 0,
             output: String::new(),
             seg_line: usize::MAX,
@@ -305,6 +326,28 @@ impl<'src> Formatter<'src> {
         let last = content[start..].trim();
         if !last.is_empty() { result.push(last); }
         result
+    }
+
+    // Reformat `:` instruction separators in `content` according to `spacing`.
+    // Only separators that are already surrounded by whitespace (` : `) are
+    // recognised — label colons and other `:` uses are left untouched.
+    // When `spacing` is `Untouched` the string is returned as-is.
+    fn normalize_colon_spacing(content: &str, spacing: SpaceAroundColumn) -> String {
+        if matches!(spacing, SpaceAroundColumn::Untouched) {
+            return content.to_string();
+        }
+        let segs = Self::split_instructions(content);
+        if segs.len() <= 1 {
+            return content.to_string();
+        }
+        let sep = match spacing {
+            SpaceAroundColumn::None => ":",
+            SpaceAroundColumn::Before => " :",
+            SpaceAroundColumn::After => ": ",
+            SpaceAroundColumn::Both => " : ",
+            SpaceAroundColumn::Untouched => unreachable!(),
+        };
+        segs.join(sep)
     }
 
     // Initialise the per-line segment cache when we move to a new source line.
@@ -496,7 +539,8 @@ impl<'src> Formatter<'src> {
                 // Emit the instruction content verbatim to avoid misidentifying
                 // struct/macro names as mnemonics and applying the wrong case.
                 self.emit_line(0, &format!("{name}:"), None);
-                self.emit_line(depth, after_label, comment);
+                let after = Self::normalize_colon_spacing(after_label, self.space_around_column);
+                self.emit_line(depth, &after, comment);
             }
         }
         self.current_line = line_0 + 1;
@@ -519,7 +563,9 @@ impl<'src> Formatter<'src> {
             if line_0 < self.current_line { return; }
             let src = self.source_lines.get(line_0).copied().unwrap_or("");
             let (c, cmt) = Self::split_comment(src.trim());
-            (c.to_string(), cmt.map(str::to_string))
+            // Reformat instruction-separator spacing if requested.
+            let c = Self::normalize_colon_spacing(c, self.space_around_column);
+            (c, cmt.map(str::to_string))
         };
 
         if token.mnemonic().is_some() {
@@ -533,13 +579,13 @@ impl<'src> Formatter<'src> {
             self.emit_line(depth, &content, comment.as_deref());
         } else if token.is_assign() {
             // Symbol assignment (label = value, label += value, etc.):
-            // first word is a user-defined symbol name, not a keyword — preserve as-is.
-            self.emit_line(depth, &content, comment.as_deref());
+            // first word is a user-defined symbol name — always at column 0.
+            self.emit_line(0, &content, comment.as_deref());
         } else if token.is_equ() {
-            // "symbol EQU value": apply directive_case to the keyword (second word),
-            // not the symbol name (first word).
+            // "symbol EQU value": label (first word) always at column 0;
+            // apply directive_case only to the keyword (second word).
             self.emit_line(
-                depth,
+                0,
                 &Self::apply_case_to_second_word(&content, self.directive_case),
                 comment.as_deref(),
             );
@@ -556,8 +602,9 @@ impl<'src> Formatter<'src> {
                 .unwrap_or_default();
             if LABEL_FIRST_KWS.contains(&second_word_upper.as_str())
                 || second_word_upper.starts_with('#') {
+                // Label-first directives: label is a top-level symbol name → column 0.
                 self.emit_line(
-                    depth,
+                    0,
                     &Self::apply_case_to_second_word(&content, self.directive_case),
                     comment.as_deref(),
                 );
@@ -1033,5 +1080,71 @@ mod tests {
         let out = fmt("myloop\tpush af");
         assert!(out.contains("myloop:"), "label missing colon: {out:?}");
         assert!(out.contains("PUSH AF"), "instruction after inline label lost: {out:?}");
+    }
+
+    #[test]
+    fn test_equ_at_column_zero() {
+        // EQU labels must start at column 0 regardless of any surrounding block depth.
+        let out = fmt("FOO EQU 42");
+        let line = out.lines().next().unwrap();
+        assert!(!line.starts_with(' '), "EQU line is indented: {line:?}");
+        assert!(line.starts_with("FOO"), "EQU label not at column 0: {line:?}");
+    }
+
+    #[test]
+    fn test_assign_at_column_zero() {
+        // Symbol assignments (=) must start at column 0.
+        let out = fmt("my_var = 10");
+        let line = out.lines().next().unwrap();
+        assert!(!line.starts_with(' '), "assignment line is indented: {line:?}");
+        assert!(line.starts_with("my_var"), "assignment not at column 0: {line:?}");
+    }
+
+    #[test]
+    fn test_comment_column_custom() {
+        // comment_column should be honoured for non-default values.
+        let opt = AsmFormatOptions::builder().comment_column(50).build();
+        let out = format("nop ; hi", &opt).unwrap();
+        let line = out.lines().next().unwrap();
+        let col = line.find(';').expect("no comment found");
+        assert_eq!(col, 50, "comment not at column 50: {line:?}");
+    }
+
+    #[test]
+    fn test_space_around_column_both() {
+        // SpaceAroundColumn::Both forces ` : ` between instructions.
+        let opt = AsmFormatOptions::builder()
+            .one_instruction_per_line(false)
+            .space_around_column(SpaceAroundColumn::Both)
+            .build();
+        let out = format("nop : ld a, 5", &opt).unwrap();
+        let line = out.lines().next().unwrap();
+        assert!(line.contains(" : "), "separator not ' : ': {line:?}");
+    }
+
+    #[test]
+    fn test_space_around_column_none() {
+        // SpaceAroundColumn::None removes all spaces around `:`.
+        let opt = AsmFormatOptions::builder()
+            .one_instruction_per_line(false)
+            .space_around_column(SpaceAroundColumn::None)
+            .build();
+        let out = format("nop : ld a, 5", &opt).unwrap();
+        let line = out.lines().next().unwrap();
+        assert!(line.contains(':') && !line.contains(" :") && !line.contains(": "),
+            "unexpected spacing around ':': {line:?}");
+    }
+
+    #[test]
+    fn test_space_around_column_untouched_preserves() {
+        // SpaceAroundColumn::Untouched (default) must not alter existing spacing.
+        let opt = AsmFormatOptions::builder()
+            .one_instruction_per_line(false)
+            .space_around_column(SpaceAroundColumn::Untouched)
+            .build();
+        let src = "nop : ld a, 5";
+        let out = format(src, &opt).unwrap();
+        // The ` : ` from source should be preserved.
+        assert!(out.contains(" : "), "spacing was altered: {out:?}");
     }
 }
