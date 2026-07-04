@@ -94,8 +94,10 @@ impl Emulator1984Version {
 
         #[cfg(target_os = "linux")]
         let builder = {
-            let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-                Box::new(|desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+            let post_install: Box<
+                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+            > = Box::new(
+                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     use std::os::unix::fs::PermissionsExt;
 
                     let app_image = desc.exec_fname();
@@ -112,7 +114,9 @@ impl Emulator1984Version {
                         eprintln!("The 1984 emulator requires SDL3 to run.");
                         eprintln!();
                         eprintln!("To install SDL3 on Ubuntu/Debian:");
-                        eprintln!("  wget https://github.com/libsdl-org/SDL/releases/download/release-3.4.10/SDL3-3.4.10.tar.gz");
+                        eprintln!(
+                            "  wget https://github.com/libsdl-org/SDL/releases/download/release-3.4.10/SDL3-3.4.10.tar.gz"
+                        );
                         eprintln!("  tar xzf SDL3-3.4.10.tar.gz");
                         eprintln!("  cd SDL3-3.4.10");
                         eprintln!("  cmake -B build -DCMAKE_BUILD_TYPE=Release");
@@ -128,25 +132,38 @@ impl Emulator1984Version {
                     download_roms(&rom_dir)?;
 
                     Ok(())
-                });
+                }
+            );
             builder.post_install(post_install)
         };
 
         #[cfg(any(target_os = "macos", target_os = "openbsd"))]
         let builder = {
-            let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-                Box::new(|desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+            let post_install: Box<
+                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+            > = Box::new(
+                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     let source_root = locate_source_root(&desc.cache_folder())?;
 
                     ensure_autotools_available()?;
                     ensure_sdl3_available()?;
 
-                    run_command("autoreconf", ["-iv"], source_root.as_std_path(), "autoreconf -iv")?;
+                    run_command(
+                        "autoreconf",
+                        ["-iv"],
+                        source_root.as_std_path(),
+                        "autoreconf -iv"
+                    )?;
                     run_command("./configure", [], source_root.as_std_path(), "./configure")?;
 
                     let jobs = available_parallelism().map(|n| n.get()).unwrap_or(1);
                     let jobs_arg = jobs.to_string();
-                    run_command("make", ["-j", jobs_arg.as_str()], source_root.as_std_path(), "make -j")?;
+                    run_command(
+                        "make",
+                        ["-j", jobs_arg.as_str()],
+                        source_root.as_std_path(),
+                        "make -j"
+                    )?;
 
                     let built_binary = source_root.join("1984");
                     let target_binary = desc.exec_fname();
@@ -175,20 +192,24 @@ impl Emulator1984Version {
                     download_roms(&rom_dir)?;
 
                     Ok(())
-                });
+                }
+            );
             builder.post_install(post_install)
         };
 
         #[cfg(target_os = "windows")]
         let builder = {
-            let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-                Box::new(|desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+            let post_install: Box<
+                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+            > = Box::new(
+                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     // Download required ROM files
                     let rom_dir = desc.cache_folder();
                     download_roms(&rom_dir)?;
 
                     Ok(())
-                });
+                }
+            );
             builder.post_install(post_install)
         };
 
@@ -249,47 +270,57 @@ impl crate::delegated::DownloadableInformation for Emulator1984Version {
     }
 
     #[cfg(any(target_os = "macos", target_os = "openbsd"))]
-    fn target_os_postinstall<E: EventObserver>(
-        &self
-    ) -> Option<crate::delegated::PostInstall<E>> {
+    fn target_os_postinstall<E: EventObserver>(&self) -> Option<crate::delegated::PostInstall<E>> {
         let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-            Box::new(|desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
-                let source_root = locate_source_root(&desc.cache_folder())?;
+            Box::new(
+                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                    let source_root = locate_source_root(&desc.cache_folder())?;
 
-                ensure_autotools_available()?;
-                ensure_sdl3_available()?;
+                    ensure_autotools_available()?;
+                    ensure_sdl3_available()?;
 
-                run_command("autoreconf", ["-iv"], source_root.as_std_path(), "autoreconf -iv")?;
-                run_command("./configure", [], source_root.as_std_path(), "./configure")?;
+                    run_command(
+                        "autoreconf",
+                        ["-iv"],
+                        source_root.as_std_path(),
+                        "autoreconf -iv"
+                    )?;
+                    run_command("./configure", [], source_root.as_std_path(), "./configure")?;
 
-                let jobs = available_parallelism().map(|n| n.get()).unwrap_or(1);
-                let jobs_arg = jobs.to_string();
-                run_command("make", ["-j", jobs_arg.as_str()], source_root.as_std_path(), "make -j")?;
+                    let jobs = available_parallelism().map(|n| n.get()).unwrap_or(1);
+                    let jobs_arg = jobs.to_string();
+                    run_command(
+                        "make",
+                        ["-j", jobs_arg.as_str()],
+                        source_root.as_std_path(),
+                        "make -j"
+                    )?;
 
-                let built_binary = source_root.join("1984");
-                let target_binary = desc.exec_fname();
-                if built_binary.exists() && built_binary != target_binary {
-                    if target_binary.exists() {
-                        fs_err::remove_file(&target_binary)
-                            .or_else(|_| fs_err::remove_dir_all(&target_binary))
-                            .map_err(|e| {
-                                format!(
-                                    "Failed to remove existing executable {}: {}",
-                                    target_binary, e
-                                )
-                            })?;
+                    let built_binary = source_root.join("1984");
+                    let target_binary = desc.exec_fname();
+                    if built_binary.exists() && built_binary != target_binary {
+                        if target_binary.exists() {
+                            fs_err::remove_file(&target_binary)
+                                .or_else(|_| fs_err::remove_dir_all(&target_binary))
+                                .map_err(|e| {
+                                    format!(
+                                        "Failed to remove existing executable {}: {}",
+                                        target_binary, e
+                                    )
+                                })?;
+                        }
+
+                        fs_err::rename(&built_binary, &target_binary).map_err(|e| {
+                            format!(
+                                "Failed to move built executable from {} to {}: {}",
+                                built_binary, target_binary, e
+                            )
+                        })?;
                     }
 
-                    fs_err::rename(&built_binary, &target_binary).map_err(|e| {
-                        format!(
-                            "Failed to move built executable from {} to {}: {}",
-                            built_binary, target_binary, e
-                        )
-                    })?;
+                    Ok(())
                 }
-
-                Ok(())
-            });
+            );
 
         Some(post_install.into())
     }
@@ -298,28 +329,21 @@ impl crate::delegated::DownloadableInformation for Emulator1984Version {
 #[cfg(any(target_os = "macos", target_os = "openbsd"))]
 fn ensure_autotools_available() -> Result<(), String> {
     for tool in ["autoreconf", "autoconf", "automake"] {
-        let status = Command::new(tool)
-            .arg("--version")
-            .output()
-            .map_err(|_e| {
-                if cfg!(target_os = "macos") {
-                        "Autotools are required. Install them with: brew install automake"
-                        .to_owned()
-                }
-                else {
-                        "Autotools are required. Install them with: pkg_add automake"
-                        .to_owned()
-                }
-            })?;
+        let status = Command::new(tool).arg("--version").output().map_err(|_e| {
+            if cfg!(target_os = "macos") {
+                "Autotools are required. Install them with: brew install automake".to_owned()
+            }
+            else {
+                "Autotools are required. Install them with: pkg_add automake".to_owned()
+            }
+        })?;
 
         if !status.status.success() {
             return Err(if cfg!(target_os = "macos") {
-                "Autotools are required. Install them with: brew install automake"
-                    .to_owned()
+                "Autotools are required. Install them with: brew install automake".to_owned()
             }
             else {
-                "Autotools are required. Install them with: pkg_add automake"
-                    .to_owned()
+                "Autotools are required. Install them with: pkg_add automake".to_owned()
             });
         }
     }
@@ -368,7 +392,8 @@ fn locate_source_root(base: &Utf8Path) -> Result<Utf8PathBuf, String> {
         .map_err(|e| format!("Unable to inspect extracted 1984 files in {base}: {e}"))?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| format!("Unable to inspect extracted 1984 files in {base}: {e}"))?;
+        let entry =
+            entry.map_err(|e| format!("Unable to inspect extracted 1984 files in {base}: {e}"))?;
         let path = entry.path();
         if !path.is_dir() {
             continue;
@@ -402,7 +427,10 @@ fn run_command<const N: usize>(
         Ok(())
     }
     else {
-        Err(format!("{label} failed: {}", String::from_utf8_lossy(&output.stderr)))
+        Err(format!(
+            "{label} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
     }
 }
 
@@ -418,31 +446,52 @@ fn is_sdl3_available_system() -> bool {
 /// Download required ROM files for the 1984 emulator
 fn download_roms(target_dir: &Utf8Path) -> Result<(), String> {
     eprintln!("Downloading required ROM files for 1984 emulator...");
-    
+
     for rom_file in ROM_FILES {
         let rom_path = target_dir.join(rom_file);
-        
+
         // Skip if ROM already exists
         if rom_path.exists() {
             eprintln!("  ✓ {} already exists", rom_file);
             continue;
         }
-        
+
         let rom_url = format!("{}/{}", ROM_BASE_URL, rom_file);
         eprintln!("  Downloading {}...", rom_file);
-        
+
         // Try curl first, then wget
         let result = Command::new("curl")
-            .args(["-L", "-o", rom_path.as_str(), &rom_url, "--silent", "--show-error"])
+            .args([
+                "-L",
+                "-o",
+                rom_path.as_str(),
+                &rom_url,
+                "--silent",
+                "--show-error"
+            ])
             .status()
-            .and_then(|s| if s.success() { Ok(()) } else { Err(std::io::Error::other("curl failed")) })
+            .and_then(|s| {
+                if s.success() {
+                    Ok(())
+                }
+                else {
+                    Err(std::io::Error::other("curl failed"))
+                }
+            })
             .or_else(|_| {
                 Command::new("wget")
                     .args(["-q", "-O", rom_path.as_str(), &rom_url])
                     .status()
-                    .and_then(|s| if s.success() { Ok(()) } else { Err(std::io::Error::other("wget failed")) })
+                    .and_then(|s| {
+                        if s.success() {
+                            Ok(())
+                        }
+                        else {
+                            Err(std::io::Error::other("wget failed"))
+                        }
+                    })
             });
-        
+
         match result {
             Ok(_) => eprintln!("  ✓ {} downloaded successfully", rom_file),
             Err(e) => {
@@ -453,7 +502,7 @@ fn download_roms(target_dir: &Utf8Path) -> Result<(), String> {
             }
         }
     }
-    
+
     eprintln!("✓ All ROM files downloaded successfully");
     Ok(())
 }

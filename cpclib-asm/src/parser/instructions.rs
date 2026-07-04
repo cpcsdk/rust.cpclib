@@ -547,11 +547,7 @@ pub fn parse_sub(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
         // Fake instruction: sub de,rr or sub hl,rr
         let operand = alt((parse_register16, parse_register_sp)).parse_next(input)?;
 
-        let token = LocatedTokenInner::new_opcode(
-            Mnemonic::Sub,
-            first,
-            Some(operand)
-        );
+        let token = LocatedTokenInner::new_opcode(Mnemonic::Sub, first, Some(operand));
 
         let result = LocatedTokenInner::WarningWrapper(
             Box::new(token),
@@ -559,7 +555,8 @@ pub fn parse_sub(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
         );
 
         Ok(result)
-    } else {
+    }
+    else {
         // Normal SUB: sub A,operand or sub operand
         let _a_opt = opt(terminated(parse_register_a, parse_comma)).parse_next(input)?;
 
@@ -608,20 +605,18 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
     }?;
 
     // Check if this is a fake instruction (sbc de,rr)
-    let is_fake = opera.as_ref().map(|o| o.is_register_de()).unwrap_or(false) && operb.is_register16();
+    let is_fake =
+        opera.as_ref().map(|o| o.is_register_de()).unwrap_or(false) && operb.is_register16();
 
-    let token = LocatedTokenInner::new_opcode(
-        Mnemonic::Sbc,
-        opera,
-        Some(operb)
-    );
+    let token = LocatedTokenInner::new_opcode(Mnemonic::Sbc, opera, Some(operb));
 
     let result = if is_fake {
         LocatedTokenInner::WarningWrapper(
             Box::new(token),
             "This is a fake instruction assembled using several opcodes".into()
         )
-    } else {
+    }
+    else {
         token
     };
 
@@ -636,7 +631,12 @@ pub fn parse_add_or_adc(
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let first = opt(terminated(
-            alt((parse_register_a, parse_register_hl, parse_indexregister16, parse_register_de)),
+            alt((
+                parse_register_a,
+                parse_register_hl,
+                parse_indexregister16,
+                parse_register_de
+            )),
             parse_comma
         ))
         .parse_next(input)?;
@@ -670,20 +670,18 @@ pub fn parse_add_or_adc(
         }?;
 
         // Check if this is a fake instruction (adc de,rr or add de,rr)
-        let is_fake = first.as_ref().map(|f| f.is_register_de()).unwrap_or(false) && second.is_register16();
-        
-        let token = LocatedTokenInner::new_opcode(
-            add_or_adc,
-            first,
-            Some(second)
-        );
+        let is_fake =
+            first.as_ref().map(|f| f.is_register_de()).unwrap_or(false) && second.is_register16();
+
+        let token = LocatedTokenInner::new_opcode(add_or_adc, first, Some(second));
 
         let result = if is_fake {
             LocatedTokenInner::WarningWrapper(
                 Box::new(token),
                 "This is a fake instruction assembled using several opcodes".into()
             )
-        } else {
+        }
+        else {
             token
         };
 
@@ -703,7 +701,9 @@ pub fn parse_push_n_pop(
             alt((parse_register16, parse_indexregister16)),
             parse_comma
         )
-        .context(StrContext::Label("expected register pair: BC, DE, HL, AF, IX or IY"))
+        .context(StrContext::Label(
+            "expected register pair: BC, DE, HL, AF, IX or IY"
+        ))
         .parse_next(input)?;
 
         if registers.len() > 1 {

@@ -7,10 +7,9 @@ use ahash::AHashMap as HashMap;
 use cpclib_common::rayon::prelude::*;
 use cpclib_common::smallvec::{SmallVec, smallvec};
 use cpclib_common::smol_str::ToSmolStr;
-use cpclib_common::strsim;
 use cpclib_common::{
     PatternExpr, PatternExprBinaryOp, PatternExprUnaryOp, parse_pattern_expr,
-    parse_pattern_number_literal
+    parse_pattern_number_literal, strsim
 };
 
 use crate::symbols::{
@@ -53,7 +52,11 @@ fn ast_to_error_label(ast: &PatternExpr) -> String {
                 PatternExprBinaryOp::BooleanAnd => "&&",
                 PatternExprBinaryOp::BooleanOr => "||"
             };
-            format!("({} {op} {})", ast_to_error_label(left), ast_to_error_label(right))
+            format!(
+                "({} {op} {})",
+                ast_to_error_label(left),
+                ast_to_error_label(right)
+            )
         }
     }
 }
@@ -403,15 +406,21 @@ impl SymbolsTable {
             PatternExpr::Unary { op, expr } => {
                 let value = self.eval_pattern_ast(expr)?;
                 match op {
-                    PatternExprUnaryOp::Not => value.not().map_err(|_| {
-                        SymbolError::CannotModify(ast_to_error_label(ast).into())
-                    }),
-                    PatternExprUnaryOp::BinaryNot => value.binary_not().map_err(|_| {
-                        SymbolError::CannotModify(ast_to_error_label(ast).into())
-                    }),
+                    PatternExprUnaryOp::Not => {
+                        value
+                            .not()
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
+                    PatternExprUnaryOp::BinaryNot => {
+                        value
+                            .binary_not()
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
                     PatternExprUnaryOp::Neg => {
-                        value.neg().map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
-                    }
+                        value
+                            .neg()
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                    },
                 }
             },
             PatternExpr::Binary { op, left, right } => {
@@ -419,34 +428,44 @@ impl SymbolsTable {
                 let rhs = self.eval_pattern_ast(right)?;
                 match op {
                     PatternExprBinaryOp::Add => {
-                        (lhs + rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs + rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::Sub => {
-                        (lhs - rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs - rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::Mul => {
-                        (lhs * rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs * rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::Div => {
-                        (lhs / rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs / rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::Mod => {
-                        (lhs % rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs % rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::ShiftLeft => {
-                        (lhs << rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs << rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::ShiftRight => {
-                        (lhs >> rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs >> rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::BitAnd => {
-                        (lhs & rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs & rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::BitXor => {
-                        (lhs ^ rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs ^ rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::BitOr => {
-                        (lhs | rhs).map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
+                        (lhs | rhs)
+                            .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))
                     },
                     PatternExprBinaryOp::Equal => Ok((lhs == rhs).into()),
                     PatternExprBinaryOp::Different => Ok((lhs != rhs).into()),
@@ -454,20 +473,22 @@ impl SymbolsTable {
                     PatternExprBinaryOp::StrictlyLower => Ok((lhs < rhs).into()),
                     PatternExprBinaryOp::GreaterOrEqual => Ok((lhs >= rhs).into()),
                     PatternExprBinaryOp::StrictlyGreater => Ok((lhs > rhs).into()),
-                    PatternExprBinaryOp::BooleanAnd => Ok(
-                        (lhs.bool().map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))?
-                            && rhs
-                                .bool()
-                                .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))?)
-                        .into()
-                    ),
-                    PatternExprBinaryOp::BooleanOr => Ok(
-                        (lhs.bool().map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))?
-                            || rhs
-                                .bool()
-                                .map_err(|_| SymbolError::CannotModify(ast_to_error_label(ast).into()))?)
-                        .into()
-                    )
+                    PatternExprBinaryOp::BooleanAnd => {
+                        Ok((lhs.bool().map_err(|_| {
+                            SymbolError::CannotModify(ast_to_error_label(ast).into())
+                        })? && rhs.bool().map_err(|_| {
+                            SymbolError::CannotModify(ast_to_error_label(ast).into())
+                        })?)
+                        .into())
+                    },
+                    PatternExprBinaryOp::BooleanOr => {
+                        Ok((lhs.bool().map_err(|_| {
+                            SymbolError::CannotModify(ast_to_error_label(ast).into())
+                        })? || rhs.bool().map_err(|_| {
+                            SymbolError::CannotModify(ast_to_error_label(ast).into())
+                        })?)
+                        .into())
+                    },
                 }
             }
         }
@@ -489,9 +510,11 @@ impl SymbolsTable {
             Some(Value::String(val)) => Ok(val.into()),
             Some(Value::Counter(val)) => Ok((*val).into()),
             Some(_) => Err(SymbolError::CannotModify(identifier.to_string().into())),
-            None => parse_pattern_number_literal(identifier)
-                .map(ExprResult::from)
-                .ok_or_else(|| SymbolError::WrongSymbol(identifier.to_string().into()))
+            None => {
+                parse_pattern_number_literal(identifier)
+                    .map(ExprResult::from)
+                    .ok_or_else(|| SymbolError::WrongSymbol(identifier.to_string().into()))
+            },
         }
     }
 
@@ -583,7 +606,8 @@ impl SymbolsTable {
                         .value()
                         .to_owned();
 
-                    self.eval_pattern_expression(&local_expr_for_eval)?.to_string()
+                    self.eval_pattern_expression(&local_expr_for_eval)?
+                        .to_string()
                 }
             };
 

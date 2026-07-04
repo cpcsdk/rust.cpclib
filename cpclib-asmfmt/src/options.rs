@@ -6,14 +6,17 @@ pub enum CaseStyle {
     #[cfg_attr(feature = "cmdline", value(name = "lowercase"))]
     LowerCase,
     #[cfg_attr(feature = "cmdline", value(name = "untouched"))]
-    Untouched,
+    Untouched
 }
 
 #[cfg(feature = "cmdline")]
 impl std::fmt::Display for CaseStyle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use clap::ValueEnum;
-        self.to_possible_value().expect("no values skipped").get_name().fmt(f)
+        self.to_possible_value()
+            .expect("no values skipped")
+            .get_name()
+            .fmt(f)
     }
 }
 
@@ -32,14 +35,17 @@ pub enum SpaceAroundColumn {
     #[cfg_attr(feature = "cmdline", value(name = "both"))]
     Both,
     #[cfg_attr(feature = "cmdline", value(name = "untouched"))]
-    Untouched,
+    Untouched
 }
 
 #[cfg(feature = "cmdline")]
 impl std::fmt::Display for SpaceAroundColumn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use clap::ValueEnum;
-        self.to_possible_value().expect("no values skipped").get_name().fmt(f)
+        self.to_possible_value()
+            .expect("no values skipped")
+            .get_name()
+            .fmt(f)
     }
 }
 
@@ -70,14 +76,17 @@ pub enum HexEncoding {
     #[cfg_attr(feature = "cmdline", value(name = "H"))]
     SuffixUpper,
     #[cfg_attr(feature = "cmdline", value(name = "untouched"))]
-    Untouched,
+    Untouched
 }
 
 #[cfg(feature = "cmdline")]
 impl std::fmt::Display for HexEncoding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use clap::ValueEnum;
-        self.to_possible_value().expect("no values skipped").get_name().fmt(f)
+        self.to_possible_value()
+            .expect("no values skipped")
+            .get_name()
+            .fmt(f)
     }
 }
 
@@ -96,14 +105,17 @@ pub enum OctalEncoding {
     #[cfg_attr(feature = "cmdline", value(name = "@"))]
     PrefixAt,
     #[cfg_attr(feature = "cmdline", value(name = "untouched"))]
-    Untouched,
+    Untouched
 }
 
 #[cfg(feature = "cmdline")]
 impl std::fmt::Display for OctalEncoding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use clap::ValueEnum;
-        self.to_possible_value().expect("no values skipped").get_name().fmt(f)
+        self.to_possible_value()
+            .expect("no values skipped")
+            .get_name()
+            .fmt(f)
     }
 }
 
@@ -122,14 +134,17 @@ pub enum BinaryEncoding {
     #[cfg_attr(feature = "cmdline", value(name = "%"))]
     PrefixPercent,
     #[cfg_attr(feature = "cmdline", value(name = "untouched"))]
-    Untouched,
+    Untouched
 }
 
 #[cfg(feature = "cmdline")]
 impl std::fmt::Display for BinaryEncoding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use clap::ValueEnum;
-        self.to_possible_value().expect("no values skipped").get_name().fmt(f)
+        self.to_possible_value()
+            .expect("no values skipped")
+            .get_name()
+            .fmt(f)
     }
 }
 
@@ -142,30 +157,59 @@ pub enum LabelPostfix {
     #[cfg_attr(feature = "cmdline", value(name = "with-column"))]
     WithColumn,
     #[cfg_attr(feature = "cmdline", value(name = "untouched"))]
-    Untouched,
+    Untouched
 }
 
 #[cfg(feature = "cmdline")]
 impl std::fmt::Display for LabelPostfix {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use clap::ValueEnum;
-        self.to_possible_value().expect("no values skipped").get_name().fmt(f)
+        self.to_possible_value()
+            .expect("no values skipped")
+            .get_name()
+            .fmt(f)
     }
 }
 
-fn default_indent_size() -> usize { 4 }
-fn default_comment_column() -> usize { 30 }
-fn default_mnemonic_case() -> CaseStyle { CaseStyle::UpperCase }
-fn default_directive_case() -> CaseStyle { CaseStyle::UpperCase }
-fn default_register_case() -> CaseStyle { CaseStyle::UpperCase }
-fn default_one_instruction_per_line() -> bool { true }
-fn default_space_around_column() -> SpaceAroundColumn { SpaceAroundColumn::Untouched }
-fn default_space_around_assignment() -> SpaceAroundColumn { SpaceAroundColumn::Untouched }
-fn default_hexadecimal_case() -> CaseStyle { CaseStyle::Untouched }
-fn default_hexadecimal_encoding() -> HexEncoding { HexEncoding::Untouched }
-fn default_octal_encoding() -> OctalEncoding { OctalEncoding::Untouched }
-fn default_binary_encoding() -> BinaryEncoding { BinaryEncoding::Untouched }
-fn default_label_postfix() -> LabelPostfix { LabelPostfix::WithColumn }
+fn default_indent_size() -> usize {
+    4
+}
+fn default_comment_column() -> usize {
+    30
+}
+fn default_mnemonic_case() -> CaseStyle {
+    CaseStyle::UpperCase
+}
+fn default_directive_case() -> CaseStyle {
+    CaseStyle::UpperCase
+}
+fn default_register_case() -> CaseStyle {
+    CaseStyle::UpperCase
+}
+fn default_one_instruction_per_line() -> bool {
+    true
+}
+fn default_space_around_column() -> SpaceAroundColumn {
+    SpaceAroundColumn::Untouched
+}
+fn default_space_around_assignment() -> SpaceAroundColumn {
+    SpaceAroundColumn::Untouched
+}
+fn default_hexadecimal_case() -> CaseStyle {
+    CaseStyle::Untouched
+}
+fn default_hexadecimal_encoding() -> HexEncoding {
+    HexEncoding::Untouched
+}
+fn default_octal_encoding() -> OctalEncoding {
+    OctalEncoding::Untouched
+}
+fn default_binary_encoding() -> BinaryEncoding {
+    BinaryEncoding::Untouched
+}
+fn default_label_postfix() -> LabelPostfix {
+    LabelPostfix::WithColumn
+}
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, bon::Builder)]
 #[cfg_attr(feature = "cmdline", derive(clap::Args))]
@@ -246,7 +290,7 @@ pub struct AsmFormatOptions {
     #[serde(default = "default_label_postfix")]
     #[builder(default = default_label_postfix())]
     #[cfg_attr(feature = "cmdline", arg(long, default_value_t = LabelPostfix::WithColumn))]
-    pub label_definition_postfix_with_column: LabelPostfix,
+    pub label_definition_postfix_with_column: LabelPostfix
 }
 
 impl Default for AsmFormatOptions {
@@ -264,7 +308,7 @@ impl Default for AsmFormatOptions {
             hexadecimal_encoding: default_hexadecimal_encoding(),
             octal_encoding: default_octal_encoding(),
             binary_encoding: default_binary_encoding(),
-            label_definition_postfix_with_column: default_label_postfix(),
+            label_definition_postfix_with_column: default_label_postfix()
         }
     }
 }

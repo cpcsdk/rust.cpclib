@@ -5588,7 +5588,9 @@ impl Env {
             },
             Mnemonic::Djnz => self.assemble_djnz(arg1.as_ref().unwrap()),
             Mnemonic::In => self.assemble_in(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
-            Mnemonic::Ld => self.assemble_ld::<_, Token>(arg1.as_ref().unwrap(), arg2.as_ref().unwrap()),
+            Mnemonic::Ld => {
+                self.assemble_ld::<_, Token>(arg1.as_ref().unwrap(), arg2.as_ref().unwrap())
+            },
             Mnemonic::Ldi
             | Mnemonic::Ldd
             | Mnemonic::Ldir
@@ -5880,15 +5882,12 @@ impl Env {
         }
         else {
             // Try fake instruction expansion (Sub with De|Hl + r16)
-            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
-                Mnemonic::Sub,
-                arg1,
-                arg2,
-                None
-            ) {
+            if let Some(listing) =
+                <T as ListingElement>::fake_to_listing_from_access(Mnemonic::Sub, arg1, arg2, None)
+            {
                 return self.assemble_fake_listing(&listing);
             }
-            
+
             unreachable!();
         }
 
@@ -5957,7 +5956,7 @@ impl Env {
             ) {
                 return self.assemble_fake_listing(&listing);
             }
-            
+
             // If not a fake, must be HL + r16
             assert!(arg1.unwrap().is_register_hl());
             assert!(arg2.is_register16());
@@ -6013,12 +6012,9 @@ impl Env {
             add_byte(&mut bytes, byte);
         }
         else if target.is_register16() {
-            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
-                mne,
-                Some(target),
-                None,
-                None
-            ) {
+            if let Some(listing) =
+                <T as ListingElement>::fake_to_listing_from_access(mne, Some(target), None, None)
+            {
                 return self.assemble_fake_listing(&listing);
             }
 
@@ -6121,7 +6117,7 @@ impl Env {
         ) {
             return self.assemble_fake_listing(&listing);
         }
-        
+
         unreachable!()
     }
 
@@ -6514,22 +6510,19 @@ impl Env {
 
         // Try fake instruction expansion as a fallback
         if bytes.is_empty() {
-            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
-                mnemonic,
-                arg1,
-                Some(arg2),
-                None
-            ) {
+            if let Some(listing) =
+                <T as ListingElement>::fake_to_listing_from_access(mnemonic, arg1, Some(arg2), None)
+            {
                 return self.assemble_fake_listing(&listing);
             }
-            
+
             return Err(Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
                 msg: format!("{mnemonic:?} not implemented for {arg1:?} {arg2:?}")
             }));
         }
-        
+
         Ok(bytes)
     }
 
@@ -6937,7 +6930,12 @@ impl Env {
                 let src = arg2.get_register8().unwrap();
                 let code = register8_to_code(src);
 
-                let code = if dst.is_high() { 0b0110_0000 + code } else { 0x68 + code };
+                let code = if dst.is_high() {
+                    0b0110_0000 + code
+                }
+                else {
+                    0x68 + code
+                };
                 bytes.push(code);
             }
             else if arg2.is_indexregister8() {
@@ -7098,9 +7096,10 @@ impl Env {
                 Some(arg1),
                 Some(arg2),
                 None
-            ) {
-                return self.assemble_fake_listing(&listing);
-            }
+            )
+        {
+            return self.assemble_fake_listing(&listing);
+        }
 
         if bytes.is_empty() {
             Err(Box::new(AssemblerError::BugInAssembler {

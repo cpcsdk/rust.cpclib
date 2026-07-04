@@ -8,8 +8,7 @@ use std::sync::{Arc, LazyLock};
 use cpclib_asm::AssemblingOptionFlags;
 use cpclib_asm::assembler::file::get_filename_to_read;
 use cpclib_asm::assembler::listing_output::{
-    DEFAULT_LISTING_LINE_TEMPLATE, ListingAddressRadix, ListingOutputFormat,
-    ListingOutputKind,
+    DEFAULT_LISTING_LINE_TEMPLATE, ListingAddressRadix, ListingOutputFormat, ListingOutputKind,
     ListingSourceFileOutputMode
 };
 use cpclib_asm::preamble::file::read_source;

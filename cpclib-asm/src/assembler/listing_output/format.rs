@@ -99,10 +99,17 @@ fn hex_byte_for_impl(format: &ListingOutputFormat, b: u8) -> String {
 }
 
 fn format_bytes_raw_for_impl(format: &ListingOutputFormat, bytes: &[u8]) -> String {
-    bytes.iter().map(|b| hex_byte_for_impl(format, *b)).join(" ")
+    bytes
+        .iter()
+        .map(|b| hex_byte_for_impl(format, *b))
+        .join(" ")
 }
 
-fn format_bytes_for_impl(format: &ListingOutputFormat, bytes_per_line: usize, bytes: &[u8]) -> String {
+fn format_bytes_for_impl(
+    format: &ListingOutputFormat,
+    bytes_per_line: usize,
+    bytes: &[u8]
+) -> String {
     let rendered = format_bytes_raw_for_impl(format, bytes);
     let full_width = bytes_per_line * 3;
     format!("{rendered:<full_width$}")
@@ -160,9 +167,13 @@ fn format_line_with_template_for_impl(
         }
 
         let rendered = match placeholder.as_str() {
-            "A" => logical_address
-                .map(|value| format_address_for_impl(format, value, logical_address_width_impl(format)))
-                .unwrap_or_else(|| blank_impl(logical_address_width_impl(format))),
+            "A" => {
+                logical_address
+                    .map(|value| {
+                        format_address_for_impl(format, value, logical_address_width_impl(format))
+                    })
+                    .unwrap_or_else(|| blank_impl(logical_address_width_impl(format)))
+            },
             "P" => {
                 if format.show_physical_address {
                     physical_address_repr.to_string()
@@ -178,7 +189,9 @@ fn format_line_with_template_for_impl(
             "F3" => format!("{:>3}", file_index),
             "L" => {
                 if format.show_line_numbers {
-                    line_number.map(|value| value.to_string()).unwrap_or_default()
+                    line_number
+                        .map(|value| value.to_string())
+                        .unwrap_or_default()
                 }
                 else {
                     String::new()
@@ -186,7 +199,9 @@ fn format_line_with_template_for_impl(
             },
             "L3" => {
                 if format.show_line_numbers {
-                    line_number.map(|value| format!("{:>3}", value)).unwrap_or_default()
+                    line_number
+                        .map(|value| format!("{:>3}", value))
+                        .unwrap_or_default()
                 }
                 else {
                     String::new()
@@ -194,7 +209,9 @@ fn format_line_with_template_for_impl(
             },
             "L4" => {
                 if format.show_line_numbers {
-                    line_number.map(|value| format!("{:>4}", value)).unwrap_or_default()
+                    line_number
+                        .map(|value| format!("{:>4}", value))
+                        .unwrap_or_default()
                 }
                 else {
                     String::new()
@@ -202,7 +219,9 @@ fn format_line_with_template_for_impl(
             },
             "L5" => {
                 if format.show_line_numbers {
-                    line_number.map(|value| format!("{:>5}", value)).unwrap_or_default()
+                    line_number
+                        .map(|value| format!("{:>5}", value))
+                        .unwrap_or_default()
                 }
                 else {
                     String::new()
@@ -265,7 +284,7 @@ fn format_deferred_line_with_template_for_impl(
                 let continuation_prefix = anchor.saturating_sub(1);
                 vec![
                     specific_content.to_string(),
-                    format!(">{:continuation_prefix$}{suffix}", "")
+                    format!(">{:continuation_prefix$}{suffix}", ""),
                 ]
             }
             else {
@@ -318,11 +337,19 @@ pub(crate) fn format_bytes_raw_for(format: &ListingOutputFormat, bytes: &[u8]) -
     format_bytes_raw_for_impl(format, bytes)
 }
 
-pub(crate) fn format_bytes(format: &ListingOutputFormat, bytes_per_line: usize, bytes: &[u8]) -> String {
+pub(crate) fn format_bytes(
+    format: &ListingOutputFormat,
+    bytes_per_line: usize,
+    bytes: &[u8]
+) -> String {
     format_bytes_for_impl(format, bytes_per_line, bytes)
 }
 
-pub(crate) fn format_bytes_for(format: &ListingOutputFormat, bytes_per_line: usize, bytes: &[u8]) -> String {
+pub(crate) fn format_bytes_for(
+    format: &ListingOutputFormat,
+    bytes_per_line: usize,
+    bytes: &[u8]
+) -> String {
     format_bytes_for_impl(format, bytes_per_line, bytes)
 }
 

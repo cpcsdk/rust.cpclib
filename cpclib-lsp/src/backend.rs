@@ -3,17 +3,17 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
-use crate::document::{Document, DocumentType};
 use crate::asm::AssemblyAnalyzer;
 use crate::basic::BasicAnalyzer;
 use crate::build::BuildFileAnalyzer;
+use crate::document::{Document, DocumentType};
 
 pub struct CpcLspBackend {
     client: Client,
     documents: DashMap<Url, Document>,
     asm_analyzer: AssemblyAnalyzer,
     build_analyzer: BuildFileAnalyzer,
-    basic_analyzer: BasicAnalyzer,
+    basic_analyzer: BasicAnalyzer
 }
 
 impl CpcLspBackend {
@@ -23,7 +23,7 @@ impl CpcLspBackend {
             documents: DashMap::new(),
             asm_analyzer: AssemblyAnalyzer::new(),
             build_analyzer: BuildFileAnalyzer::new(),
-            basic_analyzer: BasicAnalyzer::new(),
+            basic_analyzer: BasicAnalyzer::new()
         }
     }
 
@@ -35,13 +35,14 @@ impl CpcLspBackend {
 
     async fn analyze_document(&self, document: &Document) {
         let diagnostics = match document.doc_type {
-            DocumentType::Assembly  => self.asm_analyzer.analyze(document),
+            DocumentType::Assembly => self.asm_analyzer.analyze(document),
             DocumentType::BuildFile => self.build_analyzer.analyze(document),
-            DocumentType::Basic     => self.basic_analyzer.analyze(document),
-            DocumentType::Unknown   => Vec::new(),
+            DocumentType::Basic => self.basic_analyzer.analyze(document),
+            DocumentType::Unknown => Vec::new()
         };
 
-        self.publish_diagnostics(document.uri.clone(), diagnostics).await;
+        self.publish_diagnostics(document.uri.clone(), diagnostics)
+            .await;
     }
 }
 
@@ -60,9 +61,9 @@ impl LanguageServer for CpcLspBackend {
                         will_save: None,
                         will_save_wait_until: None,
                         save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
-                            include_text: Some(false),
-                        })),
-                    },
+                            include_text: Some(false)
+                        }))
+                    }
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
@@ -77,17 +78,17 @@ impl LanguageServer for CpcLspBackend {
                     ]),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                     all_commit_characters: None,
-                    completion_item: None,
+                    completion_item: None
                 }),
                 code_lens_provider: Some(CodeLensOptions {
-                    resolve_provider: Some(false),
+                    resolve_provider: Some(false)
                 }),
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec![
                         "cpclib.getTargets".to_string(),
                         "cpclib.selectRange".to_string(),
                     ],
-                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                    work_done_progress_options: WorkDoneProgressOptions::default()
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 definition_provider: Some(OneOf::Left(true)),
@@ -101,8 +102,8 @@ impl LanguageServer for CpcLspBackend {
                             CodeActionKind::REFACTOR_EXTRACT,
                         ]),
                         work_done_progress_options: Default::default(),
-                        resolve_provider: Some(false),
-                    },
+                        resolve_provider: Some(false)
+                    }
                 )),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
@@ -110,16 +111,16 @@ impl LanguageServer for CpcLspBackend {
                             work_done_progress_options: WorkDoneProgressOptions::default(),
                             legend: crate::asm::semantic_tokens_legend(),
                             range: Some(false),
-                            full: Some(SemanticTokensFullOptions::Bool(true)),
-                        },
-                    ),
+                            full: Some(SemanticTokensFullOptions::Bool(true))
+                        }
+                    )
                 ),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
                 name: "cpclib-lsp".to_string(),
-                version: Some(env!("CARGO_PKG_VERSION").to_string()),
-            }),
+                version: Some(env!("CARGO_PKG_VERSION").to_string())
+            })
         })
     }
 
@@ -142,7 +143,7 @@ impl LanguageServer for CpcLspBackend {
             params.text_document.uri.clone(),
             params.text_document.text,
             params.text_document.version,
-            Some(params.text_document.language_id.as_str()),
+            Some(params.text_document.language_id.as_str())
         );
 
         self.analyze_document(&document).await;
@@ -151,26 +152,26 @@ impl LanguageServer for CpcLspBackend {
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         tracing::info!("Document changed: {}", params.text_document.uri);
-        
+
         if let Some(mut entry) = self.documents.get_mut(&params.text_document.uri) {
             for change in params.content_changes {
                 entry.apply_change(&change, params.text_document.version);
             }
-            
+
             let document = entry.value().clone();
             drop(entry); // Release the lock before async call
-            
+
             self.analyze_document(&document).await;
         }
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         tracing::info!("Document saved: {}", params.text_document.uri);
-        
+
         if let Some(entry) = self.documents.get(&params.text_document.uri) {
             let document = entry.value().clone();
             drop(entry);
-            
+
             self.analyze_document(&document).await;
         }
     }
@@ -183,67 +184,70 @@ impl LanguageServer for CpcLspBackend {
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
-        
+
         tracing::debug!("Hover request at {}:{}", uri, position.line);
-        
+
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
-            
+
             let hover = match document.doc_type {
-                DocumentType::Assembly  => self.asm_analyzer.hover(document, position),
+                DocumentType::Assembly => self.asm_analyzer.hover(document, position),
                 DocumentType::BuildFile => self.build_analyzer.hover(document, position),
-                DocumentType::Basic     => self.basic_analyzer.hover(document, position),
-                DocumentType::Unknown   => None,
+                DocumentType::Basic => self.basic_analyzer.hover(document, position),
+                DocumentType::Unknown => None
             };
-            
+
             return Ok(hover);
         }
-        
+
         Ok(None)
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
-        
+
         tracing::debug!("Completion request at {}:{}", uri, position.line);
-        
+
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
-            
+
             let completions = match document.doc_type {
-                DocumentType::Assembly  => self.asm_analyzer.completion(document, position),
+                DocumentType::Assembly => self.asm_analyzer.completion(document, position),
                 DocumentType::BuildFile => self.build_analyzer.completion(document, position),
-                DocumentType::Basic     => self.basic_analyzer.completion(document, position),
-                DocumentType::Unknown   => Vec::new(),
+                DocumentType::Basic => self.basic_analyzer.completion(document, position),
+                DocumentType::Unknown => Vec::new()
             };
-            
+
             if !completions.is_empty() {
                 return Ok(Some(CompletionResponse::Array(completions)));
             }
         }
-        
+
         Ok(None)
     }
 
     async fn goto_definition(
         &self,
-        params: GotoDefinitionParams,
+        params: GotoDefinitionParams
     ) -> Result<Option<GotoDefinitionResponse>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
 
         tracing::debug!("Goto definition request at {}:{}", uri, position.line);
 
-        let Some(entry) = self.documents.get(&uri) else { return Ok(None); };
+        let Some(entry) = self.documents.get(&uri)
+        else {
+            return Ok(None);
+        };
         let doc_type = entry.value().doc_type;
 
         // Try the primary document first.
         let location = match doc_type {
-            DocumentType::Assembly  => self.asm_analyzer.goto_definition(entry.value(), position),
+            DocumentType::Assembly => self.asm_analyzer.goto_definition(entry.value(), position),
             DocumentType::BuildFile => self.build_analyzer.goto_definition(entry.value(), position),
-            DocumentType::Basic     => self.basic_analyzer.goto_definition(entry.value(), position),
-            DocumentType::Unknown   => None,
+            DocumentType::Basic => self.basic_analyzer.goto_definition(entry.value(), position),
+            DocumentType::Unknown => None
         };
         if let Some(loc) = location {
             return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
@@ -254,13 +258,17 @@ impl LanguageServer for CpcLspBackend {
         if doc_type == DocumentType::Assembly {
             let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
                 Some(w) => w.to_uppercase(),
-                None    => return Ok(None),
+                None => return Ok(None)
             };
             drop(entry); // release the DashMap read guard before iterating
 
             for other in self.documents.iter() {
-                if *other.key() == uri { continue; }
-                if other.value().doc_type != DocumentType::Assembly { continue; }
+                if *other.key() == uri {
+                    continue;
+                }
+                if other.value().doc_type != DocumentType::Assembly {
+                    continue;
+                }
                 if let Some(loc) = self.asm_analyzer.find_definition_in(other.value(), &word) {
                     return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
                 }
@@ -276,37 +284,57 @@ impl LanguageServer for CpcLspBackend {
 
         tracing::debug!("References request at {}:{}", uri, position.line);
 
-        let Some(entry) = self.documents.get(&uri) else { return Ok(None); };
+        let Some(entry) = self.documents.get(&uri)
+        else {
+            return Ok(None);
+        };
         let doc_type = entry.value().doc_type;
 
         if doc_type != DocumentType::Assembly {
             let references = match doc_type {
-                DocumentType::BuildFile => self.build_analyzer.find_references(entry.value(), position),
-                DocumentType::Basic     => self.basic_analyzer.find_references(entry.value(), position),
-                _                       => Vec::new(),
+                DocumentType::BuildFile => {
+                    self.build_analyzer.find_references(entry.value(), position)
+                },
+                DocumentType::Basic => self.basic_analyzer.find_references(entry.value(), position),
+                _ => Vec::new()
             };
-            return if references.is_empty() { Ok(None) } else { Ok(Some(references)) };
+            return if references.is_empty() {
+                Ok(None)
+            }
+            else {
+                Ok(Some(references))
+            };
         }
 
         // Assembly: collect references across ALL open Assembly documents.
         let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
             Some(w) => w.to_uppercase(),
-            None    => return Ok(None),
+            None => return Ok(None)
         };
         drop(entry);
 
         let mut all_refs: Vec<Location> = Vec::new();
         for doc_entry in self.documents.iter() {
-            if doc_entry.value().doc_type != DocumentType::Assembly { continue; }
-            all_refs.extend(self.asm_analyzer.find_references_in(doc_entry.value(), &word));
+            if doc_entry.value().doc_type != DocumentType::Assembly {
+                continue;
+            }
+            all_refs.extend(
+                self.asm_analyzer
+                    .find_references_in(doc_entry.value(), &word)
+            );
         }
 
-        if all_refs.is_empty() { Ok(None) } else { Ok(Some(all_refs)) }
+        if all_refs.is_empty() {
+            Ok(None)
+        }
+        else {
+            Ok(Some(all_refs))
+        }
     }
 
     async fn document_symbol(
         &self,
-        params: DocumentSymbolParams,
+        params: DocumentSymbolParams
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = params.text_document.uri;
 
@@ -316,10 +344,10 @@ impl LanguageServer for CpcLspBackend {
             let document = entry.value();
 
             let symbols = match document.doc_type {
-                DocumentType::Assembly  => self.asm_analyzer.document_symbols(document),
+                DocumentType::Assembly => self.asm_analyzer.document_symbols(document),
                 DocumentType::BuildFile => self.build_analyzer.document_symbols(document),
-                DocumentType::Basic     => self.basic_analyzer.document_symbols(document),
-                DocumentType::Unknown   => Vec::new(),
+                DocumentType::Basic => self.basic_analyzer.document_symbols(document),
+                DocumentType::Unknown => Vec::new()
             };
 
             if !symbols.is_empty() {
@@ -346,18 +374,29 @@ impl LanguageServer for CpcLspBackend {
         Ok(None)
     }
 
-    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<serde_json::Value>> {
+    async fn execute_command(
+        &self,
+        params: ExecuteCommandParams
+    ) -> Result<Option<serde_json::Value>> {
         if params.command == "cpclib.selectRange" {
             if let Some(arg) = params.arguments.into_iter().next() {
-                let uri = arg.get("uri").and_then(|v| v.as_str()).and_then(|s| s.parse::<Url>().ok());
-                let range = arg.get("range").and_then(|v| serde_json::from_value::<Range>(v.clone()).ok());
+                let uri = arg
+                    .get("uri")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse::<Url>().ok());
+                let range = arg
+                    .get("range")
+                    .and_then(|v| serde_json::from_value::<Range>(v.clone()).ok());
                 if let (Some(uri), Some(range)) = (uri, range) {
-                    let _ = self.client.show_document(ShowDocumentParams {
-                        uri,
-                        external: Some(false),
-                        take_focus: Some(true),
-                        selection: Some(range),
-                    }).await;
+                    let _ = self
+                        .client
+                        .show_document(ShowDocumentParams {
+                            uri,
+                            external: Some(false),
+                            take_focus: Some(true),
+                            selection: Some(range)
+                        })
+                        .await;
                 }
             }
             return Ok(None);
@@ -367,13 +406,20 @@ impl LanguageServer for CpcLspBackend {
             return Ok(None);
         }
 
-        let uri_str = params.arguments
+        let uri_str = params
+            .arguments
             .into_iter()
             .next()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let Some(uri_str) = uri_str else { return Ok(Some(serde_json::json!([]))); };
-        let Ok(uri) = uri_str.parse::<Url>() else { return Ok(Some(serde_json::json!([]))); };
+        let Some(uri_str) = uri_str
+        else {
+            return Ok(Some(serde_json::json!([])));
+        };
+        let Ok(uri) = uri_str.parse::<Url>()
+        else {
+            return Ok(Some(serde_json::json!([])));
+        };
 
         // Use cached document if available; otherwise read from disk.
         let targets: Vec<String> = if let Some(entry) = self.documents.get(&uri) {
@@ -382,7 +428,8 @@ impl LanguageServer for CpcLspBackend {
                 .into_iter()
                 .map(|s| s.name)
                 .collect()
-        } else if let Ok(path) = uri.to_file_path() {
+        }
+        else if let Ok(path) = uri.to_file_path() {
             if let Ok(text) = std::fs::read_to_string(&path) {
                 let doc = Document::new(uri, text, 0);
                 self.build_analyzer
@@ -390,10 +437,12 @@ impl LanguageServer for CpcLspBackend {
                     .into_iter()
                     .map(|s| s.name)
                     .collect()
-            } else {
+            }
+            else {
                 vec![]
             }
-        } else {
+        }
+        else {
             vec![]
         };
 
@@ -404,26 +453,32 @@ impl LanguageServer for CpcLspBackend {
         let uri = params.text_document.uri;
         let range = params.range;
 
-        let Some(entry) = self.documents.get(&uri) else { return Ok(None); };
+        let Some(entry) = self.documents.get(&uri)
+        else {
+            return Ok(None);
+        };
         let doc_type = entry.value().doc_type;
 
         let actions: Vec<CodeAction> = match doc_type {
             DocumentType::Assembly => self.asm_analyzer.code_actions(entry.value(), range),
-            DocumentType::Basic    => self.basic_analyzer.code_actions(entry.value(), range),
-            _                      => vec![],
+            DocumentType::Basic => self.basic_analyzer.code_actions(entry.value(), range),
+            _ => vec![]
         };
 
         if actions.is_empty() {
             return Ok(None);
         }
         Ok(Some(
-            actions.into_iter().map(CodeActionOrCommand::CodeAction).collect()
+            actions
+                .into_iter()
+                .map(CodeActionOrCommand::CodeAction)
+                .collect()
         ))
     }
 
     async fn semantic_tokens_full(
         &self,
-        params: SemanticTokensParams,
+        params: SemanticTokensParams
     ) -> Result<Option<SemanticTokensResult>> {
         let uri = params.text_document.uri;
         tracing::debug!("Semantic tokens request for {}", uri);
@@ -431,15 +486,15 @@ impl LanguageServer for CpcLspBackend {
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
             let data = match document.doc_type {
-                DocumentType::Assembly  => self.asm_analyzer.semantic_tokens(document),
+                DocumentType::Assembly => self.asm_analyzer.semantic_tokens(document),
                 DocumentType::BuildFile => self.build_analyzer.semantic_tokens(document),
-                DocumentType::Basic     => self.basic_analyzer.semantic_tokens(document),
-                DocumentType::Unknown   => vec![],
+                DocumentType::Basic => self.basic_analyzer.semantic_tokens(document),
+                DocumentType::Unknown => vec![]
             };
             if !data.is_empty() {
                 return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
                     result_id: None,
-                    data,
+                    data
                 })));
             }
         }
@@ -447,10 +502,7 @@ impl LanguageServer for CpcLspBackend {
         Ok(None)
     }
 
-    async fn formatting(
-        &self,
-        params: DocumentFormattingParams,
-    ) -> Result<Option<Vec<TextEdit>>> {
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri;
         tracing::debug!("Formatting request for {}", uri);
 
@@ -460,15 +512,20 @@ impl LanguageServer for CpcLspBackend {
                 // Load the project/user config file, reporting any parse error to the client.
                 let base_opt = match cpclib_asmfmt::find_config_file() {
                     None => cpclib_asmfmt::AsmFormatOptions::default(),
-                    Some(path) => match cpclib_asmfmt::load_config_from(&path) {
-                        Ok(cfg) => cfg,
-                        Err(e) => {
-                            self.client
-                                .show_message(MessageType::ERROR, format!("basm-fmt config error: {e}"))
-                                .await;
-                            cpclib_asmfmt::AsmFormatOptions::default()
+                    Some(path) => {
+                        match cpclib_asmfmt::load_config_from(&path) {
+                            Ok(cfg) => cfg,
+                            Err(e) => {
+                                self.client
+                                    .show_message(
+                                        MessageType::ERROR,
+                                        format!("basm-fmt config error: {e}")
+                                    )
+                                    .await;
+                                cpclib_asmfmt::AsmFormatOptions::default()
+                            }
                         }
-                    }
+                    },
                 };
                 // Let the editor's tab-size setting override the config's indent_size.
                 let opt = cpclib_asmfmt::AsmFormatOptions {

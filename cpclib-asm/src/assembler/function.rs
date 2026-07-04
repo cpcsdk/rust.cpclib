@@ -556,7 +556,7 @@ impl HardCodedFunction {
             HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
-            HardCodedFunction::ListReverse => ExpectedNbArgs::Fixed(1),
+            HardCodedFunction::ListReverse => ExpectedNbArgs::Fixed(1)
         }
     }
 

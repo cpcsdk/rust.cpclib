@@ -10,11 +10,17 @@ fn test_build_tasks_include_assemblers() {
         .flat_map(|t| t.names.iter())
         .copied()
         .collect();
-    
+
     assert!(task_names.contains(&"basm"), "Should include basm task");
-    assert!(task_names.contains(&"assemble"), "Should include assemble alias");
+    assert!(
+        task_names.contains(&"assemble"),
+        "Should include assemble alias"
+    );
     assert!(task_names.contains(&"rasm"), "Should include rasm task");
-    assert!(task_names.contains(&"sjasmplus"), "Should include sjasmplus task");
+    assert!(
+        task_names.contains(&"sjasmplus"),
+        "Should include sjasmplus task"
+    );
 }
 
 #[test]
@@ -25,10 +31,16 @@ fn test_build_tasks_include_emulators() {
         .flat_map(|t| t.names.iter())
         .copied()
         .collect();
-    
+
     assert!(task_names.contains(&"ace"), "Should include ace emulator");
-    assert!(task_names.contains(&"winape"), "Should include winape emulator");
-    assert!(task_names.contains(&"cpcec"), "Should include cpcec emulator");
+    assert!(
+        task_names.contains(&"winape"),
+        "Should include winape emulator"
+    );
+    assert!(
+        task_names.contains(&"cpcec"),
+        "Should include cpcec emulator"
+    );
 }
 
 #[test]
@@ -39,10 +51,13 @@ fn test_build_tasks_include_disk_ops() {
         .flat_map(|t| t.names.iter())
         .copied()
         .collect();
-    
+
     assert!(task_names.contains(&"dsk"), "Should include dsk task");
     assert!(task_names.contains(&"sna"), "Should include sna task");
-    assert!(task_names.contains(&"catalog"), "Should include catalog task");
+    assert!(
+        task_names.contains(&"catalog"),
+        "Should include catalog task"
+    );
 }
 
 #[test]
@@ -53,18 +68,35 @@ fn test_build_tasks_include_image_tools() {
         .flat_map(|t| t.names.iter())
         .copied()
         .collect();
-    
-    assert!(task_names.contains(&"img2cpc"), "Should include img2cpc task");
-    assert!(task_names.contains(&"martine"), "Should include martine task");
-    assert!(task_names.contains(&"convgeneric"), "Should include convgeneric task");
+
+    assert!(
+        task_names.contains(&"img2cpc"),
+        "Should include img2cpc task"
+    );
+    assert!(
+        task_names.contains(&"martine"),
+        "Should include martine task"
+    );
+    assert!(
+        task_names.contains(&"convgeneric"),
+        "Should include convgeneric task"
+    );
 }
 
 #[test]
 fn test_build_tasks_have_descriptions() {
     // Ensure all tasks have non-empty descriptions
     for task in cpclib_bndbuild::lsp::TASK_TYPES {
-        assert!(!task.description.is_empty(), "Task {:?} should have a description", task.names);
-        assert!(!task.example.is_empty(), "Task {:?} should have an example", task.names);
+        assert!(
+            !task.description.is_empty(),
+            "Task {:?} should have a description",
+            task.names
+        );
+        assert!(
+            !task.example.is_empty(),
+            "Task {:?} should have an example",
+            task.names
+        );
     }
 }
 
@@ -90,7 +122,7 @@ fn test_build_keywords_complete() {
         .iter()
         .map(|(name, _)| *name)
         .collect();
-    
+
     let expected = ["targets", "tasks", "deps", "args", "env"];
     for keyword in &expected {
         assert!(
@@ -118,7 +150,7 @@ fn test_no_duplicate_task_names() {
     // Ensure no task name appears in multiple TaskTypes
     let mut all_names = HashSet::new();
     let mut duplicates = Vec::new();
-    
+
     for task in cpclib_bndbuild::lsp::TASK_TYPES {
         for name in task.names {
             if !all_names.insert(name) {
@@ -126,7 +158,7 @@ fn test_no_duplicate_task_names() {
             }
         }
     }
-    
+
     assert!(
         duplicates.is_empty(),
         "Found duplicate task names: {:?}",
@@ -139,31 +171,29 @@ fn test_task_types_synchronized_with_all_applications() {
     // This test ensures TASK_TYPES stays in sync with ALL_APPLICATIONS
     // It duplicates the test in lsp.rs but provides an integration test perspective
     use std::collections::HashSet;
-    
+
     let mut all_commands = HashSet::new();
     for (cmds, _clearable) in cpclib_bndbuild::ALL_APPLICATIONS {
         for cmd in *cmds {
             all_commands.insert(*cmd);
         }
     }
-    
+
     let mut task_type_commands = HashSet::new();
     for task in cpclib_bndbuild::lsp::TASK_TYPES {
         for name in task.names {
             task_type_commands.insert(*name);
         }
     }
-    
-    let missing: Vec<_> = all_commands
-        .difference(&task_type_commands)
-        .collect();
-    
+
+    let missing: Vec<_> = all_commands.difference(&task_type_commands).collect();
+
     assert!(
         missing.is_empty(),
         "TASK_TYPES is missing commands from ALL_APPLICATIONS: {:?}",
         missing
     );
-    
+
     assert_eq!(
         all_commands.len(),
         task_type_commands.len(),
@@ -179,10 +209,13 @@ fn test_file_operation_tasks_present() {
         .flat_map(|t| t.names.iter())
         .copied()
         .collect();
-    
+
     assert!(task_names.contains(&"cp"), "Should include cp (copy) task");
     assert!(task_names.contains(&"mv"), "Should include mv (move) task");
-    assert!(task_names.contains(&"rm"), "Should include rm (remove) task");
+    assert!(
+        task_names.contains(&"rm"),
+        "Should include rm (remove) task"
+    );
     assert!(task_names.contains(&"mkdir"), "Should include mkdir task");
 }
 
@@ -194,9 +227,15 @@ fn test_audio_tasks_present() {
         .flat_map(|t| t.names.iter())
         .copied()
         .collect();
-    
-    assert!(task_names.contains(&"at3"), "Should include Arkos Tracker 3 task");
-    assert!(task_names.contains(&"ArkosTracker3"), "Should include ArkosTracker3 alias");
+
+    assert!(
+        task_names.contains(&"at3"),
+        "Should include Arkos Tracker 3 task"
+    );
+    assert!(
+        task_names.contains(&"ArkosTracker3"),
+        "Should include ArkosTracker3 alias"
+    );
     assert!(task_names.contains(&"ayt"), "Should include AYT task");
 }
 
@@ -208,7 +247,7 @@ fn test_external_tool_tasks_present() {
         .flat_map(|t| t.names.iter())
         .copied()
         .collect();
-    
+
     assert!(task_names.contains(&"extern"), "Should include extern task");
     assert!(task_names.contains(&"echo"), "Should include echo task");
 }

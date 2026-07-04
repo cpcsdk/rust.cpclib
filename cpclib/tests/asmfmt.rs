@@ -37,8 +37,7 @@ fn assemble_source(source: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())?;
 
     let (listing, options) = parse(&matches).map_err(|e| e.to_string())?;
-    let env = assemble(&matches, &listing, options, Arc::new(()))
-        .map_err(|e| e.to_string())?;
+    let env = assemble(&matches, &listing, options, Arc::new(())).map_err(|e| e.to_string())?;
 
     Ok(env.produced_bytes())
 }
@@ -61,14 +60,18 @@ fn all_configs() -> Vec<AsmFormatOptions> {
                         .directive_case(dc)
                         .register_case(rc)
                         .one_instruction_per_line(true)
-                        .build(),
+                        .build()
                 );
             }
         }
     }
 
     // Also verify that keeping multi-instruction lines verbatim still assembles correctly
-    configs.push(AsmFormatOptions::builder().one_instruction_per_line(false).build());
+    configs.push(
+        AsmFormatOptions::builder()
+            .one_instruction_per_line(false)
+            .build()
+    );
 
     configs
 }
@@ -89,8 +92,8 @@ fn should_skip(real_fname: &str, source: &str) -> bool {
 #[test_resources("cpclib-basm/tests/asm/good_*.asm")]
 fn formatting_preserves_binary(real_fname: &str) {
     let path = workspace_path(real_fname);
-    let source = fs_err::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
+    let source =
+        fs_err::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {path}: {e}"));
 
     if should_skip(real_fname, &source) {
         return;
@@ -126,8 +129,7 @@ fn formatting_preserves_binary(real_fname: &str) {
         });
 
         assert_eq!(
-            original_bytes,
-            formatted_bytes,
+            original_bytes, formatted_bytes,
             "binary differs after formatting {real_fname} with {opts:?}\n\
              --- formatted source ---\n{formatted}"
         );

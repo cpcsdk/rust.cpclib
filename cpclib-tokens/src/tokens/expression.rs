@@ -1045,10 +1045,16 @@ impl Display for PureExprEvalError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             PureExprEvalError::NeedsContext => {
-                write!(f, "Expression evaluation requires symbol/context resolution")
+                write!(
+                    f,
+                    "Expression evaluation requires symbol/context resolution"
+                )
             },
             PureExprEvalError::HasSideEffects => {
-                write!(f, "Expression evaluation requires side-effecting assembler state")
+                write!(
+                    f,
+                    "Expression evaluation requires side-effecting assembler state"
+                )
             },
             PureExprEvalError::Type(err) => write!(f, "{err}")
         }
@@ -1073,13 +1079,15 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
         Expr::Char(v) => Ok((*v).into()),
         Expr::Bool(v) => Ok((*v).into()),
         Expr::String(v) => Ok(v.clone().into()),
-        Expr::Label(_) | Expr::PrefixedLabel(_, _) => Err(PureExprEvalError::NeedsContext),
-        Expr::List(items) => Ok(ExprResult::List(
-            items
-                .iter()
-                .map(try_eval_expr_without_context)
-                .collect::<Result<Vec<_>, _>>()?
-        )),
+        Expr::Label(_) | Expr::PrefixedLabel(..) => Err(PureExprEvalError::NeedsContext),
+        Expr::List(items) => {
+            Ok(ExprResult::List(
+                items
+                    .iter()
+                    .map(try_eval_expr_without_context)
+                    .collect::<Result<Vec<_>, _>>()?
+            ))
+        },
         Expr::Paren(inner) => try_eval_expr_without_context(inner),
         Expr::UnaryOperation(op, inner) => {
             let value = try_eval_expr_without_context(inner)?;
@@ -1089,7 +1097,7 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
                 UnaryOperation::Neg => value.neg().map_err(PureExprEvalError::from)
             }
         },
-        Expr::UnaryTokenOperation(_, _) => Err(PureExprEvalError::HasSideEffects),
+        Expr::UnaryTokenOperation(..) => Err(PureExprEvalError::HasSideEffects),
         Expr::BinaryOperation(op, left, right) => {
             let a = try_eval_expr_without_context(left)?;
             let b = try_eval_expr_without_context(right)?;
@@ -1122,7 +1130,7 @@ pub fn try_eval_expr_without_context(expr: &Expr) -> Result<ExprResult, PureExpr
                 try_eval_expr_without_context(when_false)
             }
         },
-        Expr::AnyFunction(_, _) => Err(PureExprEvalError::HasSideEffects),
+        Expr::AnyFunction(..) => Err(PureExprEvalError::HasSideEffects),
         Expr::Rnd => Err(PureExprEvalError::HasSideEffects)
     }
 }

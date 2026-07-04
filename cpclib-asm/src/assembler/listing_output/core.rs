@@ -7,12 +7,13 @@ use std::sync::{Arc, RwLock};
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smallvec::SmallVec;
 use cpclib_tokens::ExprResult;
-use cpclib_tokens::symbols::{MemoryPhysicalAddress, PhysicalAddress, SymbolsTable, SymbolsTableTrait, Value};
-
-use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString};
+use cpclib_tokens::symbols::{
+    MemoryPhysicalAddress, PhysicalAddress, SymbolsTable, SymbolsTableTrait, Value
+};
 
 use super::format::*;
 use super::render::*;
+use crate::preamble::{LocatedToken, LocatedTokenInner, MayHaveSpan, SourceString};
 
 #[derive(Clone, PartialEq)]
 pub enum TokenKind {
@@ -52,7 +53,7 @@ pub struct ListingOutput {
     /// Complete source
     current_source: Option<&'static str>,
     /// Line number and raw/expanded line content.
-    current_line_group: Option<(u32, String, String)>, // clone view of the line XXX avoid this clone
+    current_line_group: Option<(u32, String, String)>, /* clone view of the line XXX avoid this clone */
 
     current_first_address: u32,
     current_address_kind: AddressKind,
@@ -262,26 +263,30 @@ impl ListingOutput {
     fn current_token_specific_content(&self) -> Option<String> {
         match &self.current_token_kind {
             TokenKind::Hidden => None,
-            TokenKind::Label(l) => Some(format!(
-                "{} {} {l}",
-                self.format_address(self.current_first_address, self.logical_address_width()),
-                match self.current_physical_address {
-                    PhysicalAddress::Memory(adr) => {
-                        self.format_address(adr.offset_in_cpc(), self.physical_address_width())
-                    },
-                    PhysicalAddress::Bank(adr) => {
-                        self.format_address(adr.address() as _, self.physical_address_width())
-                    },
-                    PhysicalAddress::Cpr(adr) => {
-                        self.format_address(adr.address() as _, self.physical_address_width())
+            TokenKind::Label(l) => {
+                Some(format!(
+                    "{} {} {l}",
+                    self.format_address(self.current_first_address, self.logical_address_width()),
+                    match self.current_physical_address {
+                        PhysicalAddress::Memory(adr) => {
+                            self.format_address(adr.offset_in_cpc(), self.physical_address_width())
+                        },
+                        PhysicalAddress::Bank(adr) => {
+                            self.format_address(adr.address() as _, self.physical_address_width())
+                        },
+                        PhysicalAddress::Cpr(adr) => {
+                            self.format_address(adr.address() as _, self.physical_address_width())
+                        }
                     }
-                }
-            )),
-            TokenKind::Set(label) => Some(format!(
-                "{} {} {label}",
-                self.format_address(self.current_first_address, self.logical_address_width()),
-                "?".repeat(self.physical_address_width())
-            )),
+                ))
+            },
+            TokenKind::Set(label) => {
+                Some(format!(
+                    "{} {} {label}",
+                    self.format_address(self.current_first_address, self.logical_address_width()),
+                    "?".repeat(self.physical_address_width())
+                ))
+            },
             TokenKind::MacroCall | TokenKind::Displayable => None,
             TokenKind::MacroDefine(name) => Some(format!("MACRO      {name}"))
         }
@@ -322,7 +327,8 @@ impl ListingOutput {
         symbols: Option<*const SymbolsTable>
     ) {
         // keep the source pointer stable, but avoid copying the source string itself
-        self.current_source = Some(unsafe { std::mem::transmute(token.context().complete_source()) });
+        self.current_source =
+            Some(unsafe { std::mem::transmute(token.context().complete_source()) });
         let raw_line = Self::extract_code(token);
         let expanded_line = if !Self::should_expand_source_for_token(token) {
             raw_line.clone()
@@ -354,7 +360,11 @@ impl ListingOutput {
         };
     }
 
-    fn update_current_token_kind(&mut self, token: &LocatedToken, symbols: Option<*const SymbolsTable>) {
+    fn update_current_token_kind(
+        &mut self,
+        token: &LocatedToken,
+        symbols: Option<*const SymbolsTable>
+    ) {
         self.current_token_kind = match token.deref() {
             LocatedTokenInner::Label(l) => {
                 let raw_label = l.to_string();
@@ -440,10 +450,8 @@ impl ListingOutput {
             token.span().as_str().to_string()
         }
         else {
-            unsafe {
-                std::str::from_utf8_unchecked(token.span().get_line_beginning().as_bytes())
-            }
-            .to_owned()
+            unsafe { std::str::from_utf8_unchecked(token.span().get_line_beginning().as_bytes()) }
+                .to_owned()
         }
     }
 
@@ -499,7 +507,10 @@ impl ListingOutput {
         self.update_repeat_depth(token);
     }
 
-    fn expand_symbol_with_listing_context(raw: &str, symbols: Option<*const SymbolsTable>) -> String {
+    fn expand_symbol_with_listing_context(
+        raw: &str,
+        symbols: Option<*const SymbolsTable>
+    ) -> String {
         // Listing expansion is intentionally done only in listing pass to avoid runtime overhead.
         symbols
             .and_then(|symbols| {
@@ -568,8 +579,8 @@ impl ListingOutput {
                 continue;
             }
 
-            let chunk_char = ch.is_ascii_alphanumeric()
-                || matches!(ch, '.' | '_' | '@' | '{' | '}');
+            let chunk_char =
+                ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '@' | '{' | '}');
 
             if chunk_char {
                 current.push(ch);
@@ -592,7 +603,8 @@ impl ListingOutput {
             let open = cursor + open_rel;
             out.push_str(&text[cursor..open]);
 
-            let Some(close_rel) = text[open + 1..].find('}') else {
+            let Some(close_rel) = text[open + 1..].find('}')
+            else {
                 out.push_str(&text[open..]);
                 return out;
             };
@@ -601,7 +613,10 @@ impl ListingOutput {
             let inner = &text[open + 1..close];
             let expanded_inner = Self::expand_symbol_with_listing_context(inner, symbols);
             if expanded_inner != inner {
-                out.push_str(&Self::resolve_expanded_symbol_value(&expanded_inner, symbols));
+                out.push_str(&Self::resolve_expanded_symbol_value(
+                    &expanded_inner,
+                    symbols
+                ));
             }
             else {
                 let wrapped = format!("__BASM_WRAP_BEGIN__{{{inner}}}__BASM_WRAP_END__");
@@ -614,7 +629,10 @@ impl ListingOutput {
                         out.push_str(&Self::resolve_expanded_symbol_value(stripped, symbols));
                     }
                     else {
-                        out.push_str(&Self::resolve_expanded_symbol_value(&expanded_wrapped, symbols));
+                        out.push_str(&Self::resolve_expanded_symbol_value(
+                            &expanded_wrapped,
+                            symbols
+                        ));
                     }
                 }
                 else {
@@ -634,16 +652,22 @@ impl ListingOutput {
         out
     }
 
-    fn resolve_expanded_symbol_value(expanded: &str, symbols: Option<*const SymbolsTable>) -> String {
-        let Some(symbols_ptr) = symbols else {
+    fn resolve_expanded_symbol_value(
+        expanded: &str,
+        symbols: Option<*const SymbolsTable>
+    ) -> String {
+        let Some(symbols_ptr) = symbols
+        else {
             return expanded.to_string();
         };
-        let Some(symbols) = (unsafe { symbols_ptr.as_ref() }) else {
+        let Some(symbols) = (unsafe { symbols_ptr.as_ref() })
+        else {
             return expanded.to_string();
         };
 
         let lookup_value = |symbol: &str| {
-            let Ok(Some(value)) = symbols.any_value::<&str>(symbol) else {
+            let Ok(Some(value)) = symbols.any_value::<&str>(symbol)
+            else {
                 return None;
             };
 
@@ -661,33 +685,42 @@ impl ListingOutput {
             return resolved;
         }
 
-        let qualified = Self::expand_symbol_with_listing_context(expanded, Some(symbols as *const _));
+        let qualified =
+            Self::expand_symbol_with_listing_context(expanded, Some(symbols as *const _));
         if qualified != expanded
-            && let Some(resolved) = lookup_value(&qualified) {
-                return resolved;
-            }
+            && let Some(resolved) = lookup_value(&qualified)
+        {
+            return resolved;
+        }
 
         if expanded.starts_with('.') {
             let needle = expanded.trim_start_matches('.');
             for symbol in symbols.available_symbols() {
                 let candidate = symbol.value();
                 if candidate.ends_with(needle)
-                    && let Some(resolved) = lookup_value(candidate) {
-                        return resolved;
-                    }
+                    && let Some(resolved) = lookup_value(candidate)
+                {
+                    return resolved;
+                }
             }
         }
 
         expanded.to_string()
     }
 
-    fn expand_listing_label(&self, raw_label: &str, symbols: Option<*const SymbolsTable>) -> String {
+    fn expand_listing_label(
+        &self,
+        raw_label: &str,
+        symbols: Option<*const SymbolsTable>
+    ) -> String {
         let normalized = raw_label.replace("{{", "{").replace("}}", "}");
         let expanded = Self::expand_symbol_with_listing_context(&normalized, symbols);
-        if raw_label.starts_with('.') && expanded.starts_with('.')
-            && let Some(global) = &self.listing_current_global_label {
-                return format!("{global}{expanded}");
-            }
+        if raw_label.starts_with('.')
+            && expanded.starts_with('.')
+            && let Some(global) = &self.listing_current_global_label
+        {
+            return format!("{global}{expanded}");
+        }
         expanded
     }
 
@@ -704,10 +737,7 @@ impl ListingOutput {
         let line_representation_raw = line_raw.split('\n').collect_vec();
         let line_representation_expanded = line_expanded.split('\n').collect_vec();
         let bytes_per_line = self.bytes_per_line();
-        let data_chunks = self
-            .current_line_bytes
-            .chunks(bytes_per_line)
-            .collect_vec();
+        let data_chunks = self.current_line_bytes.chunks(bytes_per_line).collect_vec();
         let data_representation = data_chunks
             .iter()
             .map(|chunk| chunk.iter().map(|b| self.hex_byte(*b)).join(" "))
@@ -749,12 +779,14 @@ impl ListingOutput {
         let source_token_renders = self
             .current_line_tokens
             .iter()
-            .map(|token| ListingTokenRender {
-                token_id: token.token_id,
-                raw_text: token.raw.as_str(),
-                expanded_text: token.expanded.as_str(),
-                bytes: token.bytes.as_slice(),
-                token_kind: &token.token_kind
+            .map(|token| {
+                ListingTokenRender {
+                    token_id: token.token_id,
+                    raw_text: token.raw.as_str(),
+                    expanded_text: token.expanded.as_str(),
+                    bytes: token.bytes.as_slice(),
+                    token_kind: &token.token_kind
+                }
             })
             .collect_vec();
 
@@ -776,8 +808,15 @@ impl ListingOutput {
                     ListingDeferredRender {
                         row_id: 0,
                         file_index: self.current_file_index,
-                        specific_content: if line_delta == 0 { specific_content } else { "" },
-                        line_number: Some(line_number + delta as u32 + line_delta as u32 - lines_count as u32),
+                        specific_content: if line_delta == 0 {
+                            specific_content
+                        }
+                        else {
+                            ""
+                        },
+                        line_number: Some(
+                            line_number + delta as u32 + line_delta as u32 - lines_count as u32
+                        ),
                         source_line_raw: line_raw,
                         source_line_expanded: line_expanded,
                         token_kind: &self.current_token_kind,
@@ -796,15 +835,14 @@ impl ListingOutput {
         let render_lines = line_representation_raw.len().max(data_representation.len());
         for idx in 0..render_lines {
             let current_inner_line_raw = line_representation_raw.get(idx).copied();
-            let current_inner_line_expanded = line_representation_expanded
-                .get(idx)
-                .copied();
+            let current_inner_line_expanded = line_representation_expanded.get(idx).copied();
             let current_inner_data = data_representation.get(idx);
             let current_chunk = data_chunks.get(idx).copied().unwrap_or(&[]);
             let current_data_len = data_chunks.get(idx).map(|chunk| chunk.len()).unwrap_or(0);
             let is_multiline_continuation =
                 idx > 0 && line_representation_raw.len() > 1 && current_inner_line_raw.is_some();
-            let is_continuation_without_data = is_multiline_continuation && current_inner_data.is_none();
+            let is_continuation_without_data =
+                is_multiline_continuation && current_inner_data.is_none();
 
             let logical_address = self.current_first_address.wrapping_add(byte_offset as u32);
             let logical_representation = if is_continuation_without_data {
@@ -833,7 +871,9 @@ impl ListingOutput {
             else if current_inner_line_raw.is_none() && current_inner_data.is_none() {
                 Self::blank(self.physical_field_width())
             }
-            else if current_offset == logical_address && self.current_address_kind == AddressKind::Address {
+            else if current_offset == logical_address
+                && self.current_address_kind == AddressKind::Address
+            {
                 Self::blank(self.physical_field_width())
             }
             else {
@@ -847,21 +887,25 @@ impl ListingOutput {
 
             // missing instruction must be added manually using TokenKind
             if self.has_current_line_output() {
-                let fallback_source_expanded =
-                    current_inner_line_expanded.map(|line| line.trim_end()).unwrap_or("");
-                let fallback_source_raw =
-                    current_inner_line_raw.map(|line| line.trim_end()).unwrap_or("");
+                let fallback_source_expanded = current_inner_line_expanded
+                    .map(|line| line.trim_end())
+                    .unwrap_or("");
+                let fallback_source_raw = current_inner_line_raw
+                    .map(|line| line.trim_end())
+                    .unwrap_or("");
                 let fallback_bytes = current_inner_data.cloned().unwrap_or_default();
                 let token_renders = token_chunks
                     .get(idx)
                     .into_iter()
                     .flat_map(|tokens| tokens.iter())
-                    .map(|token| ListingTokenRender {
-                        token_id: token.token_id,
-                        raw_text: token.raw.as_str(),
-                        expanded_text: token.expanded.as_str(),
-                        bytes: token.bytes.as_slice(),
-                        token_kind: &token.token_kind
+                    .map(|token| {
+                        ListingTokenRender {
+                            token_id: token.token_id,
+                            raw_text: token.raw.as_str(),
+                            expanded_text: token.expanded.as_str(),
+                            bytes: token.bytes.as_slice(),
+                            token_kind: &token.token_kind
+                        }
                     })
                     .collect_vec();
 
@@ -965,7 +1009,10 @@ impl ListingOutput {
                     self.file_map_header_printed = true;
                     self.renderer.render_notice(
                         &mut *self.writer,
-                        ListingNotice::FileMapHeader { file_index, fname: &fname }
+                        ListingNotice::FileMapHeader {
+                            file_index,
+                            fname: &fname
+                        }
                     );
                     return;
                 }
@@ -973,7 +1020,10 @@ impl ListingOutput {
                 if is_new_file {
                     self.renderer.render_notice(
                         &mut *self.writer,
-                        ListingNotice::FileMapEntry { file_index, fname: &fname }
+                        ListingNotice::FileMapEntry {
+                            file_index,
+                            fname: &fname
+                        }
                     );
                 }
 
@@ -994,7 +1044,10 @@ impl ListingOutput {
                 self.current_fname = Some(fname.clone());
                 self.renderer.render_notice(
                     &mut *self.writer,
-                    ListingNotice::ContextHeader { file_index, fname: &fname }
+                    ListingNotice::ContextHeader {
+                        file_index,
+                        fname: &fname
+                    }
                 );
             }
         }
@@ -1161,17 +1214,16 @@ mod tests {
     use std::io::Write;
     use std::sync::{Arc, Mutex, RwLock};
 
-    use cpclib_tokens::{ExprResult};
+    use cpclib_tokens::ExprResult;
     use cpclib_tokens::symbols::{MemoryPhysicalAddress, SymbolsTable, SymbolsTableTrait};
-
-    use crate::preamble::{LocatedTokenInner, ParserContextBuilder};
-    use crate::parse_z80_with_context_builder;
 
     use super::{
         DEFAULT_LISTING_LINE_TEMPLATE, ListingAddressRadix, ListingOutput, ListingOutputFormat,
         ListingOutputKind, ListingOutputTrigger, ListingSourceFileOutputMode, ListingTokenItem,
         MAX_RENDERED_SOURCE_COLUMN_CHARS, TokenKind
     };
+    use crate::parse_z80_with_context_builder;
+    use crate::preamble::{LocatedTokenInner, ParserContextBuilder};
 
     #[derive(Clone, Default)]
     struct SharedBufferWriter {
@@ -1201,7 +1253,8 @@ mod tests {
         let mut output = ListingOutput::new(writer.clone());
         output.on();
 
-        output.current_line_group = Some((12, "    ld a,0x12".to_string(), "    ld a,0x12".to_string()));
+        output.current_line_group =
+            Some((12, "    ld a,0x12".to_string(), "    ld a,0x12".to_string()));
         output.current_line_bytes.extend_from_slice(&[0x3E, 0x12]);
         output.current_first_address = 0x100;
         output.current_physical_address = MemoryPhysicalAddress::new(0x100, 0).into();
@@ -1225,8 +1278,12 @@ mod tests {
         output.current_first_address = 0x200;
         output.current_physical_address = MemoryPhysicalAddress::new(0x200, 0).into();
         output.current_token_kind = TokenKind::Displayable;
-        output.deferred_for_line.push("0200 00200 my_label".to_string());
-        output.counter_update.push("0201 ????? <new iteration>".to_string());
+        output
+            .deferred_for_line
+            .push("0200 00200 my_label".to_string());
+        output
+            .counter_update
+            .push("0201 ????? <new iteration>".to_string());
 
         output.process_current_line();
         output.finish();
@@ -1258,8 +1315,16 @@ mod tests {
         output.process_current_line();
 
         let listing = writer.snapshot();
-        assert!(listing.contains("MACRO      SWITCH_VALUES               30 macro SWITCH_VALUES addr1, addr2"), "listing={listing}");
-        assert!(listing.contains("                                       31 ld hl, ({addr1})"), "listing={listing}");
+        assert!(
+            listing.contains(
+                "MACRO      SWITCH_VALUES               30 macro SWITCH_VALUES addr1, addr2"
+            ),
+            "listing={listing}"
+        );
+        assert!(
+            listing.contains("                                       31 ld hl, ({addr1})"),
+            "listing={listing}"
+        );
     }
 
     #[test]
@@ -1290,8 +1355,14 @@ mod tests {
         output.process_current_line();
 
         let listing = writer.snapshot();
-        assert!(listing.contains("428B 0428B scroller_generate_initial_code\n>"), "listing={listing}");
-        assert!(listing.contains(" 202 scroller_generate_initial_code"), "listing={listing}");
+        assert!(
+            listing.contains("428B 0428B scroller_generate_initial_code\n>"),
+            "listing={listing}"
+        );
+        assert!(
+            listing.contains(" 202 scroller_generate_initial_code"),
+            "listing={listing}"
+        );
     }
 
     #[test]
@@ -1310,7 +1381,10 @@ SWITCH_VALUES(\n\
             .expect("macro call token expected");
 
         let extracted = ListingOutput::extract_code(token);
-        assert!(extracted.contains("SWITCH_VALUES("), "extracted={extracted:?}");
+        assert!(
+            extracted.contains("SWITCH_VALUES("),
+            "extracted={extracted:?}"
+        );
         assert!(
             extracted.contains("scroller_configuration_table.current_generating_code_table"),
             "extracted={extracted:?}"
@@ -1342,15 +1416,23 @@ endm\n";
             extracted.contains("macro SWITCH_VALUES addr1, addr2"),
             "extracted={extracted:?}"
         );
-        assert!(extracted.contains("ld hl, ({addr1})"), "extracted={extracted:?}");
-        assert!(extracted.contains("ld de, ({addr2})"), "extracted={extracted:?}");
+        assert!(
+            extracted.contains("ld hl, ({addr1})"),
+            "extracted={extracted:?}"
+        );
+        assert!(
+            extracted.contains("ld de, ({addr2})"),
+            "extracted={extracted:?}"
+        );
         assert!(extracted.contains("endm"), "extracted={extracted:?}");
     }
 
     #[test]
     fn expand_source_line_patterns_uses_shared_symbol_expansion() {
         let mut symbols = SymbolsTable::default();
-        symbols.assign_symbol_to_value("line", ExprResult::Value(0)).unwrap();
+        symbols
+            .assign_symbol_to_value("line", ExprResult::Value(0))
+            .unwrap();
 
         let rendered = ListingOutput::expand_source_line_patterns(
             "dw SCROLLER_CODE_{{line}}_a",
@@ -1400,7 +1482,10 @@ endm\n";
     fn resolve_expanded_symbol_value_dereferences_hidden_symbol_by_suffix() {
         let mut symbols = SymbolsTable::default();
         symbols
-            .assign_symbol_to_value("FONT_CHAR_TABLE.__hidden__2012__letter", ExprResult::String("r".into()))
+            .assign_symbol_to_value(
+                "FONT_CHAR_TABLE.__hidden__2012__letter",
+                ExprResult::String("r".into())
+            )
             .unwrap();
 
         let rendered = ListingOutput::resolve_expanded_symbol_value(
@@ -1414,7 +1499,9 @@ endm\n";
     #[test]
     fn expand_source_line_patterns_preserves_hash_glyph_strings() {
         let mut symbols = SymbolsTable::default();
-        symbols.set_current_global_label("letter_ipms_line_7").unwrap();
+        symbols
+            .set_current_global_label("letter_ipms_line_7")
+            .unwrap();
 
         let rendered = ListingOutput::expand_source_line_patterns(
             "FONT_CREATE_IPM_CHAR( t, \"###.\", \".#..\")",
@@ -1434,10 +1521,8 @@ endm\n";
         let mut output = ListingOutput::new(SharedBufferWriter::default());
         output.listing_current_global_label = Some("main".to_string());
 
-        let rendered = output.expand_listing_label(
-            ".has_nops{{nb_nops}}",
-            Some(&symbols as *const _)
-        );
+        let rendered =
+            output.expand_listing_label(".has_nops{{nb_nops}}", Some(&symbols as *const _));
 
         assert_eq!(rendered, "main.has_nops0");
     }
@@ -1457,7 +1542,9 @@ endm\n";
         output.on();
 
         let mut symbols = SymbolsTable::default();
-        symbols.assign_symbol_to_value("line", ExprResult::Value(0)).unwrap();
+        symbols
+            .assign_symbol_to_value("line", ExprResult::Value(0))
+            .unwrap();
 
         output.current_line_group = Some((
             293,
@@ -1504,8 +1591,14 @@ endm\n";
         let expected_raw = "R".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS);
         assert!(rendered.contains(&expected_expanded), "rendered={rendered}");
         assert!(!rendered.contains(&expected_raw), "rendered={rendered}");
-        assert!(!rendered.contains(&"E".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 1)), "rendered={rendered}");
-        assert!(!rendered.contains(&"R".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 1)), "rendered={rendered}");
+        assert!(
+            !rendered.contains(&"E".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 1)),
+            "rendered={rendered}"
+        );
+        assert!(
+            !rendered.contains(&"R".repeat(MAX_RENDERED_SOURCE_COLUMN_CHARS + 1)),
+            "rendered={rendered}"
+        );
     }
 
     #[test]
@@ -1532,9 +1625,18 @@ endm\n";
         let listing = writer.snapshot();
         assert!(listing.contains("<!DOCTYPE html>"), "listing={listing}");
         assert!(listing.contains("class=\"row\""), "listing={listing}");
-        assert!(listing.contains("cell source-expanded interactive"), "listing={listing}");
-        assert!(!listing.contains("cell source-raw interactive"), "listing={listing}");
-        assert!(listing.contains("token byte\" data-hover-row=\"row-0\">00</span>"), "listing={listing}");
+        assert!(
+            listing.contains("cell source-expanded interactive"),
+            "listing={listing}"
+        );
+        assert!(
+            !listing.contains("cell source-raw interactive"),
+            "listing={listing}"
+        );
+        assert!(
+            listing.contains("token byte\" data-hover-row=\"row-0\">00</span>"),
+            "listing={listing}"
+        );
     }
 
     #[test]
@@ -1550,15 +1652,27 @@ endm\n";
         );
         output.on();
 
-        output.current_line_group = Some((30, "macro SWITCH_VALUES addr1, addr2".to_string(), "macro SWITCH_VALUES addr1, addr2".to_string()));
+        output.current_line_group = Some((
+            30,
+            "macro SWITCH_VALUES addr1, addr2".to_string(),
+            "macro SWITCH_VALUES addr1, addr2".to_string()
+        ));
         output.current_token_kind = TokenKind::MacroDefine("SWITCH_VALUES".to_string());
-        output.deferred_for_line.push("MACRO      SWITCH_VALUES".to_string());
+        output
+            .deferred_for_line
+            .push("MACRO      SWITCH_VALUES".to_string());
 
         output.finish();
 
         let listing = writer.snapshot();
-        assert!(listing.contains("data-block-kind=\"macro\""), "listing={listing}");
-        assert!(listing.contains("row deferred block-start"), "listing={listing}");
+        assert!(
+            listing.contains("data-block-kind=\"macro\""),
+            "listing={listing}"
+        );
+        assert!(
+            listing.contains("row deferred block-start"),
+            "listing={listing}"
+        );
     }
 
     #[test]
@@ -1593,7 +1707,7 @@ endm\n";
                 expanded: "1".to_string(),
                 bytes: vec![0x01],
                 token_kind: TokenKind::Displayable
-            }
+            },
         ];
 
         output.finish();
@@ -1634,8 +1748,14 @@ endm\n";
         );
         output.on();
 
-        output.current_line_group = Some((39, "ld bc, 0xbc00 + 1 : out (c), c : ld bc, 0xbd00 + 96/2 : out (c), c".to_string(), "ld bc, 0xbc00 + 1 : out (c), c : ld bc, 0xbd00 + 96/2 : out (c), c".to_string()));
-        output.current_line_bytes.extend_from_slice(&[0x01, 0x01, 0xBC, 0xED, 0x49, 0x01, 0x30, 0xBD, 0xED, 0x49]);
+        output.current_line_group = Some((
+            39,
+            "ld bc, 0xbc00 + 1 : out (c), c : ld bc, 0xbd00 + 96/2 : out (c), c".to_string(),
+            "ld bc, 0xbc00 + 1 : out (c), c : ld bc, 0xbd00 + 96/2 : out (c), c".to_string()
+        ));
+        output
+            .current_line_bytes
+            .extend_from_slice(&[0x01, 0x01, 0xBC, 0xED, 0x49, 0x01, 0x30, 0xBD, 0xED, 0x49]);
         output.current_first_address = 0x4007;
         output.current_physical_address = MemoryPhysicalAddress::new(0x4007, 0).into();
         output.current_token_kind = TokenKind::Displayable;
@@ -1667,7 +1787,7 @@ endm\n";
                 expanded: "out (c), c".to_string(),
                 bytes: vec![0xED, 0x49],
                 token_kind: TokenKind::Displayable
-            }
+            },
         ];
 
         output.finish();
@@ -1696,7 +1816,11 @@ endm\n";
         );
         output.on();
 
-        output.current_line_group = Some((12, "add hl, de ; trailing comment".to_string(), "add hl, de ; trailing comment".to_string()));
+        output.current_line_group = Some((
+            12,
+            "add hl, de ; trailing comment".to_string(),
+            "add hl, de ; trailing comment".to_string()
+        ));
         output.current_line_bytes.extend_from_slice(&[0x19]);
         output.current_first_address = 0x0100;
         output.current_physical_address = MemoryPhysicalAddress::new(0x0100, 0).into();
@@ -1739,7 +1863,9 @@ endm\n";
         output.process_current_line();
 
         output.current_line_group = Some((11, "jp start".to_string(), "jp start".to_string()));
-        output.current_line_bytes.extend_from_slice(&[0xC3, 0x00, 0x01]);
+        output
+            .current_line_bytes
+            .extend_from_slice(&[0xC3, 0x00, 0x01]);
         output.current_first_address = 0x0101;
         output.current_physical_address = MemoryPhysicalAddress::new(0x0101, 0).into();
         output.current_token_kind = TokenKind::Displayable;
@@ -1758,10 +1884,7 @@ endm\n";
             listing.contains("data-symbol-candidate=\"start\""),
             "listing={listing}"
         );
-        assert!(
-            listing.contains("['start', 0]"),
-            "listing={listing}"
-        );
+        assert!(listing.contains("['start', 0]"), "listing={listing}");
         assert!(
             !listing.contains("if (row && row.id === `row-${target}`)"),
             "listing={listing}"
@@ -1785,27 +1908,25 @@ endm\n";
         output.current_first_address = 0x0100;
         output.current_physical_address = MemoryPhysicalAddress::new(0x0100, 0).into();
         output.current_token_kind = TokenKind::Label("dup_label".to_string());
-        output.deferred_for_line.push("0100 0100 dup_label".to_string());
+        output
+            .deferred_for_line
+            .push("0100 0100 dup_label".to_string());
         output.process_current_line();
 
         output.current_line_group = Some((20, "dup_label:".to_string(), "dup_label:".to_string()));
         output.current_first_address = 0x0200;
         output.current_physical_address = MemoryPhysicalAddress::new(0x0200, 0).into();
         output.current_token_kind = TokenKind::Label("dup_label".to_string());
-        output.deferred_for_line.push("0200 0200 dup_label".to_string());
+        output
+            .deferred_for_line
+            .push("0200 0200 dup_label".to_string());
         output.process_current_line();
 
         output.finish();
 
         let listing = writer.snapshot();
-        assert!(
-            listing.contains("['dup_label', 0]"),
-            "listing={listing}"
-        );
-        assert!(
-            !listing.contains("['dup_label', 1]"),
-            "listing={listing}"
-        );
+        assert!(listing.contains("['dup_label', 0]"), "listing={listing}");
+        assert!(!listing.contains("['dup_label', 1]"), "listing={listing}");
     }
 
     #[test]
@@ -1831,7 +1952,9 @@ endm\n";
         output.current_first_address = 0x0101;
         output.current_physical_address = MemoryPhysicalAddress::new(0x0101, 0).into();
         output.current_token_kind = TokenKind::Label("main.loop".to_string());
-        output.deferred_for_line.push("0101 0101 main.loop".to_string());
+        output
+            .deferred_for_line
+            .push("0101 0101 main.loop".to_string());
 
         output.finish();
 
@@ -1859,7 +1982,11 @@ endm\n";
         output.deferred_for_line.push("0100 0100 main".to_string());
         output.process_current_line();
 
-        output.current_line_group = Some((11, "jr z, .has_nops0".to_string(), "jr z, .has_nops0".to_string()));
+        output.current_line_group = Some((
+            11,
+            "jr z, .has_nops0".to_string(),
+            "jr z, .has_nops0".to_string()
+        ));
         output.current_line_bytes.extend_from_slice(&[0x28, 0x00]);
         output.current_first_address = 0x0101;
         output.current_physical_address = MemoryPhysicalAddress::new(0x0101, 0).into();
@@ -1917,7 +2044,10 @@ endm\n";
 
         let listing = writer.snapshot();
         let second = listing.lines().nth(1).unwrap_or_default();
-        assert!(second.contains("                            258"), "listing={listing}");
+        assert!(
+            second.contains("                            258"),
+            "listing={listing}"
+        );
         assert!(!second.contains('.'), "listing={listing}");
     }
 
@@ -1935,7 +2065,9 @@ endm\n";
         output.current_first_address = 0x42CC;
         output.current_physical_address = MemoryPhysicalAddress::new(0x42CC, 0).into();
         output.current_token_kind = TokenKind::Displayable;
-        output.counter_update.push("0001 ????? <new iteration>".to_string());
+        output
+            .counter_update
+            .push("0001 ????? <new iteration>".to_string());
 
         output.finish();
 
@@ -1965,7 +2097,8 @@ endm\n";
 
         {
             let mut output = builder.write().unwrap();
-            output.current_line_group = Some((10, "db 0xBE, 0xEF".to_string(), "db 0xBE, 0xEF".to_string()));
+            output.current_line_group =
+                Some((10, "db 0xBE, 0xEF".to_string(), "db 0xBE, 0xEF".to_string()));
             output.current_line_bytes.extend_from_slice(&[0xBE, 0xEF]);
             output.current_first_address = 0x0100;
             output.current_physical_address = MemoryPhysicalAddress::new(0x0100, 0).into();
@@ -1976,7 +2109,8 @@ endm\n";
 
         {
             let mut output = builder.write().unwrap();
-            output.current_line_group = Some((10, "db 0xBE, 0xEF".to_string(), "db 0xBE, 0xEF".to_string()));
+            output.current_line_group =
+                Some((10, "db 0xBE, 0xEF".to_string(), "db 0xBE, 0xEF".to_string()));
             output.current_line_bytes.extend_from_slice(&[0xBE, 0xEF]);
             output.current_first_address = 0x0102;
             output.current_physical_address = MemoryPhysicalAddress::new(0x0102, 0).into();
@@ -1985,9 +2119,13 @@ endm\n";
         }
 
         let listing = writer.snapshot();
-        let first_counter = listing.find("0001 ????? <new iteration>").unwrap_or(usize::MAX);
+        let first_counter = listing
+            .find("0001 ????? <new iteration>")
+            .unwrap_or(usize::MAX);
         let first_db = listing.find("0100 00100N BE EF").unwrap_or(usize::MAX);
-        let second_counter = listing.find("0002 ????? <new iteration>").unwrap_or(usize::MAX);
+        let second_counter = listing
+            .find("0002 ????? <new iteration>")
+            .unwrap_or(usize::MAX);
         let second_db = listing.find("0102 00102N BE EF").unwrap_or(usize::MAX);
 
         assert!(first_db < first_counter, "listing={listing}");
@@ -2006,7 +2144,8 @@ endm\n";
             "db 0,1,2,3,4,5,6,7,8,9".to_string(),
             "db 0,1,2,3,4,5,6,7,8,9".to_string()
         ));
-        output.current_line_bytes
+        output
+            .current_line_bytes
             .extend_from_slice(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         output.current_first_address = 0x4000;
         output.current_physical_address = MemoryPhysicalAddress::new(0x4000, 0).into();
@@ -2017,7 +2156,10 @@ endm\n";
         let listing = writer.snapshot();
         assert!(listing.contains("4000"), "listing={listing}");
         assert!(listing.contains("4008"), "listing={listing}");
-        assert!(listing.contains("00 01 02 03 04 05 06 07"), "listing={listing}");
+        assert!(
+            listing.contains("00 01 02 03 04 05 06 07"),
+            "listing={listing}"
+        );
         assert!(listing.contains("08 09"), "listing={listing}");
     }
 
@@ -2148,7 +2290,9 @@ endm\n";
         output.process_current_line();
 
         output.current_line_group = Some((50, "ld sp, $".to_string(), "ld sp, $".to_string()));
-        output.current_line_bytes.extend_from_slice(&[0x31, 0x55, 0x40]);
+        output
+            .current_line_bytes
+            .extend_from_slice(&[0x31, 0x55, 0x40]);
         output.current_first_address = 0x4055;
         output.current_physical_address = MemoryPhysicalAddress::new(0x4055, 0).into();
         output.current_token_kind = TokenKind::Displayable;

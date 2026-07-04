@@ -7,7 +7,11 @@ impl<'src> Formatter<'src> {
 
     pub(super) fn emit_interstitial(&mut self, target_line: usize) {
         while self.current_line < target_line {
-            let src = self.source_lines.get(self.current_line).copied().unwrap_or("");
+            let src = self
+                .source_lines
+                .get(self.current_line)
+                .copied()
+                .unwrap_or("");
             let trimmed = src.trim();
             if trimmed.is_empty() || trimmed.starts_with(';') || trimmed.starts_with("//") {
                 self.output.push_str(src);

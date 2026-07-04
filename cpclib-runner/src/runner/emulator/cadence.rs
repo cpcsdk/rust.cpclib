@@ -1,4 +1,3 @@
-
 use cpclib_common::camino::Utf8Path;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, UrlGenerator};
@@ -9,18 +8,13 @@ pub const DOWNLOAD_URL_V0_3A_LINUX: &str =
     "https://github.com/abalore/Cadence/releases/download/v0.3a/Cadence-0.3a-x86_64.AppImage";
 pub const DOWNLOAD_URL_V0_3A_MACOS: &str =
     "https://github.com/abalore/Cadence/archive/refs/tags/v0.3a.zip";
-pub const DOWNLOAD_URL_V1_1_LINUX: &str =
-    "https://github.com/abalore/Cadence-releases/releases/download/v1.1/Cadence-1.1-x86_64.AppImage";
-pub const DOWNLOAD_URL_V1_1_MACOS: &str =
-    "https://github.com/abalore/Cadence-releases/releases/download/v1.1/Cadence-1.1-macOS-arm64.dmg";
+pub const DOWNLOAD_URL_V1_1_LINUX: &str = "https://github.com/abalore/Cadence-releases/releases/download/v1.1/Cadence-1.1-x86_64.AppImage";
+pub const DOWNLOAD_URL_V1_1_MACOS: &str = "https://github.com/abalore/Cadence-releases/releases/download/v1.1/Cadence-1.1-macOS-arm64.dmg";
 pub const DOWNLOAD_URL_V1_1_WINDOWS: &str =
     "https://github.com/abalore/Cadence-releases/releases/download/v1.1/cadence-windows-x64.zip";
-pub const DOWNLOAD_URL_V1_4_LINUX: &str =
-    "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-x86_64.AppImage";
-pub const DOWNLOAD_URL_V1_4_MACOS: &str =
-    "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-macOS-arm64.dmg";
-pub const DOWNLOAD_URL_V1_4_WINDOWS: &str =
-    "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-windows-x64.zip";
+pub const DOWNLOAD_URL_V1_4_LINUX: &str = "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-x86_64.AppImage";
+pub const DOWNLOAD_URL_V1_4_MACOS: &str = "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-macOS-arm64.dmg";
+pub const DOWNLOAD_URL_V1_4_WINDOWS: &str = "https://github.com/abalore/Cadence-releases/releases/download/v1.4/Cadence-1.4-windows-x64.zip";
 
 #[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CadenceVersion {
@@ -137,26 +131,34 @@ impl CadenceVersion {
 
         #[cfg(target_os = "linux")]
         let builder = {
-            let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-                Box::new(|desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+            let post_install: Box<
+                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+            > = Box::new(
+                |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     ensure_executable(&desc.exec_fname())
-                });
+                }
+            );
             builder.post_install(post_install)
         };
 
         #[cfg(target_os = "macos")]
         let builder = {
-            let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
-                Box::new(move |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+            let post_install: Box<
+                dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
+            > = Box::new(
+                move |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     let cache_folder = desc.cache_folder();
 
                     match &version {
                         CadenceVersion::V0_3a => install_macos_source_release(&cache_folder)?,
-                        CadenceVersion::V1_1 | CadenceVersion::V1_4 => install_macos_dmg_release(&cache_folder, &desc.exec_fname())?
+                        CadenceVersion::V1_1 | CadenceVersion::V1_4 => {
+                            install_macos_dmg_release(&cache_folder, &desc.exec_fname())?
+                        },
                     }
 
                     Ok(())
-                });
+                }
+            );
             builder.post_install(post_install)
         };
 
@@ -189,7 +191,10 @@ fn install_macos_source_release(cache_folder: &Utf8Path) -> Result<(), String> {
             extracted
         }
         else {
-            return Err(format!("Cadence source folder not found in {}", cache_folder));
+            return Err(format!(
+                "Cadence source folder not found in {}",
+                cache_folder
+            ));
         }
     };
 
@@ -226,18 +231,16 @@ fn install_macos_source_release(cache_folder: &Utf8Path) -> Result<(), String> {
                 .map_err(|e| format!("Failed to remove existing app bundle {target_app}: {e}"))?;
         }
 
-        fs_err::rename(&built_app, &target_app)
-            .map_err(|e| format!("Failed to move app bundle from {built_app} to {target_app}: {e}"))?;
+        fs_err::rename(&built_app, &target_app).map_err(|e| {
+            format!("Failed to move app bundle from {built_app} to {target_app}: {e}")
+        })?;
     }
 
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
-fn install_macos_dmg_release(
-    cache_folder: &Utf8Path,
-    dmg_path: &Utf8Path
-) -> Result<(), String> {
+fn install_macos_dmg_release(cache_folder: &Utf8Path, dmg_path: &Utf8Path) -> Result<(), String> {
     use std::process::Command;
 
     let target_app = cache_folder.join("cadence.app");
@@ -277,12 +280,15 @@ fn install_macos_dmg_release(
         let _ = Command::new("hdiutil")
             .args(["detach", mount_point.as_str(), "-quiet", "-force"])
             .output();
-        return Err(format!("Cadence app bundle not found in mounted DMG at {mounted_app}"));
+        return Err(format!(
+            "Cadence app bundle not found in mounted DMG at {mounted_app}"
+        ));
     }
 
     if target_app.exists() {
-        fs_err::remove_dir_all(&target_app)
-            .map_err(|e| format!("Failed to remove previous Cadence app bundle {target_app}: {e}"))?;
+        fs_err::remove_dir_all(&target_app).map_err(|e| {
+            format!("Failed to remove previous Cadence app bundle {target_app}: {e}")
+        })?;
     }
 
     let copy = Command::new("cp")

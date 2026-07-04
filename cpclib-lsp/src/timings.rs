@@ -25,7 +25,7 @@ pub fn find_timings(instruction_text: &str) -> Vec<&'static TimingEntry> {
 
     let candidates = match BY_MNEMONIC.get(mnemonic.as_str()) {
         Some(v) => v,
-        None    => return vec![],
+        None => return vec![]
     };
 
     if candidates.len() == 1 {
@@ -47,8 +47,13 @@ pub fn find_timings(instruction_text: &str) -> Vec<&'static TimingEntry> {
 
     if top < 0 {
         candidates.to_vec()
-    } else {
-        scored.iter().filter(|(s, _)| *s == top).map(|(_, e)| *e).collect()
+    }
+    else {
+        scored
+            .iter()
+            .filter(|(s, _)| *s == top)
+            .map(|(_, e)| *e)
+            .collect()
     }
 }
 
@@ -61,7 +66,7 @@ pub fn extract_instruction_at_col(line: &str, col: usize) -> Option<String> {
     // Drop comment — byte indices are still valid because the comment is a suffix.
     let without_comment = match line.find(';') {
         Some(i) => &line[..i],
-        None    => line,
+        None => line
     };
 
     let bytes = without_comment.as_bytes();
@@ -70,8 +75,8 @@ pub fn extract_instruction_at_col(line: &str, col: usize) -> Option<String> {
 
     // Walk byte-by-byte, splitting on `:` at paren-depth 0
     for i in 0..=bytes.len() {
-        let at_end    = i == bytes.len();
-        let is_sep    = !at_end && bytes[i] == b':' && depth == 0;
+        let at_end = i == bytes.len();
+        let is_sep = !at_end && bytes[i] == b':' && depth == 0;
 
         if at_end || is_sep {
             // Is the cursor inside [seg_start, i]?
@@ -82,7 +87,8 @@ pub fn extract_instruction_at_col(line: &str, col: usize) -> Option<String> {
             if is_sep {
                 seg_start = i + 1;
             }
-        } else {
+        }
+        else {
             match bytes[i] {
                 b'(' => depth += 1,
                 b')' => depth = depth.saturating_sub(1),
@@ -163,19 +169,23 @@ pub fn format_hover(instruction_text: &str, entries: &[&TimingEntry]) -> String 
 
         // NOPs / T-states
         match entry.nops_alt {
-            None => md.push_str(&format!(
-                "**{}** NOP{} ({} T-states)\n\n",
-                entry.nops,
-                if entry.nops == 1 { "" } else { "s" },
-                entry.nops as u16 * 4
-            )),
-            Some(alt) => md.push_str(&format!(
-                "**{}** / **{}** NOPs ({}/{} T-states — taken/not taken)\n\n",
-                entry.nops,
-                alt,
-                entry.nops as u16 * 4,
-                alt as u16 * 4
-            )),
+            None => {
+                md.push_str(&format!(
+                    "**{}** NOP{} ({} T-states)\n\n",
+                    entry.nops,
+                    if entry.nops == 1 { "" } else { "s" },
+                    entry.nops as u16 * 4
+                ))
+            },
+            Some(alt) => {
+                md.push_str(&format!(
+                    "**{}** / **{}** NOPs ({}/{} T-states — taken/not taken)\n\n",
+                    entry.nops,
+                    alt,
+                    entry.nops as u16 * 4,
+                    alt as u16 * 4
+                ))
+            },
         }
 
         // Opcode template
@@ -196,22 +206,33 @@ pub fn format_hover(instruction_text: &str, entries: &[&TimingEntry]) -> String 
 fn describe_flags(flags: &str) -> String {
     let names = ["S", "Z", "5", "H", "3", "V", "N", "C"];
     let mut modified = vec![];
-    let mut forced0   = vec![];
-    let mut forced1   = vec![];
+    let mut forced0 = vec![];
+    let mut forced1 = vec![];
     for (i, ch) in flags.chars().take(8).enumerate() {
         let n = *names.get(i).unwrap_or(&"?");
         match ch {
-            '.' => {}
+            '.' => {},
             '0' => forced0.push(n),
             '1' => forced1.push(n),
-            _   => modified.push(n),
+            _ => modified.push(n)
         }
     }
     let mut parts = vec![];
-    if !modified.is_empty() { parts.push(format!("affected: **{}**", modified.join(" "))); }
-    if !forced1.is_empty()  { parts.push(format!("set: **{}**",      forced1.join(" "))); }
-    if !forced0.is_empty()  { parts.push(format!("reset: **{}**",    forced0.join(" "))); }
-    if parts.is_empty() { "unchanged".to_string() } else { parts.join(" · ") }
+    if !modified.is_empty() {
+        parts.push(format!("affected: **{}**", modified.join(" ")));
+    }
+    if !forced1.is_empty() {
+        parts.push(format!("set: **{}**", forced1.join(" ")));
+    }
+    if !forced0.is_empty() {
+        parts.push(format!("reset: **{}**", forced0.join(" ")));
+    }
+    if parts.is_empty() {
+        "unchanged".to_string()
+    }
+    else {
+        parts.join(" · ")
+    }
 }
 
 // ─── internal helpers ────────────────────────────────────────────────────────
@@ -220,7 +241,7 @@ fn split_head(s: &str) -> (&str, &str) {
     let s = s.trim();
     match s.find(|c: char| c.is_ascii_whitespace()) {
         Some(i) => (&s[..i], s[i..].trim()),
-        None    => (s, ""),
+        None => (s, "")
     }
 }
 
@@ -233,66 +254,174 @@ fn parse_ops(s: &str) -> Vec<String> {
     let mut depth = 0u32;
     for c in s.chars() {
         match c {
-            '(' => { depth += 1; cur.push(c); }
-            ')' => { depth = depth.saturating_sub(1); cur.push(c); }
+            '(' => {
+                depth += 1;
+                cur.push(c);
+            },
+            ')' => {
+                depth = depth.saturating_sub(1);
+                cur.push(c);
+            },
             ',' if depth == 0 => {
                 let t = cur.trim().to_ascii_lowercase();
-                if !t.is_empty() { ops.push(t); }
+                if !t.is_empty() {
+                    ops.push(t);
+                }
                 cur = String::new();
-            }
-            _ => cur.push(c),
+            },
+            _ => cur.push(c)
         }
     }
     let t = cur.trim().to_ascii_lowercase();
-    if !t.is_empty() { ops.push(t); }
+    if !t.is_empty() {
+        ops.push(t);
+    }
     ops
 }
 
 fn score(src: &[String], pat: &[String]) -> i32 {
     if src.len() != pat.len() {
-        if src.is_empty() && pat.is_empty() { return 50; }
+        if src.is_empty() && pat.is_empty() {
+            return 50;
+        }
         return -100;
     }
-    if src.is_empty() { return 50; }
+    if src.is_empty() {
+        return 50;
+    }
     let mut total = 0i32;
     for (s, p) in src.iter().zip(pat.iter()) {
         let v = match_op(s, p);
-        if v < 0 { return -100; }
+        if v < 0 {
+            return -100;
+        }
         total += v;
     }
     total
 }
 
 fn match_op(src: &str, pat: &str) -> i32 {
-    if src == pat { return 20; }
+    if src == pat {
+        return 20;
+    }
 
-    const R8: &[&str]    = &["a", "b", "c", "d", "e", "h", "l"];
-    const R16: &[&str]   = &["bc", "de", "hl", "sp"];
+    const R8: &[&str] = &["a", "b", "c", "d", "e", "h", "l"];
+    const R16: &[&str] = &["bc", "de", "hl", "sp"];
     const R16AF: &[&str] = &["bc", "de", "hl", "af"];
     const CC_SHORT: &[&str] = &["nz", "z", "nc", "c"];
-    const CC_ALL: &[&str]   = &["nz", "z", "nc", "c", "po", "pe", "p", "m"];
+    const CC_ALL: &[&str] = &["nz", "z", "nc", "c", "po", "pe", "p", "m"];
 
     match pat {
-        "r" | "r'" | "r''" => if R8.contains(&src) { 10 } else { -1 },
-        "rr"  => if R16.contains(&src) { 10 } else { -1 },
-        "qq"  => if R16AF.contains(&src) { 10 } else { -1 },
-        "cc"  => if CC_SHORT.contains(&src) { 10 } else { -1 },
-        "ccc" => if CC_ALL.contains(&src) { 10 } else { -1 },
+        "r" | "r'" | "r''" => {
+            if R8.contains(&src) {
+                10
+            }
+            else {
+                -1
+            }
+        },
+        "rr" => {
+            if R16.contains(&src) {
+                10
+            }
+            else {
+                -1
+            }
+        },
+        "qq" => {
+            if R16AF.contains(&src) {
+                10
+            }
+            else {
+                -1
+            }
+        },
+        "cc" => {
+            if CC_SHORT.contains(&src) {
+                10
+            }
+            else {
+                -1
+            }
+        },
+        "ccc" => {
+            if CC_ALL.contains(&src) {
+                10
+            }
+            else {
+                -1
+            }
+        },
         "n" | "nn" | "d" | "e" | "b" | "ttt" => {
-            if R8.contains(&src) || R16.contains(&src) || src.starts_with('(') { -1 }
-            else { 5 }
-        }
-        "(hl)" => if src == "(hl)" { 20 } else { -1 },
-        "(bc)" => if src == "(bc)" { 20 } else { -1 },
-        "(de)" => if src == "(de)" { 20 } else { -1 },
-        "(c)"  => if src == "(c)"  { 20 } else { -1 },
-        p if p.starts_with("(ix") => if src.starts_with("(ix") { 15 } else { -1 },
-        p if p.starts_with("(iy") => if src.starts_with("(iy") { 15 } else { -1 },
-        p if p.starts_with("(nn") || (p.starts_with('(') && !p.starts_with("(ix") && !p.starts_with("(iy")) => {
-            if src.starts_with('(') && !["(hl)", "(bc)", "(de)", "(c)"].contains(&src)
-               && !src.starts_with("(ix") && !src.starts_with("(iy")
-            { 12 } else { -1 }
-        }
-        _ => 0,
+            if R8.contains(&src) || R16.contains(&src) || src.starts_with('(') {
+                -1
+            }
+            else {
+                5
+            }
+        },
+        "(hl)" => {
+            if src == "(hl)" {
+                20
+            }
+            else {
+                -1
+            }
+        },
+        "(bc)" => {
+            if src == "(bc)" {
+                20
+            }
+            else {
+                -1
+            }
+        },
+        "(de)" => {
+            if src == "(de)" {
+                20
+            }
+            else {
+                -1
+            }
+        },
+        "(c)" => {
+            if src == "(c)" {
+                20
+            }
+            else {
+                -1
+            }
+        },
+        p if p.starts_with("(ix") => {
+            if src.starts_with("(ix") {
+                15
+            }
+            else {
+                -1
+            }
+        },
+        p if p.starts_with("(iy") => {
+            if src.starts_with("(iy") {
+                15
+            }
+            else {
+                -1
+            }
+        },
+        p if p.starts_with("(nn")
+            || (p.starts_with('(') && !p.starts_with("(ix") && !p.starts_with("(iy")) =>
+        {
+            if src.starts_with('(')
+                && !["(hl)", "(bc)", "(de)", "(c)"].contains(&src)
+                && !src.starts_with("(ix")
+                && !src.starts_with("(iy")
+            {
+                12
+            }
+            else {
+                -1
+            }
+        },
+        _ => 0
     }
 }

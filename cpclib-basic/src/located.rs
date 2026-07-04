@@ -11,8 +11,8 @@ use cpclib_common::winnow::stream::{LocatingSlice, Offset};
 use cpclib_common::winnow::token::{any, one_of, take_while};
 use cpclib_common::winnow::{ModalResult, Parser};
 
-use crate::tokens::{BasicTokenNoPrefix, BasicTokenPrefixed};
 use crate::BasicError;
+use crate::tokens::{BasicTokenNoPrefix, BasicTokenPrefixed};
 
 // ─── Stream type alias ────────────────────────────────────────────────────────
 
@@ -26,8 +26,8 @@ type Input<'a> = LocatingSlice<&'a str>;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SourceSpan {
     pub line: u32,
-    pub col:  u32,
-    pub len:  u32,
+    pub col: u32,
+    pub len: u32
 }
 
 // ─── Token kinds ──────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ pub enum LocatedTokenKind {
     Separator,
     /// The BASIC line number that opens a source line (`10`, `20`, …).
     LineNumber(u16),
-    Other(char),
+    Other(char)
 }
 
 // ─── Token ────────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ pub enum LocatedTokenKind {
 #[derive(Debug, Clone)]
 pub struct LocatedBasicToken {
     pub kind: LocatedTokenKind,
-    pub span: SourceSpan,
+    pub span: SourceSpan
 }
 
 // ─── Line ─────────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ pub struct LocatedBasicLine {
     pub line_number: u16,
     /// 0-based source-text line index.
     pub source_line: u32,
-    pub tokens: Vec<LocatedBasicToken>,
+    pub tokens: Vec<LocatedBasicToken>
 }
 
 impl LocatedBasicLine {
@@ -75,7 +75,10 @@ impl LocatedBasicLine {
         let mut pairs: Vec<(&LocatedBasicToken, &LocatedBasicToken)> = Vec::new();
         let mut i = 0;
         while i < self.tokens.len() {
-            if matches!(self.tokens[i].kind, LocatedTokenKind::Keyword(BasicTokenNoPrefix::For)) {
+            if matches!(
+                self.tokens[i].kind,
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::For)
+            ) {
                 let mut j = i + 1;
                 while j < self.tokens.len()
                     && matches!(self.tokens[j].kind, LocatedTokenKind::Space)
@@ -83,9 +86,10 @@ impl LocatedBasicLine {
                     j += 1;
                 }
                 if j < self.tokens.len()
-                    && let LocatedTokenKind::Variable(_) = &self.tokens[j].kind {
-                        pairs.push((&self.tokens[i], &self.tokens[j]));
-                    }
+                    && let LocatedTokenKind::Variable(_) = &self.tokens[j].kind
+                {
+                    pairs.push((&self.tokens[i], &self.tokens[j]));
+                }
             }
             i += 1;
         }
@@ -97,7 +101,7 @@ impl LocatedBasicLine {
 
 #[derive(Debug, Clone)]
 pub struct LocatedBasicProgram {
-    pub lines: Vec<LocatedBasicLine>,
+    pub lines: Vec<LocatedBasicLine>
 }
 
 impl LocatedBasicProgram {
@@ -129,11 +133,11 @@ impl LocatedBasicProgram {
                     .parse_next(&mut input)
                 {
                     Ok(s) => s,
-                    Err(_) => continue,
+                    Err(_) => continue
                 };
             let basic_line_number: u16 = match num_str.parse() {
                 Ok(n) => n,
-                Err(_) => continue,
+                Err(_) => continue
             };
 
             let source_line = line_idx as u32;
@@ -142,9 +146,9 @@ impl LocatedBasicProgram {
                 kind: LocatedTokenKind::LineNumber(basic_line_number),
                 span: SourceSpan {
                     line: source_line,
-                    col:  before_num.offset_from(&line_start) as u32,
-                    len:  input.offset_from(&before_num) as u32,
-                },
+                    col: before_num.offset_from(&line_start) as u32,
+                    len: input.offset_from(&before_num) as u32
+                }
             };
 
             // Body after the line number.
@@ -154,7 +158,11 @@ impl LocatedBasicProgram {
 
             let mut tokens = vec![ln_token];
             tokens.extend(lex_body(body_str, source_line, body_col_offset));
-            lines.push(LocatedBasicLine { line_number: basic_line_number, source_line, tokens });
+            lines.push(LocatedBasicLine {
+                line_number: basic_line_number,
+                source_line,
+                tokens
+            });
         }
 
         Ok(LocatedBasicProgram { lines })
@@ -168,11 +176,15 @@ pub trait BasicLineT {
 }
 
 impl BasicLineT for crate::BasicLine {
-    fn basic_line_number(&self) -> u16 { self.line_number() }
+    fn basic_line_number(&self) -> u16 {
+        self.line_number()
+    }
 }
 
 impl BasicLineT for LocatedBasicLine {
-    fn basic_line_number(&self) -> u16 { self.line_number }
+    fn basic_line_number(&self) -> u16 {
+        self.line_number
+    }
 }
 
 // ─── Keyword table ────────────────────────────────────────────────────────────
@@ -180,12 +192,12 @@ impl BasicLineT for LocatedBasicLine {
 #[derive(Clone)]
 enum KwKind {
     Keyword(BasicTokenNoPrefix),
-    Function(BasicTokenPrefixed),
+    Function(BasicTokenPrefixed)
 }
 
 struct KwEntry {
     text: &'static str,
-    kind: KwKind,
+    kind: KwKind
 }
 
 /// Returns `true` if `c` can immediately follow a keyword and still be part
@@ -201,180 +213,675 @@ static KEYWORD_TABLE: std::sync::LazyLock<Vec<KwEntry>> = std::sync::LazyLock::n
 
     let mut v: Vec<KwEntry> = vec![
         // Multi-word (longest first after sort).
-        KwEntry { text: "ON ERROR GOTO", kind: KwKind::Keyword(K::OnErrorGoto) },
-        KwEntry { text: "ON BREAK",      kind: KwKind::Keyword(K::OnBreak) },
+        KwEntry {
+            text: "ON ERROR GOTO",
+            kind: KwKind::Keyword(K::OnErrorGoto)
+        },
+        KwEntry {
+            text: "ON BREAK",
+            kind: KwKind::Keyword(K::OnBreak)
+        },
         // 9-char
-        KwEntry { text: "RANDOMIZE",     kind: KwKind::Keyword(K::Randomize) },
-        KwEntry { text: "COPYCHR$",      kind: KwKind::Function(F::CopycharDollar) },
+        KwEntry {
+            text: "RANDOMIZE",
+            kind: KwKind::Keyword(K::Randomize)
+        },
+        KwEntry {
+            text: "COPYCHR$",
+            kind: KwKind::Function(F::CopycharDollar)
+        },
         // 8-char
-        KwEntry { text: "GRAPHICS",      kind: KwKind::Keyword(K::Graphics) },
-        KwEntry { text: "CLOSEOUT",      kind: KwKind::Keyword(K::Closeout) },
-        KwEntry { text: "STRING$",       kind: KwKind::Function(F::StringDollar) },
+        KwEntry {
+            text: "GRAPHICS",
+            kind: KwKind::Keyword(K::Graphics)
+        },
+        KwEntry {
+            text: "CLOSEOUT",
+            kind: KwKind::Keyword(K::Closeout)
+        },
+        KwEntry {
+            text: "STRING$",
+            kind: KwKind::Function(F::StringDollar)
+        },
         // 7-char
-        KwEntry { text: "TESTSTR",       kind: KwKind::Function(F::Teststr) },
-        KwEntry { text: "INKEY$",        kind: KwKind::Function(F::InkeyDollar) },
-        KwEntry { text: "SPACE$",        kind: KwKind::Function(F::SpaceDollar) },
-        KwEntry { text: "RIGHT$",        kind: KwKind::Function(F::RightDollar) },
-        KwEntry { text: "LOWER$",        kind: KwKind::Function(F::LowerDollar) },
-        KwEntry { text: "UPPER$",        kind: KwKind::Function(F::UpperDollar) },
-        KwEntry { text: "CLOSEIN",       kind: KwKind::Keyword(K::Closein) },
-        KwEntry { text: "DEFREAL",       kind: KwKind::Keyword(K::Defreal) },
-        KwEntry { text: "OPENOUT",       kind: KwKind::Keyword(K::Openout) },
-        KwEntry { text: "RESTORE",       kind: KwKind::Keyword(K::Restore) },
-        KwEntry { text: "RELEASE",       kind: KwKind::Keyword(K::Release) },
-        KwEntry { text: "RETURN",        kind: KwKind::Keyword(K::Return) },
-        KwEntry { text: "REMAIN",        kind: KwKind::Function(F::Remain) },
-        KwEntry { text: "WINDOW",        kind: KwKind::Keyword(K::Window) },
-        KwEntry { text: "MEMORY",        kind: KwKind::Keyword(K::Memory) },
-        KwEntry { text: "LOCATE",        kind: KwKind::Keyword(K::Locate) },
-        KwEntry { text: "ORIGIN",        kind: KwKind::Keyword(K::Origin) },
-        KwEntry { text: "OPENIN",        kind: KwKind::Keyword(K::Openin) },
-        KwEntry { text: "RESUME",        kind: KwKind::Keyword(K::Resume) },
-        KwEntry { text: "SYMBOL",        kind: KwKind::Keyword(K::Symbol) },
-        KwEntry { text: "CURSOR",        kind: KwKind::Keyword(K::Cursor) },
-        KwEntry { text: "DEFSTR",        kind: KwKind::Keyword(K::Defstr) },
-        KwEntry { text: "DEFINT",        kind: KwKind::Keyword(K::Defint) },
-        KwEntry { text: "DELETE",        kind: KwKind::Keyword(K::Delete) },
-        KwEntry { text: "TAGOFF",        kind: KwKind::Keyword(K::Tagoff) },
-        KwEntry { text: "TROFF",         kind: KwKind::Keyword(K::Troff) },
-        KwEntry { text: "EVERY",         kind: KwKind::Keyword(K::Every) },
-        KwEntry { text: "ERASE",         kind: KwKind::Keyword(K::Erase) },
-        KwEntry { text: "INSTR",         kind: KwKind::Function(F::Instr) },
-        KwEntry { text: "LEFT$",         kind: KwKind::Function(F::LeftDollar) },
-        KwEntry { text: "LOG10",         kind: KwKind::Function(F::Log10) },
-        KwEntry { text: "CREAL",         kind: KwKind::Function(F::Creal) },
+        KwEntry {
+            text: "TESTSTR",
+            kind: KwKind::Function(F::Teststr)
+        },
+        KwEntry {
+            text: "INKEY$",
+            kind: KwKind::Function(F::InkeyDollar)
+        },
+        KwEntry {
+            text: "SPACE$",
+            kind: KwKind::Function(F::SpaceDollar)
+        },
+        KwEntry {
+            text: "RIGHT$",
+            kind: KwKind::Function(F::RightDollar)
+        },
+        KwEntry {
+            text: "LOWER$",
+            kind: KwKind::Function(F::LowerDollar)
+        },
+        KwEntry {
+            text: "UPPER$",
+            kind: KwKind::Function(F::UpperDollar)
+        },
+        KwEntry {
+            text: "CLOSEIN",
+            kind: KwKind::Keyword(K::Closein)
+        },
+        KwEntry {
+            text: "DEFREAL",
+            kind: KwKind::Keyword(K::Defreal)
+        },
+        KwEntry {
+            text: "OPENOUT",
+            kind: KwKind::Keyword(K::Openout)
+        },
+        KwEntry {
+            text: "RESTORE",
+            kind: KwKind::Keyword(K::Restore)
+        },
+        KwEntry {
+            text: "RELEASE",
+            kind: KwKind::Keyword(K::Release)
+        },
+        KwEntry {
+            text: "RETURN",
+            kind: KwKind::Keyword(K::Return)
+        },
+        KwEntry {
+            text: "REMAIN",
+            kind: KwKind::Function(F::Remain)
+        },
+        KwEntry {
+            text: "WINDOW",
+            kind: KwKind::Keyword(K::Window)
+        },
+        KwEntry {
+            text: "MEMORY",
+            kind: KwKind::Keyword(K::Memory)
+        },
+        KwEntry {
+            text: "LOCATE",
+            kind: KwKind::Keyword(K::Locate)
+        },
+        KwEntry {
+            text: "ORIGIN",
+            kind: KwKind::Keyword(K::Origin)
+        },
+        KwEntry {
+            text: "OPENIN",
+            kind: KwKind::Keyword(K::Openin)
+        },
+        KwEntry {
+            text: "RESUME",
+            kind: KwKind::Keyword(K::Resume)
+        },
+        KwEntry {
+            text: "SYMBOL",
+            kind: KwKind::Keyword(K::Symbol)
+        },
+        KwEntry {
+            text: "CURSOR",
+            kind: KwKind::Keyword(K::Cursor)
+        },
+        KwEntry {
+            text: "DEFSTR",
+            kind: KwKind::Keyword(K::Defstr)
+        },
+        KwEntry {
+            text: "DEFINT",
+            kind: KwKind::Keyword(K::Defint)
+        },
+        KwEntry {
+            text: "DELETE",
+            kind: KwKind::Keyword(K::Delete)
+        },
+        KwEntry {
+            text: "TAGOFF",
+            kind: KwKind::Keyword(K::Tagoff)
+        },
+        KwEntry {
+            text: "TROFF",
+            kind: KwKind::Keyword(K::Troff)
+        },
+        KwEntry {
+            text: "EVERY",
+            kind: KwKind::Keyword(K::Every)
+        },
+        KwEntry {
+            text: "ERASE",
+            kind: KwKind::Keyword(K::Erase)
+        },
+        KwEntry {
+            text: "INSTR",
+            kind: KwKind::Function(F::Instr)
+        },
+        KwEntry {
+            text: "LEFT$",
+            kind: KwKind::Function(F::LeftDollar)
+        },
+        KwEntry {
+            text: "LOG10",
+            kind: KwKind::Function(F::Log10)
+        },
+        KwEntry {
+            text: "CREAL",
+            kind: KwKind::Function(F::Creal)
+        },
         // 6-char
-        KwEntry { text: "BORDER",        kind: KwKind::Keyword(K::Border) },
-        KwEntry { text: "USING",         kind: KwKind::Keyword(K::Using) },
-        KwEntry { text: "WHILE",         kind: KwKind::Keyword(K::While) },
-        KwEntry { text: "WIDTH",         kind: KwKind::Keyword(K::Width) },
-        KwEntry { text: "WRITE",         kind: KwKind::Keyword(K::Write) },
-        KwEntry { text: "SOUND",         kind: KwKind::Keyword(K::Sound) },
-        KwEntry { text: "SPEED",         kind: KwKind::Keyword(K::Speed) },
-        KwEntry { text: "PRINT",         kind: KwKind::Keyword(K::Print) },
-        KwEntry { text: "INPUT",         kind: KwKind::Keyword(K::Input) },
-        KwEntry { text: "MERGE",         kind: KwKind::Keyword(K::Merge) },
-        KwEntry { text: "AFTER",         kind: KwKind::Keyword(K::After) },
-        KwEntry { text: "GOSUB",         kind: KwKind::Keyword(K::Gosub) },
-        KwEntry { text: "PLOTR",         kind: KwKind::Keyword(K::Plotr) },
-        KwEntry { text: "MOVER",         kind: KwKind::Keyword(K::Mover) },
-        KwEntry { text: "DRAWR",         kind: KwKind::Keyword(K::Drawr) },
-        KwEntry { text: "FRAME",         kind: KwKind::Keyword(K::Frame) },
-        KwEntry { text: "CHAIN",         kind: KwKind::Keyword(K::Chain) },
-        KwEntry { text: "CLEAR",         kind: KwKind::Keyword(K::Clear) },
-        KwEntry { text: "HEX$",          kind: KwKind::Function(F::HexDollar) },
-        KwEntry { text: "BIN$",          kind: KwKind::Function(F::BinDollar) },
-        KwEntry { text: "DEC$",          kind: KwKind::Function(F::DecDollar) },
-        KwEntry { text: "CHR$",          kind: KwKind::Function(F::ChrDollar) },
-        KwEntry { text: "STR$",          kind: KwKind::Function(F::StrDollar) },
-        KwEntry { text: "INKEY",         kind: KwKind::Function(F::Inkey) },
-        KwEntry { text: "HIMEM",         kind: KwKind::Function(F::Himem) },
-        KwEntry { text: "ROUND",         kind: KwKind::Function(F::Round) },
-        KwEntry { text: "RENUM",         kind: KwKind::Keyword(K::Renum) },
+        KwEntry {
+            text: "BORDER",
+            kind: KwKind::Keyword(K::Border)
+        },
+        KwEntry {
+            text: "USING",
+            kind: KwKind::Keyword(K::Using)
+        },
+        KwEntry {
+            text: "WHILE",
+            kind: KwKind::Keyword(K::While)
+        },
+        KwEntry {
+            text: "WIDTH",
+            kind: KwKind::Keyword(K::Width)
+        },
+        KwEntry {
+            text: "WRITE",
+            kind: KwKind::Keyword(K::Write)
+        },
+        KwEntry {
+            text: "SOUND",
+            kind: KwKind::Keyword(K::Sound)
+        },
+        KwEntry {
+            text: "SPEED",
+            kind: KwKind::Keyword(K::Speed)
+        },
+        KwEntry {
+            text: "PRINT",
+            kind: KwKind::Keyword(K::Print)
+        },
+        KwEntry {
+            text: "INPUT",
+            kind: KwKind::Keyword(K::Input)
+        },
+        KwEntry {
+            text: "MERGE",
+            kind: KwKind::Keyword(K::Merge)
+        },
+        KwEntry {
+            text: "AFTER",
+            kind: KwKind::Keyword(K::After)
+        },
+        KwEntry {
+            text: "GOSUB",
+            kind: KwKind::Keyword(K::Gosub)
+        },
+        KwEntry {
+            text: "PLOTR",
+            kind: KwKind::Keyword(K::Plotr)
+        },
+        KwEntry {
+            text: "MOVER",
+            kind: KwKind::Keyword(K::Mover)
+        },
+        KwEntry {
+            text: "DRAWR",
+            kind: KwKind::Keyword(K::Drawr)
+        },
+        KwEntry {
+            text: "FRAME",
+            kind: KwKind::Keyword(K::Frame)
+        },
+        KwEntry {
+            text: "CHAIN",
+            kind: KwKind::Keyword(K::Chain)
+        },
+        KwEntry {
+            text: "CLEAR",
+            kind: KwKind::Keyword(K::Clear)
+        },
+        KwEntry {
+            text: "HEX$",
+            kind: KwKind::Function(F::HexDollar)
+        },
+        KwEntry {
+            text: "BIN$",
+            kind: KwKind::Function(F::BinDollar)
+        },
+        KwEntry {
+            text: "DEC$",
+            kind: KwKind::Function(F::DecDollar)
+        },
+        KwEntry {
+            text: "CHR$",
+            kind: KwKind::Function(F::ChrDollar)
+        },
+        KwEntry {
+            text: "STR$",
+            kind: KwKind::Function(F::StrDollar)
+        },
+        KwEntry {
+            text: "INKEY",
+            kind: KwKind::Function(F::Inkey)
+        },
+        KwEntry {
+            text: "HIMEM",
+            kind: KwKind::Function(F::Himem)
+        },
+        KwEntry {
+            text: "ROUND",
+            kind: KwKind::Function(F::Round)
+        },
+        KwEntry {
+            text: "RENUM",
+            kind: KwKind::Keyword(K::Renum)
+        },
         // 5-char
-        KwEntry { text: "MID$",          kind: KwKind::Keyword(K::MidDollar) },
-        KwEntry { text: "ERROR",         kind: KwKind::Keyword(K::Error) },
-        KwEntry { text: "WEND",          kind: KwKind::Keyword(K::Wend) },
-        KwEntry { text: "SWAP",          kind: KwKind::Keyword(K::Swap) },
-        KwEntry { text: "SAVE",          kind: KwKind::Keyword(K::Save) },
-        KwEntry { text: "LOAD",          kind: KwKind::Keyword(K::Load) },
-        KwEntry { text: "POKE",          kind: KwKind::Keyword(K::Poke) },
-        KwEntry { text: "PLOT",          kind: KwKind::Keyword(K::Plot) },
-        KwEntry { text: "MOVE",          kind: KwKind::Keyword(K::Move) },
-        KwEntry { text: "DRAW",          kind: KwKind::Keyword(K::Draw) },
-        KwEntry { text: "MASK",          kind: KwKind::Keyword(K::Mask) },
-        KwEntry { text: "LINE",          kind: KwKind::Keyword(K::Line) },
-        KwEntry { text: "LIST",          kind: KwKind::Keyword(K::List) },
-        KwEntry { text: "FILL",          kind: KwKind::Keyword(K::Fill) },
-        KwEntry { text: "EDIT",          kind: KwKind::Keyword(K::Edit) },
-        KwEntry { text: "DATA",          kind: KwKind::Keyword(K::Data) },
-        KwEntry { text: "CALL",          kind: KwKind::Keyword(K::Call) },
-        KwEntry { text: "AUTO",          kind: KwKind::Keyword(K::Auto) },
-        KwEntry { text: "WAIT",          kind: KwKind::Keyword(K::Wait) },
-        KwEntry { text: "ZONE",          kind: KwKind::Keyword(K::Zone) },
-        KwEntry { text: "TRON",          kind: KwKind::Keyword(K::Tron) },
-        KwEntry { text: "THEN",          kind: KwKind::Keyword(K::Then) },
-        KwEntry { text: "STOP",          kind: KwKind::Keyword(K::Stop) },
-        KwEntry { text: "STEP",          kind: KwKind::Keyword(K::Step) },
-        KwEntry { text: "READ",          kind: KwKind::Keyword(K::Read) },
-        KwEntry { text: "PEEK",          kind: KwKind::Function(F::Peek) },
-        KwEntry { text: "PAPER",         kind: KwKind::Keyword(K::Paper) },
-        KwEntry { text: "NEXT",          kind: KwKind::Keyword(K::Next) },
-        KwEntry { text: "MODE",          kind: KwKind::Keyword(K::Mode) },
-        KwEntry { text: "GOTO",          kind: KwKind::Keyword(K::Goto) },
-        KwEntry { text: "ELSE",          kind: KwKind::Keyword(K::Else) },
-        KwEntry { text: "CINT",          kind: KwKind::Function(F::Cint) },
-        KwEntry { text: "XPOS",          kind: KwKind::Function(F::Xpos) },
-        KwEntry { text: "YPOS",          kind: KwKind::Function(F::Ypos) },
-        KwEntry { text: "VPOS",          kind: KwKind::Function(F::Vpos) },
-        KwEntry { text: "TIME",          kind: KwKind::Function(F::Time) },
-        KwEntry { text: "SIGN",          kind: KwKind::Function(F::Sign) },
-        KwEntry { text: "DERR",          kind: KwKind::Function(F::Derr) },
-        KwEntry { text: "TEST",          kind: KwKind::Function(F::Test) },
+        KwEntry {
+            text: "MID$",
+            kind: KwKind::Keyword(K::MidDollar)
+        },
+        KwEntry {
+            text: "ERROR",
+            kind: KwKind::Keyword(K::Error)
+        },
+        KwEntry {
+            text: "WEND",
+            kind: KwKind::Keyword(K::Wend)
+        },
+        KwEntry {
+            text: "SWAP",
+            kind: KwKind::Keyword(K::Swap)
+        },
+        KwEntry {
+            text: "SAVE",
+            kind: KwKind::Keyword(K::Save)
+        },
+        KwEntry {
+            text: "LOAD",
+            kind: KwKind::Keyword(K::Load)
+        },
+        KwEntry {
+            text: "POKE",
+            kind: KwKind::Keyword(K::Poke)
+        },
+        KwEntry {
+            text: "PLOT",
+            kind: KwKind::Keyword(K::Plot)
+        },
+        KwEntry {
+            text: "MOVE",
+            kind: KwKind::Keyword(K::Move)
+        },
+        KwEntry {
+            text: "DRAW",
+            kind: KwKind::Keyword(K::Draw)
+        },
+        KwEntry {
+            text: "MASK",
+            kind: KwKind::Keyword(K::Mask)
+        },
+        KwEntry {
+            text: "LINE",
+            kind: KwKind::Keyword(K::Line)
+        },
+        KwEntry {
+            text: "LIST",
+            kind: KwKind::Keyword(K::List)
+        },
+        KwEntry {
+            text: "FILL",
+            kind: KwKind::Keyword(K::Fill)
+        },
+        KwEntry {
+            text: "EDIT",
+            kind: KwKind::Keyword(K::Edit)
+        },
+        KwEntry {
+            text: "DATA",
+            kind: KwKind::Keyword(K::Data)
+        },
+        KwEntry {
+            text: "CALL",
+            kind: KwKind::Keyword(K::Call)
+        },
+        KwEntry {
+            text: "AUTO",
+            kind: KwKind::Keyword(K::Auto)
+        },
+        KwEntry {
+            text: "WAIT",
+            kind: KwKind::Keyword(K::Wait)
+        },
+        KwEntry {
+            text: "ZONE",
+            kind: KwKind::Keyword(K::Zone)
+        },
+        KwEntry {
+            text: "TRON",
+            kind: KwKind::Keyword(K::Tron)
+        },
+        KwEntry {
+            text: "THEN",
+            kind: KwKind::Keyword(K::Then)
+        },
+        KwEntry {
+            text: "STOP",
+            kind: KwKind::Keyword(K::Stop)
+        },
+        KwEntry {
+            text: "STEP",
+            kind: KwKind::Keyword(K::Step)
+        },
+        KwEntry {
+            text: "READ",
+            kind: KwKind::Keyword(K::Read)
+        },
+        KwEntry {
+            text: "PEEK",
+            kind: KwKind::Function(F::Peek)
+        },
+        KwEntry {
+            text: "PAPER",
+            kind: KwKind::Keyword(K::Paper)
+        },
+        KwEntry {
+            text: "NEXT",
+            kind: KwKind::Keyword(K::Next)
+        },
+        KwEntry {
+            text: "MODE",
+            kind: KwKind::Keyword(K::Mode)
+        },
+        KwEntry {
+            text: "GOTO",
+            kind: KwKind::Keyword(K::Goto)
+        },
+        KwEntry {
+            text: "ELSE",
+            kind: KwKind::Keyword(K::Else)
+        },
+        KwEntry {
+            text: "CINT",
+            kind: KwKind::Function(F::Cint)
+        },
+        KwEntry {
+            text: "XPOS",
+            kind: KwKind::Function(F::Xpos)
+        },
+        KwEntry {
+            text: "YPOS",
+            kind: KwKind::Function(F::Ypos)
+        },
+        KwEntry {
+            text: "VPOS",
+            kind: KwKind::Function(F::Vpos)
+        },
+        KwEntry {
+            text: "TIME",
+            kind: KwKind::Function(F::Time)
+        },
+        KwEntry {
+            text: "SIGN",
+            kind: KwKind::Function(F::Sign)
+        },
+        KwEntry {
+            text: "DERR",
+            kind: KwKind::Function(F::Derr)
+        },
+        KwEntry {
+            text: "TEST",
+            kind: KwKind::Function(F::Test)
+        },
         // 4-char
-        KwEntry { text: "OPEN",          kind: KwKind::Keyword(K::Openin) },
-        KwEntry { text: "NEW",           kind: KwKind::Keyword(K::New) },
-        KwEntry { text: "MAX",           kind: KwKind::Function(F::Max) },
-        KwEntry { text: "MIN",           kind: KwKind::Function(F::Min) },
-        KwEntry { text: "POS",           kind: KwKind::Function(F::Pos) },
-        KwEntry { text: "SQR",           kind: KwKind::Function(F::Sqr) },
-        KwEntry { text: "ABS",           kind: KwKind::Function(F::Abs) },
-        KwEntry { text: "ASC",           kind: KwKind::Function(F::Asc) },
-        KwEntry { text: "ATN",           kind: KwKind::Function(F::Atn) },
-        KwEntry { text: "COS",           kind: KwKind::Function(F::Cos) },
-        KwEntry { text: "EXP",           kind: KwKind::Function(F::Exp) },
-        KwEntry { text: "FIX",           kind: KwKind::Function(F::Fix) },
-        KwEntry { text: "FRE",           kind: KwKind::Function(F::Fre) },
-        KwEntry { text: "INP",           kind: KwKind::Function(F::Inp) },
-        KwEntry { text: "INT",           kind: KwKind::Function(F::Int) },
-        KwEntry { text: "JOY",           kind: KwKind::Function(F::Joy) },
-        KwEntry { text: "LEN",           kind: KwKind::Function(F::Len) },
-        KwEntry { text: "LOG",           kind: KwKind::Function(F::Log) },
-        KwEntry { text: "SIN",           kind: KwKind::Function(F::Sin) },
-        KwEntry { text: "TAN",           kind: KwKind::Function(F::Tan) },
-        KwEntry { text: "UNT",           kind: KwKind::Function(F::Unt) },
-        KwEntry { text: "VAL",           kind: KwKind::Function(F::Val) },
-        KwEntry { text: "EOF",           kind: KwKind::Function(F::Eof) },
-        KwEntry { text: "ERR",           kind: KwKind::Function(F::Err) },
-        KwEntry { text: "RND",           kind: KwKind::Function(F::Rnd) },
-        KwEntry { text: "SQ",            kind: KwKind::Function(F::Sq) },
-        KwEntry { text: "PI",            kind: KwKind::Function(F::Pi) },
+        KwEntry {
+            text: "OPEN",
+            kind: KwKind::Keyword(K::Openin)
+        },
+        KwEntry {
+            text: "NEW",
+            kind: KwKind::Keyword(K::New)
+        },
+        KwEntry {
+            text: "MAX",
+            kind: KwKind::Function(F::Max)
+        },
+        KwEntry {
+            text: "MIN",
+            kind: KwKind::Function(F::Min)
+        },
+        KwEntry {
+            text: "POS",
+            kind: KwKind::Function(F::Pos)
+        },
+        KwEntry {
+            text: "SQR",
+            kind: KwKind::Function(F::Sqr)
+        },
+        KwEntry {
+            text: "ABS",
+            kind: KwKind::Function(F::Abs)
+        },
+        KwEntry {
+            text: "ASC",
+            kind: KwKind::Function(F::Asc)
+        },
+        KwEntry {
+            text: "ATN",
+            kind: KwKind::Function(F::Atn)
+        },
+        KwEntry {
+            text: "COS",
+            kind: KwKind::Function(F::Cos)
+        },
+        KwEntry {
+            text: "EXP",
+            kind: KwKind::Function(F::Exp)
+        },
+        KwEntry {
+            text: "FIX",
+            kind: KwKind::Function(F::Fix)
+        },
+        KwEntry {
+            text: "FRE",
+            kind: KwKind::Function(F::Fre)
+        },
+        KwEntry {
+            text: "INP",
+            kind: KwKind::Function(F::Inp)
+        },
+        KwEntry {
+            text: "INT",
+            kind: KwKind::Function(F::Int)
+        },
+        KwEntry {
+            text: "JOY",
+            kind: KwKind::Function(F::Joy)
+        },
+        KwEntry {
+            text: "LEN",
+            kind: KwKind::Function(F::Len)
+        },
+        KwEntry {
+            text: "LOG",
+            kind: KwKind::Function(F::Log)
+        },
+        KwEntry {
+            text: "SIN",
+            kind: KwKind::Function(F::Sin)
+        },
+        KwEntry {
+            text: "TAN",
+            kind: KwKind::Function(F::Tan)
+        },
+        KwEntry {
+            text: "UNT",
+            kind: KwKind::Function(F::Unt)
+        },
+        KwEntry {
+            text: "VAL",
+            kind: KwKind::Function(F::Val)
+        },
+        KwEntry {
+            text: "EOF",
+            kind: KwKind::Function(F::Eof)
+        },
+        KwEntry {
+            text: "ERR",
+            kind: KwKind::Function(F::Err)
+        },
+        KwEntry {
+            text: "RND",
+            kind: KwKind::Function(F::Rnd)
+        },
+        KwEntry {
+            text: "SQ",
+            kind: KwKind::Function(F::Sq)
+        },
+        KwEntry {
+            text: "PI",
+            kind: KwKind::Function(F::Pi)
+        },
         // 3-char
-        KwEntry { text: "FOR",           kind: KwKind::Keyword(K::For) },
-        KwEntry { text: "REM",           kind: KwKind::Keyword(K::Rem) },
-        KwEntry { text: "LET",           kind: KwKind::Keyword(K::Let) },
-        KwEntry { text: "DIM",           kind: KwKind::Keyword(K::Dim) },
-        KwEntry { text: "RUN",           kind: KwKind::Keyword(K::Run) },
-        KwEntry { text: "OUT",           kind: KwKind::Keyword(K::Out) },
-        KwEntry { text: "PEN",           kind: KwKind::Keyword(K::Pen) },
-        KwEntry { text: "CLG",           kind: KwKind::Keyword(K::Clg) },
-        KwEntry { text: "CLS",           kind: KwKind::Keyword(K::Cls) },
-        KwEntry { text: "INK",           kind: KwKind::Keyword(K::Ink) },
-        KwEntry { text: "KEY",           kind: KwKind::Keyword(K::Key) },
-        KwEntry { text: "ENT",           kind: KwKind::Keyword(K::Ent) },
-        KwEntry { text: "ENV",           kind: KwKind::Keyword(K::Env) },
-        KwEntry { text: "TAB",           kind: KwKind::Keyword(K::Tab) },
-        KwEntry { text: "SPC",           kind: KwKind::Keyword(K::Spc) },
-        KwEntry { text: "TAG",           kind: KwKind::Keyword(K::Tag) },
-        KwEntry { text: "DEG",           kind: KwKind::Keyword(K::Deg) },
-        KwEntry { text: "RAD",           kind: KwKind::Keyword(K::Rad) },
-        KwEntry { text: "END",           kind: KwKind::Keyword(K::End) },
-        KwEntry { text: "DEF",           kind: KwKind::Keyword(K::Def) },
-        KwEntry { text: "CAT",           kind: KwKind::Keyword(K::Cat) },
-        KwEntry { text: "ERL",           kind: KwKind::Keyword(K::Erl) },
-        KwEntry { text: "FN",            kind: KwKind::Keyword(K::Fn) },
+        KwEntry {
+            text: "FOR",
+            kind: KwKind::Keyword(K::For)
+        },
+        KwEntry {
+            text: "REM",
+            kind: KwKind::Keyword(K::Rem)
+        },
+        KwEntry {
+            text: "LET",
+            kind: KwKind::Keyword(K::Let)
+        },
+        KwEntry {
+            text: "DIM",
+            kind: KwKind::Keyword(K::Dim)
+        },
+        KwEntry {
+            text: "RUN",
+            kind: KwKind::Keyword(K::Run)
+        },
+        KwEntry {
+            text: "OUT",
+            kind: KwKind::Keyword(K::Out)
+        },
+        KwEntry {
+            text: "PEN",
+            kind: KwKind::Keyword(K::Pen)
+        },
+        KwEntry {
+            text: "CLG",
+            kind: KwKind::Keyword(K::Clg)
+        },
+        KwEntry {
+            text: "CLS",
+            kind: KwKind::Keyword(K::Cls)
+        },
+        KwEntry {
+            text: "INK",
+            kind: KwKind::Keyword(K::Ink)
+        },
+        KwEntry {
+            text: "KEY",
+            kind: KwKind::Keyword(K::Key)
+        },
+        KwEntry {
+            text: "ENT",
+            kind: KwKind::Keyword(K::Ent)
+        },
+        KwEntry {
+            text: "ENV",
+            kind: KwKind::Keyword(K::Env)
+        },
+        KwEntry {
+            text: "TAB",
+            kind: KwKind::Keyword(K::Tab)
+        },
+        KwEntry {
+            text: "SPC",
+            kind: KwKind::Keyword(K::Spc)
+        },
+        KwEntry {
+            text: "TAG",
+            kind: KwKind::Keyword(K::Tag)
+        },
+        KwEntry {
+            text: "DEG",
+            kind: KwKind::Keyword(K::Deg)
+        },
+        KwEntry {
+            text: "RAD",
+            kind: KwKind::Keyword(K::Rad)
+        },
+        KwEntry {
+            text: "END",
+            kind: KwKind::Keyword(K::End)
+        },
+        KwEntry {
+            text: "DEF",
+            kind: KwKind::Keyword(K::Def)
+        },
+        KwEntry {
+            text: "CAT",
+            kind: KwKind::Keyword(K::Cat)
+        },
+        KwEntry {
+            text: "ERL",
+            kind: KwKind::Keyword(K::Erl)
+        },
+        KwEntry {
+            text: "FN",
+            kind: KwKind::Keyword(K::Fn)
+        },
         // 2-char
-        KwEntry { text: "IF",            kind: KwKind::Keyword(K::If) },
-        KwEntry { text: "ON",            kind: KwKind::Keyword(K::On) },
-        KwEntry { text: "TO",            kind: KwKind::Keyword(K::To) },
-        KwEntry { text: "DI",            kind: KwKind::Keyword(K::Di) },
-        KwEntry { text: "EI",            kind: KwKind::Keyword(K::Ei) },
+        KwEntry {
+            text: "IF",
+            kind: KwKind::Keyword(K::If)
+        },
+        KwEntry {
+            text: "ON",
+            kind: KwKind::Keyword(K::On)
+        },
+        KwEntry {
+            text: "TO",
+            kind: KwKind::Keyword(K::To)
+        },
+        KwEntry {
+            text: "DI",
+            kind: KwKind::Keyword(K::Di)
+        },
+        KwEntry {
+            text: "EI",
+            kind: KwKind::Keyword(K::Ei)
+        },
         // Word-bounded logical/arithmetic operators.
-        KwEntry { text: "AND",           kind: KwKind::Keyword(K::And) },
-        KwEntry { text: "NOT",           kind: KwKind::Keyword(K::Not) },
-        KwEntry { text: "MOD",           kind: KwKind::Keyword(K::Mod) },
-        KwEntry { text: "XOR",           kind: KwKind::Keyword(K::Xor) },
-        KwEntry { text: "OR",            kind: KwKind::Keyword(K::Or) },
+        KwEntry {
+            text: "AND",
+            kind: KwKind::Keyword(K::And)
+        },
+        KwEntry {
+            text: "NOT",
+            kind: KwKind::Keyword(K::Not)
+        },
+        KwEntry {
+            text: "MOD",
+            kind: KwKind::Keyword(K::Mod)
+        },
+        KwEntry {
+            text: "XOR",
+            kind: KwKind::Keyword(K::Xor)
+        },
+        KwEntry {
+            text: "OR",
+            kind: KwKind::Keyword(K::Or)
+        },
     ];
 
     // Longest match: sort by descending length, deduplicate by text.
@@ -442,7 +949,7 @@ fn parse_word(input: &mut Input<'_>) -> ModalResult<LocatedTokenKind, ContextErr
     if let Ok(kw) = parse_keyword(input) {
         return Ok(match kw {
             KwKind::Keyword(k) => LocatedTokenKind::Keyword(k),
-            KwKind::Function(f) => LocatedTokenKind::Function(f),
+            KwKind::Function(f) => LocatedTokenKind::Function(f)
         });
     }
 
@@ -460,13 +967,16 @@ fn parse_word(input: &mut Input<'_>) -> ModalResult<LocatedTokenKind, ContextErr
 /// Numeric literal: `&X…` binary, `&[H]…` hex, decimal, or float.
 /// The actual text is filled in by the caller from the offset difference.
 fn parse_number_body(input: &mut Input<'_>) -> ModalResult<(), ContextError> {
-    if peek(one_of::<Input<'_>, _, ContextError>('&')).parse_next(input).is_ok() {
+    if peek(one_of::<Input<'_>, _, ContextError>('&'))
+        .parse_next(input)
+        .is_ok()
+    {
         '&'.parse_next(input)?;
         let kind = opt(one_of(['X', 'x', 'H', 'h'])).parse_next(input)?;
         match kind {
             Some('X') | Some('x') => {
                 take_while(0.., |c: char| c == '0' || c == '1').parse_next(input)?;
-            }
+            },
             _ => {
                 take_while(0.., |c: char| c.is_ascii_hexdigit()).parse_next(input)?;
             }
@@ -475,14 +985,16 @@ fn parse_number_body(input: &mut Input<'_>) -> ModalResult<(), ContextError> {
     }
 
     // Decimal / float.
-    let has_digit = peek(one_of::<Input<'_>, _, ContextError>(|c: char| c.is_ascii_digit()))
-        .parse_next(input)
-        .is_ok();
+    let has_digit = peek(one_of::<Input<'_>, _, ContextError>(|c: char| {
+        c.is_ascii_digit()
+    }))
+    .parse_next(input)
+    .is_ok();
     let has_dot_digit = {
         let saved = *input;
         let ok = (
             one_of::<Input<'_>, _, ContextError>('.'),
-            one_of::<Input<'_>, _, ContextError>(|c: char| c.is_ascii_digit()),
+            one_of::<Input<'_>, _, ContextError>(|c: char| c.is_ascii_digit())
         )
             .parse_next(input)
             .is_ok();
@@ -494,7 +1006,10 @@ fn parse_number_body(input: &mut Input<'_>) -> ModalResult<(), ContextError> {
     }
 
     take_while(0.., |c: char| c.is_ascii_digit()).parse_next(input)?;
-    if peek(one_of::<Input<'_>, _, ContextError>('.')).parse_next(input).is_ok() {
+    if peek(one_of::<Input<'_>, _, ContextError>('.'))
+        .parse_next(input)
+        .is_ok()
+    {
         '.'.parse_next(input)?;
         take_while(0.., |c: char| c.is_ascii_digit()).parse_next(input)?;
     }
@@ -513,7 +1028,7 @@ fn parse_op2(input: &mut Input<'_>) -> ModalResult<LocatedTokenKind, ContextErro
     alt((
         ">=".map(|_| LocatedTokenKind::Operator(K::GreaterOrEqual)),
         "<=".map(|_| LocatedTokenKind::Operator(K::LessThanOrEqual)),
-        "<>".map(|_| LocatedTokenKind::Operator(K::NotEqual)),
+        "<>".map(|_| LocatedTokenKind::Operator(K::NotEqual))
     ))
     .parse_next(input)
 }
@@ -533,7 +1048,7 @@ fn parse_op1(input: &mut Input<'_>) -> ModalResult<LocatedTokenKind, ContextErro
                 '/' => K::Division,
                 '^' => K::Power,
                 '\\' => K::IntegerDivision,
-                _ => unreachable!(),
+                _ => unreachable!()
             })
         })
         .parse_next(input)
@@ -558,7 +1073,11 @@ fn lex_body(body: &str, source_line: u32, col_offset: u32) -> Vec<LocatedBasicTo
             if len > 0 {
                 out.push(LocatedBasicToken {
                     kind: $kind,
-                    span: SourceSpan { line: source_line, col, len },
+                    span: SourceSpan {
+                        line: source_line,
+                        col,
+                        len
+                    }
                 });
             }
         }};
@@ -571,14 +1090,18 @@ fn lex_body(body: &str, source_line: u32, col_offset: u32) -> Vec<LocatedBasicTo
         // but doesn't capture the text; we recover it from the offset difference.
         if let Ok(()) = parse_number_body(&mut input) {
             let start = before.offset_from(&line_start);
-            let end   = input.offset_from(&line_start);
-            let text  = body[start..end].to_owned();
-            let col   = col_offset + start as u32;
-            let len   = (end - start) as u32;
+            let end = input.offset_from(&line_start);
+            let text = body[start..end].to_owned();
+            let col = col_offset + start as u32;
+            let len = (end - start) as u32;
             if len > 0 {
                 out.push(LocatedBasicToken {
                     kind: LocatedTokenKind::Number(text),
-                    span: SourceSpan { line: source_line, col, len },
+                    span: SourceSpan {
+                        line: source_line,
+                        col,
+                        len
+                    }
                 });
             }
             continue;
@@ -611,9 +1134,9 @@ fn lex_body(body: &str, source_line: u32, col_offset: u32) -> Vec<LocatedBasicTo
                         kind: LocatedTokenKind::Comment(rest.to_owned()),
                         span: SourceSpan {
                             line: source_line,
-                            col:  col_offset + comment_col_start as u32,
-                            len:  rest.len() as u32,
-                        },
+                            col: col_offset + comment_col_start as u32,
+                            len: rest.len() as u32
+                        }
                     });
                     let _ = take_while::<_, Input<'_>, ContextError>(0.., |_: char| true)
                         .parse_next(&mut input);
@@ -634,8 +1157,9 @@ fn lex_body(body: &str, source_line: u32, col_offset: u32) -> Vec<LocatedBasicTo
         input = before;
 
         // Whitespace.
-        if let Ok(_) = take_while::<_, Input<'_>, ContextError>(1.., |c: char| c == ' ' || c == '\t')
-            .parse_next(&mut input)
+        if let Ok(_) =
+            take_while::<_, Input<'_>, ContextError>(1.., |c: char| c == ' ' || c == '\t')
+                .parse_next(&mut input)
         {
             push!(before, LocatedTokenKind::Space);
             continue;
@@ -666,7 +1190,8 @@ fn lex_body(body: &str, source_line: u32, col_offset: u32) -> Vec<LocatedBasicTo
         // Fallback: consume one character.
         if let Ok(c) = any::<Input<'_>, ContextError>.parse_next(&mut input) {
             push!(before, LocatedTokenKind::Other(c));
-        } else {
+        }
+        else {
             break; // truly stuck — should not happen
         }
     }

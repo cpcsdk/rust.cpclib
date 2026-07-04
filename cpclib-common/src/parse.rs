@@ -37,10 +37,14 @@ pub fn scan_numeric_literals(content: &str) -> Vec<(usize, usize, u32, EncodingK
         if b == b'"' {
             i += 1;
             while i < bytes.len() && bytes[i] != b'"' {
-                if bytes[i] == b'\\' { i += 1; } // skip escaped char
+                if bytes[i] == b'\\' {
+                    i += 1;
+                } // skip escaped char
                 i += 1;
             }
-            if i < bytes.len() { i += 1; } // closing '"'
+            if i < bytes.len() {
+                i += 1;
+            } // closing '"'
             continue;
         }
 
@@ -48,8 +52,8 @@ pub fn scan_numeric_literals(content: &str) -> Vec<(usize, usize, u32, EncodingK
             let pb = bytes[i - 1];
             pb.is_ascii_alphanumeric() || pb == b'_'
         };
-        let could_be_num = !prev_is_ident
-            && (b.is_ascii_digit() || matches!(b, b'#' | b'$' | b'@' | b'%' | b'&'));
+        let could_be_num =
+            !prev_is_ident && (b.is_ascii_digit() || matches!(b, b'#' | b'$' | b'@' | b'%' | b'&'));
 
         if could_be_num {
             let slice = &content[i..];
@@ -268,7 +272,9 @@ pub fn parse_pattern_number_literal(text: &str) -> Option<i32> {
         return None;
     }
 
-    let value = parse_value::<_, ContextError>.parse(BStr::new(text.as_bytes())).ok()?;
+    let value = parse_value::<_, ContextError>
+        .parse(BStr::new(text.as_bytes()))
+        .ok()?;
     i32::try_from(value).ok()
 }
 
@@ -529,7 +535,11 @@ fn parse_pattern_unary(input: &mut &str) -> ModalResult<PatternExpr> {
 
 fn parse_pattern_primary(input: &mut &str) -> ModalResult<PatternExpr> {
     alt((
-        delimited(preceded(space0, '('), parse_pattern_boolean_or, preceded(space0, ')')),
+        delimited(
+            preceded(space0, '('),
+            parse_pattern_boolean_or,
+            preceded(space0, ')')
+        ),
         parse_pattern_char,
         parse_pattern_number,
         parse_pattern_identifier
@@ -562,15 +572,14 @@ fn parse_pattern_number(input: &mut &str) -> ModalResult<PatternExpr> {
     }
 
     input.reset(&checkpoint);
-    Err(winnow::error::ErrMode::Backtrack(winnow::error::ContextError::default()))
+    Err(winnow::error::ErrMode::Backtrack(
+        winnow::error::ContextError::default()
+    ))
 }
 
 fn parse_pattern_identifier(input: &mut &str) -> ModalResult<PatternExpr> {
-    let first = preceded(
-        space0,
-        one_of(('a'..='z', 'A'..='Z', '_', '.', '@'))
-    )
-    .parse_next(input)?;
+    let first =
+        preceded(space0, one_of(('a'..='z', 'A'..='Z', '_', '.', '@'))).parse_next(input)?;
     let rest: &str = take_while(0.., |c: char| {
         c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '@')
     })

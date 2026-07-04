@@ -6,7 +6,7 @@ impl<'src> Formatter<'src> {
         match case {
             CaseStyle::UpperCase => text.to_ascii_uppercase(),
             CaseStyle::LowerCase => text.to_ascii_lowercase(),
-            CaseStyle::Untouched => text.to_string(),
+            CaseStyle::Untouched => text.to_string()
         }
     }
 
@@ -14,12 +14,15 @@ impl<'src> Formatter<'src> {
     // Also normalises any run of whitespace between the keyword and its arguments to a single
     // space so that "ORG  40" → "ORG 40".
     pub(super) fn apply_case_to_first_word(content: &str, case: CaseStyle) -> String {
-        let word_end = content.find(|c: char| c.is_ascii_whitespace()).unwrap_or(content.len());
+        let word_end = content
+            .find(|c: char| c.is_ascii_whitespace())
+            .unwrap_or(content.len());
         let keyword = Self::apply_case(&content[..word_end], case);
         let rest = content[word_end..].trim_start();
         if rest.is_empty() {
             keyword
-        } else {
+        }
+        else {
             format!("{keyword} {rest}")
         }
     }
@@ -29,7 +32,10 @@ impl<'src> Formatter<'src> {
     // Also normalises inter-word whitespace to a single space.
     pub(super) fn apply_case_to_second_word(content: &str, case: CaseStyle) -> String {
         let bytes = content.as_bytes();
-        let first_end = bytes.iter().position(|b| b.is_ascii_whitespace()).unwrap_or(bytes.len());
+        let first_end = bytes
+            .iter()
+            .position(|b| b.is_ascii_whitespace())
+            .unwrap_or(bytes.len());
         let second_start = bytes[first_end..]
             .iter()
             .position(|b| !b.is_ascii_whitespace())
@@ -40,12 +46,13 @@ impl<'src> Formatter<'src> {
             .position(|b| b.is_ascii_whitespace())
             .map(|p| second_start + p)
             .unwrap_or(bytes.len());
-        let symbol  = &content[..first_end];
+        let symbol = &content[..first_end];
         let keyword = Self::apply_case(&content[second_start..second_end], case);
-        let rest    = content[second_end..].trim_start();
+        let rest = content[second_end..].trim_start();
         if rest.is_empty() {
             format!("{symbol} {keyword}")
-        } else {
+        }
+        else {
             format!("{symbol} {keyword} {rest}")
         }
     }
@@ -53,16 +60,24 @@ impl<'src> Formatter<'src> {
     // Apply case to a mnemonic line: transforms the mnemonic keyword and register names
     // in operands but leaves numeric literals / labels / expressions unchanged.
     // Also normalises the whitespace between mnemonic and operands to a single space.
-    pub(super) fn apply_mnemonic_case(content: &str, mnemonic_case: CaseStyle, register_case: CaseStyle) -> String {
-        let word_end = content.find(|c: char| c.is_ascii_whitespace()).unwrap_or(content.len());
+    pub(super) fn apply_mnemonic_case(
+        content: &str,
+        mnemonic_case: CaseStyle,
+        register_case: CaseStyle
+    ) -> String {
+        let word_end = content
+            .find(|c: char| c.is_ascii_whitespace())
+            .unwrap_or(content.len());
         let mnemonic = Self::apply_case(&content[..word_end], mnemonic_case);
         let rest = content[word_end..].trim_start();
         if rest.is_empty() {
             mnemonic
-        } else {
+        }
+        else {
             let operands = if matches!(register_case, CaseStyle::Untouched) {
                 rest.to_string()
-            } else {
+            }
+            else {
                 Self::apply_register_case(rest, register_case)
             };
             format!("{mnemonic} {operands}")
@@ -71,9 +86,8 @@ impl<'src> Formatter<'src> {
 
     pub(super) fn apply_register_case(operands: &str, case: CaseStyle) -> String {
         const REGISTERS: &[&str] = &[
-            "AF'", "IXH", "IXL", "IYH", "IYL",
-            "AF", "BC", "DE", "HL", "IX", "IY", "SP", "PC",
-            "A", "B", "C", "D", "E", "H", "L", "F", "I", "R",
+            "AF'", "IXH", "IXL", "IYH", "IYL", "AF", "BC", "DE", "HL", "IX", "IY", "SP", "PC", "A",
+            "B", "C", "D", "E", "H", "L", "F", "I", "R"
         ];
         let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
         let bytes = operands.as_bytes();
@@ -99,9 +113,14 @@ impl<'src> Formatter<'src> {
                         }
                     }
                 }
-                if !matched { result.push(b as char); i += 1; }
-            } else {
-                result.push(b as char); i += 1;
+                if !matched {
+                    result.push(b as char);
+                    i += 1;
+                }
+            }
+            else {
+                result.push(b as char);
+                i += 1;
             }
         }
         result

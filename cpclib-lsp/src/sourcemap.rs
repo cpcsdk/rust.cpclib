@@ -7,7 +7,7 @@ const MARKER_SUFFIX: &str = "_#";
 /// Index is the expanded line number (0-based); value is the original line number (0-based),
 /// or `None` for lines that were synthesised by Jinja with no direct source counterpart.
 pub struct SourceMap {
-    pub expanded_to_original: Vec<Option<u32>>,
+    pub expanded_to_original: Vec<Option<u32>>
 }
 
 impl SourceMap {
@@ -22,7 +22,7 @@ impl SourceMap {
     /// Identity map for when we're working directly on the raw file.
     pub fn identity(line_count: usize) -> Self {
         Self {
-            expanded_to_original: (0..line_count as u32).map(Some).collect(),
+            expanded_to_original: (0..line_count as u32).map(Some).collect()
         }
     }
 }
@@ -37,7 +37,7 @@ impl SourceMap {
 /// Pass `None` when no file-system includes are expected.
 pub fn expand_with_source_map(
     source: &str,
-    file_dir: Option<&std::path::Path>,
+    file_dir: Option<&std::path::Path>
 ) -> Result<(String, SourceMap), minijinja::Error> {
     // Step 1 — annotate every line with its original line number.
     let annotated = annotate(source);
@@ -56,19 +56,25 @@ pub fn expand_with_source_map(
             match std::fs::read_to_string(&path) {
                 Ok(s) => Ok(Some(s)),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-                Err(e) => Err(minijinja::Error::new(
-                    minijinja::ErrorKind::InvalidOperation,
-                    "could not read include",
-                )
-                .with_source(e)),
+                Err(e) => {
+                    Err(minijinja::Error::new(
+                        minijinja::ErrorKind::InvalidOperation,
+                        "could not read include"
+                    )
+                    .with_source(e))
+                },
             }
         });
     }
 
     // Register the same custom functions as bndbuild's create_template_env so
     // templates that call them don't abort the LSP expansion.
-    fn lsp_fail(_msg: String) -> Result<String, minijinja::Error> { Ok(String::new()) }
-    fn lsp_assert(_ok: bool, _msg: String) -> Result<(), minijinja::Error> { Ok(()) }
+    fn lsp_fail(_msg: String) -> Result<String, minijinja::Error> {
+        Ok(String::new())
+    }
+    fn lsp_assert(_ok: bool, _msg: String) -> Result<(), minijinja::Error> {
+        Ok(())
+    }
     fn lsp_basename(path: String) -> Result<String, minijinja::Error> {
         Ok(std::path::Path::new(&path)
             .file_name()
@@ -76,7 +82,9 @@ pub fn expand_with_source_map(
             .unwrap_or(&path)
             .to_string())
     }
-    fn lsp_escape(path: String) -> Result<String, minijinja::Error> { Ok(path) }
+    fn lsp_escape(path: String) -> Result<String, minijinja::Error> {
+        Ok(path)
+    }
 
     env.add_function("fail", lsp_fail);
     env.add_function("assert", lsp_assert);
@@ -102,15 +110,16 @@ pub fn expand_with_source_map(
     // Preserve trailing newline if the rendered output had one.
     let clean_text = if rendered.ends_with('\n') {
         format!("{}\n", clean_text)
-    } else {
+    }
+    else {
         clean_text
     };
 
     Ok((
         clean_text,
         SourceMap {
-            expanded_to_original: map,
-        },
+            expanded_to_original: map
+        }
     ))
 }
 
@@ -129,7 +138,8 @@ fn annotate(source: &str) -> String {
             // Line is inside or starts a multi-line {% %} tag —
             // injecting the marker here would corrupt the Jinja expression.
             out.push_str(trimmed);
-        } else {
+        }
+        else {
             out.push_str(trimmed);
             out.push(' ');
             out.push_str(MARKER_PREFIX);
@@ -152,10 +162,12 @@ fn line_ends_in_block_tag(line: &str, starts_inside: bool) -> bool {
         if !inside && bytes[i] == b'{' && bytes[i + 1] == b'%' {
             inside = true;
             i += 2;
-        } else if inside && bytes[i] == b'%' && bytes[i + 1] == b'}' {
+        }
+        else if inside && bytes[i] == b'%' && bytes[i + 1] == b'}' {
             inside = false;
             i += 2;
-        } else {
+        }
+        else {
             i += 1;
         }
     }

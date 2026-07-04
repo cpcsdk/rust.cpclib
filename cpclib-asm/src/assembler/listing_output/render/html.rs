@@ -1,13 +1,15 @@
 use std::io::Write;
 
-use super::{
-    escape_html, global_prefix_for_symbol, is_identifier_char, qualify_local_symbol,
-    render_html_bytes_for_row, HtmlBlockKind,
-    HtmlListingRenderer, ListingDeferredRender, ListingLineRender, ListingNotice,
-    ListingTokenRender
-};
-use super::super::format::{format_address_for, hex_byte_for, logical_address_width, render_source_column, ListingOutputFormat};
 use super::super::TokenKind;
+use super::super::format::{
+    ListingOutputFormat, format_address_for, hex_byte_for, logical_address_width,
+    render_source_column
+};
+use super::{
+    HtmlBlockKind, HtmlListingRenderer, ListingDeferredRender, ListingLineRender, ListingNotice,
+    ListingTokenRender, escape_html, global_prefix_for_symbol, is_identifier_char,
+    qualify_local_symbol, render_html_bytes_for_row
+};
 
 impl HtmlListingRenderer {
     const BYTES_COLUMN_CHARS: usize = 23;
@@ -15,10 +17,10 @@ impl HtmlListingRenderer {
     fn update_current_global_symbol(&mut self, token_kind: &TokenKind) {
         match token_kind {
             TokenKind::Label(name) | TokenKind::Set(name) | TokenKind::MacroDefine(name)
-                if !name.starts_with('.') && !name.starts_with('@')
-                    && !name.contains('.') => {
+                if !name.starts_with('.') && !name.starts_with('@') && !name.contains('.') =>
+            {
                 self.current_global_symbol = Some(name.clone());
-            }
+            },
             _ => {}
         }
     }
@@ -60,8 +62,12 @@ impl HtmlListingRenderer {
     }
 
     fn insert_symbol_target(&mut self, symbol: &str, row_id: usize, value: Option<&str>) {
-        self.symbol_names_by_row.entry(row_id).or_insert_with(|| symbol.to_string());
-        self.symbol_targets.entry(symbol.to_string()).or_insert(row_id);
+        self.symbol_names_by_row
+            .entry(row_id)
+            .or_insert_with(|| symbol.to_string());
+        self.symbol_targets
+            .entry(symbol.to_string())
+            .or_insert(row_id);
         self.symbol_targets
             .entry(symbol.to_ascii_lowercase())
             .or_insert(row_id);
@@ -75,13 +81,17 @@ impl HtmlListingRenderer {
         }
 
         if let Some(last_dot) = symbol.rfind('.')
-            && last_dot > 0 && last_dot + 1 < symbol.len() {
-                let short_local = format!(".{}", &symbol[last_dot + 1..]);
-                self.symbol_targets.entry(short_local.clone()).or_insert(row_id);
-                self.symbol_targets
-                    .entry(short_local.to_ascii_lowercase())
-                    .or_insert(row_id);
-            }
+            && last_dot > 0
+            && last_dot + 1 < symbol.len()
+        {
+            let short_local = format!(".{}", &symbol[last_dot + 1..]);
+            self.symbol_targets
+                .entry(short_local.clone())
+                .or_insert(row_id);
+            self.symbol_targets
+                .entry(short_local.to_ascii_lowercase())
+                .or_insert(row_id);
+        }
 
         if let Some(prefix) = global_prefix_for_symbol(symbol) {
             self.symbol_targets
@@ -117,15 +127,18 @@ impl HtmlListingRenderer {
         let mut output = String::new();
         let mut chars = text.chars().peekable();
         let keywords = [
-            "org", "macro", "endm", "repeat", "endr", "for", "next", "while", "wend",
-            "if", "else", "endif", "db", "dw", "ds", "include", "equ", "set", "assert"
+            "org", "macro", "endm", "repeat", "endr", "for", "next", "while", "wend", "if", "else",
+            "endif", "db", "dw", "ds", "include", "equ", "set", "assert"
         ];
 
         while let Some(ch) = chars.next() {
             if ch == ';' {
                 let mut comment = String::from(ch);
                 comment.extend(chars.by_ref());
-                output.push_str(&format!("<span class=\"token comment\">{}</span>", escape_html(&comment).replace(' ', "&nbsp;")));
+                output.push_str(&format!(
+                    "<span class=\"token comment\">{}</span>",
+                    escape_html(&comment).replace(' ', "&nbsp;")
+                ));
                 break;
             }
 
@@ -138,7 +151,10 @@ impl HtmlListingRenderer {
                         break;
                     }
                 }
-                output.push_str(&format!("<span class=\"token string\">{}</span>", escape_html(&string).replace(' ', "&nbsp;")));
+                output.push_str(&format!(
+                    "<span class=\"token string\">{}</span>",
+                    escape_html(&string).replace(' ', "&nbsp;")
+                ));
                 continue;
             }
 
@@ -159,7 +175,10 @@ impl HtmlListingRenderer {
                         escape_html(&token)
                     ));
                 }
-                else if token.starts_with("0x") || token.starts_with('#') || token.chars().all(|c| c.is_ascii_digit()) {
+                else if token.starts_with("0x")
+                    || token.starts_with('#')
+                    || token.chars().all(|c| c.is_ascii_digit())
+                {
                     output.push_str(&format!(
                         "<span class=\"token number\">{}</span>",
                         escape_html(&token)
@@ -261,7 +280,6 @@ impl HtmlListingRenderer {
             .collect::<Vec<_>>();
 
         for (token_idx, token) in token_with_bytes.iter().enumerate() {
-
             let hover_key = Self::token_hover_key(token.token_id);
             let hover_attr = Self::row_hover_attr_for_key(&hover_key);
             for (idx, byte) in token.bytes.iter().enumerate() {
@@ -270,12 +288,16 @@ impl HtmlListingRenderer {
                     hex_byte_for(format, *byte)
                 ));
                 if idx + 1 < token.bytes.len() {
-                    rendered.push(format!("<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"));
+                    rendered.push(format!(
+                        "<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"
+                    ));
                 }
                 consumed += 1;
             }
             if token_idx + 1 < token_with_bytes.len() {
-                rendered.push(format!("<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"));
+                rendered.push(format!(
+                    "<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"
+                ));
             }
         }
 
@@ -288,7 +310,9 @@ impl HtmlListingRenderer {
                     hex_byte_for(format, *byte)
                 ));
                 if idx + 1 < remaining.len() {
-                    rendered.push(format!("<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"));
+                    rendered.push(format!(
+                        "<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"
+                    ));
                 }
             }
         }
@@ -515,21 +539,26 @@ document.addEventListener('click', (event) => {
     pub(crate) fn render_notice(&mut self, writer: &mut dyn Write, notice: ListingNotice<'_>) {
         let (class_name, content) = match notice {
             ListingNotice::RawLine(line) => ("notice raw", line.to_string()),
-            ListingNotice::ContextHeader { file_index, fname } => (
-                "notice context",
-                format!("Context [{file_index}]: {fname}")
-            ),
-            ListingNotice::FileMapHeader { file_index, fname } => (
-                "notice filemap",
-                format!("Source file map\n[{file_index}] {fname}")
-            ),
-            ListingNotice::FileMapEntry { file_index, fname } => (
-                "notice filemap-entry",
-                format!("[{file_index}] {fname}")
-            )
+            ListingNotice::ContextHeader { file_index, fname } => {
+                ("notice context", format!("Context [{file_index}]: {fname}"))
+            },
+            ListingNotice::FileMapHeader { file_index, fname } => {
+                (
+                    "notice filemap",
+                    format!("Source file map\n[{file_index}] {fname}")
+                )
+            },
+            ListingNotice::FileMapEntry { file_index, fname } => {
+                ("notice filemap-entry", format!("[{file_index}] {fname}"))
+            },
         };
 
-        writeln!(writer, "<div class=\"{class_name}\">{}</div>", escape_html(&content)).unwrap();
+        writeln!(
+            writer,
+            "<div class=\"{class_name}\">{}</div>",
+            escape_html(&content)
+        )
+        .unwrap();
     }
 
     fn highlight_source_html(&self, text: &str, row_id: Option<usize>) -> String {
@@ -537,15 +566,18 @@ document.addEventListener('click', (event) => {
         let mut chars = text.chars().peekable();
         let hover_attr = row_id.map(Self::row_hover_attr).unwrap_or_default();
         let keywords = [
-            "org", "macro", "endm", "repeat", "endr", "for", "next", "while", "wend",
-            "if", "else", "endif", "db", "dw", "ds", "include", "equ", "set", "assert"
+            "org", "macro", "endm", "repeat", "endr", "for", "next", "while", "wend", "if", "else",
+            "endif", "db", "dw", "ds", "include", "equ", "set", "assert"
         ];
 
         while let Some(ch) = chars.next() {
             if ch == ';' {
                 let mut comment = String::from(ch);
                 comment.extend(chars.by_ref());
-                output.push_str(&format!("<span class=\"token comment\">{}</span>", escape_html(&comment)));
+                output.push_str(&format!(
+                    "<span class=\"token comment\">{}</span>",
+                    escape_html(&comment)
+                ));
                 break;
             }
 
@@ -558,7 +590,10 @@ document.addEventListener('click', (event) => {
                         break;
                     }
                 }
-                output.push_str(&format!("<span class=\"token string\"{hover_attr}>{}</span>", escape_html(&string)));
+                output.push_str(&format!(
+                    "<span class=\"token string\"{hover_attr}>{}</span>",
+                    escape_html(&string)
+                ));
                 continue;
             }
 
@@ -579,14 +614,18 @@ document.addEventListener('click', (event) => {
                         escape_html(&token)
                     ));
                 }
-                else if token.starts_with("0x") || token.starts_with('#') || token.chars().all(|c| c.is_ascii_digit()) {
+                else if token.starts_with("0x")
+                    || token.starts_with('#')
+                    || token.chars().all(|c| c.is_ascii_digit())
+                {
                     output.push_str(&format!(
                         "<span class=\"token number\"{hover_attr}>{}</span>",
                         escape_html(&token)
                     ));
                 }
                 else {
-                    let display_token = qualify_local_symbol(&token, self.current_global_symbol.as_deref());
+                    let display_token =
+                        qualify_local_symbol(&token, self.current_global_symbol.as_deref());
                     output.push_str(&format!(
                         "<span class=\"token\"{hover_attr} data-symbol-candidate=\"{}\">{}</span>",
                         escape_html(&token),
@@ -607,7 +646,10 @@ document.addEventListener('click', (event) => {
         if matches!(token_kind, TokenKind::MacroDefine(_)) || normalized.starts_with("macro ") {
             Some(HtmlBlockKind::MacroDefinition)
         }
-        else if normalized.starts_with("repeat ") || normalized.starts_with("for ") || normalized.starts_with("while ") {
+        else if normalized.starts_with("repeat ")
+            || normalized.starts_with("for ")
+            || normalized.starts_with("while ")
+        {
             Some(HtmlBlockKind::Repeat)
         }
         else {
@@ -635,7 +677,9 @@ document.addEventListener('click', (event) => {
 
     fn extract_definition_symbol(token_kind: &TokenKind) -> Option<String> {
         match token_kind {
-            TokenKind::Label(name) | TokenKind::Set(name) | TokenKind::MacroDefine(name) => Some(name.clone()),
+            TokenKind::Label(name) | TokenKind::Set(name) | TokenKind::MacroDefine(name) => {
+                Some(name.clone())
+            },
             _ => None
         }
     }
@@ -644,7 +688,10 @@ document.addEventListener('click', (event) => {
         matches!(token_kind, TokenKind::Label(_) | TokenKind::Set(_))
     }
 
-    fn split_deferred_specific_columns(token_kind: &TokenKind, specific: &str) -> (String, String, String) {
+    fn split_deferred_specific_columns(
+        token_kind: &TokenKind,
+        specific: &str
+    ) -> (String, String, String) {
         if !matches!(token_kind, TokenKind::Label(_) | TokenKind::Set(_)) {
             return (String::new(), String::new(), specific.to_string());
         }
@@ -661,38 +708,61 @@ document.addEventListener('click', (event) => {
         (addr, phys, symbol)
     }
 
-    pub(crate) fn render_deferred(&mut self, writer: &mut dyn Write, format: &ListingOutputFormat, deferred: ListingDeferredRender<'_>) {
+    pub(crate) fn render_deferred(
+        &mut self,
+        writer: &mut dyn Write,
+        format: &ListingOutputFormat,
+        deferred: ListingDeferredRender<'_>
+    ) {
         let row_id = self.next_row_id;
         self.next_row_id += 1;
         self.update_current_global_symbol(deferred.token_kind);
         let (deferred_addr, deferred_phys, deferred_specific) =
             Self::split_deferred_specific_columns(deferred.token_kind, deferred.specific_content);
         if !deferred.specific_content.is_empty()
-            && let Some(symbol) = Self::extract_definition_symbol(deferred.token_kind) {
-                let value = if !deferred_addr.is_empty() {
-                    Some(deferred_addr.as_str())
-                }
-                else if !deferred_phys.is_empty() {
-                    Some(deferred_phys.as_str())
-                }
-                else {
-                    None
-                };
-                self.insert_symbol_target(&symbol, row_id, value);
+            && let Some(symbol) = Self::extract_definition_symbol(deferred.token_kind)
+        {
+            let value = if !deferred_addr.is_empty() {
+                Some(deferred_addr.as_str())
             }
+            else if !deferred_phys.is_empty() {
+                Some(deferred_phys.as_str())
+            }
+            else {
+                None
+            };
+            self.insert_symbol_target(&symbol, row_id, value);
+        }
         let block_kind = self
             .classify_block(deferred.token_kind, deferred.source_line_expanded)
             .or_else(|| self.classify_block(deferred.token_kind, deferred.source_line_raw));
-        let block_kind_name = block_kind.as_ref().map(|kind| match kind {
-            HtmlBlockKind::MacroDefinition => "macro",
-            HtmlBlockKind::Repeat => "repeat"
-        }).unwrap_or("");
+        let block_kind_name = block_kind
+            .as_ref()
+            .map(|kind| {
+                match kind {
+                    HtmlBlockKind::MacroDefinition => "macro",
+                    HtmlBlockKind::Repeat => "repeat"
+                }
+            })
+            .unwrap_or("");
         let block_start_attrs = block_kind
             .as_ref()
             .map(|_| format!(" data-block-kind=\"{}\"", block_kind_name))
             .unwrap_or_default();
-        let block_end_attrs = if matches!(deferred.source_line_expanded.trim_start().to_ascii_lowercase().as_str(), "endm" | "endr") {
-            match deferred.source_line_expanded.trim_start().to_ascii_lowercase().as_str() {
+        let block_end_attrs = if matches!(
+            deferred
+                .source_line_expanded
+                .trim_start()
+                .to_ascii_lowercase()
+                .as_str(),
+            "endm" | "endr"
+        ) {
+            match deferred
+                .source_line_expanded
+                .trim_start()
+                .to_ascii_lowercase()
+                .as_str()
+            {
                 "endm" => " data-block-end=\"macro\"",
                 _ => " data-block-end=\"repeat\""
             }
@@ -701,17 +771,32 @@ document.addEventListener('click', (event) => {
             ""
         };
         let show_toggle = block_kind.is_some() && !deferred.specific_content.is_empty();
-        let row_classes = if show_toggle { "row deferred block-start" } else { "row deferred" };
-        let collapsible_toggle = if show_toggle { "<span class=\"toggle\">▸</span>" } else { "" };
+        let row_classes = if show_toggle {
+            "row deferred block-start"
+        }
+        else {
+            "row deferred"
+        };
+        let collapsible_toggle = if show_toggle {
+            "<span class=\"toggle\">▸</span>"
+        }
+        else {
+            ""
+        };
         let specific_in_bytes = Self::deferred_symbol_uses_bytes_column(deferred.token_kind);
-        let source_on_next_line = specific_in_bytes
-            && deferred_specific.chars().count() > Self::BYTES_COLUMN_CHARS;
+        let source_on_next_line =
+            specific_in_bytes && deferred_specific.chars().count() > Self::BYTES_COLUMN_CHARS;
         let show_expanded = Self::template_shows_source_expanded(format);
         let show_raw = Self::template_shows_source_raw(format);
         let bytes_cell = if specific_in_bytes {
             format!(
                 "<span class=\"cell bytes specific-bytes{}\">{}</span>",
-                if source_on_next_line { " specific-overflow" } else { "" },
+                if source_on_next_line {
+                    " specific-overflow"
+                }
+                else {
+                    ""
+                },
                 escape_html(&deferred_specific)
             )
         }
@@ -722,10 +807,23 @@ document.addEventListener('click', (event) => {
             String::new()
         }
         else {
-            format!("<span class=\"cell specific\">{}</span>", escape_html(&deferred_specific))
+            format!(
+                "<span class=\"cell specific\">{}</span>",
+                escape_html(&deferred_specific)
+            )
         };
-        let source_extra_class = if source_on_next_line { " source-next-line" } else { "" };
-        let line_extra_class = if source_on_next_line { " line-next-line" } else { "" };
+        let source_extra_class = if source_on_next_line {
+            " source-next-line"
+        }
+        else {
+            ""
+        };
+        let line_extra_class = if source_on_next_line {
+            " line-next-line"
+        }
+        else {
+            ""
+        };
         writeln!(
             writer,
             "<div id=\"row-{row_id}\" class=\"{row_classes}\" data-row-id=\"row-{row_id}\" data-kind=\"{}\"{block_start_attrs}{block_end_attrs}><span class=\"cell marker\">{collapsible_toggle}</span><span class=\"cell addr\">{}</span><span class=\"cell phys\">{}</span>{}{}<span class=\"cell line{line_extra_class}\">{}</span>{}{}</div>",
@@ -744,18 +842,22 @@ document.addEventListener('click', (event) => {
         ).unwrap();
     }
 
-    pub(crate) fn render_line(&mut self, writer: &mut dyn Write, format: &ListingOutputFormat, line: ListingLineRender<'_>) {
+    pub(crate) fn render_line(
+        &mut self,
+        writer: &mut dyn Write,
+        format: &ListingOutputFormat,
+        line: ListingLineRender<'_>
+    ) {
         let row_id = self.next_row_id;
         self.next_row_id += 1;
         self.update_current_global_symbol(line.token_kind);
-        let marker = if line.is_multiline_continuation
-            && !matches!(line.token_kind, TokenKind::Hidden)
-        {
-            "&gt;"
-        }
-        else {
-            ""
-        };
+        let marker =
+            if line.is_multiline_continuation && !matches!(line.token_kind, TokenKind::Hidden) {
+                "&gt;"
+            }
+            else {
+                ""
+            };
         let logical = line
             .logical_address
             .map(|value| format_address_for(format, value, logical_address_width(format)))
@@ -769,18 +871,35 @@ document.addEventListener('click', (event) => {
             };
             self.insert_symbol_target(&symbol, row_id, value);
         }
-        let block_kind = self.classify_block(line.token_kind, line.source_line_expanded)
+        let block_kind = self
+            .classify_block(line.token_kind, line.source_line_expanded)
             .or_else(|| self.classify_block(line.token_kind, line.source_line_raw));
-        let block_kind_name = block_kind.as_ref().map(|kind| match kind {
-            HtmlBlockKind::MacroDefinition => "macro",
-            HtmlBlockKind::Repeat => "repeat"
-        }).unwrap_or("");
+        let block_kind_name = block_kind
+            .as_ref()
+            .map(|kind| {
+                match kind {
+                    HtmlBlockKind::MacroDefinition => "macro",
+                    HtmlBlockKind::Repeat => "repeat"
+                }
+            })
+            .unwrap_or("");
         let block_start_attrs = block_kind
             .as_ref()
             .map(|_| format!(" data-block-kind=\"{}\"", block_kind_name))
             .unwrap_or_default();
-        let block_end_attrs = if matches!(line.source_line_expanded.trim_start().to_ascii_lowercase().as_str(), "endm" | "endr") {
-            match line.source_line_expanded.trim_start().to_ascii_lowercase().as_str() {
+        let block_end_attrs = if matches!(
+            line.source_line_expanded
+                .trim_start()
+                .to_ascii_lowercase()
+                .as_str(),
+            "endm" | "endr"
+        ) {
+            match line
+                .source_line_expanded
+                .trim_start()
+                .to_ascii_lowercase()
+                .as_str()
+            {
                 "endm" => " data-block-end=\"macro\"",
                 _ => " data-block-end=\"repeat\""
             }
@@ -789,13 +908,44 @@ document.addEventListener('click', (event) => {
             ""
         };
         let show_toggle = block_kind.is_some() && !line.is_multiline_continuation;
-        let has_byte_hover = !line.bytes.is_empty() || line.tokens.iter().any(|token| !token.bytes.is_empty());
-        let bytes_class = if has_byte_hover { "cell bytes interactive" } else { "cell bytes" };
-        let source_expanded_class = if has_byte_hover { "cell source-expanded interactive" } else { "cell source-expanded" };
-        let source_raw_class = if has_byte_hover { "cell source-raw interactive" } else { "cell source-raw" };
-        let hover_attr = if has_byte_hover { Self::row_hover_attr(row_id) } else { String::new() };
-        let row_classes = if show_toggle { "row block-start" } else { "row" };
-        let collapsible_toggle = if show_toggle { "<span class=\"toggle\">▸</span>" } else { "" };
+        let has_byte_hover =
+            !line.bytes.is_empty() || line.tokens.iter().any(|token| !token.bytes.is_empty());
+        let bytes_class = if has_byte_hover {
+            "cell bytes interactive"
+        }
+        else {
+            "cell bytes"
+        };
+        let source_expanded_class = if has_byte_hover {
+            "cell source-expanded interactive"
+        }
+        else {
+            "cell source-expanded"
+        };
+        let source_raw_class = if has_byte_hover {
+            "cell source-raw interactive"
+        }
+        else {
+            "cell source-raw"
+        };
+        let hover_attr = if has_byte_hover {
+            Self::row_hover_attr(row_id)
+        }
+        else {
+            String::new()
+        };
+        let row_classes = if show_toggle {
+            "row block-start"
+        }
+        else {
+            "row"
+        };
+        let collapsible_toggle = if show_toggle {
+            "<span class=\"toggle\">▸</span>"
+        }
+        else {
+            ""
+        };
         let show_expanded = Self::template_shows_source_expanded(format);
         let show_raw = Self::template_shows_source_raw(format);
         writeln!(
@@ -821,19 +971,11 @@ document.addEventListener('click', (event) => {
             .symbol_names_by_row
             .iter()
             .map(|(row, symbol)| {
-                let value = self
-                    .symbol_values
-                    .get(row)
-                    .cloned()
-                    .unwrap_or_default();
+                let value = self.symbol_values.get(row).cloned().unwrap_or_default();
                 (*row, symbol.clone(), value)
             })
             .collect::<Vec<_>>();
-        symbol_rows.sort_by(|left, right| {
-            left.1
-                .cmp(&right.1)
-                .then_with(|| left.0.cmp(&right.0))
-        });
+        symbol_rows.sort_by(|left, right| left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0)));
 
         writer.write_all(br#"</div>
 <div class="symbols-panel">
@@ -857,10 +999,14 @@ document.addEventListener('click', (event) => {
             ).unwrap();
         }
 
-        writer.write_all(br#"</tbody>
+        writer
+            .write_all(
+                br#"</tbody>
 </table>
 </div>
-"#).unwrap();
+"#
+            )
+            .unwrap();
 
         let mut symbol_entries = self
             .symbol_targets
@@ -869,7 +1015,8 @@ document.addEventListener('click', (event) => {
             .collect::<Vec<_>>();
         symbol_entries.sort_by(|(left, _), (right, _)| left.cmp(right));
 
-        let mut symbol_map_script = String::from("<script>\nconst BASM_SYMBOL_TARGETS = new Map([\n");
+        let mut symbol_map_script =
+            String::from("<script>\nconst BASM_SYMBOL_TARGETS = new Map([\n");
         for (symbol, row) in symbol_entries {
             symbol_map_script.push_str(&format!(
                 "['{}', {}],\n",
@@ -880,10 +1027,14 @@ document.addEventListener('click', (event) => {
         symbol_map_script.push_str("]);\nattachSymbolLinks(BASM_SYMBOL_TARGETS);\ninitializeCollapsedBlocks();\ninitializeSymbolFilter();\n</script>\n");
         writer.write_all(symbol_map_script.as_bytes()).unwrap();
 
-        writer.write_all(br#"</div>
+        writer
+            .write_all(
+                br#"</div>
 </div>
 </body>
 </html>
-"#).unwrap();
+"#
+            )
+            .unwrap();
     }
 }

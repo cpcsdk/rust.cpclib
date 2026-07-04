@@ -1,6 +1,7 @@
-use super::Formatter;
-use crate::options::{CaseStyle, HexEncoding, OctalEncoding, BinaryEncoding};
 use cpclib_common::parse::{EncodingKind, scan_numeric_literals};
+
+use super::Formatter;
+use crate::options::{BinaryEncoding, CaseStyle, HexEncoding, OctalEncoding};
 
 impl<'src> Formatter<'src> {
     // Reformat all numeric literals in `content` according to the hex/oct/bin encoding and
@@ -36,7 +37,7 @@ impl<'src> Formatter<'src> {
             EncodingKind::Hex => self.reformat_hex(value, original),
             EncodingKind::Oct => self.reformat_oct(value, original),
             EncodingKind::Bin => self.reformat_bin(value, original),
-            _ => original.to_string(), // Dec and internal states: unchanged
+            _ => original.to_string() // Dec and internal states: unchanged
         }
     }
 
@@ -50,58 +51,76 @@ impl<'src> Formatter<'src> {
 
         if matches!(enc, HexEncoding::Untouched) {
             // Only change letter case; preserve prefix/suffix verbatim.
-            return original.chars().map(|c| match c {
-                'a'..='f' | 'A'..='F' => match case {
-                    CaseStyle::UpperCase => c.to_ascii_uppercase(),
-                    CaseStyle::LowerCase => c.to_ascii_lowercase(),
-                    CaseStyle::Untouched => c,
-                },
-                _ => c,
-            }).collect();
+            return original
+                .chars()
+                .map(|c| {
+                    match c {
+                        'a'..='f' | 'A'..='F' => {
+                            match case {
+                                CaseStyle::UpperCase => c.to_ascii_uppercase(),
+                                CaseStyle::LowerCase => c.to_ascii_lowercase(),
+                                CaseStyle::Untouched => c
+                            }
+                        },
+                        _ => c
+                    }
+                })
+                .collect();
         }
 
         // Re-encode: format value as hex digits with the requested case.
         let raw = format!("{:X}", value); // always uppercase first
-        let digits: String = raw.chars().map(|c| match case {
-            CaseStyle::LowerCase => c.to_ascii_lowercase(),
-            _ => c, // UpperCase or Untouched → uppercase
-        }).collect();
+        let digits: String = raw
+            .chars()
+            .map(|c| {
+                match case {
+                    CaseStyle::LowerCase => c.to_ascii_lowercase(),
+                    _ => c // UpperCase or Untouched → uppercase
+                }
+            })
+            .collect();
 
         let is_suffix = matches!(enc, HexEncoding::SuffixLower | HexEncoding::SuffixUpper);
         // Suffix form must start with a digit to avoid being parsed as an identifier.
-        let digits = if is_suffix && digits.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+        let digits = if is_suffix
+            && digits
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_ascii_alphabetic())
+        {
             format!("0{digits}")
-        } else {
+        }
+        else {
             digits
         };
 
         match enc {
-            HexEncoding::Prefix0x     => format!("0x{digits}"),
-            HexEncoding::Prefix0X     => format!("0X{digits}"),
-            HexEncoding::PrefixHash   => format!("#{digits}"),
+            HexEncoding::Prefix0x => format!("0x{digits}"),
+            HexEncoding::Prefix0X => format!("0X{digits}"),
+            HexEncoding::PrefixHash => format!("#{digits}"),
             HexEncoding::PrefixDollar => format!("${digits}"),
-            HexEncoding::PrefixAmp    => format!("&{digits}"),
-            HexEncoding::SuffixLower  => format!("{digits}h"),
-            HexEncoding::SuffixUpper  => format!("{digits}H"),
-            HexEncoding::Untouched    => unreachable!(),
+            HexEncoding::PrefixAmp => format!("&{digits}"),
+            HexEncoding::SuffixLower => format!("{digits}h"),
+            HexEncoding::SuffixUpper => format!("{digits}H"),
+            HexEncoding::Untouched => unreachable!()
         }
     }
 
     fn reformat_oct(&self, value: u32, original: &str) -> String {
         match self.octal_encoding {
             OctalEncoding::Untouched => original.to_string(),
-            OctalEncoding::Prefix0o  => format!("0o{:o}", value),
-            OctalEncoding::Prefix0O  => format!("0O{:o}", value),
-            OctalEncoding::PrefixAt  => format!("@{:o}", value),
+            OctalEncoding::Prefix0o => format!("0o{:o}", value),
+            OctalEncoding::Prefix0O => format!("0O{:o}", value),
+            OctalEncoding::PrefixAt => format!("@{:o}", value)
         }
     }
 
     fn reformat_bin(&self, value: u32, original: &str) -> String {
         match self.binary_encoding {
-            BinaryEncoding::Untouched      => original.to_string(),
-            BinaryEncoding::Prefix0b       => format!("0b{:b}", value),
-            BinaryEncoding::Prefix0B       => format!("0B{:b}", value),
-            BinaryEncoding::PrefixPercent  => format!("%{:b}", value),
+            BinaryEncoding::Untouched => original.to_string(),
+            BinaryEncoding::Prefix0b => format!("0b{:b}", value),
+            BinaryEncoding::Prefix0B => format!("0B{:b}", value),
+            BinaryEncoding::PrefixPercent => format!("%{:b}", value)
         }
     }
 }

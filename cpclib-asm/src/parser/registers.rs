@@ -32,7 +32,7 @@ pub fn parse_register16(
             // context entry uses the start-of-token position.
             let err = Z80ParserError::from_input(input);
             input.reset(&start);
-            return Err(ErrMode::Backtrack(err))
+            return Err(ErrMode::Backtrack(err));
         }
     };
 
@@ -225,14 +225,14 @@ pub fn parse_indexregister16(
                 _ => {
                     let err = Z80ParserError::from_input(input);
                     input.reset(&start);
-                    return Err(ErrMode::Backtrack(err))
+                    return Err(ErrMode::Backtrack(err));
                 }
             }
         },
         _ => {
             let err = Z80ParserError::from_input(input);
             input.reset(&start);
-            return Err(ErrMode::Backtrack(err))
+            return Err(ErrMode::Backtrack(err));
         }
     };
 

@@ -1,15 +1,15 @@
-mod options;
-mod config;
-mod formatter;
 #[cfg(feature = "cmdline")]
 pub mod cli;
+mod config;
+mod formatter;
+mod options;
 
+pub use config::{CONFIG_FILE_NAME, find_config_file, load_config, load_config_from};
+pub use formatter::{format, format_listing};
 pub use options::{
-    AsmFormatOptions, CaseStyle, SpaceAroundColumn,
-    HexEncoding, OctalEncoding, BinaryEncoding, LabelPostfix,
+    AsmFormatOptions, BinaryEncoding, CaseStyle, HexEncoding, LabelPostfix, OctalEncoding,
+    SpaceAroundColumn
 };
-pub use config::{CONFIG_FILE_NAME, find_config_file, load_config_from, load_config};
-pub use formatter::{format_listing, format};
 
 #[cfg(test)]
 mod tests {
@@ -44,8 +44,14 @@ mod tests {
     #[test]
     fn test_block_header_directive_case() {
         let out = fmt("repeat 5, i, 3\n  ld a, i\nendr");
-        assert!(out.contains("REPEAT 5, i, 3"), "REPEAT not uppercased: {out:?}");
-        assert!(out.contains("ENDR") || out.contains("ENDREPEAT"), "closer not uppercased: {out:?}");
+        assert!(
+            out.contains("REPEAT 5, i, 3"),
+            "REPEAT not uppercased: {out:?}"
+        );
+        assert!(
+            out.contains("ENDR") || out.contains("ENDREPEAT"),
+            "closer not uppercased: {out:?}"
+        );
     }
 
     #[test]
@@ -76,14 +82,23 @@ mod tests {
         let line = out.lines().next().unwrap();
         let col = line.find(';').expect("no comment");
         let content_end = 4 + long.len();
-        assert!(col >= content_end + 2, "less than 2 spaces before comment: {line:?}");
+        assert!(
+            col >= content_end + 2,
+            "less than 2 spaces before comment: {line:?}"
+        );
     }
 
     #[test]
     fn test_macro_call_no_panic() {
         let out = fmt("MY_MACRO arg1, arg2\npush af");
-        assert!(out.contains("MY_MACRO arg1, arg2"), "macro call lost: {out:?}");
-        assert!(out.contains("PUSH AF"), "opcode after macro call lost: {out:?}");
+        assert!(
+            out.contains("MY_MACRO arg1, arg2"),
+            "macro call lost: {out:?}"
+        );
+        assert!(
+            out.contains("PUSH AF"),
+            "opcode after macro call lost: {out:?}"
+        );
     }
 
     #[test]
@@ -103,7 +118,10 @@ mod tests {
         };
         let out = format("PUSH AF\nORG 0x40\n", &opt).unwrap();
         assert!(out.contains("push af"), "mnemonic not lowercased: {out:?}");
-        assert!(out.contains("org 0x40"), "directive not lowercased: {out:?}");
+        assert!(
+            out.contains("org 0x40"),
+            "directive not lowercased: {out:?}"
+        );
     }
 
     #[test]
@@ -127,33 +145,59 @@ mod tests {
             ..AsmFormatOptions::default()
         };
         let out = format("PUSH AF\nLD HL, BC\n", &opt).unwrap();
-        assert!(out.contains("PUSH af\n"), "register not lowercased: {out:?}");
-        assert!(out.contains("LD hl, bc\n"), "registers not lowercased: {out:?}");
+        assert!(
+            out.contains("PUSH af\n"),
+            "register not lowercased: {out:?}"
+        );
+        assert!(
+            out.contains("LD hl, bc\n"),
+            "registers not lowercased: {out:?}"
+        );
     }
 
     #[test]
     fn test_literal_not_hex_encoded() {
         let out = fmt("ld a, 1\nld hl, 100\nld de, 0x40\nadd a, %00001111");
-        assert!(out.contains("LD A, 1\n"),           "literal 1 re-encoded: {out:?}");
-        assert!(out.contains("LD HL, 100\n"),        "literal 100 re-encoded: {out:?}");
-        assert!(out.contains("LD DE, 0x40\n"),       "literal 0x40 re-encoded: {out:?}");
-        assert!(out.contains("ADD A, %00001111\n"),  "literal %… re-encoded: {out:?}");
+        assert!(out.contains("LD A, 1\n"), "literal 1 re-encoded: {out:?}");
+        assert!(
+            out.contains("LD HL, 100\n"),
+            "literal 100 re-encoded: {out:?}"
+        );
+        assert!(
+            out.contains("LD DE, 0x40\n"),
+            "literal 0x40 re-encoded: {out:?}"
+        );
+        assert!(
+            out.contains("ADD A, %00001111\n"),
+            "literal %… re-encoded: {out:?}"
+        );
     }
 
     #[test]
     fn test_registers_uppercased() {
         let out = fmt("ld hl, (ix+2)\npush af\nex af, af'");
-        assert!(out.contains("LD HL, (IX+2)\n"),  "registers not uppercased: {out:?}");
-        assert!(out.contains("PUSH AF\n"),          "AF not uppercased: {out:?}");
-        assert!(out.contains("EX AF, AF'\n"),       "AF' not uppercased: {out:?}");
+        assert!(
+            out.contains("LD HL, (IX+2)\n"),
+            "registers not uppercased: {out:?}"
+        );
+        assert!(out.contains("PUSH AF\n"), "AF not uppercased: {out:?}");
+        assert!(out.contains("EX AF, AF'\n"), "AF' not uppercased: {out:?}");
     }
 
     #[test]
     fn test_trailing_comment_no_duplicate() {
         let src = "    org 0x40  ; comment 1\n    push af  ; comment 2\n    pop af\n";
         let out = fmt(src);
-        assert_eq!(out.matches("comment 1").count(), 1, "comment 1 duplicated: {out:?}");
-        assert_eq!(out.matches("comment 2").count(), 1, "comment 2 duplicated: {out:?}");
+        assert_eq!(
+            out.matches("comment 1").count(),
+            1,
+            "comment 1 duplicated: {out:?}"
+        );
+        assert_eq!(
+            out.matches("comment 2").count(),
+            1,
+            "comment 2 duplicated: {out:?}"
+        );
     }
 
     #[test]
@@ -161,9 +205,21 @@ mod tests {
         // Multiple instructions on one line must not be duplicated.
         let src = "    pop hl : push af : pop af\n";
         let out = fmt(src);
-        assert_eq!(out.matches("POP HL").count(),  1, "POP HL duplicated: {out:?}");
-        assert_eq!(out.matches("PUSH AF").count(), 1, "PUSH AF duplicated: {out:?}");
-        assert_eq!(out.matches("POP AF").count(),  1, "POP AF duplicated: {out:?}");
+        assert_eq!(
+            out.matches("POP HL").count(),
+            1,
+            "POP HL duplicated: {out:?}"
+        );
+        assert_eq!(
+            out.matches("PUSH AF").count(),
+            1,
+            "PUSH AF duplicated: {out:?}"
+        );
+        assert_eq!(
+            out.matches("POP AF").count(),
+            1,
+            "POP AF duplicated: {out:?}"
+        );
     }
 
     #[test]
@@ -172,9 +228,18 @@ mod tests {
         let out = fmt(src);
         let lines: Vec<&str> = out.lines().collect();
         // Each instruction on its own line
-        assert!(lines.iter().any(|l| l.trim() == "POP HL"),  "POP HL not on own line: {out:?}");
-        assert!(lines.iter().any(|l| l.trim() == "PUSH AF"), "PUSH AF not on own line: {out:?}");
-        assert!(lines.iter().any(|l| l.trim() == "POP AF"),  "POP AF not on own line: {out:?}");
+        assert!(
+            lines.iter().any(|l| l.trim() == "POP HL"),
+            "POP HL not on own line: {out:?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.trim() == "PUSH AF"),
+            "PUSH AF not on own line: {out:?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.trim() == "POP AF"),
+            "POP AF not on own line: {out:?}"
+        );
     }
 
     #[test]
@@ -189,7 +254,8 @@ mod tests {
         // The second mnemonic keyword is not in first-word position so its case is not
         // transformed; only registers like HL/AF are uppercased within the line.
         assert!(
-            out.lines().any(|l| l.contains("POP HL") && l.contains("push AF")),
+            out.lines()
+                .any(|l| l.contains("POP HL") && l.contains("push AF")),
             "line was split when one_instruction_per_line=false: {out:?}"
         );
     }
@@ -199,10 +265,20 @@ mod tests {
         // Trailing comment must appear once, on the last instruction.
         let src = "pop hl : push af ; my comment\n";
         let out = fmt(src);
-        assert_eq!(out.matches("my comment").count(), 1, "comment duplicated: {out:?}");
+        assert_eq!(
+            out.matches("my comment").count(),
+            1,
+            "comment duplicated: {out:?}"
+        );
         // The comment should be on the PUSH AF line, not the POP HL line.
-        let push_line = out.lines().find(|l| l.contains("PUSH AF")).expect("no PUSH AF line");
-        assert!(push_line.contains("my comment"), "comment not on last instruction: {push_line:?}");
+        let push_line = out
+            .lines()
+            .find(|l| l.contains("PUSH AF"))
+            .expect("no PUSH AF line");
+        assert!(
+            push_line.contains("my comment"),
+            "comment not on last instruction: {push_line:?}"
+        );
     }
 
     #[test]
@@ -213,8 +289,8 @@ mod tests {
             Ok(out) => {
                 assert!(out.contains("    EI\n"), "EI missing: {out:?}");
                 assert!(out.contains("    ORG 40\n"), "ORG missing: {out:?}");
-            }
-            Err(e) => panic!("format failed: {e}"),
+            },
+            Err(e) => panic!("format failed: {e}")
         }
     }
 
@@ -222,15 +298,24 @@ mod tests {
     fn test_assign_symbol_case_not_changed() {
         // Symbol names in assignment directives must not be case-transformed.
         let out = fmt("my_label = 42\nassert my_label == 42");
-        assert!(out.contains("my_label = 42"), "symbol name changed: {out:?}");
-        assert!(out.contains("ASSERT my_label"), "symbol in expr changed: {out:?}");
+        assert!(
+            out.contains("my_label = 42"),
+            "symbol name changed: {out:?}"
+        );
+        assert!(
+            out.contains("ASSERT my_label"),
+            "symbol in expr changed: {out:?}"
+        );
     }
 
     #[test]
     fn test_equ_keyword_case_changed() {
         // EQU keyword should be case-transformed, symbol name should not.
         let out = fmt("my_sym equ 10\ndb my_sym");
-        assert!(out.contains("my_sym EQU 10"), "EQU not uppercased or symbol changed: {out:?}");
+        assert!(
+            out.contains("my_sym EQU 10"),
+            "EQU not uppercased or symbol changed: {out:?}"
+        );
     }
 
     #[test]
@@ -238,7 +323,10 @@ mod tests {
         // Label followed by instruction on the same line (no colon separator).
         let out = fmt("myloop\tpush af");
         assert!(out.contains("myloop:"), "label missing colon: {out:?}");
-        assert!(out.contains("PUSH AF"), "instruction after inline label lost: {out:?}");
+        assert!(
+            out.contains("PUSH AF"),
+            "instruction after inline label lost: {out:?}"
+        );
     }
 
     #[test]
@@ -247,7 +335,10 @@ mod tests {
         let out = fmt("FOO EQU 42");
         let line = out.lines().next().unwrap();
         assert!(!line.starts_with(' '), "EQU line is indented: {line:?}");
-        assert!(line.starts_with("FOO"), "EQU label not at column 0: {line:?}");
+        assert!(
+            line.starts_with("FOO"),
+            "EQU label not at column 0: {line:?}"
+        );
     }
 
     #[test]
@@ -255,8 +346,14 @@ mod tests {
         // Symbol assignments (=) must start at column 0.
         let out = fmt("my_var = 10");
         let line = out.lines().next().unwrap();
-        assert!(!line.starts_with(' '), "assignment line is indented: {line:?}");
-        assert!(line.starts_with("my_var"), "assignment not at column 0: {line:?}");
+        assert!(
+            !line.starts_with(' '),
+            "assignment line is indented: {line:?}"
+        );
+        assert!(
+            line.starts_with("my_var"),
+            "assignment not at column 0: {line:?}"
+        );
     }
 
     #[test]
@@ -290,8 +387,10 @@ mod tests {
             .build();
         let out = format("nop : ld a, 5", &opt).unwrap();
         let line = out.lines().next().unwrap();
-        assert!(line.contains(':') && !line.contains(" :") && !line.contains(": "),
-            "unexpected spacing around ':': {line:?}");
+        assert!(
+            line.contains(':') && !line.contains(" :") && !line.contains(": "),
+            "unexpected spacing around ':': {line:?}"
+        );
     }
 
     #[test]
@@ -387,29 +486,60 @@ binary_encoding = "0b"
 label_definition_postfix_with_column = "NoColumn"
 "#;
         let cfg: AsmFormatOptions = toml::from_str(toml).expect("TOML parse failed");
-        assert!(matches!(cfg.mnemonic_case, CaseStyle::LowerCase), "mnemonic_case: {cfg:?}");
-        assert!(matches!(cfg.register_case, CaseStyle::LowerCase), "register_case");
-        assert!(matches!(cfg.hexadecimal_encoding, HexEncoding::Prefix0x), "hex_enc");
-        assert!(matches!(cfg.octal_encoding, OctalEncoding::Prefix0o), "oct_enc");
-        assert!(matches!(cfg.binary_encoding, BinaryEncoding::Prefix0b), "bin_enc");
-        assert!(matches!(cfg.label_definition_postfix_with_column, LabelPostfix::NoColumn), "label_postfix");
+        assert!(
+            matches!(cfg.mnemonic_case, CaseStyle::LowerCase),
+            "mnemonic_case: {cfg:?}"
+        );
+        assert!(
+            matches!(cfg.register_case, CaseStyle::LowerCase),
+            "register_case"
+        );
+        assert!(
+            matches!(cfg.hexadecimal_encoding, HexEncoding::Prefix0x),
+            "hex_enc"
+        );
+        assert!(
+            matches!(cfg.octal_encoding, OctalEncoding::Prefix0o),
+            "oct_enc"
+        );
+        assert!(
+            matches!(cfg.binary_encoding, BinaryEncoding::Prefix0b),
+            "bin_enc"
+        );
+        assert!(
+            matches!(
+                cfg.label_definition_postfix_with_column,
+                LabelPostfix::NoColumn
+            ),
+            "label_postfix"
+        );
     }
 
     // ── hexadecimal_case ─────────────────────────────────────────────────────
 
     #[test]
     fn test_hex_case_upper() {
-        let opt = AsmFormatOptions::builder().hexadecimal_case(CaseStyle::UpperCase).build();
+        let opt = AsmFormatOptions::builder()
+            .hexadecimal_case(CaseStyle::UpperCase)
+            .build();
         let out = format("ld a, 0xff\nld b, $ab", &opt).unwrap();
-        assert!(out.contains("0xFF") || out.contains("0XFF"), "hex not uppercased: {out:?}");
+        assert!(
+            out.contains("0xFF") || out.contains("0XFF"),
+            "hex not uppercased: {out:?}"
+        );
         assert!(out.contains("$AB"), "dollar hex not uppercased: {out:?}");
     }
 
     #[test]
     fn test_hex_case_lower() {
-        let opt = AsmFormatOptions::builder().hexadecimal_case(CaseStyle::LowerCase).build();
+        let opt = AsmFormatOptions::builder()
+            .hexadecimal_case(CaseStyle::LowerCase)
+            .build();
         let out = format("ld a, 0xFF\nld b, $AB", &opt).unwrap();
-        assert!(out.contains("0xff") || out.contains("ff"), "hex not lowercased: {out:?}");
+        assert!(
+            out.contains("0xff") || out.contains("ff"),
+            "hex not lowercased: {out:?}"
+        );
         assert!(out.contains("$ab"), "dollar hex not lowercased: {out:?}");
     }
 
@@ -421,8 +551,14 @@ label_definition_postfix_with_column = "NoColumn"
             .hexadecimal_encoding(HexEncoding::PrefixDollar)
             .build();
         let out = format("ld a, 0xff", &opt).unwrap();
-        assert!(out.contains("$FF") || out.contains("$ff"), "not $ prefix: {out:?}");
-        assert!(!out.contains("0xff") && !out.contains("0xFF"), "old prefix still present: {out:?}");
+        assert!(
+            out.contains("$FF") || out.contains("$ff"),
+            "not $ prefix: {out:?}"
+        );
+        assert!(
+            !out.contains("0xff") && !out.contains("0xFF"),
+            "old prefix still present: {out:?}"
+        );
     }
 
     #[test]
@@ -431,7 +567,10 @@ label_definition_postfix_with_column = "NoColumn"
             .hexadecimal_encoding(HexEncoding::SuffixLower)
             .build();
         let out = format("ld a, 0x1A", &opt).unwrap();
-        assert!(out.contains("1ah") || out.contains("1Ah"), "not h suffix: {out:?}");
+        assert!(
+            out.contains("1ah") || out.contains("1Ah"),
+            "not h suffix: {out:?}"
+        );
     }
 
     #[test]
@@ -441,7 +580,10 @@ label_definition_postfix_with_column = "NoColumn"
             .hexadecimal_encoding(HexEncoding::SuffixUpper)
             .build();
         let out = format("ld a, 0xFF", &opt).unwrap();
-        assert!(out.contains("0FFH") || out.contains("0ffH"), "leading 0 missing: {out:?}");
+        assert!(
+            out.contains("0FFH") || out.contains("0ffH"),
+            "leading 0 missing: {out:?}"
+        );
     }
 
     // ── octal_encoding ────────────────────────────────────────────────────────
@@ -472,7 +614,10 @@ label_definition_postfix_with_column = "NoColumn"
             .binary_encoding(BinaryEncoding::PrefixPercent)
             .build();
         let out = format("ld a, 0b00001111", &opt).unwrap();
-        assert!(out.contains("%1111") || out.contains("%00001111"), "not % prefix: {out:?}");
+        assert!(
+            out.contains("%1111") || out.contains("%00001111"),
+            "not % prefix: {out:?}"
+        );
     }
 
     #[test]
@@ -493,7 +638,10 @@ label_definition_postfix_with_column = "NoColumn"
             .build();
         let out = format("myloop:\n  push af", &opt).unwrap();
         let label_line = out.lines().next().unwrap();
-        assert!(!label_line.contains(':'), "colon present with NoColumn: {out:?}");
+        assert!(
+            !label_line.contains(':'),
+            "colon present with NoColumn: {out:?}"
+        );
         assert!(label_line.trim() == "myloop", "wrong label line: {out:?}");
     }
 
@@ -504,7 +652,10 @@ label_definition_postfix_with_column = "NoColumn"
             .build();
         let out = format("myloop:\n  push af", &opt).unwrap();
         let label_line = out.lines().next().unwrap();
-        assert!(label_line.contains(':'), "colon missing with WithColumn: {out:?}");
+        assert!(
+            label_line.contains(':'),
+            "colon missing with WithColumn: {out:?}"
+        );
     }
 
     // ── single space after directive ──────────────────────────────────────────
@@ -512,7 +663,13 @@ label_definition_postfix_with_column = "NoColumn"
     #[test]
     fn test_single_space_after_directive() {
         let out = fmt("ORG  0x40\nDB   1, 2, 3");
-        assert!(out.contains("ORG 0x40"), "double space after ORG not collapsed: {out:?}");
-        assert!(out.contains("DB 1, 2, 3"), "double space after DB not collapsed: {out:?}");
+        assert!(
+            out.contains("ORG 0x40"),
+            "double space after ORG not collapsed: {out:?}"
+        );
+        assert!(
+            out.contains("DB 1, 2, 3"),
+            "double space after DB not collapsed: {out:?}"
+        );
     }
 }

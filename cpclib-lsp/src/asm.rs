@@ -1,76 +1,80 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
-use tower_lsp::lsp_types::*;
-use cpclib_asmfmt;
+
 use cpclib_asm::parser::context::ParserContextBuilder;
 use cpclib_asm::parser::obtained::{LocatedListing, MayHaveSpan};
-use cpclib_tokens::ListingElement;
+use cpclib_asmfmt;
 use cpclib_basic::located::{LocatedBasicProgram, LocatedTokenKind};
+use cpclib_tokens::ListingElement;
+use tower_lsp::lsp_types::*;
+
 use crate::document::Document;
 
 // Semantic token type indices — must match `semantic_tokens_legend()` order
-const TT_KEYWORD: u32 = 0;     // Z80 instructions
-const TT_MACRO: u32 = 1;       // assembler directives (EQU, DEFB, MACRO…)
-const TT_FUNCTION: u32 = 2;    // macro invocation names
-const TT_NAMESPACE: u32 = 3;   // module names
-const TT_VARIABLE: u32 = 4;    // registers / condition codes
-const TT_NUMBER: u32 = 5;      // numeric literals
-const TT_STRING: u32 = 6;      // string literals
-const TT_COMMENT: u32 = 7;     // line comments
-const TT_OPERATOR: u32 = 8;    // operators
+const TT_KEYWORD: u32 = 0; // Z80 instructions
+const TT_MACRO: u32 = 1; // assembler directives (EQU, DEFB, MACRO…)
+const TT_FUNCTION: u32 = 2; // macro invocation names
+const TT_NAMESPACE: u32 = 3; // module names
+const TT_VARIABLE: u32 = 4; // registers / condition codes
+const TT_NUMBER: u32 = 5; // numeric literals
+const TT_STRING: u32 = 6; // string literals
+const TT_COMMENT: u32 = 7; // line comments
+const TT_OPERATOR: u32 = 8; // operators
 const TT_ENUM_MEMBER: u32 = 9; // EQU / assign constants
-const TT_LABEL: u32 = 10;      // jump / procedure labels
-const TT_PARAMETER: u32 = 11;  // macro parameters {param}
+const TT_LABEL: u32 = 10; // jump / procedure labels
+const TT_PARAMETER: u32 = 11; // macro parameters {param}
 
 const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_READONLY: u32 = 1 << 1;
 
 // Full Z80 register set + condition codes used as operands
 const REGISTER_LIST: &[&str] = &[
-    "AF'", "AF", "BC", "DE", "HL", "IX", "IY", "SP", "PC",
-    "IXH", "IXL", "IYH", "IYL",
-    "A", "B", "C", "D", "E", "H", "L", "F", "I", "R",
-    "NZ", "Z", "NC", "PE", "PO", "P", "M",
+    "AF'", "AF", "BC", "DE", "HL", "IX", "IY", "SP", "PC", "IXH", "IXL", "IYH", "IYL", "A", "B",
+    "C", "D", "E", "H", "L", "F", "I", "R", "NZ", "Z", "NC", "PE", "PO", "P", "M"
 ];
 
 // Static lookup sets — built once, shared across all tokenizer calls
-pub static INSTRUCTION_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
-    cpclib_asm::lsp::Z80_INSTRUCTIONS.iter().copied().collect()
-});
+pub static INSTRUCTION_SET: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| cpclib_asm::lsp::Z80_INSTRUCTIONS.iter().copied().collect());
 
 static DIRECTIVE_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     let mut s = HashSet::new();
-    for d in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_STANDALONE { s.insert(*d); }
-    for d in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_START       { s.insert(*d); }
-    for d in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_END         { s.insert(*d); }
+    for d in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_STANDALONE {
+        s.insert(*d);
+    }
+    for d in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_START {
+        s.insert(*d);
+    }
+    for d in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_END {
+        s.insert(*d);
+    }
     s
 });
 
-static REGISTER_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
-    REGISTER_LIST.iter().copied().collect()
-});
+static REGISTER_SET: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| REGISTER_LIST.iter().copied().collect());
 
 /// Returns the SemanticTokensLegend that must be advertised in `initialize()`.
 pub fn semantic_tokens_legend() -> SemanticTokensLegend {
     SemanticTokensLegend {
         token_types: vec![
-            SemanticTokenType::KEYWORD,          // 0  Z80 instructions
-            SemanticTokenType::MACRO,            // 1  assembler directives
-            SemanticTokenType::FUNCTION,         // 2  macro invocation names
-            SemanticTokenType::NAMESPACE,        // 3  module names
-            SemanticTokenType::VARIABLE,         // 4  registers / condition codes
-            SemanticTokenType::NUMBER,           // 5  numeric literals
-            SemanticTokenType::STRING,           // 6  string literals
-            SemanticTokenType::COMMENT,          // 7  comments
-            SemanticTokenType::OPERATOR,         // 8  operators
-            SemanticTokenType::ENUM_MEMBER,      // 9  EQU / assign constants
-            SemanticTokenType::TYPE,             // 10 jump / procedure labels (teal — avoids theme blue)
-            SemanticTokenType::DECORATOR,        // 11 macro parameters {param}
+            SemanticTokenType::KEYWORD,     // 0  Z80 instructions
+            SemanticTokenType::MACRO,       // 1  assembler directives
+            SemanticTokenType::FUNCTION,    // 2  macro invocation names
+            SemanticTokenType::NAMESPACE,   // 3  module names
+            SemanticTokenType::VARIABLE,    // 4  registers / condition codes
+            SemanticTokenType::NUMBER,      // 5  numeric literals
+            SemanticTokenType::STRING,      // 6  string literals
+            SemanticTokenType::COMMENT,     // 7  comments
+            SemanticTokenType::OPERATOR,    // 8  operators
+            SemanticTokenType::ENUM_MEMBER, // 9  EQU / assign constants
+            SemanticTokenType::TYPE, // 10 jump / procedure labels (teal — avoids theme blue)
+            SemanticTokenType::DECORATOR, // 11 macro parameters {param}
         ],
         token_modifiers: vec![
             SemanticTokenModifier::DECLARATION,
             SemanticTokenModifier::READONLY,
-        ],
+        ]
     }
 }
 
@@ -85,10 +89,10 @@ impl AssemblyAnalyzer {
     /// Parse the assembly document and return the listing
     fn parse_document(&self, document: &Document) -> Result<LocatedListing, LocatedListing> {
         let text = document.text();
-        
+
         // Create a parser context builder
         let builder = ParserContextBuilder::default();
-        
+
         // Parse the assembly code using new_complete_source
         LocatedListing::new_complete_source(text, builder)
     }
@@ -104,8 +108,14 @@ impl AssemblyAnalyzer {
                 if diagnostics.is_empty() {
                     diagnostics.push(Diagnostic {
                         range: Range {
-                            start: Position { line: 0, character: 0 },
-                            end:   Position { line: 0, character: 100 },
+                            start: Position {
+                                line: 0,
+                                character: 0
+                            },
+                            end: Position {
+                                line: 0,
+                                character: 100
+                            }
                         },
                         severity: Some(DiagnosticSeverity::ERROR),
                         source: Some("basm".to_string()),
@@ -128,9 +138,14 @@ impl AssemblyAnalyzer {
         {
             let text = document.text();
             let loco_blocks = extract_locomotive_blocks(&text);
-            if let Some(block) = loco_blocks.iter().find(|b| b.basic_range.contains(&line_idx)) {
+            if let Some(block) = loco_blocks
+                .iter()
+                .find(|b| b.basic_range.contains(&line_idx))
+            {
                 let all_lines: Vec<&str> = text.lines().collect();
-                let basic_text: String = block.basic_range.clone()
+                let basic_text: String = block
+                    .basic_range
+                    .clone()
                     .map(|i| all_lines[i])
                     .collect::<Vec<_>>()
                     .join("\n");
@@ -140,14 +155,16 @@ impl AssemblyAnalyzer {
                     line_trimmed,
                     &basic_text,
                     basic_line,
-                    position.character,
+                    position.character
                 );
             }
         }
 
         // Numeric literal — show all bases
         if let Some((num_str, value)) = extract_number_at_position(&line, col) {
-            return Some(make_hover(crate::utils::format_number_hover(&num_str, value)));
+            return Some(make_hover(crate::utils::format_number_hover(
+                &num_str, value
+            )));
         }
 
         let word = self.extract_word_at_position(&line, col)?;
@@ -160,7 +177,8 @@ impl AssemblyAnalyzer {
             let entries = crate::timings::find_timings(&full);
             let md = if entries.is_empty() {
                 format!("**{}** — Z80 instruction", word_upper)
-            } else {
+            }
+            else {
                 crate::timings::format_hover(&full, &entries)
             };
             return Some(make_hover(md));
@@ -183,17 +201,23 @@ impl AssemblyAnalyzer {
                     let sym = token.equ_symbol();
                     if sym.to_uppercase() == word_upper {
                         return Some(make_hover(format!(
-                            "**{}** = `{}`\n\n*EQU constant*", sym, token.equ_value()
+                            "**{}** = `{}`\n\n*EQU constant*",
+                            sym,
+                            token.equ_value()
                         )));
                     }
-                } else if token.is_assign() {
+                }
+                else if token.is_assign() {
                     let sym = token.assign_symbol();
                     if sym.to_uppercase() == word_upper {
                         return Some(make_hover(format!(
-                            "**{}** = `{}`\n\n*Assign*", sym, token.assign_value()
+                            "**{}** = `{}`\n\n*Assign*",
+                            sym,
+                            token.assign_value()
                         )));
                     }
-                } else if token.is_label() {
+                }
+                else if token.is_label() {
                     let sym = token.label_symbol();
                     if sym.to_uppercase() == word_upper {
                         return Some(make_hover(format!("**{}** — label", sym)));
@@ -221,7 +245,7 @@ impl AssemblyAnalyzer {
     /// Provide completion suggestions
     pub fn completion(&self, _document: &Document, _position: Position) -> Vec<CompletionItem> {
         let mut completions = Vec::new();
-        
+
         // Add Z80 instruction completions using generated data from cpclib-asm
         for mnemonic in cpclib_asm::lsp::Z80_INSTRUCTIONS {
             completions.push(CompletionItem {
@@ -232,7 +256,7 @@ impl AssemblyAnalyzer {
                 ..Default::default()
             });
         }
-        
+
         // Add assembler directives using generated data from cpclib-asm
         for directive in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_STANDALONE {
             completions.push(CompletionItem {
@@ -243,7 +267,7 @@ impl AssemblyAnalyzer {
                 ..Default::default()
             });
         }
-        
+
         for directive in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_START {
             completions.push(CompletionItem {
                 label: directive.to_string(),
@@ -253,7 +277,7 @@ impl AssemblyAnalyzer {
                 ..Default::default()
             });
         }
-        
+
         for directive in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_END {
             completions.push(CompletionItem {
                 label: directive.to_string(),
@@ -263,7 +287,7 @@ impl AssemblyAnalyzer {
                 ..Default::default()
             });
         }
-        
+
         // Add registers using generated data from cpclib-asm
         for register in cpclib_asm::lsp::Z80_REGISTERS {
             completions.push(CompletionItem {
@@ -274,7 +298,7 @@ impl AssemblyAnalyzer {
                 ..Default::default()
             });
         }
-        
+
         completions
     }
 
@@ -288,9 +312,15 @@ impl AssemblyAnalyzer {
             return Some(Location {
                 uri: target_uri,
                 range: Range {
-                    start: Position { line: 0, character: 0 },
-                    end:   Position { line: 0, character: 0 },
-                },
+                    start: Position {
+                        line: 0,
+                        character: 0
+                    },
+                    end: Position {
+                        line: 0,
+                        character: 0
+                    }
+                }
             });
         }
 
@@ -299,9 +329,14 @@ impl AssemblyAnalyzer {
             let text = document.text();
             let loco_blocks = extract_locomotive_blocks(&text);
             let line_idx = position.line as usize;
-            if let Some(block) = loco_blocks.iter().find(|b| b.basic_range.contains(&line_idx)) {
+            if let Some(block) = loco_blocks
+                .iter()
+                .find(|b| b.basic_range.contains(&line_idx))
+            {
                 let all_lines: Vec<&str> = text.lines().collect();
-                let basic_text: String = block.basic_range.clone()
+                let basic_text: String = block
+                    .basic_range
+                    .clone()
                     .map(|i| all_lines[i])
                     .collect::<Vec<_>>()
                     .join("\n");
@@ -309,7 +344,7 @@ impl AssemblyAnalyzer {
                     &basic_text,
                     position,
                     block.basic_range.start as u32,
-                    &document.uri,
+                    &document.uri
                 );
             }
         }
@@ -334,15 +369,20 @@ impl AssemblyAnalyzer {
         for token in listing.iter() {
             let source_name: &str = if token.is_label() {
                 token.label_symbol()
-            } else if token.is_equ() {
+            }
+            else if token.is_equ() {
                 token.equ_symbol()
-            } else if token.is_assign() {
+            }
+            else if token.is_assign() {
                 token.assign_symbol()
-            } else if token.is_macro_definition() {
+            }
+            else if token.is_macro_definition() {
                 token.macro_definition_name()
-            } else if token.is_module() {
+            }
+            else if token.is_module() {
                 token.module_name()
-            } else {
+            }
+            else {
                 continue;
             };
             if source_name.to_uppercase() == word_upper {
@@ -353,9 +393,15 @@ impl AssemblyAnalyzer {
                 return Some(Location {
                     uri: document.uri.clone(),
                     range: Range {
-                        start: Position { line: lsp_line, character: lsp_char },
-                        end:   Position { line: lsp_line, character: lsp_char + source_name.len() as u32 },
-                    },
+                        start: Position {
+                            line: lsp_line,
+                            character: lsp_char
+                        },
+                        end: Position {
+                            line: lsp_line,
+                            character: lsp_char + source_name.len() as u32
+                        }
+                    }
                 });
             }
         }
@@ -374,19 +420,26 @@ impl AssemblyAnalyzer {
                 if let Some(pos) = line_up[start..].find(word_upper) {
                     let abs = start + pos;
                     let before_ok = abs == 0 || !is_ident_byte(line.as_bytes()[abs - 1]);
-                    let after_ok  = abs + wlen >= line.len()
-                        || !is_ident_byte(line.as_bytes()[abs + wlen]);
+                    let after_ok =
+                        abs + wlen >= line.len() || !is_ident_byte(line.as_bytes()[abs + wlen]);
                     if before_ok && after_ok {
                         refs.push(Location {
                             uri: document.uri.clone(),
                             range: Range {
-                                start: Position { line: line_idx as u32, character: abs as u32 },
-                                end:   Position { line: line_idx as u32, character: (abs + wlen) as u32 },
-                            },
+                                start: Position {
+                                    line: line_idx as u32,
+                                    character: abs as u32
+                                },
+                                end: Position {
+                                    line: line_idx as u32,
+                                    character: (abs + wlen) as u32
+                                }
+                            }
                         });
                     }
                     start = abs + 1;
-                } else {
+                }
+                else {
                     break;
                 }
             }
@@ -398,7 +451,7 @@ impl AssemblyAnalyzer {
     pub fn find_references(&self, document: &Document, position: Position) -> Vec<Location> {
         let word = match self.word_at_position(document, position) {
             Some(w) => w.to_uppercase(),
-            None    => return Vec::new(),
+            None => return Vec::new()
         };
         self.find_references_in(document, &word)
     }
@@ -410,7 +463,8 @@ impl AssemblyAnalyzer {
     pub fn document_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
         let mut symbols = Vec::new();
 
-        let Ok(listing) = self.parse_document(document) else {
+        let Ok(listing) = self.parse_document(document)
+        else {
             return symbols;
         };
 
@@ -420,38 +474,61 @@ impl AssemblyAnalyzer {
         for token in listing.iter() {
             // source_name: as it appears in source (for range length)
             // display_name: what the outline shows
-            let (source_name, display_name, kind, detail): (&str, String, SymbolKind, Option<String>) =
-                if token.is_label() {
-                    let raw = token.label_symbol();
-                    let display = if raw.starts_with('.') {
-                        match &current_global {
-                            Some(g) => format!("{}{}", g, raw),
-                            None    => raw.to_string(),
-                        }
-                    } else {
-                        current_global = Some(raw.to_string());
-                        raw.to_string()
-                    };
-                    (raw, display, SymbolKind::FUNCTION, None)
-                } else if token.is_equ() {
-                    let sym = token.equ_symbol();
-                    (sym, sym.to_string(), SymbolKind::CONSTANT,
-                     Some(format!("= {}", token.equ_value())))
-                } else if token.is_assign() {
-                    let sym = token.assign_symbol();
-                    (sym, sym.to_string(), SymbolKind::VARIABLE,
-                     Some(format!("= {}", token.assign_value())))
-                } else if token.is_macro_definition() {
-                    let name = token.macro_definition_name();
-                    current_global = Some(name.to_string());
-                    (name, name.to_string(), SymbolKind::FUNCTION, Some("MACRO".to_string()))
-                } else if token.is_module() {
-                    let name = token.module_name();
-                    current_global = Some(name.to_string());
-                    (name, name.to_string(), SymbolKind::MODULE, None)
-                } else {
-                    continue;
+            let (source_name, display_name, kind, detail): (
+                &str,
+                String,
+                SymbolKind,
+                Option<String>
+            ) = if token.is_label() {
+                let raw = token.label_symbol();
+                let display = if raw.starts_with('.') {
+                    match &current_global {
+                        Some(g) => format!("{}{}", g, raw),
+                        None => raw.to_string()
+                    }
+                }
+                else {
+                    current_global = Some(raw.to_string());
+                    raw.to_string()
                 };
+                (raw, display, SymbolKind::FUNCTION, None)
+            }
+            else if token.is_equ() {
+                let sym = token.equ_symbol();
+                (
+                    sym,
+                    sym.to_string(),
+                    SymbolKind::CONSTANT,
+                    Some(format!("= {}", token.equ_value()))
+                )
+            }
+            else if token.is_assign() {
+                let sym = token.assign_symbol();
+                (
+                    sym,
+                    sym.to_string(),
+                    SymbolKind::VARIABLE,
+                    Some(format!("= {}", token.assign_value()))
+                )
+            }
+            else if token.is_macro_definition() {
+                let name = token.macro_definition_name();
+                current_global = Some(name.to_string());
+                (
+                    name,
+                    name.to_string(),
+                    SymbolKind::FUNCTION,
+                    Some("MACRO".to_string())
+                )
+            }
+            else if token.is_module() {
+                let name = token.module_name();
+                current_global = Some(name.to_string());
+                (name, name.to_string(), SymbolKind::MODULE, None)
+            }
+            else {
+                continue;
+            };
 
             let span = token.span();
             let (line_1based, col_1based) = span.relative_line_and_column();
@@ -459,8 +536,14 @@ impl AssemblyAnalyzer {
             let lsp_char = col_1based.saturating_sub(1) as u32;
             // Range covers the source token, not the (potentially longer) display name
             let range = Range {
-                start: Position { line: lsp_line, character: lsp_char },
-                end: Position { line: lsp_line, character: lsp_char + source_name.len() as u32 },
+                start: Position {
+                    line: lsp_line,
+                    character: lsp_char
+                },
+                end: Position {
+                    line: lsp_line,
+                    character: lsp_char + source_name.len() as u32
+                }
             };
 
             #[allow(deprecated)]
@@ -472,7 +555,7 @@ impl AssemblyAnalyzer {
                 deprecated: None,
                 range: range.clone(),
                 selection_range: range,
-                children: None,
+                children: None
             });
         }
 
@@ -483,8 +566,8 @@ impl AssemblyAnalyzer {
     pub fn semantic_tokens(&self, document: &Document) -> Vec<SemanticToken> {
         // Static lookup sets (built once on first call)
         let instructions = &*INSTRUCTION_SET;
-        let directives   = &*DIRECTIVE_SET;
-        let registers    = &*REGISTER_SET;
+        let directives = &*DIRECTIVE_SET;
+        let registers = &*REGISTER_SET;
 
         // Best-effort AST parse to identify EQU / assign / macro / module definition names
         let mut equ_names: HashSet<String> = HashSet::new();
@@ -495,11 +578,14 @@ impl AssemblyAnalyzer {
             for token in listing.iter() {
                 if token.is_equ() {
                     equ_names.insert(token.equ_symbol().to_uppercase());
-                } else if token.is_assign() {
+                }
+                else if token.is_assign() {
                     assign_names.insert(token.assign_symbol().to_uppercase());
-                } else if token.is_macro_definition() {
+                }
+                else if token.is_macro_definition() {
                     macro_names.insert(token.macro_definition_name().to_uppercase());
-                } else if token.is_module() {
+                }
+                else if token.is_module() {
                     module_names.insert(token.module_name().to_uppercase());
                 }
             }
@@ -515,14 +601,20 @@ impl AssemblyAnalyzer {
         let mut loco_lines: HashSet<usize> = HashSet::new();
         for block in &loco_blocks {
             loco_lines.insert(block.directive_line);
-            if let Some(hl) = block.hide_lines_line { loco_lines.insert(hl); }
-            for i in block.basic_range.clone() { loco_lines.insert(i); }
+            if let Some(hl) = block.hide_lines_line {
+                loco_lines.insert(hl);
+            }
+            for i in block.basic_range.clone() {
+                loco_lines.insert(i);
+            }
             loco_lines.insert(block.end_line);
         }
 
         'line: for (line_idx, line) in text.lines().enumerate() {
             // LOCOMOTIVE block lines are tokenised as BASIC below.
-            if loco_lines.contains(&line_idx) { continue; }
+            if loco_lines.contains(&line_idx) {
+                continue;
+            }
             let line_u = line_idx as u32;
             let bytes = line.as_bytes();
             let mut col: usize = 0;
@@ -531,20 +623,36 @@ impl AssemblyAnalyzer {
                 let c = bytes[col];
 
                 // Whitespace — skip
-                if c == b' ' || c == b'\t' { col += 1; continue; }
+                if c == b' ' || c == b'\t' {
+                    col += 1;
+                    continue;
+                }
 
                 // Comment: `;` through end of line
                 if c == b';' {
-                    raw.push((line_u, col as u32, (bytes.len() - col) as u32, TT_COMMENT, 0));
+                    raw.push((
+                        line_u,
+                        col as u32,
+                        (bytes.len() - col) as u32,
+                        TT_COMMENT,
+                        0
+                    ));
                     continue 'line;
                 }
 
                 // Double-quoted string
                 if c == b'"' {
-                    let start = col; col += 1;
+                    let start = col;
+                    col += 1;
                     while col < bytes.len() {
-                        if bytes[col] == b'\\' && col + 1 < bytes.len() { col += 2; continue; }
-                        if bytes[col] == b'"' { col += 1; break; }
+                        if bytes[col] == b'\\' && col + 1 < bytes.len() {
+                            col += 2;
+                            continue;
+                        }
+                        if bytes[col] == b'"' {
+                            col += 1;
+                            break;
+                        }
                         col += 1;
                     }
                     raw.push((line_u, start as u32, (col - start) as u32, TT_STRING, 0));
@@ -558,14 +666,22 @@ impl AssemblyAnalyzer {
                         p.is_ascii_alphanumeric() || p == b'_'
                     };
                     if !prev_word {
-                        let start = col; col += 1;
+                        let start = col;
+                        col += 1;
                         while col < bytes.len() {
-                            if bytes[col] == b'\\' && col + 1 < bytes.len() { col += 2; continue; }
-                            if bytes[col] == b'\'' { col += 1; break; }
+                            if bytes[col] == b'\\' && col + 1 < bytes.len() {
+                                col += 2;
+                                continue;
+                            }
+                            if bytes[col] == b'\'' {
+                                col += 1;
+                                break;
+                            }
                             col += 1;
                         }
                         raw.push((line_u, start as u32, (col - start) as u32, TT_STRING, 0));
-                    } else {
+                    }
+                    else {
                         col += 1; // stray ' (e.g. AF' already consumed by register scan)
                     }
                     continue;
@@ -573,21 +689,26 @@ impl AssemblyAnalyzer {
 
                 // Hex literal: $hexdigits
                 if c == b'$' && col + 1 < bytes.len() && bytes[col + 1].is_ascii_hexdigit() {
-                    let start = col; col += 1;
-                    while col < bytes.len() && bytes[col].is_ascii_hexdigit() { col += 1; }
+                    let start = col;
+                    col += 1;
+                    while col < bytes.len() && bytes[col].is_ascii_hexdigit() {
+                        col += 1;
+                    }
                     raw.push((line_u, start as u32, (col - start) as u32, TT_NUMBER, 0));
                     continue;
                 }
 
                 // Binary literal: %0101… (else treat % as operator)
                 if c == b'%' {
-                    let start = col; col += 1;
+                    let start = col;
+                    col += 1;
                     if col < bytes.len() && (bytes[col] == b'0' || bytes[col] == b'1') {
                         while col < bytes.len() && (bytes[col] == b'0' || bytes[col] == b'1') {
                             col += 1;
                         }
                         raw.push((line_u, start as u32, (col - start) as u32, TT_NUMBER, 0));
-                    } else {
+                    }
+                    else {
                         raw.push((line_u, start as u32, 1, TT_OPERATOR, 0));
                     }
                     continue;
@@ -596,20 +717,28 @@ impl AssemblyAnalyzer {
                 // Numeric literal starting with a digit
                 if c.is_ascii_digit() {
                     let start = col;
-                    if c == b'0' && col + 1 < bytes.len()
+                    if c == b'0'
+                        && col + 1 < bytes.len()
                         && (bytes[col + 1] == b'x' || bytes[col + 1] == b'X')
                     {
                         col += 2;
-                        while col < bytes.len() && bytes[col].is_ascii_hexdigit() { col += 1; }
-                    } else if c == b'0' && col + 1 < bytes.len()
+                        while col < bytes.len() && bytes[col].is_ascii_hexdigit() {
+                            col += 1;
+                        }
+                    }
+                    else if c == b'0'
+                        && col + 1 < bytes.len()
                         && (bytes[col + 1] == b'b' || bytes[col + 1] == b'B')
                     {
                         col += 2;
                         while col < bytes.len() && (bytes[col] == b'0' || bytes[col] == b'1') {
                             col += 1;
                         }
-                    } else {
-                        while col < bytes.len() && bytes[col].is_ascii_hexdigit() { col += 1; }
+                    }
+                    else {
+                        while col < bytes.len() && bytes[col].is_ascii_hexdigit() {
+                            col += 1;
+                        }
                         if col < bytes.len() && (bytes[col] == b'H' || bytes[col] == b'h') {
                             col += 1;
                         }
@@ -620,9 +749,14 @@ impl AssemblyAnalyzer {
 
                 // Macro parameter: {identifier}
                 if c == b'{' {
-                    let start = col; col += 1;
-                    while col < bytes.len() && bytes[col] != b'}' { col += 1; }
-                    if col < bytes.len() { col += 1; } // consume '}'
+                    let start = col;
+                    col += 1;
+                    while col < bytes.len() && bytes[col] != b'}' {
+                        col += 1;
+                    }
+                    if col < bytes.len() {
+                        col += 1;
+                    } // consume '}'
                     raw.push((line_u, start as u32, (col - start) as u32, TT_PARAMETER, 0));
                     continue;
                 }
@@ -634,7 +768,8 @@ impl AssemblyAnalyzer {
                         let ch = bytes[col];
                         if ch.is_ascii_alphanumeric() || ch == b'_' || ch == b'@' || ch == b'.' {
                             col += 1;
-                        } else {
+                        }
+                        else {
                             break;
                         }
                     }
@@ -644,11 +779,14 @@ impl AssemblyAnalyzer {
                     let word_upper_base = word_no_prime.to_uppercase();
                     let has_prime = col < bytes.len() && bytes[col] == b'\'';
                     let is_af_prime = has_prime && word_upper_base == "AF";
-                    if is_af_prime { col += 1; }
+                    if is_af_prime {
+                        col += 1;
+                    }
 
                     let word_upper: String = if is_af_prime {
                         format!("AF'")
-                    } else {
+                    }
+                    else {
                         word_upper_base
                     };
                     let word_len = col - start;
@@ -664,26 +802,32 @@ impl AssemblyAnalyzer {
                             && !instructions.contains(word_upper.as_str())
                             && !directives.contains(word_upper.as_str()));
 
-                    let (tok_type, modifiers) =
-                        if equ_names.contains(word_upper.as_str())
-                            || assign_names.contains(word_upper.as_str())
-                        {
-                            (TT_ENUM_MEMBER, MOD_READONLY)
-                        } else if macro_names.contains(word_upper.as_str()) {
-                            (TT_FUNCTION, if is_label_def { MOD_DECLARATION } else { 0 })
-                        } else if module_names.contains(word_upper.as_str()) {
-                            (TT_NAMESPACE, if is_label_def { MOD_DECLARATION } else { 0 })
-                        } else if instructions.contains(word_upper.as_str()) {
-                            (TT_KEYWORD, 0)
-                        } else if directives.contains(word_upper.as_str()) {
-                            (TT_MACRO, 0)
-                        } else if registers.contains(word_upper.as_str()) {
-                            (TT_VARIABLE, 0)
-                        } else if is_label_def {
-                            (TT_LABEL, MOD_DECLARATION)
-                        } else {
-                            (TT_LABEL, 0) // label reference
-                        };
+                    let (tok_type, modifiers) = if equ_names.contains(word_upper.as_str())
+                        || assign_names.contains(word_upper.as_str())
+                    {
+                        (TT_ENUM_MEMBER, MOD_READONLY)
+                    }
+                    else if macro_names.contains(word_upper.as_str()) {
+                        (TT_FUNCTION, if is_label_def { MOD_DECLARATION } else { 0 })
+                    }
+                    else if module_names.contains(word_upper.as_str()) {
+                        (TT_NAMESPACE, if is_label_def { MOD_DECLARATION } else { 0 })
+                    }
+                    else if instructions.contains(word_upper.as_str()) {
+                        (TT_KEYWORD, 0)
+                    }
+                    else if directives.contains(word_upper.as_str()) {
+                        (TT_MACRO, 0)
+                    }
+                    else if registers.contains(word_upper.as_str()) {
+                        (TT_VARIABLE, 0)
+                    }
+                    else if is_label_def {
+                        (TT_LABEL, MOD_DECLARATION)
+                    }
+                    else {
+                        (TT_LABEL, 0) // label reference
+                    };
 
                     raw.push((line_u, start as u32, word_len as u32, tok_type, modifiers));
 
@@ -697,11 +841,10 @@ impl AssemblyAnalyzer {
 
                 // Single-character operators
                 match c {
-                    b'+' | b'-' | b'*' | b'/' | b'<' | b'>' | b'=' | b'!'
-                    | b'&' | b'|' | b'^' | b'~' | b'#' | b'(' | b')'
-                    | b'[' | b']' | b',' | b':' => {
+                    b'+' | b'-' | b'*' | b'/' | b'<' | b'>' | b'=' | b'!' | b'&' | b'|' | b'^'
+                    | b'~' | b'#' | b'(' | b')' | b'[' | b']' | b',' | b':' => {
                         raw.push((line_u, col as u32, 1, TT_OPERATOR, 0));
-                    }
+                    },
                     _ => {}
                 }
                 col += 1;
@@ -722,13 +865,18 @@ impl AssemblyAnalyzer {
         let mut prev_start = 0u32;
         for (line, start, len, tok_type, modifiers) in raw {
             let delta_line = line - prev_line;
-            let delta_start = if delta_line == 0 { start - prev_start } else { start };
+            let delta_start = if delta_line == 0 {
+                start - prev_start
+            }
+            else {
+                start
+            };
             result.push(SemanticToken {
                 delta_line,
                 delta_start,
                 length: len,
                 token_type: tok_type,
-                token_modifiers_bitset: modifiers,
+                token_modifiers_bitset: modifiers
             });
             prev_line = line;
             prev_start = start;
@@ -760,7 +908,8 @@ impl AssemblyAnalyzer {
 
         if start < end {
             Some(chars[start..end].iter().collect())
-        } else {
+        }
+        else {
             None
         }
     }
@@ -775,8 +924,13 @@ impl AssemblyAnalyzer {
         // Offer RENUM when cursor/selection is inside a LOCOMOTIVE block.
         let loco_blocks = extract_locomotive_blocks(&text);
         let cursor_line = range.start.line as usize;
-        if let Some(block) = loco_blocks.iter().find(|b| b.basic_range.contains(&cursor_line)) {
-            let basic_text: String = block.basic_range.clone()
+        if let Some(block) = loco_blocks
+            .iter()
+            .find(|b| b.basic_range.contains(&cursor_line))
+        {
+            let basic_text: String = block
+                .basic_range
+                .clone()
                 .filter_map(|i| all_lines.get(i).copied())
                 .collect::<Vec<_>>()
                 .join("\n");
@@ -784,12 +938,19 @@ impl AssemblyAnalyzer {
                 if new_basic != basic_text {
                     let new_text = if new_basic.ends_with('\n') {
                         new_basic
-                    } else {
+                    }
+                    else {
                         format!("{new_basic}\n")
                     };
                     let edit_range = Range {
-                        start: Position { line: block.basic_range.start as u32, character: 0 },
-                        end:   Position { line: block.basic_range.end   as u32, character: 0 },
+                        start: Position {
+                            line: block.basic_range.start as u32,
+                            character: 0
+                        },
+                        end: Position {
+                            line: block.basic_range.end as u32,
+                            character: 0
+                        }
                     };
                     actions.push(CodeAction {
                         title: "Renumber BASIC lines in LOCOMOTIVE block (10, 20, 30…)".to_string(),
@@ -809,26 +970,40 @@ impl AssemblyAnalyzer {
         // end.line is exclusive when character == 0; include last non-empty line
         let end_line = if range.end.character == 0 && range.end.line > range.start.line {
             (range.end.line as usize).saturating_sub(1)
-        } else {
+        }
+        else {
             range.end.line as usize
-        }.min(all_lines.len().saturating_sub(1));
+        }
+        .min(all_lines.len().saturating_sub(1));
 
-        if start_line > end_line { return actions; }
+        if start_line > end_line {
+            return actions;
+        }
 
         // Wrap in MACRO / ENDM
         actions.push(self.wrap_action(
-            document, &all_lines, start_line, end_line,
-            "MACRO MY_MACRO", "ENDM", "MY_MACRO",
+            document,
+            &all_lines,
+            start_line,
+            end_line,
+            "MACRO MY_MACRO",
+            "ENDM",
+            "MY_MACRO",
             "Wrap selection in MACRO…ENDM (rename MY_MACRO)",
-            CodeActionKind::REFACTOR_EXTRACT,
+            CodeActionKind::REFACTOR_EXTRACT
         ));
 
         // Wrap in REPEAT / REND
         actions.push(self.wrap_action(
-            document, &all_lines, start_line, end_line,
-            "REPEAT 10", "REND", "10",
+            document,
+            &all_lines,
+            start_line,
+            end_line,
+            "REPEAT 10",
+            "REND",
+            "10",
             "Wrap selection in REPEAT…REND (replace 10 with count)",
-            CodeActionKind::REFACTOR_EXTRACT,
+            CodeActionKind::REFACTOR_EXTRACT
         ));
 
         // Join selected lines into one (instructions separated by " : ")
@@ -856,7 +1031,7 @@ impl AssemblyAnalyzer {
         footer: &str,
         placeholder: &str,
         title: &str,
-        kind: CodeActionKind,
+        kind: CodeActionKind
     ) -> CodeAction {
         // Detect minimum indentation of non-empty selected lines.
         let indent = lines[start_line..=end_line]
@@ -878,8 +1053,14 @@ impl AssemblyAnalyzer {
         new_text.push_str(&format!("{footer}\n"));
 
         let edit_range = Range {
-            start: Position { line: start_line as u32, character: 0 },
-            end:   Position { line: end_line as u32 + 1, character: 0 },
+            start: Position {
+                line: start_line as u32,
+                character: 0
+            },
+            end: Position {
+                line: end_line as u32 + 1,
+                character: 0
+            }
         };
 
         // Select the placeholder text in the header line once the edit is applied,
@@ -887,8 +1068,14 @@ impl AssemblyAnalyzer {
         let command = header.find(placeholder).map(|col| {
             let header_line = start_line as u32;
             let placeholder_range = Range {
-                start: Position { line: header_line, character: col as u32 },
-                end:   Position { line: header_line, character: (col + placeholder.len()) as u32 },
+                start: Position {
+                    line: header_line,
+                    character: col as u32
+                },
+                end: Position {
+                    line: header_line,
+                    character: (col + placeholder.len()) as u32
+                }
             };
             select_range_command(&document.uri, placeholder_range)
         });
@@ -907,7 +1094,7 @@ impl AssemblyAnalyzer {
         document: &Document,
         lines: &[&str],
         start_line: usize,
-        end_line: usize,
+        end_line: usize
     ) -> Option<CodeAction> {
         // Indentation taken from the first non-empty line.
         let first = lines[start_line..=end_line]
@@ -922,12 +1109,20 @@ impl AssemblyAnalyzer {
             .map(|l| strip_asm_comment(l).trim())
             .filter(|s| !s.is_empty())
             .collect();
-        if parts.len() < 2 { return None; }
+        if parts.len() < 2 {
+            return None;
+        }
 
         let joined = format!("{}{}\n", indent, parts.join(" : "));
         let edit_range = Range {
-            start: Position { line: start_line as u32, character: 0 },
-            end:   Position { line: end_line as u32 + 1, character: 0 },
+            start: Position {
+                line: start_line as u32,
+                character: 0
+            },
+            end: Position {
+                line: end_line as u32 + 1,
+                character: 0
+            }
         };
         Some(CodeAction {
             title: "Join selected lines (separate with :)".to_string(),
@@ -942,7 +1137,7 @@ impl AssemblyAnalyzer {
         document: &Document,
         lines: &[&str],
         start_line: usize,
-        end_line: usize,
+        end_line: usize
     ) -> Option<CodeAction> {
         let mut new_text = String::new();
         let mut any_split = false;
@@ -951,7 +1146,9 @@ impl AssemblyAnalyzer {
             let indent_len = line.len() - line.trim_start().len();
             let indent = &line[..indent_len];
             let parts = split_at_colon(line);
-            if parts.len() > 1 { any_split = true; }
+            if parts.len() > 1 {
+                any_split = true;
+            }
             for part in parts {
                 new_text.push_str(indent);
                 new_text.push_str(part.trim_start());
@@ -959,11 +1156,19 @@ impl AssemblyAnalyzer {
             }
         }
 
-        if !any_split { return None; }
+        if !any_split {
+            return None;
+        }
 
         let edit_range = Range {
-            start: Position { line: start_line as u32, character: 0 },
-            end:   Position { line: end_line as u32 + 1, character: 0 },
+            start: Position {
+                line: start_line as u32,
+                character: 0
+            },
+            end: Position {
+                line: end_line as u32 + 1,
+                character: 0
+            }
         };
         Some(CodeAction {
             title: "Split lines at : (one instruction per line)".to_string(),
@@ -977,24 +1182,37 @@ impl AssemblyAnalyzer {
     /// or `None` if the source cannot be parsed or is already correctly formatted.
     /// `opt` is the already-resolved format options (config loading is the caller's responsibility
     /// so the backend can report config errors to the LSP client).
-    pub fn format(&self, document: &Document, opt: &cpclib_asmfmt::AsmFormatOptions) -> Option<Vec<TextEdit>> {
+    pub fn format(
+        &self,
+        document: &Document,
+        opt: &cpclib_asmfmt::AsmFormatOptions
+    ) -> Option<Vec<TextEdit>> {
         let source = document.text();
         let formatted = cpclib_asmfmt::format(&source, opt).ok()?;
         if formatted == source {
             return None;
         }
         let line_count = document.line_count() as u32;
-        let last_line_len = document.line(line_count.saturating_sub(1) as usize)
+        let last_line_len = document
+            .line(line_count.saturating_sub(1) as usize)
             .map(|l| l.len() as u32)
             .unwrap_or(0);
         let whole_doc = Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: line_count, character: last_line_len },
+            start: Position {
+                line: 0,
+                character: 0
+            },
+            end: Position {
+                line: line_count,
+                character: last_line_len
+            }
         };
-        Some(vec![TextEdit { range: whole_doc, new_text: formatted }])
+        Some(vec![TextEdit {
+            range: whole_doc,
+            new_text: formatted
+        }])
     }
 }
-
 
 impl Default for AssemblyAnalyzer {
     fn default() -> Self {
@@ -1008,9 +1226,9 @@ fn make_hover(md: String) -> Hover {
     Hover {
         contents: HoverContents::Markup(MarkupContent {
             kind: MarkupKind::Markdown,
-            value: md,
+            value: md
         }),
-        range: None,
+        range: None
     }
 }
 
@@ -1022,8 +1240,7 @@ fn extract_number_at_position(line: &str, col: usize) -> Option<(String, i64)> {
         return None;
     }
     let ch = bytes[col];
-    let is_hex_digit =
-        |b: u8| b.is_ascii_digit() || matches!(b, b'a'..=b'f' | b'A'..=b'F');
+    let is_hex_digit = |b: u8| b.is_ascii_digit() || matches!(b, b'a'..=b'f' | b'A'..=b'F');
     let is_prefix = |b: u8| matches!(b, b'$' | b'%' | b'&' | b'#');
 
     // Cursor must be on a digit, hex letter, or a numeric prefix
@@ -1042,7 +1259,12 @@ fn extract_number_at_position(line: &str, col: usize) -> Option<(String, i64)> {
     }
 
     // Scan forward to end of token
-    let body_start = if is_prefix(bytes[start]) { start + 1 } else { start };
+    let body_start = if is_prefix(bytes[start]) {
+        start + 1
+    }
+    else {
+        start
+    };
     let mut end = body_start;
     // Consume a 0x / 0b / 0o prefix if present
     if end + 1 < bytes.len()
@@ -1066,26 +1288,32 @@ fn extract_number_at_position(line: &str, col: usize) -> Option<(String, i64)> {
         .or_else(|| num_str.strip_prefix('#'))
     {
         i64::from_str_radix(h, 16).ok()?
-    } else if let Some(b) = num_str.strip_prefix('%') {
+    }
+    else if let Some(b) = num_str.strip_prefix('%') {
         i64::from_str_radix(b, 2).ok()?
-    } else if let Some(h) = num_str
+    }
+    else if let Some(h) = num_str
         .strip_prefix("0x")
         .or_else(|| num_str.strip_prefix("0X"))
     {
         i64::from_str_radix(h, 16).ok()?
-    } else if let Some(b) = num_str
+    }
+    else if let Some(b) = num_str
         .strip_prefix("0b")
         .or_else(|| num_str.strip_prefix("0B"))
     {
         i64::from_str_radix(b, 2).ok()?
-    } else if let Some(o) = num_str
+    }
+    else if let Some(o) = num_str
         .strip_prefix("0o")
         .or_else(|| num_str.strip_prefix("0O"))
     {
         i64::from_str_radix(o, 8).ok()?
-    } else if num_str.bytes().all(|b| b.is_ascii_digit()) {
+    }
+    else if num_str.bytes().all(|b| b.is_ascii_digit()) {
         num_str.parse().ok()?
-    } else {
+    }
+    else {
         return None;
     };
 
@@ -1098,37 +1326,39 @@ fn is_ident_byte(b: u8) -> bool {
 
 fn register_description(upper: &str) -> Option<String> {
     let desc = match upper {
-        "A"   => "**A** — Accumulator (8-bit). Primary register for arithmetic/logic.",
-        "B"   => "**B** — 8-bit general purpose register.",
-        "C"   => "**C** — 8-bit general purpose register. Also the carry condition code.",
-        "D"   => "**D** — 8-bit general purpose register.",
-        "E"   => "**E** — 8-bit general purpose register.",
-        "H"   => "**H** — High byte of HL.",
-        "L"   => "**L** — Low byte of HL.",
-        "F"   => "**F** — Flags register (8-bit). Bits: S Z 5 H 3 P/V N C.",
-        "BC"  => "**BC** — 16-bit register pair (B:C). Often used as counter or source address.",
-        "DE"  => "**DE** — 16-bit register pair (D:E). Often used as destination pointer.",
-        "HL"  => "**HL** — 16-bit register pair (H:L). Primary 16-bit address register.",
-        "AF"  => "**AF** — Accumulator + Flags register pair.",
+        "A" => "**A** — Accumulator (8-bit). Primary register for arithmetic/logic.",
+        "B" => "**B** — 8-bit general purpose register.",
+        "C" => "**C** — 8-bit general purpose register. Also the carry condition code.",
+        "D" => "**D** — 8-bit general purpose register.",
+        "E" => "**E** — 8-bit general purpose register.",
+        "H" => "**H** — High byte of HL.",
+        "L" => "**L** — Low byte of HL.",
+        "F" => "**F** — Flags register (8-bit). Bits: S Z 5 H 3 P/V N C.",
+        "BC" => "**BC** — 16-bit register pair (B:C). Often used as counter or source address.",
+        "DE" => "**DE** — 16-bit register pair (D:E). Often used as destination pointer.",
+        "HL" => "**HL** — 16-bit register pair (H:L). Primary 16-bit address register.",
+        "AF" => "**AF** — Accumulator + Flags register pair.",
         "AF'" => "**AF'** — Alternate Accumulator + Flags register pair (shadow).",
-        "IX"  => "**IX** — 16-bit index register X. Used with `(IX+d)` displacement addressing.",
-        "IY"  => "**IY** — 16-bit index register Y. Used with `(IY+d)` displacement addressing.",
-        "SP"  => "**SP** — Stack Pointer (16-bit). Points to the top of the hardware stack.",
-        "PC"  => "**PC** — Program Counter (16-bit). Points to the next instruction to execute.",
-        "I"   => "**I** — Interrupt vector register (8-bit). High byte of the IM 2 vector table address.",
-        "R"   => "**R** — Memory Refresh register (8-bit). Auto-incremented each M1 machine cycle.",
+        "IX" => "**IX** — 16-bit index register X. Used with `(IX+d)` displacement addressing.",
+        "IY" => "**IY** — 16-bit index register Y. Used with `(IY+d)` displacement addressing.",
+        "SP" => "**SP** — Stack Pointer (16-bit). Points to the top of the hardware stack.",
+        "PC" => "**PC** — Program Counter (16-bit). Points to the next instruction to execute.",
+        "I" => {
+            "**I** — Interrupt vector register (8-bit). High byte of the IM 2 vector table address."
+        },
+        "R" => "**R** — Memory Refresh register (8-bit). Auto-incremented each M1 machine cycle.",
         "IXH" => "**IXH** — High byte of IX (undocumented).",
         "IXL" => "**IXL** — Low byte of IX (undocumented).",
         "IYH" => "**IYH** — High byte of IY (undocumented).",
         "IYL" => "**IYL** — Low byte of IY (undocumented).",
-        "NZ"  => "**NZ** — Condition code: not zero (Z=0).",
-        "Z"   => "**Z** — Condition code: zero (Z=1).",
-        "NC"  => "**NC** — Condition code: no carry (C=0).",
-        "PE"  => "**PE** — Condition code: parity even / overflow set (P/V=1).",
-        "PO"  => "**PO** — Condition code: parity odd / overflow clear (P/V=0).",
-        "P"   => "**P** — Condition code: positive / sign clear (S=0).",
-        "M"   => "**M** — Condition code: minus / sign set (S=1).",
-        _     => return None,
+        "NZ" => "**NZ** — Condition code: not zero (Z=0).",
+        "Z" => "**Z** — Condition code: zero (Z=1).",
+        "NC" => "**NC** — Condition code: no carry (C=0).",
+        "PE" => "**PE** — Condition code: parity even / overflow set (P/V=1).",
+        "PO" => "**PO** — Condition code: parity odd / overflow clear (P/V=0).",
+        "P" => "**P** — Condition code: positive / sign clear (S=0).",
+        "M" => "**M** — Condition code: minus / sign set (S=1).",
+        _ => return None
     };
     Some(desc.to_string())
 }
@@ -1140,7 +1370,12 @@ const INCLUDE_DIRECTIVES: &[&str] = &["INCLUDE", "INCBIN", "BINCLUDE"];
 /// Directory-level markers that indicate the project root.  We stop walking
 /// up the ancestor tree when we find one of these in the current directory.
 const PROJECT_ROOT_MARKERS: &[&str] = &[
-    ".git", ".hg", "Cargo.toml", "Cargo.lock", "Makefile", "makefile",
+    ".git",
+    ".hg",
+    "Cargo.toml",
+    "Cargo.lock",
+    "Makefile",
+    "makefile"
 ];
 
 /// If `col` is inside a double-quoted string on a line that starts with an
@@ -1178,7 +1413,7 @@ fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
         let at_root = PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists());
         match dir.parent() {
             Some(parent) if !at_root => dir = parent,
-            _ => break,
+            _ => break
         }
     }
     None
@@ -1194,7 +1429,8 @@ fn find_quoted_string(bytes: &[u8], col: usize) -> Option<(usize, usize)> {
     // `col` must be inside or on the opening/closing quote.
     if col >= open && col <= close {
         Some((open, close))
-    } else {
+    }
+    else {
         None
     }
 }
@@ -1205,7 +1441,7 @@ struct LocomotiveBlock {
     directive_line: usize,
     hide_lines_line: Option<usize>,
     basic_range: std::ops::Range<usize>,
-    end_line: usize,
+    end_line: usize
 }
 
 fn extract_locomotive_blocks(text: &str) -> Vec<LocomotiveBlock> {
@@ -1217,7 +1453,11 @@ fn extract_locomotive_blocks(text: &str) -> Vec<LocomotiveBlock> {
         let upper = lines[i].trim().to_uppercase();
         if upper == "LOCOMOTIVE"
             || (upper.starts_with("LOCOMOTIVE")
-                && upper.as_bytes().get(10).map(|b| b.is_ascii_whitespace()).unwrap_or(false))
+                && upper
+                    .as_bytes()
+                    .get(10)
+                    .map(|b| b.is_ascii_whitespace())
+                    .unwrap_or(false))
         {
             let directive_line = i;
             i += 1;
@@ -1229,10 +1469,12 @@ fn extract_locomotive_blocks(text: &str) -> Vec<LocomotiveBlock> {
                     let hl = i;
                     i += 1;
                     Some(hl)
-                } else {
+                }
+                else {
                     None
                 }
-            } else {
+            }
+            else {
                 None
             };
 
@@ -1246,7 +1488,7 @@ fn extract_locomotive_blocks(text: &str) -> Vec<LocomotiveBlock> {
                         directive_line,
                         hide_lines_line,
                         basic_range: basic_start..i,
-                        end_line: i,
+                        end_line: i
                     });
                     break;
                 }
@@ -1264,7 +1506,7 @@ fn extract_locomotive_blocks(text: &str) -> Vec<LocomotiveBlock> {
 fn push_locomotive_basic_tokens(
     block: &LocomotiveBlock,
     lines: &[&str],
-    raw: &mut Vec<(u32, u32, u32, u32, u32)>,
+    raw: &mut Vec<(u32, u32, u32, u32, u32)>
 ) {
     // Highlight the LOCOMOTIVE directive line itself (keyword + label).
     {
@@ -1316,15 +1558,15 @@ fn push_locomotive_basic_tokens(
             let src_line = block.basic_range.start as u32 + bline.source_line;
             for tok in &bline.tokens {
                 let tt = match &tok.kind {
-                    LocatedTokenKind::Keyword(_)   => TT_KEYWORD,
-                    LocatedTokenKind::Function(_)  => TT_FUNCTION,
-                    LocatedTokenKind::Variable(_)  => TT_VARIABLE,
-                    LocatedTokenKind::Number(_)    => TT_NUMBER,
+                    LocatedTokenKind::Keyword(_) => TT_KEYWORD,
+                    LocatedTokenKind::Function(_) => TT_FUNCTION,
+                    LocatedTokenKind::Variable(_) => TT_VARIABLE,
+                    LocatedTokenKind::Number(_) => TT_NUMBER,
                     LocatedTokenKind::StringLit(_) => TT_STRING,
-                    LocatedTokenKind::Comment(_)   => TT_COMMENT,
-                    LocatedTokenKind::Operator(_)  => TT_OPERATOR,
+                    LocatedTokenKind::Comment(_) => TT_COMMENT,
+                    LocatedTokenKind::Operator(_) => TT_OPERATOR,
                     LocatedTokenKind::LineNumber(_) => TT_NUMBER,
-                    _ => continue,
+                    _ => continue
                 };
                 if tok.span.len > 0 {
                     raw.push((src_line, tok.span.col, tok.span.len, tt, 0));
@@ -1350,9 +1592,10 @@ include!(concat!(env!("OUT_DIR"), "/directive_docs_generated.rs"));
 /// Look up an assembler directive by name (case-insensitive) and return a
 /// markdown hover string, or `None` if not found.
 fn directive_hover(word_upper: &str) -> Option<String> {
-    DIRECTIVE_DOCS.iter().find(|(names, _)| {
-        names.iter().any(|n| n.to_uppercase() == word_upper)
-    }).map(|(_, doc)| doc.to_string())
+    DIRECTIVE_DOCS
+        .iter()
+        .find(|(names, _)| names.iter().any(|n| n.to_uppercase() == word_upper))
+        .map(|(_, doc)| doc.to_string())
 }
 
 // ─── Per-error diagnostics ─────────────────────────────────────────────────────
@@ -1362,41 +1605,62 @@ fn directive_hover(word_upper: &str) -> Option<String> {
 fn collect_asm_diagnostics(
     error: &cpclib_asm::AssemblerError,
     parent_span: Option<&cpclib_asm::parser::Z80Span>,
-    out: &mut Vec<Diagnostic>,
+    out: &mut Vec<Diagnostic>
 ) {
     use cpclib_asm::AssemblerError;
     match error {
         AssemblerError::MultipleErrors { errors } => {
-            for e in errors { collect_asm_diagnostics(e, parent_span, out); }
-        }
+            for e in errors {
+                collect_asm_diagnostics(e, parent_span, out);
+            }
+        },
         AssemblerError::RelocatedError { span, error: inner } => {
             collect_asm_diagnostics(inner, Some(span), out);
-        }
+        },
         AssemblerError::RelocatedWarning { warning, span } => {
-            out.push(asm_diag(Some(span), format!("{warning}"), DiagnosticSeverity::WARNING));
-        }
+            out.push(asm_diag(
+                Some(span),
+                format!("{warning}"),
+                DiagnosticSeverity::WARNING
+            ));
+        },
         AssemblerError::RelocatedInfo { info, span } => {
-            out.push(asm_diag(Some(span), format!("{info}"), DiagnosticSeverity::INFORMATION));
-        }
+            out.push(asm_diag(
+                Some(span),
+                format!("{info}"),
+                DiagnosticSeverity::INFORMATION
+            ));
+        },
         AssemblerError::IncludedFileError { span, error: inner } => {
-            out.push(asm_diag(Some(span), format!("In included file: {inner}"), DiagnosticSeverity::ERROR));
-        }
+            out.push(asm_diag(
+                Some(span),
+                format!("In included file: {inner}"),
+                DiagnosticSeverity::ERROR
+            ));
+        },
         AssemblerError::IfIssue { span, error: inner } => {
             collect_asm_diagnostics(inner, Some(span), out);
-        }
+        },
         AssemblerError::ForIssue { span, error: inner } => {
             collect_asm_diagnostics(inner, span.as_ref(), out);
-        }
-        AssemblerError::RepeatIssue { span, error: inner, .. } => {
+        },
+        AssemblerError::RepeatIssue {
+            span, error: inner, ..
+        } => {
             collect_asm_diagnostics(inner, span.as_ref(), out);
-        }
+        },
         AssemblerError::WhileIssue { span, error: inner } => {
             collect_asm_diagnostics(inner, span.as_ref(), out);
-        }
-        AssemblerError::MacroError { name, location, root } => {
+        },
+        AssemblerError::MacroError {
+            name,
+            location,
+            root
+        } => {
             let prefix = if let Some(loc) = location {
                 format!("Macro {} (defined at {}): ", name, loc)
-            } else {
+            }
+            else {
                 format!("Macro {}: ", name)
             };
             let mut sub = Vec::new();
@@ -1405,29 +1669,35 @@ fn collect_asm_diagnostics(
                 d.message = format!("{}{}", prefix, d.message);
                 out.push(d);
             }
-        }
+        },
         AssemblerError::CrunchedSectionError { error: inner } => {
             collect_asm_diagnostics(inner, parent_span, out);
-        }
+        },
         AssemblerError::FunctionError(name, inner) => {
             let msg = format!("Function {name}: {inner}");
             out.push(asm_diag(parent_span, msg, DiagnosticSeverity::ERROR));
-        }
+        },
         AssemblerError::SyntaxError { error: parse_err } => {
             let message = strip_ansi(&format!("{error}"));
             // primary_span_and_end gives exact source byte offsets — no tab expansion issues.
             if let Some((span, end_off)) = parse_err.primary_span_and_end() {
                 let (line_1, col_1) = span.relative_line_and_column();
                 let line = line_1.saturating_sub(1) as u32;
-                let col  = col_1.saturating_sub(1) as u32;
-                let len  = end_off.saturating_sub(span.offset_from_start()) as u32;
+                let col = col_1.saturating_sub(1) as u32;
+                let len = end_off.saturating_sub(span.offset_from_start()) as u32;
                 out.push(Diagnostic {
                     range: Range {
-                        start: Position { line, character: col },
-                        end:   Position { line, character: col + len.max(1) },
+                        start: Position {
+                            line,
+                            character: col
+                        },
+                        end: Position {
+                            line,
+                            character: col + len.max(1)
+                        }
                     },
                     severity: Some(DiagnosticSeverity::ERROR),
-                    source:   Some("basm".to_string()),
+                    source: Some("basm".to_string()),
                     message,
                     ..Default::default()
                 });
@@ -1436,12 +1706,20 @@ fn collect_asm_diagnostics(
             let owned_span = parse_err.primary_z80span();
             let span_ref = owned_span.as_ref().or(parent_span);
             out.push(asm_diag(span_ref, message, DiagnosticSeverity::ERROR));
-        }
+        },
         AssemblerError::AlreadyRenderedError(s) => {
-            out.push(asm_diag(parent_span, strip_ansi(s), DiagnosticSeverity::ERROR));
-        }
+            out.push(asm_diag(
+                parent_span,
+                strip_ansi(s),
+                DiagnosticSeverity::ERROR
+            ));
+        },
         other => {
-            out.push(asm_diag(parent_span, format!("{other}"), DiagnosticSeverity::ERROR));
+            out.push(asm_diag(
+                parent_span,
+                format!("{other}"),
+                DiagnosticSeverity::ERROR
+            ));
         }
     }
 }
@@ -1449,26 +1727,46 @@ fn collect_asm_diagnostics(
 fn asm_diag(
     span: Option<&cpclib_asm::parser::Z80Span>,
     message: String,
-    severity: DiagnosticSeverity,
+    severity: DiagnosticSeverity
 ) -> Diagnostic {
     let (start, end_pos) = if let Some(s) = span {
         let (line_1, col_1) = s.relative_line_and_column();
         let line = line_1.saturating_sub(1) as u32;
-        let col  = col_1.saturating_sub(1) as u32;
+        let col = col_1.saturating_sub(1) as u32;
         let span_text: &str = s.as_ref();
         // Highlight to end of the current instruction (next `:` separator) or end of line.
         let first_line = span_text.lines().next().unwrap_or(span_text);
-        let len = (first_line.find(':')
-            .unwrap_or(first_line.len()) as u32)
-            .max(1);
-        (Position { line, character: col }, Position { line, character: col + len })
-    } else {
-        (Position { line: 0, character: 0 }, Position { line: 0, character: 100 })
+        let len = (first_line.find(':').unwrap_or(first_line.len()) as u32).max(1);
+        (
+            Position {
+                line,
+                character: col
+            },
+            Position {
+                line,
+                character: col + len
+            }
+        )
+    }
+    else {
+        (
+            Position {
+                line: 0,
+                character: 0
+            },
+            Position {
+                line: 0,
+                character: 100
+            }
+        )
     };
     Diagnostic {
-        range:    Range { start, end: end_pos },
+        range: Range {
+            start,
+            end: end_pos
+        },
         severity: Some(severity),
-        source:   Some("basm".to_string()),
+        source: Some("basm".to_string()),
         message,
         ..Default::default()
     }
@@ -1484,15 +1782,18 @@ fn strip_ansi(s: &str) -> String {
                     chars.next(); // consume '['
                     // CSI: consume until final byte in 0x40..=0x7E ('@'..='~')
                     for c2 in chars.by_ref() {
-                        if ('@'..='~').contains(&c2) { break; }
+                        if ('@'..='~').contains(&c2) {
+                            break;
+                        }
                     }
-                }
+                },
                 Some(c2) if ('\x40'..='\x5F').contains(&c2) => {
                     chars.next(); // 2-char Fe sequence
-                }
+                },
                 _ => {}
             }
-        } else {
+        }
+        else {
             out.push(c);
         }
     }
@@ -1504,7 +1805,10 @@ fn strip_ansi(s: &str) -> String {
 /// Build a `WorkspaceEdit` that replaces one range in one file.
 fn single_file_edit(uri: Url, range: Range, new_text: String) -> WorkspaceEdit {
     WorkspaceEdit {
-        changes: Some(std::collections::HashMap::from([(uri, vec![TextEdit { range, new_text }])])),
+        changes: Some(std::collections::HashMap::from([(
+            uri,
+            vec![TextEdit { range, new_text }]
+        )])),
         ..Default::default()
     }
 }
@@ -1519,7 +1823,7 @@ fn select_range_command(uri: &Url, range: Range) -> Command {
         arguments: Some(vec![serde_json::json!({
             "uri": uri.to_string(),
             "range": range,
-        })]),
+        })])
     }
 }
 
@@ -1554,7 +1858,10 @@ fn split_at_colon(line: &str) -> Vec<String> {
 
     while i < bytes.len() {
         match bytes[i] {
-            b'"' => { in_str = !in_str; i += 1; }
+            b'"' => {
+                in_str = !in_str;
+                i += 1;
+            },
             b':' if !in_str => {
                 if i + 1 < bytes.len() && bytes[i + 1] == b':' {
                     i += 2;
@@ -1563,23 +1870,35 @@ fn split_at_colon(line: &str) -> Vec<String> {
                 raw_parts.push(&line[start..i]);
                 start = i + 1;
                 i += 1;
+            },
+            _ => {
+                i += 1;
             }
-            _ => { i += 1; }
         }
     }
     raw_parts.push(&line[start..]);
 
     let n = raw_parts.len();
-    raw_parts.into_iter()
+    raw_parts
+        .into_iter()
         .enumerate()
         .filter_map(|(idx, part)| {
             let trimmed = part.trim();
-            if trimmed.is_empty() { return None; }
+            if trimmed.is_empty() {
+                return None;
+            }
             // A part followed by a colon in the source, made up only of
             // identifier characters, is a label definition.
             let is_label = idx + 1 < n
-                && trimmed.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '@');
-            Some(if is_label { format!("{trimmed}:") } else { trimmed.to_string() })
+                && trimmed
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '.' || c == '@');
+            Some(if is_label {
+                format!("{trimmed}:")
+            }
+            else {
+                trimmed.to_string()
+            })
         })
         .collect()
 }

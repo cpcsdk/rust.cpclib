@@ -1,11 +1,14 @@
 use std::io::Write;
 
-use super::super::format::{blank, format_address_for, format_deferred_line_with_template_for, format_line_with_template_for, logical_address_width, ListingOutputFormat};
-use super::shared::{
-    global_prefix_for_symbol, is_identifier_char, qualify_local_symbol, ListingDeferredRender,
-    ListingLineRender, ListingNotice, TextListingRenderer
-};
 use super::super::TokenKind;
+use super::super::format::{
+    ListingOutputFormat, blank, format_address_for, format_deferred_line_with_template_for,
+    format_line_with_template_for, logical_address_width
+};
+use super::shared::{
+    ListingDeferredRender, ListingLineRender, ListingNotice, TextListingRenderer,
+    global_prefix_for_symbol, is_identifier_char, qualify_local_symbol
+};
 
 impl TextListingRenderer {
     fn update_current_global_symbol(&mut self, token_kind: &TokenKind) {
@@ -53,15 +56,25 @@ impl TextListingRenderer {
     pub(crate) fn render_notice(&mut self, writer: &mut dyn Write, notice: ListingNotice<'_>) {
         let line = match notice {
             ListingNotice::RawLine(line) => line.to_string(),
-            ListingNotice::ContextHeader { file_index, fname } => format!("Context [{file_index}]: {fname}"),
-            ListingNotice::FileMapHeader { file_index, fname } => format!("Source file map:\n  [{file_index}] {fname}"),
+            ListingNotice::ContextHeader { file_index, fname } => {
+                format!("Context [{file_index}]: {fname}")
+            },
+            ListingNotice::FileMapHeader { file_index, fname } => {
+                format!("Source file map:\n  [{file_index}] {fname}")
+            },
             ListingNotice::FileMapEntry { file_index, fname } => format!("  [{file_index}] {fname}")
         };
 
         writeln!(writer, "{line}").unwrap();
     }
 
-    pub(crate) fn render_deferred(&mut self, writer: &mut dyn Write, format: &ListingOutputFormat, bytes_per_line: usize, deferred: ListingDeferredRender<'_>) {
+    pub(crate) fn render_deferred(
+        &mut self,
+        writer: &mut dyn Write,
+        format: &ListingOutputFormat,
+        bytes_per_line: usize,
+        deferred: ListingDeferredRender<'_>
+    ) {
         self.update_current_global_symbol(deferred.token_kind);
         let source_line_raw = self.qualify_locals_in_line(deferred.source_line_raw);
         let source_line_expanded = self.qualify_locals_in_line(deferred.source_line_expanded);
@@ -79,7 +92,13 @@ impl TextListingRenderer {
         }
     }
 
-    pub(crate) fn render_line(&mut self, writer: &mut dyn Write, format: &ListingOutputFormat, bytes_per_line: usize, line: ListingLineRender<'_>) {
+    pub(crate) fn render_line(
+        &mut self,
+        writer: &mut dyn Write,
+        format: &ListingOutputFormat,
+        bytes_per_line: usize,
+        line: ListingLineRender<'_>
+    ) {
         self.update_current_global_symbol(line.token_kind);
         let source_line_raw = self.qualify_locals_in_line(line.source_line_raw);
         let source_line_expanded = self.qualify_locals_in_line(line.source_line_expanded);

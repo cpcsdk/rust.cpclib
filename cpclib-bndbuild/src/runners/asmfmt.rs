@@ -62,23 +62,22 @@ impl<E: EventObserver + 'static> Runner for AsmFmtRunner<E> {
         let matches = matches.unwrap();
 
         if matches.get_flag("version") {
-            o.emit_stdout(&format!(
-                "basm-fmt {}\n",
-                env!("CARGO_PKG_VERSION")
-            ));
+            o.emit_stdout(&format!("basm-fmt {}\n", env!("CARGO_PKG_VERSION")));
             return Ok(());
         }
 
         use std::path::PathBuf;
         let base = match cpclib_asmfmt::find_config_file() {
             None => cpclib_asmfmt::AsmFormatOptions::default(),
-            Some(path) => match cpclib_asmfmt::load_config_from(&path) {
-                Ok(cfg) => cfg,
-                Err(e) => {
-                    o.emit_stdout(&format!("warning: {}: {e}\n", path.display()));
-                    cpclib_asmfmt::AsmFormatOptions::default()
+            Some(path) => {
+                match cpclib_asmfmt::load_config_from(&path) {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        o.emit_stdout(&format!("warning: {}: {e}\n", path.display()));
+                        cpclib_asmfmt::AsmFormatOptions::default()
+                    }
                 }
-            }
+            },
         };
         let options = cpclib_asmfmt::cli::apply_cli_overrides(base, &matches);
         let inplace = matches.get_flag("inplace");
@@ -103,20 +102,23 @@ impl<E: EventObserver + 'static> Runner for AsmFmtRunner<E> {
                     o.emit_stdout(&format!("{}: would be reformatted\n", path.display()));
                     all_changed = true;
                 }
-            } else if inplace {
+            }
+            else if inplace {
                 if formatted != source {
                     fs_err::write(path, &formatted)
                         .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
                     o.emit_stdout(&format!("{}: reformatted\n", path.display()));
                 }
-            } else {
+            }
+            else {
                 o.emit_stdout(&formatted);
             }
         }
 
         if check && all_changed {
             Err("some files would be reformatted".to_owned())
-        } else {
+        }
+        else {
             Ok(())
         }
     }

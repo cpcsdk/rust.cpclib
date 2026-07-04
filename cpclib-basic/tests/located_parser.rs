@@ -19,8 +19,8 @@ const HBL_INTRO: &str = r#"10 INK 3,26,26
 
 #[test]
 fn test_located_parse_hbl_intro() {
-    let prog = LocatedBasicProgram::parse(HBL_INTRO)
-        .expect("LocatedBasicProgram::parse should not fail");
+    let prog =
+        LocatedBasicProgram::parse(HBL_INTRO).expect("LocatedBasicProgram::parse should not fail");
     // We have 16 source lines, all with valid line numbers.
     // Duplicate line 12 appears three times — all should be parsed.
     assert!(

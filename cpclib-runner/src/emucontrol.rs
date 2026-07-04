@@ -635,7 +635,7 @@ impl EmulatorConf {
                 },
                 Emulator::Emulator1984(_) => {
                     args.push(format!("--disk-a={drive_a}"));
-                },
+                }
             }
         }
 

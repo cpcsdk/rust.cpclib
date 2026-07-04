@@ -2,9 +2,7 @@ use std::collections::HashMap;
 use std::io::Write;
 
 use super::super::TokenKind;
-use super::super::format::{
-    hex_byte_for, ListingOutputFormat, ListingOutputKind
-};
+use super::super::format::{ListingOutputFormat, ListingOutputKind, hex_byte_for};
 
 pub(crate) struct ListingLineRender<'a> {
     pub(crate) row_id: usize,
@@ -94,7 +92,11 @@ pub(crate) fn render_html_bytes(format: &ListingOutputFormat, bytes: &[u8]) -> S
     render_html_bytes_for_row(format, bytes, None)
 }
 
-pub(crate) fn render_html_bytes_for_row(format: &ListingOutputFormat, bytes: &[u8], row_id: Option<usize>) -> String {
+pub(crate) fn render_html_bytes_for_row(
+    format: &ListingOutputFormat,
+    bytes: &[u8],
+    row_id: Option<usize>
+) -> String {
     let hover_attr = row_id
         .map(|row_id| format!(" data-hover-row=\"row-{row_id}\""))
         .unwrap_or_default();
@@ -106,7 +108,9 @@ pub(crate) fn render_html_bytes_for_row(format: &ListingOutputFormat, bytes: &[u
             hex_byte_for(format, *byte)
         ));
         if idx + 1 < bytes.len() {
-            out.push_str(&format!("<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"));
+            out.push_str(&format!(
+                "<span class=\"byte-sep\"{hover_attr}>&nbsp;</span>"
+            ));
         }
     }
     out
@@ -114,13 +118,15 @@ pub(crate) fn render_html_bytes_for_row(format: &ListingOutputFormat, bytes: &[u
 
 pub(crate) fn escape_html(text: &str) -> String {
     text.chars()
-        .map(|ch| match ch {
-            '&' => "&amp;".to_string(),
-            '<' => "&lt;".to_string(),
-            '>' => "&gt;".to_string(),
-            '"' => "&quot;".to_string(),
-            '\'' => "&#39;".to_string(),
-            _ => ch.to_string()
+        .map(|ch| {
+            match ch {
+                '&' => "&amp;".to_string(),
+                '<' => "&lt;".to_string(),
+                '>' => "&gt;".to_string(),
+                '"' => "&quot;".to_string(),
+                '\'' => "&#39;".to_string(),
+                _ => ch.to_string()
+            }
         })
         .collect()
 }
@@ -142,7 +148,10 @@ pub(crate) fn render_html_tokenized_text(text: &str, class_name: &str) -> String
             out.push_str(&escape_html(&token));
         }
         else {
-            out.push_str(&format!("<span class=\"token {class_name}\">{}</span>", escape_html(&token)));
+            out.push_str(&format!(
+                "<span class=\"token {class_name}\">{}</span>",
+                escape_html(&token)
+            ));
         }
 
         token.clear();
@@ -155,7 +164,10 @@ pub(crate) fn render_html_tokenized_text(text: &str, class_name: &str) -> String
             out.push_str(&escape_html(&token));
         }
         else {
-            out.push_str(&format!("<span class=\"token {class_name}\">{}</span>", escape_html(&token)));
+            out.push_str(&format!(
+                "<span class=\"token {class_name}\">{}</span>",
+                escape_html(&token)
+            ));
         }
     }
 
@@ -175,9 +187,10 @@ pub(crate) fn global_prefix_for_symbol(symbol: &str) -> Option<&str> {
 
 pub(crate) fn qualify_local_symbol(token_text: &str, current_global: Option<&str>) -> String {
     if token_text.starts_with('.')
-        && let Some(global) = current_global {
-            return format!("{global}{token_text}");
-        }
+        && let Some(global) = current_global
+    {
+        return format!("{global}{token_text}");
+    }
 
     token_text.to_string()
 }
@@ -204,14 +217,28 @@ impl ListingRenderer {
         }
     }
 
-    pub(crate) fn render_deferred(&mut self, writer: &mut dyn Write, format: &ListingOutputFormat, bytes_per_line: usize, deferred: ListingDeferredRender<'_>) {
+    pub(crate) fn render_deferred(
+        &mut self,
+        writer: &mut dyn Write,
+        format: &ListingOutputFormat,
+        bytes_per_line: usize,
+        deferred: ListingDeferredRender<'_>
+    ) {
         match self {
-            Self::Text(renderer) => renderer.render_deferred(writer, format, bytes_per_line, deferred),
+            Self::Text(renderer) => {
+                renderer.render_deferred(writer, format, bytes_per_line, deferred)
+            },
             Self::Html(renderer) => renderer.render_deferred(writer, format, deferred)
         }
     }
 
-    pub(crate) fn render_line(&mut self, writer: &mut dyn Write, format: &ListingOutputFormat, bytes_per_line: usize, line: ListingLineRender<'_>) {
+    pub(crate) fn render_line(
+        &mut self,
+        writer: &mut dyn Write,
+        format: &ListingOutputFormat,
+        bytes_per_line: usize,
+        line: ListingLineRender<'_>
+    ) {
         match self {
             Self::Text(renderer) => renderer.render_line(writer, format, bytes_per_line, line),
             Self::Html(renderer) => renderer.render_line(writer, format, line)

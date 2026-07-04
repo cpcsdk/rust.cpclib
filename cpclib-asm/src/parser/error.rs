@@ -58,7 +58,10 @@ impl Z80ParserError {
         let errors = self.errors();
         // Prefer a meaningful, non-noise entry.
         if let Some((span, _)) = errors.iter().find(|(_, k)| {
-            !matches!(k, Z80ParserErrorKind::Winnow | Z80ParserErrorKind::DebugContext(_))
+            !matches!(
+                k,
+                Z80ParserErrorKind::Winnow | Z80ParserErrorKind::DebugContext(_)
+            )
         }) {
             return Some(Z80Span::from(*(*span)));
         }
@@ -73,12 +76,16 @@ impl Z80ParserError {
     pub fn primary_span_and_end(&self) -> Option<(Z80Span, usize)> {
         let errors = self.errors();
         let found = errors.iter().find(|(_, k)| {
-            !matches!(k, Z80ParserErrorKind::Winnow | Z80ParserErrorKind::DebugContext(_))
+            !matches!(
+                k,
+                Z80ParserErrorKind::Winnow | Z80ParserErrorKind::DebugContext(_)
+            )
         })?;
         let span = Z80Span::from(*found.0);
         let end = if let Z80ParserErrorKind::ContextWithEnd { end_offset, .. } = found.1 {
             *end_offset
-        } else {
+        }
+        else {
             span.offset_from_start() + 1
         };
         Some((span, end))

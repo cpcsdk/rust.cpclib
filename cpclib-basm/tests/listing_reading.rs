@@ -2,9 +2,9 @@ mod common;
 
 use std::process::Command;
 
+use common::{GLOBAL_TEST_LOCK, manual_cleanup};
 use pretty_assertions::assert_eq;
 use test_generator::test_resources;
-use common::{GLOBAL_TEST_LOCK, manual_cleanup};
 
 fn acquire_lock() -> parking_lot::lock_api::MutexGuard<'static, parking_lot::RawMutex, ()> {
     GLOBAL_TEST_LOCK.lock()
@@ -180,7 +180,11 @@ fn assemble_and_compare_listing_bytes_from_lst(fname: &str) {
 
     let res = run_basm_once_with_listing(fname, output_fname, listing_fname);
     if !res.status.success() {
-        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&res));
+        panic!(
+            "Failure to assemble {}.\n{}",
+            fname,
+            format_basm_failure(&res)
+        );
     }
 
     let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
@@ -198,8 +202,11 @@ fn assemble_and_compare_listing_bytes_from_lst(fname: &str) {
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let code_only_output_fname = code_only_output_file.path().as_os_str().to_str().unwrap();
 
-    let res_code_only =
-        run_basm_once_with_code_only_listing(fname, code_only_output_fname, code_only_listing_fname);
+    let res_code_only = run_basm_once_with_code_only_listing(
+        fname,
+        code_only_output_fname,
+        code_only_listing_fname
+    );
 
     if !res_code_only.status.success() {
         let stderr = String::from_utf8_lossy(&res_code_only.stderr);
@@ -240,9 +247,9 @@ fn assemble_and_compare_listing_bytes_from_lst(fname: &str) {
     let code_only_rows = extract_rows_from_code_only_listing(&code_only_listing);
 
     for row in rows {
-        let exists_in_code_only = code_only_rows
-            .iter()
-            .any(|candidate| candidate.logical_address == row.logical_address && candidate.bytes == row.bytes);
+        let exists_in_code_only = code_only_rows.iter().any(|candidate| {
+            candidate.logical_address == row.logical_address && candidate.bytes == row.bytes
+        });
 
         assert!(
             exists_in_code_only,

@@ -3,6 +3,7 @@ mod common;
 use std::process::Command;
 use std::sync::{Arc, LazyLock};
 
+use common::{GLOBAL_TEST_LOCK, manual_cleanup};
 use cpclib_asm::assembler::Env;
 use cpclib_asm::error::AssemblerError;
 use cpclib_basm::{BasmError, build_args_parser, process};
@@ -10,7 +11,6 @@ use cpclib_common::itertools::Itertools;
 use pretty_assertions::assert_eq;
 use regex::Regex;
 use test_generator::test_resources;
-use common::{GLOBAL_TEST_LOCK, manual_cleanup};
 
 fn command_for_generated_test(
     fname: &str,
@@ -89,28 +89,26 @@ fn strip_html_spaces(input: &str) -> String {
 }
 
 fn extract_byte_rows_from_html_listing(listing: &str) -> Vec<ListingBytesRow> {
-    static ROW_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"(?s)<div[^>]*class=\"row[^\"]*\"[^>]*>.*?</div>"#).unwrap()
-    });
+    static ROW_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?s)<div[^>]*class=\"row[^\"]*\"[^>]*>.*?</div>"#).unwrap());
     static ADDR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"<span class=\"cell addr\">\s*([0-9A-Fa-f]{4})\s*</span>"#).unwrap()
     });
-    static PHYS_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"<span class=\"cell phys\">(.*?)</span>"#).unwrap()
-    });
+    static PHYS_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"<span class=\"cell phys\">(.*?)</span>"#).unwrap());
     static BYTES_CELL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"(?s)<span class=\"cell bytes[^\"]*\"[^>]*>(.*?)</span>"#).unwrap()
     });
     static BYTE_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"<span class=\"token byte\"[^>]*>\s*([0-9A-Fa-f]{2})\s*</span>"#)
-            .unwrap()
+        Regex::new(r#"<span class=\"token byte\"[^>]*>\s*([0-9A-Fa-f]{2})\s*</span>"#).unwrap()
     });
 
     ROW_RE
         .captures_iter(listing)
         .filter_map(|row_cap| {
             let row = row_cap.get(0)?.as_str();
-            let logical_address = u32::from_str_radix(ADDR_RE.captures(row)?.get(1)?.as_str(), 16).ok()?;
+            let logical_address =
+                u32::from_str_radix(ADDR_RE.captures(row)?.get(1)?.as_str(), 16).ok()?;
 
             let physical_field = PHYS_RE
                 .captures(row)
@@ -299,32 +297,29 @@ fn extract_rows_from_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow>
 }
 
 fn extract_rows_from_html_code_only_listing(listing: &str) -> Vec<CodeOnlyListingRow> {
-    static ROW_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"(?s)<div[^>]*class=\"row[^\"]*\"[^>]*>.*?</div>"#).unwrap()
-    });
+    static ROW_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?s)<div[^>]*class=\"row[^\"]*\"[^>]*>.*?</div>"#).unwrap());
     static ADDR_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"<span class=\"cell addr\">\s*([0-9A-Fa-f]{4})\s*</span>"#).unwrap()
     });
-    static PHYS_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"<span class=\"cell phys\">(.*?)</span>"#).unwrap()
-    });
+    static PHYS_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"<span class=\"cell phys\">(.*?)</span>"#).unwrap());
     static BYTES_CELL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"(?s)<span class=\"cell bytes[^\"]*\"[^>]*>(.*?)</span>"#).unwrap()
     });
     static BYTE_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"<span class=\"token byte\"[^>]*>\s*([0-9A-Fa-f]{2})\s*</span>"#)
-            .unwrap()
+        Regex::new(r#"<span class=\"token byte\"[^>]*>\s*([0-9A-Fa-f]{2})\s*</span>"#).unwrap()
     });
-    static SOURCE_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"(?s)<span class=\"cell source\">(.*?)</span>"#).unwrap()
-    });
+    static SOURCE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(?s)<span class=\"cell source\">(.*?)</span>"#).unwrap());
     static TAG_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"<[^>]+>"#).unwrap());
 
     ROW_RE
         .captures_iter(listing)
         .filter_map(|row_cap| {
             let row = row_cap.get(0)?.as_str();
-            let logical_address = u32::from_str_radix(ADDR_RE.captures(row)?.get(1)?.as_str(), 16).ok()?;
+            let logical_address =
+                u32::from_str_radix(ADDR_RE.captures(row)?.get(1)?.as_str(), 16).ok()?;
 
             let physical_address = PHYS_RE
                 .captures(row)
@@ -350,7 +345,12 @@ fn extract_rows_from_html_code_only_listing(listing: &str) -> Vec<CodeOnlyListin
                 .and_then(|cap| cap.get(1))
                 .map(|m| m.as_str())
                 .map(|src| TAG_RE.replace_all(src, "").to_string())
-                .map(|src| src.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&"))
+                .map(|src| {
+                    src.replace("&nbsp;", " ")
+                        .replace("&lt;", "<")
+                        .replace("&gt;", ">")
+                        .replace("&amp;", "&")
+                })
                 .map(|src| src.trim().to_string())
                 .filter(|src| !src.is_empty());
 
@@ -468,7 +468,8 @@ fn build_source_from_code_output(rows: &[CodeOnlyListingRow]) -> String {
 
         // For banked outputs, physical addresses above 64k point to bank storage
         // (`bank_index * 0x4000 + offset`). Recreate BANK directives when needed.
-            if !saw_explicit_bank && !saw_explicit_bankset
+        if !saw_explicit_bank
+            && !saw_explicit_bankset
             && let Some(physical_address) = row.physical_address
             && physical_address >= 0x1_0000
         {
@@ -505,7 +506,10 @@ fn parse_bank_value(raw: &str) -> Option<u32> {
         return None;
     }
 
-    if let Some(stripped) = value.strip_prefix("0x").or_else(|| value.strip_prefix("0X")) {
+    if let Some(stripped) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
         u32::from_str_radix(stripped, 16).ok()
     }
     else {
@@ -531,7 +535,7 @@ fn format_basm_failure(res: &std::process::Output) -> String {
 fn emitted_rows_signature(rows: &[CodeOnlyListingRow]) -> Vec<(u32, Vec<u8>)> {
     rows.iter()
         .filter(|row| !row.bytes.is_empty())
-    .map(|row| (row.logical_address, row.bytes.clone()))
+        .map(|row| (row.logical_address, row.bytes.clone()))
         .collect()
 }
 
@@ -550,7 +554,11 @@ fn assemble_and_compare_listing_bytes(fname: &str, listing_kind: ListingKind) {
 
     let res = run_basm_once_with_listing(fname, output_fname, &listing_fname);
     if !res.status.success() {
-        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&res));
+        panic!(
+            "Failure to assemble {}.\n{}",
+            fname,
+            format_basm_failure(&res)
+        );
     }
 
     let listing = fs_err::read_to_string(&listing_fname).expect("Listing is missing");
@@ -574,7 +582,7 @@ fn assemble_and_compare_listing_bytes(fname: &str, listing_kind: ListingKind) {
     let res_code_only = run_basm_once_with_code_only_listing(
         fname,
         code_only_output_fname,
-        code_only_listing_fname,
+        code_only_listing_fname
     );
     let listing_kind_name = match listing_kind {
         ListingKind::Text => "text",
@@ -638,7 +646,10 @@ fn assemble_and_compare_listing_bytes(fname: &str, listing_kind: ListingKind) {
     }
 }
 
-fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str, listing_kind: ListingKind) {
+fn assemble_and_check_reconstructed_source_from_code_listing(
+    fname: &str,
+    listing_kind: ListingKind
+) {
     let output_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
     let output_fname = output_file.path().as_os_str().to_str().unwrap();
@@ -653,7 +664,11 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str, listin
 
     let first = run_basm_once_with_code_only_listing(fname, output_fname, &listing_fname);
     if !first.status.success() {
-        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&first));
+        panic!(
+            "Failure to assemble {}.\n{}",
+            fname,
+            format_basm_failure(&first)
+        );
     }
 
     let listing = fs_err::read_to_string(&listing_fname).expect("Listing is missing");
@@ -666,13 +681,21 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str, listin
 
     let reconstructed_input_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let reconstructed_input_fname = reconstructed_input_file.path().as_os_str().to_str().unwrap();
+    let reconstructed_input_fname = reconstructed_input_file
+        .path()
+        .as_os_str()
+        .to_str()
+        .unwrap();
     fs_err::write(reconstructed_input_fname, reconstructed_source)
         .expect("Unable to write reconstructed source");
 
     let reconstructed_output_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
-    let reconstructed_output_fname = reconstructed_output_file.path().as_os_str().to_str().unwrap();
+    let reconstructed_output_fname = reconstructed_output_file
+        .path()
+        .as_os_str()
+        .to_str()
+        .unwrap();
 
     let reconstructed_listing_stem_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
@@ -689,7 +712,7 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str, listin
     let second = run_basm_once_with_code_only_listing(
         reconstructed_input_fname,
         reconstructed_output_fname,
-        &reconstructed_listing_fname,
+        &reconstructed_listing_fname
     );
 
     if !second.status.success() {
@@ -709,8 +732,7 @@ fn assemble_and_check_reconstructed_source_from_code_listing(fname: &str, listin
     let reconstructed_signature = emitted_rows_signature(&reconstructed_rows);
 
     assert_eq!(
-        first_signature,
-        reconstructed_signature,
+        first_signature, reconstructed_signature,
         "Reconstructed source emitted rows differ from original assembled rows for {}.",
         fname
     );
@@ -727,7 +749,11 @@ fn specific_test(folder: &str, fname: &str) {
         .expect("Unable to launch basm");
 
     if !res.status.success() {
-        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&res));
+        panic!(
+            "Failure to assemble {}.\n{}",
+            fname,
+            format_basm_failure(&res)
+        );
     }
 }
 
@@ -985,7 +1011,11 @@ fn expect_listing_success(fname: &str) {
 
     let res = run_basm_once_with_listing(fname, output_fname, listing_fname);
     if !res.status.success() {
-        panic!("Failure to assemble {}.\n{}", fname, format_basm_failure(&res));
+        panic!(
+            "Failure to assemble {}.\n{}",
+            fname,
+            format_basm_failure(&res)
+        );
     }
 }
 

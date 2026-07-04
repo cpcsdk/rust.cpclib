@@ -5,9 +5,9 @@
 /// updated to match the new numbering.
 use std::collections::HashMap;
 
+use crate::BasicError;
 use crate::located::{LocatedBasicProgram, LocatedBasicToken, LocatedTokenKind};
 use crate::tokens::BasicTokenNoPrefix as K;
-use crate::BasicError;
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -30,9 +30,16 @@ impl Renumber for LocatedBasicProgram {
             return Vec::new();
         }
 
-        let mapping: HashMap<u16, u16> = self.lines.iter()
+        let mapping: HashMap<u16, u16> = self
+            .lines
+            .iter()
             .enumerate()
-            .map(|(i, l)| (l.line_number, start.saturating_add((i as u16).saturating_mul(step))))
+            .map(|(i, l)| {
+                (
+                    l.line_number,
+                    start.saturating_add((i as u16).saturating_mul(step))
+                )
+            })
             .collect();
 
         let mut subs: Vec<Substitution> = Vec::new();
@@ -49,35 +56,42 @@ impl Renumber for LocatedBasicProgram {
                             subs.push(tok_sub(tok, new_n.to_string()));
                         }
                         after_jump = false;
-                    }
+                    },
 
                     LocatedTokenKind::Keyword(kw) => {
-                        after_jump = matches!(kw,
-                            K::Goto | K::Gosub | K::Restore | K::Run
-                                | K::Then | K::Else | K::OnErrorGoto
+                        after_jump = matches!(
+                            kw,
+                            K::Goto
+                                | K::Gosub
+                                | K::Restore
+                                | K::Run
+                                | K::Then
+                                | K::Else
+                                | K::OnErrorGoto
                         );
-                    }
+                    },
 
                     // Number in jump context → line reference.
                     LocatedTokenKind::Number(n) if after_jump => {
                         if let Ok(old) = n.parse::<u16>()
                             && let Some(&new_n) = mapping.get(&old)
-                                && new_n != old {
-                                    subs.push(tok_sub(tok, new_n.to_string()));
-                                }
+                            && new_n != old
+                        {
+                            subs.push(tok_sub(tok, new_n.to_string()));
+                        }
                         // Keep `after_jump`: comma may follow for ON GOTO n,n,n lists.
-                    }
+                    },
 
                     // Comma in a line-number list — keep state.
-                    LocatedTokenKind::Other(',') => {}
+                    LocatedTokenKind::Other(',') => {},
 
                     // Whitespace — keep state.
-                    LocatedTokenKind::Space => {}
+                    LocatedTokenKind::Space => {},
 
                     // ':' resets the state machine.
                     LocatedTokenKind::Separator => {
                         after_jump = false;
-                    }
+                    },
 
                     // Anything else (operator, variable, string literal, …) resets.
                     _ => {
@@ -169,7 +183,10 @@ mod tests {
     #[test]
     fn test_goto_updated() {
         let src = "10 GOTO 30\n20 PRINT \"hi\"\n30 END";
-        assert_eq!(renum(src, 100, 100), "100 GOTO 300\n200 PRINT \"hi\"\n300 END");
+        assert_eq!(
+            renum(src, 100, 100),
+            "100 GOTO 300\n200 PRINT \"hi\"\n300 END"
+        );
     }
 
     #[test]
@@ -183,7 +200,10 @@ mod tests {
     fn test_then_shorthand() {
         // IF X THEN line_number  (no GOTO keyword)
         let src = "10 IF X=1 THEN 30\n20 PRINT \"no\"\n30 PRINT \"yes\"";
-        assert_eq!(renum(src, 10, 10), "10 IF X=1 THEN 30\n20 PRINT \"no\"\n30 PRINT \"yes\"");
+        assert_eq!(
+            renum(src, 10, 10),
+            "10 IF X=1 THEN 30\n20 PRINT \"no\"\n30 PRINT \"yes\""
+        );
         // All already 10/20/30 → no change expected
         let src2 = "5 IF X=1 THEN 15\n15 PRINT \"yes\"";
         assert_eq!(renum(src2, 10, 10), "10 IF X=1 THEN 20\n20 PRINT \"yes\"");
@@ -196,7 +216,10 @@ mod tests {
         assert_eq!(renum(src, 10, 10), src);
 
         let src2 = "1 ON X GOTO 1,2,3\n2 PRINT \"b\"\n3 PRINT \"c\"";
-        assert_eq!(renum(src2, 10, 10), "10 ON X GOTO 10,20,30\n20 PRINT \"b\"\n30 PRINT \"c\"");
+        assert_eq!(
+            renum(src2, 10, 10),
+            "10 ON X GOTO 10,20,30\n20 PRINT \"b\"\n30 PRINT \"c\""
+        );
     }
 
     #[test]

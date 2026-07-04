@@ -1370,7 +1370,10 @@ add_to_a(3)\n\
             parse_z80_line_complete(&mut tokens),
             "pop af : push tg : pop af"
         );
-        assert!(res.is_err(), "pop af : push tg : pop af must be a parse error");
+        assert!(
+            res.is_err(),
+            "pop af : push tg : pop af must be a parse error"
+        );
 
         if let Err(ref err) = res.res {
             let inner = err.clone().into_inner();
@@ -1391,9 +1394,9 @@ add_to_a(3)\n\
         // Verify the exact column returned by primary_z80span() for tab + push cases.
         // This is used by cpclib-lsp to set the LSP diagnostic character position.
         let cases = [
-            ("push tg", 5u32),            // col 5 (0-indexed): after "push "
-            ("\tpush tg", 6u32),           // col 6: after "\tpush " (tab=1 char)
-            ("pop af : push tg : pop af", 14u32), // col 14: after "pop af : push "
+            ("push tg", 5u32),                    // col 5 (0-indexed): after "push "
+            ("\tpush tg", 6u32),                  // col 6: after "\tpush " (tab=1 char)
+            ("pop af : push tg : pop af", 14u32)  // col 14: after "pop af : push "
         ];
         for (src, expected_col) in cases {
             let mut tokens = Vec::new();
@@ -1405,10 +1408,11 @@ add_to_a(3)\n\
                     let (_line, col_1based) = span.relative_line_and_column();
                     let col = col_1based.saturating_sub(1) as u32;
                     let len = end_off.saturating_sub(span.offset_from_start()) as u32;
-                    assert_eq!(col, expected_col,
-                        "'{src}': expected tg at col {expected_col}, got {col}");
-                    assert_eq!(len, 2,
-                        "'{src}': expected len=2 for 'tg', got len={len}");
+                    assert_eq!(
+                        col, expected_col,
+                        "'{src}': expected tg at col {expected_col}, got {col}"
+                    );
+                    assert_eq!(len, 2, "'{src}': expected len=2 for 'tg', got len={len}");
                 }
             }
         }

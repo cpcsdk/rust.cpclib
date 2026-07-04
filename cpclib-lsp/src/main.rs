@@ -1,5 +1,5 @@
-use tower_lsp::{LspService, Server};
 use cpclib_lsp::CpcLspBackend;
+use tower_lsp::{LspService, Server};
 
 #[tokio::main]
 async fn main() {
@@ -15,8 +15,6 @@ async fn main() {
     let stdout = tokio::io::stdout();
 
     let (service, socket) = LspService::new(CpcLspBackend::new);
-    
-    Server::new(stdin, stdout, socket)
-        .serve(service)
-        .await;
+
+    Server::new(stdin, stdout, socket).serve(service).await;
 }

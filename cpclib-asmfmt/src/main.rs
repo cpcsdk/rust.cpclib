@@ -14,7 +14,7 @@ struct RunConfig {
     files: Vec<PathBuf>,
     inplace: bool,
     check: bool,
-    options: AsmFormatOptions,
+    options: AsmFormatOptions
 }
 
 fn process_stdin(cfg: &RunConfig) -> Result<bool, String> {
@@ -28,7 +28,8 @@ fn process_stdin(cfg: &RunConfig) -> Result<bool, String> {
             eprintln!("<stdin> would be reformatted");
             return Ok(false);
         }
-    } else {
+    }
+    else {
         print!("{formatted}");
     }
     Ok(true)
@@ -43,12 +44,14 @@ fn process_file(path: &Path, cfg: &RunConfig) -> Result<bool, String> {
             eprintln!("{}: would be reformatted", path.display());
             return Ok(false);
         }
-    } else if cfg.inplace {
+    }
+    else if cfg.inplace {
         if formatted != source {
             std::fs::write(path, &formatted)
                 .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
         }
-    } else {
+    }
+    else {
         print!("{formatted}");
     }
     Ok(true)
@@ -59,13 +62,15 @@ fn run() -> i32 {
 
     let base = match cpclib_asmfmt::find_config_file() {
         None => AsmFormatOptions::default(),
-        Some(path) => match cpclib_asmfmt::load_config_from(&path) {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("warning: {}: {e}", path.display());
-                AsmFormatOptions::default()
+        Some(path) => {
+            match cpclib_asmfmt::load_config_from(&path) {
+                Ok(cfg) => cfg,
+                Err(e) => {
+                    eprintln!("warning: {}: {e}", path.display());
+                    AsmFormatOptions::default()
+                }
             }
-        }
+        },
     };
 
     let options = apply_cli_overrides(base, &matches);
@@ -77,13 +82,21 @@ fn run() -> i32 {
     let inplace = matches.get_flag("inplace");
     let check = matches.get_flag("check");
 
-    let cfg = RunConfig { files, inplace, check, options };
+    let cfg = RunConfig {
+        files,
+        inplace,
+        check,
+        options
+    };
 
     if cfg.files.is_empty() {
         match process_stdin(&cfg) {
             Ok(true) => return 0,
             Ok(false) => return 1,
-            Err(e) => { eprintln!("error: {e}"); return 2; }
+            Err(e) => {
+                eprintln!("error: {e}");
+                return 2;
+            }
         }
     }
 
@@ -93,13 +106,20 @@ fn run() -> i32 {
             match process_stdin(&cfg) {
                 Ok(true) => {},
                 Ok(false) => all_ok = false,
-                Err(e) => { eprintln!("error: {e}"); all_ok = false; }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    all_ok = false;
+                }
             }
-        } else {
+        }
+        else {
             match process_file(path, &cfg) {
                 Ok(true) => {},
                 Ok(false) => all_ok = false,
-                Err(e) => { eprintln!("error: {e}"); all_ok = false; }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    all_ok = false;
+                }
             }
         }
     }

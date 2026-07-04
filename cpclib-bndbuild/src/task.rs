@@ -15,8 +15,8 @@ use cpclib_runner::runner::ay::fap::FAP_CMD;
 use cpclib_runner::runner::convgeneric::CONVGENERIC_CMD;
 use cpclib_runner::runner::disassembler::ExternDisassembler;
 use cpclib_runner::runner::disassembler::disark::{DISARK_CMD, DisarkVersion};
-use cpclib_runner::runner::emulator::caprice_forever::CAPRICEFOREVER_CMD;
 use cpclib_runner::runner::emulator::cadence::CADENCE_CMD;
+use cpclib_runner::runner::emulator::caprice_forever::CAPRICEFOREVER_CMD;
 use cpclib_runner::runner::emulator::cpcemu::CPCEMU_CMD;
 use cpclib_runner::runner::emulator::cpcemupower::CPCEMUPOWER_CMD;
 use cpclib_runner::runner::emulator::emulator1984::EMULATOR_1984_CMD;
@@ -854,15 +854,23 @@ impl InnerTask {
         }
         else if cfg!(feature = "tape") && is_rtzx_cmd(code) {
             #[cfg(feature = "tape")]
-            {Ok(Self::with_rtzx(std))}
+            {
+                Ok(Self::with_rtzx(std))
+            }
             #[cfg(not(feature = "tape"))]
-            {Err(format!("{code} is an invalid command"))}
+            {
+                Err(format!("{code} is an invalid command"))
+            }
         }
         else if cfg!(feature = "tape") && is_two_cdt_cmd(code) {
             #[cfg(feature = "tape")]
-            {Ok(Self::Cdt(crate::runners::cdt::CdtManager::TwoCdt, std))}
+            {
+                Ok(Self::Cdt(crate::runners::cdt::CdtManager::TwoCdt, std))
+            }
             #[cfg(not(feature = "tape"))]
-            {Err(format!("{code} is an invalid command"))}
+            {
+                Err(format!("{code} is an invalid command"))
+            }
         }
         else if is_vlink_cmd(code) {
             Ok(Self::with_vlink(std))
@@ -894,7 +902,7 @@ impl InnerTask {
     fn standard_task_arguments(&self) -> &StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
-                    | InnerTask::Catalog(t)
+            | InnerTask::Catalog(t)
             | InnerTask::Locomotive(t)
             | InnerTask::YmCruncher(_, t)
             | InnerTask::BasmDoc(t)
@@ -937,7 +945,7 @@ impl InnerTask {
     fn standard_task_arguments_mut(&mut self) -> &mut StandardTaskArguments {
         match self {
             InnerTask::Assembler(_, t)
-                    | InnerTask::YmCruncher(_, t)
+            | InnerTask::YmCruncher(_, t)
             | InnerTask::BasmDoc(t)
             | InnerTask::BndBuild(t)
             | InnerTask::Convgeneric(t)
@@ -974,7 +982,6 @@ impl InnerTask {
 
             #[cfg(feature = "tape")]
             InnerTask::Cdt(_, t) => t
-
         }
     }
 

@@ -7,7 +7,7 @@ use cpclib_common::smallvec::SmallVec;
 
 use crate::{
     AssemblerControlCommand, AssemblerFlavor, BinaryTransformation, CrunchType, DataAccess,
-    DataAccessElem, ExprElement, MacroParamElement, Mnemonic, Register16, Register8,
+    DataAccessElem, ExprElement, MacroParamElement, Mnemonic, Register8, Register16,
     TestKindElement
 };
 
@@ -183,8 +183,7 @@ where Self: Debug + Sized + Sync
         arg1: Option<&DA>,
         arg2: Option<&DA>,
         arg3: Option<Register8>
-    ) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>>
-    {
+    ) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>> {
         if arg3.is_some() {
             return None;
         }
@@ -194,7 +193,8 @@ where Self: Debug + Sized + Sync
         match mnemonic {
             Mnemonic::Add | Mnemonic::Adc
                 if arg1.as_ref().map(|a| a.is_register_de()).unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) => {
+                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) =>
+            {
                 let rhs = arg2.unwrap().get_register16().unwrap();
                 let mapped_rhs = rhs.swap_de_hl();
                 listing.push((Mnemonic::ExHlDe, None, None));
@@ -209,7 +209,8 @@ where Self: Debug + Sized + Sync
 
             Mnemonic::Sbc
                 if arg1.as_ref().map(|a| a.is_register_de()).unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) => {
+                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) =>
+            {
                 let rhs = arg2.unwrap().get_register16().unwrap();
                 let mapped_rhs = rhs.swap_de_hl();
                 listing.push((Mnemonic::ExHlDe, None, None));
@@ -227,10 +228,15 @@ where Self: Debug + Sized + Sync
                     .as_ref()
                     .map(|a| a.is_register_de() || a.is_register_hl())
                     .unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) => {
+                    && arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false) =>
+            {
                 let lhs = arg1.unwrap();
                 let rhs = arg2.unwrap().get_register16().unwrap();
-                listing.push((Mnemonic::Or, Some(DataAccess::Register8(Register8::A)), None));
+                listing.push((
+                    Mnemonic::Or,
+                    Some(DataAccess::Register8(Register8::A)),
+                    None
+                ));
 
                 if lhs.is_register_de() {
                     let mapped_rhs = rhs.swap_de_hl();
@@ -255,7 +261,8 @@ where Self: Debug + Sized + Sync
 
             Mnemonic::Ld
                 if arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_register_sp()).unwrap_or(false) => {
+                    && arg2.as_ref().map(|a| a.is_register_sp()).unwrap_or(false) =>
+            {
                 listing.push((
                     Mnemonic::Ld,
                     Some(DataAccess::Register16(Register16::Hl)),
@@ -277,7 +284,8 @@ where Self: Debug + Sized + Sync
                     && arg2
                         .as_ref()
                         .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
-                        .unwrap_or(false) => {
+                        .unwrap_or(false) =>
+            {
                 let lhs = arg1.unwrap().get_register16().unwrap();
                 let rhs = arg2.unwrap().get_register16().unwrap();
                 listing.push((
@@ -298,7 +306,11 @@ where Self: Debug + Sized + Sync
                     .as_ref()
                     .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
                     .unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_indexregister_with_index()).unwrap_or(false) => {
+                    && arg2
+                        .as_ref()
+                        .map(|a| a.is_indexregister_with_index())
+                        .unwrap_or(false) =>
+            {
                 let dst = arg1.unwrap().get_register16().unwrap();
                 let src = arg2.unwrap().get_indexregister16().unwrap();
                 let idx = arg2.unwrap().get_index().unwrap();
@@ -325,11 +337,15 @@ where Self: Debug + Sized + Sync
             },
 
             Mnemonic::Ld
-                if arg1.as_ref().map(|a| a.is_indexregister_with_index()).unwrap_or(false)
+                if arg1
+                    .as_ref()
+                    .map(|a| a.is_indexregister_with_index())
+                    .unwrap_or(false)
                     && arg2
                         .as_ref()
                         .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
-                        .unwrap_or(false) => {
+                        .unwrap_or(false) =>
+            {
                 let dst = arg1.unwrap().get_indexregister16().unwrap();
                 let idx = arg1.unwrap().get_index().unwrap();
                 let src = arg2.unwrap().get_register16().unwrap();
@@ -357,11 +373,24 @@ where Self: Debug + Sized + Sync
 
             Mnemonic::Ld
                 if (arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false))
-                    || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
+                    && arg2
+                        .as_ref()
+                        .map(|a| a.is_indexregister16())
+                        .unwrap_or(false))
+                    || (arg1
+                        .as_ref()
+                        .map(|a| a.is_indexregister16())
+                        .unwrap_or(false)
                         && arg2.as_ref().map(|a| a.is_register_hl()).unwrap_or(false))
-                    || (arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
-                        && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)) => {
+                    || (arg1
+                        .as_ref()
+                        .map(|a| a.is_indexregister16())
+                        .unwrap_or(false)
+                        && arg2
+                            .as_ref()
+                            .map(|a| a.is_indexregister16())
+                            .unwrap_or(false)) =>
+            {
                 let dst = if arg1.unwrap().is_register16() {
                     DataAccess::Register16(arg1.unwrap().get_register16().unwrap())
                 }
@@ -386,7 +415,11 @@ where Self: Debug + Sized + Sync
                     .as_ref()
                     .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
                     .unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false) => {
+                    && arg2
+                        .as_ref()
+                        .map(|a| a.is_indexregister16())
+                        .unwrap_or(false) =>
+            {
                 let dst = arg1.unwrap().get_register16().unwrap();
                 let src = arg2.unwrap().get_indexregister16().unwrap();
 
@@ -404,11 +437,15 @@ where Self: Debug + Sized + Sync
             },
 
             Mnemonic::Ld
-                if arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false)
+                if arg1
+                    .as_ref()
+                    .map(|a| a.is_indexregister16())
+                    .unwrap_or(false)
                     && arg2
                         .as_ref()
                         .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
-                        .unwrap_or(false) => {
+                        .unwrap_or(false) =>
+            {
                 let dst = arg1.unwrap().get_indexregister16().unwrap();
                 let src = arg2.unwrap().get_register16().unwrap();
 
@@ -430,7 +467,8 @@ where Self: Debug + Sized + Sync
                     .as_ref()
                     .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
                     .unwrap_or(false)
-                    && arg2.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false) => {
+                    && arg2.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false) =>
+            {
                 let dst = arg1.unwrap().get_register16().unwrap();
 
                 listing.push((
@@ -461,7 +499,8 @@ where Self: Debug + Sized + Sync
                     && arg2
                         .as_ref()
                         .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
-                        .unwrap_or(false) => {
+                        .unwrap_or(false) =>
+            {
                 let src = arg2.unwrap().get_register16().unwrap();
 
                 listing.push((
@@ -491,7 +530,8 @@ where Self: Debug + Sized + Sync
                 if arg1
                     .as_ref()
                     .map(|a| a.is_register16() || a.is_indexregister16())
-                    .unwrap_or(false) => {
+                    .unwrap_or(false) =>
+            {
                 if arg1.unwrap().is_register16() {
                     let reg = arg1.unwrap().get_register16().unwrap();
                     listing.push((
@@ -529,7 +569,8 @@ where Self: Debug + Sized + Sync
             | Mnemonic::Rr
             | Mnemonic::Rlc
             | Mnemonic::Rrc
-                if arg1.as_ref().map(|a| a.is_register16()).unwrap_or(false) => {
+                if arg1.as_ref().map(|a| a.is_register16()).unwrap_or(false) =>
+            {
                 let reg16 = arg1.unwrap().get_register16().unwrap();
                 let opcodes: &[(Mnemonic, Option<Register8>)] = match mnemonic {
                     Mnemonic::Srl => &[(Mnemonic::Srl, reg16.high()), (Mnemonic::Rr, reg16.low())],
@@ -538,18 +579,22 @@ where Self: Debug + Sized + Sync
                     Mnemonic::Sla => &[(Mnemonic::Sla, reg16.low()), (Mnemonic::Rl, reg16.high())],
                     Mnemonic::Rr => &[(Mnemonic::Rr, reg16.high()), (Mnemonic::Rr, reg16.low())],
                     Mnemonic::Rl => &[(Mnemonic::Rl, reg16.low()), (Mnemonic::Rl, reg16.high())],
-                    Mnemonic::Rlc => &[
-                        (Mnemonic::Sla, reg16.high()),
-                        (Mnemonic::Rl, reg16.low()),
-                        (Mnemonic::Rr, reg16.high()),
-                        (Mnemonic::Rlc, reg16.high())
-                    ],
-                    Mnemonic::Rrc => &[
-                        (Mnemonic::Srl, reg16.high()),
-                        (Mnemonic::Rr, reg16.low()),
-                        (Mnemonic::Rl, reg16.high()),
-                        (Mnemonic::Rrc, reg16.high())
-                    ],
+                    Mnemonic::Rlc => {
+                        &[
+                            (Mnemonic::Sla, reg16.high()),
+                            (Mnemonic::Rl, reg16.low()),
+                            (Mnemonic::Rr, reg16.high()),
+                            (Mnemonic::Rlc, reg16.high())
+                        ]
+                    },
+                    Mnemonic::Rrc => {
+                        &[
+                            (Mnemonic::Srl, reg16.high()),
+                            (Mnemonic::Rr, reg16.low()),
+                            (Mnemonic::Rl, reg16.high()),
+                            (Mnemonic::Rrc, reg16.high())
+                        ]
+                    },
                     _ => unreachable!()
                 };
 
@@ -577,12 +622,18 @@ where Self: Debug + Sized + Sync
         let arg1_is_de = arg1.as_ref().map(|a| a.is_register_de()).unwrap_or(false);
         let arg1_is_hl = arg1.as_ref().map(|a| a.is_register_hl()).unwrap_or(false);
         let arg1_is_reg16 = arg1.as_ref().map(|a| a.is_register16()).unwrap_or(false);
-        let arg1_is_ix16 = arg1.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false);
+        let arg1_is_ix16 = arg1
+            .as_ref()
+            .map(|a| a.is_indexregister16())
+            .unwrap_or(false);
         let arg1_is_reg16_or_ix16 = arg1_is_reg16 || arg1_is_ix16;
 
         let arg2_is_reg16 = arg2.as_ref().map(|a| a.is_register16()).unwrap_or(false);
         let arg2_is_sp = arg2.as_ref().map(|a| a.is_register_sp()).unwrap_or(false);
-        let arg2_is_ix16 = arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false);
+        let arg2_is_ix16 = arg2
+            .as_ref()
+            .map(|a| a.is_indexregister16())
+            .unwrap_or(false);
         let arg2_is_hl_mem = arg2.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false);
         let _arg2_is_reg16_or_ix16 = arg2_is_reg16 || arg2_is_ix16;
 
@@ -608,7 +659,10 @@ where Self: Debug + Sized + Sync
                         })
                         .unwrap_or(false);
 
-                let fake_indexed_load = arg1.as_ref().map(|a| a.is_indexregister_with_index()).unwrap_or(false)
+                let fake_indexed_load = arg1
+                    .as_ref()
+                    .map(|a| a.is_indexregister_with_index())
+                    .unwrap_or(false)
                     && arg2
                         .as_ref()
                         .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
@@ -632,10 +686,11 @@ where Self: Debug + Sized + Sync
                         .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
                         .unwrap_or(false)
                         && arg2_is_hl_mem)
-                    || (arg1.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false) && arg2
-                        .as_ref()
-                        .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
-                        .unwrap_or(false));
+                    || (arg1.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false)
+                        && arg2
+                            .as_ref()
+                            .map(|a| a.is_register_bc() || a.is_register_de() || a.is_register_hl())
+                            .unwrap_or(false));
 
                 fake_hl_sp || fake_reg16_pair || fake_indexed_load || fake_indexed16_transfer
             },
@@ -780,7 +835,7 @@ where Self: Debug + Sized + Sync
 #[cfg(test)]
 mod tests {
     use super::ListingElement;
-    use crate::{DataAccess, Mnemonic, Register16, Register8, Token};
+    use crate::{DataAccess, Mnemonic, Register8, Register16, Token};
 
     #[test]
     fn fake_predicate_and_expansion_are_aligned() {
@@ -826,7 +881,7 @@ mod tests {
                 Some(DataAccess::Register16(Register16::Hl)),
                 None,
                 None
-            )
+            ),
         ];
 
         let non_fake_cases = vec![
@@ -853,7 +908,7 @@ mod tests {
                 Some(DataAccess::Register16(Register16::De)),
                 None,
                 Some(Register8::A)
-            )
+            ),
         ];
 
         for (mnemonic, arg1, arg2, arg3) in fake_cases {

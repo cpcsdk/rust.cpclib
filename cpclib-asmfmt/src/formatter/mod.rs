@@ -1,14 +1,14 @@
 use cpclib_asm::{AssemblerError, LocatedListing, MayHaveSpan, parse_z80_str};
 
 use crate::options::{
-    AsmFormatOptions, CaseStyle, SpaceAroundColumn,
-    HexEncoding, OctalEncoding, BinaryEncoding, LabelPostfix,
+    AsmFormatOptions, BinaryEncoding, CaseStyle, HexEncoding, LabelPostfix, OctalEncoding,
+    SpaceAroundColumn
 };
 
 mod case;
 mod emit;
-mod splitting;
 mod numeric;
+mod splitting;
 mod tokens;
 
 pub(super) struct Formatter<'src> {
@@ -29,10 +29,10 @@ pub(super) struct Formatter<'src> {
     pub(super) current_line: usize,
     pub(super) output: String,
     // Per-source-line segment cache (`:` splitting for one_instruction_per_line)
-    pub(super) seg_line: usize,             // which source line is currently cached (usize::MAX = none)
-    pub(super) seg_idx: usize,              // next segment to consume
-    pub(super) seg_items: Vec<String>,      // content segments (before trailing `;` comment)
-    pub(super) seg_trailing: Option<String>, // the trailing `;` comment of the whole source line
+    pub(super) seg_line: usize, // which source line is currently cached (usize::MAX = none)
+    pub(super) seg_idx: usize,  // next segment to consume
+    pub(super) seg_items: Vec<String>, // content segments (before trailing `;` comment)
+    pub(super) seg_trailing: Option<String>  // the trailing `;` comment of the whole source line
 }
 
 impl<'src> Formatter<'src> {
@@ -57,12 +57,17 @@ impl<'src> Formatter<'src> {
             seg_line: usize::MAX,
             seg_idx: 0,
             seg_items: Vec::new(),
-            seg_trailing: None,
+            seg_trailing: None
         }
     }
 }
 
-pub fn format_listing(listing: &LocatedListing, source: &str, depth: usize, opt: &AsmFormatOptions) -> String {
+pub fn format_listing(
+    listing: &LocatedListing,
+    source: &str,
+    depth: usize,
+    opt: &AsmFormatOptions
+) -> String {
     let mut fmt = Formatter::new(source, opt);
     if let Some(first) = listing.iter().next() {
         let (line_1, _) = first.span().relative_line_and_column();

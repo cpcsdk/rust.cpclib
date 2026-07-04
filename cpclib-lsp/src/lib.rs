@@ -1,10 +1,10 @@
-mod backend;
-mod document;
 mod asm;
-mod build;
+mod backend;
 mod basic;
-mod utils;
-pub mod timings;
+mod build;
+mod document;
 pub mod sourcemap;
+pub mod timings;
+mod utils;
 
 pub use backend::CpcLspBackend;
