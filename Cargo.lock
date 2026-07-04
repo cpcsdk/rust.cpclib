@@ -2553,6 +2553,7 @@ name = "cpclib-asmfmt"
 version = "0.11.0"
 dependencies = [
  "bon",
+ "clap",
  "cpclib-asm",
  "cpclib-common",
  "serde",
@@ -2666,6 +2667,7 @@ dependencies = [
  "clap_complete",
  "codespan-reporting 0.13.1",
  "cpclib-asm",
+ "cpclib-asmfmt",
  "cpclib-basm",
  "cpclib-basmdoc",
  "cpclib-bdasm",

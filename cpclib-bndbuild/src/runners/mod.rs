@@ -5,6 +5,7 @@ use cpclib_runner::runner::{Runner, RunnerWithClap};
 pub mod macros;
 
 pub mod archive;
+pub mod asmfmt;
 pub mod assembler;
 pub mod ay;
 pub mod basmdoc;

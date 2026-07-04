@@ -1,6 +1,8 @@
 mod options;
 mod config;
 mod formatter;
+#[cfg(feature = "cmdline")]
+pub mod cli;
 
 pub use options::{
     AsmFormatOptions, CaseStyle, SpaceAroundColumn,

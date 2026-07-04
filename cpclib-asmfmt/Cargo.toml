@@ -18,3 +18,12 @@ cpclib-common.workspace = true
 serde = { workspace = true, features = ["derive"] }
 toml = "0.8"
 bon.workspace = true
+clap = { workspace = true, features = ["derive"], optional = true }
+
+[features]
+cmdline = ["dep:clap"]
+
+[[bin]]
+name = "basm-fmt"
+path = "src/main.rs"
+required-features = ["cmdline"]

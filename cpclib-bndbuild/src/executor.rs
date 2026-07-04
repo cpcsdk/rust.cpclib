@@ -30,6 +30,7 @@ use crate::runners::crunch::CrunchRunner;
 use crate::runners::csl::CslRunner;
 use crate::runners::disassembler::{BdasmRunner, Disassembler};
 use crate::runners::disc::DiscManagerRunner;
+use crate::runners::asmfmt::AsmFmtRunner;
 use crate::runners::echo::EchoRunner;
 use crate::runners::fade::FadeRunner;
 use crate::runners::fs::cp::CpRunner;
@@ -203,6 +204,7 @@ pub fn execute<E: BndBuilderObserver + 'static>(
         InnerTask::Cp(_) => CpRunner::default().run(task.args(), observer),
         InnerTask::Mv(_) => MvRunner::default().run(task.args(), observer),
         InnerTask::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),
+        InnerTask::AsmFmt(_) => AsmFmtRunner::default().run(task.args(), observer),
         InnerTask::Echo(_) => EchoRunner::default().run(task.args(), observer),
         InnerTask::Extern(_) => ExternRunner::default().run(task.args(), observer),
         InnerTask::Fade(_) => FadeRunner::<E>::default().run(task.args(), observer),
