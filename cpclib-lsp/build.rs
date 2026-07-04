@@ -208,7 +208,60 @@ fn generate_timings() {
         ).unwrap();
     }
 
+    emit_injected_alu_variants(&mut out);
+
     writeln!(out, "];").unwrap();
+}
+
+/// The source table only lists the register form `r` for adc/sub/sbc/and/or/xor/cp.
+/// The (hl), (ix+n), and n addressing modes follow the same flag rules and timing
+/// as the corresponding `add` variants. Opcodes are verified against the assembler.
+///
+/// NOPs:  r → 1,  (hl) → 2,  (ix+n) → 5,  n → 2   (identical to add).
+/// Note:  the source table has `or r` and `xor r` bit-patterns swapped; the values
+///        used here are the correct Z80 encodings from the assembler source.
+fn emit_injected_alu_variants(out: &mut std::fs::File) {
+    // (pattern, opcodes, flags_8char, nops, notes)
+    const EXTRA: &[(&str, &str, &str, u8, &str)] = &[
+        // ADC — flags identical to ADD
+        ("adc (hl)",   "10001110",      "SZ5H3V0C", 2, "A := A + [(HL) + Carry]"),
+        ("adc (ix+n)", "DD 10001110 n", "SZ5H3V0C", 5, "A := A + [(IX+n) + Carry]"),
+        ("adc n",      "11001110 n",    "SZ5H3V0C", 2, "A := A + [n + Carry]"),
+        // SUB
+        ("sub (hl)",   "10010110",      "SZ5H3V1C", 2, ""),
+        ("sub (ix+n)", "DD 10010110 n", "SZ5H3V1C", 5, ""),
+        ("sub n",      "11010110 n",    "SZ5H3V1C", 2, ""),
+        // SBC — flags identical to SUB
+        ("sbc (hl)",   "10011110",      "SZ5H3V1C", 2, "A := A - [(HL) + Carry]"),
+        ("sbc (ix+n)", "DD 10011110 n", "SZ5H3V1C", 5, "A := A - [(IX+n) + Carry]"),
+        ("sbc n",      "11011110 n",    "SZ5H3V1C", 2, "A := A - [n + Carry]"),
+        // AND (H always set)
+        ("and (hl)",   "10100110",      "SZ513P00",  2, ""),
+        ("and (ix+n)", "DD 10100110 n", "SZ513P00",  5, ""),
+        ("and n",      "11100110 n",    "SZ513P00",  2, ""),
+        // OR (H always reset) — opcode 0xB6/0xF6; table's `or r` bit-pattern is transposed
+        ("or (hl)",    "10110110",      "SZ503P00",  2, ""),
+        ("or (ix+n)",  "DD 10110110 n", "SZ503P00",  5, ""),
+        ("or n",       "11110110 n",    "SZ503P00",  2, ""),
+        // XOR (H always reset) — opcode 0xAE/0xEE
+        ("xor (hl)",   "10101110",      "SZ503P00",  2, ""),
+        ("xor (ix+n)", "DD 10101110 n", "SZ503P00",  5, ""),
+        ("xor n",      "11101110 n",    "SZ503P00",  2, ""),
+        // CP — flags like sub
+        ("cp (hl)",    "10111110",      "SZ5H3V1C", 2, "Flags like sub"),
+        ("cp (ix+n)",  "DD 10111110 n", "SZ5H3V1C", 5, "Flags like sub"),
+        ("cp n",       "11111110 n",    "SZ5H3V1C", 2, "Flags like sub"),
+    ];
+
+    writeln!(out, "    // --- Injected: (hl)/(ix+n)/n variants for 8-bit ALU (adc/sub/sbc/and/or/xor/cp) ---").unwrap();
+    for (pattern, opcodes, flags, nops, notes) in EXTRA {
+        let mnemonic = pattern.split_whitespace().next().unwrap_or("").to_uppercase();
+        writeln!(
+            out,
+            "    TimingEntry {{ mnemonic: \"{}\", pattern: \"{}\", opcodes: \"{}\", flags: \"{}\", nops: {}u8, nops_alt: None, notes: \"{}\" }},",
+            esc(&mnemonic), esc(pattern), esc(opcodes), esc(flags), nops, esc(notes)
+        ).unwrap();
+    }
 }
 
 fn parse_nops(s: &str) -> (u8, Option<u8>) {
