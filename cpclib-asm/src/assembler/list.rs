@@ -214,7 +214,7 @@ pub fn list_sort(mut list: ExprResult) -> Result<ExprResult, Box<AssemblerError>
 }
 
 
-pub fn list_reverse(mut list: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+pub fn list_reverse(list: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match list {
         ExprResult::List(mut l) => {
             l.reverse(); // inplace reverse

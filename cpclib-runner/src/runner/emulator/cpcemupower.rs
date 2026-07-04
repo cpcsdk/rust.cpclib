@@ -81,7 +81,7 @@ impl DownloadableInformation for CpcEmuPowerVersion {
 
                 let mut perms = fs_err::metadata(&fname)
                     .map_err(|e| {
-                        format!("Error when setting execution rights to {}. {}", &fname, e)
+                        format!("Error when setting execution rights to {}. {}", fname, e)
                     })?
                     .permissions();
 

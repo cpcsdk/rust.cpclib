@@ -1,6 +1,5 @@
 use std::sync::OnceLock;
 
-use cpclib_common::camino::Utf8PathBuf;
 
 use crate::delegated::{
     ArchiveFormat, DownloadableInformation, ExecutableInformation,

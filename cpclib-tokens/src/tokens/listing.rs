@@ -584,7 +584,7 @@ where Self: Debug + Sized + Sync
         let arg2_is_sp = arg2.as_ref().map(|a| a.is_register_sp()).unwrap_or(false);
         let arg2_is_ix16 = arg2.as_ref().map(|a| a.is_indexregister16()).unwrap_or(false);
         let arg2_is_hl_mem = arg2.as_ref().map(|a| a.is_address_in_hl()).unwrap_or(false);
-        let arg2_is_reg16_or_ix16 = arg2_is_reg16 || arg2_is_ix16;
+        let _arg2_is_reg16_or_ix16 = arg2_is_reg16 || arg2_is_ix16;
 
         match mnemonic {
             Mnemonic::Add | Mnemonic::Adc | Mnemonic::Sbc => arg1_is_de && arg2_is_reg16,

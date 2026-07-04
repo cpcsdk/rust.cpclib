@@ -74,15 +74,14 @@ impl HtmlListingRenderer {
             self.symbol_targets.entry(normalized).or_insert(row_id);
         }
 
-        if let Some(last_dot) = symbol.rfind('.') {
-            if last_dot > 0 && last_dot + 1 < symbol.len() {
+        if let Some(last_dot) = symbol.rfind('.')
+            && last_dot > 0 && last_dot + 1 < symbol.len() {
                 let short_local = format!(".{}", &symbol[last_dot + 1..]);
                 self.symbol_targets.entry(short_local.clone()).or_insert(row_id);
                 self.symbol_targets
                     .entry(short_local.to_ascii_lowercase())
                     .or_insert(row_id);
             }
-        }
 
         if let Some(prefix) = global_prefix_for_symbol(symbol) {
             self.symbol_targets
@@ -133,7 +132,7 @@ impl HtmlListingRenderer {
             if ch == '"' || ch == '\'' {
                 let quote = ch;
                 let mut string = String::from(ch);
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     string.push(next);
                     if next == quote {
                         break;
@@ -553,7 +552,7 @@ document.addEventListener('click', (event) => {
             if ch == '"' || ch == '\'' {
                 let quote = ch;
                 let mut string = String::from(ch);
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     string.push(next);
                     if next == quote {
                         break;
@@ -668,8 +667,8 @@ document.addEventListener('click', (event) => {
         self.update_current_global_symbol(deferred.token_kind);
         let (deferred_addr, deferred_phys, deferred_specific) =
             Self::split_deferred_specific_columns(deferred.token_kind, deferred.specific_content);
-        if !deferred.specific_content.is_empty() {
-            if let Some(symbol) = Self::extract_definition_symbol(deferred.token_kind) {
+        if !deferred.specific_content.is_empty()
+            && let Some(symbol) = Self::extract_definition_symbol(deferred.token_kind) {
                 let value = if !deferred_addr.is_empty() {
                     Some(deferred_addr.as_str())
                 }
@@ -681,7 +680,6 @@ document.addEventListener('click', (event) => {
                 };
                 self.insert_symbol_target(&symbol, row_id, value);
             }
-        }
         let block_kind = self
             .classify_block(deferred.token_kind, deferred.source_line_expanded)
             .or_else(|| self.classify_block(deferred.token_kind, deferred.source_line_raw));
@@ -806,14 +804,14 @@ document.addEventListener('click', (event) => {
             Self::token_kind_name(line.token_kind),
             escape_html(&logical),
             escape_html(line.physical_address_repr),
-            &hover_attr,
+            hover_attr,
             self.render_token_bytes_html(format, row_id, &line),
             line.line_number.map(|value| value.to_string()).unwrap_or_default(),
             if show_expanded {
-                format!("<span class=\"{source_expanded_class}\"{}>{}</span>", &hover_attr, self.highlight_source_html_precise(&render_source_column(Some(line.source_line_expanded)), row_id, line.source_tokens, true))
+                format!("<span class=\"{source_expanded_class}\"{}>{}</span>", hover_attr, self.highlight_source_html_precise(&render_source_column(Some(line.source_line_expanded)), row_id, line.source_tokens, true))
             } else { String::new() },
             if show_raw {
-                format!("<span class=\"{source_raw_class}\"{}>{}</span>", &hover_attr, self.highlight_source_html_precise(&render_source_column(Some(line.source_line_raw)), row_id, line.source_tokens, false))
+                format!("<span class=\"{source_raw_class}\"{}>{}</span>", hover_attr, self.highlight_source_html_precise(&render_source_column(Some(line.source_line_raw)), row_id, line.source_tokens, false))
             } else { String::new() }
         ).unwrap();
     }

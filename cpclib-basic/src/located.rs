@@ -82,11 +82,10 @@ impl LocatedBasicLine {
                 {
                     j += 1;
                 }
-                if j < self.tokens.len() {
-                    if let LocatedTokenKind::Variable(_) = &self.tokens[j].kind {
+                if j < self.tokens.len()
+                    && let LocatedTokenKind::Variable(_) = &self.tokens[j].kind {
                         pairs.push((&self.tokens[i], &self.tokens[j]));
                     }
-                }
             }
             i += 1;
         }

@@ -93,7 +93,7 @@ impl<E: EventObserver + 'static> Runner for AsmFmtRunner<E> {
 
         for path_buf in &files {
             let path: &Path = path_buf.as_path();
-            let source = std::fs::read_to_string(path)
+            let source = fs_err::read_to_string(path)
                 .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
             let formatted = cpclib_asmfmt::format(&source, &options)
                 .map_err(|e| format!("{}: {e}", path.display()))?;
@@ -105,7 +105,7 @@ impl<E: EventObserver + 'static> Runner for AsmFmtRunner<E> {
                 }
             } else if inplace {
                 if formatted != source {
-                    std::fs::write(path, &formatted)
+                    fs_err::write(path, &formatted)
                         .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
                     o.emit_stdout(&format!("{}: reformatted\n", path.display()));
                 }

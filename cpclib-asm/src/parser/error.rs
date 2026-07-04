@@ -60,9 +60,9 @@ impl Z80ParserError {
         if let Some((span, _)) = errors.iter().find(|(_, k)| {
             !matches!(k, Z80ParserErrorKind::Winnow | Z80ParserErrorKind::DebugContext(_))
         }) {
-            return Some(Z80Span::from((*span).clone()));
+            return Some(Z80Span::from(*(*span)));
         }
-        errors.first().map(|(span, _)| Z80Span::from((*span).clone()))
+        errors.first().map(|(span, _)| Z80Span::from(*(*span)))
     }
 
     /// Return (start_span, end_byte_offset) for the most informative error.
@@ -75,7 +75,7 @@ impl Z80ParserError {
         let found = errors.iter().find(|(_, k)| {
             !matches!(k, Z80ParserErrorKind::Winnow | Z80ParserErrorKind::DebugContext(_))
         })?;
-        let span = Z80Span::from((*found.0).clone());
+        let span = Z80Span::from(*found.0);
         let end = if let Z80ParserErrorKind::ContextWithEnd { end_offset, .. } = found.1 {
             *end_offset
         } else {

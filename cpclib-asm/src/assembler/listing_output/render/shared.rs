@@ -3,9 +3,7 @@ use std::io::Write;
 
 use super::super::TokenKind;
 use super::super::format::{
-    blank, format_address_for, format_deferred_line_with_template_for,
-    format_line_with_template_for, hex_byte_for, logical_address_width,
-    render_source_column, ListingOutputFormat, ListingOutputKind
+    hex_byte_for, ListingOutputFormat, ListingOutputKind
 };
 
 pub(crate) struct ListingLineRender<'a> {
@@ -176,11 +174,10 @@ pub(crate) fn global_prefix_for_symbol(symbol: &str) -> Option<&str> {
 }
 
 pub(crate) fn qualify_local_symbol(token_text: &str, current_global: Option<&str>) -> String {
-    if token_text.starts_with('.') {
-        if let Some(global) = current_global {
+    if token_text.starts_with('.')
+        && let Some(global) = current_global {
             return format!("{global}{token_text}");
         }
-    }
 
     token_text.to_string()
 }

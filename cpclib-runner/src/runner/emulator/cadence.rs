@@ -1,4 +1,3 @@
-use std::thread::available_parallelism;
 
 use cpclib_common::camino::Utf8Path;
 
@@ -85,11 +84,11 @@ impl CadenceVersion {
 
         #[cfg(target_os = "linux")]
         {
-            return match self {
+            match self {
                 CadenceVersion::V0_3a => "Cadence-0.3a-x86_64.AppImage",
                 CadenceVersion::V1_1 => "Cadence-1.1-x86_64.AppImage",
                 CadenceVersion::V1_4 => "Cadence-1.4-x86_64.AppImage"
-            };
+            }
         }
 
         #[cfg(target_os = "macos")]
@@ -114,7 +113,7 @@ impl CadenceVersion {
 
         #[cfg(target_os = "linux")]
         {
-            return ArchiveFormat::Raw;
+            ArchiveFormat::Raw
         }
 
         #[cfg(target_os = "macos")]
@@ -128,7 +127,7 @@ impl CadenceVersion {
     }
 
     pub fn configuration<E: EventObserver>(&self) -> DelegateApplicationDescription<E> {
-        let version = self.clone();
+        let _version = self.clone();
 
         let builder = DelegateApplicationDescription::builder()
             .download_fn_url(self.target_url_generator())

@@ -60,13 +60,11 @@ impl Renumber for LocatedBasicProgram {
 
                     // Number in jump context → line reference.
                     LocatedTokenKind::Number(n) if after_jump => {
-                        if let Ok(old) = n.parse::<u16>() {
-                            if let Some(&new_n) = mapping.get(&old) {
-                                if new_n != old {
+                        if let Ok(old) = n.parse::<u16>()
+                            && let Some(&new_n) = mapping.get(&old)
+                                && new_n != old {
                                     subs.push(tok_sub(tok, new_n.to_string()));
                                 }
-                            }
-                        }
                         // Keep `after_jump`: comma may follow for ON GOTO n,n,n lists.
                     }
 

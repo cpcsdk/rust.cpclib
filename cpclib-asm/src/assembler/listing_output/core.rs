@@ -365,7 +365,7 @@ impl ListingOutput {
                 TokenKind::Label(expanded_label)
             },
             LocatedTokenInner::Equ { label, .. } | LocatedTokenInner::Assign { label, .. } => {
-                TokenKind::Set(self.expand_listing_label(&label.to_string(), symbols))
+                TokenKind::Set(self.expand_listing_label(label.as_ref(), symbols))
             },
             LocatedTokenInner::Macro { name, .. } => TokenKind::MacroDefine(name.to_string()),
             LocatedTokenInner::MacroCall(..)
@@ -662,21 +662,19 @@ impl ListingOutput {
         }
 
         let qualified = Self::expand_symbol_with_listing_context(expanded, Some(symbols as *const _));
-        if qualified != expanded {
-            if let Some(resolved) = lookup_value(&qualified) {
+        if qualified != expanded
+            && let Some(resolved) = lookup_value(&qualified) {
                 return resolved;
             }
-        }
 
         if expanded.starts_with('.') {
             let needle = expanded.trim_start_matches('.');
             for symbol in symbols.available_symbols() {
                 let candidate = symbol.value();
-                if candidate.ends_with(needle) {
-                    if let Some(resolved) = lookup_value(candidate) {
+                if candidate.ends_with(needle)
+                    && let Some(resolved) = lookup_value(candidate) {
                         return resolved;
                     }
-                }
             }
         }
 
@@ -686,11 +684,10 @@ impl ListingOutput {
     fn expand_listing_label(&self, raw_label: &str, symbols: Option<*const SymbolsTable>) -> String {
         let normalized = raw_label.replace("{{", "{").replace("}}", "}");
         let expanded = Self::expand_symbol_with_listing_context(&normalized, symbols);
-        if raw_label.starts_with('.') && expanded.starts_with('.') {
-            if let Some(global) = &self.listing_current_global_label {
+        if raw_label.starts_with('.') && expanded.starts_with('.')
+            && let Some(global) = &self.listing_current_global_label {
                 return format!("{global}{expanded}");
             }
-        }
         expanded
     }
 
@@ -952,57 +949,54 @@ impl ListingOutput {
             .map(|p| p.as_os_str().to_str().unwrap_or("<NO FNAME>").to_string())
             .or_else(|| ctx.context_name().map(|s| s.to_owned()));
 
-        match fname {
-            Some(fname) => {
-                let (file_index, is_new_file) = self.register_source_file_name(&fname);
-                self.current_file_index = file_index;
+        if let Some(fname) = fname {
+            let (file_index, is_new_file) = self.register_source_file_name(&fname);
+            self.current_file_index = file_index;
 
-                if self.format.source_file_output_mode == ListingSourceFileOutputMode::None {
-                    self.current_fname = Some(fname);
-                    return;
-                }
+            if self.format.source_file_output_mode == ListingSourceFileOutputMode::None {
+                self.current_fname = Some(fname);
+                return;
+            }
 
-                if self.format.source_file_output_mode == ListingSourceFileOutputMode::FileMap {
-                    self.current_fname = Some(fname.clone());
+            if self.format.source_file_output_mode == ListingSourceFileOutputMode::FileMap {
+                self.current_fname = Some(fname.clone());
 
-                    if !self.file_map_header_printed {
-                        self.file_map_header_printed = true;
-                        self.renderer.render_notice(
-                            &mut *self.writer,
-                            ListingNotice::FileMapHeader { file_index, fname: &fname }
-                        );
-                        return;
-                    }
-
-                    if is_new_file {
-                        self.renderer.render_notice(
-                            &mut *self.writer,
-                            ListingNotice::FileMapEntry { file_index, fname: &fname }
-                        );
-                    }
-
-                    return;
-                }
-
-                if !self.format.show_context_header {
-                    self.current_fname = Some(fname);
-                    return;
-                }
-
-                let print = match self.current_fname.as_ref() {
-                    Some(current_fname) => *current_fname != fname,
-                    None => true
-                };
-
-                if print {
-                    self.current_fname = Some(fname.clone());
+                if !self.file_map_header_printed {
+                    self.file_map_header_printed = true;
                     self.renderer.render_notice(
                         &mut *self.writer,
-                        ListingNotice::ContextHeader { file_index, fname: &fname }
+                        ListingNotice::FileMapHeader { file_index, fname: &fname }
+                    );
+                    return;
+                }
+
+                if is_new_file {
+                    self.renderer.render_notice(
+                        &mut *self.writer,
+                        ListingNotice::FileMapEntry { file_index, fname: &fname }
                     );
                 }
-            },
-            None => {}
+
+                return;
+            }
+
+            if !self.format.show_context_header {
+                self.current_fname = Some(fname);
+                return;
+            }
+
+            let print = match self.current_fname.as_ref() {
+                Some(current_fname) => *current_fname != fname,
+                None => true
+            };
+
+            if print {
+                self.current_fname = Some(fname.clone());
+                self.renderer.render_notice(
+                    &mut *self.writer,
+                    ListingNotice::ContextHeader { file_index, fname: &fname }
+                );
+            }
         }
     }
 

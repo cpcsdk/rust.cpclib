@@ -7092,8 +7092,8 @@ impl Env {
         }
 
         // handle fake instructions
-        if bytes.is_empty() {
-            if let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
+        if bytes.is_empty()
+            && let Some(listing) = <T as ListingElement>::fake_to_listing_from_access(
                 Mnemonic::Ld,
                 Some(arg1),
                 Some(arg2),
@@ -7101,7 +7101,6 @@ impl Env {
             ) {
                 return self.assemble_fake_listing(&listing);
             }
-        }
 
         if bytes.is_empty() {
             Err(Box::new(AssemblerError::BugInAssembler {

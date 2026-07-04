@@ -1,7 +1,6 @@
-use std::thread::available_parallelism;
 use std::process::Command;
 
-use cpclib_common::camino::{Utf8Path, Utf8PathBuf};
+use cpclib_common::camino::Utf8Path;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, MutiplatformUrls};
 use crate::event::EventObserver;
@@ -436,12 +435,12 @@ fn download_roms(target_dir: &Utf8Path) -> Result<(), String> {
         let result = Command::new("curl")
             .args(["-L", "-o", rom_path.as_str(), &rom_url, "--silent", "--show-error"])
             .status()
-            .and_then(|s| if s.success() { Ok(()) } else { Err(std::io::Error::new(std::io::ErrorKind::Other, "curl failed")) })
+            .and_then(|s| if s.success() { Ok(()) } else { Err(std::io::Error::other("curl failed")) })
             .or_else(|_| {
                 Command::new("wget")
                     .args(["-q", "-O", rom_path.as_str(), &rom_url])
                     .status()
-                    .and_then(|s| if s.success() { Ok(()) } else { Err(std::io::Error::new(std::io::ErrorKind::Other, "wget failed")) })
+                    .and_then(|s| if s.success() { Ok(()) } else { Err(std::io::Error::other("wget failed")) })
             });
         
         match result {

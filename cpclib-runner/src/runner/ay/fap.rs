@@ -1,5 +1,3 @@
-use std::io::Cursor;
-use std::process::Command;
 
 use cpclib_common::camino::Utf8PathBuf;
 
