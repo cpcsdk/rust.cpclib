@@ -28,6 +28,7 @@ fn default_directive_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_register_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_one_instruction_per_line() -> bool { true }
 fn default_space_around_column() -> SpaceAroundColumn { SpaceAroundColumn::Untouched }
+fn default_space_around_assignment() -> SpaceAroundColumn { SpaceAroundColumn::Untouched }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, bon::Builder)]
 pub struct AsmFormatOptions {
@@ -63,6 +64,11 @@ pub struct AsmFormatOptions {
     #[serde(default = "default_space_around_column")]
     #[builder(default = default_space_around_column())]
     pub space_around_column: SpaceAroundColumn,
+    /// How spaces are written around the assignment operator (`=`, `+=`, `>>=`, …)
+    /// in symbol-assignment statements (default: Untouched).
+    #[serde(default = "default_space_around_assignment")]
+    #[builder(default = default_space_around_assignment())]
+    pub space_around_assignment: SpaceAroundColumn,
 }
 
 impl Default for AsmFormatOptions {
@@ -75,6 +81,7 @@ impl Default for AsmFormatOptions {
             register_case: default_register_case(),
             one_instruction_per_line: default_one_instruction_per_line(),
             space_around_column: default_space_around_column(),
+            space_around_assignment: default_space_around_assignment(),
         }
     }
 }
@@ -124,6 +131,7 @@ struct Formatter<'src> {
     register_case: CaseStyle,
     one_instruction_per_line: bool,
     space_around_column: SpaceAroundColumn,
+    space_around_assignment: SpaceAroundColumn,
     current_line: usize,
     output: String,
     // Per-source-line segment cache (`:` splitting for one_instruction_per_line)
@@ -144,6 +152,7 @@ impl<'src> Formatter<'src> {
             register_case: opt.register_case,
             one_instruction_per_line: opt.one_instruction_per_line,
             space_around_column: opt.space_around_column,
+            space_around_assignment: opt.space_around_assignment,
             current_line: 0,
             output: String::new(),
             seg_line: usize::MAX,
@@ -348,6 +357,37 @@ impl<'src> Formatter<'src> {
             SpaceAroundColumn::Untouched => unreachable!(),
         };
         segs.join(sep)
+    }
+
+    // Reformat the assignment operator spacing in a `label [op]= value` statement.
+    // Locates the first `=` and scans back over compound-operator prefix characters
+    // (`+`, `-`, `*`, `/`, `%`, `&`, `|`, `^`, `<`, `>`) to find the full operator.
+    // Whitespace on both sides of the operator is then replaced according to `spacing`.
+    fn normalize_assignment_spacing(content: &str, spacing: SpaceAroundColumn) -> String {
+        if matches!(spacing, SpaceAroundColumn::Untouched) {
+            return content.to_string();
+        }
+        let bytes = content.as_bytes();
+        let is_op_prefix = |b: u8| matches!(b, b'+' | b'-' | b'*' | b'/' | b'%' | b'&' | b'|' | b'^' | b'<' | b'>');
+        let Some(eq_pos) = bytes.iter().position(|&b| b == b'=') else {
+            return content.to_string();
+        };
+        // Find where the operator starts (scan back over prefix chars only, no whitespace).
+        let mut op_start = eq_pos;
+        while op_start > 0 && is_op_prefix(bytes[op_start - 1]) {
+            op_start -= 1;
+        }
+        let label = content[..op_start].trim_end();
+        let op    = &content[op_start..=eq_pos];
+        let value = content[eq_pos + 1..].trim_start();
+        let (sp_before, sp_after) = match spacing {
+            SpaceAroundColumn::None   => ("", ""),
+            SpaceAroundColumn::Before => (" ", ""),
+            SpaceAroundColumn::After  => ("", " "),
+            SpaceAroundColumn::Both   => (" ", " "),
+            SpaceAroundColumn::Untouched => unreachable!(),
+        };
+        format!("{}{}{}{}{}", label, sp_before, op, sp_after, value)
     }
 
     // Initialise the per-line segment cache when we move to a new source line.
@@ -580,7 +620,8 @@ impl<'src> Formatter<'src> {
         } else if token.is_assign() {
             // Symbol assignment (label = value, label += value, etc.):
             // first word is a user-defined symbol name — always at column 0.
-            self.emit_line(0, &content, comment.as_deref());
+            let normalized = Self::normalize_assignment_spacing(&content, self.space_around_assignment);
+            self.emit_line(0, &normalized, comment.as_deref());
         } else if token.is_equ() {
             // "symbol EQU value": label (first word) always at column 0;
             // apply directive_case only to the keyword (second word).
@@ -1146,5 +1187,65 @@ mod tests {
         let out = format(src, &opt).unwrap();
         // The ` : ` from source should be preserved.
         assert!(out.contains(" : "), "spacing was altered: {out:?}");
+    }
+
+    // ── space_around_assignment ──────────────────────────────────────────────
+
+    fn fmt_assign(src: &str, spacing: SpaceAroundColumn) -> String {
+        let opt = AsmFormatOptions::builder()
+            .space_around_assignment(spacing)
+            .build();
+        format(src, &opt).unwrap()
+    }
+
+    #[test]
+    fn test_assign_spacing_both() {
+        let out = fmt_assign("my_var=5", SpaceAroundColumn::Both);
+        assert!(out.contains("my_var = 5"), "Both: {out:?}");
+    }
+
+    #[test]
+    fn test_assign_spacing_none() {
+        let out = fmt_assign("my_var = 5", SpaceAroundColumn::None);
+        assert!(out.contains("my_var=5"), "None: {out:?}");
+    }
+
+    #[test]
+    fn test_assign_spacing_before() {
+        let out = fmt_assign("my_var=5", SpaceAroundColumn::Before);
+        assert!(out.contains("my_var =5"), "Before: {out:?}");
+    }
+
+    #[test]
+    fn test_assign_spacing_after() {
+        let out = fmt_assign("my_var=5", SpaceAroundColumn::After);
+        assert!(out.contains("my_var= 5"), "After: {out:?}");
+    }
+
+    #[test]
+    fn test_assign_spacing_untouched() {
+        // Untouched (default) must preserve original spacing exactly.
+        let out = fmt_assign("my_var=5", SpaceAroundColumn::Untouched);
+        assert!(out.contains("my_var=5"), "Untouched: {out:?}");
+        let out2 = fmt_assign("my_var = 5", SpaceAroundColumn::Untouched);
+        assert!(out2.contains("my_var = 5"), "Untouched spaces: {out2:?}");
+    }
+
+    #[test]
+    fn test_assign_compound_operator_both() {
+        let out = fmt_assign("my_var+=10", SpaceAroundColumn::Both);
+        assert!(out.contains("my_var += 10"), "compound Both: {out:?}");
+    }
+
+    #[test]
+    fn test_assign_compound_operator_none() {
+        let out = fmt_assign("my_var += 10", SpaceAroundColumn::None);
+        assert!(out.contains("my_var+=10"), "compound None: {out:?}");
+    }
+
+    #[test]
+    fn test_assign_shift_operator_both() {
+        let out = fmt_assign("my_var>>=2", SpaceAroundColumn::Both);
+        assert!(out.contains("my_var >>= 2"), "shift Both: {out:?}");
     }
 }
