@@ -457,7 +457,25 @@ impl LanguageServer for CpcLspBackend {
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
             if document.doc_type == DocumentType::Assembly {
-                return Ok(self.asm_analyzer.format(document, &params.options));
+                // Load the project/user config file, reporting any parse error to the client.
+                let base_opt = match cpclib_asmfmt::find_config_file() {
+                    None => cpclib_asmfmt::AsmFormatOptions::default(),
+                    Some(path) => match cpclib_asmfmt::load_config_from(&path) {
+                        Ok(cfg) => cfg,
+                        Err(e) => {
+                            self.client
+                                .show_message(MessageType::ERROR, format!("basm-fmt config error: {e}"))
+                                .await;
+                            cpclib_asmfmt::AsmFormatOptions::default()
+                        }
+                    }
+                };
+                // Let the editor's tab-size setting override the config's indent_size.
+                let opt = cpclib_asmfmt::AsmFormatOptions {
+                    indent_size: params.options.tab_size as usize,
+                    ..base_opt
+                };
+                return Ok(self.asm_analyzer.format(document, &opt));
             }
         }
         Ok(None)

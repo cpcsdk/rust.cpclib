@@ -975,15 +975,11 @@ impl AssemblyAnalyzer {
 
     /// Format the entire document and return a single whole-document TextEdit,
     /// or `None` if the source cannot be parsed or is already correctly formatted.
-    pub fn format(&self, document: &Document, options: &FormattingOptions) -> Option<Vec<TextEdit>> {
+    /// `opt` is the already-resolved format options (config loading is the caller's responsibility
+    /// so the backend can report config errors to the LSP client).
+    pub fn format(&self, document: &Document, opt: &cpclib_asmfmt::AsmFormatOptions) -> Option<Vec<TextEdit>> {
         let source = document.text();
-        // Load project/user config; override indent_size from the editor's tab setting.
-        let indent_size = options.tab_size as usize;
-        let opt = cpclib_asmfmt::AsmFormatOptions {
-            indent_size,
-            ..cpclib_asmfmt::load_config()
-        };
-        let formatted = cpclib_asmfmt::format(&source, &opt).ok()?;
+        let formatted = cpclib_asmfmt::format(&source, opt).ok()?;
         if formatted == source {
             return None;
         }

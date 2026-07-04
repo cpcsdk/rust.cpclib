@@ -14,6 +14,7 @@ independent = true
 
 [dependencies]
 cpclib-asm.workspace = true
+cpclib-common.workspace = true
 serde = { workspace = true, features = ["derive"] }
 toml = "0.8"
 bon.workspace = true

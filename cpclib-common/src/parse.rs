@@ -5,9 +5,77 @@ use winnow::stream::{AsBytes, AsChar, Compare, Stream, StreamIsPartial};
 use winnow::token::{any, one_of, take_while};
 use winnow::{BStr, ModalResult, Parser};
 
+/// Describes how a numeric literal is encoded in source text.
+/// Returned by [`parse_value_with_kind`] and [`scan_numeric_literals`].
+/// The variants `AmbiguousBinHex` and `Unk` are internal parser states and are
+/// never returned in a completed parse result.
+#[derive(Clone, Copy, PartialEq, Debug)]
+#[repr(u32)]
+pub enum EncodingKind {
+    Hex = 16,
+    Oct = 8,
+    Bin = 2,
+    Dec = 10,
+    #[doc(hidden)]
+    AmbiguousBinHex = 200,
+    #[doc(hidden)]
+    Unk = 255
+}
+
+/// Scan `content` for numeric literals and return their byte spans + parsed value/kind.
+/// Each entry is `(start, end_exclusive, value, kind)`.
+/// Double-quoted string literals are skipped (numbers inside strings are not reported).
+pub fn scan_numeric_literals(content: &str) -> Vec<(usize, usize, u32, EncodingKind)> {
+    let mut results = Vec::new();
+    let bytes = content.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        let b = bytes[i];
+
+        // Skip string literals verbatim
+        if b == b'"' {
+            i += 1;
+            while i < bytes.len() && bytes[i] != b'"' {
+                if bytes[i] == b'\\' { i += 1; } // skip escaped char
+                i += 1;
+            }
+            if i < bytes.len() { i += 1; } // closing '"'
+            continue;
+        }
+
+        let prev_is_ident = i > 0 && {
+            let pb = bytes[i - 1];
+            pb.is_ascii_alphanumeric() || pb == b'_'
+        };
+        let could_be_num = !prev_is_ident
+            && (b.is_ascii_digit() || matches!(b, b'#' | b'$' | b'@' | b'%' | b'&'));
+
+        if could_be_num {
+            let slice = &content[i..];
+            let before_len = slice.len();
+            let mut input: &BStr = BStr::new(slice.as_bytes());
+            if let Ok((value, kind)) =
+                parse_value_with_kind::<_, winnow::error::ContextError>(&mut input)
+            {
+                let consumed = before_len - input.len();
+                if consumed > 0 {
+                    results.push((i, i + consumed, value, kind));
+                    i += consumed;
+                    continue;
+                }
+            }
+        }
+
+        i += 1;
+    }
+
+    results
+}
+
 #[inline]
-///  (prefix) space number suffix
-pub fn parse_value<I, Error>(input: &mut I) -> ModalResult<u32, Error>
+///  (prefix) space number suffix — returns both the value and its encoding kind.
+pub fn parse_value_with_kind<I, Error>(input: &mut I) -> ModalResult<(u32, EncodingKind), Error>
 where
     I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
     <I as Stream>::Slice: AsBytes,
@@ -18,18 +86,6 @@ where
     I: winnow::stream::Compare<u8>,
     Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
 {
-    #[derive(Clone, PartialEq, Debug)]
-    #[repr(u32)]
-    enum EncodingKind {
-        Hex = 16,
-        Oct = 8,
-        Bin = 2,
-        Dec = 10,
-
-        AmbiguousBinHex = 200,
-        Unk = 255
-    }
-
     let before_encoding: <I as Stream>::Checkpoint = input.checkpoint();
 
     // numbers have an optional prefix with an eventual space
@@ -141,7 +197,23 @@ where
         number = base * number + digit;
     }
 
-    Ok(number)
+    Ok((number, encoding))
+}
+
+#[inline]
+///  (prefix) space number suffix — backward-compatible wrapper that discards the encoding kind.
+pub fn parse_value<I, Error>(input: &mut I) -> ModalResult<u32, Error>
+where
+    I: Stream + StreamIsPartial + for<'a> Compare<&'a str>,
+    <I as Stream>::Slice: AsBytes,
+    <I as Stream>::Token: AsChar,
+    <I as Stream>::Token: Clone,
+    I: for<'a> Compare<&'a [u8; 2]>,
+    I: for<'a> Compare<&'a [u8; 1]>,
+    I: winnow::stream::Compare<u8>,
+    Error: ParserError<I> + AddContext<I, winnow::error::StrContext>
+{
+    parse_value_with_kind(input).map(|(v, _)| v)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

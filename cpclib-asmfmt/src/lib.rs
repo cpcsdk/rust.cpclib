@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use cpclib_asm::{AssemblerError, ListingElement, LocatedListing, LocatedToken, MayHaveSpan, parse_z80_str};
+use cpclib_common::parse::{EncodingKind, scan_numeric_literals};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CaseStyle {
@@ -21,6 +22,48 @@ pub enum SpaceAroundColumn {
     Untouched, // preserve original spacing
 }
 
+/// Controls the prefix or suffix used when reformatting hexadecimal literals.
+/// TOML / JSON values: `"0x"`, `"0X"`, `"#"`, `"$"`, `"&"`, `"h"`, `"H"`, `"Untouched"`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum HexEncoding {
+    #[serde(rename = "0x")]  Prefix0x,      // 0x1A
+    #[serde(rename = "0X")]  Prefix0X,      // 0X1A
+    #[serde(rename = "#")]   PrefixHash,    // #1A
+    #[serde(rename = "$")]   PrefixDollar,  // $1A
+    #[serde(rename = "&")]   PrefixAmp,     // &1A
+    #[serde(rename = "h")]   SuffixLower,   // 1ah
+    #[serde(rename = "H")]   SuffixUpper,   // 1AH
+    Untouched,                              // preserve original encoding
+}
+
+/// Controls the prefix used when reformatting octal literals.
+/// TOML / JSON values: `"0o"`, `"0O"`, `"@"`, `"Untouched"`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum OctalEncoding {
+    #[serde(rename = "0o")]  Prefix0o,   // 0o17
+    #[serde(rename = "0O")]  Prefix0O,   // 0O17
+    #[serde(rename = "@")]   PrefixAt,   // @17
+    Untouched,                           // preserve original encoding
+}
+
+/// Controls the prefix used when reformatting binary literals.
+/// TOML / JSON values: `"0b"`, `"0B"`, `"%"`, `"Untouched"`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum BinaryEncoding {
+    #[serde(rename = "0b")]  Prefix0b,       // 0b00110101
+    #[serde(rename = "0B")]  Prefix0B,       // 0B00110101
+    #[serde(rename = "%")]   PrefixPercent,  // %00110101
+    Untouched,                               // preserve original encoding
+}
+
+/// Controls whether label definitions are emitted with or without a trailing `:`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum LabelPostfix {
+    NoColumn,   // emit without trailing ':'
+    WithColumn, // emit with trailing ':'
+    Untouched,  // preserve original source (colon if source had one)
+}
+
 fn default_indent_size() -> usize { 4 }
 fn default_comment_column() -> usize { 30 }
 fn default_mnemonic_case() -> CaseStyle { CaseStyle::UpperCase }
@@ -29,6 +72,11 @@ fn default_register_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_one_instruction_per_line() -> bool { true }
 fn default_space_around_column() -> SpaceAroundColumn { SpaceAroundColumn::Untouched }
 fn default_space_around_assignment() -> SpaceAroundColumn { SpaceAroundColumn::Untouched }
+fn default_hexadecimal_case() -> CaseStyle { CaseStyle::Untouched }
+fn default_hexadecimal_encoding() -> HexEncoding { HexEncoding::Untouched }
+fn default_octal_encoding() -> OctalEncoding { OctalEncoding::Untouched }
+fn default_binary_encoding() -> BinaryEncoding { BinaryEncoding::Untouched }
+fn default_label_postfix() -> LabelPostfix { LabelPostfix::WithColumn }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, bon::Builder)]
 pub struct AsmFormatOptions {
@@ -69,6 +117,26 @@ pub struct AsmFormatOptions {
     #[serde(default = "default_space_around_assignment")]
     #[builder(default = default_space_around_assignment())]
     pub space_around_assignment: SpaceAroundColumn,
+    /// Case applied to the A-F letters inside hex literals (default: Untouched).
+    #[serde(default = "default_hexadecimal_case")]
+    #[builder(default = default_hexadecimal_case())]
+    pub hexadecimal_case: CaseStyle,
+    /// Prefix/suffix form used when reformatting hex literals (default: Untouched).
+    #[serde(default = "default_hexadecimal_encoding")]
+    #[builder(default = default_hexadecimal_encoding())]
+    pub hexadecimal_encoding: HexEncoding,
+    /// Prefix form used when reformatting octal literals (default: Untouched).
+    #[serde(default = "default_octal_encoding")]
+    #[builder(default = default_octal_encoding())]
+    pub octal_encoding: OctalEncoding,
+    /// Prefix form used when reformatting binary literals (default: Untouched).
+    #[serde(default = "default_binary_encoding")]
+    #[builder(default = default_binary_encoding())]
+    pub binary_encoding: BinaryEncoding,
+    /// Whether label definitions are emitted with or without a trailing `:` (default: Untouched).
+    #[serde(default = "default_label_postfix")]
+    #[builder(default = default_label_postfix())]
+    pub label_definition_postfix_with_column: LabelPostfix,
 }
 
 impl Default for AsmFormatOptions {
@@ -82,6 +150,11 @@ impl Default for AsmFormatOptions {
             one_instruction_per_line: default_one_instruction_per_line(),
             space_around_column: default_space_around_column(),
             space_around_assignment: default_space_around_assignment(),
+            hexadecimal_case: default_hexadecimal_case(),
+            hexadecimal_encoding: default_hexadecimal_encoding(),
+            octal_encoding: default_octal_encoding(),
+            binary_encoding: default_binary_encoding(),
+            label_definition_postfix_with_column: default_label_postfix(),
         }
     }
 }
@@ -132,6 +205,11 @@ struct Formatter<'src> {
     one_instruction_per_line: bool,
     space_around_column: SpaceAroundColumn,
     space_around_assignment: SpaceAroundColumn,
+    hexadecimal_case: CaseStyle,
+    hexadecimal_encoding: HexEncoding,
+    octal_encoding: OctalEncoding,
+    binary_encoding: BinaryEncoding,
+    label_definition_postfix_with_column: LabelPostfix,
     current_line: usize,
     output: String,
     // Per-source-line segment cache (`:` splitting for one_instruction_per_line)
@@ -153,6 +231,11 @@ impl<'src> Formatter<'src> {
             one_instruction_per_line: opt.one_instruction_per_line,
             space_around_column: opt.space_around_column,
             space_around_assignment: opt.space_around_assignment,
+            hexadecimal_case: opt.hexadecimal_case,
+            hexadecimal_encoding: opt.hexadecimal_encoding,
+            octal_encoding: opt.octal_encoding,
+            binary_encoding: opt.binary_encoding,
+            label_definition_postfix_with_column: opt.label_definition_postfix_with_column,
             current_line: 0,
             output: String::new(),
             seg_line: usize::MAX,
@@ -187,56 +270,62 @@ impl<'src> Formatter<'src> {
     }
 
     // Apply case to the first whitespace-delimited word only; rest is preserved verbatim.
+    // Also normalises any run of whitespace between the keyword and its arguments to a single
+    // space so that "ORG  40" → "ORG 40".
     fn apply_case_to_first_word(content: &str, case: CaseStyle) -> String {
-        if matches!(case, CaseStyle::Untouched) {
-            return content.to_string();
-        }
         let word_end = content.find(|c: char| c.is_ascii_whitespace()).unwrap_or(content.len());
         let keyword = Self::apply_case(&content[..word_end], case);
-        let mut result = keyword;
-        result.push_str(&content[word_end..]);
-        result
+        let rest = content[word_end..].trim_start();
+        if rest.is_empty() {
+            keyword
+        } else {
+            format!("{keyword} {rest}")
+        }
     }
 
     // Apply case to the second whitespace-delimited word (e.g., the EQU keyword in
     // "symbol EQU value"), leaving the first word (user symbol name) unchanged.
+    // Also normalises inter-word whitespace to a single space.
     fn apply_case_to_second_word(content: &str, case: CaseStyle) -> String {
-        if matches!(case, CaseStyle::Untouched) {
-            return content.to_string();
-        }
         let bytes = content.as_bytes();
-        // Find end of first word
         let first_end = bytes.iter().position(|b| b.is_ascii_whitespace()).unwrap_or(bytes.len());
-        // Find start of second word (skip whitespace)
         let second_start = bytes[first_end..]
             .iter()
             .position(|b| !b.is_ascii_whitespace())
             .map(|p| first_end + p)
             .unwrap_or(bytes.len());
-        // Find end of second word
         let second_end = bytes[second_start..]
             .iter()
             .position(|b| b.is_ascii_whitespace())
             .map(|p| second_start + p)
             .unwrap_or(bytes.len());
-        let mut result = content[..first_end].to_string();
-        result.push_str(&content[first_end..second_start]);
-        result.push_str(&Self::apply_case(&content[second_start..second_end], case));
-        result.push_str(&content[second_end..]);
-        result
+        let symbol  = &content[..first_end];
+        let keyword = Self::apply_case(&content[second_start..second_end], case);
+        let rest    = content[second_end..].trim_start();
+        if rest.is_empty() {
+            format!("{symbol} {keyword}")
+        } else {
+            format!("{symbol} {keyword} {rest}")
+        }
     }
 
     // Apply case to a mnemonic line: transforms the mnemonic keyword and register names
     // in operands but leaves numeric literals / labels / expressions unchanged.
+    // Also normalises the whitespace between mnemonic and operands to a single space.
     fn apply_mnemonic_case(content: &str, mnemonic_case: CaseStyle, register_case: CaseStyle) -> String {
         let word_end = content.find(|c: char| c.is_ascii_whitespace()).unwrap_or(content.len());
         let mnemonic = Self::apply_case(&content[..word_end], mnemonic_case);
-        let operands = if matches!(register_case, CaseStyle::Untouched) {
-            content[word_end..].to_string()
+        let rest = content[word_end..].trim_start();
+        if rest.is_empty() {
+            mnemonic
         } else {
-            Self::apply_register_case(&content[word_end..], register_case)
-        };
-        format!("{}{}", mnemonic, operands)
+            let operands = if matches!(register_case, CaseStyle::Untouched) {
+                rest.to_string()
+            } else {
+                Self::apply_register_case(rest, register_case)
+            };
+            format!("{mnemonic} {operands}")
+        }
     }
 
     fn apply_register_case(operands: &str, case: CaseStyle) -> String {
@@ -390,6 +479,108 @@ impl<'src> Formatter<'src> {
         format!("{}{}{}{}{}", label, sp_before, op, sp_after, value)
     }
 
+    // Reformat all numeric literals in `content` according to the hex/oct/bin encoding and
+    // hex case settings.  When all four settings are Untouched the string is returned as-is.
+    fn reformat_numeric_literals(&self, content: &str) -> String {
+        if matches!(self.hexadecimal_case, CaseStyle::Untouched)
+            && matches!(self.hexadecimal_encoding, HexEncoding::Untouched)
+            && matches!(self.octal_encoding, OctalEncoding::Untouched)
+            && matches!(self.binary_encoding, BinaryEncoding::Untouched)
+        {
+            return content.to_string();
+        }
+
+        let spans = scan_numeric_literals(content);
+        if spans.is_empty() {
+            return content.to_string();
+        }
+
+        let mut result = String::with_capacity(content.len());
+        let mut cursor = 0usize;
+        for (start, end, value, kind) in spans {
+            result.push_str(&content[cursor..start]);
+            let original = &content[start..end];
+            result.push_str(&self.reformat_number(value, kind, original));
+            cursor = end;
+        }
+        result.push_str(&content[cursor..]);
+        result
+    }
+
+    fn reformat_number(&self, value: u32, kind: EncodingKind, original: &str) -> String {
+        match kind {
+            EncodingKind::Hex => self.reformat_hex(value, original),
+            EncodingKind::Oct => self.reformat_oct(value, original),
+            EncodingKind::Bin => self.reformat_bin(value, original),
+            _ => original.to_string(), // Dec and internal states: unchanged
+        }
+    }
+
+    fn reformat_hex(&self, value: u32, original: &str) -> String {
+        let enc = self.hexadecimal_encoding;
+        let case = self.hexadecimal_case;
+
+        if matches!(enc, HexEncoding::Untouched) && matches!(case, CaseStyle::Untouched) {
+            return original.to_string();
+        }
+
+        if matches!(enc, HexEncoding::Untouched) {
+            // Only change letter case; preserve prefix/suffix verbatim.
+            return original.chars().map(|c| match c {
+                'a'..='f' | 'A'..='F' => match case {
+                    CaseStyle::UpperCase => c.to_ascii_uppercase(),
+                    CaseStyle::LowerCase => c.to_ascii_lowercase(),
+                    CaseStyle::Untouched => c,
+                },
+                _ => c,
+            }).collect();
+        }
+
+        // Re-encode: format value as hex digits with the requested case.
+        let raw = format!("{:X}", value); // always uppercase first
+        let digits: String = raw.chars().map(|c| match case {
+            CaseStyle::LowerCase => c.to_ascii_lowercase(),
+            _ => c, // UpperCase or Untouched → uppercase
+        }).collect();
+
+        let is_suffix = matches!(enc, HexEncoding::SuffixLower | HexEncoding::SuffixUpper);
+        // Suffix form must start with a digit to avoid being parsed as an identifier.
+        let digits = if is_suffix && digits.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+            format!("0{digits}")
+        } else {
+            digits
+        };
+
+        match enc {
+            HexEncoding::Prefix0x     => format!("0x{digits}"),
+            HexEncoding::Prefix0X     => format!("0X{digits}"),
+            HexEncoding::PrefixHash   => format!("#{digits}"),
+            HexEncoding::PrefixDollar => format!("${digits}"),
+            HexEncoding::PrefixAmp    => format!("&{digits}"),
+            HexEncoding::SuffixLower  => format!("{digits}h"),
+            HexEncoding::SuffixUpper  => format!("{digits}H"),
+            HexEncoding::Untouched    => unreachable!(),
+        }
+    }
+
+    fn reformat_oct(&self, value: u32, original: &str) -> String {
+        match self.octal_encoding {
+            OctalEncoding::Untouched => original.to_string(),
+            OctalEncoding::Prefix0o  => format!("0o{:o}", value),
+            OctalEncoding::Prefix0O  => format!("0O{:o}", value),
+            OctalEncoding::PrefixAt  => format!("@{:o}", value),
+        }
+    }
+
+    fn reformat_bin(&self, value: u32, original: &str) -> String {
+        match self.binary_encoding {
+            BinaryEncoding::Untouched      => original.to_string(),
+            BinaryEncoding::Prefix0b       => format!("0b{:b}", value),
+            BinaryEncoding::Prefix0B       => format!("0B{:b}", value),
+            BinaryEncoding::PrefixPercent  => format!("%{:b}", value),
+        }
+    }
+
     // Initialise the per-line segment cache when we move to a new source line.
     // Must be called at the top of format_token (after warning/comment guards).
     fn init_segments_for_line(&mut self, line_0: usize) {
@@ -422,6 +613,7 @@ impl<'src> Formatter<'src> {
         let src = self.source_lines.get(line_0).copied().unwrap_or("");
         let (content, comment) = Self::split_comment(src.trim());
         let formatted = Self::apply_case_to_first_word(content, self.directive_case);
+        let formatted = self.reformat_numeric_literals(&formatted);
         self.emit_line(depth, &formatted, comment);
     }
 
@@ -539,6 +731,19 @@ impl<'src> Formatter<'src> {
 
     fn format_label(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
         let name = token.label_symbol();
+
+        // Determine whether to emit the trailing ':' based on the postfix option.
+        let src_line = self.source_lines.get(line_0).copied().unwrap_or("");
+        let original_had_colon = src_line.trim_start()
+            .strip_prefix(name)
+            .map_or(false, |rest| rest.trim_start().starts_with(':'));
+        let emit_colon = match self.label_definition_postfix_with_column {
+            LabelPostfix::WithColumn => true,
+            LabelPostfix::NoColumn   => false,
+            LabelPostfix::Untouched  => original_had_colon,
+        };
+        let label_str = if emit_colon { format!("{name}:") } else { name.to_string() };
+
         if self.one_instruction_per_line {
             // The segment at seg_idx may contain "label_name [trailing_instruction]"
             // (when a label and an instruction are on the same line without a `:` between them).
@@ -563,7 +768,7 @@ impl<'src> Formatter<'src> {
             } else {
                 None
             };
-            self.emit_line(0, &format!("{name}:"), comment.as_deref());
+            self.emit_line(0, &label_str, comment.as_deref());
         } else {
             let src = self.source_lines.get(line_0).copied().unwrap_or("");
             let (content_no_comment, comment) = Self::split_comment(src.trim());
@@ -573,12 +778,12 @@ impl<'src> Formatter<'src> {
                 .map(|rest| rest.trim_start_matches(':').trim())
                 .unwrap_or("");
             if after_label.is_empty() {
-                self.emit_line(0, &format!("{name}:"), comment);
+                self.emit_line(0, &label_str, comment);
             } else {
                 // Label and instruction share a line in the source; split them out.
                 // Emit the instruction content verbatim to avoid misidentifying
                 // struct/macro names as mnemonics and applying the wrong case.
-                self.emit_line(0, &format!("{name}:"), None);
+                self.emit_line(0, &label_str, None);
                 let after = Self::normalize_colon_spacing(after_label, self.space_around_column);
                 self.emit_line(depth, &after, comment);
             }
@@ -609,27 +814,25 @@ impl<'src> Formatter<'src> {
         };
 
         if token.mnemonic().is_some() {
-            self.emit_line(
-                depth,
-                &Self::apply_mnemonic_case(&content, self.mnemonic_case, self.register_case),
-                comment.as_deref(),
-            );
+            let out = Self::apply_mnemonic_case(&content, self.mnemonic_case, self.register_case);
+            let out = self.reformat_numeric_literals(&out);
+            self.emit_line(depth, &out, comment.as_deref());
         } else if token.is_call_macro_or_build_struct() {
-            // Macro names are user-defined: preserve casing.
-            self.emit_line(depth, &content, comment.as_deref());
+            // Macro names are user-defined: preserve casing; only reformat numeric literals.
+            let out = self.reformat_numeric_literals(&content);
+            self.emit_line(depth, &out, comment.as_deref());
         } else if token.is_assign() {
             // Symbol assignment (label = value, label += value, etc.):
             // first word is a user-defined symbol name — always at column 0.
-            let normalized = Self::normalize_assignment_spacing(&content, self.space_around_assignment);
-            self.emit_line(0, &normalized, comment.as_deref());
+            let out = Self::normalize_assignment_spacing(&content, self.space_around_assignment);
+            let out = self.reformat_numeric_literals(&out);
+            self.emit_line(0, &out, comment.as_deref());
         } else if token.is_equ() {
             // "symbol EQU value": label (first word) always at column 0;
             // apply directive_case only to the keyword (second word).
-            self.emit_line(
-                0,
-                &Self::apply_case_to_second_word(&content, self.directive_case),
-                comment.as_deref(),
-            );
+            let out = Self::apply_case_to_second_word(&content, self.directive_case);
+            let out = self.reformat_numeric_literals(&out);
+            self.emit_line(0, &out, comment.as_deref());
         } else {
             // Directives where a user-defined symbol precedes the keyword (like SETN/NEXT)
             // must not have that symbol name case-converted.
@@ -644,18 +847,14 @@ impl<'src> Formatter<'src> {
             if LABEL_FIRST_KWS.contains(&second_word_upper.as_str())
                 || second_word_upper.starts_with('#') {
                 // Label-first directives: label is a top-level symbol name → column 0.
-                self.emit_line(
-                    0,
-                    &Self::apply_case_to_second_word(&content, self.directive_case),
-                    comment.as_deref(),
-                );
+                let out = Self::apply_case_to_second_word(&content, self.directive_case);
+                let out = self.reformat_numeric_literals(&out);
+                self.emit_line(0, &out, comment.as_deref());
             } else {
                 // All other directives: keyword is the first word.
-                self.emit_line(
-                    depth,
-                    &Self::apply_case_to_first_word(&content, self.directive_case),
-                    comment.as_deref(),
-                );
+                let out = Self::apply_case_to_first_word(&content, self.directive_case);
+                let out = self.reformat_numeric_literals(&out);
+                self.emit_line(depth, &out, comment.as_deref());
             }
         }
 
@@ -1247,5 +1446,154 @@ mod tests {
     fn test_assign_shift_operator_both() {
         let out = fmt_assign("my_var>>=2", SpaceAroundColumn::Both);
         assert!(out.contains("my_var >>= 2"), "shift Both: {out:?}");
+    }
+
+    // ── TOML config roundtrip ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_toml_config_roundtrip() {
+        let toml = r#"
+indent_size = 4
+comment_column = 13
+mnemonic_case = "LowerCase"
+directive_case = "UpperCase"
+register_case = "LowerCase"
+one_instruction_per_line = false
+space_around_column = "Both"
+space_around_assignment = "Both"
+hexadecimal_case = "UpperCase"
+hexadecimal_encoding = "0x"
+octal_encoding = "0o"
+binary_encoding = "0b"
+label_definition_postfix_with_column = "NoColumn"
+"#;
+        let cfg: AsmFormatOptions = toml::from_str(toml).expect("TOML parse failed");
+        assert!(matches!(cfg.mnemonic_case, CaseStyle::LowerCase), "mnemonic_case: {cfg:?}");
+        assert!(matches!(cfg.register_case, CaseStyle::LowerCase), "register_case");
+        assert!(matches!(cfg.hexadecimal_encoding, HexEncoding::Prefix0x), "hex_enc");
+        assert!(matches!(cfg.octal_encoding, OctalEncoding::Prefix0o), "oct_enc");
+        assert!(matches!(cfg.binary_encoding, BinaryEncoding::Prefix0b), "bin_enc");
+        assert!(matches!(cfg.label_definition_postfix_with_column, LabelPostfix::NoColumn), "label_postfix");
+    }
+
+    // ── hexadecimal_case ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_hex_case_upper() {
+        let opt = AsmFormatOptions::builder().hexadecimal_case(CaseStyle::UpperCase).build();
+        let out = format("ld a, 0xff\nld b, $ab", &opt).unwrap();
+        assert!(out.contains("0xFF") || out.contains("0XFF"), "hex not uppercased: {out:?}");
+        assert!(out.contains("$AB"), "dollar hex not uppercased: {out:?}");
+    }
+
+    #[test]
+    fn test_hex_case_lower() {
+        let opt = AsmFormatOptions::builder().hexadecimal_case(CaseStyle::LowerCase).build();
+        let out = format("ld a, 0xFF\nld b, $AB", &opt).unwrap();
+        assert!(out.contains("0xff") || out.contains("ff"), "hex not lowercased: {out:?}");
+        assert!(out.contains("$ab"), "dollar hex not lowercased: {out:?}");
+    }
+
+    // ── hexadecimal_encoding ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_hex_encoding_prefix_dollar() {
+        let opt = AsmFormatOptions::builder()
+            .hexadecimal_encoding(HexEncoding::PrefixDollar)
+            .build();
+        let out = format("ld a, 0xff", &opt).unwrap();
+        assert!(out.contains("$FF") || out.contains("$ff"), "not $ prefix: {out:?}");
+        assert!(!out.contains("0xff") && !out.contains("0xFF"), "old prefix still present: {out:?}");
+    }
+
+    #[test]
+    fn test_hex_encoding_suffix_h() {
+        let opt = AsmFormatOptions::builder()
+            .hexadecimal_encoding(HexEncoding::SuffixLower)
+            .build();
+        let out = format("ld a, 0x1A", &opt).unwrap();
+        assert!(out.contains("1ah") || out.contains("1Ah"), "not h suffix: {out:?}");
+    }
+
+    #[test]
+    fn test_hex_encoding_suffix_h_leading_zero() {
+        // When the first hex digit is alphabetic, a leading 0 must be added.
+        let opt = AsmFormatOptions::builder()
+            .hexadecimal_encoding(HexEncoding::SuffixUpper)
+            .build();
+        let out = format("ld a, 0xFF", &opt).unwrap();
+        assert!(out.contains("0FFH") || out.contains("0ffH"), "leading 0 missing: {out:?}");
+    }
+
+    // ── octal_encoding ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_octal_encoding_prefix_at() {
+        let opt = AsmFormatOptions::builder()
+            .octal_encoding(OctalEncoding::PrefixAt)
+            .build();
+        let out = format("ld a, 0o17", &opt).unwrap();
+        assert!(out.contains("@17"), "not @ prefix: {out:?}");
+    }
+
+    #[test]
+    fn test_octal_encoding_prefix_0o() {
+        let opt = AsmFormatOptions::builder()
+            .octal_encoding(OctalEncoding::Prefix0o)
+            .build();
+        let out = format("ld a, @17", &opt).unwrap();
+        assert!(out.contains("0o17"), "not 0o prefix: {out:?}");
+    }
+
+    // ── binary_encoding ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_binary_encoding_percent() {
+        let opt = AsmFormatOptions::builder()
+            .binary_encoding(BinaryEncoding::PrefixPercent)
+            .build();
+        let out = format("ld a, 0b00001111", &opt).unwrap();
+        assert!(out.contains("%1111") || out.contains("%00001111"), "not % prefix: {out:?}");
+    }
+
+    #[test]
+    fn test_binary_encoding_0b() {
+        let opt = AsmFormatOptions::builder()
+            .binary_encoding(BinaryEncoding::Prefix0b)
+            .build();
+        let out = format("ld a, %00001111", &opt).unwrap();
+        assert!(out.contains("0b"), "not 0b prefix: {out:?}");
+    }
+
+    // ── label_definition_postfix_with_column ──────────────────────────────────
+
+    #[test]
+    fn test_label_postfix_no_column() {
+        let opt = AsmFormatOptions::builder()
+            .label_definition_postfix_with_column(LabelPostfix::NoColumn)
+            .build();
+        let out = format("myloop:\n  push af", &opt).unwrap();
+        let label_line = out.lines().next().unwrap();
+        assert!(!label_line.contains(':'), "colon present with NoColumn: {out:?}");
+        assert!(label_line.trim() == "myloop", "wrong label line: {out:?}");
+    }
+
+    #[test]
+    fn test_label_postfix_with_column() {
+        let opt = AsmFormatOptions::builder()
+            .label_definition_postfix_with_column(LabelPostfix::WithColumn)
+            .build();
+        let out = format("myloop:\n  push af", &opt).unwrap();
+        let label_line = out.lines().next().unwrap();
+        assert!(label_line.contains(':'), "colon missing with WithColumn: {out:?}");
+    }
+
+    // ── single space after directive ──────────────────────────────────────────
+
+    #[test]
+    fn test_single_space_after_directive() {
+        let out = fmt("ORG  0x40\nDB   1, 2, 3");
+        assert!(out.contains("ORG 0x40"), "double space after ORG not collapsed: {out:?}");
+        assert!(out.contains("DB 1, 2, 3"), "double space after DB not collapsed: {out:?}");
     }
 }

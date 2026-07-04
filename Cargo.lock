@@ -2554,6 +2554,7 @@ version = "0.11.0"
 dependencies = [
  "bon",
  "cpclib-asm",
+ "cpclib-common",
  "serde",
  "toml 0.8.2",
 ]
