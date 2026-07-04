@@ -16,28 +16,34 @@ fn default_directive_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_register_case() -> CaseStyle { CaseStyle::UpperCase }
 fn default_one_instruction_per_line() -> bool { true }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, bon::Builder)]
 pub struct AsmFormatOptions {
     /// Number of spaces per indentation level (default: 4).
     #[serde(default = "default_indent_size")]
+    #[builder(default = default_indent_size())]
     pub indent_size: usize,
     /// Minimum column (0-indexed) at which trailing comments start (default: 30).
     #[serde(default = "default_comment_column")]
+    #[builder(default = default_comment_column())]
     pub comment_column: usize,
     /// Case transformation applied to Z80 mnemonic keywords (LD, PUSH, …) (default: UpperCase).
     #[serde(default = "default_mnemonic_case")]
+    #[builder(default = default_mnemonic_case())]
     pub mnemonic_case: CaseStyle,
     /// Case transformation applied to directive keywords
     /// (ORG, EQU, REPEAT, ENDREPEAT, …) (default: UpperCase).
     #[serde(default = "default_directive_case")]
+    #[builder(default = default_directive_case())]
     pub directive_case: CaseStyle,
     /// Case transformation applied to Z80 register names in operands (default: UpperCase).
     #[serde(default = "default_register_case")]
+    #[builder(default = default_register_case())]
     pub register_case: CaseStyle,
     /// When true, multiple instructions on the same source line (separated by `:`) are
     /// placed on individual lines. When false the original multi-instruction line is kept
     /// verbatim (default: true).
     #[serde(default = "default_one_instruction_per_line")]
+    #[builder(default = default_one_instruction_per_line())]
     pub one_instruction_per_line: bool,
 }
 
@@ -162,6 +168,34 @@ impl<'src> Formatter<'src> {
         result
     }
 
+    // Apply case to the second whitespace-delimited word (e.g., the EQU keyword in
+    // "symbol EQU value"), leaving the first word (user symbol name) unchanged.
+    fn apply_case_to_second_word(content: &str, case: CaseStyle) -> String {
+        if matches!(case, CaseStyle::Untouched) {
+            return content.to_string();
+        }
+        let bytes = content.as_bytes();
+        // Find end of first word
+        let first_end = bytes.iter().position(|b| b.is_ascii_whitespace()).unwrap_or(bytes.len());
+        // Find start of second word (skip whitespace)
+        let second_start = bytes[first_end..]
+            .iter()
+            .position(|b| !b.is_ascii_whitespace())
+            .map(|p| first_end + p)
+            .unwrap_or(bytes.len());
+        // Find end of second word
+        let second_end = bytes[second_start..]
+            .iter()
+            .position(|b| b.is_ascii_whitespace())
+            .map(|p| second_start + p)
+            .unwrap_or(bytes.len());
+        let mut result = content[..first_end].to_string();
+        result.push_str(&content[first_end..second_start]);
+        result.push_str(&Self::apply_case(&content[second_start..second_end], case));
+        result.push_str(&content[second_end..]);
+        result
+    }
+
     // Apply case to a mnemonic line: transforms the mnemonic keyword and register names
     // in operands but leaves numeric literals / labels / expressions unchanged.
     fn apply_mnemonic_case(content: &str, mnemonic_case: CaseStyle, register_case: CaseStyle) -> String {
@@ -223,11 +257,17 @@ impl<'src> Formatter<'src> {
 
     // Split `content` (already stripped of trailing comment) into `:` separated instruction
     // segments. Colons inside parentheses or double-quoted strings are not split points.
+    // A `:` is only an instruction separator when BOTH the preceding and following bytes are
+    // ASCII whitespace (or boundary): this avoids splitting label prefixes (`other: equ 5`),
+    // global-scope paths (`jp ::label1`), and bare label colons (`myloop: ld a,0`).
     // Empty segments (e.g. from a trailing `:` on a label) are discarded.
     fn split_instructions(content: &str) -> Vec<&str> {
         let mut result = Vec::new();
         let mut depth = 0i32;
         let mut in_string = false;
+        // Track unmatched `?` so we can suppress splitting at the `:` of a ternary
+        // expression (`cond ? then : else`).
+        let mut ternary_depth = 0u32;
         let mut start = 0;
         let bytes = content.as_bytes();
         let mut i = 0;
@@ -240,10 +280,22 @@ impl<'src> Formatter<'src> {
                     b'"' => in_string = true,
                     b'(' | b'[' => depth += 1,
                     b')' | b']' => { depth -= 1; if depth < 0 { depth = 0; } }
+                    b'?' if depth == 0 => ternary_depth += 1,
                     b':' if depth == 0 => {
-                        let seg = content[start..i].trim();
-                        if !seg.is_empty() { result.push(seg); }
-                        start = i + 1;
+                        if ternary_depth > 0 {
+                            // This `:` closes a ternary — not an instruction separator.
+                            ternary_depth -= 1;
+                        } else {
+                            // Only split when prev byte is whitespace (or at start) AND
+                            // next byte is whitespace or end-of-content.
+                            let prev_ws = i == 0 || bytes[i - 1].is_ascii_whitespace();
+                            let next_ws = i + 1 >= bytes.len() || bytes[i + 1].is_ascii_whitespace();
+                            if prev_ws && next_ws {
+                                let seg = content[start..i].trim();
+                                if !seg.is_empty() { result.push(seg); }
+                                start = i + 1;
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -290,24 +342,26 @@ impl<'src> Formatter<'src> {
         self.emit_line(depth, &formatted, comment);
     }
 
-    fn find_keyword_start(&self, keyword: &str) -> usize {
-        let kw = keyword.to_ascii_uppercase();
+    fn find_closer_start(&self, keywords: &[&str]) -> usize {
+        let kws: Vec<String> = keywords.iter().map(|k| k.to_ascii_uppercase()).collect();
         for i in self.current_line..self.source_lines.len() {
             let t = self.source_lines[i].trim().to_ascii_uppercase();
-            if t == kw
-                || t.starts_with(&format!("{kw} "))
-                || t.starts_with(&format!("{kw}\t"))
-                || t.starts_with(&format!("{kw};"))
-                || t.starts_with(&format!("{kw}//"))
-            {
-                return i;
+            for kw in &kws {
+                if t == kw.as_str()
+                    || t.starts_with(&format!("{kw} "))
+                    || t.starts_with(&format!("{kw}\t"))
+                    || t.starts_with(&format!("{kw};"))
+                    || t.starts_with(&format!("{kw}//"))
+                {
+                    return i;
+                }
             }
         }
         self.current_line
     }
 
-    fn emit_closer(&mut self, depth: usize, keyword: &str) {
-        let line = self.find_keyword_start(keyword);
+    fn emit_closer(&mut self, depth: usize, keywords: &[&str]) {
+        let line = self.find_closer_start(keywords);
         self.emit_interstitial(line);
         self.emit_source_line_indented(depth, line);
         self.current_line = line + 1;
@@ -346,44 +400,50 @@ impl<'src> Formatter<'src> {
         }
 
         if token.is_label() {
-            let name = token.label_symbol();
-            if self.one_instruction_per_line {
-                self.seg_idx += 1; // consume the label segment
-                // Emit trailing comment only if nothing more follows on this line
-                let comment = if self.seg_idx >= self.seg_items.len() {
-                    self.seg_trailing.clone()
-                } else {
-                    None
-                };
-                self.emit_line(0, &format!("{name}:"), comment.as_deref());
-            } else {
-                let src = self.source_lines.get(line_0).copied().unwrap_or("");
-                let (_, comment) = Self::split_comment(src.trim());
-                self.emit_line(0, &format!("{name}:"), comment);
-            }
-            self.current_line = line_0 + 1;
+            self.format_label(token, depth, line_0);
         } else if token.is_if() {
             self.format_if(token, depth, line_0);
         } else if token.is_repeat() {
-            self.format_block(token.repeat_listing(), depth, line_0, "ENDREPEAT");
+            self.format_block(
+                token.repeat_listing(), depth, line_0,
+                &["ENDREPEAT", "ENDREPT", "ENDREP", "ENDR", "REND"],
+            );
         } else if token.is_while() {
-            self.format_block(token.while_listing(), depth, line_0, "WEND");
+            self.format_block(
+                token.while_listing(), depth, line_0,
+                &["ENDWHILE", "ENDW", "WEND"],
+            );
         } else if token.is_for() {
-            self.format_block(token.for_listing(), depth, line_0, "ENDFOR");
+            self.format_block(
+                token.for_listing(), depth, line_0,
+                &["ENDFOR", "FEND", "ENDF"],
+            );
         } else if token.is_module() {
-            self.format_block(token.module_listing(), depth, line_0, "ENDMODULE");
+            self.format_block(token.module_listing(), depth, line_0, &["ENDMODULE"]);
         } else if token.is_confined() {
-            self.format_block(token.confined_listing(), depth, line_0, "ENDCONFINED");
+            self.format_block(
+                token.confined_listing(), depth, line_0,
+                &["ENDCONFINED", "CEND", "ENDC"],
+            );
         } else if token.is_repeat_until() {
             self.format_repeat_until(token, depth, line_0);
         } else if token.is_iterate() {
-            self.format_block(token.iterate_listing(), depth, line_0, "ENDITERATE");
+            self.format_block(
+                token.iterate_listing(), depth, line_0,
+                &["ENDITERATE", "ENDITER", "ENDI", "IEND"],
+            );
         } else if token.is_rorg() {
-            self.format_block(token.rorg_listing(), depth, line_0, "REND");
+            self.format_block(token.rorg_listing(), depth, line_0, &["DEPHASE", "REND", "ENDR"]);
         } else if token.is_crunched_section() {
-            self.format_block(token.crunched_section_listing(), depth, line_0, "LZCLOSE");
+            self.format_block(
+                token.crunched_section_listing(), depth, line_0,
+                &["LZCLOSE"],
+            );
         } else if token.is_function_definition() {
-            self.format_block(token.function_definition_inner(), depth, line_0, "ENDFUNCTION");
+            self.format_block(
+                token.function_definition_inner(), depth, line_0,
+                &["ENDFUNCTION", "ENDF"],
+            );
         } else if token.is_switch() {
             self.format_switch(token, depth, line_0);
         } else if token.is_macro_definition() {
@@ -392,6 +452,54 @@ impl<'src> Formatter<'src> {
             // Simple instruction, directive, or macro call.
             self.format_simple(token, depth, line_0);
         }
+    }
+
+    fn format_label(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
+        let name = token.label_symbol();
+        if self.one_instruction_per_line {
+            // The segment at seg_idx may contain "label_name [trailing_instruction]"
+            // (when a label and an instruction are on the same line without a `:` between them).
+            // Consume the segment but re-inject any trailing instruction content.
+            let seg_text = self.seg_items.get(self.seg_idx).cloned().unwrap_or_default();
+            let trimmed = seg_text.trim_start();
+            let after_label = trimmed
+                .strip_prefix(name)
+                .map(|rest| rest.trim_start_matches(':').trim())
+                .unwrap_or("");
+
+            self.seg_idx += 1;
+
+            if !after_label.is_empty() {
+                // Re-inject the trailing instruction as the next segment to consume.
+                self.seg_items.insert(self.seg_idx, after_label.to_string());
+            }
+
+            // Emit trailing comment only if nothing more follows on this line.
+            let comment = if self.seg_idx >= self.seg_items.len() {
+                self.seg_trailing.clone()
+            } else {
+                None
+            };
+            self.emit_line(0, &format!("{name}:"), comment.as_deref());
+        } else {
+            let src = self.source_lines.get(line_0).copied().unwrap_or("");
+            let (content_no_comment, comment) = Self::split_comment(src.trim());
+            // Extract any instruction content that follows the label name on the same source line.
+            let after_label = content_no_comment.trim_start()
+                .strip_prefix(name)
+                .map(|rest| rest.trim_start_matches(':').trim())
+                .unwrap_or("");
+            if after_label.is_empty() {
+                self.emit_line(0, &format!("{name}:"), comment);
+            } else {
+                // Label and instruction share a line in the source; split them out.
+                // Emit the instruction content verbatim to avoid misidentifying
+                // struct/macro names as mnemonics and applying the wrong case.
+                self.emit_line(0, &format!("{name}:"), None);
+                self.emit_line(depth, after_label, comment);
+            }
+        }
+        self.current_line = line_0 + 1;
     }
 
     // Format a non-block, non-label token.
@@ -423,16 +531,61 @@ impl<'src> Formatter<'src> {
         } else if token.is_call_macro_or_build_struct() {
             // Macro names are user-defined: preserve casing.
             self.emit_line(depth, &content, comment.as_deref());
-        } else {
-            // All other directives: apply case to the leading keyword.
+        } else if token.is_assign() {
+            // Symbol assignment (label = value, label += value, etc.):
+            // first word is a user-defined symbol name, not a keyword — preserve as-is.
+            self.emit_line(depth, &content, comment.as_deref());
+        } else if token.is_equ() {
+            // "symbol EQU value": apply directive_case to the keyword (second word),
+            // not the symbol name (first word).
             self.emit_line(
                 depth,
-                &Self::apply_case_to_first_word(&content, self.directive_case),
+                &Self::apply_case_to_second_word(&content, self.directive_case),
                 comment.as_deref(),
             );
+        } else {
+            // Directives where a user-defined symbol precedes the keyword (like SETN/NEXT)
+            // must not have that symbol name case-converted.
+            // All directives where a user-defined symbol precedes the keyword:
+            // SETN/NEXT (set-next symbol), FIELD/# (MAP entry allocation).
+            const LABEL_FIRST_KWS: &[&str] = &["SETN", "SETNX", "NEXT", "FIELD", "#"];
+            let second_word_upper = content
+                .split_ascii_whitespace()
+                .nth(1)
+                .map(|w| w.trim_start_matches(':').to_ascii_uppercase())
+                .unwrap_or_default();
+            if LABEL_FIRST_KWS.contains(&second_word_upper.as_str())
+                || second_word_upper.starts_with('#') {
+                self.emit_line(
+                    depth,
+                    &Self::apply_case_to_second_word(&content, self.directive_case),
+                    comment.as_deref(),
+                );
+            } else {
+                // All other directives: keyword is the first word.
+                self.emit_line(
+                    depth,
+                    &Self::apply_case_to_first_word(&content, self.directive_case),
+                    comment.as_deref(),
+                );
+            }
         }
 
-        if line_0 >= self.current_line {
+        // If the token spans multiple source lines (e.g. a multi-line expression),
+        // emit the continuation lines verbatim so the assembler sees the complete syntax.
+        let span_lines: usize = {
+            let s: &str = token.span().as_ref();
+            s.lines().count().max(1)
+        };
+        if span_lines > 1 {
+            for i in 1..span_lines {
+                if let Some(src) = self.source_lines.get(line_0 + i).copied() {
+                    self.output.push_str(src);
+                    self.output.push('\n');
+                }
+            }
+            self.current_line = self.current_line.max(line_0 + span_lines);
+        } else if line_0 >= self.current_line {
             self.current_line = line_0 + 1;
         }
     }
@@ -442,82 +595,188 @@ impl<'src> Formatter<'src> {
         inner: &[LocatedToken],
         depth: usize,
         line_0: usize,
-        closer: &str,
+        closers: &[&str],
     ) {
-        self.emit_source_line_indented(depth, line_0);
-        self.current_line = line_0 + 1;
+        if line_0 >= self.current_line {
+            self.emit_source_line_indented(depth, line_0);
+            self.current_line = line_0 + 1;
+        }
+        if self.is_block_inline(inner, line_0) {
+            return;
+        }
         self.format_tokens(inner, depth + 1);
-        self.emit_closer(depth, closer);
+        self.emit_closer(depth, closers);
+    }
+
+    // Returns true if a block whose header is at `line_0` has its first inner token on the
+    // same source line (i.e. the whole block is inline: `if x : body : endif`).
+    fn is_block_inline(&self, inner: &[LocatedToken], line_0: usize) -> bool {
+        inner.first()
+            .map(|t| t.span().relative_line_and_column().0.saturating_sub(1) == line_0)
+            // Empty body but closer might still be on the same line (e.g. `if x : endif`).
+            .unwrap_or_else(|| {
+                self.source_lines.get(line_0)
+                    .map(|l| {
+                        let u = l.to_ascii_uppercase();
+                        u.contains("ENDIF") || u.contains("ENDM") || u.contains("ENDREPEAT")
+                    })
+                    .unwrap_or(false)
+            })
     }
 
     fn format_if(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
         let nb_tests = token.if_nb_tests();
-
-        self.emit_source_line_indented(depth, line_0);
-        self.current_line = line_0 + 1;
         let (_, inner_0) = token.if_test(0);
+
+        if line_0 >= self.current_line {
+            self.emit_source_line_indented(depth, line_0);
+            self.current_line = line_0 + 1;
+        }
+
+        // Inline IF (all on one source line): header already emitted; skip body/closer.
+        if self.is_block_inline(inner_0, line_0) {
+            return;
+        }
+
         self.format_tokens(inner_0, depth + 1);
 
         for i in 1..nb_tests {
-            let header = self.find_keyword_start("ELSE");
+            // Determine the ELSEIF* header line from the first body token's source position
+            // (the header is always the line immediately before the body).
+            // This handles ELSEIFDEF/ELSEIFNDEF/ELSEIF etc. without keyword-specific searches.
+            let (_, inner_i) = token.if_test(i);
+            let header = inner_i.first()
+                .map(|t| t.span().relative_line_and_column().0.saturating_sub(2))
+                .unwrap_or_else(|| self.find_closer_start(&["ELSEIF", "ELSE"]));
             self.emit_interstitial(header);
             self.emit_source_line_indented(depth, header);
             self.current_line = header + 1;
-            let (_, inner_i) = token.if_test(i);
             self.format_tokens(inner_i, depth + 1);
         }
 
         if let Some(else_inner) = token.if_else() {
-            let else_line = self.find_keyword_start("ELSE");
+            let else_line = self.find_closer_start(&["ELSE"]);
             self.emit_interstitial(else_line);
             self.emit_source_line_indented(depth, else_line);
             self.current_line = else_line + 1;
             self.format_tokens(else_inner, depth + 1);
         }
 
-        self.emit_closer(depth, "ENDIF");
+        self.emit_closer(depth, &["ENDIF"]);
     }
 
     fn format_repeat_until(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
-        self.emit_source_line_indented(depth, line_0);
-        self.current_line = line_0 + 1;
+        if line_0 >= self.current_line {
+            self.emit_source_line_indented(depth, line_0);
+            self.current_line = line_0 + 1;
+        }
         self.format_tokens(token.repeat_until_listing(), depth + 1);
-        self.emit_closer(depth, "UNTIL");
+        self.emit_closer(depth, &["UNTIL"]);
     }
 
     fn format_macro_def(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
-        self.emit_source_line_indented(depth, line_0);
+        // Emit the macro header applying directive_case only to the MACRO keyword, not the
+        // user-defined name. For name-first syntax (`name MACRO`) the first word is the name
+        // and the second word is the keyword. For keyword-first (`MACRO name`) it is reversed.
+        let src = self.source_lines.get(line_0).copied().unwrap_or("");
+        let (content, comment) = Self::split_comment(src.trim());
+        let macro_name = token.macro_definition_name();
+        let first_word = content.split_ascii_whitespace().next().unwrap_or("");
+        let first_upper = first_word.to_ascii_uppercase();
+        let name_upper = macro_name.to_ascii_uppercase();
+        let is_name_first = first_upper == name_upper
+            || first_upper == format!("{}:", name_upper);
+        let formatted = if is_name_first {
+            // name MACRO[(params)]: case only the leading alpha chars of the keyword word,
+            // leaving the macro name AND any parameter list unchanged.
+            let name_end = content.find(|c: char| c.is_ascii_whitespace()).unwrap_or(content.len());
+            let ws_and_rest = &content[name_end..];
+            let rest_start = ws_and_rest.find(|c: char| !c.is_ascii_whitespace()).unwrap_or(ws_and_rest.len());
+            let kw_and_tail = &ws_and_rest[rest_start..];
+            let kw_end = kw_and_tail.find(|c: char| !c.is_ascii_alphabetic() && c != '_').unwrap_or(kw_and_tail.len());
+            format!(
+                "{}{}{}{}",
+                &content[..name_end],
+                &ws_and_rest[..rest_start],
+                Self::apply_case(&kw_and_tail[..kw_end], self.directive_case),
+                &kw_and_tail[kw_end..],
+            )
+        } else {
+            // MACRO name [...]: case the first word (the keyword) as usual.
+            Self::apply_case_to_first_word(content, self.directive_case)
+        };
+        self.emit_line(depth, &formatted, comment);
         self.current_line = line_0 + 1;
         let body = token.macro_definition_code();
-        for body_line in body.lines() {
-            self.output.push_str(body_line);
+        // The body content captured by the parser ends just before the ENDM keyword.
+        // For name-first macros (`name MACRO`) the newline of the header line is
+        // included at the start of the body. For all macros the indentation prefix
+        // of the ENDM line appears as a trailing whitespace-only fragment.
+        // Strip both so current_line stays aligned with the ENDM source line.
+        let mut lines: Vec<&str> = body.lines().collect();
+        let first_content = lines.iter().position(|l| !l.trim().is_empty()).unwrap_or(lines.len());
+        lines.drain(..first_content);
+        if lines.last().map_or(false, |l| l.trim().is_empty()) {
+            lines.pop();
+        }
+        for line in lines {
+            self.output.push_str(line);
             self.output.push('\n');
             self.current_line += 1;
         }
-        self.emit_closer(depth, "ENDM");
+        self.emit_closer(depth, &["ENDM", "ENDMACRO", "MEND"]);
     }
 
     fn format_switch(&mut self, token: &LocatedToken, depth: usize, line_0: usize) {
-        self.emit_source_line_indented(depth, line_0);
-        self.current_line = line_0 + 1;
+        if line_0 >= self.current_line {
+            self.emit_source_line_indented(depth, line_0);
+            self.current_line = line_0 + 1;
+        }
 
-        for (_, case_inner, _) in token.switch_cases() {
-            let case_line = self.find_keyword_start("CASE");
+        // Collect cases so we can inspect them without consuming the iterator twice.
+        let switch_cases: Vec<_> = token.switch_cases().collect();
+
+        for (_, case_inner, has_break) in &switch_cases {
+            let case_line = self.find_closer_start(&["CASE"]);
+            // If no CASE line exists past current position (e.g. entirely inline switch), stop.
+            if case_line >= self.source_lines.len() { break; }
             self.emit_interstitial(case_line);
             self.emit_source_line_indented(depth, case_line);
             self.current_line = case_line + 1;
-            self.format_tokens(case_inner, depth + 1);
+
+            // If the first body token is on the same source line as the CASE header, the
+            // entire case clause is inline (e.g. `case 1: db 1 : break`) and was already
+            // emitted by emit_source_line_indented above.
+            let body_inline = case_inner.first()
+                .map(|t| t.span().relative_line_and_column().0.saturating_sub(1) <= case_line)
+                .unwrap_or(false);
+            if !body_inline {
+                self.format_tokens(case_inner, depth + 1);
+                if *has_break {
+                    self.emit_closer(depth + 1, &["BREAK"]);
+                }
+            }
         }
 
         if let Some(default_inner) = token.switch_default() {
-            let default_line = self.find_keyword_start("DEFAULT");
-            self.emit_interstitial(default_line);
-            self.emit_source_line_indented(depth, default_line);
-            self.current_line = default_line + 1;
-            self.format_tokens(default_inner, depth + 1);
+            let default_line = self.find_closer_start(&["DEFAULT"]);
+            if default_line < self.source_lines.len() {
+                self.emit_interstitial(default_line);
+                self.emit_source_line_indented(depth, default_line);
+                self.current_line = default_line + 1;
+                let body_inline = default_inner.first()
+                    .map(|t| t.span().relative_line_and_column().0.saturating_sub(1) <= default_line)
+                    .unwrap_or(false);
+                if !body_inline {
+                    self.format_tokens(default_inner, depth + 1);
+                }
+            }
         }
 
-        self.emit_closer(depth, "ENDSWITCH");
+        let endswitch_line = self.find_closer_start(&["ENDSWITCH", "ENDS"]);
+        if endswitch_line < self.source_lines.len() {
+            self.emit_closer(depth, &["ENDSWITCH", "ENDS"]);
+        }
     }
 }
 
@@ -751,5 +1010,28 @@ mod tests {
             }
             Err(e) => panic!("format failed: {e}"),
         }
+    }
+
+    #[test]
+    fn test_assign_symbol_case_not_changed() {
+        // Symbol names in assignment directives must not be case-transformed.
+        let out = fmt("my_label = 42\nassert my_label == 42");
+        assert!(out.contains("my_label = 42"), "symbol name changed: {out:?}");
+        assert!(out.contains("ASSERT my_label"), "symbol in expr changed: {out:?}");
+    }
+
+    #[test]
+    fn test_equ_keyword_case_changed() {
+        // EQU keyword should be case-transformed, symbol name should not.
+        let out = fmt("my_sym equ 10\ndb my_sym");
+        assert!(out.contains("my_sym EQU 10"), "EQU not uppercased or symbol changed: {out:?}");
+    }
+
+    #[test]
+    fn test_label_with_instruction_on_same_line() {
+        // Label followed by instruction on the same line (no colon separator).
+        let out = fmt("myloop\tpush af");
+        assert!(out.contains("myloop:"), "label missing colon: {out:?}");
+        assert!(out.contains("PUSH AF"), "instruction after inline label lost: {out:?}");
     }
 }

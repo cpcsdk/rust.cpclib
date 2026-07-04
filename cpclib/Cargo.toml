@@ -47,8 +47,13 @@ time = { workspace = true, optional = true }
 
 
 
-[dev-dependencies] 
-pretty_assertions= "1.4.1"
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+cpclib-asmfmt.workspace = true
+cpclib-basm.workspace = true
+test-generator.workspace = true
+camino-tempfile.workspace = true
+fs-err.workspace = true
 
 [build-dependencies]
 built = { workspace = true, features = ["chrono"] }

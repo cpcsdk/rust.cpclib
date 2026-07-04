@@ -2475,7 +2475,9 @@ dependencies = [
  "camino-tempfile",
  "cfg-if",
  "cpclib-asm",
+ "cpclib-asmfmt",
  "cpclib-basic",
+ "cpclib-basm",
  "cpclib-common",
  "cpclib-crunchers",
  "cpclib-disc",
@@ -2489,11 +2491,13 @@ dependencies = [
  "dbg",
  "delegate",
  "either",
+ "fs-err",
  "getset",
  "log",
  "paste",
  "pretty_assertions",
  "serde",
+ "test-generator",
  "time",
 ]
 
@@ -2548,6 +2552,7 @@ dependencies = [
 name = "cpclib-asmfmt"
 version = "0.11.0"
 dependencies = [
+ "bon",
  "cpclib-asm",
  "serde",
  "toml 0.8.2",
