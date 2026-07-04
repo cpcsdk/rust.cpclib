@@ -242,61 +242,125 @@ impl AssemblyAnalyzer {
         None
     }
 
-    /// Provide completion suggestions
-    pub fn completion(&self, _document: &Document, _position: Position) -> Vec<CompletionItem> {
+    /// Provide context-aware completion suggestions.
+    ///
+    /// * **Mnemonic position** (start of statement): instructions + directives + labels.
+    ///   Registers are excluded here — they cannot appear as a mnemonic.
+    /// * **Instruction operand**: only registers / conditions valid for that argument slot,
+    ///   plus labels from the document when the slot accepts an expression (`n`/`nn`).
+    ///   Instructions and directives are never offered inside an operand.
+    /// * **Directive argument**: only labels / document symbols (any expression is valid).
+    pub fn completion(&self, document: &Document, position: Position) -> Vec<CompletionItem> {
+        use crate::completion::{CompletionContext, analyze_context, mask_accepts_expression,
+                                operand_mask, tokens_for_mask};
+
+        let line = document.line(position.line as usize).unwrap_or_default();
+        let col = position.character as usize;
+        let ctx = analyze_context(&line, col);
+
+        // Collect document-level symbols (labels, EQU constants, macros) for use as expressions.
+        let doc_symbols: Vec<(String, String)> = if let Ok(listing) = self.parse_document(document) {
+            let mut syms = Vec::new();
+            for token in listing.iter() {
+                if token.is_label() {
+                    syms.push((token.label_symbol().to_string(), "label".to_string()));
+                } else if token.is_equ() {
+                    syms.push((token.equ_symbol().to_string(), format!("= {}", token.equ_value())));
+                } else if token.is_assign() {
+                    syms.push((token.assign_symbol().to_string(), format!("= {}", token.assign_value())));
+                } else if token.is_macro_definition() {
+                    syms.push((token.macro_definition_name().to_string(), "macro".to_string()));
+                }
+            }
+            syms
+        } else {
+            Vec::new()
+        };
+
         let mut completions = Vec::new();
 
-        // Add Z80 instruction completions using generated data from cpclib-asm
-        for mnemonic in cpclib_asm::lsp::Z80_INSTRUCTIONS {
-            completions.push(CompletionItem {
-                label: mnemonic.to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some("Z80 instruction".to_string()),
-                documentation: None,
-                ..Default::default()
-            });
-        }
+        match ctx {
+            CompletionContext::MnemonicPosition => {
+                // Instructions
+                for mnemonic in cpclib_asm::lsp::Z80_INSTRUCTIONS {
+                    completions.push(CompletionItem {
+                        label: mnemonic.to_string(),
+                        kind: Some(CompletionItemKind::KEYWORD),
+                        detail: Some("Z80 instruction".to_string()),
+                        ..Default::default()
+                    });
+                }
+                // Directives
+                for (directives, detail) in [
+                    (cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_STANDALONE, "assembler directive"),
+                    (cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_START, "block-start directive"),
+                    (cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_END, "block-end directive"),
+                ] {
+                    for d in directives {
+                        completions.push(CompletionItem {
+                            label: d.to_string(),
+                            kind: Some(CompletionItemKind::KEYWORD),
+                            detail: Some(detail.to_string()),
+                            ..Default::default()
+                        });
+                    }
+                }
+                // Labels — macros can be invoked like mnemonics
+                for (sym, detail) in &doc_symbols {
+                    completions.push(CompletionItem {
+                        label: sym.clone(),
+                        kind: Some(CompletionItemKind::REFERENCE),
+                        detail: Some(detail.clone()),
+                        ..Default::default()
+                    });
+                }
+            }
 
-        // Add assembler directives using generated data from cpclib-asm
-        for directive in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_STANDALONE {
-            completions.push(CompletionItem {
-                label: directive.to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some(format!("Assembler directive: {}", directive)),
-                documentation: None,
-                ..Default::default()
-            });
-        }
+            CompletionContext::InstructionOperand { ref mnemonic, arg_index } => {
+                // None  = instruction not in table → generous fallback
+                // Some(0) = known instruction, no operand here → empty list
+                // Some(m) = use m
+                let mask = match operand_mask(mnemonic, arg_index) {
+                    Some(m) => m,
+                    None => crate::completion::T_R8 | crate::completion::T_R16
+                        | crate::completion::T_IX | crate::completion::T_IY
+                        | crate::completion::T_COND8 | crate::completion::T_EXPR,
+                };
 
-        for directive in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_START {
-            completions.push(CompletionItem {
-                label: directive.to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some(format!("Block start directive: {}", directive)),
-                documentation: None,
-                ..Default::default()
-            });
-        }
+                // Register / condition / synthetic tokens from the mask
+                for (token, detail) in tokens_for_mask(mask) {
+                    completions.push(CompletionItem {
+                        label: token.to_string(),
+                        kind: Some(CompletionItemKind::CONSTANT),
+                        detail: Some(detail.to_string()),
+                        ..Default::default()
+                    });
+                }
 
-        for directive in cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_END {
-            completions.push(CompletionItem {
-                label: directive.to_string(),
-                kind: Some(CompletionItemKind::KEYWORD),
-                detail: Some(format!("Block end directive: {}", directive)),
-                documentation: None,
-                ..Default::default()
-            });
-        }
+                // Labels / expressions when the slot accepts one
+                if mask_accepts_expression(mask) {
+                    for (sym, detail) in &doc_symbols {
+                        completions.push(CompletionItem {
+                            label: sym.clone(),
+                            kind: Some(CompletionItemKind::REFERENCE),
+                            detail: Some(detail.clone()),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
 
-        // Add registers using generated data from cpclib-asm
-        for register in cpclib_asm::lsp::Z80_REGISTERS {
-            completions.push(CompletionItem {
-                label: register.to_string(),
-                kind: Some(CompletionItemKind::CONSTANT),
-                detail: Some("Z80 Register".to_string()),
-                documentation: None,
-                ..Default::default()
-            });
+            CompletionContext::DirectiveArgument => {
+                // Directives accept any expression — offer labels / document symbols only.
+                for (sym, detail) in &doc_symbols {
+                    completions.push(CompletionItem {
+                        label: sym.clone(),
+                        kind: Some(CompletionItemKind::REFERENCE),
+                        detail: Some(detail.clone()),
+                        ..Default::default()
+                    });
+                }
+            }
         }
 
         completions

@@ -2,6 +2,7 @@ mod asm;
 mod backend;
 mod basic;
 mod build;
+mod completion;
 mod document;
 pub mod sourcemap;
 pub mod timings;
