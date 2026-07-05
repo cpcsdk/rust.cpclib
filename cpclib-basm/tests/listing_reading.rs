@@ -283,11 +283,11 @@ fn listing_contains_good_str_directives_and_escaped_quotes() {
     let listing = fs_err::read_to_string(listing_fname).expect("Listing is missing");
 
     assert!(listing.contains("ORG 0X1000"));
-    assert!(listing.contains("DEFB \"HELL\""));
-    assert!(listing.contains("STR \"HELLO\""));
-    assert!(listing.contains("DB \"   \\\" ET VOILA\""));
-    assert!(listing.contains("DB \" \\\" ET VOILA\""));
-    assert!(listing.contains("DB \"\\\" ET VOILA\""));
+    assert!(listing.contains("DEFB \"hell\""));
+    assert!(listing.contains("STR \"hello\""));
+    assert!(listing.contains("DB \"   \\\" et voila\""));
+    assert!(listing.contains("DB \" \\\" et voila\""));
+    assert!(listing.contains("DB \"\\\" et voila\""));
 
     let code_only_listing_file =
         camino_tempfile::NamedUtf8TempFile::new().expect("Unable to build temporary file");
