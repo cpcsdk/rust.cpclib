@@ -1110,10 +1110,27 @@ impl BuildFileAnalyzer {
         for task in cpclib_bndbuild::lsp::TASK_TYPES {
             for name in task.names {
                 if *name == word {
-                    return Some(format!(
-                        "**{}**\n\n{}\n\nExample:\n```yaml\n{}\n```",
-                        name, task.description, task.example
-                    ));
+                    let mut md = format!(
+                        "**{}**\n\n{}\n\nUsage:\n```\n{}\n```",
+                        name, task.description, task.synopsis
+                    );
+                    if !task.example.is_empty() {
+                        let cmd = if task.example.contains('\n') {
+                            format!(
+                                "cmd:\n{}",
+                                task.example
+                                    .lines()
+                                    .map(|line| format!("  {line}"))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            )
+                        }
+                        else {
+                            format!("cmd: {}", task.example)
+                        };
+                        md.push_str(&format!("\n\nExample:\n```\n{cmd}\n```"));
+                    }
+                    return Some(md);
                 }
             }
         }

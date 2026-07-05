@@ -85,7 +85,9 @@ fn test_build_tasks_include_image_tools() {
 
 #[test]
 fn test_build_tasks_have_descriptions() {
-    // Ensure all tasks have non-empty descriptions
+    // Ensure all tasks have a non-empty description and synopsis.
+    // `example` is allowed to be empty: it only holds a real-world `cmd:` invocation
+    // when one was actually found in a build file, and not every task type has one.
     for task in cpclib_bndbuild::lsp::TASK_TYPES {
         assert!(
             !task.description.is_empty(),
@@ -93,23 +95,29 @@ fn test_build_tasks_have_descriptions() {
             task.names
         );
         assert!(
-            !task.example.is_empty(),
-            "Task {:?} should have an example",
+            !task.synopsis.is_empty(),
+            "Task {:?} should have a synopsis",
             task.names
         );
     }
 }
 
 #[test]
-fn test_build_tasks_examples_are_yaml() {
-    // Ensure examples are valid YAML-like syntax
+fn test_build_tasks_examples_reference_their_command() {
+    // `example` holds a real, verbatim `cmd:` invocation copied from an actual build
+    // file (never fabricated). When present, it should actually invoke the task's own
+    // command name.
     for task in cpclib_bndbuild::lsp::TASK_TYPES {
         let example = task.example;
-        // Basic check: should start with "- " (list item) and contain ":"
+        if example.is_empty() {
+            continue;
+        }
+        let canonical = task.names[0];
         assert!(
-            example.starts_with("- ") && example.contains(':'),
-            "Task {:?} example should be YAML-like: {}",
+            example.contains(canonical),
+            "Task {:?} example should mention its command {:?}: {}",
             task.names,
+            canonical,
             example
         );
     }

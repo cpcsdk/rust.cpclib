@@ -125,7 +125,7 @@ impl Vlink {
                 .download_fn_url("http://sun.hasenbraten.de/vlink/release/vlink.tar.gz")
                 .folder("vlink-build")
                 .archive_format(ArchiveFormat::TarGz)
-                .exec_fname("vlink")
+                .exec_fname("vlink/vlink")
                 .post_install(post_install)
                 .build()
         }
