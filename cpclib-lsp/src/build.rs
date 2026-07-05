@@ -1164,7 +1164,7 @@ impl BuildFileAnalyzer {
                         label: name.to_string(),
                         kind: Some(CompletionItemKind::CLASS),
                         detail: Some(task.description.to_string()),
-                        insert_text: Some(format!("{}: ", name)),
+                        insert_text: Some(format!("{} ", name)),
                         insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
                         ..Default::default()
                     }
