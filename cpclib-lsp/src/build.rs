@@ -278,10 +278,20 @@ impl BuildFileAnalyzer {
         let line_idx = position.line as usize;
         if let Some(line) = document.line(line_idx) {
             let indent = line.chars().take_while(|c| c.is_whitespace()).count();
+            let cursor = position.character as usize;
 
             // If we're at the start of a line or after whitespace, suggest top-level keys
             if indent == 0 || line.trim().is_empty() {
                 completions.extend(self.get_top_level_completions());
+            }
+            else if let Some((cmd_name, args, arg_index)) =
+                self.internal_command_argv_at_cursor(&line, cursor)
+            {
+                // Cursor is past a recognized internal command name: offer real
+                // flag/value completion driven by that command's clap::Command.
+                completions.extend(self.get_internal_command_arg_completions(
+                    cmd_name, args, arg_index
+                ));
             }
             else if line.trim_start().starts_with("- ") {
                 // Inside a list - suggest task types
@@ -1173,6 +1183,127 @@ impl BuildFileAnalyzer {
             .collect()
     }
 
+    /// If the cursor sits inside the value of a task-invocation line (a `- `
+    /// list item, or a scalar `cmd:`/`tasks:`/`command:`/`launch:`/`run:` value)
+    /// whose first word is a *recognized internal command*, return that
+    /// command's canonical name plus the tokenized argv `clap_complete` needs.
+    ///
+    /// Returns `None` when the cursor is still inside the command-name token
+    /// itself (falls back to plain command-name completion), or the command is
+    /// delegated/unrecognized, or the line isn't a task-invocation line at all.
+    fn internal_command_argv_at_cursor(
+        &self,
+        line_text: &str,
+        cursor_column: usize
+    ) -> Option<(&'static str, Vec<std::ffi::OsString>, usize)> {
+        let rest = line_text.trim_start();
+        let leading_ws = line_text.chars().count() - rest.chars().count();
+
+        let (value_text, consumed_chars) = if let Some(after_dash) = rest.strip_prefix("- ") {
+            (after_dash, leading_ws + 2)
+        }
+        else if let Some(colon_idx) = rest.find(':') {
+            let key = rest[..colon_idx].trim();
+            let is_task_key = cpclib_bndbuild::lsp::RULE_KEYS
+                .iter()
+                .find(|k| k.names.contains(&"tasks"))
+                .is_some_and(|k| k.names.contains(&key));
+            if !is_task_key {
+                return None;
+            }
+            let after_colon = &rest[colon_idx + 1..];
+            let after_colon_trimmed = after_colon.trim_start();
+            if after_colon_trimmed.is_empty() {
+                return None; // `cmd:` alone - list items follow on later lines
+            }
+            let ws_after_colon = after_colon.chars().count() - after_colon_trimmed.chars().count();
+            (after_colon_trimmed, leading_ws + key.chars().count() + 1 + ws_after_colon)
+        }
+        else {
+            return None;
+        };
+
+        let cursor_in_value = cursor_column.checked_sub(consumed_chars)?;
+        let value_chars: Vec<char> = value_text.chars().collect();
+        if cursor_in_value > value_chars.len() {
+            return None;
+        }
+        let prefix_before_cursor: String = value_chars[..cursor_in_value].iter().collect();
+
+        // Tokenize with the streaming lexer (not shlex::split, which just
+        // returns None on an unterminated quote - exactly the state a user is
+        // in while mid-typing a quoted argument).
+        let mut lexer = shlex::Shlex::new(&prefix_before_cursor);
+        let mut tokens: Vec<String> = (&mut lexer).collect();
+        if lexer.had_error {
+            return None;
+        }
+        if tokens.is_empty() {
+            return None; // cursor is still on/before the command name itself
+        }
+
+        let ends_in_whitespace = prefix_before_cursor.ends_with(char::is_whitespace);
+        let cmd_word = tokens.remove(0);
+        if tokens.is_empty() && !ends_in_whitespace {
+            // Cursor is still within the command-name token: let the existing
+            // command-name completion branch handle it.
+            return None;
+        }
+
+        let canonical = cpclib_bndbuild::lsp::TASK_TYPES
+            .iter()
+            .find(|t| t.names.contains(&cmd_word.as_str()))
+            .map(|t| t.names[0])?;
+        crate::internal_commands::get_command_for(canonical)?;
+
+        if ends_in_whitespace {
+            tokens.push(String::new());
+        }
+        let arg_index = tokens.len() - 1;
+        let args = tokens.into_iter().map(std::ffi::OsString::from).collect();
+        Some((canonical, args, arg_index))
+    }
+
+    fn get_internal_command_arg_completions(
+        &self,
+        cmd_name: &str,
+        args: Vec<std::ffi::OsString>,
+        arg_index: usize
+    ) -> Vec<CompletionItem> {
+        let Some(mut cmd) = crate::internal_commands::get_command_for(cmd_name)
+        else {
+            return Vec::new();
+        };
+        match clap_complete::engine::complete(&mut cmd, args, arg_index, None) {
+            Ok(candidates) => {
+                candidates
+                    .into_iter()
+                    .map(|c| {
+                        let value = c.get_value().to_string_lossy().into_owned();
+                        let kind = if value.starts_with('-') {
+                            CompletionItemKind::PROPERTY
+                        }
+                        else {
+                            CompletionItemKind::VALUE
+                        };
+                        CompletionItem {
+                            label: value.clone(),
+                            kind: Some(kind),
+                            detail: c.get_help().map(|h| h.to_string()),
+                            insert_text: Some(value),
+                            insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+                            ..Default::default()
+                        }
+                    })
+                    .collect()
+            },
+            Err(e) => {
+                tracing::debug!("clap_complete engine::complete failed for {cmd_name}: {e}");
+                Vec::new()
+            }
+        }
+    }
+
     fn get_jinja_completions(&self) -> Vec<CompletionItem> {
         vec![
             CompletionItem {
@@ -1214,5 +1345,74 @@ impl BuildFileAnalyzer {
 impl Default for BuildFileAnalyzer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod internal_command_completion_tests {
+    use super::*;
+
+    fn argv_at(line: &str, cursor: usize) -> Option<(&'static str, Vec<String>, usize)> {
+        BuildFileAnalyzer::new().internal_command_argv_at_cursor(line, cursor).map(
+            |(name, args, idx)| {
+                (name, args.into_iter().map(|a| a.to_string_lossy().into_owned()).collect(), idx)
+            }
+        )
+    }
+
+    #[test]
+    fn list_item_partial_flag() {
+        let line = "  - basm --sn";
+        let result = argv_at(line, line.chars().count());
+        assert_eq!(result, Some(("basm", vec!["--sn".to_string()], 0)));
+    }
+
+    #[test]
+    fn list_item_trailing_whitespace_yields_empty_token() {
+        let line = "  - basm ";
+        let result = argv_at(line, line.chars().count());
+        assert_eq!(result, Some(("basm", vec![String::new()], 0)));
+    }
+
+    #[test]
+    fn scalar_cmd_form_with_several_args() {
+        let line = "  cmd: basm --output foo.sna --";
+        let result = argv_at(line, line.chars().count());
+        assert_eq!(
+            result,
+            Some((
+                "basm",
+                vec!["--output".to_string(), "foo.sna".to_string(), "--".to_string()],
+                2
+            ))
+        );
+    }
+
+    #[test]
+    fn cursor_still_inside_command_name_falls_back() {
+        let line = "  - basm";
+        let result = argv_at(line, line.chars().count());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn delegated_command_is_not_completed_dynamically() {
+        let line = "  - rasm foo.asm --";
+        let result = argv_at(line, line.chars().count());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn unknown_command_word_is_ignored() {
+        let line = "  - notacommand --x";
+        let result = argv_at(line, line.chars().count());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn non_task_key_is_ignored() {
+        let line = "  targets: basm --sn";
+        let result = argv_at(line, line.chars().count());
+        assert_eq!(result, None);
     }
 }

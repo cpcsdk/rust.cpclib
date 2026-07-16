@@ -195,6 +195,75 @@ async fn test_build_file_completion() {
 }
 
 #[tokio::test]
+async fn test_internal_command_argument_completion() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+
+    let backend = service.inner();
+
+    let params = InitializeParams {
+        process_id: None,
+        root_path: None,
+        root_uri: None,
+        initialization_options: None,
+        capabilities: ClientCapabilities::default(),
+        trace: Some(TraceValue::Off),
+        workspace_folders: None,
+        client_info: None,
+        locale: None
+    };
+
+    backend.initialize(params).await.unwrap();
+
+    let uri = Url::parse("file:///build2.build").unwrap();
+    let text = "targets:\n  main:\n    tasks:\n      - basm --sn";
+    let open_params = DidOpenTextDocumentParams {
+        text_document: TextDocumentItem {
+            uri: uri.clone(),
+            language_id: "yaml".to_string(),
+            version: 1,
+            text: text.to_string()
+        }
+    };
+
+    backend.did_open(open_params).await;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    // Cursor at the end of "      - basm --sn" (line 3, 0-indexed)
+    let last_line_len = text.lines().last().unwrap().chars().count() as u32;
+    let completion_params = CompletionParams {
+        text_document_position: TextDocumentPositionParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            position: Position {
+                line: 3,
+                character: last_line_len
+            }
+        },
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
+        context: None
+    };
+
+    let result = backend.completion(completion_params).await.unwrap();
+
+    let Some(completion_result) = result
+    else {
+        panic!("Expected completion result");
+    };
+    let items = match completion_result {
+        CompletionResponse::Array(items) => items,
+        CompletionResponse::List(list) => list.items
+    };
+
+    let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
+    assert!(
+        labels.iter().any(|l| l == "--snapshot"),
+        "Should offer basm's real --snapshot flag, got: {:?}",
+        labels
+    );
+}
+
+#[tokio::test]
 async fn test_assembly_hover() {
     let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
 

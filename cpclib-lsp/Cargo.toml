@@ -18,8 +18,9 @@ path = "src/main.rs"
 cpclib-asm.workspace = true
 cpclib-asmfmt.workspace = true
 cpclib-bndbuild = { workspace = true, default-features = false }
+cpclib-runner = { workspace = true, default-features = false }
 cpclib-basic.workspace = true
-cpclib-common.workspace = true
+cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-tokens.workspace = true
 camino.workspace = true
 minijinja.workspace = true
@@ -27,6 +28,10 @@ minijinja.workspace = true
 # LSP
 tower-lsp = "0.19"
 tokio = { version = "1", features = ["full"] }
+
+# Dynamic clap-based completion for internal bndbuild commands
+clap_complete = { version = "4.6.7", features = ["unstable-dynamic"] }
+shlex.workspace = true
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
