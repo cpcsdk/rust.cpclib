@@ -1,3 +1,16 @@
+//! Completion for assembly files.
+//!
+//! The first half of this file is the semantic completion model: operand-type
+//! bitflags, the per-instruction operand table, and cursor-context analysis.
+//! The second half is the analyzer entry point that renders the candidates
+//! into LSP `CompletionItem`s.
+
+use cpclib_tokens::ListingElement;
+use tower_lsp::lsp_types::*;
+
+use super::AssemblyAnalyzer;
+use crate::common::document::Document;
+
 /// Semantic completion context for Z80 assembly.
 ///
 /// Determines whether the cursor is in "mnemonic/directive" position
@@ -87,7 +100,10 @@ static INSTR_OPERANDS: &[(&str, &[u32])] = &[
     ("ADC", &[T_R8 | T_HL, R8_MEM_IMM | T_R16]),
     ("SBC", &[T_R8 | T_HL, R8_MEM_IMM | T_R16]),
     // ADD — ADD A,r  or  ADD HL,rr  or  ADD IX,rr
-    ("ADD", &[T_A | T_HL | T_IX | T_IY, R8_MEM_IMM | T_R16 | T_IX | T_IY]),
+    (
+        "ADD",
+        &[T_A | T_HL | T_IX | T_IY, R8_MEM_IMM | T_R16 | T_IX | T_IY]
+    ),
     // INC / DEC — 8-bit or 16-bit or (HL) or (IX+n)
     ("INC", &[T_R8 | T_MEM_HL | T_MEM_IX | T_R16 | T_IX | T_IY]),
     ("DEC", &[T_R8 | T_MEM_HL | T_MEM_IX | T_R16 | T_IX | T_IY]),
@@ -111,13 +127,25 @@ static INSTR_OPERANDS: &[(&str, &[u32])] = &[
     (
         "LD",
         &[
-            T_R8 | T_R16 | T_IX | T_IY | T_MEM_HL | T_MEM_IX | T_MEM_BC | T_MEM_DE | T_MEM_NN
-                | T_I | T_R_REG | T_SP,
-            T_R8 | T_R16 | T_IX | T_IY | T_MEM_HL | T_MEM_IX | T_EXPR | T_I | T_R_REG,
+            T_R8 | T_R16
+                | T_IX
+                | T_IY
+                | T_MEM_HL
+                | T_MEM_IX
+                | T_MEM_BC
+                | T_MEM_DE
+                | T_MEM_NN
+                | T_I
+                | T_R_REG
+                | T_SP,
+            T_R8 | T_R16 | T_IX | T_IY | T_MEM_HL | T_MEM_IX | T_EXPR | T_I | T_R_REG
         ]
     ),
     // EX — EX DE,HL  /  EX AF,AF'  /  EX (SP),HL or IX or IY
-    ("EX", &[T_DE | T_AF_ALT | T_MEM_HL, T_HL | T_AF_ALT | T_IX | T_IY]),
+    (
+        "EX",
+        &[T_DE | T_AF_ALT | T_MEM_HL, T_HL | T_AF_ALT | T_IX | T_IY]
+    ),
     // JP — JP nn  /  JP cc,nn  /  JP HL  /  JP IX
     ("JP", &[T_COND8 | T_EXPR | T_HL | T_IX | T_IY, T_EXPR]),
     // JR — JR n  /  JR cc,n
@@ -135,7 +163,7 @@ static INSTR_OPERANDS: &[(&str, &[u32])] = &[
     // IN — IN A,(n)  /  IN r,(C)
     ("IN", &[T_R8, T_PORT_N | T_PORT_C]),
     // OUT — OUT (n),A  /  OUT (C),r
-    ("OUT", &[T_PORT_N | T_PORT_C, T_R8 | T_EXPR]),
+    ("OUT", &[T_PORT_N | T_PORT_C, T_R8 | T_EXPR])
 ];
 
 // ─── Context analysis ─────────────────────────────────────────────────────────
@@ -149,10 +177,10 @@ pub enum CompletionContext {
     InstructionOperand {
         mnemonic: String,
         /// 0 = first operand, 1 = second operand, etc.
-        arg_index: usize,
+        arg_index: usize
     },
     /// Cursor is in an argument of an assembler directive.
-    DirectiveArgument,
+    DirectiveArgument
 }
 
 /// Analyse the current line up to `col` and return the completion context.
@@ -171,8 +199,8 @@ pub fn analyze_context(line: &str, col: usize) -> CompletionContext {
     }
 
     // If there is no whitespace immediately after the mnemonic, still completing it
-    let has_space_after = stmt.len() > mnemonic.len()
-        && stmt.as_bytes()[mnemonic.len()].is_ascii_whitespace();
+    let has_space_after =
+        stmt.len() > mnemonic.len() && stmt.as_bytes()[mnemonic.len()].is_ascii_whitespace();
     if !has_space_after {
         return CompletionContext::MnemonicPosition;
     }
@@ -180,7 +208,9 @@ pub fn analyze_context(line: &str, col: usize) -> CompletionContext {
     let mnemonic_upper = mnemonic.to_uppercase();
 
     // Check whether this is an instruction or a directive
-    let is_instruction = INSTR_OPERANDS.iter().any(|(m, _)| *m == mnemonic_upper.as_str())
+    let is_instruction = INSTR_OPERANDS
+        .iter()
+        .any(|(m, _)| *m == mnemonic_upper.as_str())
         || cpclib_asm::lsp::Z80_INSTRUCTIONS
             .iter()
             .any(|m| m.to_uppercase() == mnemonic_upper);
@@ -194,7 +224,7 @@ pub fn analyze_context(line: &str, col: usize) -> CompletionContext {
 
     CompletionContext::InstructionOperand {
         mnemonic: mnemonic_upper,
-        arg_index,
+        arg_index
     }
 }
 
@@ -333,7 +363,12 @@ pub fn mask_accepts_expression(mask: u32) -> bool {
 fn skip_label_definition(s: &str) -> &str {
     let bytes = s.as_bytes();
     let mut i = 0;
-    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'@' || bytes[i] == b'.') {
+    while i < bytes.len()
+        && (bytes[i].is_ascii_alphanumeric()
+            || bytes[i] == b'_'
+            || bytes[i] == b'@'
+            || bytes[i] == b'.')
+    {
         i += 1;
     }
     if i == 0 || i >= bytes.len() {
@@ -343,7 +378,8 @@ fn skip_label_definition(s: &str) -> &str {
         // Skip the colon and following whitespace
         let rest = &s[i + 1..];
         rest.trim_start()
-    } else {
+    }
+    else {
         s
     }
 }
@@ -394,39 +430,60 @@ mod tests {
 
     #[test]
     fn mid_mnemonic_is_mnemonic_position() {
-        assert!(matches!(ctx("  LD", 4), CompletionContext::MnemonicPosition));
+        assert!(matches!(
+            ctx("  LD", 4),
+            CompletionContext::MnemonicPosition
+        ));
         assert!(matches!(ctx("JP", 2), CompletionContext::MnemonicPosition));
     }
 
     #[test]
     fn after_mnemonic_space_is_operand0() {
         let c = ctx("  LD ", 5);
-        assert!(matches!(c, CompletionContext::InstructionOperand { arg_index: 0, .. }));
+        assert!(matches!(
+            c,
+            CompletionContext::InstructionOperand { arg_index: 0, .. }
+        ));
     }
 
     #[test]
     fn after_first_comma_is_operand1() {
         let c = ctx("  LD A,", 7);
-        assert!(matches!(c, CompletionContext::InstructionOperand { arg_index: 1, .. }));
+        assert!(matches!(
+            c,
+            CompletionContext::InstructionOperand { arg_index: 1, .. }
+        ));
     }
 
     #[test]
     fn comma_inside_parens_not_counted() {
         // BIT 3, — the "3" is not preceded by a nested comma
         let c = ctx("BIT 3,", 6);
-        assert!(matches!(c, CompletionContext::InstructionOperand { arg_index: 1, .. }));
+        assert!(matches!(
+            c,
+            CompletionContext::InstructionOperand { arg_index: 1, .. }
+        ));
     }
 
     #[test]
     fn label_before_mnemonic_is_skipped() {
         let c = ctx("loop: LD A,", 11);
-        assert!(matches!(c, CompletionContext::InstructionOperand { arg_index: 1, .. }));
+        assert!(matches!(
+            c,
+            CompletionContext::InstructionOperand { arg_index: 1, .. }
+        ));
     }
 
     #[test]
     fn directive_gives_directive_argument_context() {
-        assert!(matches!(ctx("ORG ", 4), CompletionContext::DirectiveArgument));
-        assert!(matches!(ctx("DEFB ", 5), CompletionContext::DirectiveArgument));
+        assert!(matches!(
+            ctx("ORG ", 4),
+            CompletionContext::DirectiveArgument
+        ));
+        assert!(matches!(
+            ctx("DEFB ", 5),
+            CompletionContext::DirectiveArgument
+        ));
     }
 
     #[test]
@@ -470,5 +527,152 @@ mod tests {
     fn no_operand_instructions_have_no_mask() {
         assert_eq!(operand_mask("NOP", 0), Some(0));
         assert_eq!(operand_mask("EI", 0), Some(0));
+    }
+}
+
+impl AssemblyAnalyzer {
+    /// Provide context-aware completion suggestions.
+    ///
+    /// * **Mnemonic position** (start of statement): instructions + directives + labels.
+    ///   Registers are excluded here — they cannot appear as a mnemonic.
+    /// * **Instruction operand**: only registers / conditions valid for that argument slot,
+    ///   plus labels from the document when the slot accepts an expression (`n`/`nn`).
+    ///   Instructions and directives are never offered inside an operand.
+    /// * **Directive argument**: only labels / document symbols (any expression is valid).
+    pub fn completion(&self, document: &Document, position: Position) -> Vec<CompletionItem> {
+        let line = document.line(position.line as usize).unwrap_or_default();
+        let col = position.character as usize;
+        let ctx = analyze_context(&line, col);
+
+        // Collect document-level symbols (labels, EQU constants, macros) for use as expressions.
+        let doc_symbols: Vec<(String, String)> = if let Ok(listing) = self.parse_document(document)
+        {
+            let mut syms = Vec::new();
+            for token in listing.iter() {
+                if token.is_label() {
+                    syms.push((token.label_symbol().to_string(), "label".to_string()));
+                }
+                else if token.is_equ() {
+                    syms.push((
+                        token.equ_symbol().to_string(),
+                        format!("= {}", token.equ_value())
+                    ));
+                }
+                else if token.is_assign() {
+                    syms.push((
+                        token.assign_symbol().to_string(),
+                        format!("= {}", token.assign_value())
+                    ));
+                }
+                else if token.is_macro_definition() {
+                    syms.push((
+                        token.macro_definition_name().to_string(),
+                        "macro".to_string()
+                    ));
+                }
+            }
+            syms
+        }
+        else {
+            Vec::new()
+        };
+
+        let mut completions = Vec::new();
+
+        match ctx {
+            CompletionContext::MnemonicPosition => {
+                // Instructions
+                for mnemonic in cpclib_asm::lsp::Z80_INSTRUCTIONS {
+                    completions.push(CompletionItem {
+                        label: mnemonic.to_string(),
+                        kind: Some(CompletionItemKind::KEYWORD),
+                        detail: Some("Z80 instruction".to_string()),
+                        ..Default::default()
+                    });
+                }
+                // Directives
+                for (directives, detail) in [
+                    (
+                        cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_STANDALONE,
+                        "assembler directive"
+                    ),
+                    (
+                        cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_START,
+                        "block-start directive"
+                    ),
+                    (
+                        cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_END,
+                        "block-end directive"
+                    )
+                ] {
+                    for d in directives {
+                        completions.push(CompletionItem {
+                            label: d.to_string(),
+                            kind: Some(CompletionItemKind::KEYWORD),
+                            detail: Some(detail.to_string()),
+                            ..Default::default()
+                        });
+                    }
+                }
+                // Labels — macros can be invoked like mnemonics
+                for (sym, detail) in &doc_symbols {
+                    completions.push(CompletionItem {
+                        label: sym.clone(),
+                        kind: Some(CompletionItemKind::REFERENCE),
+                        detail: Some(detail.clone()),
+                        ..Default::default()
+                    });
+                }
+            },
+
+            CompletionContext::InstructionOperand {
+                ref mnemonic,
+                arg_index
+            } => {
+                // None  = instruction not in table → generous fallback
+                // Some(0) = known instruction, no operand here → empty list
+                // Some(m) = use m
+                let mask = match operand_mask(mnemonic, arg_index) {
+                    Some(m) => m,
+                    None => T_R8 | T_R16 | T_IX | T_IY | T_COND8 | T_EXPR
+                };
+
+                // Register / condition / synthetic tokens from the mask
+                for (token, detail) in tokens_for_mask(mask) {
+                    completions.push(CompletionItem {
+                        label: token.to_string(),
+                        kind: Some(CompletionItemKind::CONSTANT),
+                        detail: Some(detail.to_string()),
+                        ..Default::default()
+                    });
+                }
+
+                // Labels / expressions when the slot accepts one
+                if mask_accepts_expression(mask) {
+                    for (sym, detail) in &doc_symbols {
+                        completions.push(CompletionItem {
+                            label: sym.clone(),
+                            kind: Some(CompletionItemKind::REFERENCE),
+                            detail: Some(detail.clone()),
+                            ..Default::default()
+                        });
+                    }
+                }
+            },
+
+            CompletionContext::DirectiveArgument => {
+                // Directives accept any expression — offer labels / document symbols only.
+                for (sym, detail) in &doc_symbols {
+                    completions.push(CompletionItem {
+                        label: sym.clone(),
+                        kind: Some(CompletionItemKind::REFERENCE),
+                        detail: Some(detail.clone()),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
+        completions
     }
 }

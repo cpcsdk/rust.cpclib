@@ -1,13 +1,7 @@
-mod asm;
-mod backend;
-mod basic;
-mod build;
-mod completion;
-mod delegated_help;
-mod document;
-mod internal_commands;
-pub mod sourcemap;
-pub mod timings;
-mod utils;
+mod basm;
+mod bndbuild;
+mod common;
+mod locomotive;
+mod server;
 
-pub use backend::CpcLspBackend;
+pub use server::CpcLspBackend;

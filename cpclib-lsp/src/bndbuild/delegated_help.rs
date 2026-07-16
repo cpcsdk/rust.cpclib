@@ -1,7 +1,7 @@
 //! Best-effort flag/option completion for *delegated* bndbuild task commands
 //! (third-party binaries like rasm, sjasmplus, ace, martine, ... that bndbuild
 //! downloads/installs on demand - as opposed to "internal" commands, which are
-//! completed from their real `clap::Command` via `crate::internal_commands`).
+//! completed from their real `clap::Command` via `super::internal_commands`).
 //!
 //! There is no `clap::Command` available for these tools, so instead this runs
 //! `<command> --help` through bndbuild's own task execution machinery (the same
@@ -59,7 +59,12 @@ fn parse_help_options(text: &str) -> Vec<(String, Option<String>)> {
         }
 
         let comment: Vec<&str> = tokens.collect();
-        let comment = if comment.is_empty() { None } else { Some(comment.join(" ")) };
+        let comment = if comment.is_empty() {
+            None
+        }
+        else {
+            Some(comment.join(" "))
+        };
 
         for flag in flags {
             out.push((flag, comment.clone()));
@@ -140,7 +145,10 @@ mod tests {
     fn ignores_non_option_lines() {
         let text = "Usage: rasm <inputfile> [options]\n\nOptions:\n  -o <file>    output file\n";
         let result = parse_help_options(text);
-        assert_eq!(result, vec![("-o".to_string(), Some("<file> output file".to_string()))]);
+        assert_eq!(
+            result,
+            vec![("-o".to_string(), Some("<file> output file".to_string()))]
+        );
     }
 
     #[test]

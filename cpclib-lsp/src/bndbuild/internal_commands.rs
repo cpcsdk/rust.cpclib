@@ -21,11 +21,11 @@ use cpclib_bndbuild::runners::fs::cp::CpRunner;
 use cpclib_bndbuild::runners::fs::mkdir::MkdirRunner;
 use cpclib_bndbuild::runners::fs::mv::MvRunner;
 use cpclib_bndbuild::runners::fs::rm::RmRunner;
-use cpclib_bndbuild::runners::{
-    archive, asmfmt, basmdoc, bndbuild, cpc2img, cprcli, crunch, csl, fade, hideur, hxcfe,
-    img2cpc, locomotive, snapshot
-};
 use cpclib_bndbuild::runners::xfer::XferRunner;
+use cpclib_bndbuild::runners::{
+    archive, asmfmt, basmdoc, bndbuild, cpc2img, cprcli, crunch, csl, fade, hideur, hxcfe, img2cpc,
+    locomotive, snapshot
+};
 use cpclib_common::clap::Command;
 use cpclib_common::event::CapturingObserver;
 use cpclib_runner::emucontrol::EmulatorFacadeRunner;
@@ -49,19 +49,39 @@ static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = Lazy
     let mut m: HashMap<&'static str, CommandBuilder> = HashMap::new();
 
     m.insert("basm", || {
-        normalized(BasmRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            BasmRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("orgams", || {
-        normalized(OrgamsRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            OrgamsRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("dsk", || {
-        normalized(DiscManagerRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            DiscManagerRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("catalog", || {
-        normalized(CatalogRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            CatalogRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("bdasm", || {
-        normalized(BdasmRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            BdasmRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("basmdoc", || {
         normalized(
@@ -71,16 +91,32 @@ static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = Lazy
         )
     });
     m.insert("cp", || {
-        normalized(CpRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            CpRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("mv", || {
-        normalized(MvRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            MvRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("rm", || {
-        normalized(RmRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            RmRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("mkdir", || {
-        normalized(MkdirRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            MkdirRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("archive", || {
         normalized(
@@ -90,7 +126,11 @@ static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = Lazy
         )
     });
     m.insert("xfer", || {
-        normalized(XferRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            XferRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("cpr", || {
         normalized(
@@ -100,7 +140,11 @@ static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = Lazy
         )
     });
     m.insert("csl", || {
-        normalized(csl::CslRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            csl::CslRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("crunch", || {
         normalized(
@@ -138,7 +182,11 @@ static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = Lazy
         )
     });
     m.insert("fade", || {
-        normalized(fade::FadeRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            fade::FadeRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("hideur", || {
         normalized(
@@ -148,7 +196,11 @@ static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = Lazy
         )
     });
     m.insert("hxcfe", || {
-        normalized(hxcfe::HxcfeRunner::<CapturingObserver>::default().get_clap_command().clone())
+        normalized(
+            hxcfe::HxcfeRunner::<CapturingObserver>::default()
+                .get_clap_command()
+                .clone()
+        )
     });
     m.insert("sna", || {
         normalized(
@@ -200,15 +252,12 @@ mod tests {
     #[test]
     fn basm_offers_snapshot_flag_completion() {
         let mut cmd = get_command_for("basm").unwrap();
-        let candidates = clap_complete::engine::complete(
-            &mut cmd,
-            vec!["--sna".into()],
-            0,
-            None
-        )
-        .expect("completion should not error");
-        let values: Vec<String> =
-            candidates.iter().map(|c| c.get_value().to_string_lossy().into_owned()).collect();
+        let candidates = clap_complete::engine::complete(&mut cmd, vec!["--sna".into()], 0, None)
+            .expect("completion should not error");
+        let values: Vec<String> = candidates
+            .iter()
+            .map(|c| c.get_value().to_string_lossy().into_owned())
+            .collect();
         assert!(
             values.iter().any(|v| v == "--snapshot"),
             "expected --snapshot among {values:?}"
@@ -217,13 +266,19 @@ mod tests {
 
     #[test]
     fn delegated_and_unknown_commands_are_not_internal() {
-        assert!(get_command_for("rasm").is_none(), "rasm is a delegated command");
+        assert!(
+            get_command_for("rasm").is_none(),
+            "rasm is a delegated command"
+        );
         assert!(get_command_for("nonexistent").is_none());
     }
 
     #[test]
     fn emuctrl_command_is_normalized() {
         let cmd = get_command_for("cpc").expect("cpc (emuctrl) should be a known command");
-        assert!(cmd.is_no_binary_name_set(), "emuctrl command should be normalized");
+        assert!(
+            cmd.is_no_binary_name_set(),
+            "emuctrl command should be normalized"
+        );
     }
 }

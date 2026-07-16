@@ -1,3 +1,16 @@
+use tower_lsp::lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind};
+
+/// Wrap an already-rendered markdown string into an LSP `Hover`.
+pub fn make_hover(md: String) -> Hover {
+    Hover {
+        contents: HoverContents::Markup(MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: md
+        }),
+        range: None
+    }
+}
+
 /// Build the Markdown hover table for a numeric literal, using CPC conventions:
 ///   decimal — no prefix, hex — `&`, binary — `%` with `_` every 4 bits.
 /// The value column is right-aligned.

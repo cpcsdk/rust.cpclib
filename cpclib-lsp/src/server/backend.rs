@@ -3,10 +3,10 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
-use crate::asm::AssemblyAnalyzer;
-use crate::basic::BasicAnalyzer;
-use crate::build::BuildFileAnalyzer;
-use crate::document::{Document, DocumentType};
+use crate::basm::AssemblyAnalyzer;
+use crate::bndbuild::BuildFileAnalyzer;
+use crate::common::document::{Document, DocumentType};
+use crate::locomotive::BasicAnalyzer;
 
 pub struct CpcLspBackend {
     client: Client,
@@ -109,7 +109,7 @@ impl LanguageServer for CpcLspBackend {
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
                             work_done_progress_options: WorkDoneProgressOptions::default(),
-                            legend: crate::asm::semantic_tokens_legend(),
+                            legend: crate::basm::semantic_tokens_legend(),
                             range: Some(false),
                             full: Some(SemanticTokensFullOptions::Bool(true))
                         }

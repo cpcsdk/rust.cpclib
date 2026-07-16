@@ -102,7 +102,7 @@ pub fn extract_instruction_at_col(line: &str, col: usize) -> Option<String> {
 /// Given the text of a single segment (possibly `"label: LD A, B"` or just `"LD A, B"`),
 /// skip any leading label definitions and return the mnemonic + operands.
 fn extract_mnemonic_from_segment(seg: &str) -> Option<String> {
-    use crate::asm::INSTRUCTION_SET;
+    use super::token::INSTRUCTION_SET;
     let bytes = seg.as_bytes();
     let mut pos = 0usize;
 
