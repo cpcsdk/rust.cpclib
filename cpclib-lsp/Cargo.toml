@@ -57,6 +57,7 @@ dashmap = "6"
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }
+camino-tempfile.workspace = true
 
 [features]
 default = []

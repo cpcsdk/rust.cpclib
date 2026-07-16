@@ -3016,6 +3016,7 @@ version = "0.11.0"
 dependencies = [
  "anyhow",
  "camino",
+ "camino-tempfile",
  "clap_complete",
  "cpclib-asm",
  "cpclib-asmfmt",

@@ -264,6 +264,75 @@ async fn test_internal_command_argument_completion() {
 }
 
 #[tokio::test]
+async fn test_dependency_filename_completion() {
+    let tmp = camino_tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("hello.asm"), "").unwrap();
+    std::fs::write(tmp.path().join("hello2.dsk"), "").unwrap();
+
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let params = InitializeParams {
+        process_id: None,
+        root_path: None,
+        root_uri: None,
+        initialization_options: None,
+        capabilities: ClientCapabilities::default(),
+        trace: Some(TraceValue::Off),
+        workspace_folders: None,
+        client_info: None,
+        locale: None
+    };
+    backend.initialize(params).await.unwrap();
+
+    let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+    let text = "- tgt: out.bin\n  dep: hel";
+    let open_params = DidOpenTextDocumentParams {
+        text_document: TextDocumentItem {
+            uri: uri.clone(),
+            language_id: "yaml".to_string(),
+            version: 1,
+            text: text.to_string()
+        }
+    };
+    backend.did_open(open_params).await;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let last_line_len = text.lines().last().unwrap().chars().count() as u32;
+    let completion_params = CompletionParams {
+        text_document_position: TextDocumentPositionParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            position: Position {
+                line: 1,
+                character: last_line_len
+            }
+        },
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
+        context: None
+    };
+
+    let result = backend.completion(completion_params).await.unwrap();
+
+    let Some(completion_result) = result
+    else {
+        panic!("Expected completion result");
+    };
+    let items = match completion_result {
+        CompletionResponse::Array(items) => items,
+        CompletionResponse::List(list) => list.items
+    };
+
+    let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
+    assert!(
+        labels.iter().any(|l| l == "hello.asm") && labels.iter().any(|l| l == "hello2.dsk"),
+        "Should offer real files from the build file's directory, got: {:?}",
+        labels
+    );
+}
+
+#[tokio::test]
 async fn test_assembly_hover() {
     let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
 

@@ -1,0 +1,1 @@
+There is a bug in timings.txt file (inversion of or/xor) But it is fixed in the code that reads it
