@@ -285,13 +285,22 @@ impl BuildFileAnalyzer {
                 completions.extend(self.get_top_level_completions());
             }
             else if let Some((cmd_name, args, arg_index)) =
-                self.internal_command_argv_at_cursor(&line, cursor)
+                self.command_argv_at_cursor(&line, cursor)
             {
-                // Cursor is past a recognized internal command name: offer real
-                // flag/value completion driven by that command's clap::Command.
-                completions.extend(self.get_internal_command_arg_completions(
-                    cmd_name, args, arg_index
-                ));
+                if crate::internal_commands::get_command_for(cmd_name).is_some() {
+                    // Internal command: offer real flag/value completion driven
+                    // by its actual clap::Command.
+                    completions.extend(self.get_internal_command_arg_completions(
+                        cmd_name, args, arg_index
+                    ));
+                }
+                else {
+                    // Delegated (third-party) command: best-effort completion
+                    // scraped from its `--help` output, if already installed.
+                    let prefix = args[arg_index].to_string_lossy();
+                    completions
+                        .extend(self.get_delegated_command_arg_completions(cmd_name, &prefix));
+                }
             }
             else if line.trim_start().starts_with("- ") {
                 // Inside a list - suggest task types
@@ -1185,13 +1194,16 @@ impl BuildFileAnalyzer {
 
     /// If the cursor sits inside the value of a task-invocation line (a `- `
     /// list item, or a scalar `cmd:`/`tasks:`/`command:`/`launch:`/`run:` value)
-    /// whose first word is a *recognized internal command*, return that
-    /// command's canonical name plus the tokenized argv `clap_complete` needs.
+    /// whose first word is a *recognized task command* (internal or
+    /// delegated), return that command's canonical name plus the tokenized
+    /// argv. `args[arg_index]` is always the partial/in-progress token.
     ///
     /// Returns `None` when the cursor is still inside the command-name token
-    /// itself (falls back to plain command-name completion), or the command is
-    /// delegated/unrecognized, or the line isn't a task-invocation line at all.
-    fn internal_command_argv_at_cursor(
+    /// itself (falls back to plain command-name completion), the command word
+    /// is unrecognized, or the line isn't a task-invocation line at all.
+    /// Callers decide separately whether the resolved command is internal
+    /// (`crate::internal_commands`) or delegated (`crate::delegated_help`).
+    fn command_argv_at_cursor(
         &self,
         line_text: &str,
         cursor_column: usize
@@ -1254,7 +1266,6 @@ impl BuildFileAnalyzer {
             .iter()
             .find(|t| t.names.contains(&cmd_word.as_str()))
             .map(|t| t.names[0])?;
-        crate::internal_commands::get_command_for(canonical)?;
 
         if ends_in_whitespace {
             tokens.push(String::new());
@@ -1304,6 +1315,32 @@ impl BuildFileAnalyzer {
         }
     }
 
+    /// Argument completion for *delegated* (third-party) commands, scraped
+    /// from their `--help` output - see `crate::delegated_help`. Only offers
+    /// something when the tool is already installed locally; otherwise (or
+    /// when its help text had no recognizable options) returns nothing, same
+    /// as today's behavior.
+    fn get_delegated_command_arg_completions(
+        &self,
+        cmd_name: &str,
+        current_prefix: &str
+    ) -> Vec<CompletionItem> {
+        crate::delegated_help::get_completions_for(cmd_name)
+            .into_iter()
+            .filter(|(flag, _)| flag.starts_with(current_prefix))
+            .map(|(flag, comment)| {
+                CompletionItem {
+                    label: flag.clone(),
+                    kind: Some(CompletionItemKind::PROPERTY),
+                    detail: comment,
+                    insert_text: Some(flag),
+                    insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+                    ..Default::default()
+                }
+            })
+            .collect()
+    }
+
     fn get_jinja_completions(&self) -> Vec<CompletionItem> {
         vec![
             CompletionItem {
@@ -1349,15 +1386,13 @@ impl Default for BuildFileAnalyzer {
 }
 
 #[cfg(test)]
-mod internal_command_completion_tests {
+mod command_argv_at_cursor_tests {
     use super::*;
 
     fn argv_at(line: &str, cursor: usize) -> Option<(&'static str, Vec<String>, usize)> {
-        BuildFileAnalyzer::new().internal_command_argv_at_cursor(line, cursor).map(
-            |(name, args, idx)| {
-                (name, args.into_iter().map(|a| a.to_string_lossy().into_owned()).collect(), idx)
-            }
-        )
+        BuildFileAnalyzer::new().command_argv_at_cursor(line, cursor).map(|(name, args, idx)| {
+            (name, args.into_iter().map(|a| a.to_string_lossy().into_owned()).collect(), idx)
+        })
     }
 
     #[test]
@@ -1396,10 +1431,15 @@ mod internal_command_completion_tests {
     }
 
     #[test]
-    fn delegated_command_is_not_completed_dynamically() {
+    fn delegated_command_is_still_recognized_and_tokenized() {
+        // The tokenizer resolves & tokenizes regardless of internal/delegated;
+        // `completion()` is what decides which completion mechanism to use.
         let line = "  - rasm foo.asm --";
         let result = argv_at(line, line.chars().count());
-        assert_eq!(result, None);
+        assert_eq!(
+            result,
+            Some(("rasm", vec!["foo.asm".to_string(), "--".to_string()], 1))
+        );
     }
 
     #[test]

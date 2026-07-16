@@ -406,21 +406,29 @@ pub const TASK_TYPES: &[TaskType] = &[
     }
 ];
 
+static TARGET_HELP: &str = "Targets - define the list of targets built by the rules";
+static DEPS_HELP: &str = "Dependencies - define the list of dependencies for the rules";
+static TASKS_HELP: &str = "Tasks - define the list of tasks to execute for the rules";
+
 /// Build file top-level keywords
 pub const BUILD_KEYWORDS: &[(&str, &str)] = &[
-    (
-        "targets",
-        "Define build targets with dependencies and tasks"
-    ),
-    ("tasks", "List of tasks to execute for this target"),
-    (
-        "deps",
-        "Dependencies - other targets that must be built first"
-    ),
-    ("args", "Arguments or configuration for the task"),
-    ("env", "Environment variables for the build"),
-    ("default", "Default target to build"),
-    ("includes", "Include other build files")
+    ("target", TARGET_HELP),
+    ("tgt", TARGET_HELP),
+    ("build", TARGET_HELP),
+
+    ("dep", DEPS_HELP),
+    ("dependency", DEPS_HELP),
+    ("requires", DEPS_HELP),
+
+    ("cmd", TASKS_HELP),
+    ("command", TASKS_HELP),
+    ("launch", TASKS_HELP),
+    ("run", TASKS_HELP),
+
+    ("help", "Help text for the rule"),
+    ("phony", "If true, the target is always rebuilt regardless of file timestamps"),
+    ("constraint", "Condition under which this rule applies (e.g. OS or environment constraint)"),
+
 ];
 
 #[cfg(test)]

@@ -3,6 +3,7 @@ mod backend;
 mod basic;
 mod build;
 mod completion;
+mod delegated_help;
 mod document;
 mod internal_commands;
 pub mod sourcemap;
