@@ -2,6 +2,9 @@
 //! streaming its output back to the client as it runs, and mapping a build
 //! failure back onto the source line that caused it.
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use cpclib_bndbuild::event::{
     BndBuilderEvent, BndBuilderObserved, BndBuilderObserver, BndBuilderObserverRc
 };
@@ -75,11 +78,52 @@ impl BndBuilderObserver for StreamingObserver {
     }
 }
 
+/// Tracks, per rule, the 0-based index of the most recently *started* task.
+///
+/// The executor runs a rule's tasks strictly in source order and stops at
+/// the first one that fails (it never starts another task for that rule
+/// afterwards - see `BndBuilder::execute_rule`), so after a rule fails this
+/// is exactly the index of the task that failed. This gives a precise
+/// line-highlight instead of guessing from the error text.
+#[derive(Clone, Default)]
+struct TaskIndexTracker {
+    index_by_rule: Arc<Mutex<HashMap<String, usize>>>
+}
+
+impl TaskIndexTracker {
+    fn failed_index_for(&self, rule: &str) -> Option<usize> {
+        self.index_by_rule.lock().unwrap().get(rule).copied()
+    }
+}
+
+impl std::fmt::Debug for TaskIndexTracker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskIndexTracker").finish()
+    }
+}
+
+impl EventObserver for TaskIndexTracker {
+    fn emit_stdout(&self, _s: &str) {}
+
+    fn emit_stderr(&self, _s: &str) {}
+}
+
+impl BndBuilderObserver for TaskIndexTracker {
+    fn update(&self, event: BndBuilderEvent) {
+        if let BndBuilderEvent::StartTask(Some(rule), _) = event {
+            let mut map = self.index_by_rule.lock().unwrap();
+            let key = rule.to_string();
+            let next = map.get(&key).map_or(0, |i| i + 1);
+            map.insert(key, next);
+        }
+    }
+}
+
 impl BuildFileAnalyzer {
     /// Build `rule` of the build file behind `document` (blocking: run this
     /// on a worker thread). On failure, returns a diagnostic highlighting the
-    /// failing rule — refined to the responsible task line when it can be
-    /// identified from the error message.
+    /// failing rule — refined to the specific failing task line, identified
+    /// from the executor's own task-start events rather than guessed.
     ///
     /// When `output` is provided, every line of build progress/stdout/stderr
     /// is forwarded to it as the build runs.
@@ -91,11 +135,23 @@ impl BuildFileAnalyzer {
     ) -> RuleRunOutcome {
         let Ok(path) = document.uri.to_file_path()
         else {
-            return failure_outcome(document, rule, rule, "invalid build file path".to_string());
+            return failure_outcome(
+                document,
+                rule,
+                rule,
+                "invalid build file path".to_string(),
+                None
+            );
         };
         let Some(utf8_path) = path.to_str().map(camino::Utf8PathBuf::from)
         else {
-            return failure_outcome(document, rule, rule, "non-UTF8 build file path".to_string());
+            return failure_outcome(
+                document,
+                rule,
+                rule,
+                "non-UTF8 build file path".to_string(),
+                None
+            );
         };
 
         // `force_serial = false`: same parallel scheduling as the CLI.
@@ -103,9 +159,12 @@ impl BuildFileAnalyzer {
         let mut builder = match builder {
             Ok((_, builder)) => builder,
             Err(e) => {
-                return failure_outcome(document, rule, rule, strip_ansi(&e.to_string()));
+                return failure_outcome(document, rule, rule, strip_ansi(&e.to_string()), None);
             }
         };
+
+        let task_tracker = TaskIndexTracker::default();
+        builder.add_observer(BndBuilderObserverRc::new(task_tracker.clone()));
 
         if let Some(tx) = output {
             builder.add_observer(BndBuilderObserverRc::new(StreamingObserver { tx }));
@@ -136,7 +195,14 @@ impl BuildFileAnalyzer {
                     },
                     other => (rule.to_string(), other.to_string())
                 };
-                failure_outcome(document, rule, &failing_target, strip_ansi(&msg))
+                let failed_task_index = task_tracker.failed_index_for(&failing_target);
+                failure_outcome(
+                    document,
+                    rule,
+                    &failing_target,
+                    strip_ansi(&msg),
+                    failed_task_index
+                )
             }
         }
     }
@@ -148,7 +214,8 @@ fn failure_outcome(
     document: &Document,
     requested_rule: &str,
     failing_target: &str,
-    msg: String
+    msg: String,
+    failed_task_index: Option<usize>
 ) -> RuleRunOutcome {
     let text = document.text();
     let tgt_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
@@ -161,10 +228,14 @@ fn failure_outcome(
         .or_else(|| BuildFileAnalyzer::find_target_line(&text, requested_rule, &tgt_keys))
         .unwrap_or(0);
 
-    // Try to refine to the task line responsible for the failure: within the
-    // failing rule's block, prefer the task line sharing the most tokens with
-    // the error message.
-    let line_idx = best_failing_line(&text, rule_line as usize, &msg).unwrap_or(rule_line as usize);
+    // Prefer the task line identified precisely from the executor's own
+    // task-start events; fall back to a text-based guess (e.g. for failures
+    // that aren't tied to a specific task, like a missing dependency rule),
+    // and finally to the rule's own `tgt:` line.
+    let line_idx = failed_task_index
+        .and_then(|idx| nth_task_line(&text, rule_line as usize, idx))
+        .or_else(|| best_failing_line(&text, rule_line as usize, &msg))
+        .unwrap_or(rule_line as usize);
 
     let line_text = text.lines().nth(line_idx).unwrap_or_default();
     let start_char = line_text.len() - line_text.trim_start().len();
@@ -193,16 +264,23 @@ fn failure_outcome(
     }
 }
 
-/// Within the rule block starting at `rule_line`, find the task line whose
-/// command shares the most distinctive tokens with the error message.
-fn best_failing_line(text: &str, rule_line: usize, msg: &str) -> Option<usize> {
+/// Enumerate the task lines declared under the rule starting at `rule_line`,
+/// in source order, as `(line_index, task_content)`. A task line is either a
+/// `- item` in a task list, or the value of a scalar `cmd:`/`tasks:`/... key
+/// (the whole rule then has exactly that one task).
+fn task_lines_in_rule(text: &str, rule_line: usize) -> Vec<(usize, &str)> {
     let lines: Vec<&str> = text.lines().collect();
     let rule_indent = lines
         .get(rule_line)
         .map(|l| l.len() - l.trim_start().len())
         .unwrap_or(0);
+    let task_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
+        .iter()
+        .find(|k| k.names.contains(&"tasks"))
+        .map(|k| k.names.to_vec())
+        .unwrap_or_default();
 
-    let mut best: Option<(usize, usize)> = None; // (score, line)
+    let mut out = Vec::new();
     for (idx, line) in lines.iter().enumerate().skip(rule_line + 1) {
         let trimmed = line.trim_start();
         if trimmed.is_empty() {
@@ -213,18 +291,17 @@ fn best_failing_line(text: &str, rule_line: usize, msg: &str) -> Option<usize> {
             break; // left the rule block
         }
 
-        // Only task-looking content: `cmd: xxx` values or `- xxx` items whose
-        // first word is not a rule key.
         let content = if let Some(item) = trimmed.strip_prefix("- ") {
             item
         }
         else if let Some((key, value)) = trimmed.split_once(':') {
-            if cpclib_bndbuild::lsp::RULE_KEYS
-                .iter()
-                .find(|k| k.names.contains(&"tasks"))
-                .is_some_and(|k| k.names.contains(&key.trim()))
+            let value = value.trim_start();
+            if task_keys.contains(&key.trim())
+                && !value.is_empty()
+                && !value.starts_with('>')
+                && !value.starts_with('|')
             {
-                value.trim_start()
+                value
             }
             else {
                 continue;
@@ -234,6 +311,24 @@ fn best_failing_line(text: &str, rule_line: usize, msg: &str) -> Option<usize> {
             continue;
         };
 
+        out.push((idx, content));
+    }
+    out
+}
+
+/// Line of the `task_index`-th task (0-based, in source order) declared
+/// under the rule starting at `rule_line`.
+fn nth_task_line(text: &str, rule_line: usize, task_index: usize) -> Option<usize> {
+    task_lines_in_rule(text, rule_line)
+        .get(task_index)
+        .map(|(idx, _)| *idx)
+}
+
+/// Within the rule block starting at `rule_line`, find the task line whose
+/// command shares the most distinctive tokens with the error message.
+fn best_failing_line(text: &str, rule_line: usize, msg: &str) -> Option<usize> {
+    let mut best: Option<(usize, usize)> = None; // (score, line)
+    for (idx, content) in task_lines_in_rule(text, rule_line) {
         let score = content
             .split_whitespace()
             .filter(|tok| tok.len() > 3 && !tok.starts_with('-'))
@@ -350,5 +445,38 @@ mod tests {
             !lines.is_empty(),
             "expected some output to be streamed on failure"
         );
+    }
+
+    #[test]
+    fn highlights_the_specific_failing_task_not_the_first_one() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let content = "- tgt: multi\n  phony: true\n  cmd:\n    - echo first task ok\n    - cp does_not_exist_anywhere.src dst.bin\n    - echo third task never runs\n";
+        let document = doc(tmp.path().as_std_path(), content);
+
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "multi", None);
+        assert!(!outcome.success);
+        assert_eq!(outcome.diagnostics.len(), 1);
+        let diag = &outcome.diagnostics[0];
+        // Line 4 is the second `- cp ...` task (0-based task index 1), not
+        // the first task (line 3) nor the rule's `tgt:` line (line 0).
+        assert_eq!(
+            diag.range.start.line, 4,
+            "expected the failing task's own line, got: {:?}",
+            diag.range
+        );
+    }
+
+    #[test]
+    fn task_index_tracker_records_the_last_started_task_per_rule() {
+        let tracker = TaskIndexTracker::default();
+        let rule = camino::Utf8Path::new("some/rule");
+        let task = cpclib_bndbuild::task::Task::new_echo("hello");
+
+        tracker.update(BndBuilderEvent::StartTask(Some(rule), &task));
+        assert_eq!(tracker.failed_index_for("some/rule"), Some(0));
+        tracker.update(BndBuilderEvent::StartTask(Some(rule), &task));
+        assert_eq!(tracker.failed_index_for("some/rule"), Some(1));
+
+        assert_eq!(tracker.failed_index_for("other/rule"), None);
     }
 }
