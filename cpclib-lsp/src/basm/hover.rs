@@ -259,7 +259,7 @@ fn register_description(upper: &str) -> Option<String> {
 
 // ─── Directive documentation (generated from docs/basm/directives.md) ────────
 
-include!(concat!(env!("OUT_DIR"), "/directive_docs_generated.rs"));
+use super::token::DIRECTIVE_DOCS;
 
 /// Look up an assembler directive by name (case-insensitive) and return a
 /// markdown hover string, or `None` if not found.

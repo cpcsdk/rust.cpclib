@@ -113,3 +113,8 @@ impl AssemblyAnalyzer {
 pub(super) fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'@'
 }
+
+// ─── Generated directive documentation ────────────────────────────────────────
+
+// `DIRECTIVE_DOCS` + `DIRECTIVE_FILE_ARGS`, generated from docs/basm/directives.md.
+include!(concat!(env!("OUT_DIR"), "/directive_docs_generated.rs"));

@@ -125,17 +125,33 @@ fn test_build_tasks_examples_reference_their_command() {
 
 #[test]
 fn test_build_keywords_complete() {
-    // Test that all major build file keywords are present
-    let keyword_names: Vec<&str> = cpclib_bndbuild::lsp::BUILD_KEYWORDS
+    // The rule-level keys must cover every key of the bndbuild schema
+    // (schema.json): tgt/target/build, dep/dependency/requires,
+    // cmd/command/launch/run, help, phony, constraint.
+    let key_names: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
         .iter()
-        .map(|(name, _)| *name)
+        .flat_map(|k| k.names.iter().copied())
         .collect();
 
-    let expected = ["targets", "tasks", "deps", "args", "env"];
+    let expected = [
+        "tgt",
+        "target",
+        "build",
+        "dep",
+        "dependency",
+        "requires",
+        "cmd",
+        "command",
+        "launch",
+        "run",
+        "help",
+        "phony",
+        "constraint"
+    ];
     for keyword in &expected {
         assert!(
-            keyword_names.contains(keyword),
-            "Missing expected keyword: {}",
+            key_names.contains(keyword),
+            "Missing expected schema key: {}",
             keyword
         );
     }

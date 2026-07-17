@@ -10,6 +10,17 @@ impl BuildFileAnalyzer {
     pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
         let line = document.line(position.line as usize)?;
         let col = position.character as usize;
+
+        // Jinja variable: the definition is its `{% set NAME = ... %}` line;
+        // every other occurrence is a reference.
+        if let Some(word) = jinja_word_at(&line, col)
+            && let Some((_, location)) = super::jinja::collect_jinja_variables(document)
+                .into_iter()
+                .find(|(name, _)| *name == word)
+        {
+            return Some(location);
+        }
+
         let bytes = line.as_bytes();
         let len = bytes.len();
 
@@ -280,8 +291,77 @@ impl BuildFileAnalyzer {
         true
     }
 
-    pub fn find_references(&self, _document: &Document, _position: Position) -> Vec<Location> {
-        // TODO: Find all references to targets, variables, etc.
-        Vec::new()
+    /// References of a Jinja variable: every whole-word occurrence in the
+    /// document (the `{% set %}` line is the definition, the rest are uses).
+    pub fn find_references(&self, document: &Document, position: Position) -> Vec<Location> {
+        let Some(line) = document.line(position.line as usize)
+        else {
+            return Vec::new();
+        };
+        let Some(word) = jinja_word_at(&line, position.character as usize)
+        else {
+            return Vec::new();
+        };
+        // Only meaningful for variables that actually have a definition.
+        if !super::jinja::collect_jinja_variables(document)
+            .iter()
+            .any(|(name, _)| *name == word)
+        {
+            return Vec::new();
+        }
+
+        let text = document.text();
+        let mut refs = Vec::new();
+        for (line_idx, line) in text.lines().enumerate() {
+            let bytes = line.as_bytes();
+            let mut start = 0;
+            while let Some(pos) = line[start..].find(&word) {
+                let abs = start + pos;
+                let before_ok =
+                    abs == 0 || !(bytes[abs - 1].is_ascii_alphanumeric() || bytes[abs - 1] == b'_');
+                let after = abs + word.len();
+                let after_ok = after >= bytes.len()
+                    || !(bytes[after].is_ascii_alphanumeric() || bytes[after] == b'_');
+                if before_ok && after_ok {
+                    refs.push(Location {
+                        uri: document.uri.clone(),
+                        range: Range {
+                            start: Position {
+                                line: line_idx as u32,
+                                character: abs as u32
+                            },
+                            end: Position {
+                                line: line_idx as u32,
+                                character: after as u32
+                            }
+                        }
+                    });
+                }
+                start = abs + 1;
+            }
+        }
+        refs
+    }
+}
+
+/// The identifier under the cursor, when the cursor is inside Jinja braces
+/// (`{{ }}` / `{% %}`) on this line.
+fn jinja_word_at(line: &str, col: usize) -> Option<String> {
+    super::jinja::jinja_context_at(line, col)?;
+    let bytes = line.as_bytes();
+    let col = col.min(bytes.len());
+    let mut start = col;
+    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+        start -= 1;
+    }
+    let mut end = col;
+    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+        end += 1;
+    }
+    if start < end {
+        Some(line[start..end].to_string())
+    }
+    else {
+        None
     }
 }

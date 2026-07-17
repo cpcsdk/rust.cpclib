@@ -8,6 +8,7 @@ pub mod autocomplete;
 pub mod command;
 pub mod definition;
 pub mod diagnostics;
+pub mod format;
 pub mod hover;
 pub mod semantic_tokens;
 pub mod symbols;

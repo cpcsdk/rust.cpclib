@@ -5,8 +5,201 @@ use std::{env, fs};
 fn main() {
     println!("cargo:rerun-if-changed=data/timings.txt");
     println!("cargo:rerun-if-changed=../docs/basm/directives.md");
+    println!("cargo:rerun-if-changed=../cpclib-lsp-zed/snippets/basm.json");
     generate_directive_docs();
     generate_timings();
+    generate_instr_forms();
+    generate_snippets();
+}
+
+/// Generate the table of valid instruction forms (mnemonic + operand
+/// patterns) from `data/timings.txt`. Used by completion to filter out
+/// impossible operand combinations (e.g. the second `LD` argument depends on
+/// the first).
+fn generate_instr_forms() {
+    let src = fs::read_to_string("data/timings.txt").expect("cannot read data/timings.txt");
+
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dest = Path::new(&out_dir).join("instr_forms_generated.rs");
+    let mut out = fs::File::create(dest).unwrap();
+
+    writeln!(out, "// Auto-generated from data/timings.txt — do not edit").unwrap();
+    writeln!(
+        out,
+        "/// Valid instruction forms: (MNEMONIC, operand patterns)."
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "pub static INSTR_FORMS: &[(&'static str, &'static [&'static str])] = &["
+    )
+    .unwrap();
+
+    let mut emit_form = |pattern: &str| {
+        let pattern = pattern.trim();
+        let (mnemonic, rest) = match pattern.split_once(char::is_whitespace) {
+            Some((m, r)) => (m, r.trim()),
+            None => (pattern, "")
+        };
+        if mnemonic.is_empty() || !mnemonic.starts_with(|c: char| c.is_ascii_alphabetic()) {
+            return;
+        }
+        let operands: Vec<String> = if rest.is_empty() {
+            Vec::new()
+        }
+        else {
+            split_operands(rest)
+                .into_iter()
+                .map(|o| o.trim().to_lowercase())
+                .collect()
+        };
+        let ops_lit: Vec<String> = operands.iter().map(|o| format!("\"{}\"", esc(o))).collect();
+        writeln!(
+            out,
+            "    (\"{}\", &[{}]),",
+            esc(&mnemonic.to_uppercase()),
+            ops_lit.join(", ")
+        )
+        .unwrap();
+    };
+
+    for raw_line in src.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with(';') {
+            continue;
+        }
+        let parts: Vec<&str> = line.splitn(4, '|').collect();
+        if parts.len() < 4 {
+            continue;
+        }
+        let pattern = parts[0].trim();
+        let flags = parts[2].trim();
+        if !pattern.starts_with(|c: char| c.is_ascii_alphabetic()) || flags.len() != 8 {
+            continue;
+        }
+        emit_form(pattern);
+    }
+
+    // Same injected ALU variants as the timing table.
+    for pattern in [
+        "adc (hl)",
+        "adc (ix+n)",
+        "adc n",
+        "sub (hl)",
+        "sub (ix+n)",
+        "sub n",
+        "sbc (hl)",
+        "sbc (ix+n)",
+        "sbc n",
+        "and (hl)",
+        "and (ix+n)",
+        "and n",
+        "or (hl)",
+        "or (ix+n)",
+        "or n",
+        "xor (hl)",
+        "xor (ix+n)",
+        "xor n",
+        "cp (hl)",
+        "cp (ix+n)",
+        "cp n"
+    ] {
+        emit_form(pattern);
+    }
+
+    writeln!(out, "];").unwrap();
+}
+
+/// Split an operand list at top-level commas (commas inside parentheses do
+/// not split — e.g. there are none in practice, but stay safe).
+fn split_operands(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    for (i, b) in s.bytes().enumerate() {
+        match b {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            b',' if depth <= 0 => {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            },
+            _ => {}
+        }
+    }
+    parts.push(&s[start..]);
+    parts
+}
+
+/// Generate completion snippets from the Zed extension's snippet file, so the
+/// same file can be reused in other contexts.
+fn generate_snippets() {
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let dest = Path::new(&out_dir).join("snippets_generated.rs");
+
+    let empty = "pub static SNIPPETS: &[(&str, &str, &str)] = &[];\n";
+    let src = match fs::read_to_string("../cpclib-lsp-zed/snippets/basm.json") {
+        Ok(s) => s,
+        Err(_) => {
+            fs::write(dest, empty).unwrap();
+            return;
+        }
+    };
+    let json: serde_json::Value = match serde_json::from_str(&src) {
+        Ok(v) => v,
+        Err(e) => {
+            println!("cargo:warning=cannot parse basm.json snippets: {e}");
+            fs::write(dest, empty).unwrap();
+            return;
+        }
+    };
+
+    let mut out = fs::File::create(dest).unwrap();
+    writeln!(
+        out,
+        "// Auto-generated from cpclib-lsp-zed/snippets/basm.json — do not edit"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "/// (prefix, description, snippet body in LSP snippet syntax)"
+    )
+    .unwrap();
+    writeln!(out, "pub static SNIPPETS: &[(&str, &str, &str)] = &[").unwrap();
+
+    if let Some(map) = json.as_object() {
+        for (name, snip) in map {
+            let prefix = snip.get("prefix").and_then(|v| v.as_str()).unwrap_or("");
+            if prefix.is_empty() {
+                continue;
+            }
+            let description = snip
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or(name);
+            let body = match snip.get("body") {
+                Some(serde_json::Value::String(s)) => s.clone(),
+                Some(serde_json::Value::Array(lines)) => {
+                    lines
+                        .iter()
+                        .filter_map(|l| l.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                },
+                _ => continue
+            };
+            writeln!(
+                out,
+                "    (\"{}\", \"{}\", \"{}\"),",
+                esc_str(prefix),
+                esc_str(description),
+                esc_str(&body)
+            )
+            .unwrap();
+        }
+    }
+
+    writeln!(out, "];").unwrap();
 }
 
 fn generate_directive_docs() {
@@ -19,7 +212,8 @@ fn generate_directive_docs() {
             let dest = Path::new(&out_dir).join("directive_docs_generated.rs");
             fs::write(
                 dest,
-                "pub static DIRECTIVE_DOCS: &[(&[&str], &str)] = &[];\n"
+                "pub static DIRECTIVE_DOCS: &[(&[&str], &str)] = &[];\n\
+                 pub static DIRECTIVE_FILE_ARGS: &[&str] = &[];\n"
             )
             .unwrap();
             return;
@@ -39,7 +233,7 @@ fn generate_directive_docs() {
     .unwrap();
     writeln!(out, "pub static DIRECTIVE_DOCS: &[(&[&str], &str)] = &[").unwrap();
 
-    for (names, doc) in &entries {
+    for (names, doc, _) in &entries {
         let names_lit: Vec<String> = names
             .iter()
             .map(|n| format!("\"{}\"", esc_str(n)))
@@ -54,10 +248,45 @@ fn generate_directive_docs() {
     }
 
     writeln!(out, "];").unwrap();
+
+    // Directives whose synopsis takes a quoted filename argument (INCLUDE,
+    // INCBIN, SAVE, ...): completion offers filenames-in-strings for these.
+    writeln!(out).unwrap();
+    writeln!(
+        out,
+        "/// Directive names (uppercase) whose argument is a quoted filename."
+    )
+    .unwrap();
+    writeln!(out, "pub static DIRECTIVE_FILE_ARGS: &[&str] = &[").unwrap();
+    for (names, _, has_file_arg) in &entries {
+        if !has_file_arg {
+            continue;
+        }
+        for n in names {
+            writeln!(out, "    \"{}\",", esc_str(&n.to_uppercase())).unwrap();
+        }
+    }
+    writeln!(out, "];").unwrap();
 }
 
-/// Parse the directives.md and return `(names, hover_markdown)` pairs.
-fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String)> {
+/// Returns true when a directive synopsis takes a quoted filename argument.
+fn synopsis_has_file_arg(syn: &str) -> bool {
+    let lower = syn.to_lowercase();
+    [
+        "\"fname",
+        "\"<fname",
+        "\"filename",
+        "\"template",
+        ".sna\"",
+        ".cpr\"",
+        ".dsk\""
+    ]
+    .iter()
+    .any(|m| lower.contains(m))
+}
+
+/// Parse the directives.md and return `(names, hover_markdown, has_file_arg)` tuples.
+fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String, bool)> {
     #[derive(PartialEq)]
     enum Sec {
         None,
@@ -66,7 +295,7 @@ fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String)> {
         Example
     }
 
-    let mut result: Vec<(Vec<String>, String)> = Vec::new();
+    let mut result: Vec<(Vec<String>, String, bool)> = Vec::new();
     let mut names: Vec<String> = Vec::new();
     let mut syn: String = String::new();
     let mut desc: String = String::new();
@@ -76,7 +305,7 @@ fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String)> {
     let flush = |names: &mut Vec<String>,
                  syn: &mut String,
                  desc: &mut String,
-                 result: &mut Vec<(Vec<String>, String)>| {
+                 result: &mut Vec<(Vec<String>, String, bool)>| {
         if names.is_empty() {
             return;
         }
@@ -90,7 +319,8 @@ fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String)> {
         if !d.is_empty() {
             doc.push_str(&format!("\n\n{d}"));
         }
-        result.push((std::mem::take(names), doc));
+        let has_file_arg = synopsis_has_file_arg(syn);
+        result.push((std::mem::take(names), doc, has_file_arg));
         syn.clear();
         desc.clear();
     };

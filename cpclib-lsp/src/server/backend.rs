@@ -91,6 +91,10 @@ impl LanguageServer for CpcLspBackend {
                     work_done_progress_options: WorkDoneProgressOptions::default()
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                document_on_type_formatting_provider: Some(DocumentOnTypeFormattingOptions {
+                    first_trigger_character: "\n".to_string(),
+                    more_trigger_character: None
+                }),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -213,7 +217,17 @@ impl LanguageServer for CpcLspBackend {
             let document = entry.value();
 
             let completions = match document.doc_type {
-                DocumentType::Assembly => self.asm_analyzer.completion(document, position),
+                DocumentType::Assembly => {
+                    // Labels from the other open assembly files are offered too.
+                    let others: Vec<Document> = self
+                        .documents
+                        .iter()
+                        .filter(|e| *e.key() != uri && e.value().doc_type == DocumentType::Assembly)
+                        .map(|e| e.value().clone())
+                        .collect();
+                    self.asm_analyzer
+                        .completion_with_documents(document, position, &others)
+                },
                 DocumentType::BuildFile => self.build_analyzer.completion(document, position),
                 DocumentType::Basic => self.basic_analyzer.completion(document, position),
                 DocumentType::Unknown => Vec::new()
@@ -533,6 +547,26 @@ impl LanguageServer for CpcLspBackend {
                     ..base_opt
                 };
                 return Ok(self.asm_analyzer.format(document, &opt));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn on_type_formatting(
+        &self,
+        params: DocumentOnTypeFormattingParams
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        if params.ch != "\n" {
+            return Ok(None);
+        }
+        if let Some(entry) = self.documents.get(&uri) {
+            let document = entry.value();
+            if document.doc_type == DocumentType::Basic {
+                // Continue BASIC line numbering on the new line.
+                return Ok(self.basic_analyzer.on_type_newline(document, position));
             }
         }
         Ok(None)

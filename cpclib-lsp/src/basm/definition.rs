@@ -72,43 +72,103 @@ impl AssemblyAnalyzer {
     }
 
     /// Search `document` for a definition of `word_upper` (already uppercased).
+    ///
+    /// A *definition* is a label token, or a directive that assigns the symbol
+    /// (`EQU` / `=`), or a macro/module declaration — never a mere reference
+    /// (e.g. the operand of a `CALL`/`JR`).
+    ///
     /// Returns the first matching `Location`, or `None`.
     pub fn find_definition_in(&self, document: &Document, word_upper: &str) -> Option<Location> {
-        let listing = self.parse_document(document).ok()?;
-        for token in listing.iter() {
-            let source_name: &str = if token.is_label() {
-                token.label_symbol()
+        if let Ok(listing) = self.parse_document(document) {
+            for token in listing.iter() {
+                let source_name: &str = if token.is_label() {
+                    token.label_symbol()
+                }
+                else if token.is_equ() {
+                    token.equ_symbol()
+                }
+                else if token.is_assign() {
+                    token.assign_symbol()
+                }
+                else if token.is_macro_definition() {
+                    // TODO add the same for struct
+                    token.macro_definition_name()
+                }
+                else if token.is_module() {
+                    token.module_name()
+                }
+                else {
+                    continue;
+                };
+                if source_name.to_uppercase() == word_upper {
+                    let span = token.span();
+                    let (line_1based, col_1based) = span.relative_line_and_column();
+                    let lsp_line = line_1based.saturating_sub(1) as u32;
+                    let lsp_char = col_1based.saturating_sub(1) as u32;
+                    return Some(Location {
+                        uri: document.uri.clone(),
+                        range: Range {
+                            start: Position {
+                                line: lsp_line,
+                                character: lsp_char
+                            },
+                            end: Position {
+                                line: lsp_line,
+                                character: lsp_char + source_name.len() as u32
+                            }
+                        }
+                    });
+                }
             }
-            else if token.is_equ() {
-                token.equ_symbol()
-            }
-            else if token.is_assign() {
-                token.assign_symbol()
-            }
-            else if token.is_macro_definition() {
-                token.macro_definition_name()
-            }
-            else if token.is_module() {
-                token.module_name()
-            }
+        }
+
+        // Text-based fallback, used both when the document does not fully
+        // parse (goto-definition must keep working in files that don't
+        // assemble yet, e.g. work-in-progress or disassembler output) and
+        // when the parsed listing did not yield the symbol.
+        self.find_definition_by_text(document, word_upper)
+    }
+
+    /// Line-oriented definition scan, used when the parsed listing yields
+    /// nothing: matches `word:` / `word` at line start, and `word EQU ...` /
+    /// `word = ...` anywhere the symbol starts the statement.
+    fn find_definition_by_text(&self, document: &Document, word_upper: &str) -> Option<Location> {
+        let text = document.text();
+        for (line_idx, line) in text.lines().enumerate() {
+            let trimmed = line.trim_start();
+            let indent = line.len() - trimmed.len();
+            let upper = trimmed.to_uppercase();
+
+            let Some(rest) = upper.strip_prefix(word_upper)
             else {
                 continue;
             };
-            if source_name.to_uppercase() == word_upper {
-                let span = token.span();
-                let (line_1based, col_1based) = span.relative_line_and_column();
-                let lsp_line = line_1based.saturating_sub(1) as u32;
-                let lsp_char = col_1based.saturating_sub(1) as u32;
+            // Must be a whole word.
+            if rest.as_bytes().first().is_some_and(|&b| is_ident_byte(b)) {
+                continue;
+            }
+
+            let rest_trimmed = rest.trim_start();
+            let is_label_def = (rest.starts_with(':') && !rest.starts_with("::"))
+                || (indent == 0 && (rest_trimmed.is_empty() || rest_trimmed.starts_with(';')));
+            let is_symbol_def = rest_trimmed.starts_with("EQU")
+                && !rest_trimmed
+                    .as_bytes()
+                    .get(3)
+                    .is_some_and(|&b| is_ident_byte(b))
+                || (rest_trimmed.starts_with('=') && !rest_trimmed.starts_with("=="));
+
+            if is_label_def || is_symbol_def {
                 return Some(Location {
                     uri: document.uri.clone(),
                     range: Range {
                         start: Position {
-                            line: lsp_line,
-                            character: lsp_char
+                            line: line_idx as u32,
+                            character: indent as u32
                         },
                         end: Position {
-                            line: lsp_line,
-                            character: lsp_char + source_name.len() as u32
+                            line: line_idx as u32,
+                            character: (indent + word_upper.len()) as u32
                         }
                     }
                 });
@@ -117,6 +177,7 @@ impl AssemblyAnalyzer {
         None
     }
 
+    /// TODO rename it find_reference_in_by_text and rewrite find_reference_in using the listing. The references will be stored in expressions
     /// Find all occurrences of `word_upper` (already uppercased) as whole words in `document`.
     pub fn find_references_in(&self, document: &Document, word_upper: &str) -> Vec<Location> {
         let text = document.text();
@@ -235,5 +296,61 @@ fn find_quoted_string(bytes: &[u8], col: usize) -> Option<(usize, usize)> {
     }
     else {
         None
+    }
+}
+
+#[cfg(test)]
+mod definition_tests {
+    use super::*;
+
+    #[test]
+    fn label_definition_found_not_reference() {
+        let text = r#"
+        call    nz,output_char    ;{{c390:c4a0c3}} ; display text char
+        jr      nz,_output_asciiz_string_2;{{c393:20f8}}  (-$08)
+
+        pop     hl                ;{{c395:e1}}
+        pop     af                ;{{c396:f1}}
+        ret                       ;{{c397:c9}}
+output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
+        ret
+"#;
+        let uri = tower_lsp::lsp_types::Url::parse("file:///test.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        let loc = analyzer.find_definition_in(&doc, "OUTPUT_CHAR");
+        assert!(loc.is_some(), "definition of output_char should be found");
+        let loc = loc.unwrap();
+        assert_eq!(
+            loc.range.start.line, 7,
+            "definition is the label line, not the call reference"
+        );
+    }
+
+    #[test]
+    fn label_definition_found_despite_parse_error_elsewhere() {
+        // The `!!!` line does not assemble; goto-definition must still work.
+        let text = "        call nz,output_char\n        !!! invalid line !!!\noutput_char:\n        ret\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///test2.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        let loc = analyzer.find_definition_in(&doc, "OUTPUT_CHAR");
+        assert!(
+            loc.is_some(),
+            "definition should be found even with parse errors"
+        );
+        assert_eq!(loc.unwrap().range.start.line, 2);
+    }
+
+    #[test]
+    fn equ_and_assign_definitions_found() {
+        let text = "        ld a,(screen_base)\nscreen_base equ 0xC000\nother_sym = 12\n        ld hl,other_sym\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///test3.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        let loc = analyzer.find_definition_in(&doc, "SCREEN_BASE");
+        assert_eq!(loc.expect("equ definition").range.start.line, 1);
+        let loc = analyzer.find_definition_in(&doc, "OTHER_SYM");
+        assert_eq!(loc.expect("= definition").range.start.line, 2);
     }
 }

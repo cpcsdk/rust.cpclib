@@ -11,6 +11,18 @@ use tower_lsp::lsp_types::*;
 use super::BuildFileAnalyzer;
 use crate::common::document::Document;
 
+/// What a `- ` list item (or a bare line) belongs to, per the bndbuild
+/// schema: the document is an array of rules; a rule's `cmd:` key holds a
+/// list of task invocations.
+#[derive(Debug, PartialEq)]
+enum ListContext {
+    /// Item of the document root array, or continuation lines of a rule
+    /// mapping: rule keys apply here.
+    Rule,
+    /// Item nested under a `cmd:`/`tasks:`/... key: task invocations apply.
+    Tasks
+}
+
 impl BuildFileAnalyzer {
     /// Provide completion suggestions for build files
     pub fn completion(&self, document: &Document, position: Position) -> Vec<CompletionItem> {
@@ -18,16 +30,15 @@ impl BuildFileAnalyzer {
 
         let line_idx = position.line as usize;
         if let Some(line) = document.line(line_idx) {
-            let indent = line.chars().take_while(|c| c.is_whitespace()).count();
             let cursor = position.character as usize;
 
-            // If we're at the start of a line or after whitespace, suggest top-level keys
-            if indent == 0 || line.trim().is_empty() {
-                completions.extend(self.get_top_level_completions());
+            // Inside `{{ }}` / `{% %}`: offer Jinja-context completions only
+            // (never the brace snippets - the braces are already there).
+            if let Some(ctx) = super::jinja::jinja_context_at(&line, cursor) {
+                return self.get_jinja_inner_completions(document, ctx);
             }
-            else if let Some((cmd_name, args, arg_index)) =
-                self.command_argv_at_cursor(&line, cursor)
-            {
+
+            if let Some((cmd_name, args, arg_index)) = self.command_argv_at_cursor(&line, cursor) {
                 let prefix = args[arg_index].to_string_lossy().into_owned();
                 if super::internal_commands::get_command_for(cmd_name).is_some() {
                     // Internal command: offer real flag/value completion driven
@@ -50,33 +61,155 @@ impl BuildFileAnalyzer {
                 // Inside a `targets:`/`dependencies:` (or aliases) scalar value
                 completions.extend(self.get_filename_completions(document, &prefix));
             }
-            else if line.trim_start().starts_with("- ") {
-                // Inside a list - suggest task types
-                completions.extend(self.get_task_completions());
+            else if let Some(values) = self.boolean_key_value_at_cursor(&line, cursor) {
+                // `phony:` takes a boolean
+                completions.extend(values);
+            }
+            else {
+                // Key/task-name position: what applies depends on the schema
+                // context of this line, not on a blanket "list item" rule.
+                match self.list_context_at(document, line_idx) {
+                    ListContext::Tasks => completions.extend(self.get_task_completions()),
+                    ListContext::Rule => completions.extend(self.get_rule_key_completions())
+                }
             }
         }
 
-        // Add Jinja template completions
+        // Jinja brace snippets - only offered outside existing braces.
         completions.extend(self.get_jinja_completions());
 
         completions
     }
 
-    fn get_top_level_completions(&self) -> Vec<CompletionItem> {
-        // Use cpclib-bndbuild's build keywords
-        cpclib_bndbuild::lsp::BUILD_KEYWORDS
+    /// Decide whether the line belongs to a rule mapping (offer rule keys) or
+    /// to a task list under `cmd:`/`tasks:`/... (offer task invocations), by
+    /// scanning up for the closest enclosing line with a smaller indent.
+    fn list_context_at(&self, document: &Document, line_idx: usize) -> ListContext {
+        let Some(line) = document.line(line_idx)
+        else {
+            return ListContext::Rule;
+        };
+        let indent = line.chars().take_while(|c| c.is_whitespace()).count();
+
+        let task_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
             .iter()
-            .map(|(keyword, description)| {
+            .find(|k| k.names.contains(&"tasks"))
+            .map(|k| k.names.to_vec())
+            .unwrap_or_default();
+
+        for prev_idx in (0..line_idx).rev() {
+            let Some(prev) = document.line(prev_idx)
+            else {
+                continue;
+            };
+            if prev.trim().is_empty() {
+                continue;
+            }
+            let prev_indent = prev.chars().take_while(|c| c.is_whitespace()).count();
+            if prev_indent >= indent {
+                continue;
+            }
+            // Closest enclosing line: is it a task-list key?
+            let content = prev.trim_start();
+            let content = content.strip_prefix("- ").unwrap_or(content);
+            if let Some((key, _)) = content.split_once(':')
+                && task_keys.contains(&key.trim())
+            {
+                return ListContext::Tasks;
+            }
+            return ListContext::Rule;
+        }
+        ListContext::Rule
+    }
+
+    /// `true`/`false` completion for the boolean `phony:` key.
+    fn boolean_key_value_at_cursor(
+        &self,
+        line: &str,
+        cursor: usize
+    ) -> Option<Vec<CompletionItem>> {
+        let content = line.trim_start();
+        let content = content.strip_prefix("- ").unwrap_or(content);
+        let (key, _) = content.split_once(':')?;
+        if key.trim() != "phony" {
+            return None;
+        }
+        // Cursor must be after the colon.
+        let colon_col = line.find(':')?;
+        if cursor <= colon_col {
+            return None;
+        }
+        Some(
+            ["true", "false"]
+                .iter()
+                .map(|v| {
+                    CompletionItem {
+                        label: v.to_string(),
+                        kind: Some(CompletionItemKind::VALUE),
+                        insert_text: Some(v.to_string()),
+                        insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+                        ..Default::default()
+                    }
+                })
+                .collect()
+        )
+    }
+
+    /// Rule-level keys from the schema (tgt/dep/cmd/help/phony/constraint and
+    /// their aliases).
+    fn get_rule_key_completions(&self) -> Vec<CompletionItem> {
+        cpclib_bndbuild::lsp::RULE_KEYS
+            .iter()
+            .flat_map(|key| {
+                key.names.iter().map(move |name| {
+                    CompletionItem {
+                        label: name.to_string(),
+                        kind: Some(CompletionItemKind::KEYWORD),
+                        detail: Some(key.description.to_string()),
+                        insert_text: Some(format!("{}: ", name)),
+                        insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+                        ..Default::default()
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// Completions offered *inside* Jinja braces: `{% set %}` variables, plus
+    /// statement keywords when inside `{% ... %}`.
+    fn get_jinja_inner_completions(
+        &self,
+        document: &Document,
+        ctx: super::jinja::JinjaContext
+    ) -> Vec<CompletionItem> {
+        let mut completions: Vec<CompletionItem> = super::jinja::collect_jinja_variables(document)
+            .into_iter()
+            .map(|(name, _)| {
                 CompletionItem {
-                    label: keyword.to_string(),
-                    kind: Some(CompletionItemKind::KEYWORD),
-                    detail: Some(description.to_string()),
-                    insert_text: Some(format!("{}:\n  ", keyword)),
+                    label: name.clone(),
+                    kind: Some(CompletionItemKind::VARIABLE),
+                    detail: Some("Jinja variable ({% set %})".to_string()),
+                    insert_text: Some(name),
                     insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
                     ..Default::default()
                 }
             })
-            .collect()
+            .collect();
+
+        if ctx == super::jinja::JinjaContext::Statement {
+            for (kw, detail) in super::jinja::JINJA_STATEMENT_KEYWORDS {
+                completions.push(CompletionItem {
+                    label: kw.to_string(),
+                    kind: Some(CompletionItemKind::KEYWORD),
+                    detail: Some(detail.to_string()),
+                    insert_text: Some(kw.to_string()),
+                    insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+                    ..Default::default()
+                });
+            }
+        }
+
+        completions
     }
 
     fn get_task_completions(&self) -> Vec<CompletionItem> {
@@ -589,5 +722,123 @@ mod get_filename_completions_tests {
         let items = BuildFileAnalyzer::new().get_filename_completions(&document, "src");
         let src_item = items.iter().find(|i| i.label == "src").unwrap();
         assert_eq!(src_item.insert_text, Some("src/".to_string()));
+    }
+}
+
+#[cfg(test)]
+mod schema_context_tests {
+    use super::*;
+
+    fn complete(text: &str, line: u32, character: u32) -> Vec<String> {
+        let uri = Url::parse("file:///t.bnd").unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        BuildFileAnalyzer::new()
+            .completion(&doc, Position { line, character })
+            .iter()
+            .map(|i| i.label.clone())
+            .collect()
+    }
+
+    #[test]
+    fn rule_start_offers_rule_keys_not_tasks() {
+        // `- ` at document root starts a new rule: keys, not task names.
+        let labels = complete("- tgt: out.bin\n- ", 1, 2);
+        assert!(labels.contains(&"tgt".to_string()), "{labels:?}");
+        assert!(labels.contains(&"dep".to_string()));
+        assert!(
+            !labels.contains(&"basm".to_string()),
+            "task names don't belong here: {labels:?}"
+        );
+    }
+
+    #[test]
+    fn task_list_offers_task_names_not_keys() {
+        let text = "- tgt: out.bin\n  cmd:\n    - ";
+        let labels = complete(text, 2, 6);
+        assert!(labels.contains(&"basm".to_string()), "{labels:?}");
+        assert!(
+            !labels.contains(&"tgt".to_string()),
+            "rule keys don't belong here: {labels:?}"
+        );
+    }
+
+    #[test]
+    fn rule_continuation_line_offers_rule_keys() {
+        let text = "- tgt: out.bin\n  ";
+        let labels = complete(text, 1, 2);
+        assert!(labels.contains(&"dep".to_string()), "{labels:?}");
+        assert!(labels.contains(&"phony".to_string()));
+    }
+
+    #[test]
+    fn phony_value_offers_booleans() {
+        let text = "- tgt: out.bin\n  phony: ";
+        let labels = complete(text, 1, 9);
+        assert!(labels.contains(&"true".to_string()), "{labels:?}");
+        assert!(labels.contains(&"false".to_string()));
+    }
+
+    #[test]
+    fn no_brace_snippets_inside_jinja() {
+        let text = "{% set root = \"src\" %}\n- tgt: {{r";
+        let labels = complete(text, 1, 10);
+        assert!(
+            !labels.iter().any(|l| l.contains("{{")),
+            "brace snippets must not be offered inside jinja: {labels:?}"
+        );
+        assert!(
+            labels.contains(&"root".to_string()),
+            "set variables offered: {labels:?}"
+        );
+    }
+
+    #[test]
+    fn jinja_statement_offers_keywords_and_variables() {
+        let text = "{% set root = \"src\" %}\n{% ";
+        let labels = complete(text, 1, 3);
+        assert!(labels.contains(&"if".to_string()), "{labels:?}");
+        assert!(labels.contains(&"endfor".to_string()));
+        assert!(labels.contains(&"root".to_string()));
+    }
+
+    #[test]
+    fn brace_snippets_offered_outside_jinja() {
+        let labels = complete("- tgt: out.bin\n- ", 1, 2);
+        assert!(labels.iter().any(|l| l.contains("{{")), "{labels:?}");
+    }
+}
+
+#[cfg(test)]
+mod jinja_definition_tests {
+    use super::*;
+
+    #[test]
+    fn jinja_variable_definition_and_references() {
+        let uri = Url::parse("file:///t.bnd").unwrap();
+        let text =
+            "{% set root = \"src\" %}\n- tgt: {{root}}/out.bin\n  cmd: basm {{root}}/main.asm\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let analyzer = BuildFileAnalyzer::new();
+
+        // goto-definition from the use on line 1 goes to the set on line 0
+        let def = analyzer.goto_definition(
+            &doc,
+            Position {
+                line: 1,
+                character: 10
+            }
+        );
+        assert_eq!(def.expect("definition").range.start.line, 0);
+
+        // references include the set line and both uses
+        let refs = analyzer.find_references(
+            &doc,
+            Position {
+                line: 1,
+                character: 10
+            }
+        );
+        let lines: Vec<u32> = refs.iter().map(|r| r.range.start.line).collect();
+        assert_eq!(lines, vec![0, 1, 2], "{refs:?}");
     }
 }
