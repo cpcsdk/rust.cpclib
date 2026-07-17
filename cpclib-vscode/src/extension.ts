@@ -27,6 +27,20 @@ export function activate(context: ExtensionContext) {
         ],
         synchronize: {
             fileEvents: workspace.createFileSystemWatcher('{**/*.{asm,z80,build,bnd,bas,BAS},**/bndbuild.yml}')
+        },
+        middleware: {
+            // The server streams build output (stdout/stderr as the rule
+            // runs) via `window/logMessage`, which vscode-languageclient
+            // always writes to its own "CPClib LSP" output channel - but
+            // never *shows* that channel on its own. Reveal it right when a
+            // build starts, the same way the old terminal-based runner used
+            // to pop into view; `true` preserves editor focus.
+            executeCommand: (command, args, next) => {
+                if (command === 'cpclib.runRule') {
+                    client.outputChannel.show(true);
+                }
+                return next(command, args);
+            }
         }
     };
 
@@ -44,6 +58,9 @@ export function activate(context: ExtensionContext) {
     // start (no code lenses, no completion, nothing). Clicking the "▶ Run"
     // code lens therefore goes through the bridge to the server, which runs
     // the rule and publishes a diagnostic on the failing line when it fails.
+    // The `executeCommand` middleware above reveals the output channel; the
+    // bridge (registered by vscode-languageclient itself) forwards the
+    // request to the server unchanged.
 
     client.start().then(() => {
         window.showInformationMessage('CPClib LSP server started.');

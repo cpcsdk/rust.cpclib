@@ -421,12 +421,36 @@ impl LanguageServer for CpcLspBackend {
                 .log_message(MessageType::INFO, format!("Building rule '{rule}'..."))
                 .await;
 
+            // Stream build output to the client's output channel as it
+            // happens, the same way a terminal used to show it. The channel
+            // closes on its own once `run_rule` (and its observer) drop `tx`
+            // at the end of the blocking task, ending `log_task`.
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
             // The build is heavy and synchronous: run it on a worker thread.
             let outcome = {
                 let document = document.clone();
                 let rule = rule.clone();
                 tokio::task::spawn_blocking(move || {
-                    crate::bndbuild::BuildFileAnalyzer::new().run_rule(&document, &rule)
+                    crate::bndbuild::BuildFileAnalyzer::new().run_rule(&document, &rule, Some(tx))
                 })
                 .await
                 .map_err(|e| {
@@ -437,6 +461,7 @@ impl LanguageServer for CpcLspBackend {
                     }
                 })?
             };
+            let _ = log_task.await;
 
             // Static analysis diagnostics + the failure highlight (if any):
             // publishing replaces the previous set, so a successful build
