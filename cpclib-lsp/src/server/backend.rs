@@ -87,6 +87,7 @@ impl LanguageServer for CpcLspBackend {
                     commands: vec![
                         "cpclib.getTargets".to_string(),
                         "cpclib.selectRange".to_string(),
+                        "cpclib.runRule".to_string(),
                     ],
                     work_done_progress_options: WorkDoneProgressOptions::default()
                 }),
@@ -392,6 +393,73 @@ impl LanguageServer for CpcLspBackend {
         &self,
         params: ExecuteCommandParams
     ) -> Result<Option<serde_json::Value>> {
+        if params.command == "cpclib.runRule" {
+            let mut args = params.arguments.into_iter();
+            let rule = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let (Some(rule), Some(fname)) = (rule, fname)
+            else {
+                return Ok(None);
+            };
+            let Ok(uri) = Url::from_file_path(&fname)
+            else {
+                return Ok(None);
+            };
+
+            // Use the open document when available, else load from disk.
+            let document = if let Some(entry) = self.documents.get(&uri) {
+                entry.value().clone()
+            }
+            else if let Ok(text) = std::fs::read_to_string(&fname) {
+                Document::new(uri.clone(), text, 0)
+            }
+            else {
+                return Ok(None);
+            };
+
+            self.client
+                .log_message(MessageType::INFO, format!("Building rule '{rule}'..."))
+                .await;
+
+            // The build is heavy and synchronous: run it on a worker thread.
+            let outcome = {
+                let document = document.clone();
+                let rule = rule.clone();
+                tokio::task::spawn_blocking(move || {
+                    crate::bndbuild::BuildFileAnalyzer::new().run_rule(&document, &rule)
+                })
+                .await
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("build task panicked: {e}").into(),
+                        data: None
+                    }
+                })?
+            };
+
+            // Static analysis diagnostics + the failure highlight (if any):
+            // publishing replaces the previous set, so a successful build
+            // clears an earlier failure marker.
+            let mut diagnostics = self.build_analyzer.analyze(&document);
+            let failed = !outcome.success;
+            diagnostics.extend(outcome.diagnostics);
+            self.publish_diagnostics(uri, diagnostics).await;
+
+            self.client
+                .show_message(
+                    if failed {
+                        MessageType::ERROR
+                    }
+                    else {
+                        MessageType::INFO
+                    },
+                    &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
         if params.command == "cpclib.selectRange" {
             if let Some(arg) = params.arguments.into_iter().next() {
                 let uri = arg

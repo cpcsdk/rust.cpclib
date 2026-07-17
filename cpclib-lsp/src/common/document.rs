@@ -20,7 +20,12 @@ impl DocumentType {
         if path.ends_with(".asm") || path.ends_with(".s") || path.ends_with(".z80") {
             Self::Assembly
         }
-        else if path.ends_with(".build") || path.ends_with(".bnd") {
+        else if path.ends_with(".build")
+            || path.ends_with(".bnd")
+            || path.ends_with("/bndbuild.yml")
+            || path.ends_with("bndbuild.yml") && !path.contains('/')
+        {
+            // `bndbuild.yml` is one of bndbuild's standard build-file names.
             Self::BuildFile
         }
         else if path.ends_with(".bas") || path.ends_with(".BAS") {
@@ -32,9 +37,11 @@ impl DocumentType {
     }
 
     pub fn from_language_id(language_id: &str) -> Self {
+        // Includes the ids sent by the Zed extension ("Assembly"/"Buildfile",
+        // per cpclib-lsp-zed/extension.toml `language_ids`).
         match language_id {
-            "basm" | "asm" | "z80" => Self::Assembly,
-            "bndbuild" => Self::BuildFile,
+            "basm" | "asm" | "z80" | "Assembly" => Self::Assembly,
+            "bndbuild" | "Buildfile" => Self::BuildFile,
             "locomotive-basic" => Self::Basic,
             _ => Self::Unknown
         }

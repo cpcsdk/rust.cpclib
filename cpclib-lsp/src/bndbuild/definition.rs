@@ -211,7 +211,11 @@ impl BuildFileAnalyzer {
     /// `filename`.  Exact matches take priority; Jinja template patterns
     /// (e.g., `HBL.{{hbl.nb}}`) are used as a fallback so that clicking
     /// `HBL.002` in a dep field navigates to the template line.
-    fn find_target_line(text: &str, filename: &str, tgt_key_names: &[&str]) -> Option<u32> {
+    pub(super) fn find_target_line(
+        text: &str,
+        filename: &str,
+        tgt_key_names: &[&str]
+    ) -> Option<u32> {
         let mut template_match: Option<u32> = None;
 
         for (line_num, line) in text.lines().enumerate() {

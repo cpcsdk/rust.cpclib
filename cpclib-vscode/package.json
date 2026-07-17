@@ -24,6 +24,7 @@
         "id": "bndbuild",
         "aliases": ["BndBuild", "Bndbuild"],
         "extensions": [".build", ".bnd"],
+        "filenames": ["bndbuild.yml"],
         "configuration": "./language-configuration-bnd.json"
       },
       {

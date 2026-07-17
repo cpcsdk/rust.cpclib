@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { workspace, ExtensionContext, window, commands, Terminal } from 'vscode';
+import { workspace, ExtensionContext, window } from 'vscode';
 import * as path from 'path';
 import {
     LanguageClient,
@@ -9,14 +9,6 @@ import {
 } from 'vscode-languageclient/node';
 
 let client: LanguageClient;
-let buildTerminal: Terminal | undefined;
-
-function getOrCreateTerminal(): Terminal {
-    if (!buildTerminal || buildTerminal.exitStatus !== undefined) {
-        buildTerminal = window.createTerminal('CPClib Build');
-    }
-    return buildTerminal;
-}
 
 export function activate(context: ExtensionContext) {
     const config = workspace.getConfiguration('cpclib-lsp');
@@ -34,7 +26,7 @@ export function activate(context: ExtensionContext) {
             { scheme: 'file', language: 'locomotive-basic' }
         ],
         synchronize: {
-            fileEvents: workspace.createFileSystemWatcher('**/*.{asm,z80,build,bnd,bas,BAS}')
+            fileEvents: workspace.createFileSystemWatcher('{**/*.{asm,z80,build,bnd,bas,BAS},**/bndbuild.yml}')
         }
     };
 
@@ -45,39 +37,13 @@ export function activate(context: ExtensionContext) {
         clientOptions
     );
 
-    // Register the "Run Rule" command invoked by CodeLens buttons in bndbuild files.
-    // Arguments: target (string), buildFilePath (string, absolute path to the .bnd/.build file).
-    const runRuleCmd = commands.registerCommand('cpclib.runRule', (target: string, buildFilePath?: string) => {
-        const terminal = getOrCreateTerminal();
-        terminal.show(true); // preserve focus
-
-        const bndbuildPath = config.get<string>('bndbuildPath', 'bndbuild');
-
-        // Prefer the file path passed by the code lens; fall back to the active editor.
-        const filePath = buildFilePath
-            ?? (window.activeTextEditor?.document.uri.scheme === 'file'
-                ? window.activeTextEditor.document.uri.fsPath
-                : undefined);
-
-        if (filePath) {
-            const workDir  = path.dirname(filePath);
-            const fileName = path.basename(filePath);
-            terminal.sendText(`cd "${workDir}" && ${bndbuildPath} -f "${fileName}" ${target}`);
-        } else {
-            terminal.sendText(`${bndbuildPath} ${target}`);
-        }
-    });
-
-    context.subscriptions.push(runRuleCmd);
-
-    // Clean up terminal on extension deactivation
-    context.subscriptions.push(
-        window.onDidCloseTerminal(t => {
-            if (t === buildTerminal) {
-                buildTerminal = undefined;
-            }
-        })
-    );
+    // NOTE: do NOT register `cpclib.runRule` here. The server advertises it in
+    // its `executeCommandProvider` capability and vscode-languageclient
+    // auto-registers a bridge for every advertised command; registering it a
+    // second time throws "command already exists" and aborts the whole client
+    // start (no code lenses, no completion, nothing). Clicking the "▶ Run"
+    // code lens therefore goes through the bridge to the server, which runs
+    // the rule and publishes a diagnostic on the failing line when it fails.
 
     client.start().then(() => {
         window.showInformationMessage('CPClib LSP server started.');
@@ -112,7 +78,7 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
 
     async provideTasks(_token: vscode.CancellationToken): Promise<vscode.Task[]> {
         const buildFiles = await vscode.workspace.findFiles(
-            '**/*.{bnd,build}',
+            '{**/*.{bnd,build},**/bndbuild.yml}',
             '{**/node_modules/**,**/.git/**,**/target/**}',
         );
 

@@ -17,7 +17,7 @@ path = "src/main.rs"
 # Workspace dependencies
 cpclib-asm.workspace = true
 cpclib-asmfmt.workspace = true
-cpclib-bndbuild = { workspace = true, default-features = false }
+cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
 cpclib-runner = { workspace = true, default-features = false }
 cpclib-basic.workspace = true
 cpclib-common = { workspace = true, features = ["cmdline"] }
