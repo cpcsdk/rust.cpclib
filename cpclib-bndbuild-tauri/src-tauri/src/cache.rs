@@ -189,7 +189,25 @@ impl BndBuilderObserver for TauriBndBuilderObserver {
                     .emit("event-skipped_rule", rule.as_str())
                     .unwrap();
             },
-            cpclib_bndbuild::event::BndBuilderEvent::BuildFileContext(_) => {}
+            cpclib_bndbuild::event::BndBuilderEvent::BuildFileContext(_) => {},
+            cpclib_bndbuild::event::BndBuilderEvent::TaskIgnoredError(utf8_path, task, content) => {
+                #[derive(Serialize, Clone)]
+                struct TaskIgnoredError<'a> {
+                    rule: &'a str,
+                    task_id: usize,
+                    content: &'a str
+                }
+                self.app_handle
+                    .emit(
+                        "event-task_ignored_error",
+                        TaskIgnoredError {
+                            rule: utf8_path.as_str(),
+                            task_id: task.id(),
+                            content
+                        }
+                    )
+                    .unwrap();
+            }
         }
     }
 }

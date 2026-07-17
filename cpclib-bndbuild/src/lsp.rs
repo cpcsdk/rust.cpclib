@@ -415,20 +415,22 @@ pub const BUILD_KEYWORDS: &[(&str, &str)] = &[
     ("target", TARGET_HELP),
     ("tgt", TARGET_HELP),
     ("build", TARGET_HELP),
-
     ("dep", DEPS_HELP),
     ("dependency", DEPS_HELP),
     ("requires", DEPS_HELP),
-
     ("cmd", TASKS_HELP),
     ("command", TASKS_HELP),
     ("launch", TASKS_HELP),
     ("run", TASKS_HELP),
-
     ("help", "Help text for the rule"),
-    ("phony", "If true, the target is always rebuilt regardless of file timestamps"),
-    ("constraint", "Condition under which this rule applies (e.g. OS or environment constraint)"),
-
+    (
+        "phony",
+        "If true, the target is always rebuilt regardless of file timestamps"
+    ),
+    (
+        "constraint",
+        "Condition under which this rule applies (e.g. OS or environment constraint)"
+    )
 ];
 
 #[cfg(test)]

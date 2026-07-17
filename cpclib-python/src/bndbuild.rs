@@ -72,7 +72,10 @@ impl BndBuilderObserver for PyConsoleObserver {
                 out_of: _
             } => todo!(),
             SkippedRule(_utf8_path) => todo!(),
-            BuildFileContext(_utf8_path) => todo!()
+            BuildFileContext(_utf8_path) => todo!(),
+            TaskIgnoredError(tgt, _task, err) => {
+                eprintln!("[{}] Error ignored: {}", tgt, err);
+            }
         }
     }
 }

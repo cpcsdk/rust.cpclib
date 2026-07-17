@@ -275,7 +275,13 @@ pub fn execute<E: BndBuilderObserver + 'static>(
     }
     .or_else(|e| {
         if task.ignore_errors() {
-            observer.emit_stdout(&format!("[Error ignored] {e}\n"));
+            // Structured event (drives e.g. the CLI's red "[Error ignored]"
+            // line and the LSP's warning diagnostics); observers that only
+            // implement plain `update()`/`EventObserver` and ignore this
+            // still see nothing here, unlike before - if you need a plain
+            // stdout fallback for such an observer, add it there instead of
+            // reverting this, to avoid the double-print this replaces.
+            observer.emit_ignored_error(&e);
             Ok(())
         }
         else {

@@ -66,7 +66,14 @@ impl<'a> From<BndBuilderEvent<'a>> for RatatuiEvent {
                 }
             },
             BndBuilderEvent::Stdout(s) => RatatuiEvent::Stdout(s.to_string()),
-            BndBuilderEvent::Stderr(s) => RatatuiEvent::Stderr(s.to_string())
+            BndBuilderEvent::Stderr(s) => RatatuiEvent::Stderr(s.to_string()),
+            BndBuilderEvent::TaskIgnoredError(path, task, err) => {
+                RatatuiEvent::TaskIgnoredError {
+                    path: path.to_string(),
+                    task: format!("{}", task),
+                    error: err.to_string()
+                }
+            },
         }
     }
 }
@@ -108,6 +115,11 @@ pub enum RatatuiEvent {
         path: String,
         task: String,
         output: String
+    },
+    TaskIgnoredError {
+        path: String,
+        task: String,
+        error: String
     },
     Stdout(String),
     Stderr(String)

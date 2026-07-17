@@ -78,43 +78,102 @@ impl BndBuilderObserver for StreamingObserver {
     }
 }
 
-/// Tracks, per rule, the 0-based index of the most recently *started* task.
+/// Tracks, per rule: the 0-based index of the most recently *started* task,
+/// the combined stdout+stderr output produced by that task so far, and every
+/// task whose failure was ignored (command prefixed with `-`).
 ///
 /// The executor runs a rule's tasks strictly in source order and stops at
 /// the first one that fails (it never starts another task for that rule
-/// afterwards - see `BndBuilder::execute_rule`), so after a rule fails this
-/// is exactly the index of the task that failed. This gives a precise
-/// line-highlight instead of guessing from the error text.
+/// afterwards - see `BndBuilder::execute_rule`), so after a rule fails, the
+/// most-recently-started task is exactly the one that failed, and its
+/// buffered output (reset on every `StartTask`) is exactly that task's own
+/// output. This gives a precise line-highlight and full failure context
+/// instead of guessing from the (often generic, e.g. "Error while launching
+/// the command.") error string alone.
+///
+/// Note: on the PTY-based runner path (the default outside macOS's legacy
+/// pipe path), the child's stdout and stderr are merged by the OS before
+/// reaching us, so *all* of a task's output - including what would be stderr
+/// on a real terminal - arrives as `TaskStdout`. Buffering both event kinds
+/// together is what makes this robust across platforms.
 #[derive(Clone, Default)]
-struct TaskIndexTracker {
-    index_by_rule: Arc<Mutex<HashMap<String, usize>>>
+struct TaskTracker {
+    index_by_rule: Arc<Mutex<HashMap<String, usize>>>,
+    output_by_rule: Arc<Mutex<HashMap<String, String>>>,
+    ignored_errors: Arc<Mutex<Vec<IgnoredTaskError>>>
 }
 
-impl TaskIndexTracker {
+/// One task whose failure was ignored (`-command` in the build file).
+struct IgnoredTaskError {
+    rule: String,
+    task_index: usize,
+    message: String
+}
+
+impl TaskTracker {
     fn failed_index_for(&self, rule: &str) -> Option<usize> {
         self.index_by_rule.lock().unwrap().get(rule).copied()
     }
-}
 
-impl std::fmt::Debug for TaskIndexTracker {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TaskIndexTracker").finish()
+    fn output_for(&self, rule: &str) -> String {
+        self.output_by_rule
+            .lock()
+            .unwrap()
+            .get(rule)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn take_ignored_errors(&self) -> Vec<IgnoredTaskError> {
+        std::mem::take(&mut *self.ignored_errors.lock().unwrap())
     }
 }
 
-impl EventObserver for TaskIndexTracker {
+impl std::fmt::Debug for TaskTracker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskTracker").finish()
+    }
+}
+
+impl EventObserver for TaskTracker {
     fn emit_stdout(&self, _s: &str) {}
 
     fn emit_stderr(&self, _s: &str) {}
 }
 
-impl BndBuilderObserver for TaskIndexTracker {
+impl BndBuilderObserver for TaskTracker {
     fn update(&self, event: BndBuilderEvent) {
-        if let BndBuilderEvent::StartTask(Some(rule), _) = event {
-            let mut map = self.index_by_rule.lock().unwrap();
-            let key = rule.to_string();
-            let next = map.get(&key).map_or(0, |i| i + 1);
-            map.insert(key, next);
+        match event {
+            BndBuilderEvent::StartTask(Some(rule), _) => {
+                let key = rule.to_string();
+                let mut idx_map = self.index_by_rule.lock().unwrap();
+                let next = idx_map.get(&key).map_or(0, |i| i + 1);
+                idx_map.insert(key.clone(), next);
+                self.output_by_rule
+                    .lock()
+                    .unwrap()
+                    .insert(key, String::new());
+            },
+            BndBuilderEvent::TaskStdout(rule, _, s) | BndBuilderEvent::TaskStderr(rule, _, s) => {
+                let mut out = self.output_by_rule.lock().unwrap();
+                out.entry(rule.to_string()).or_default().push_str(s);
+            },
+            BndBuilderEvent::TaskIgnoredError(rule, _, message) => {
+                let key = rule.to_string();
+                let task_index = self
+                    .index_by_rule
+                    .lock()
+                    .unwrap()
+                    .get(&key)
+                    .copied()
+                    .unwrap_or(0);
+                self.ignored_errors.lock().unwrap().push(IgnoredTaskError {
+                    rule: key,
+                    task_index,
+                    message: message.to_string()
+                });
+            },
+            _ => {}
         }
     }
 }
@@ -123,7 +182,10 @@ impl BuildFileAnalyzer {
     /// Build `rule` of the build file behind `document` (blocking: run this
     /// on a worker thread). On failure, returns a diagnostic highlighting the
     /// failing rule — refined to the specific failing task line, identified
-    /// from the executor's own task-start events rather than guessed.
+    /// from the executor's own task-start events rather than guessed, and
+    /// carrying that task's full captured output for context. Also surfaces
+    /// every task whose failure was *ignored* (`-command`) as a warning
+    /// diagnostic on its own line, whether or not the rule ultimately failed.
     ///
     /// When `output` is provided, every line of build progress/stdout/stderr
     /// is forwarded to it as the build runs.
@@ -140,7 +202,8 @@ impl BuildFileAnalyzer {
                 rule,
                 rule,
                 "invalid build file path".to_string(),
-                None
+                None,
+                ""
             );
         };
         let Some(utf8_path) = path.to_str().map(camino::Utf8PathBuf::from)
@@ -150,7 +213,8 @@ impl BuildFileAnalyzer {
                 rule,
                 rule,
                 "non-UTF8 build file path".to_string(),
-                None
+                None,
+                ""
             );
         };
 
@@ -159,18 +223,18 @@ impl BuildFileAnalyzer {
         let mut builder = match builder {
             Ok((_, builder)) => builder,
             Err(e) => {
-                return failure_outcome(document, rule, rule, strip_ansi(&e.to_string()), None);
+                return failure_outcome(document, rule, rule, strip_ansi(&e.to_string()), None, "");
             }
         };
 
-        let task_tracker = TaskIndexTracker::default();
+        let task_tracker = TaskTracker::default();
         builder.add_observer(BndBuilderObserverRc::new(task_tracker.clone()));
 
         if let Some(tx) = output {
             builder.add_observer(BndBuilderObserverRc::new(StreamingObserver { tx }));
         }
 
-        match builder.execute(rule) {
+        let mut outcome = match builder.execute(rule) {
             Ok(()) => {
                 RuleRunOutcome {
                     message: format!("Rule '{rule}' built successfully"),
@@ -196,26 +260,38 @@ impl BuildFileAnalyzer {
                     other => (rule.to_string(), other.to_string())
                 };
                 let failed_task_index = task_tracker.failed_index_for(&failing_target);
+                let full_output = strip_ansi(&task_tracker.output_for(&failing_target));
                 failure_outcome(
                     document,
                     rule,
                     &failing_target,
                     strip_ansi(&msg),
-                    failed_task_index
+                    failed_task_index,
+                    &full_output
                 )
             }
-        }
+        };
+
+        outcome.diagnostics.extend(ignored_error_diagnostics(
+            document,
+            task_tracker.take_ignored_errors()
+        ));
+        outcome
     }
 }
 
 /// Build the failure outcome: locate the best line to highlight and produce
-/// the diagnostic.
+/// the diagnostic. `full_output` is the failing task's own captured
+/// stdout+stderr (may be empty, e.g. for failures not tied to a task at
+/// all) and is appended to the diagnostic so hovering it shows everything
+/// the command actually printed, not just the (often generic) error string.
 fn failure_outcome(
     document: &Document,
     requested_rule: &str,
     failing_target: &str,
     msg: String,
-    failed_task_index: Option<usize>
+    failed_task_index: Option<usize>,
+    full_output: &str
 ) -> RuleRunOutcome {
     let text = document.text();
     let tgt_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
@@ -240,6 +316,14 @@ fn failure_outcome(
     let line_text = text.lines().nth(line_idx).unwrap_or_default();
     let start_char = line_text.len() - line_text.trim_start().len();
 
+    let output = full_output.trim();
+    let message = if output.is_empty() || output == msg.trim() {
+        format!("Rule '{failing_target}' failed: {msg}")
+    }
+    else {
+        format!("Rule '{failing_target}' failed: {msg}\n\n{output}")
+    };
+
     let diagnostic = Diagnostic {
         range: Range {
             start: Position {
@@ -253,7 +337,7 @@ fn failure_outcome(
         },
         severity: Some(DiagnosticSeverity::ERROR),
         source: Some("bndbuild".to_string()),
-        message: format!("Rule '{failing_target}' failed: {msg}"),
+        message,
         ..Default::default()
     };
 
@@ -322,6 +406,55 @@ fn nth_task_line(text: &str, rule_line: usize, task_index: usize) -> Option<usiz
     task_lines_in_rule(text, rule_line)
         .get(task_index)
         .map(|(idx, _)| *idx)
+}
+
+/// One WARNING diagnostic per task whose failure was ignored (`-command`),
+/// anchored on that task's own line. Produced regardless of whether the
+/// overall rule ultimately succeeded or failed.
+fn ignored_error_diagnostics(
+    document: &Document,
+    ignored: Vec<IgnoredTaskError>
+) -> Vec<Diagnostic> {
+    if ignored.is_empty() {
+        return Vec::new();
+    }
+    let text = document.text();
+    let tgt_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
+        .iter()
+        .find(|k| k.names.contains(&"targets"))
+        .map(|k| k.names.to_vec())
+        .unwrap_or_default();
+
+    ignored
+        .into_iter()
+        .filter_map(|entry| {
+            let rule_line = BuildFileAnalyzer::find_target_line(&text, &entry.rule, &tgt_keys)?;
+            let line_idx = nth_task_line(&text, rule_line as usize, entry.task_index)
+                .unwrap_or(rule_line as usize);
+            let line_text = text.lines().nth(line_idx).unwrap_or_default();
+            let start_char = line_text.len() - line_text.trim_start().len();
+            Some(Diagnostic {
+                range: Range {
+                    start: Position {
+                        line: line_idx as u32,
+                        character: start_char as u32
+                    },
+                    end: Position {
+                        line: line_idx as u32,
+                        character: line_text.len() as u32
+                    }
+                },
+                severity: Some(DiagnosticSeverity::WARNING),
+                source: Some("bndbuild".to_string()),
+                message: format!(
+                    "Task error ignored (command prefixed with `-`) in rule '{}': {}",
+                    entry.rule,
+                    strip_ansi(&entry.message)
+                ),
+                ..Default::default()
+            })
+        })
+        .collect()
 }
 
 /// Within the rule block starting at `rule_line`, find the task line whose
@@ -467,8 +600,8 @@ mod tests {
     }
 
     #[test]
-    fn task_index_tracker_records_the_last_started_task_per_rule() {
-        let tracker = TaskIndexTracker::default();
+    fn task_tracker_records_the_last_started_task_per_rule() {
+        let tracker = TaskTracker::default();
         let rule = camino::Utf8Path::new("some/rule");
         let task = cpclib_bndbuild::task::Task::new_echo("hello");
 
@@ -478,5 +611,98 @@ mod tests {
         assert_eq!(tracker.failed_index_for("some/rule"), Some(1));
 
         assert_eq!(tracker.failed_index_for("other/rule"), None);
+    }
+
+    #[test]
+    fn task_tracker_buffers_output_per_current_task() {
+        let tracker = TaskTracker::default();
+        let rule = camino::Utf8Path::new("some/rule");
+        let task = cpclib_bndbuild::task::Task::new_echo("hello");
+
+        tracker.update(BndBuilderEvent::StartTask(Some(rule), &task));
+        tracker.update(BndBuilderEvent::TaskStdout(
+            rule,
+            &task,
+            "first task output\n"
+        ));
+        assert_eq!(tracker.output_for("some/rule"), "first task output\n");
+
+        // A new task starting resets the buffer to just its own output.
+        tracker.update(BndBuilderEvent::StartTask(Some(rule), &task));
+        tracker.update(BndBuilderEvent::TaskStderr(
+            rule,
+            &task,
+            "second task output\n"
+        ));
+        assert_eq!(tracker.output_for("some/rule"), "second task output\n");
+    }
+
+    #[test]
+    fn task_tracker_records_ignored_errors_with_task_index() {
+        let tracker = TaskTracker::default();
+        let rule = camino::Utf8Path::new("some/rule");
+        let task = cpclib_bndbuild::task::Task::new_echo("hello");
+
+        tracker.update(BndBuilderEvent::StartTask(Some(rule), &task)); // index 0
+        tracker.update(BndBuilderEvent::StartTask(Some(rule), &task)); // index 1
+        tracker.update(BndBuilderEvent::TaskIgnoredError(rule, &task, "boom"));
+
+        let ignored = tracker.take_ignored_errors();
+        assert_eq!(ignored.len(), 1);
+        assert_eq!(ignored[0].rule, "some/rule");
+        assert_eq!(ignored[0].task_index, 1);
+        assert_eq!(ignored[0].message, "boom");
+
+        // Draining clears the list.
+        assert!(tracker.take_ignored_errors().is_empty());
+    }
+
+    #[test]
+    fn ignored_task_error_is_reported_as_a_warning_not_a_failure() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let content = "- tgt: tolerant\n  phony: true\n  cmd:\n    - echo first task ok\n    - -cp does_not_exist_anywhere.src dst.bin\n    - echo third task still runs\n";
+        let document = doc(tmp.path().as_std_path(), content);
+
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "tolerant", None);
+        assert!(
+            outcome.success,
+            "an ignored error must not fail the rule: {}",
+            outcome.message
+        );
+        assert_eq!(outcome.diagnostics.len(), 1);
+        let diag = &outcome.diagnostics[0];
+        assert_eq!(diag.severity, Some(DiagnosticSeverity::WARNING));
+        // Anchored on the ignored task's own line (index 1), not task 0 or 2.
+        assert_eq!(
+            diag.range.start.line, 4,
+            "unexpected line: {:?}",
+            diag.range
+        );
+        assert!(diag.message.contains("ignored"), "{}", diag.message);
+    }
+
+    #[test]
+    fn failure_diagnostic_includes_the_command_s_full_output() {
+        // `extern` shells out via ExternRunner (the real PTY-based path used
+        // for every delegated/external command), whose own returned error
+        // string is just a generic "Error while launching the command." -
+        // all the actually useful detail only ever existed in the process's
+        // own output. `cat` on a missing file reliably writes a clear error
+        // to stderr and exits non-zero on any Unix system.
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let content =
+            "- tgt: broken\n  phony: true\n  cmd: extern cat /this/path/does/not/exist12345\n";
+        let document = doc(tmp.path().as_std_path(), content);
+
+        let outcome = BuildFileAnalyzer::new().run_rule(&document, "broken", None);
+        assert!(!outcome.success);
+        assert_eq!(outcome.diagnostics.len(), 1);
+        let diag = &outcome.diagnostics[0];
+        assert!(
+            diag.message.contains("exist12345"),
+            "diagnostic should include the command's actual output, not just \
+             the generic error string, got: {}",
+            diag.message
+        );
     }
 }

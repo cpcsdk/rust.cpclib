@@ -403,6 +403,10 @@ impl BndBuilderRatatui {
                 self.push_task_output(&task, &output, true);
             },
 
+            RatatuiEvent::TaskIgnoredError { task, error, .. } => {
+                self.push_task_output(&task, &format!("[Error ignored] {error}"), true);
+            },
+
             RatatuiEvent::Stdout(_) | RatatuiEvent::Stderr(_) => {}
         }
     }

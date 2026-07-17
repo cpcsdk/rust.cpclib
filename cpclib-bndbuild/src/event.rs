@@ -50,6 +50,10 @@ pub enum BndBuilderEvent<'a> {
     StopTask(Option<&'a Utf8Path>, &'a Task, Duration),
     TaskStdout(&'a Utf8Path, &'a Task, &'a str),
     TaskStderr(&'a Utf8Path, &'a Task, &'a str),
+    /// A task failed but its error was swallowed because the command was
+    /// prefixed with `-` in the build file (make-style "ignore errors").
+    /// Carries the rule, the task, and the error string the runner returned.
+    TaskIgnoredError(&'a Utf8Path, &'a Task, &'a str),
     Stdout(&'a str),
     Stderr(&'a str)
 }
@@ -60,17 +64,32 @@ pub enum BndBuilderEvent<'a> {
 /// build state changes, task execution, and output streams.
 pub trait BndBuilderObserver: EventObserver {
     fn update(&self, event: BndBuilderEvent);
+
+    /// Called when a task's failure was ignored (command prefixed with `-`).
+    /// Default: no-op. Override to react to it specifically - e.g.
+    /// `RuleTaskEventDispatcher` uses this to emit a rule/task-scoped
+    /// `TaskIgnoredError` event, which plain `update()` implementers won't
+    /// otherwise be able to distinguish from a normal `Stdout` line.
+    fn emit_ignored_error(&self, _err: &str) {}
 }
 
 impl<T: BndBuilderObserver> BndBuilderObserver for Box<T> {
     fn update(&self, event: BndBuilderEvent) {
         self.deref().update(event)
     }
+
+    fn emit_ignored_error(&self, err: &str) {
+        self.deref().emit_ignored_error(err)
+    }
 }
 
 impl<T: BndBuilderObserver> BndBuilderObserver for Arc<T> {
     fn update(&self, event: BndBuilderEvent) {
         self.deref().update(event)
+    }
+
+    fn emit_ignored_error(&self, err: &str) {
+        self.deref().emit_ignored_error(err)
     }
 }
 
@@ -94,6 +113,10 @@ pub trait BndBuilderObserved: Debug + Sync + Send {
     #[inline]
     fn emit_task_stderr<S: AsRef<str>, P: AsRef<Utf8Path>>(&self, p: P, t: &Task, s: S) {
         self.notify(BndBuilderEvent::TaskStderr(p.as_ref(), t, s.as_ref()))
+    }
+    #[inline]
+    fn emit_task_ignored_error<S: AsRef<str>, P: AsRef<Utf8Path>>(&self, p: P, t: &Task, s: S) {
+        self.notify(BndBuilderEvent::TaskIgnoredError(p.as_ref(), t, s.as_ref()))
     }
     #[inline]
     fn do_compute_dependencies<P: AsRef<Utf8Path>>(&self, p: P) {
@@ -395,6 +418,12 @@ where E: BndBuilderObserved
         // (StartTask, StopTask, StartRule, etc.) rather than plain text.
         self.observed.notify(event);
     }
+
+    fn emit_ignored_error(&self, err: &str) {
+        if let Some(rule) = self.rule {
+            self.observed.emit_task_ignored_error(rule, self.task, err);
+        }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -500,6 +529,13 @@ impl BndBuilderObserver for BndBuilderDefaultObserver {
                         );
                     }
                 }
+            },
+            BndBuilderEvent::TaskIgnoredError(tgt, _task, err) => {
+                println!(
+                    "[{tgt}]\t{}[Error ignored] {err}{}",
+                    ERROR_TXT_STYLE.render(),
+                    ERROR_TXT_STYLE.render_reset()
+                );
             },
             BndBuilderEvent::Stdout(s) => print!("{s}"),
             BndBuilderEvent::Stderr(s) => print!("{s}")
