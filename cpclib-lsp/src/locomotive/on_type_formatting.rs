@@ -1,5 +1,7 @@
-//! On-type formatting for Locomotive BASIC: when the user presses Enter in a
-//! line-numbered program, start the new line with the next line number.
+//! On-type (`textDocument/onTypeFormatting`) formatting for Locomotive
+//! BASIC: when the user presses Enter in a line-numbered program, start the
+//! new line with the next line number. For whole-document formatting
+//! (`textDocument/formatting`), see `format.rs`.
 
 use tower_lsp::lsp_types::*;
 

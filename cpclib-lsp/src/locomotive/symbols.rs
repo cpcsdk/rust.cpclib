@@ -1,14 +1,10 @@
 //! Document symbols (outline) for Locomotive BASIC programs.
 
-use std::collections::HashMap;
-
-use cpclib_basic::located::{LocatedBasicProgram, LocatedTokenKind};
-use cpclib_basic::tokens::BasicTokenNoPrefix;
+use cpclib_basic::located::LocatedBasicProgram;
 use tower_lsp::lsp_types::*;
 
 use super::BasicAnalyzer;
-use super::diagnostics::{collect_comma_separated_vars, collect_vars_after_input, record_var};
-use super::token::*;
+use super::token::collect_variable_occurrences;
 use crate::common::document::Document;
 
 impl BasicAnalyzer {
@@ -19,59 +15,9 @@ impl BasicAnalyzer {
             Err(_) => return vec![]
         };
 
-        // Track first-assignment location for each variable (key: uppercase).
-        // "Assignment context" means:
-        //   - After LET  → variable immediately follows
-        //   - After FOR  → variable immediately follows
-        //   - After INPUT / READ → one or more variables follow
-        //   - Bare assignment: variable is followed (through spaces) by `=`
-        let mut seen: HashMap<String, (String, u32, u32)> = HashMap::new(); // key→(original_name, line, col)
-
-        for bline in &prog.lines {
-            let toks = &bline.tokens;
-            let n = toks.len();
-            let mut i = 0;
-
-            while i < n {
-                let tok = &toks[i];
-                match &tok.kind {
-                    LocatedTokenKind::Keyword(BasicTokenNoPrefix::Let) => {
-                        // Skip spaces, then expect variable.
-                        if let Some(var_tok) = skip_spaces_then_var(toks, i + 1) {
-                            record_var(&mut seen, var_tok);
-                        }
-                        i += 1;
-                    },
-                    LocatedTokenKind::Keyword(BasicTokenNoPrefix::For) => {
-                        if let Some(var_tok) = skip_spaces_then_var(toks, i + 1) {
-                            record_var(&mut seen, var_tok);
-                        }
-                        i += 1;
-                    },
-                    LocatedTokenKind::Keyword(BasicTokenNoPrefix::Input) => {
-                        // Collect all variables that follow (skipping prompt string).
-                        collect_vars_after_input(toks, i + 1, &mut seen);
-                        i += 1;
-                    },
-                    LocatedTokenKind::Keyword(BasicTokenNoPrefix::Read) => {
-                        collect_comma_separated_vars(toks, i + 1, &mut seen);
-                        i += 1;
-                    },
-                    LocatedTokenKind::Variable(name) => {
-                        // Bare assignment: var followed by optional spaces then `=`.
-                        if is_followed_by_eq(toks, i + 1) {
-                            let key = name.to_uppercase();
-                            seen.entry(key)
-                                .or_insert_with(|| (name.clone(), tok.span.line, tok.span.col));
-                        }
-                        i += 1;
-                    },
-                    _ => {
-                        i += 1;
-                    }
-                }
-            }
-        }
+        // key → (original_name, line, col) of the first "assignment context"
+        // occurrence: LET/FOR target, INPUT/READ target, or bare `NAME = ...`.
+        let seen = collect_variable_occurrences(&prog);
 
         let mut entries: Vec<(String, String, u32, u32)> = seen
             .into_values()

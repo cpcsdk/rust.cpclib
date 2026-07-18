@@ -903,7 +903,7 @@ impl AssemblyAnalyzer {
                 for mnemonic in cpclib_asm::lsp::Z80_INSTRUCTIONS {
                     completions.push(keyword_item(mnemonic, "Z80 instruction", case));
                 }
-                for (directives, detail) in [
+                for (directives, generic_detail) in [
                     (
                         cpclib_asm::lsp::ASSEMBLER_DIRECTIVES_STANDALONE,
                         "assembler directive"
@@ -918,7 +918,9 @@ impl AssemblyAnalyzer {
                     )
                 ] {
                     for d in directives {
-                        completions.push(keyword_item(d, detail, case));
+                        let detail = super::token::directive_first_doc_line(&d.to_uppercase())
+                            .unwrap_or_else(|| generic_detail.to_string());
+                        completions.push(keyword_item(d, &detail, case));
                     }
                 }
                 // Labels / macros — macros can be invoked like mnemonics.
@@ -1012,9 +1014,23 @@ impl AssemblyAnalyzer {
             return collect_symbols_by_text(document);
         };
         let mut syms = Vec::new();
+        // Track the last seen global label to qualify local labels (`.foo` →
+        // `parent.foo`), matching the outline (`symbols.rs`) exactly.
+        let mut current_global: Option<String> = None;
         for token in super::token::flatten_listing(listing.iter()) {
             if token.is_label() {
-                syms.push((token.label_symbol().to_string(), "label".to_string()));
+                let raw = token.label_symbol();
+                let display = if raw.starts_with('.') {
+                    match &current_global {
+                        Some(g) => format!("{g}{raw}"),
+                        None => raw.to_string()
+                    }
+                }
+                else {
+                    current_global = Some(raw.to_string());
+                    raw.to_string()
+                };
+                syms.push((display, "label".to_string()));
             }
             else if token.is_equ() {
                 syms.push((
@@ -1029,10 +1045,14 @@ impl AssemblyAnalyzer {
                 ));
             }
             else if token.is_macro_definition() {
-                syms.push((
-                    token.macro_definition_name().to_string(),
-                    "macro".to_string()
-                ));
+                let name = token.macro_definition_name().to_string();
+                current_global = Some(name.clone());
+                syms.push((name, "macro".to_string()));
+            }
+            else if token.is_module() {
+                let name = token.module_name().to_string();
+                current_global = Some(name.clone());
+                syms.push((name, "module".to_string()));
             }
             else if token.is_directive() && super::token::starts_with_range_keyword(token) {
                 // A section name defined via `RANGE`/`DEFSECTION start, stop,
@@ -1790,5 +1810,70 @@ mod snaset_and_section_tests {
         let doc = Document::new(uri, text.to_string(), 1);
         let syms = collect_symbols_by_text(&doc);
         assert!(syms.iter().any(|(n, _)| n == "OTHER_SECTION"), "{syms:?}");
+    }
+}
+
+#[cfg(test)]
+mod directive_detail_and_symbol_parity_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    #[test]
+    fn directive_completions_carry_a_one_line_detail_from_the_docs() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let doc = Document::new(uri, String::new(), 1);
+        let items = AssemblyAnalyzer::new().completion_with_documents(
+            &doc,
+            Position {
+                line: 0,
+                character: 0
+            },
+            &[]
+        );
+        let org = items.iter().find(|i| i.label == "ORG").unwrap();
+        assert_eq!(
+            org.detail.as_deref(),
+            Some("Set the assembly address. Code will be placed at this address in memory.")
+        );
+    }
+
+    #[test]
+    fn module_names_are_offered_in_completion_matching_the_outline() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "MODULE foo\nENDMODULE\n\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let items = AssemblyAnalyzer::new().completion_with_documents(
+            &doc,
+            Position {
+                line: 2,
+                character: 0
+            },
+            &[]
+        );
+        assert!(
+            items
+                .iter()
+                .any(|i| i.label == "foo" && i.detail.as_deref() == Some("module")),
+            "{items:?}"
+        );
+    }
+
+    #[test]
+    fn local_labels_are_qualified_with_their_parent_global_label() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "global_label\n.local\n\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let items = AssemblyAnalyzer::new().completion_with_documents(
+            &doc,
+            Position {
+                line: 2,
+                character: 0
+            },
+            &[]
+        );
+        assert!(
+            items.iter().any(|i| i.label == "global_label.local"),
+            "{items:?}"
+        );
     }
 }

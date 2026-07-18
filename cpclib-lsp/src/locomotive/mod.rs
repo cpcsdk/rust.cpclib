@@ -5,11 +5,13 @@
 //! `BasicAnalyzer` type through separate `impl` blocks.
 
 pub mod autocomplete;
+pub mod color;
 pub mod command;
 pub mod definition;
 pub mod diagnostics;
 pub mod format;
 pub mod hover;
+pub mod on_type_formatting;
 pub mod semantic_tokens;
 pub mod symbols;
 pub mod token;

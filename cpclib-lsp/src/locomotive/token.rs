@@ -2,8 +2,12 @@
 //! table, semantic-token indices, and small token-stream scanners shared by
 //! the feature modules.
 
-use cpclib_basic::located::{LocatedBasicToken, LocatedTokenKind};
+use std::collections::HashMap;
+
+use cpclib_basic::located::{LocatedBasicProgram, LocatedBasicToken, LocatedTokenKind};
 use cpclib_basic::tokens::BasicTokenNoPrefix;
+
+use super::diagnostics::{collect_comma_separated_vars, collect_vars_after_input, record_var};
 
 // ─── Semantic-token type indices (must match the basm module legend) ─────────
 pub(super) const TT_KEYWORD: u32 = 0;
@@ -100,6 +104,66 @@ pub(super) fn is_followed_by_eq(toks: &[LocatedBasicToken], from: usize) -> bool
         }
     }
     false
+}
+
+// ─── Variable collection ───────────────────────────────────────────────────────
+
+/// Scan every line of `prog` for variable "definition" occurrences — the
+/// same notion of "assignment context" used by the outline: `LET`/`FOR`
+/// targets, `INPUT`/`READ` targets, and bare `NAME = ...` assignments.
+/// Returns each variable keyed by its uppercased name, first-occurrence line
+/// and column preserved for callers that need a location (the outline);
+/// completion only needs the names.
+pub(super) fn collect_variable_occurrences(
+    prog: &LocatedBasicProgram
+) -> HashMap<String, (String, u32, u32)> {
+    let mut seen: HashMap<String, (String, u32, u32)> = HashMap::new();
+
+    for bline in &prog.lines {
+        let toks = &bline.tokens;
+        let n = toks.len();
+        let mut i = 0;
+
+        while i < n {
+            let tok = &toks[i];
+            match &tok.kind {
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::Let) => {
+                    if let Some(var_tok) = skip_spaces_then_var(toks, i + 1) {
+                        record_var(&mut seen, var_tok);
+                    }
+                    i += 1;
+                },
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::For) => {
+                    if let Some(var_tok) = skip_spaces_then_var(toks, i + 1) {
+                        record_var(&mut seen, var_tok);
+                    }
+                    i += 1;
+                },
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::Input) => {
+                    collect_vars_after_input(toks, i + 1, &mut seen);
+                    i += 1;
+                },
+                LocatedTokenKind::Keyword(BasicTokenNoPrefix::Read) => {
+                    collect_comma_separated_vars(toks, i + 1, &mut seen);
+                    i += 1;
+                },
+                LocatedTokenKind::Variable(name) => {
+                    // Bare assignment: var followed by optional spaces then `=`.
+                    if is_followed_by_eq(toks, i + 1) {
+                        let key = name.to_uppercase();
+                        seen.entry(key)
+                            .or_insert_with(|| (name.clone(), tok.span.line, tok.span.col));
+                    }
+                    i += 1;
+                },
+                _ => {
+                    i += 1;
+                }
+            }
+        }
+    }
+
+    seen
 }
 
 // ─── Number helpers ───────────────────────────────────────────────────────────

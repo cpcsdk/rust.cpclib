@@ -1911,6 +1911,7 @@ impl ListingElement for LocatedTokenInner {
                 ))
             },
             Self::Section(label) => Cow::Owned(Token::Section(label.as_str().into())),
+            Self::SnaSet(flag, value) => Cow::Owned(Token::SnaSet(*flag, value.clone())),
 
             _ => todo!("Need to implement conversion  for {:?}", self)
         }

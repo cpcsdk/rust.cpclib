@@ -236,7 +236,63 @@ pub(super) fn locate_name_in_statement<T: cpclib_asm::parser::obtained::MayHaveS
     (lsp_line, col)
 }
 
+/// Same text-based pre-filter as `starts_with_range_keyword`, for `SNASET`
+/// statements — needed before calling the costly (and partially
+/// unimplemented) `to_token()` conversion.
+pub(super) fn starts_with_snaset_keyword<T: cpclib_asm::parser::obtained::MayHaveSpan>(
+    token: &T
+) -> bool {
+    let span_text: &str = token.span().as_ref();
+    let first_line = span_text.lines().next().unwrap_or(span_text);
+    let first_word: String = first_line
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect();
+    first_word.eq_ignore_ascii_case("SNASET")
+}
+
+/// The `(line, start_col, end_col)` span of a `SNASET FLAG, value` token's
+/// `value` argument — the token's own span points at the `SNASET` keyword,
+/// not at the value. Finds the last top-level `,` on the statement's first
+/// line and takes the following run of non-whitespace/non-comment
+/// characters. Returns `None` if the statement has no comma (malformed).
+pub(super) fn locate_snaset_value_span<T: cpclib_asm::parser::obtained::MayHaveSpan>(
+    token: &T
+) -> Option<(u32, u32, u32)> {
+    let span = token.span();
+    let span_text: &str = span.as_ref();
+    let first_line = span_text.lines().next().unwrap_or(span_text);
+    let (line_1based, col_1based) = span.relative_line_and_column();
+    let lsp_line = line_1based.saturating_sub(1) as u32;
+    let base_col = col_1based.saturating_sub(1) as u32;
+
+    let comma_off = first_line.rfind(',')?;
+    let bytes = first_line.as_bytes();
+    let mut i = comma_off + 1;
+    while i < bytes.len() && bytes[i] == b' ' {
+        i += 1;
+    }
+    let start = i;
+    while i < bytes.len() && !matches!(bytes[i], b' ' | b';' | b'\t') {
+        i += 1;
+    }
+    if i == start {
+        return None;
+    }
+    Some((lsp_line, base_col + start as u32, base_col + i as u32))
+}
+
 // ─── Generated directive documentation ────────────────────────────────────────
 
 // `DIRECTIVE_DOCS` + `DIRECTIVE_FILE_ARGS`, generated from docs/basm/directives.md.
 include!(concat!(env!("OUT_DIR"), "/directive_docs_generated.rs"));
+
+/// Look up a directive by name (case-insensitive) and return a one-line
+/// summary of its documentation, for use as a completion item's `.detail`.
+pub(super) fn directive_first_doc_line(word_upper: &str) -> Option<String> {
+    DIRECTIVE_DOCS
+        .iter()
+        .find(|(names, _)| names.iter().any(|n| n.to_uppercase() == word_upper))
+        .map(|(_, doc)| crate::common::render::first_doc_line(doc))
+}

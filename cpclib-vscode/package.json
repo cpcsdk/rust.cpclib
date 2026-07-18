@@ -93,6 +93,11 @@
           "description": "Trace LSP communication between VS Code and the server (useful for debugging)."
         }
       }
+    },
+    "configurationDefaults": {
+      "[locomotive-basic]": {
+        "editor.formatOnType": true
+      }
     }
   },
   "scripts": {

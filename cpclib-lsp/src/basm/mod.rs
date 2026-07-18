@@ -9,6 +9,7 @@
 //! dependency.
 
 pub mod autocomplete;
+pub mod color;
 pub mod command;
 pub mod definition;
 pub mod diagnostics;

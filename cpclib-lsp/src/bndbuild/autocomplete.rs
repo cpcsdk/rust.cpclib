@@ -20,7 +20,10 @@ enum ListContext {
     /// mapping: rule keys apply here.
     Rule,
     /// Item nested under a `cmd:`/`tasks:`/... key: task invocations apply.
-    Tasks
+    Tasks,
+    /// Item nested under a `tgt:`/`dep:`/... key, before `- ` has been
+    /// typed: filenames apply, not rule keys.
+    Files
 }
 
 impl BuildFileAnalyzer {
@@ -75,7 +78,11 @@ impl BuildFileAnalyzer {
                 // context of this line, not on a blanket "list item" rule.
                 match self.list_context_at(document, line_idx) {
                     ListContext::Tasks => completions.extend(self.get_task_completions()),
-                    ListContext::Rule => completions.extend(self.get_rule_key_completions())
+                    ListContext::Rule => completions.extend(self.get_rule_key_completions()),
+                    ListContext::Files => {
+                        completions.extend(self.get_filename_completions(document, ""));
+                        completions.extend(self.get_variable_brace_completions(document));
+                    }
                 }
             }
         }
@@ -95,9 +102,15 @@ impl BuildFileAnalyzer {
             .find(|k| k.names.contains(&"tasks"))
             .map(|k| k.names.to_vec())
             .unwrap_or_default();
+        let file_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
+            .iter()
+            .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
+            .flat_map(|k| k.names.iter().copied())
+            .collect();
 
         match Self::enclosing_key_for_list_item(document, line_idx) {
             Some(key) if task_keys.contains(&key.as_str()) => ListContext::Tasks,
+            Some(key) if file_keys.contains(&key.as_str()) => ListContext::Files,
             _ => ListContext::Rule
         }
     }
@@ -742,6 +755,79 @@ mod filename_prefix_at_cursor_tests {
         let line = "    - hel";
         let result = prefix_at_with_context(&preceding, line, line.chars().count());
         assert_eq!(result, None);
+    }
+}
+
+#[cfg(test)]
+mod list_context_at_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    #[test]
+    fn blank_line_under_dependencies_key_offers_filenames_not_rule_keys() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("hello.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        // The `- ` marker hasn't been typed yet on the last (blank) line.
+        let text = "- tgt: out.bin\n  dep:\n    ";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let items = BuildFileAnalyzer::new().completion(
+            &document,
+            Position {
+                line: 2,
+                character: 4
+            }
+        );
+        let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
+
+        assert!(
+            labels.contains(&"hello.asm".to_string()),
+            "expected filename completion, got {labels:?}"
+        );
+        assert!(
+            !labels.contains(&"tgt".to_string()) && !labels.contains(&"dep".to_string()),
+            "rule keys should not be offered under an open dep: list, got {labels:?}"
+        );
+    }
+
+    #[test]
+    fn blank_line_under_targets_key_offers_filenames_not_rule_keys() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("out.bin"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt:\n    ";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let items = BuildFileAnalyzer::new().completion(
+            &document,
+            Position {
+                line: 1,
+                character: 4
+            }
+        );
+        let labels: Vec<String> = items.iter().map(|i| i.label.clone()).collect();
+
+        assert!(
+            labels.contains(&"out.bin".to_string()),
+            "expected filename completion, got {labels:?}"
+        );
+        assert!(
+            !labels.contains(&"cmd".to_string()),
+            "rule keys should not be offered under an open tgt: list, got {labels:?}"
+        );
+    }
+
+    #[test]
+    fn blank_line_under_cmd_key_still_offers_task_completions() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        let text = "- tgt: out.bin\n  cmd:\n    ";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        assert_eq!(
+            BuildFileAnalyzer::new().list_context_at(&document, 2),
+            ListContext::Tasks
+        );
     }
 }
 

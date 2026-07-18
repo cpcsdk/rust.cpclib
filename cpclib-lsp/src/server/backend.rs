@@ -250,6 +250,7 @@ impl LanguageServer for CpcLspBackend {
                         }
                     )
                 ),
+                color_provider: Some(ColorProviderCapability::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -786,8 +787,34 @@ impl LanguageServer for CpcLspBackend {
                 };
                 return Ok(self.asm_analyzer.format(document, &opt));
             }
+            if document.doc_type == DocumentType::Basic {
+                return Ok(self.basic_analyzer.format(document));
+            }
         }
         Ok(None)
+    }
+
+    async fn document_color(&self, params: DocumentColorParams) -> Result<Vec<ColorInformation>> {
+        let uri = params.text_document.uri;
+        if let Some(entry) = self.documents.get(&uri) {
+            let document = entry.value();
+            return Ok(match document.doc_type {
+                DocumentType::Assembly => self.asm_analyzer.document_colors(document),
+                DocumentType::Basic => self.basic_analyzer.document_colors(document),
+                _ => Vec::new()
+            });
+        }
+        Ok(Vec::new())
+    }
+
+    async fn color_presentation(
+        &self,
+        params: ColorPresentationParams
+    ) -> Result<Vec<ColorPresentation>> {
+        // Read-only swatches: no editable color-picker round trip, for
+        // either language.
+        let _ = params;
+        Ok(Vec::new())
     }
 
     async fn on_type_formatting(
