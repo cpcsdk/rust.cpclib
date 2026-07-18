@@ -297,7 +297,7 @@ impl BuildFileAnalyzer {
     /// is unrecognized, or the line isn't a task-invocation line at all.
     /// Callers decide separately whether the resolved command is internal
     /// (`super::internal_commands`) or delegated (`super::delegated_help`).
-    fn command_argv_at_cursor(
+    pub(super) fn command_argv_at_cursor(
         &self,
         line_text: &str,
         cursor_column: usize

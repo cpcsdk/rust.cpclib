@@ -1835,7 +1835,13 @@ pub struct EmuCli {
     #[arg(short, long, value_parser = value_parser!(Crtc), help="Choice of the CRTC [possible values: 0, 1, 2, 3, 4]")]
     crtc: Option<Crtc>,
 
-    #[arg(short, long, default_value = "ace", alias = "emu")]
+    #[arg(
+        short,
+        long,
+        default_value = "ace",
+        alias = "emu",
+        help = "Which emulator to use [possible values: ace, winape, cpcec, amspirit, sugarbox, cpcemupower, cpcemu, caprice, cadence, emulator1984, rvm]"
+    )]
     emulator: Emu,
 
     #[arg(short, long, action = ArgAction::SetTrue, help = "Keep the emulator open after the interaction")]
@@ -1960,9 +1966,13 @@ pub struct OrgamsCli {
 
 #[derive(Subcommand, Clone, Debug)]
 pub enum Commands {
+    /// Assemble or interactively edit a file with the Orgams editor,
+    /// running inside the emulator.
     #[cfg(feature = "screenshot")]
     Orgams(OrgamsCli),
 
+    /// Launch the emulator and keep its window open afterwards (implies
+    /// --keepemulator), optionally typing --text into it once it's ready.
     Run {
         #[arg(short, long, help = "Simple text to type")]
         text: Option<String>
