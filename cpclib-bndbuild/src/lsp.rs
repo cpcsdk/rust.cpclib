@@ -433,6 +433,44 @@ pub const BUILD_KEYWORDS: &[(&str, &str)] = &[
     )
 ];
 
+/// A Jinja global variable injected automatically by `crate::env::create_template_env`,
+/// available in every build file's templates without a `{% set %}`.
+#[derive(Debug, Clone)]
+pub struct JinjaGlobal {
+    pub name: &'static str,
+    pub description: &'static str
+}
+
+/// Built-in Jinja globals, kept in sync with `crate::env::create_template_env`.
+/// User `-D key=value` definitions are not listed here: they're only known at
+/// build-invocation time, not statically from the build file's own text.
+pub const BUILTIN_JINJA_GLOBALS: &[JinjaGlobal] = &[
+    JinjaGlobal {
+        name: "FAP_PLAY_PATH",
+        description: "Path to the FAP player's play binary (only defined when the `fap` feature is enabled)."
+    },
+    JinjaGlobal {
+        name: "FAP_INIT_PATH",
+        description: "Path to the FAP player's init binary (only defined when the `fap` feature is enabled)."
+    },
+    JinjaGlobal {
+        name: "AKG_PLAYER_PATH",
+        description: "Path to the AT3 AKG player binary."
+    },
+    JinjaGlobal {
+        name: "AKM_PLAYER_PATH",
+        description: "Path to the AT3 AKM player binary."
+    },
+    JinjaGlobal {
+        name: "AKY_PLAYER_PATH",
+        description: "Path to the AT3 AKY player binary."
+    },
+    JinjaGlobal {
+        name: "AKY_STABLE_PLAYER_PATH",
+        description: "Path to the AT3 AKY stable player binary."
+    }
+];
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;

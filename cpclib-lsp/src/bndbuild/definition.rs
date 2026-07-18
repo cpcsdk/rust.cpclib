@@ -14,9 +14,9 @@ impl BuildFileAnalyzer {
         // Jinja variable: the definition is its `{% set NAME = ... %}` line;
         // every other occurrence is a reference.
         if let Some(word) = jinja_word_at(&line, col)
-            && let Some((_, location)) = super::jinja::collect_jinja_variables(document)
+            && let Some((_, _, location)) = super::jinja::collect_jinja_variables(document)
                 .into_iter()
-                .find(|(name, _)| *name == word)
+                .find(|(name, ..)| *name == word)
         {
             return Some(location);
         }
@@ -309,7 +309,7 @@ impl BuildFileAnalyzer {
         // Only meaningful for variables that actually have a definition.
         if !super::jinja::collect_jinja_variables(document)
             .iter()
-            .any(|(name, _)| *name == word)
+            .any(|(name, ..)| *name == word)
         {
             return Vec::new();
         }

@@ -60,10 +60,12 @@ pub(super) const JINJA_STATEMENT_KEYWORDS: &[(&str, &str)] = &[
 ];
 
 /// Collect the variables defined with `{% set NAME = ... %}` (or `{%- set`),
-/// with the location of each definition. First definition wins.
-pub(super) fn collect_jinja_variables(document: &Document) -> Vec<(String, Location)> {
+/// with the value expression's source text and the location of each
+/// definition. First definition wins. The value is the raw text of the
+/// expression as written (e.g. `"src"` or `["a", "b"]`), not evaluated.
+pub(super) fn collect_jinja_variables(document: &Document) -> Vec<(String, String, Location)> {
     let text = document.text();
-    let mut vars: Vec<(String, Location)> = Vec::new();
+    let mut vars: Vec<(String, String, Location)> = Vec::new();
 
     for (line_idx, line) in text.lines().enumerate() {
         let mut search_from = 0usize;
@@ -80,10 +82,27 @@ pub(super) fn collect_jinja_variables(document: &Document) -> Vec<(String, Locat
                     .chars()
                     .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
                     .collect();
-                if !name.is_empty() && !vars.iter().any(|(n, _)| *n == name) {
+                if !name.is_empty() && !vars.iter().any(|(n, ..)| *n == name) {
                     let name_col = line.len() - rest_trimmed.len();
+
+                    // Value expression: after the name, skip whitespace,
+                    // expect `=`, then take everything up to the closing
+                    // `%}`/`-%}`, trimmed. Left empty when the statement
+                    // doesn't parse as a simple `name = expr` assignment.
+                    let value = rest_trimmed[name.len()..]
+                        .trim_start()
+                        .strip_prefix('=')
+                        .map(|v| {
+                            let v = v.trim();
+                            let v = v.strip_suffix("-%}").map(str::trim_end).unwrap_or(v);
+                            let v = v.strip_suffix("%}").map(str::trim_end).unwrap_or(v);
+                            v.to_string()
+                        })
+                        .unwrap_or_default();
+
                     vars.push((
                         name.clone(),
+                        value,
                         Location {
                             uri: document.uri.clone(),
                             range: Range {
@@ -103,6 +122,33 @@ pub(super) fn collect_jinja_variables(document: &Document) -> Vec<(String, Locat
             search_from = stmt_start;
         }
     }
+    vars
+}
+
+/// All variables a bndbuild template could reference: locally `{% set %}`
+/// variables (paired with their source-text value) plus the built-in globals
+/// injected by `create_template_env`, for completion. Local variables shadow
+/// a built-in of the same name.
+pub(super) fn known_variables(document: &Document) -> Vec<(String, String)> {
+    let mut vars: Vec<(String, String)> = collect_jinja_variables(document)
+        .into_iter()
+        .map(|(name, value, _)| {
+            let detail = if value.is_empty() {
+                "Jinja variable ({% set %})".to_string()
+            }
+            else {
+                format!("{{% set %}} variable = {value}")
+            };
+            (name, detail)
+        })
+        .collect();
+
+    for global in cpclib_bndbuild::lsp::BUILTIN_JINJA_GLOBALS {
+        if !vars.iter().any(|(n, _)| n == global.name) {
+            vars.push((global.name.to_string(), global.description.to_string()));
+        }
+    }
+
     vars
 }
 
@@ -140,9 +186,40 @@ mod tests {
         let text = "{% set root = \"src\" %}\n{%- set count = 3 -%}\n- tgt: {{root}}/x\n";
         let doc = Document::new(uri, text.to_string(), 1);
         let vars = collect_jinja_variables(&doc);
-        let names: Vec<&str> = vars.iter().map(|(n, _)| n.as_str()).collect();
+        let names: Vec<&str> = vars.iter().map(|(n, ..)| n.as_str()).collect();
         assert_eq!(names, vec!["root", "count"]);
-        assert_eq!(vars[0].1.range.start.line, 0);
-        assert_eq!(vars[1].1.range.start.line, 1);
+        assert_eq!(vars[0].2.range.start.line, 0);
+        assert_eq!(vars[1].2.range.start.line, 1);
+    }
+
+    #[test]
+    fn captures_the_value_expression_source_text() {
+        let uri = Url::parse("file:///b.bnd").unwrap();
+        let text =
+            "{% set root = \"src\" %}\n{%- set count = 3 -%}\n{% set files = [\"a\", \"b\"] %}\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let vars = collect_jinja_variables(&doc);
+        let values: Vec<(&str, &str)> = vars
+            .iter()
+            .map(|(n, v, _)| (n.as_str(), v.as_str()))
+            .collect();
+        assert_eq!(
+            values,
+            vec![
+                ("root", "\"src\""),
+                ("count", "3"),
+                ("files", "[\"a\", \"b\"]")
+            ]
+        );
+    }
+
+    #[test]
+    fn known_variables_includes_builtin_globals() {
+        let uri = Url::parse("file:///b.bnd").unwrap();
+        let text = "{% set root = \"src\" %}\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let names: Vec<String> = known_variables(&doc).into_iter().map(|(n, _)| n).collect();
+        assert!(names.contains(&"root".to_string()));
+        assert!(names.contains(&"AKG_PLAYER_PATH".to_string()));
     }
 }

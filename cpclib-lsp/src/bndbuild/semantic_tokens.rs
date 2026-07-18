@@ -204,7 +204,7 @@ impl BuildFileAnalyzer {
     }
 
     /// Emit a CodeLens "▶ Run" button on each target declared in a bndbuild file.
-    /// Delegates target detection to `document_symbols` so that Jinja expansion,
+    /// Delegates target detection to `target_symbols` so that Jinja expansion,
     /// block scalars, and all key aliases are handled consistently.
     pub fn code_lens(&self, document: &Document) -> Vec<CodeLens> {
         let file_path = document
@@ -214,7 +214,7 @@ impl BuildFileAnalyzer {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
 
-        self.document_symbols(document)
+        self.target_symbols(document)
             .into_iter()
             .map(|sym| {
                 CodeLens {

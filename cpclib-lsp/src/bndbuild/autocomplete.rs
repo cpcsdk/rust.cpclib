@@ -56,10 +56,12 @@ impl BuildFileAnalyzer {
                 // Most task arguments are filenames - offer those too, in
                 // addition to the command-specific completions above.
                 completions.extend(self.get_filename_completions(document, &prefix));
+                completions.extend(self.get_variable_brace_completions(document));
             }
             else if let Some(prefix) = self.filename_prefix_at_cursor(&line, cursor) {
                 // Inside a `targets:`/`dependencies:` (or aliases) scalar value
                 completions.extend(self.get_filename_completions(document, &prefix));
+                completions.extend(self.get_variable_brace_completions(document));
             }
             else if let Some(values) = self.boolean_key_value_at_cursor(&line, cursor) {
                 // `phony:` takes a boolean
@@ -175,20 +177,21 @@ impl BuildFileAnalyzer {
             .collect()
     }
 
-    /// Completions offered *inside* Jinja braces: `{% set %}` variables, plus
-    /// statement keywords when inside `{% ... %}`.
+    /// Completions offered *inside* Jinja braces: known variables (local
+    /// `{% set %}` and built-in globals), plus statement keywords when inside
+    /// `{% ... %}`.
     fn get_jinja_inner_completions(
         &self,
         document: &Document,
         ctx: super::jinja::JinjaContext
     ) -> Vec<CompletionItem> {
-        let mut completions: Vec<CompletionItem> = super::jinja::collect_jinja_variables(document)
+        let mut completions: Vec<CompletionItem> = super::jinja::known_variables(document)
             .into_iter()
-            .map(|(name, _)| {
+            .map(|(name, detail)| {
                 CompletionItem {
                     label: name.clone(),
                     kind: Some(CompletionItemKind::VARIABLE),
-                    detail: Some("Jinja variable ({% set %})".to_string()),
+                    detail: Some(detail),
                     insert_text: Some(name),
                     insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
                     ..Default::default()
@@ -514,6 +517,26 @@ impl BuildFileAnalyzer {
             .collect()
     }
 
+    /// Known-variable completions offered *outside* Jinja braces: a bare
+    /// variable reference isn't valid bndbuild YAML, so proposing `root` and
+    /// letting the user type it plain would produce broken output. Instead
+    /// each candidate is inserted already wrapped as `{{root}}`.
+    fn get_variable_brace_completions(&self, document: &Document) -> Vec<CompletionItem> {
+        super::jinja::known_variables(document)
+            .into_iter()
+            .map(|(name, detail)| {
+                CompletionItem {
+                    label: name.clone(),
+                    kind: Some(CompletionItemKind::VARIABLE),
+                    detail: Some(detail),
+                    insert_text: Some(format!("{{{{{name}}}}}")),
+                    insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
+                    ..Default::default()
+                }
+            })
+            .collect()
+    }
+
     fn get_jinja_completions(&self) -> Vec<CompletionItem> {
         vec![
             CompletionItem {
@@ -805,6 +828,51 @@ mod schema_context_tests {
     fn brace_snippets_offered_outside_jinja() {
         let labels = complete("- tgt: out.bin\n- ", 1, 2);
         assert!(labels.iter().any(|l| l.contains("{{")), "{labels:?}");
+    }
+
+    #[test]
+    fn known_variable_completion_outside_braces_is_wrapped_in_braces() {
+        // A real (empty) tempdir - `get_filename_completions` lists the
+        // document's actual directory, and a bare `file:///t.bnd` URI would
+        // resolve to the filesystem root, which may itself contain an
+        // unrelated `root` entry (e.g. `/root`) that collides with the
+        // variable label under test.
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let text = "{% set root = \"src\" %}\n- tgt: out.bin\n  dep: ";
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        let items = BuildFileAnalyzer::new().completion(
+            &doc,
+            Position {
+                line: 2,
+                character: 7
+            }
+        );
+        let root_item = items
+            .iter()
+            .find(|i| i.label == "root" && i.kind == Some(CompletionItemKind::VARIABLE))
+            .expect("root variable offered as a completion");
+        assert_eq!(root_item.insert_text.as_deref(), Some("{{root}}"));
+    }
+
+    #[test]
+    fn builtin_jinja_globals_offered_outside_braces_in_dep_value() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let text = "- tgt: out.bin\n  dep: ";
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        let items = BuildFileAnalyzer::new().completion(
+            &doc,
+            Position {
+                line: 1,
+                character: 7
+            }
+        );
+        let item = items
+            .iter()
+            .find(|i| i.label == "AKG_PLAYER_PATH")
+            .expect("builtin global offered as a completion");
+        assert_eq!(item.insert_text.as_deref(), Some("{{AKG_PLAYER_PATH}}"));
     }
 }
 

@@ -531,7 +531,7 @@ impl LanguageServer for CpcLspBackend {
         // Use cached document if available; otherwise read from disk.
         let targets: Vec<String> = if let Some(entry) = self.documents.get(&uri) {
             self.build_analyzer
-                .document_symbols(entry.value())
+                .target_symbols(entry.value())
                 .into_iter()
                 .map(|s| s.name)
                 .collect()
@@ -540,7 +540,7 @@ impl LanguageServer for CpcLspBackend {
             if let Ok(text) = std::fs::read_to_string(&path) {
                 let doc = Document::new(uri, text, 0);
                 self.build_analyzer
-                    .document_symbols(&doc)
+                    .target_symbols(&doc)
                     .into_iter()
                     .map(|s| s.name)
                     .collect()

@@ -8,7 +8,27 @@ use super::token::Collecting;
 use crate::common::document::Document;
 
 impl BuildFileAnalyzer {
+    /// Outline for the editor: two top-level groups, "Variables" (the
+    /// `{% set %}` definitions, each showing its value) and "Artifacts" (the
+    /// rules/targets, as before). Either group is omitted when empty.
     pub fn document_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
+        let variables = self.variable_symbols(document);
+        let targets = self.target_symbols(document);
+
+        let mut root = Vec::new();
+        if !variables.is_empty() {
+            root.push(Self::container_symbol("Variables", variables));
+        }
+        if !targets.is_empty() {
+            root.push(Self::container_symbol("Artifacts", targets));
+        }
+        root
+    }
+
+    /// Flat list of target/rule symbols only, with no "Variables"/"Artifacts"
+    /// grouping — used by callers that need one entry per actual buildable
+    /// target (e.g. `code_lens`'s "▶ Run" buttons, `cpclib.getTargets`).
+    pub(crate) fn target_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
         let target_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
             .iter()
             .find(|k| k.names.contains(&"targets"))
@@ -37,6 +57,56 @@ impl BuildFileAnalyzer {
             };
 
         self.scan_symbols_from_text(&expanded_text, &source_map, &target_names)
+    }
+
+    /// One symbol per `{% set NAME = VALUE %}`, `detail` set to the value's
+    /// source text so it's visible directly in the outline.
+    fn variable_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
+        super::jinja::collect_jinja_variables(document)
+            .into_iter()
+            .map(|(name, value, location)| {
+                #[allow(deprecated)]
+                DocumentSymbol {
+                    name,
+                    detail: (!value.is_empty()).then_some(value),
+                    kind: SymbolKind::VARIABLE,
+                    tags: None,
+                    deprecated: None,
+                    range: location.range,
+                    selection_range: location.range,
+                    children: None
+                }
+            })
+            .collect()
+    }
+
+    /// Group `children` under a synthetic namespace symbol spanning their
+    /// combined range. `children` must be non-empty.
+    fn container_symbol(name: &str, children: Vec<DocumentSymbol>) -> DocumentSymbol {
+        let mut start = children[0].range.start;
+        let mut end = children[0].range.end;
+        for child in &children[1..] {
+            if (child.range.start.line, child.range.start.character) < (start.line, start.character)
+            {
+                start = child.range.start;
+            }
+            if (child.range.end.line, child.range.end.character) > (end.line, end.character) {
+                end = child.range.end;
+            }
+        }
+        let range = Range { start, end };
+
+        #[allow(deprecated)]
+        DocumentSymbol {
+            name: name.to_string(),
+            detail: None,
+            kind: SymbolKind::NAMESPACE,
+            tags: None,
+            deprecated: None,
+            range,
+            selection_range: range,
+            children: Some(children)
+        }
     }
 
     fn scan_symbols_from_text(
@@ -260,4 +330,57 @@ impl BuildFileAnalyzer {
     }
 
     // Helper methods
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    fn symbols_for(text: &str) -> Vec<DocumentSymbol> {
+        let uri = Url::parse("file:///t.bnd").unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+        BuildFileAnalyzer::new().document_symbols(&document)
+    }
+
+    #[test]
+    fn groups_variables_and_artifacts_separately() {
+        let text = "{% set root = \"src\" %}\n- tgt: out.bin\n  cmd: basm {{root}}/main.asm\n";
+        let symbols = symbols_for(text);
+        let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["Variables", "Artifacts"], "{symbols:?}");
+
+        let variables = &symbols[0];
+        let children = variables.children.as_ref().expect("Variables has children");
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].name, "root");
+        assert_eq!(children[0].detail.as_deref(), Some("\"src\""));
+        assert_eq!(children[0].kind, SymbolKind::VARIABLE);
+
+        let artifacts = &symbols[1];
+        let children = artifacts.children.as_ref().expect("Artifacts has children");
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].name, "out.bin");
+    }
+
+    #[test]
+    fn variables_group_omitted_when_there_are_no_set_statements() {
+        let text = "- tgt: out.bin\n  cmd: basm main.asm\n";
+        let symbols = symbols_for(text);
+        let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["Artifacts"], "{symbols:?}");
+    }
+
+    #[test]
+    fn target_symbols_stays_flat_for_code_lens_and_get_targets() {
+        let uri = Url::parse("file:///t.bnd").unwrap();
+        let document = Document::new(
+            uri,
+            "{% set root = \"src\" %}\n- tgt: out.bin\n  cmd: basm {{root}}/main.asm\n".to_string(),
+            1
+        );
+        let flat = BuildFileAnalyzer::new().target_symbols(&document);
+        let names: Vec<&str> = flat.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["out.bin"], "{flat:?}");
+    }
 }
