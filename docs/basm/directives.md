@@ -174,7 +174,7 @@ Example:
 ```
 
 
-### RANGE/DEFSECTION
+### RANGE, DEFSECTION
 
 Synopsis:
 
@@ -560,7 +560,7 @@ Example:
 --8<-- "cpclib-basm/tests/asm/good_document_ifdef.asm"
 ```
 
-### IFUSED/IFEXIST
+### IFUSED, IFEXIST
 
 Synopsis:
 
@@ -598,7 +598,7 @@ Example:
 --8<-- "cpclib-basm/tests/asm/good_document_ifnused.asm"
 ```
 
-### ELSEIF, ELSEIFDEF, ELSEIFNDEF, ELSEIFNOT, ELSEIFUSED/ELSEIFEXIST
+### ELSEIF, ELSEIFDEF, ELSEIFNDEF, ELSEIFNOT, ELSEIFUSED, ELSEIFEXIST
 
 Synopsis:
 

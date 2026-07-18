@@ -330,8 +330,12 @@ fn parse_directive_md(md: &str) -> Vec<(Vec<String>, String, bool)> {
             flush(&mut names, &mut syn, &mut desc, &mut result);
             in_code = false;
             sec = Sec::None;
+            // Most `### ` headings separate alias names with `, ` (e.g.
+            // `PHASE, DEPHASE`), but a few use `/` instead (e.g.
+            // `RANGE/DEFSECTION`) - split on either so every alias gets its
+            // own entry and hovering any of them finds the shared doc.
             names = line[4..]
-                .split(',')
+                .split([',', '/'])
                 .map(|n| n.trim().to_string())
                 .filter(|n| !n.is_empty())
                 .collect();

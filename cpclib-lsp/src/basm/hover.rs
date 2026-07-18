@@ -392,3 +392,55 @@ mod symbol_hover_tests {
         assert!(md.contains("GUARDED_LABEL"), "{md}");
     }
 }
+
+#[cfg(test)]
+mod directive_doc_hover_tests {
+    use super::*;
+
+    fn hover_at(text: &str, line: u32, character: u32) -> Option<Hover> {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        AssemblyAnalyzer::new().hover(&doc, Position { line, character })
+    }
+
+    fn markdown(hover: &Hover) -> &str {
+        match &hover.contents {
+            HoverContents::Markup(m) => m.value.as_str(),
+            _ => panic!("expected markdown hover contents")
+        }
+    }
+
+    /// Regression test: `directives.md` documents some directives under a
+    /// single heading joining their aliases with `/` (e.g.
+    /// `### RANGE, DEFSECTION`, previously `### RANGE/DEFSECTION`) instead
+    /// of `,` like every other heading. The doc-generation build script only
+    /// split headings on `,`, so a `/`-joined heading became one opaque name
+    /// ("RANGE/DEFSECTION") that could never match the bare word "RANGE" a
+    /// user actually hovers - hover silently showed nothing.
+    #[test]
+    fn hovering_range_shows_its_documentation() {
+        let text = "RANGE 0x4000, 0x8000, MY_SECTION\n";
+        let hover = hover_at(text, 0, 2).expect("hover on RANGE");
+        let md = markdown(&hover);
+        assert!(md.contains("RANGE"), "{md}");
+        assert!(md.contains("DEFSECTION"), "{md}");
+    }
+
+    #[test]
+    fn hovering_defsection_shows_the_same_documentation() {
+        let text = "DEFSECTION 0x4000, 0x8000, MY_SECTION\n";
+        let hover = hover_at(text, 0, 2).expect("hover on DEFSECTION");
+        let md = markdown(&hover);
+        assert!(md.contains("RANGE"), "{md}");
+        assert!(md.contains("DEFSECTION"), "{md}");
+    }
+
+    #[test]
+    fn hovering_ifused_shows_its_documentation() {
+        let text = "    ifused SOME_LABEL\n    endif\n";
+        let hover = hover_at(text, 0, 6).expect("hover on ifused");
+        let md = markdown(&hover);
+        assert!(md.to_uppercase().contains("IFUSED"), "{md}");
+        assert!(md.to_uppercase().contains("IFEXIST"), "{md}");
+    }
+}
