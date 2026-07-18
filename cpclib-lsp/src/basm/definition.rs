@@ -2,7 +2,7 @@
 //! include-file navigation, embedded-BASIC line targets.
 
 use cpclib_asm::parser::obtained::MayHaveSpan;
-use cpclib_tokens::ListingElement;
+use cpclib_tokens::{ListingElement, Token};
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
@@ -98,6 +98,34 @@ impl AssemblyAnalyzer {
                     token.module_name()
                 }
                 else {
+                    // A section's *definition*: `RANGE`/`DEFSECTION` start,
+                    // stop, name — the name is the last argument, so `word_upper`
+                    // here is what a `SECTION name` usage (or the definition
+                    // itself) resolves to. `to_token()` is needed to extract it
+                    // (no `is_range`/`range_*` accessor exists) and is only
+                    // ever called for tokens that already look like a `RANGE`/
+                    // `DEFSECTION` statement — see `starts_with_range_keyword`.
+                    if token.is_directive()
+                        && super::token::starts_with_range_keyword(token)
+                        && let Token::Range(name, ..) = token.to_token().into_owned()
+                        && name.to_uppercase() == word_upper
+                    {
+                        let (lsp_line, lsp_char) =
+                            super::token::locate_name_in_statement(token, &name);
+                        return Some(Location {
+                            uri: document.uri.clone(),
+                            range: Range {
+                                start: Position {
+                                    line: lsp_line,
+                                    character: lsp_char
+                                },
+                                end: Position {
+                                    line: lsp_line,
+                                    character: lsp_char + name.len() as u32
+                                }
+                            }
+                        });
+                    }
                     continue;
                 };
                 if source_name.to_uppercase() == word_upper {
@@ -434,5 +462,60 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         let analyzer = AssemblyAnalyzer::new();
         let loc = analyzer.find_definition_in(&doc, "GUARDED_LABEL");
         assert_eq!(loc.expect("label inside ifndef").range.start.line, 1);
+    }
+
+    /// A `SECTION name` usage must jump to the `RANGE`/`DEFSECTION` line
+    /// that defines that section name (the last argument), landing on the
+    /// name itself rather than on the `RANGE`/`DEFSECTION` keyword.
+    #[test]
+    fn section_usage_jumps_to_its_range_definition() {
+        let text = "RANGE 0x4000, 0x8000, MY_SECTION\nSECTION MY_SECTION\n    ret\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///sect.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        let loc = analyzer
+            .find_definition_in(&doc, "MY_SECTION")
+            .expect("section definition");
+        assert_eq!(loc.range.start.line, 0, "{loc:?}");
+        assert_eq!(loc.range.start.character, 22, "{loc:?}");
+        assert_eq!(loc.range.end.character, 32, "{loc:?}");
+    }
+
+    #[test]
+    fn goto_definition_from_a_section_usage_position_finds_the_range_line() {
+        let text = "RANGE 0x4000, 0x8000, MY_SECTION\nSECTION MY_SECTION\n    ret\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///sect2.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "MY_SECTION" within the `SECTION MY_SECTION` usage line.
+        let loc = analyzer
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 1,
+                    character: 10
+                }
+            )
+            .expect("goto-definition from a SECTION usage");
+        assert_eq!(loc.range.start.line, 0, "{loc:?}");
+    }
+
+    #[test]
+    fn goto_definition_on_the_range_name_itself_returns_its_own_position() {
+        let text = "RANGE 0x4000, 0x8000, MY_SECTION\n    ret\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///sect3.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        let loc = analyzer
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 0,
+                    character: 25
+                }
+            )
+            .expect("goto-definition on the section name inside its own definition");
+        assert_eq!(loc.range.start.line, 0, "{loc:?}");
+        assert_eq!(loc.range.start.character, 22, "{loc:?}");
     }
 }

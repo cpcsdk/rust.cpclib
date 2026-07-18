@@ -40,12 +40,15 @@ impl AssemblyAnalyzer {
         for token in super::token::flatten_listing(listing.iter()) {
             // source_len: byte length of the token as it appears in source
             // (for the selection range) — display_name: what the outline shows
-            let (source_len, display_name, category, kind, detail): (
+            // pos_override: set only when the definition's own position isn't
+            // `token.span()` (see the RANGE/DEFSECTION arm below)
+            let (source_len, display_name, category, kind, detail, pos_override): (
                 usize,
                 String,
                 SymbolCategory,
                 SymbolKind,
-                Option<String>
+                Option<String>,
+                Option<(u32, u32)>
             ) = if token.is_label() {
                 let raw = token.label_symbol();
                 let display = if raw.starts_with('.') {
@@ -63,6 +66,7 @@ impl AssemblyAnalyzer {
                     display,
                     SymbolCategory::Label,
                     SymbolKind::FUNCTION,
+                    None,
                     None
                 )
             }
@@ -73,7 +77,8 @@ impl AssemblyAnalyzer {
                     sym.to_string(),
                     SymbolCategory::Constant,
                     SymbolKind::CONSTANT,
-                    Some(format!("= {}", token.equ_value()))
+                    Some(format!("= {}", token.equ_value())),
+                    None
                 )
             }
             else if token.is_assign() {
@@ -83,7 +88,8 @@ impl AssemblyAnalyzer {
                     sym.to_string(),
                     SymbolCategory::Variable,
                     SymbolKind::VARIABLE,
-                    Some(format!("= {}", token.assign_value()))
+                    Some(format!("= {}", token.assign_value())),
+                    None
                 )
             }
             else if token.is_macro_definition() {
@@ -94,7 +100,8 @@ impl AssemblyAnalyzer {
                     name.to_string(),
                     SymbolCategory::Macro,
                     SymbolKind::FUNCTION,
-                    Some("MACRO".to_string())
+                    Some("MACRO".to_string()),
+                    None
                 )
             }
             else if token.is_module() {
@@ -105,10 +112,11 @@ impl AssemblyAnalyzer {
                     name.to_string(),
                     SymbolCategory::Module,
                     SymbolKind::MODULE,
+                    None,
                     None
                 )
             }
-            else if token.is_directive() && starts_with_range_keyword(token) {
+            else if token.is_directive() && super::token::starts_with_range_keyword(token) {
                 // A section's *definition*: `RANGE start, stop, name` (or the
                 // `DEFSECTION` alias) — the name is the last argument. Bare
                 // `SECTION name` only *uses* an already-defined section (it
@@ -117,21 +125,24 @@ impl AssemblyAnalyzer {
                 // to a label isn't a second definition of that label.
                 //
                 // `ListingElement` has no dedicated `is_range`/`range_*`
-                // accessors, so this goes through `to_token()` instead.
-                // `to_token()` still has an unimplemented (`todo!()`-panicking)
-                // fallback for several other directive variants, so
-                // `starts_with_range_keyword` gates the call to only the
-                // tokens we already know convert cleanly — calling it for
-                // every directive in a real file (ORG, DB, IF, INCLUDE, ...)
-                // previously crashed the whole outline.
+                // accessors, so this goes through `to_token()` instead;
+                // `starts_with_range_keyword` keeps that call off the hot
+                // path of ordinary directives — see its doc comment.
                 match token.to_token().into_owned() {
                     Token::Range(name, start, stop) => {
+                        // The token's own span points at the `RANGE`/
+                        // `DEFSECTION` keyword, not at `name` (the last
+                        // argument) — locate it within the statement so the
+                        // outline entry (and goto-definition, which reuses
+                        // this same extraction) highlights the actual name.
+                        let pos = super::token::locate_name_in_statement(token, &name);
                         (
                             name.len(),
                             name,
                             SymbolCategory::Section,
                             SymbolKind::NAMESPACE,
-                            Some(format!("{start}..{stop}"))
+                            Some(format!("{start}..{stop}")),
+                            Some(pos)
                         )
                     },
                     _ => continue
@@ -141,10 +152,14 @@ impl AssemblyAnalyzer {
                 continue;
             };
 
-            let span = token.span();
-            let (line_1based, col_1based) = span.relative_line_and_column();
-            let lsp_line = line_1based.saturating_sub(1) as u32;
-            let lsp_char = col_1based.saturating_sub(1) as u32;
+            let (lsp_line, lsp_char) = pos_override.unwrap_or_else(|| {
+                let span = token.span();
+                let (line_1based, col_1based) = span.relative_line_and_column();
+                (
+                    line_1based.saturating_sub(1) as u32,
+                    col_1based.saturating_sub(1) as u32
+                )
+            });
             // Range covers the source token, not the (potentially longer) display name
             let range = Range {
                 start: Position {
@@ -176,23 +191,6 @@ impl AssemblyAnalyzer {
         symbols.sort_by(|a, b| a.0.cmp(&b.0));
         symbols.into_iter().map(|(_, sym)| sym).collect()
     }
-}
-
-/// `true` when `token`'s own statement starts with the `RANGE` or
-/// `DEFSECTION` keyword — the only directives `document_symbols` risks a
-/// `to_token()` call for (see the call site). Checked by reading the
-/// token's own source text rather than any parsed representation, so it
-/// can't itself trigger the very panic it's meant to avoid.
-fn starts_with_range_keyword<T: MayHaveSpan>(token: &T) -> bool {
-    let span_text: &str = token.span().as_ref();
-    let first_line = span_text.lines().next().unwrap_or(span_text);
-    let first_word: String = first_line
-        .trim_start()
-        .chars()
-        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-        .collect();
-    let upper = first_word.to_uppercase();
-    upper == "RANGE" || upper == "DEFSECTION"
 }
 
 #[cfg(test)]

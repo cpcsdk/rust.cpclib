@@ -189,6 +189,53 @@ where T: cpclib_tokens::ListingElement + 'a {
     out
 }
 
+// ─── RANGE / DEFSECTION (section definitions) ─────────────────────────────────
+
+/// `true` when `token`'s own statement starts with the `RANGE` or
+/// `DEFSECTION` keyword. `ListingElement` has no dedicated `is_range`/
+/// `range_*` accessors, so extracting a section's name goes through the
+/// (documented-costly, and only partially implemented) `to_token()`
+/// conversion — this text-based pre-check, read from the token's own source
+/// rather than any parsed representation, keeps that call off the hot path
+/// of ordinary opcode/directive lines and away from `to_token()`'s
+/// unimplemented (`todo!()`-panicking) fallback for other directive kinds.
+pub(super) fn starts_with_range_keyword<T: cpclib_asm::parser::obtained::MayHaveSpan>(
+    token: &T
+) -> bool {
+    let span_text: &str = token.span().as_ref();
+    let first_line = span_text.lines().next().unwrap_or(span_text);
+    let first_word: String = first_line
+        .trim_start()
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect();
+    let upper = first_word.to_uppercase();
+    upper == "RANGE" || upper == "DEFSECTION"
+}
+
+/// Best-effort `(line, column)` of `name` within `token`'s own statement —
+/// used for `RANGE`/`DEFSECTION`, where the token's span points at the
+/// keyword (`RANGE start, stop, name`), not at the name argument itself.
+/// Falls back to the keyword's own position if `name` can't be found on the
+/// statement's first line (shouldn't happen for a well-formed `Token::Range`
+/// just extracted from this same token).
+pub(super) fn locate_name_in_statement<T: cpclib_asm::parser::obtained::MayHaveSpan>(
+    token: &T,
+    name: &str
+) -> (u32, u32) {
+    let span = token.span();
+    let span_text: &str = span.as_ref();
+    let first_line = span_text.lines().next().unwrap_or(span_text);
+    let (line_1based, col_1based) = span.relative_line_and_column();
+    let lsp_line = line_1based.saturating_sub(1) as u32;
+    let base_col = col_1based.saturating_sub(1) as u32;
+    let col = first_line
+        .find(name)
+        .map(|byte_off| base_col + byte_off as u32)
+        .unwrap_or(base_col);
+    (lsp_line, col)
+}
+
 // ─── Generated directive documentation ────────────────────────────────────────
 
 // `DIRECTIVE_DOCS` + `DIRECTIVE_FILE_ARGS`, generated from docs/basm/directives.md.
