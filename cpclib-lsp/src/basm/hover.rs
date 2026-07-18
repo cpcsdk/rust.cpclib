@@ -91,6 +91,12 @@ impl AssemblyAnalyzer {
             return Some(make_hover(md));
         }
 
+        // SNASET flag (e.g. `Z80_AF`, `GA_PAL:5`) — its specific purpose,
+        // scraped from the same `### SNASET` section's flag list.
+        if let Some(md) = snaset_flag_hover(&word_upper) {
+            return Some(make_hover(md));
+        }
+
         // Symbol — look up EQU / assign / label in the listing (only when parse succeeds)
         if let Ok(listing) = self.parse_document(document) {
             for token in super::token::flatten_listing(listing.iter()) {
@@ -302,7 +308,7 @@ fn format_include_preview(filename: &str, content: &str) -> String {
 
 // ─── Directive documentation (generated from docs/basm/directives.md) ────────
 
-use super::token::DIRECTIVE_DOCS;
+use super::token::{DIRECTIVE_DOCS, SNASET_FLAGS};
 
 /// Look up an assembler directive by name (case-insensitive) and return a
 /// markdown hover string, or `None` if not found.
@@ -311,6 +317,17 @@ fn directive_hover(word_upper: &str) -> Option<String> {
         .iter()
         .find(|(names, _)| names.iter().any(|n| n.to_uppercase() == word_upper))
         .map(|(_, doc)| doc.to_string())
+}
+
+/// Look up a SNASET flag (e.g. `Z80_AF`) by name and return its specific
+/// purpose. An indexed family like `GA_PAL:n` is matched by its base name
+/// alone (`GA_PAL`) — word extraction stops at `:`, so hovering the actual
+/// usage `GA_PAL:5` only ever offers `GA_PAL` as the word under the cursor.
+fn snaset_flag_hover(word_upper: &str) -> Option<String> {
+    SNASET_FLAGS
+        .iter()
+        .find(|(name, _)| name.strip_suffix(":n").unwrap_or(name).to_uppercase() == word_upper)
+        .map(|(name, desc)| format!("**{name}** — SNASET flag\n\n{desc}"))
 }
 
 #[cfg(test)]
@@ -442,5 +459,25 @@ mod directive_doc_hover_tests {
         let md = markdown(&hover);
         assert!(md.to_uppercase().contains("IFUSED"), "{md}");
         assert!(md.to_uppercase().contains("IFEXIST"), "{md}");
+    }
+
+    #[test]
+    fn hovering_a_plain_snaset_flag_shows_its_own_purpose() {
+        let text = "SNASET Z80_AF, 1\n";
+        // Cursor inside "Z80_AF".
+        let hover = hover_at(text, 0, 9).expect("hover on Z80_AF");
+        let md = markdown(&hover);
+        assert!(md.contains("Z80_AF"), "{md}");
+        assert!(md.contains("16-bit register pairs"), "{md}");
+    }
+
+    #[test]
+    fn hovering_an_indexed_snaset_flag_shows_its_family_purpose() {
+        let text = "SNASET GA_PAL:5, 1\n";
+        // Word extraction stops at ':', so the cursor lands on "GA_PAL".
+        let hover = hover_at(text, 0, 9).expect("hover on GA_PAL");
+        let md = markdown(&hover);
+        assert!(md.contains("GA_PAL"), "{md}");
+        assert!(md.contains("requires index"), "{md}");
     }
 }

@@ -213,7 +213,8 @@ fn generate_directive_docs() {
             fs::write(
                 dest,
                 "pub static DIRECTIVE_DOCS: &[(&[&str], &str)] = &[];\n\
-                 pub static DIRECTIVE_FILE_ARGS: &[&str] = &[];\n"
+                 pub static DIRECTIVE_FILE_ARGS: &[&str] = &[];\n\
+                 pub static SNASET_FLAGS: &[(&str, &str)] = &[];\n"
             )
             .unwrap();
             return;
@@ -267,6 +268,95 @@ fn generate_directive_docs() {
         }
     }
     writeln!(out, "];").unwrap();
+
+    // SNASET's first argument (the flag being set) only accepts a specific,
+    // documented list of names - offer exactly those for completion, and
+    // their individual purpose on hover, instead of treating it like any
+    // other directive's free-form expression argument.
+    writeln!(out).unwrap();
+    writeln!(
+        out,
+        "/// `(flag, description)` pairs accepted as SNASET's first argument, \
+         parsed from the `### SNASET` section's bullet lists. A name ending \
+         in `:n` (e.g. `GA_PAL:n`) is an indexed family (`GA_PAL:0`, \
+         `GA_PAL:1`, ...); matching/completion on the Rust side special-cases \
+         that suffix."
+    )
+    .unwrap();
+    writeln!(out, "pub static SNASET_FLAGS: &[(&str, &str)] = &[").unwrap();
+    for (name, desc) in parse_snaset_flags(&md_src) {
+        writeln!(out, "    (\"{}\", \"{}\"),", esc_str(&name), esc_str(&desc)).unwrap();
+    }
+    writeln!(out, "];").unwrap();
+}
+
+/// Extract `(flag_name, description)` pairs from the `### SNASET` section's
+/// bullet lists. Two bullet shapes are used there:
+///   - `` - `NAME` - description `` (one name)
+///   - `` - `A`, `B`, `C` (shared description) `` (several names)
+/// Every backtick-quoted name on a bullet line gets its own entry, sharing
+/// that line's description.
+fn parse_snaset_flags(md: &str) -> Vec<(String, String)> {
+    let mut result: Vec<(String, String)> = Vec::new();
+    let mut in_snaset = false;
+
+    for line in md.lines() {
+        if line.starts_with("### ") {
+            in_snaset = line[4..].trim() == "SNASET";
+            continue;
+        }
+        if !in_snaset {
+            continue;
+        }
+        let trimmed = line.trim_start();
+        let Some(rest) = trimmed.strip_prefix("- ")
+        else {
+            continue;
+        };
+
+        // Collect every `NAME` backtick-quoted segment on this bullet line,
+        // tracking how many bytes of `rest` they consumed so the remainder
+        // (the description) can be sliced off afterwards.
+        let mut names = Vec::new();
+        let mut remaining = rest;
+        let mut consumed = 0usize;
+        loop {
+            let Some(open) = remaining.find('`')
+            else {
+                break;
+            };
+            let after_open = &remaining[open + 1..];
+            let Some(close_rel) = after_open.find('`')
+            else {
+                break;
+            };
+            names.push(after_open[..close_rel].to_string());
+            consumed += open + 1 + close_rel + 1;
+            remaining = &after_open[close_rel + 1..];
+        }
+        if names.is_empty() {
+            continue;
+        }
+
+        let tail = rest[consumed..].trim();
+        let description = if let Some(d) = tail.strip_prefix("- ") {
+            d.trim().to_string()
+        }
+        else if let Some(d) = tail.strip_prefix('(').and_then(|s| s.strip_suffix(')')) {
+            d.trim().to_string()
+        }
+        else {
+            tail.trim_start_matches(',').trim().to_string()
+        };
+
+        for name in names {
+            if !result.iter().any(|(n, _)| *n == name) {
+                result.push((name, description.clone()));
+            }
+        }
+    }
+
+    result
 }
 
 /// Returns true when a directive synopsis takes a quoted filename argument.

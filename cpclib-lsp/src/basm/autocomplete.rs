@@ -5,11 +5,11 @@
 //! The second half is the analyzer entry point that renders the candidates
 //! into LSP `CompletionItem`s.
 
-use cpclib_tokens::ListingElement;
+use cpclib_tokens::{ListingElement, Token};
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
-use super::token::{DIRECTIVE_FILE_ARGS, is_ident_byte};
+use super::token::{DIRECTIVE_FILE_ARGS, SNASET_FLAGS, is_ident_byte};
 use crate::common::document::Document;
 
 /// Semantic completion context for Z80 assembly.
@@ -181,7 +181,10 @@ pub enum CompletionContext {
         arg_index: usize
     },
     /// Cursor is in an argument of an assembler directive.
-    DirectiveArgument
+    DirectiveArgument {
+        /// 0 = first argument, 1 = second argument, etc.
+        arg_index: usize
+    }
 }
 
 /// Analyse the current line up to `col` and return the completion context.
@@ -216,12 +219,12 @@ pub fn analyze_context(line: &str, col: usize) -> CompletionContext {
             .iter()
             .any(|m| m.to_uppercase() == mnemonic_upper);
 
-    if !is_instruction {
-        return CompletionContext::DirectiveArgument;
-    }
-
     // Count commas outside parentheses/brackets to find arg_index
     let arg_index = count_arg_index(rest);
+
+    if !is_instruction {
+        return CompletionContext::DirectiveArgument { arg_index };
+    }
 
     CompletionContext::InstructionOperand {
         mnemonic: mnemonic_upper,
@@ -479,11 +482,11 @@ mod tests {
     fn directive_gives_directive_argument_context() {
         assert!(matches!(
             ctx("ORG ", 4),
-            CompletionContext::DirectiveArgument
+            CompletionContext::DirectiveArgument { .. }
         ));
         assert!(matches!(
             ctx("DEFB ", 5),
-            CompletionContext::DirectiveArgument
+            CompletionContext::DirectiveArgument { .. }
         ));
     }
 
@@ -970,7 +973,7 @@ impl AssemblyAnalyzer {
                 }
             },
 
-            CompletionContext::DirectiveArgument => {
+            CompletionContext::DirectiveArgument { arg_index } => {
                 let directive = first_statement_word(&line).unwrap_or_default();
                 if DIRECTIVE_FILE_ARGS.contains(&directive.as_str()) {
                     completions.extend(directive_filename_completions(
@@ -979,6 +982,12 @@ impl AssemblyAnalyzer {
                         position.line,
                         col
                     ));
+                }
+                else if directive.eq_ignore_ascii_case("SNASET") && arg_index == 0 {
+                    // SNASET's first argument (the flag being set) only
+                    // accepts a specific, documented list of names - offer
+                    // exactly those, not arbitrary symbols/expressions.
+                    completions.extend(snaset_flag_completions());
                 }
                 else {
                     // Directives accept any expression — offer symbols.
@@ -1025,6 +1034,16 @@ impl AssemblyAnalyzer {
                     "macro".to_string()
                 ));
             }
+            else if token.is_directive() && super::token::starts_with_range_keyword(token) {
+                // A section name defined via `RANGE`/`DEFSECTION start, stop,
+                // name` — the only valid values for a `SECTION` directive's
+                // argument, but offered alongside every other symbol kind
+                // here rather than only there, consistent with how EQU
+                // constants and macros are already offered everywhere too.
+                if let Token::Range(name, start, stop) = token.to_token().into_owned() {
+                    syms.push((name, format!("section {start}..{stop}")));
+                }
+            }
         }
         syms
     }
@@ -1060,6 +1079,53 @@ fn collect_symbols_by_text(document: &Document) -> Vec<(String, String)> {
     let mut syms: Vec<(String, String)> = Vec::new();
     for line in text.lines() {
         let trimmed = line.trim_start();
+
+        // RANGE/DEFSECTION start, stop, name — section definition. Checked
+        // first and unconditionally (this directive's own line will very
+        // often be exactly what fails to parse while it's still being
+        // typed, which is precisely when this text-based fallback runs).
+        //
+        // A directive doesn't necessarily start at column 0: several
+        // statements can share one physical line via `:`, and a `/* ... */`
+        // block comment can precede it - so every `:`-separated segment is
+        // checked, each with a leading block comment stripped first, rather
+        // than assuming the keyword starts the (trimmed) line.
+        let mut found_range = false;
+        for segment in trimmed.split(':') {
+            let mut seg = segment.trim_start();
+            if let Some(rest) = seg.strip_prefix("/*")
+                && let Some(end) = rest.find("*/")
+            {
+                seg = rest[end + 2..].trim_start();
+            }
+            let seg_upper = seg.to_uppercase();
+            let keyword_len = if seg_upper.starts_with("RANGE ") {
+                Some(6)
+            }
+            else if seg_upper.starts_with("DEFSECTION ") {
+                Some(11)
+            }
+            else {
+                None
+            };
+            let Some(klen) = keyword_len
+            else {
+                continue;
+            };
+            found_range = true;
+            // RANGE/DEFSECTION are pure ASCII, so `klen` bytes line up the
+            // same in `seg` (original case) as in `seg_upper`.
+            if let Some(name) = seg[klen..].rsplit(',').next() {
+                let name = name.trim();
+                if !name.is_empty() && !syms.iter().any(|(s, _)| s == name) {
+                    syms.push((name.to_string(), "section".to_string()));
+                }
+            }
+        }
+        if found_range {
+            continue;
+        }
+
         let indent = line.len() - trimmed.len();
         let bytes = trimmed.as_bytes();
         let mut i = 0;
@@ -1322,6 +1388,31 @@ fn inner_file_completions(
                     },
                     new_text
                 })),
+                ..Default::default()
+            }
+        })
+        .collect()
+}
+
+/// Completions for SNASET's first argument — the documented flag list
+/// (`SNASET_FLAGS`), generated from the `### SNASET` section of
+/// `docs/basm/directives.md`. A `NAME:n` entry (e.g. `GA_PAL:n`) is an
+/// indexed family: it's inserted as a snippet with the index placeholder
+/// selected, ready for the user to type the actual number.
+fn snaset_flag_completions() -> Vec<CompletionItem> {
+    SNASET_FLAGS
+        .iter()
+        .map(|(name, desc)| {
+            let (insert_text, insert_text_format) = match name.strip_suffix(":n") {
+                Some(base) => (format!("{base}:${{1:n}}"), InsertTextFormat::SNIPPET),
+                None => (name.to_string(), InsertTextFormat::PLAIN_TEXT)
+            };
+            CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                detail: Some(desc.to_string()),
+                insert_text: Some(insert_text),
+                insert_text_format: Some(insert_text_format),
                 ..Default::default()
             }
         })
@@ -1598,5 +1689,106 @@ mod include_tests {
         let names: Vec<&str> = syms.iter().map(|(_, sym, _)| sym.as_str()).collect();
         assert!(names.contains(&"GA_COL_00"), "{names:?}");
         assert!(names.contains(&"GA_BLACK"), "{names:?}");
+    }
+}
+
+#[cfg(test)]
+mod snaset_and_section_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    fn complete(text: &str, line: u32, character: u32) -> Vec<CompletionItem> {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        AssemblyAnalyzer::new().completion(&doc, Position { line, character })
+    }
+
+    fn labels(items: &[CompletionItem]) -> Vec<String> {
+        items.iter().map(|i| i.label.clone()).collect()
+    }
+
+    #[test]
+    fn snaset_first_argument_offers_only_documented_flags() {
+        let text = "SNASET ";
+        let items = complete(text, 0, text.len() as u32);
+        let ls = labels(&items);
+        assert!(ls.contains(&"Z80_AF".to_string()), "{ls:?}");
+        assert!(ls.contains(&"GA_PAL:n".to_string()), "{ls:?}");
+        assert_eq!(items.len(), SNASET_FLAGS.len(), "{ls:?}");
+    }
+
+    #[test]
+    fn snaset_second_argument_is_not_restricted_to_the_flag_list() {
+        let text = "MY_LABEL:\n    ret\nSNASET Z80_AF, ";
+        let last_line_len = text.lines().last().unwrap().len() as u32;
+        let items = complete(text, 2, last_line_len);
+        let ls = labels(&items);
+        assert!(
+            ls.contains(&"MY_LABEL".to_string()),
+            "second argument should fall back to ordinary symbols: {ls:?}"
+        );
+        assert_ne!(
+            items.len(),
+            SNASET_FLAGS.len(),
+            "must not be exclusively the flag list here: {ls:?}"
+        );
+    }
+
+    #[test]
+    fn indexed_snaset_flag_completes_as_a_snippet() {
+        let text = "SNASET ";
+        let items = complete(text, 0, text.len() as u32);
+        let item = items
+            .iter()
+            .find(|i| i.label == "GA_PAL:n")
+            .expect("GA_PAL:n offered");
+        assert_eq!(item.insert_text_format, Some(InsertTextFormat::SNIPPET));
+        assert_eq!(item.insert_text.as_deref(), Some("GA_PAL:${1:n}"));
+    }
+
+    #[test]
+    fn plain_snaset_flag_inserts_as_is() {
+        let text = "SNASET ";
+        let items = complete(text, 0, text.len() as u32);
+        let item = items
+            .iter()
+            .find(|i| i.label == "Z80_AF")
+            .expect("Z80_AF offered");
+        assert_eq!(item.insert_text_format, Some(InsertTextFormat::PLAIN_TEXT));
+        assert_eq!(item.insert_text.as_deref(), Some("Z80_AF"));
+    }
+
+    #[test]
+    fn range_defined_section_name_is_offered_in_completion() {
+        let text = "RANGE 0x4000, 0x8000, MY_SECTION\nSECTION ";
+        let last_line_len = text.lines().last().unwrap().len() as u32;
+        let items = complete(text, 1, last_line_len);
+        assert!(
+            labels(&items).contains(&"MY_SECTION".to_string()),
+            "{:?}",
+            labels(&items)
+        );
+    }
+
+    /// The text-based fallback (used when the document doesn't fully parse,
+    /// e.g. while another line is still being typed) must not assume RANGE/
+    /// DEFSECTION starts at column 0 either — same reasoning as the AST path
+    /// tested in `symbols.rs`'s `multi_statement_line_tests`.
+    #[test]
+    fn text_fallback_finds_range_after_a_colon_separated_statement() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "    LD A,1 : RANGE 0x4000, 0x8000, MY_SECTION\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let syms = collect_symbols_by_text(&doc);
+        assert!(syms.iter().any(|(n, _)| n == "MY_SECTION"), "{syms:?}");
+    }
+
+    #[test]
+    fn text_fallback_finds_range_after_a_block_comment() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "/* comment */ RANGE 0x4000, 0x8000, OTHER_SECTION\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let syms = collect_symbols_by_text(&doc);
+        assert!(syms.iter().any(|(n, _)| n == "OTHER_SECTION"), "{syms:?}");
     }
 }

@@ -280,3 +280,53 @@ mod tests {
         assert_eq!(section.kind, SymbolKind::NAMESPACE);
     }
 }
+
+#[cfg(test)]
+mod multi_statement_line_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    fn symbols_for(text: &str) -> Vec<DocumentSymbol> {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        AssemblyAnalyzer::new().document_symbols(&doc)
+    }
+
+    /// A `RANGE`/`DEFSECTION` (or any directive) doesn't necessarily start at
+    /// column 0 — several statements can share one physical line via `:`,
+    /// and a `/* ... */` block comment can precede it too. `token.span()`
+    /// (used by `starts_with_range_keyword`/`locate_name_in_statement`) is
+    /// anchored to the token's own real start position, as parsed, not to
+    /// the start of its physical line, so both must still work.
+    #[test]
+    fn range_after_a_colon_separated_statement_is_still_found() {
+        let text = "    LD A,1 : RANGE 0x4000, 0x8000, MY_SECTION\n    ret\n";
+        let symbols = symbols_for(text);
+        let section = symbols
+            .iter()
+            .find(|s| s.name == "MY_SECTION")
+            .expect("section symbol after a `:`-separated statement");
+        assert_eq!(section.kind, SymbolKind::NAMESPACE);
+        // The highlighted range must be "MY_SECTION" itself, not swallow the
+        // "LD A,1 : RANGE ..." prefix that precedes it on the line.
+        assert_eq!(
+            section.range.end.character - section.range.start.character,
+            "MY_SECTION".len() as u32
+        );
+    }
+
+    #[test]
+    fn range_after_a_block_comment_is_still_found() {
+        let text = "/* comment */ RANGE 0x4000, 0x8000, OTHER_SECTION\n";
+        let symbols = symbols_for(text);
+        let section = symbols
+            .iter()
+            .find(|s| s.name == "OTHER_SECTION")
+            .expect("section symbol after a block comment");
+        assert_eq!(section.kind, SymbolKind::NAMESPACE);
+        assert_eq!(
+            section.range.end.character - section.range.start.character,
+            "OTHER_SECTION".len() as u32
+        );
+    }
+}
