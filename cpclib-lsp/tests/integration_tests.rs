@@ -777,3 +777,138 @@ async fn test_directive_completion() {
         panic!("Expected completion result");
     }
 }
+
+#[tokio::test]
+async fn test_goto_definition_finds_symbol_in_an_unopened_included_file() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    // helper.asm is never opened by the editor - only INCLUDEd from main.asm.
+    std::fs::write(tmp.path().join("helper.asm"), "HELPER_LABEL:\n    ret\n").unwrap();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: main_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "    include \"helper.asm\"\n    call helper_label\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    // Cursor on "helper_label" (the call target), line 1.
+    let result = backend
+        .goto_definition(GotoDefinitionParams {
+            text_document_position_params: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: main_uri.clone()
+                },
+                position: Position {
+                    line: 1,
+                    character: 11
+                }
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap();
+
+    let GotoDefinitionResponse::Scalar(location) = result.expect("definition should be found")
+    else {
+        panic!("expected a scalar location");
+    };
+    assert_eq!(
+        location.uri,
+        Url::from_file_path(tmp.path().join("helper.asm")).unwrap()
+    );
+    assert_eq!(location.range.start.line, 0);
+}
+
+#[tokio::test]
+async fn test_goto_definition_finds_symbol_via_workspace_scan_without_an_include() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    // other.asm is never opened and never INCLUDEd by main.asm - only
+    // findable by scanning the workspace for .asm files.
+    std::fs::write(tmp.path().join("other.asm"), "SOME_LABEL:\n    ret\n").unwrap();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: Url::from_file_path(tmp.path()).unwrap(),
+                name: "test-workspace".to_string()
+            }]),
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: main_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "    call some_label\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let result = backend
+        .goto_definition(GotoDefinitionParams {
+            text_document_position_params: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: main_uri.clone()
+                },
+                position: Position {
+                    line: 0,
+                    character: 11
+                }
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap();
+
+    let GotoDefinitionResponse::Scalar(location) = result.expect("definition should be found")
+    else {
+        panic!("expected a scalar location");
+    };
+    assert_eq!(
+        location.uri,
+        Url::from_file_path(tmp.path().join("other.asm")).unwrap()
+    );
+    assert_eq!(location.range.start.line, 0);
+}

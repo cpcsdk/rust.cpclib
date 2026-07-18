@@ -3038,6 +3038,7 @@ dependencies = [
  "tower-lsp",
  "tracing",
  "tracing-subscriber",
+ "walkdir",
  "winnow 0.6.26",
 ]
 

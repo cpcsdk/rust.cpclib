@@ -263,15 +263,21 @@ fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
         return None;
     }
 
+    let path = resolve_include_path(filename, doc_uri)?;
+    Url::from_file_path(path).ok()
+}
+
+/// Walk up from `doc_uri`'s directory, trying each ancestor as a base for
+/// `filename`, stopping once a project-root marker or the filesystem root is
+/// reached. Shared by ctrl+click include navigation and the eager
+/// cross-file goto-definition fallback.
+pub fn resolve_include_path(filename: &str, doc_uri: &Url) -> Option<std::path::PathBuf> {
     let doc_path = doc_uri.to_file_path().ok()?;
     let mut dir = doc_path.parent()?;
-
-    // Walk up the ancestor tree: try each directory as a base for `filename`.
-    // Stop once we hit a project-root marker or the filesystem root.
     loop {
         let candidate = dir.join(filename);
         if candidate.exists() {
-            return Url::from_file_path(candidate).ok();
+            return Some(candidate);
         }
         // If this directory contains a project-root marker, don't go further up.
         let at_root = PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists());
@@ -281,6 +287,59 @@ fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
         }
     }
     None
+}
+
+/// Every filename referenced by an `INCLUDE`/`INCBIN`/`BINCLUDE` directive in
+/// `text`, in document order. Best-effort text scan (recognizes the same
+/// directives as `resolve_include_at`, but line-anchored rather than
+/// cursor-anchored so the whole file can be scanned in one pass).
+pub fn extract_include_filenames(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        let upper = trimmed.to_uppercase();
+
+        let Some(directive) = INCLUDE_DIRECTIVES.iter().find(|d| {
+            upper == **d
+                || upper.starts_with(&format!("{d} "))
+                || upper.starts_with(&format!("{d}\t"))
+        })
+        else {
+            continue;
+        };
+
+        let after = &trimmed[directive.len()..];
+        let Some(q1) = after.find('"')
+        else {
+            continue;
+        };
+        let Some(q2_rel) = after[q1 + 1..].find('"')
+        else {
+            continue;
+        };
+        out.push(after[q1 + 1..q1 + 1 + q2_rel].to_string());
+    }
+    out
+}
+
+/// The nearest ancestor directory of `doc_uri` containing a project-root
+/// marker (`.git`, `Cargo.toml`, ...), or the document's own directory if no
+/// marker is found anywhere up to the filesystem root. Used as the search
+/// base for the eager cross-file goto-definition fallback when the LSP
+/// client didn't report any workspace folder.
+pub fn project_root_for(doc_uri: &Url) -> Option<std::path::PathBuf> {
+    let doc_path = doc_uri.to_file_path().ok()?;
+    let own_dir = doc_path.parent()?.to_path_buf();
+    let mut dir = own_dir.clone();
+    loop {
+        if PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists()) {
+            return Some(dir);
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent.to_path_buf(),
+            None => return Some(own_dir)
+        }
+    }
 }
 
 /// Find the byte range of the quoted string `"..."` that covers position `col`.

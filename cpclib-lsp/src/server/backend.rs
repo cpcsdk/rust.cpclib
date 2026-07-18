@@ -1,3 +1,6 @@
+use std::path::PathBuf;
+use std::sync::RwLock;
+
 use dashmap::DashMap;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -13,7 +16,13 @@ pub struct CpcLspBackend {
     documents: DashMap<Url, Document>,
     asm_analyzer: AssemblyAnalyzer,
     build_analyzer: BuildFileAnalyzer,
-    basic_analyzer: BasicAnalyzer
+    basic_analyzer: BasicAnalyzer,
+    /// Workspace folder(s) reported at `initialize`, used to bound the eager
+    /// cross-file goto-definition fallback (`find_definition_via_workspace_scan`).
+    /// Empty when the client sent neither `workspaceFolders` nor `rootUri`
+    /// (e.g. single-file mode) - the fallback then derives a root from the
+    /// document itself, see `basm::definition::project_root_for`.
+    workspace_roots: RwLock<Vec<PathBuf>>
 }
 
 impl CpcLspBackend {
@@ -23,7 +32,8 @@ impl CpcLspBackend {
             documents: DashMap::new(),
             asm_analyzer: AssemblyAnalyzer::new(),
             build_analyzer: BuildFileAnalyzer::new(),
-            basic_analyzer: BasicAnalyzer::new()
+            basic_analyzer: BasicAnalyzer::new(),
+            workspace_roots: RwLock::new(Vec::new())
         }
     }
 
@@ -44,6 +54,107 @@ impl CpcLspBackend {
         self.publish_diagnostics(document.uri.clone(), diagnostics)
             .await;
     }
+
+    /// Symbol defined in a file explicitly `INCLUDE`/`INCBIN`/`BINCLUDE`d by
+    /// `document_text` (the document at `from_uri`), even when that file was
+    /// never opened by the editor. Prefers the already-open in-memory
+    /// version when there is one (it may have unsaved changes), otherwise
+    /// reads straight from disk.
+    fn find_definition_via_includes(
+        &self,
+        document_text: &str,
+        from_uri: &Url,
+        word_upper: &str
+    ) -> Option<Location> {
+        for filename in crate::basm::definition::extract_include_filenames(document_text) {
+            let Some(path) = crate::basm::definition::resolve_include_path(&filename, from_uri)
+            else {
+                continue;
+            };
+            if let Some(loc) = self.find_definition_at_path(&path, word_upper) {
+                return Some(loc);
+            }
+        }
+        None
+    }
+
+    /// Symbol defined in any `.asm` file under the workspace root(s) (or, if
+    /// the client reported none, the nearest project-root ancestor of
+    /// `from_uri`), even when never opened by the editor. Stops at the first
+    /// match; `.git`/`target`/etc. are pruned from the walk.
+    fn find_definition_via_workspace_scan(
+        &self,
+        from_uri: &Url,
+        word_upper: &str
+    ) -> Option<Location> {
+        let roots: Vec<PathBuf> = {
+            let guard = self.workspace_roots.read().unwrap();
+            if guard.is_empty() {
+                crate::basm::definition::project_root_for(from_uri)
+                    .into_iter()
+                    .collect()
+            }
+            else {
+                guard.clone()
+            }
+        };
+
+        let from_path = from_uri.to_file_path().ok();
+
+        for root in roots {
+            let walker = walkdir::WalkDir::new(&root)
+                .into_iter()
+                .filter_entry(|e| !is_ignored_dir(e));
+            for entry in walker.filter_map(|e| e.ok()) {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                let path = entry.path();
+                let is_asm = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
+                if !is_asm || from_path.as_deref() == Some(path) {
+                    continue;
+                }
+                if let Some(loc) = self.find_definition_at_path(path, word_upper) {
+                    return Some(loc);
+                }
+            }
+        }
+        None
+    }
+
+    /// Shared by both cross-file fallbacks: look up `word_upper` in the file
+    /// at `path`, using the already-open in-memory document if there is one.
+    fn find_definition_at_path(
+        &self,
+        path: &std::path::Path,
+        word_upper: &str
+    ) -> Option<Location> {
+        let target_uri = Url::from_file_path(path).ok()?;
+
+        if let Some(open_doc) = self.documents.get(&target_uri) {
+            return self
+                .asm_analyzer
+                .find_definition_in(open_doc.value(), word_upper);
+        }
+
+        let text = std::fs::read_to_string(path).ok()?;
+        let doc = Document::new(target_uri, text, 0);
+        self.asm_analyzer.find_definition_in(&doc, word_upper)
+    }
+}
+
+/// Directories never worth descending into while scanning the workspace for
+/// `.asm` files: VCS metadata and build output can be huge and are never
+/// where hand-written assembly sources live.
+fn is_ignored_dir(entry: &walkdir::DirEntry) -> bool {
+    entry.file_type().is_dir()
+        && matches!(
+            entry.file_name().to_str(),
+            Some(".git" | ".hg" | ".svn" | "target" | "node_modules")
+        )
 }
 
 #[tower_lsp::async_trait]
@@ -51,6 +162,25 @@ impl LanguageServer for CpcLspBackend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         tracing::info!("Initializing cpclib-lsp server");
         tracing::info!("Client capabilities: {:?}", params.capabilities);
+
+        // Record the workspace root(s) for the eager cross-file
+        // goto-definition fallback. `workspaceFolders` is the modern,
+        // possibly-multi-root source; `rootUri` is the deprecated
+        // single-root predecessor some clients still send instead.
+        let mut roots: Vec<PathBuf> = params
+            .workspace_folders
+            .iter()
+            .flatten()
+            .filter_map(|f| f.uri.to_file_path().ok())
+            .collect();
+        if roots.is_empty() {
+            #[allow(deprecated)]
+            let root_uri = params.root_uri.as_ref();
+            if let Some(path) = root_uri.and_then(|u| u.to_file_path().ok()) {
+                roots.push(path);
+            }
+        }
+        *self.workspace_roots.write().unwrap() = roots;
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -275,7 +405,8 @@ impl LanguageServer for CpcLspBackend {
                 Some(w) => w.to_uppercase(),
                 None => return Ok(None)
             };
-            drop(entry); // release the DashMap read guard before iterating
+            let document_text = entry.value().text();
+            drop(entry); // release the DashMap read guard before iterating/reading files
 
             for other in self.documents.iter() {
                 if *other.key() == uri {
@@ -287,6 +418,20 @@ impl LanguageServer for CpcLspBackend {
                 if let Some(loc) = self.asm_analyzer.find_definition_in(other.value(), &word) {
                     return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
                 }
+            }
+
+            // Not found among already-open documents either: the symbol is
+            // presumably defined in a file the editor was never told to
+            // open. Eagerly try, in order: (1) files this document itself
+            // `INCLUDE`s, then (2) any `.asm` file under the workspace -
+            // real-world sources are made of many files, most of which are
+            // never individually opened, so without this goto-definition
+            // would only ever work by accident.
+            if let Some(loc) = self.find_definition_via_includes(&document_text, &uri, &word) {
+                return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
+            }
+            if let Some(loc) = self.find_definition_via_workspace_scan(&uri, &word) {
+                return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
             }
         }
 
