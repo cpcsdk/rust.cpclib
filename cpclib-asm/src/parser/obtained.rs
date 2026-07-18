@@ -1902,6 +1902,16 @@ impl ListingElement for LocatedTokenInner {
                     step: step.as_ref().map(|e| Box::new(e.to_expr().into_owned()))
                 })
             },
+
+            Self::Range(label, start, stop) => {
+                Cow::Owned(Token::Range(
+                    label.as_str().to_string(),
+                    start.to_expr().into_owned(),
+                    stop.to_expr().into_owned()
+                ))
+            },
+            Self::Section(label) => Cow::Owned(Token::Section(label.as_str().into())),
+
             _ => todo!("Need to implement conversion  for {:?}", self)
         }
     }
