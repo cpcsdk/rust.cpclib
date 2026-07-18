@@ -15,6 +15,7 @@ pub mod diagnostics;
 pub mod embedded_basic;
 pub mod format;
 pub mod hover;
+pub mod includes;
 pub mod parse;
 pub mod refactor;
 pub mod semantic_tokens;

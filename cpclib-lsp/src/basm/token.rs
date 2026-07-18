@@ -114,6 +114,81 @@ pub(super) fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'@'
 }
 
+// ─── Listing flattening ────────────────────────────────────────────────────────
+
+/// Recursively flatten a parsed listing, descending into every kind of
+/// nested block (`IF`/`IFDEF`/`IFNDEF`, `MODULE`, `REPEAT`/`REPEAT...UNTIL`,
+/// `WHILE`, `RORG`, `FOR`, `ITERATE`, `SWITCH`, `CONFINED`, crunched
+/// sections, assembler-control blocks).
+///
+/// `listing.iter()` alone only sees the *top-level* statements — a file
+/// entirely wrapped in an `ifndef GUARD ... endif` header guard (extremely
+/// common in real-world sources, including several of basm's own
+/// `inner://` resources, e.g. `ga.asm`) would otherwise expose exactly one
+/// top-level `IF` token and none of the labels/constants/macros inside it.
+/// Symbol lookups (completion, hover, goto-definition) should use this
+/// instead of a shallow `.iter()` so they see everything, not just what
+/// happens to sit outside every conditional/loop/module.
+pub(super) fn flatten_listing<'a, T>(tokens: impl IntoIterator<Item = &'a T>) -> Vec<&'a T>
+where T: cpclib_tokens::ListingElement + 'a {
+    fn walk<'a, T>(tokens: impl IntoIterator<Item = &'a T>, out: &mut Vec<&'a T>)
+    where T: cpclib_tokens::ListingElement + 'a {
+        for token in tokens {
+            out.push(token);
+            if token.is_module() {
+                walk(token.module_listing(), out);
+            }
+            if token.is_if() {
+                for i in 0..token.if_nb_tests() {
+                    walk(token.if_test(i).1, out);
+                }
+                if let Some(else_listing) = token.if_else() {
+                    walk(else_listing, out);
+                }
+            }
+            if token.is_repeat() {
+                walk(token.repeat_listing(), out);
+            }
+            if token.is_repeat_until() {
+                walk(token.repeat_until_listing(), out);
+            }
+            if token.is_while() {
+                walk(token.while_listing(), out);
+            }
+            if token.is_rorg() {
+                walk(token.rorg_listing(), out);
+            }
+            if token.is_for() {
+                walk(token.for_listing(), out);
+            }
+            if token.is_iterate() {
+                walk(token.iterate_listing(), out);
+            }
+            if token.is_switch() {
+                for (_, case_listing, _) in token.switch_cases() {
+                    walk(case_listing, out);
+                }
+                if let Some(default_listing) = token.switch_default() {
+                    walk(default_listing, out);
+                }
+            }
+            if token.is_confined() {
+                walk(token.confined_listing(), out);
+            }
+            if token.is_crunched_section() {
+                walk(token.crunched_section_listing(), out);
+            }
+            if token.is_assembler_control() {
+                walk(token.assembler_control_get_listing(), out);
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    walk(tokens, &mut out);
+    out
+}
+
 // ─── Generated directive documentation ────────────────────────────────────────
 
 // `DIRECTIVE_DOCS` + `DIRECTIVE_FILE_ARGS`, generated from docs/basm/directives.md.

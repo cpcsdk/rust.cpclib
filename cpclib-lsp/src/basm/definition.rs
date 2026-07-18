@@ -80,7 +80,7 @@ impl AssemblyAnalyzer {
     /// Returns the first matching `Location`, or `None`.
     pub fn find_definition_in(&self, document: &Document, word_upper: &str) -> Option<Location> {
         if let Ok(listing) = self.parse_document(document) {
-            for token in listing.iter() {
+            for token in super::token::flatten_listing(listing.iter()) {
                 let source_name: &str = if token.is_label() {
                     token.label_symbol()
                 }
@@ -245,6 +245,17 @@ const PROJECT_ROOT_MARKERS: &[&str] = &[
 /// If `col` is inside a double-quoted string on a line that starts with an
 /// include-like directive, return the resolved file URI.
 fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
+    let filename = include_filename_at(line, col)?;
+    let path = resolve_include_path(&filename, doc_uri)?;
+    Url::from_file_path(path).ok()
+}
+
+/// If `col` is inside a double-quoted string on a line that starts with an
+/// include-like directive (`INCLUDE`/`INCBIN`/`BINCLUDE`), return the raw
+/// filename text (unresolved — may be a relative on-disk path or an
+/// `inner://...` embedded-resource reference). Shared by ctrl+click
+/// navigation (`resolve_include_at`) and hover content preview.
+pub(super) fn include_filename_at(line: &str, col: usize) -> Option<String> {
     let bytes = line.as_bytes();
     if col >= bytes.len() {
         return None;
@@ -263,8 +274,7 @@ fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
         return None;
     }
 
-    let path = resolve_include_path(filename, doc_uri)?;
-    Url::from_file_path(path).ok()
+    Some(filename.to_string())
 }
 
 /// Walk up from `doc_uri`'s directory, trying each ancestor as a base for
@@ -411,5 +421,18 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         assert_eq!(loc.expect("equ definition").range.start.line, 1);
         let loc = analyzer.find_definition_in(&doc, "OTHER_SYM");
         assert_eq!(loc.expect("= definition").range.start.line, 2);
+    }
+
+    /// Regression test: a label wrapped in an `ifndef ... endif` header
+    /// guard must still be reachable via goto-definition — `listing.iter()`
+    /// alone only sees the top-level `IF` token, not what's inside it.
+    #[test]
+    fn definition_wrapped_in_an_ifndef_guard_is_found() {
+        let text = "    ifndef GUARD\nGUARDED_LABEL:\n    ret\n    endif\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///guarded.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        let loc = analyzer.find_definition_in(&doc, "GUARDED_LABEL");
+        assert_eq!(loc.expect("label inside ifndef").range.start.line, 1);
     }
 }

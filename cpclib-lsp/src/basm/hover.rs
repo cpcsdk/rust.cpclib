@@ -47,6 +47,16 @@ impl AssemblyAnalyzer {
             }
         }
 
+        // Hovering an included filename (INCLUDE/INCBIN/BINCLUDE): preview
+        // its content — a real file on disk or an embedded `inner://...`
+        // resource are equally valid directive arguments, and equally worth
+        // previewing without leaving the current file.
+        if let Some(filename) = super::definition::include_filename_at(&line, col)
+            && let Some(content) = super::includes::read_included_file(&filename, &document.uri)
+        {
+            return Some(make_hover(format_include_preview(&filename, &content)));
+        }
+
         // Numeric literal — show all bases
         if let Some((num_str, value)) = extract_number_at_position(&line, col) {
             return Some(make_hover(crate::common::render::format_number_hover(
@@ -83,7 +93,7 @@ impl AssemblyAnalyzer {
 
         // Symbol — look up EQU / assign / label in the listing (only when parse succeeds)
         if let Ok(listing) = self.parse_document(document) {
-            for token in listing.iter() {
+            for token in super::token::flatten_listing(listing.iter()) {
                 if token.is_equ() {
                     let sym = token.equ_symbol();
                     if sym.to_uppercase() == word_upper {
@@ -257,6 +267,39 @@ fn register_description(upper: &str) -> Option<String> {
     Some(desc.to_string())
 }
 
+// ─── Included-file content preview ───────────────────────────────────────────
+
+/// Cap on how much of an included file's content is shown in the hover, so a
+/// large source file doesn't produce an unwieldy tooltip.
+const INCLUDE_PREVIEW_MAX_LINES: usize = 60;
+
+/// Render a markdown preview of an included file's content, truncated to
+/// `INCLUDE_PREVIEW_MAX_LINES`.
+fn format_include_preview(filename: &str, content: &str) -> String {
+    let total_lines = content.lines().count();
+    let preview: String = content
+        .lines()
+        .take(INCLUDE_PREVIEW_MAX_LINES)
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let mut md = format!("**{filename}**\n\n```z80\n{preview}\n");
+    if total_lines > INCLUDE_PREVIEW_MAX_LINES {
+        md.push_str(&format!(
+            "... ({} more line{})\n",
+            total_lines - INCLUDE_PREVIEW_MAX_LINES,
+            if total_lines - INCLUDE_PREVIEW_MAX_LINES == 1 {
+                ""
+            }
+            else {
+                "s"
+            }
+        ));
+    }
+    md.push_str("```");
+    md
+}
+
 // ─── Directive documentation (generated from docs/basm/directives.md) ────────
 
 use super::token::DIRECTIVE_DOCS;
@@ -268,4 +311,84 @@ fn directive_hover(word_upper: &str) -> Option<String> {
         .iter()
         .find(|(names, _)| names.iter().any(|n| n.to_uppercase() == word_upper))
         .map(|(_, doc)| doc.to_string())
+}
+
+#[cfg(test)]
+mod include_preview_tests {
+    use super::*;
+
+    fn hover_at(text: &str, uri: Url, line: u32, character: u32) -> Option<Hover> {
+        let doc = Document::new(uri, text.to_string(), 1);
+        AssemblyAnalyzer::new().hover(&doc, Position { line, character })
+    }
+
+    fn markdown(hover: &Hover) -> &str {
+        match &hover.contents {
+            HoverContents::Markup(m) => m.value.as_str(),
+            _ => panic!("expected markdown hover contents")
+        }
+    }
+
+    #[test]
+    fn hovering_an_on_disk_included_filename_previews_its_content() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("helper.asm"), "HELPER_LABEL:\n    ret\n").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let text = "    include \"helper.asm\"\n";
+
+        // Cursor inside "helper.asm".
+        let hover = hover_at(text, uri, 0, 16).expect("hover on helper.asm");
+        let md = markdown(&hover);
+        assert!(md.contains("helper.asm"), "{md}");
+        assert!(md.contains("HELPER_LABEL"), "{md}");
+    }
+
+    #[test]
+    fn hovering_an_inner_included_filename_previews_its_content() {
+        let uri = Url::parse("file:///main.asm").unwrap();
+        let text = "    include \"inner://crtc.asm\"\n";
+
+        // Cursor inside "inner://crtc.asm".
+        let hover = hover_at(text, uri, 0, 20).expect("hover on inner://crtc.asm");
+        let md = markdown(&hover);
+        assert!(md.contains("inner://crtc.asm"), "{md}");
+        assert!(md.contains("CRTC_REG_COUNTER"), "{md}");
+    }
+
+    #[test]
+    fn hovering_an_unresolvable_include_yields_no_preview() {
+        let uri = Url::parse("file:///main.asm").unwrap();
+        let text = "    include \"does_not_exist.asm\"\n";
+        assert!(hover_at(text, uri, 0, 20).is_none());
+    }
+}
+
+#[cfg(test)]
+mod symbol_hover_tests {
+    use super::*;
+
+    /// Regression test: a label wrapped in an `ifndef ... endif` header
+    /// guard must still show hover info — `listing.iter()` alone only sees
+    /// the top-level `IF` token, not what's inside it.
+    #[test]
+    fn hovering_a_label_wrapped_in_an_ifndef_guard_shows_its_info() {
+        let uri = Url::parse("file:///guarded.asm").unwrap();
+        let text = "    ifndef GUARD\nGUARDED_LABEL:\n    ret\n    endif\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor inside "GUARDED_LABEL" on line 1.
+        let hover = AssemblyAnalyzer::new()
+            .hover(
+                &doc,
+                Position {
+                    line: 1,
+                    character: 5
+                }
+            )
+            .expect("hover on GUARDED_LABEL");
+        let md = match &hover.contents {
+            HoverContents::Markup(m) => m.value.as_str(),
+            _ => panic!("expected markdown hover contents")
+        };
+        assert!(md.contains("GUARDED_LABEL"), "{md}");
+    }
 }

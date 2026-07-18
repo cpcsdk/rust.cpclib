@@ -868,8 +868,11 @@ impl AssemblyAnalyzer {
         let ctx = analyze_context(&line, col);
         let case = case_pref_at(&line, col);
 
-        // Collect symbols (labels, EQU constants, macros) from this document
-        // and every other open assembly document.
+        // Collect symbols (labels, EQU constants, macros) from this document,
+        // every other open assembly document, and every file this document
+        // INCLUDEs/INCBINs/BINCLUDEs (on-disk or an embedded `inner://...`
+        // resource) — read straight from disk/the embedded asset table even
+        // when never opened by the editor.
         let mut doc_symbols: Vec<(String, String)> = self.collect_symbols(document);
         for other in other_documents {
             let fname = other
@@ -882,6 +885,11 @@ impl AssemblyAnalyzer {
                 if !doc_symbols.iter().any(|(s, _)| *s == sym) {
                     doc_symbols.push((sym, format!("{detail} ({fname})")));
                 }
+            }
+        }
+        for (fname, sym, detail) in self.collect_symbols_from_includes(document) {
+            if !doc_symbols.iter().any(|(s, _)| *s == sym) {
+                doc_symbols.push((sym, format!("{detail} ({fname})")));
             }
         }
 
@@ -965,7 +973,12 @@ impl AssemblyAnalyzer {
             CompletionContext::DirectiveArgument => {
                 let directive = first_statement_word(&line).unwrap_or_default();
                 if DIRECTIVE_FILE_ARGS.contains(&directive.as_str()) {
-                    completions.extend(directive_filename_completions(document, &line, col));
+                    completions.extend(directive_filename_completions(
+                        document,
+                        &line,
+                        position.line,
+                        col
+                    ));
                 }
                 else {
                     // Directives accept any expression — offer symbols.
@@ -990,7 +1003,7 @@ impl AssemblyAnalyzer {
             return collect_symbols_by_text(document);
         };
         let mut syms = Vec::new();
-        for token in listing.iter() {
+        for token in super::token::flatten_listing(listing.iter()) {
             if token.is_label() {
                 syms.push((token.label_symbol().to_string(), "label".to_string()));
             }
@@ -1014,6 +1027,29 @@ impl AssemblyAnalyzer {
             }
         }
         syms
+    }
+
+    /// Collect `(source_name, symbol, detail)` for every file this document
+    /// `INCLUDE`s/`INCBIN`s/`BINCLUDE`s — on-disk or an embedded
+    /// `inner://...` resource — even when never opened by the editor.
+    /// `source_name` identifies which included file a symbol came from, for
+    /// the completion item's detail text.
+    fn collect_symbols_from_includes(&self, document: &Document) -> Vec<(String, String, String)> {
+        let text = document.text();
+        let mut out = Vec::new();
+        for filename in super::definition::extract_include_filenames(&text) {
+            let Some(content) = super::includes::read_included_file(&filename, &document.uri)
+            else {
+                continue;
+            };
+            let source_name = filename.rsplit('/').next().unwrap_or(&filename).to_string();
+            let synthetic_uri = Url::parse(&filename).unwrap_or_else(|_| document.uri.clone());
+            let included_doc = Document::new(synthetic_uri, content, 0);
+            for (sym, detail) in self.collect_symbols(&included_doc) {
+                out.push((source_name.clone(), sym, detail));
+            }
+        }
+        out
     }
 }
 
@@ -1140,10 +1176,14 @@ fn symbol_item(sym: &str, detail: &str) -> CompletionItem {
 
 /// Filename completions for a file-based directive (INCLUDE, INCBIN, SAVE…).
 /// When the cursor is inside a quoted string, complete the path being typed;
-/// otherwise offer quoted filenames.
+/// otherwise offer quoted filenames. Always includes basm's embedded
+/// `inner://...` resources alongside on-disk files, since e.g.
+/// `INCLUDE "inner://firmware/kernel.asm"` is just as valid a directive
+/// argument as a real path.
 fn directive_filename_completions(
     document: &Document,
     line: &str,
+    line_no: u32,
     col: usize
 ) -> Vec<CompletionItem> {
     // Detect an open quote before the cursor.
@@ -1156,6 +1196,20 @@ fn directive_filename_completions(
         ""
     };
 
+    let mut items = on_disk_filename_completions(document, prefix, in_string);
+    items.extend(inner_file_completions(prefix, in_string, line_no, col));
+    items.sort_by(|a, b| a.label.cmp(&b.label));
+    items
+}
+
+/// The on-disk half of `directive_filename_completions` — lists entries of
+/// the directory implied by `prefix` (everything up to its last `/`),
+/// relative to the current document's own directory.
+fn on_disk_filename_completions(
+    document: &Document,
+    prefix: &str,
+    in_string: bool
+) -> Vec<CompletionItem> {
     let Ok(doc_path) = document.uri.to_file_path()
     else {
         return Vec::new();
@@ -1181,7 +1235,7 @@ fn directive_filename_completions(
         return Vec::new();
     };
 
-    let mut items: Vec<CompletionItem> = entries
+    entries
         .filter_map(|e| e.ok())
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -1217,9 +1271,61 @@ fn directive_filename_completions(
             })
         })
         .take(200)
-        .collect();
-    items.sort_by(|a, b| a.label.cmp(&b.label));
-    items
+        .collect()
+}
+
+/// Completions for basm's embedded `inner://...` resource files (crunchers,
+/// firmware routines, ...) — the same set `basm --list-embedded` reports.
+/// Unlike real directories, `inner://` has no separate "list this
+/// subdirectory" step: the whole key is always known ahead of time from the
+/// embedded asset table, so — instead of guessing at word-boundary
+/// replacement like the on-disk branch does via plain `insert_text` — each
+/// candidate carries an explicit `text_edit` that replaces exactly what's
+/// been typed inside the quotes with the full key.
+fn inner_file_completions(
+    prefix: &str,
+    in_string: bool,
+    line_no: u32,
+    col: usize
+) -> Vec<CompletionItem> {
+    let col = col as u32;
+    let prefix_start = if in_string {
+        col.saturating_sub(prefix.len() as u32)
+    }
+    else {
+        col
+    };
+
+    super::includes::inner_file_names()
+        .filter(|key| key.starts_with(prefix))
+        .map(|key| {
+            let new_text = if in_string {
+                key.clone()
+            }
+            else {
+                format!("\"{key}\"")
+            };
+            CompletionItem {
+                label: key,
+                kind: Some(CompletionItemKind::FILE),
+                detail: Some("Embedded basm resource".to_string()),
+                text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                    range: Range {
+                        start: Position {
+                            line: line_no,
+                            character: prefix_start
+                        },
+                        end: Position {
+                            line: line_no,
+                            character: col
+                        }
+                    },
+                    new_text
+                })),
+                ..Default::default()
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -1326,5 +1432,171 @@ mod form_completion_tests {
             "labels should be offered for call target: {:?}",
             labels(&items)
         );
+    }
+}
+
+#[cfg(test)]
+mod include_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    #[test]
+    fn inner_file_completions_matches_the_typed_prefix() {
+        let items = inner_file_completions("inner://firm", true, 1, 20);
+        assert!(
+            items
+                .iter()
+                .any(|i| i.label == "inner://firmware/kernel.asm"),
+            "{items:?}"
+        );
+        assert!(
+            items.iter().all(|i| i.label.starts_with("inner://firm")),
+            "{items:?}"
+        );
+
+        let item = items
+            .iter()
+            .find(|i| i.label == "inner://firmware/kernel.asm")
+            .unwrap();
+        let Some(CompletionTextEdit::Edit(edit)) = &item.text_edit
+        else {
+            panic!("expected a text edit, got {item:?}");
+        };
+        assert_eq!(edit.new_text, "inner://firmware/kernel.asm");
+        assert_eq!(
+            edit.range,
+            Range {
+                start: Position {
+                    line: 1,
+                    character: 20 - "inner://firm".len() as u32
+                },
+                end: Position {
+                    line: 1,
+                    character: 20
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn inner_file_completions_outside_a_string_are_quoted() {
+        let items = inner_file_completions("", false, 0, 5);
+        assert!(!items.is_empty());
+        let Some(CompletionTextEdit::Edit(edit)) = &items[0].text_edit
+        else {
+            panic!("expected a text edit");
+        };
+        assert!(
+            edit.new_text.starts_with('"') && edit.new_text.ends_with('"'),
+            "{}",
+            edit.new_text
+        );
+    }
+
+    #[test]
+    fn directive_completion_offers_both_disk_and_inner_files() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("helper.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let text = "    INCLUDE \"".to_string();
+        let doc = Document::new(uri, text.clone(), 1);
+        let items = AssemblyAnalyzer::new().completion(
+            &doc,
+            Position {
+                line: 0,
+                character: text.len() as u32
+            }
+        );
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"helper.asm"), "{labels:?}");
+        assert!(
+            labels.iter().any(|l| l.starts_with("inner://")),
+            "{labels:?}"
+        );
+    }
+
+    #[test]
+    fn collect_symbols_from_includes_finds_symbols_in_an_on_disk_include() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("helper.asm"), "HELPER_LABEL:\n    ret\n").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let doc = Document::new(uri, "    include \"helper.asm\"\n".to_string(), 1);
+
+        let analyzer = AssemblyAnalyzer::new();
+        let syms = analyzer.collect_symbols_from_includes(&doc);
+        assert!(
+            syms.iter()
+                .any(|(src, sym, _)| sym == "HELPER_LABEL" && src == "helper.asm"),
+            "{syms:?}"
+        );
+    }
+
+    #[test]
+    fn collect_symbols_from_includes_finds_symbols_in_an_inner_file() {
+        let uri = Url::parse("file:///main.asm").unwrap();
+        let doc = Document::new(uri, "    include \"inner://crtc.asm\"\n".to_string(), 1);
+
+        let analyzer = AssemblyAnalyzer::new();
+        let syms = analyzer.collect_symbols_from_includes(&doc);
+        assert!(
+            syms.iter()
+                .any(|(src, sym, _)| sym == "CRTC_REG_COUNTER" && src == "crtc.asm"),
+            "{syms:?}"
+        );
+    }
+
+    #[test]
+    fn included_symbols_are_offered_in_completion() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("helper.asm"), "HELPER_LABEL:\n    ret\n").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let text = "    include \"helper.asm\"\n    call ".to_string();
+        let doc = Document::new(uri, text.clone(), 1);
+        let items = AssemblyAnalyzer::new().completion(
+            &doc,
+            Position {
+                line: 1,
+                character: 9
+            }
+        );
+        assert!(
+            items.iter().any(|i| i.label == "HELPER_LABEL"),
+            "{:?}",
+            items.iter().map(|i| &i.label).collect::<Vec<_>>()
+        );
+    }
+
+    /// Regression test for symbols wrapped in an `ifndef GUARD ... endif`
+    /// header guard not being offered — `listing.iter()` alone only sees
+    /// top-level statements, and a fully-guarded file has exactly one
+    /// top-level token (the `IF`), hiding everything inside it. This is
+    /// extremely common in real-world sources (see the next test, against
+    /// the actual `inner://ga.asm` embedded resource).
+    #[test]
+    fn symbols_wrapped_in_an_ifndef_guard_are_still_found() {
+        let uri = Url::parse("file:///guarded.asm").unwrap();
+        let text = "    ifndef GUARD\nGUARDED_LABEL:\n    ret\nGUARDED_CONST set 1\n    endif\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+
+        let syms = AssemblyAnalyzer::new().collect_symbols(&doc);
+        let names: Vec<&str> = syms.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names.contains(&"GUARDED_LABEL"), "{names:?}");
+        assert!(names.contains(&"GUARDED_CONST"), "{names:?}");
+    }
+
+    /// Same bug, against the real embedded resource that surfaced it:
+    /// `inner://ga.asm`'s entire content (including `GA_BLACK`, defined via
+    /// `GA_BLACK set GA_COL_00`) is wrapped in a single `ifndef GA_COL_00
+    /// ... endif`.
+    #[test]
+    fn ga_asm_color_constants_are_found_through_its_ifndef_guard() {
+        let uri = Url::parse("file:///main.asm").unwrap();
+        let doc = Document::new(uri, "    include \"inner://ga.asm\"\n".to_string(), 1);
+
+        let analyzer = AssemblyAnalyzer::new();
+        let syms = analyzer.collect_symbols_from_includes(&doc);
+        let names: Vec<&str> = syms.iter().map(|(_, sym, _)| sym.as_str()).collect();
+        assert!(names.contains(&"GA_COL_00"), "{names:?}");
+        assert!(names.contains(&"GA_BLACK"), "{names:?}");
     }
 }
