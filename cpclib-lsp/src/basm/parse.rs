@@ -13,12 +13,16 @@ impl AssemblyAnalyzer {
         &self,
         document: &Document
     ) -> Result<LocatedListing, LocatedListing> {
-        let text = document.text();
+        Self::parse_source(&document.text())
+    }
 
-        // Create a parser context builder
+    /// Parse a raw assembly source string in isolation, with no `Document`
+    /// required. Used directly by `diagnostics::analyze`'s multi-error
+    /// recovery, which re-parses tail fragments of the file (everything
+    /// after the last reported error) to surface more than just the first
+    /// syntax error.
+    pub(super) fn parse_source(text: &str) -> Result<LocatedListing, LocatedListing> {
         let builder = ParserContextBuilder::default();
-
-        // Parse the assembly code using new_complete_source
         LocatedListing::new_complete_source(text, builder)
     }
 }
