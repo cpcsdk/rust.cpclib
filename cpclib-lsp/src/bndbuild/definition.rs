@@ -97,37 +97,51 @@ impl BuildFileAnalyzer {
             .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
             .flat_map(|k| k.names.iter().copied())
             .collect();
+        let tgt_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
+            .iter()
+            .find(|k| k.names.contains(&"targets"))
+            .map(|k| k.names.to_vec())
+            .unwrap_or_default();
 
-        if let Some(filename) = Self::filename_under_cursor(&line, &file_key_names, col) {
+        if let Some((filename, is_target_field)) = Self::filename_under_cursor(
+            document,
+            position.line as usize,
+            &line,
+            &file_key_names,
+            &tgt_key_names,
+            col
+        ) {
             // Skip Jinja expressions — can't resolve them statically.
             if !filename.contains("{{") && !filename.contains("{%") {
-                let tgt_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
-                    .iter()
-                    .find(|k| k.names.contains(&"targets"))
-                    .map(|k| k.names.to_vec())
-                    .unwrap_or_default();
-
-                // Priority 1: filename matches a target declared in this file.
-                // Use a direct raw-text scan — it's reliable even when Jinja
-                // expansion fails — and navigate to that rule, never opening the file.
-                let raw = document.text();
-                if let Some(tgt_line) = Self::find_target_line(&raw, filename, &tgt_key_names) {
-                    return Some(Location {
-                        uri: document.uri.clone(),
-                        range: Range {
-                            start: Position {
-                                line: tgt_line,
-                                character: 0
-                            },
-                            end: Position {
-                                line: tgt_line,
-                                character: 0
+                // Priority 1: only for dependency fields — jump to the rule
+                // that produces this filename elsewhere. For a target field
+                // this rule itself IS the producer, so "jumping to the
+                // declaring rule" would just point back at the same line;
+                // go straight to opening the file instead.
+                if !is_target_field {
+                    // Use a direct raw-text scan — it's reliable even when
+                    // Jinja expansion fails — and navigate to that rule,
+                    // never opening the file.
+                    let raw = document.text();
+                    if let Some(tgt_line) = Self::find_target_line(&raw, filename, &tgt_key_names) {
+                        return Some(Location {
+                            uri: document.uri.clone(),
+                            range: Range {
+                                start: Position {
+                                    line: tgt_line,
+                                    character: 0
+                                },
+                                end: Position {
+                                    line: tgt_line,
+                                    character: 0
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
 
-                // Priority 2: not a declared target — open the file if it exists.
+                // Priority 2: open the file on disk (always for a target
+                // field; fallback for a dependency not produced elsewhere).
                 if let Some(base_dir) = document
                     .uri
                     .to_file_path()
@@ -151,9 +165,23 @@ impl BuildFileAnalyzer {
     }
 
     /// Return the space-separated token at column `col` in the value part of
-    /// `key: value` when `key` is one of `key_names`.  Handles the inline
-    /// `- key: value` list-item form and strips trailing YAML comments.
-    fn filename_under_cursor<'a>(line: &'a str, key_names: &[&str], col: usize) -> Option<&'a str> {
+    /// a `targets:`/`dependencies:` field, when `key` is one of `key_names`,
+    /// plus whether the matched key is a `targets:` alias (as opposed to a
+    /// `dependencies:` one) — callers need to distinguish the two, since a
+    /// target field is never "produced elsewhere" the way a dependency is.
+    /// Handles every form the field can take: the inline `- key: value`
+    /// list-item form, the scalar `key: value` form, and the multi-line list
+    /// form (`dep:\n  - a.bin\n  - b.bin`) — where a bare `- ` item's
+    /// governing key is resolved via `enclosing_key_for_list_item`, since
+    /// the item's own line never repeats it. Strips trailing YAML comments.
+    fn filename_under_cursor<'a>(
+        document: &Document,
+        line_idx: usize,
+        line: &'a str,
+        key_names: &[&str],
+        tgt_key_names: &[&str],
+        col: usize
+    ) -> Option<(&'a str, bool)> {
         let bytes = line.as_bytes();
         let len = bytes.len();
 
@@ -162,7 +190,8 @@ impl BuildFileAnalyzer {
         while i < len && matches!(bytes[i], b' ' | b'\t') {
             i += 1;
         }
-        if i + 1 < len && bytes[i] == b'-' && bytes[i + 1] == b' ' {
+        let is_dash = i + 1 < len && bytes[i] == b'-' && bytes[i + 1] == b' ';
+        if is_dash {
             i += 2;
             while i < len && bytes[i] == b' ' {
                 i += 1;
@@ -185,24 +214,49 @@ impl BuildFileAnalyzer {
                 return None;
             }
 
-            // Walk space-separated tokens until end-of-line or YAML comment.
-            while v < len && bytes[v] != b'#' {
-                while v < len && bytes[v] == b' ' {
-                    v += 1;
-                }
-                if v >= len || bytes[v] == b'#' {
-                    break;
-                }
-                let tok_start = v;
-                while v < len && bytes[v] != b' ' && bytes[v] != b'#' {
-                    v += 1;
-                }
-                let tok_end = v;
-                if col >= tok_start && col < tok_end {
-                    return Some(&line[tok_start..tok_end]);
-                }
+            let filename = Self::token_at_col(line, v, col)?;
+            return Some((filename, tgt_key_names.contains(&key)));
+        }
+
+        // Multi-line list form: a bare `- ` item with no key of its own — its
+        // governing key is on an earlier, less-indented line.
+        if is_dash && !line[i..].contains(':') {
+            let key = Self::enclosing_key_for_list_item(document, line_idx)?;
+            if !key_names.contains(&key.as_str()) {
+                return None;
             }
-            return None; // key matched but cursor not on any token
+            let filename = Self::token_at_col(line, i, col)?;
+            return Some((filename, tgt_key_names.contains(&key.as_str())));
+        }
+
+        None
+    }
+
+    /// Walk space-separated tokens in `line[start..]` until end-of-line or a
+    /// YAML comment, returning the one spanning column `col` (if any).
+    ///
+    /// `document.line()` (ropey) includes the trailing line terminator, so
+    /// `\n`/`\r` must stop scanning just like a `#` comment would.
+    fn token_at_col(line: &str, start: usize, col: usize) -> Option<&str> {
+        let bytes = line.as_bytes();
+        let len = bytes.len();
+        let is_end = |b: u8| matches!(b, b'#' | b'\n' | b'\r');
+        let mut v = start;
+        while v < len && !is_end(bytes[v]) {
+            while v < len && bytes[v] == b' ' {
+                v += 1;
+            }
+            if v >= len || is_end(bytes[v]) {
+                break;
+            }
+            let tok_start = v;
+            while v < len && bytes[v] != b' ' && !is_end(bytes[v]) {
+                v += 1;
+            }
+            let tok_end = v;
+            if col >= tok_start && col < tok_end {
+                return Some(&line[tok_start..tok_end]);
+            }
         }
         None
     }
@@ -267,6 +321,14 @@ impl BuildFileAnalyzer {
             }
         }
         segments.push(rem);
+
+        // A template with no literal characters at all (e.g. a bare
+        // `{{SNA}}`) provides no constraint and would otherwise match any
+        // filename whatsoever — refuse to treat that as a match, or every
+        // unrelated dependency would spuriously "resolve" to this target.
+        if segments.iter().all(|seg| seg.is_empty()) {
+            return false;
+        }
 
         // Match segments against filename left-to-right.
         let mut fname = filename;
@@ -367,5 +429,123 @@ fn jinja_word_at(line: &str, col: usize) -> Option<String> {
     }
     else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    #[test]
+    fn goto_definition_on_a_multi_line_dep_list_item_opens_the_file() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("helper.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  dep:\n    - helper.asm\n  cmd: basm helper.asm\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "helper.asm" within the "- helper.asm" list item (line 2).
+        let loc = BuildFileAnalyzer::new()
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 2,
+                    character: 8
+                }
+            )
+            .expect("goto-definition on a multi-line dep list item");
+        assert_eq!(
+            loc.uri,
+            Url::from_file_path(tmp.path().join("helper.asm")).unwrap()
+        );
+    }
+
+    #[test]
+    fn goto_definition_on_a_multi_line_dep_list_item_jumps_to_the_producing_rule() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        let text = "- tgt: helper.o\n  cmd: basm helper.asm -o helper.o\n- tgt: out.bin\n  dep:\n    - helper.o\n  cmd: link helper.o\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "helper.o" within the "- helper.o" list item (line 4).
+        let loc = BuildFileAnalyzer::new()
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 4,
+                    character: 8
+                }
+            )
+            .expect("goto-definition on a multi-line dep list item to a declared target");
+        assert_eq!(
+            loc.range.start.line, 0,
+            "should jump to the rule declaring helper.o"
+        );
+    }
+
+    #[test]
+    fn root_level_dash_item_is_not_treated_as_a_dep_list_value() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        // A bare `- ` item with no preceding (and thus no enclosing) key at
+        // all must not be misinterpreted as a dep/tgt list value.
+        let text = "- some_file.bin\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let loc = BuildFileAnalyzer::new().goto_definition(
+            &doc,
+            Position {
+                line: 0,
+                character: 4
+            }
+        );
+        assert!(loc.is_none(), "{loc:?}");
+    }
+
+    #[test]
+    fn goto_definition_on_a_target_s_own_filename_opens_the_file_not_the_rule() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("out.bin"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  cmd: basm main.asm -o out.bin\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "out.bin" within the "tgt: out.bin" field (line 0).
+        let loc = BuildFileAnalyzer::new()
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 0,
+                    character: 9
+                }
+            )
+            .expect("goto-definition on a target's own filename");
+        assert_eq!(
+            loc.uri,
+            Url::from_file_path(tmp.path().join("out.bin")).unwrap(),
+            "clicking a target's own filename should open the file, not jump back to its own rule"
+        );
+    }
+
+    #[test]
+    fn goto_definition_on_a_dep_does_not_spuriously_match_a_bare_jinja_target() {
+        // The target is *entirely* a Jinja expression with no literal
+        // characters ("{{SNA}}"), so it must not act as a wildcard that
+        // matches every unrelated dependency filename.
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("sna.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: {{SNA}}\n  dep:\n    - sna.asm\n    - demo_code.asm\n  cmd: basm sna.asm -o {{SNA}}\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "sna.asm" within the "- sna.asm" list item (line 2).
+        let loc = BuildFileAnalyzer::new()
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 2,
+                    character: 8
+                }
+            )
+            .expect("goto-definition on sna.asm dependency");
+        assert_eq!(
+            loc.uri,
+            Url::from_file_path(tmp.path().join("sna.asm")).unwrap(),
+            "clicking a dependency should open the file, not jump to an unrelated bare-Jinja target"
+        );
     }
 }

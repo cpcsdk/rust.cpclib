@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 
 use super::BuildFileAnalyzer;
+use crate::common::document::Document;
 
 // Reuse the same token type indices as the basm module (same SemanticTokensLegend)
 pub(super) const TT_KEYWORD: u32 = 0;
@@ -62,5 +63,47 @@ impl BuildFileAnalyzer {
         else {
             None
         }
+    }
+
+    /// A bare `- value` list item never repeats its governing key on its own
+    /// line — that key is on an earlier, less-indented `key:` line, e.g.:
+    /// ```yaml
+    /// dep:
+    ///   - a.bin
+    ///   - b.bin
+    /// ```
+    /// Scan upward from `line_idx` for the nearest strictly-less-indented
+    /// line and, if it's a `key:` with an empty value (i.e. it introduces the
+    /// following block list rather than being itself a scalar or a rule-start
+    /// item), return that key's trimmed text. Returns `None` for a root-level
+    /// `- ` item (which starts a *new rule*, not a list value) or when no
+    /// such enclosing key is found.
+    pub(super) fn enclosing_key_for_list_item(
+        document: &Document,
+        line_idx: usize
+    ) -> Option<String> {
+        let line = document.line(line_idx)?;
+        let indent = line.chars().take_while(|c| c.is_whitespace()).count();
+
+        for prev_idx in (0..line_idx).rev() {
+            let prev = document.line(prev_idx)?;
+            if prev.trim().is_empty() {
+                continue;
+            }
+            let prev_indent = prev.chars().take_while(|c| c.is_whitespace()).count();
+            if prev_indent >= indent {
+                continue;
+            }
+            let content = prev.trim_start();
+            let content = content.strip_prefix("- ").unwrap_or(content);
+            let (key, value) = content.split_once(':')?;
+            return if value.trim().is_empty() {
+                Some(key.trim().to_string())
+            }
+            else {
+                None
+            };
+        }
+        None
     }
 }

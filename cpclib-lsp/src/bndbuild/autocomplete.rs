@@ -58,8 +58,11 @@ impl BuildFileAnalyzer {
                 completions.extend(self.get_filename_completions(document, &prefix));
                 completions.extend(self.get_variable_brace_completions(document));
             }
-            else if let Some(prefix) = self.filename_prefix_at_cursor(&line, cursor) {
-                // Inside a `targets:`/`dependencies:` (or aliases) scalar value
+            else if let Some(prefix) =
+                self.filename_prefix_at_cursor(document, line_idx, &line, cursor)
+            {
+                // Inside a `targets:`/`dependencies:` (or aliases) value -
+                // either the scalar form or a multi-line `- ` list item.
                 completions.extend(self.get_filename_completions(document, &prefix));
                 completions.extend(self.get_variable_brace_completions(document));
             }
@@ -85,43 +88,18 @@ impl BuildFileAnalyzer {
 
     /// Decide whether the line belongs to a rule mapping (offer rule keys) or
     /// to a task list under `cmd:`/`tasks:`/... (offer task invocations), by
-    /// scanning up for the closest enclosing line with a smaller indent.
+    /// finding the closest enclosing key (see `enclosing_key_for_list_item`).
     fn list_context_at(&self, document: &Document, line_idx: usize) -> ListContext {
-        let Some(line) = document.line(line_idx)
-        else {
-            return ListContext::Rule;
-        };
-        let indent = line.chars().take_while(|c| c.is_whitespace()).count();
-
         let task_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
             .iter()
             .find(|k| k.names.contains(&"tasks"))
             .map(|k| k.names.to_vec())
             .unwrap_or_default();
 
-        for prev_idx in (0..line_idx).rev() {
-            let Some(prev) = document.line(prev_idx)
-            else {
-                continue;
-            };
-            if prev.trim().is_empty() {
-                continue;
-            }
-            let prev_indent = prev.chars().take_while(|c| c.is_whitespace()).count();
-            if prev_indent >= indent {
-                continue;
-            }
-            // Closest enclosing line: is it a task-list key?
-            let content = prev.trim_start();
-            let content = content.strip_prefix("- ").unwrap_or(content);
-            if let Some((key, _)) = content.split_once(':')
-                && task_keys.contains(&key.trim())
-            {
-                return ListContext::Tasks;
-            }
-            return ListContext::Rule;
+        match Self::enclosing_key_for_list_item(document, line_idx) {
+            Some(key) if task_keys.contains(&key.as_str()) => ListContext::Tasks,
+            _ => ListContext::Rule
         }
-        ListContext::Rule
     }
 
     /// `true`/`false` completion for the boolean `phony:` key.
@@ -344,26 +322,41 @@ impl BuildFileAnalyzer {
     }
 
     /// If the cursor sits inside the value of a `targets:`/`tgt:`/`target:`/
-    /// `build:` or `dependencies:`/`dep:`/`dependency:`/`requires:` line
-    /// (scalar form only - see note below), return the partial filename token
-    /// at the cursor, for filesystem-based completion.
-    ///
-    /// Only the scalar `key: value` form is handled here (not multi-line `- `
-    /// lists): unlike `tasks:`/`cmd:`, real-world build files essentially
-    /// always write targets/dependencies as a single space-separated scalar
-    /// string, and a bare `- ` line's enclosing key can't be determined
-    /// without scanning back through prior lines, which isn't done here.
-    fn filename_prefix_at_cursor(&self, line_text: &str, cursor_column: usize) -> Option<String> {
+    /// `build:` or `dependencies:`/`dep:`/`dependency:`/`requires:` field,
+    /// return the partial filename token at the cursor, for filesystem-based
+    /// completion. Handles both forms these fields can take:
+    ///   - the scalar `key: value` form (`tgt: a.bin b.bin`)
+    ///   - the multi-line list form (`dep:\n  - a.bin\n  - b.bin`), where a
+    ///     bare `- ` item's governing key is resolved via
+    ///     `enclosing_key_for_list_item` since the item's own line never
+    ///     repeats it
+    fn filename_prefix_at_cursor(
+        &self,
+        document: &Document,
+        line_idx: usize,
+        line_text: &str,
+        cursor_column: usize
+    ) -> Option<String> {
         let file_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
             .iter()
             .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
             .flat_map(|k| k.names.iter().copied())
             .collect();
 
-        // Only the scalar `key: value` form applies here, so bypass the `- `
-        // handling in `value_prefix_before_cursor` by requiring a `:` on this
-        // line before delegating to it.
-        if !line_text.trim_start().contains(':') {
+        let trimmed = line_text.trim_start();
+        if trimmed.starts_with("- ") && !trimmed.contains(':') {
+            // Multi-line list form: a bare item with no key of its own.
+            // Only offer filenames when the enclosing key is actually
+            // tgt/dep - a root-level `- ` item starts a *new rule* (offering
+            // rule keys instead, via the `list_context_at` fallback), and a
+            // `cmd:`/`tasks:` item is a task invocation, not a filename.
+            let key = Self::enclosing_key_for_list_item(document, line_idx)?;
+            if !file_keys.contains(&key.as_str()) {
+                return None;
+            }
+        }
+        else if !trimmed.contains(':') {
+            // Neither a bare list item nor a `key: value` line.
             return None;
         }
         let prefix_before_cursor =
@@ -662,9 +655,24 @@ mod command_argv_at_cursor_tests {
 #[cfg(test)]
 mod filename_prefix_at_cursor_tests {
     use super::*;
+    use crate::common::document::Document;
+
+    /// `line` is placed as the *last* line of a synthetic document, with
+    /// `preceding` (if any) as the line(s) directly above it — for the
+    /// scalar-only tests `preceding` is empty, matching the old single-line
+    /// behavior; the multi-line list tests below supply real context.
+    fn prefix_at_with_context(preceding: &[&str], line: &str, cursor: usize) -> Option<String> {
+        let uri = Url::parse("file:///t.bnd").unwrap();
+        let mut lines: Vec<&str> = preceding.to_vec();
+        lines.push(line);
+        let text = lines.join("\n");
+        let document = Document::new(uri, text, 1);
+        let line_idx = lines.len() - 1;
+        BuildFileAnalyzer::new().filename_prefix_at_cursor(&document, line_idx, line, cursor)
+    }
 
     fn prefix_at(line: &str, cursor: usize) -> Option<String> {
-        BuildFileAnalyzer::new().filename_prefix_at_cursor(line, cursor)
+        prefix_at_with_context(&[], line, cursor)
     }
 
     #[test]
@@ -703,9 +711,36 @@ mod filename_prefix_at_cursor_tests {
     }
 
     #[test]
-    fn dash_form_is_not_handled_here() {
+    fn dash_form_without_an_enclosing_key_is_not_handled() {
+        // No preceding line at all - e.g. a root-level `- ` item starting a
+        // new rule, which `enclosing_key_for_list_item` correctly reports as
+        // having no governing tgt/dep key.
         let line = "  - hello.asm";
         let result = prefix_at(line, line.chars().count());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn dash_form_under_a_dependencies_key_completes_filenames() {
+        let preceding = ["- tgt: out.bin", "  dep:"];
+        let line = "    - hel";
+        let result = prefix_at_with_context(&preceding, line, line.chars().count());
+        assert_eq!(result, Some("hel".to_string()));
+    }
+
+    #[test]
+    fn dash_form_under_a_targets_key_completes_filenames() {
+        let preceding = ["- tgt:"];
+        let line = "    - out.b";
+        let result = prefix_at_with_context(&preceding, line, line.chars().count());
+        assert_eq!(result, Some("out.b".to_string()));
+    }
+
+    #[test]
+    fn dash_form_under_a_cmd_key_is_not_treated_as_a_filename() {
+        let preceding = ["- tgt: out.bin", "  cmd:"];
+        let line = "    - hel";
+        let result = prefix_at_with_context(&preceding, line, line.chars().count());
         assert_eq!(result, None);
     }
 }
