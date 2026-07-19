@@ -55,8 +55,22 @@
         "command": "cpclib.runRule",
         "title": "Run bndbuild Rule",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.pickInkColor",
+        "title": "Pick CPC Ink Color",
+        "category": "CPClib"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "cpclib.pickInkColor",
+          "when": "(editorLangId == basm || editorLangId == locomotive-basic) && cpclib.cursorOnInkColor",
+          "group": "9_cutcopypaste"
+        }
+      ]
+    },
     "taskDefinitions": [
       {
         "type": "bndbuild",

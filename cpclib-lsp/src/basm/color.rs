@@ -32,7 +32,8 @@ use super::AssemblyAnalyzer;
 use super::embedded_basic::extract_locomotive_blocks;
 use super::token::{NumeralLiteral, NumeralStyle, scan_numeral_literals};
 use crate::common::colors::{
-    INK_GA_VALUE, from_lsp_color, ink_index_from_ga_value, ink_rgb, inks_by_distance, to_lsp_color
+    INK_GA_VALUE, from_lsp_color, ink_index_from_ga_value, ink_rgb,
+    inks_by_distance_including_duplicates, to_lsp_color
 };
 use crate::common::document::Document;
 
@@ -92,12 +93,16 @@ impl AssemblyAnalyzer {
         colors
     }
 
-    /// Snap a client's (typically continuous) color picker to the nearest
-    /// of the 27 CPC inks, offering all 27 sorted by proximity so the user
-    /// can browse the exact discrete palette rather than an arbitrary RGB
-    /// value with no meaning on real hardware. The replacement preserves
-    /// the original literal's own style (hex `$`/`0x`, binary `%`/`0b`, or
-    /// bare decimal) and, for a byte that owns the prefix, re-includes it.
+    /// Offer all 32 GA byte encodings (duplicates included — each is a
+    /// distinct, individually valid `SNASET GA_PAL:n` value) as the
+    /// `colorPresentation` list, sorted by proximity to whatever the
+    /// client's own (continuous) color picker landed on. VSCode always
+    /// shows its native RGB/HSV picker for `documentColor` — the LSP
+    /// protocol has no way to suppress that — but this makes the
+    /// CPC-correct choices the ones actually offered for one-click
+    /// selection. The replacement preserves the original literal's own
+    /// style (hex `$`/`0x`, binary `%`/`0b`, or bare decimal) and, for a
+    /// byte that owns the prefix, re-includes it.
     pub fn color_presentations(
         &self,
         document: &Document,
@@ -144,7 +149,7 @@ impl AssemblyAnalyzer {
             matched.style
         );
 
-        inks_by_distance(target)
+        inks_by_distance_including_duplicates(target)
             .into_iter()
             .filter_map(|idx| {
                 let byte = *INK_GA_VALUE.get(idx)?;
@@ -530,10 +535,24 @@ mod tests {
     }
 
     #[test]
-    fn presentations_offer_all_27_inks_closest_first() {
+    fn presentations_offer_all_32_ga_encodings_closest_first() {
+        // All 32, duplicates included — each is a distinct, individually
+        // valid GA byte even when a few share an RGB with an earlier index.
         let presentations = presentations_for("LD A, 0x54\n"); // ink 0 = black
-        assert_eq!(presentations.len(), 27);
+        assert_eq!(presentations.len(), 32);
         assert_eq!(presentations[0].label, "Ink 0 (0x54)");
+    }
+
+    #[test]
+    fn duplicated_indices_offer_their_own_distinct_ga_byte() {
+        // Ink 27 shares ink 13's RGB but is a different, independently
+        // selectable GA byte (0x41 vs 0x40) — must appear in the list too.
+        let presentations = presentations_for("LD A, 0x54\n");
+        let dup = presentations
+            .iter()
+            .find(|p| p.label.starts_with("Ink 27 "))
+            .expect("ink 27 should be offered");
+        assert_eq!(dup.label, "Ink 27 (0x41)");
     }
 
     #[test]

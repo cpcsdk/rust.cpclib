@@ -84,12 +84,26 @@ pub fn from_lsp_color(c: tower_lsp::lsp_types::Color) -> (u8, u8, u8) {
 }
 
 /// The 27 canonical CPC ink indices (0-26 — the 27-31 range are firmware
-/// duplicates, not distinct colors, so excluded here), sorted by RGB
-/// distance to `target`, closest first. Used to turn a client's continuous
-/// color picker into a discrete "which CPC ink did you mean" list via
-/// `textDocument/colorPresentation`.
+/// duplicates of an earlier index's *color*, though each is still a
+/// distinct GA byte, so excluded here), sorted by RGB distance to `target`,
+/// closest first. Used to turn a client's continuous color picker into a
+/// discrete "which CPC ink did you mean" list via
+/// `textDocument/colorPresentation`, for a language (Locomotive BASIC's
+/// `INK`/`BORDER`) whose value only ever accepts 0-26.
 pub fn inks_by_distance(target: (u8, u8, u8)) -> Vec<usize> {
-    let mut idxs: Vec<usize> = (0..27).collect();
+    inks_by_distance_in(target, 0..27)
+}
+
+/// Same as [`inks_by_distance`], but over all 32 GA byte encodings
+/// (0-31, duplicates included) — for basm, where each of the 32 is a
+/// distinct, individually valid `SNASET GA_PAL:n` value even when a few
+/// happen to select the same RGB color as an earlier index.
+pub fn inks_by_distance_including_duplicates(target: (u8, u8, u8)) -> Vec<usize> {
+    inks_by_distance_in(target, 0..32)
+}
+
+fn inks_by_distance_in(target: (u8, u8, u8), range: std::ops::Range<usize>) -> Vec<usize> {
+    let mut idxs: Vec<usize> = range.collect();
     idxs.sort_by_key(|&i| {
         let (r, g, b) = INK_RGB[i];
         let dr = r as i32 - target.0 as i32;
