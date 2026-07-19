@@ -60,6 +60,7 @@ memchr = "2"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
+gag.workspace = true
 
 
 [[bench]]

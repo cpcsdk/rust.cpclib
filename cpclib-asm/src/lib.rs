@@ -84,7 +84,17 @@ pub struct AssemblingOptions {
     enable_warnings: bool,
     force_void: bool,
     debug: bool,
-    forbid_memory_override: bool
+    forbid_memory_override: bool,
+    /// When set, guarantees no real-world side effect occurs during
+    /// assembling: no file is written to disk (`SAVE`/`WRITE`, `BUILDSNA`,
+    /// `BUILDCPR`, listing output), and no blocking read of the real
+    /// process stdin happens (`PAUSE`). Everything else (in particular
+    /// computing the assembled bytes/symbol table) runs exactly as normal —
+    /// this is not a "skip assembling" flag, only a "skip its disk/stdin
+    /// effects" one. See each gated call site (`SaveCommand::execute_on`,
+    /// `Env::save_sna`/`save_cpr`, `PauseCommand::execute`) for exactly
+    /// what's suppressed.
+    dry_run: bool
 }
 
 impl Default for AssemblingOptions {
@@ -102,7 +112,8 @@ impl Default for AssemblingOptions {
             enable_warnings: true,
             force_void: true,
             debug: false,
-            forbid_memory_override: false
+            forbid_memory_override: false,
+            dry_run: false
         }
     }
 }
@@ -209,10 +220,33 @@ impl AssemblingOptions {
         self
     }
 
+    pub fn dry_run(&self) -> bool {
+        self.dry_run
+    }
+
+    /// Also clears any listing-output writer already configured via
+    /// `write_listing_output[_with_format]` — defense in depth against a
+    /// caller that configures output *before* enabling `dry_run`, which
+    /// the setters' own dry-run check (evaluated at the time *they're*
+    /// called) can't otherwise catch.
+    pub fn set_dry_run(&mut self, dry_run: bool) -> &mut Self {
+        self.dry_run = dry_run;
+        if dry_run {
+            self.output_builder = None;
+        }
+        self
+    }
+
+    /// No-op under `dry_run` (defense in depth: a listing writer given to a
+    /// dry-run environment is silently dropped rather than trusted not to
+    /// point at a real file), otherwise as `write_listing_output`.
     pub fn write_listing_output<W: 'static + Write + Send + Sync>(
         &mut self,
         writer: W
     ) -> &mut Self {
+        if self.dry_run {
+            return self;
+        }
         self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new(writer))));
         if let Some(b) = self.output_builder.as_mut() {
             b.write().unwrap().on()
@@ -220,11 +254,15 @@ impl AssemblingOptions {
         self
     }
 
+    /// No-op under `dry_run` — see [`Self::write_listing_output`].
     pub fn write_listing_output_with_format<W: 'static + Write + Send + Sync>(
         &mut self,
         writer: W,
         format: ListingOutputFormat
     ) -> &mut Self {
+        if self.dry_run {
+            return self;
+        }
         self.output_builder = Some(Arc::new(RwLock::new(ListingOutput::new_with_format(
             writer, format
         ))));
@@ -321,6 +359,107 @@ mod test_super {
 
         let bytes = assemble(code).unwrap_or_else(|e| panic!("Unable to assemble {}: {}", code, e));
         assert_eq!(bytes, vec![1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn dry_run_prevents_save_from_writing_a_file() {
+        let target = std::env::temp_dir().join(format!(
+            "cpclib_asm_dry_run_test_{}_should_not_exist.bin",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&target); // in case a previous failed run left it behind
+        let code = format!("org 0\ndb 1,2,3,4\nsave \"{}\", 0, 4\n", target.display());
+
+        let mut options = AssemblingOptions::default();
+        options.set_dry_run(true);
+        let options = EnvOptions::from(options);
+
+        let tokens = parser::parse_z80_str(&code).unwrap();
+        let (_toks, mut env) = assembler::visit_tokens_all_passes_with_options(&tokens, options)
+            .unwrap_or_else(|(_, _, e)| panic!("assembling failed: {e}"));
+        // `SAVE` only queues a command; a real build's post-processing step
+        // is what actually writes it — exercise that step explicitly to
+        // prove `dry_run` holds even when it's reached.
+        env.handle_post_actions(&tokens)
+            .unwrap_or_else(|e| panic!("handle_post_actions failed: {e}"));
+
+        assert!(
+            !target.exists(),
+            "dry_run must prevent SAVE from writing a real file"
+        );
+    }
+
+    #[test]
+    fn dry_run_skips_pause_without_blocking_on_stdin() {
+        let code = "org 0\ndb 1\npause\n";
+        let mut options = AssemblingOptions::default();
+        options.set_dry_run(true);
+        // `PAUSE`'s queued command is only ever flushed from
+        // `start_new_pass` when `debug` is on — enable it so this test
+        // actually exercises the gated code path, not just a PAUSE that
+        // was never reached regardless of dry_run.
+        options.set_debug(true);
+        let options = EnvOptions::from(options);
+        // Would hang forever waiting on real stdin if dry_run didn't skip
+        // PAUSE's blocking read — this test completing at all is the proof.
+        let result = assemble_with_options(code, options);
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    #[test]
+    fn quiet_parser_option_is_off_by_default_and_round_trips_through_the_builder() {
+        assert!(!crate::parser::context::ParserOptions::default().quiet);
+
+        let ctx = crate::parser::context::ParserContextBuilder::default()
+            .set_quiet(true)
+            .build("");
+        assert!(ctx.options.quiet);
+    }
+
+    /// Real proof that `quiet` suppresses `PRINT_PARSE`'s stdout write, using
+    /// an actual OS-level fd redirection (`gag`) — `#[ignore]`d because it
+    /// captures the real process stdout fd, which any *other* test running
+    /// concurrently (incl. cargo's own "test ... ok" progress lines) would
+    /// leak into, making this flaky under the default parallel test runner.
+    /// Run in isolation (also needs `--nocapture`, or the test harness's
+    /// own stdout capture intercepts the output before `gag` ever sees it):
+    /// `cargo test -p cpclib-asm --lib -- --ignored --test-threads=1
+    /// --nocapture quiet_parser_option_actually_suppresses_stdout`.
+    #[test]
+    #[ignore = "captures the real process stdout fd; must run alone, see doc comment"]
+    fn quiet_parser_option_actually_suppresses_stdout() {
+        let code = "ASMCONTROL PRINT_PARSE, \"hello\"\n";
+
+        // Baseline: without `quiet`, PRINT_PARSE really does write to
+        // stdout at parse time (this is the pre-existing, intentional CLI
+        // behavior `quiet` must not break).
+        {
+            let stdout = gag::BufferRedirect::stdout().unwrap();
+            let builder = crate::parser::context::ParserContextBuilder::default();
+            let _ = crate::parser::obtained::LocatedListing::new_complete_source(code, builder);
+            let mut buf = String::new();
+            let mut stdout = stdout.into_inner();
+            std::io::Read::read_to_string(&mut stdout, &mut buf).unwrap();
+            assert!(
+                buf.contains("[PARSE]"),
+                "expected PRINT_PARSE to print without quiet, got: {buf:?}"
+            );
+        }
+
+        // With `quiet`, nothing must reach the real stdout — this is what
+        // an LSP server (whose real stdout carries JSON-RPC traffic) needs.
+        {
+            let stdout = gag::BufferRedirect::stdout().unwrap();
+            let builder = crate::parser::context::ParserContextBuilder::default().set_quiet(true);
+            let _ = crate::parser::obtained::LocatedListing::new_complete_source(code, builder);
+            let mut buf = String::new();
+            let mut stdout = stdout.into_inner();
+            std::io::Read::read_to_string(&mut stdout, &mut buf).unwrap();
+            assert!(
+                buf.is_empty(),
+                "quiet must suppress PRINT_PARSE's stdout output, got: {buf:?}"
+            );
+        }
     }
 
     #[test]

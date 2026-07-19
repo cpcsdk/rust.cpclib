@@ -129,6 +129,8 @@ impl EnvOptions {
             pub fn symbols(&self) -> &cpclib_tokens::symbols::SymbolsTable;
             pub fn symbols_mut(&mut self) -> &mut cpclib_tokens::symbols::SymbolsTable;
             pub fn save_behavior(&self) -> cpclib_disc::amsdos::AmsdosAddBehavior;
+            pub fn dry_run(&self) -> bool;
+            pub fn set_dry_run(&mut self, dry_run: bool) -> &mut AssemblingOptions;
 
             pub fn write_listing_output<W: 'static + Write + Send + Sync>(
                 &mut self,
@@ -1471,10 +1473,11 @@ impl Env {
 
         let mut print_errors: Option<Box<AssemblerError>> = None;
         let observer = self.observer();
+        let dry_run = self.options().assemble_options().dry_run();
 
         let mut handle_page_info = |page: &PageInformation| {
             let l_errors: Result<(), Box<AssemblerError>> =
-                page.execute_print_or_pause(observer.deref());
+                page.execute_print_or_pause(observer.deref(), dry_run);
             match (&mut print_errors, l_errors) {
                 (_, Ok(_)) => {
                     // nothing to do
@@ -2089,11 +2092,19 @@ impl Env {
         self.sna_version
     }
 
+    /// No-op under `dry_run` — guarantees `BUILDSNA` never writes a real file.
     pub fn save_sna<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<(), std::io::Error> {
+        if self.options().assemble_options().dry_run() {
+            return Ok(());
+        }
         self.sna().save(fname, self.sna_version())
     }
 
+    /// No-op under `dry_run` — guarantees `BUILDCPR` never writes a real file.
     pub fn save_cpr<P: AsRef<Utf8Path>>(&self, fname: P) -> Result<(), Box<AssemblerError>> {
+        if self.options().assemble_options().dry_run() {
+            return Ok(());
+        }
         let cpr_asm = self.cpr.as_ref().unwrap();
         let cpr = cpr_asm.build_cpr()?;
         Ok(cpr

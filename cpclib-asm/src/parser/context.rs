@@ -105,7 +105,15 @@ pub struct ParserOptions {
     pub show_progress: bool,
     /// Set to true when directives must start by a dot
     pub dotted_directive: bool,
-    pub assembler_flavor: AssemblerFlavor
+    pub assembler_flavor: AssemblerFlavor,
+    /// When set, directives that print at *parse* time (`PRINT_PARSE`) are
+    /// suppressed instead of writing to the real process stdout. Unlike
+    /// `AssemblingOptions::dry_run`, this has nothing to do with assembling
+    /// or an `Env` — it exists because `PRINT_PARSE` runs before any `Env`
+    /// is created, so it can't be gated at that level; a caller such as an
+    /// LSP server (whose real stdout carries JSON-RPC protocol traffic, not
+    /// build output) must suppress it here instead.
+    pub quiet: bool
 }
 
 impl Default for ParserOptions {
@@ -115,7 +123,8 @@ impl Default for ParserOptions {
             read_referenced_files: true,
             dotted_directive: false,
             show_progress: false,
-            assembler_flavor: AssemblerFlavor::Basm
+            assembler_flavor: AssemblerFlavor::Basm,
+            quiet: false
         }
     }
 }
@@ -184,6 +193,12 @@ impl ParserContextBuilder {
         self
     }
 
+    /// See [`ParserOptions::quiet`].
+    pub fn set_quiet(mut self, quiet: bool) -> Self {
+        self.options.set_quiet(quiet);
+        self
+    }
+
     pub fn set_options(mut self, options: ParserOptions) -> Self {
         self.options = options;
         self
@@ -212,6 +227,11 @@ impl ParserOptions {
 
     pub fn set_dotted_directives(&mut self, tag: bool) {
         self.dotted_directive = tag;
+    }
+
+    /// See [`ParserOptions::quiet`].
+    pub fn set_quiet(&mut self, tag: bool) {
+        self.quiet = tag;
     }
 
     /// Add a search path and ensure it is ABSOLUTE

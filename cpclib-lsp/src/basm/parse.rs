@@ -22,7 +22,10 @@ impl AssemblyAnalyzer {
     /// after the last reported error) to surface more than just the first
     /// syntax error.
     pub(super) fn parse_source(text: &str) -> Result<LocatedListing, LocatedListing> {
-        let builder = ParserContextBuilder::default();
+        // `quiet`: a `PRINT_PARSE` directive prints at *parse* time, before
+        // any `Env`/`dry_run` exists to gate it — must be suppressed here
+        // instead, since the LSP's real stdout carries JSON-RPC traffic.
+        let builder = ParserContextBuilder::default().set_quiet(true);
         LocatedListing::new_complete_source(text, builder)
     }
 }

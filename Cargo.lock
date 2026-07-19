@@ -2532,6 +2532,7 @@ dependencies = [
  "either",
  "enumflags2",
  "fs-err",
+ "gag",
  "getset",
  "globset",
  "hashbag",

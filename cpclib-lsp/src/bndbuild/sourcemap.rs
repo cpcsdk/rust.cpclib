@@ -27,22 +27,18 @@ impl SourceMap {
     }
 }
 
-/// Expand a Jinja template, returning the rendered text and a source map.
+/// Build the same lenient, LSP-safe `minijinja::Environment` used throughout
+/// this module: same custom functions as bndbuild's real
+/// `create_template_env` (so templates calling them don't abort the LSP's
+/// own rendering), but stubbed to never fail/write/shell out, and
+/// `Chainable` undefined-variable behavior so a file mid-edit (or missing
+/// `-D` definitions the real build would otherwise require) still renders
+/// as far as possible instead of erroring immediately. Shared by
+/// `expand_with_source_map` (diagnostics/symbols) and macro-call hover.
 ///
-/// The source map maps each line in the output back to the line in `source`
-/// that generated it.  Lines that come from Jinja control structures
-/// (`{% for %}`, `{% if %}`, etc.) with no data payload map to `None`.
-///
-/// `file_dir` is the directory used as base path for `{% include %}` directives.
-/// Pass `None` when no file-system includes are expected.
-pub fn expand_with_source_map(
-    source: &str,
-    file_dir: Option<&std::path::Path>
-) -> Result<(String, SourceMap), minijinja::Error> {
-    // Step 1 — annotate every line with its original line number.
-    let annotated = annotate(source);
-
-    // Step 2 — render through minijinja.
+/// `file_dir` is the directory used as base path for `{% include %}`
+/// directives. Pass `None` when no file-system includes are expected.
+pub(super) fn build_environment(file_dir: Option<&std::path::Path>) -> Environment<'static> {
     let mut env = Environment::new();
     // Lenient: undefined variables return Undefined instead of aborting.
     // This lets the expansion proceed even when external build-time variables
@@ -91,6 +87,27 @@ pub fn expand_with_source_map(
     env.add_function("basename", lsp_basename);
     env.add_function("basm_escape_path", lsp_escape);
     env.add_filter("basm_escape_path", |path: String| path);
+
+    env
+}
+
+/// Expand a Jinja template, returning the rendered text and a source map.
+///
+/// The source map maps each line in the output back to the line in `source`
+/// that generated it.  Lines that come from Jinja control structures
+/// (`{% for %}`, `{% if %}`, etc.) with no data payload map to `None`.
+///
+/// `file_dir` is the directory used as base path for `{% include %}` directives.
+/// Pass `None` when no file-system includes are expected.
+pub fn expand_with_source_map(
+    source: &str,
+    file_dir: Option<&std::path::Path>
+) -> Result<(String, SourceMap), minijinja::Error> {
+    // Step 1 — annotate every line with its original line number.
+    let annotated = annotate(source);
+
+    // Step 2 — render through minijinja.
+    let env = build_environment(file_dir);
 
     // No variable context — variables defined via {% set %} in the template
     // are sufficient; external definitions resolve to Undefined (lenient).

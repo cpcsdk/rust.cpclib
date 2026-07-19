@@ -62,7 +62,7 @@ impl PageInformation {
             pub fn execute_save(&self, env: &Env, mmr: u8) -> Result<Vec<SavedFile>, Box<AssemblerError>>;
             pub fn nb_files_to_save(&self) -> usize;
             pub fn collect_assert_failure(&self) -> Result<(), Box<AssemblerError>>;
-            pub fn execute_print_or_pause(&self, o: &dyn EnvEventObserver)-> Result<(), Box<AssemblerError>>;
+            pub fn execute_print_or_pause(&self, o: &dyn EnvEventObserver, dry_run: bool)-> Result<(), Box<AssemblerError>>;
             pub fn collect_breakpoints(&self)-> &[BreakpointCommand];
         }
     }

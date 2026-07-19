@@ -2812,8 +2812,10 @@ pub fn parse_assembler_control_print_parse(
                         .map(|c| c.to_owned())
                         .unwrap_or_default()
                 });
-            let (line, column) = Z80Span::from(input2).relative_line_and_column();
-            println!("[PARSE] {ctx}:{line}:{column} {msg}");
+            if !input.state.options.quiet {
+                let (line, column) = Z80Span::from(input2).relative_line_and_column();
+                println!("[PARSE] {ctx}:{line}:{column} {msg}");
+            }
             p
         })
         .map(|p| {

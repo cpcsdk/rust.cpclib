@@ -12,6 +12,7 @@ pub mod diagnostics;
 pub mod hover;
 pub mod internal_commands;
 pub mod jinja;
+pub mod macro_expand;
 pub mod semantic_tokens;
 pub mod sourcemap;
 pub mod symbols;

@@ -150,8 +150,21 @@ impl From<Option<Z80Span>> for PauseCommand {
 }
 
 impl PauseCommand {
+    /// `dry_run` skips the message *and* the blocking read of the real
+    /// process stdin entirely — a `PAUSE` in a dry-run assembling pass must
+    /// never block waiting for input nobody can provide (e.g. an LSP
+    /// server, whose real stdin carries protocol traffic, not a human at a
+    /// terminal).
     #[inline]
-    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), Box<AssemblerError>> {
+    pub fn execute(
+        &self,
+        writer: &dyn EnvEventObserver,
+        dry_run: bool
+    ) -> Result<(), Box<AssemblerError>> {
+        if dry_run {
+            return Ok(());
+        }
+
         let msg = "PAUSE - press enter to continue.";
         writer.emit_stdout(
             &(if let Some(span) = &self.0 {
@@ -192,10 +205,14 @@ impl From<PauseCommand> for PrintOrPauseCommand {
 }
 
 impl PrintOrPauseCommand {
-    pub fn execute(&self, writer: &dyn EnvEventObserver) -> Result<(), Box<AssemblerError>> {
+    pub fn execute(
+        &self,
+        writer: &dyn EnvEventObserver,
+        dry_run: bool
+    ) -> Result<(), Box<AssemblerError>> {
         match self {
             PrintOrPauseCommand::Print(p) => p.execute(writer),
-            PrintOrPauseCommand::Pause(p) => p.execute(writer)
+            PrintOrPauseCommand::Pause(p) => p.execute(writer, dry_run)
         }
     }
 
@@ -428,10 +445,10 @@ impl DelayedCommands {
         }
     }
 
-    /// XXX Current version completly ignore pause. TODO find a way to reactivate
     pub fn execute_print_or_pause(
         &self,
-        writer: &dyn EnvEventObserver
+        writer: &dyn EnvEventObserver,
+        dry_run: bool
     ) -> Result<(), Box<AssemblerError>> {
         let iter = self.print_commands.iter();
 
@@ -448,7 +465,7 @@ impl DelayedCommands {
                         }
                     },
                     PrintOrPauseCommand::Pause(p) => {
-                        let _ = p.execute(writer);
+                        let _ = p.execute(writer, dry_run);
                         None
                     }
                 }

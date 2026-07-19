@@ -234,6 +234,8 @@ pub fn assemble(
     assemble_options.set_force_void(!matches.get_flag("NO_FORCED_VOID"));
     assemble_options.set_debug(matches.get_flag("DEBUG"));
     assemble_options.set_forbid_memory_override(matches.get_flag("FORBID_MEMORY_OVERRIDE"));
+    let dry_run = matches.get_flag("DRY_RUN");
+    assemble_options.set_dry_run(dry_run);
 
     if matches.get_flag("OVERRIDE") {
         assemble_options
@@ -342,7 +344,9 @@ pub fn assemble(
         }
     }
 
-    if let Some(dest) = matches.get_one::<String>("LISTING_OUTPUT") {
+    if let Some(dest) = matches.get_one::<String>("LISTING_OUTPUT")
+        && !dry_run
+    {
         let mut listing_format = listing_format_from_matches(matches)?;
         if listing_output_uses_html(dest) {
             listing_format.output_kind = ListingOutputKind::Html;
@@ -374,6 +378,10 @@ pub fn assemble(
     let _ = env
         .handle_post_actions(listing)
         .map(|(remu, wabp)| -> Result<(), BasmError> {
+            if dry_run {
+                return Ok(());
+            }
+
             if let Some(remu) = remu
                 && let Some(fname) = matches.get_one::<String>("REMU_OUTPUT")
             {
@@ -406,7 +414,9 @@ pub fn assemble(
             }
         })?;
 
-    if let Some(dest) = matches.get_one::<String>("SYMBOLS_OUTPUT") {
+    if let Some(dest) = matches.get_one::<String>("SYMBOLS_OUTPUT")
+        && !dry_run
+    {
         let kind = matches.get_one::<String>("SYMBOLS_KIND").unwrap();
         let kind = SymbolOutputFormat::from_str(kind).unwrap();
         if dest == "-" {
@@ -534,6 +544,12 @@ fn save_binary_to_file(
 /// TODO manage the various save options and delegate them with save commands
 pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
     let show_progress = matches.get_flag("PROGRESS");
+    // `env.save_cpr`/`env.save_sna` already no-op under dry_run (the flag
+    // travels with `env`'s own options, set in `assemble()`) — this local
+    // copy is only needed to gate what `save()` does *outside* `Env`:
+    // `save_binary_to_file`'s raw file/disc writes, and (real hardware!)
+    // uploading to a physical M4 over `xferlib`.
+    let dry_run = matches.get_flag("DRY_RUN");
 
     if matches.get_flag("SNAPSHOT")
         && !matches.contains_id("TO_M4")
@@ -560,7 +576,9 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
         })?;
 
         #[cfg(feature = "xferlib")]
-        if let Some(m4) = matches.get_one::<String>("TO_M4") {
+        if let Some(m4) = matches.get_one::<String>("TO_M4")
+            && !dry_run
+        {
             #[cfg(feature = "indicatif")]
             let bar = if show_progress {
                 Some(Progress::progress().add_bar("Send to M4"))
@@ -582,6 +600,7 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
     else if cfg!(feature = "xferlib")
         && matches.contains_id("TO_M4")
         && !matches.contains_id("OUTPUT")
+        && !dry_run
     {
         #[cfg(feature = "xferlib")]
         {
@@ -622,6 +641,9 @@ pub fn save(matches: &ArgMatches, env: &Env) -> Result<(), BasmError> {
                     PrintableListing::from(&Listing::from(listing))
                 ));
             }
+        }
+        else if dry_run {
+            // Nothing to write.
         }
         else {
             // Collect filenames from both command-line and OUTPUT directive
@@ -987,6 +1009,12 @@ If a placeholder appears multiple times in the template, only the first occurren
                         Arg::new("DEBUG")
                         .help("Trace more information to help debug")
                         .long("debug")
+                        .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("DRY_RUN")
+                        .help("Assemble normally but write nothing to disk (no output/listing/symbols file, no BUILDSNA/BUILDCPR, no SAVE/WRITE) and never upload to a real M4. Useful to check a file compiles without producing/touching any output.")
+                        .long("dry-run")
                         .action(ArgAction::SetTrue)
                     )
                     .arg(

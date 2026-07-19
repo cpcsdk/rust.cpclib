@@ -15,6 +15,18 @@ impl BuildFileAnalyzer {
         let line = document.line(line_idx)?;
         let cursor = position.character as usize;
 
+        // A call to a `{% macro %}` defined in this file: show what it
+        // expands to for these exact arguments.
+        if let Some(md) = super::macro_expand::macro_call_hover(document, &line, cursor) {
+            return Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: md
+                }),
+                range: None
+            });
+        }
+
         // Extract word at cursor
         let word = self.extract_word_at_position(&line, cursor)?;
 

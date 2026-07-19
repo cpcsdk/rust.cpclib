@@ -57,6 +57,16 @@ impl AssemblyAnalyzer {
             return Some(make_hover(format_include_preview(&filename, &content)));
         }
 
+        // Macro/struct call — show the expanded content for these arguments.
+        if let Some(md) = self.macro_or_struct_call_hover(document, position) {
+            return Some(make_hover(md));
+        }
+
+        // User-defined FUNCTION call — show its evaluated return value.
+        if let Some(md) = self.function_call_hover(document, &line, col) {
+            return Some(make_hover(md));
+        }
+
         // Numeric literal — show all bases
         if let Some((num_str, value)) = extract_number_at_position(&line, col) {
             return Some(make_hover(crate::common::render::format_number_hover(

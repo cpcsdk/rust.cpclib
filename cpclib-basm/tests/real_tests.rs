@@ -1226,6 +1226,38 @@ fn test_output_directive() {
 }
 
 #[test]
+fn test_output_directive_dry_run() {
+    let _lock = acquire_lock();
+    manual_cleanup();
+
+    // Clean up any pre-existing testoutput.bin
+    let output_path = std::path::Path::new("testoutput.bin");
+    if output_path.exists() {
+        fs_err::remove_file(output_path).unwrap();
+    }
+
+    let fname = "tests/asm/good_document_output.asm";
+
+    // Use basm command directly to assemble the file, with --dry-run
+    let res = Command::new("../target/debug/basm")
+        .args(["-I", "tests/asm/", "-i", fname, "--dry-run"])
+        .output()
+        .expect("Unable to launch basm");
+
+    assert!(
+        res.status.success(),
+        "Assembly failed: {}",
+        String::from_utf8_lossy(&res.stderr)
+    );
+
+    // --dry-run must prevent the OUTPUT directive from creating any file
+    assert!(
+        !output_path.exists(),
+        "--dry-run must prevent the OUTPUT directive from creating testoutput.bin"
+    );
+}
+
+#[test]
 fn test_output_directive_with_command_line() {
     let _lock = acquire_lock();
     manual_cleanup();

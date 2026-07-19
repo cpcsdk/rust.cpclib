@@ -67,25 +67,29 @@ impl SaveCommand {
         // get the data from the CPC memory
         let data = env.get_memory(from as _, size as _);
 
-        // Generate and save the file
-
-        self.file
-            .save(
-                data,
-                Some(from as u16),
-                match env.run_options {
-                    Some((exec_address, _)) if exec_address < from as u16 + size as u16 => {
-                        Some(exec_address)
+        // Generate and save the file — unless `dry_run` guarantees no
+        // real-world side effect: the data is still computed above exactly
+        // as normal (so callers relying on `SavedFile`'s reported size see
+        // the real value), only the actual disk write is skipped.
+        if !env.options().assemble_options().dry_run() {
+            self.file
+                .save(
+                    data,
+                    Some(from as u16),
+                    match env.run_options {
+                        Some((exec_address, _)) if exec_address < from as u16 + size as u16 => {
+                            Some(exec_address)
+                        },
+                        _ => None
                     },
-                    _ => None
-                },
-                Some(env.options().assemble_options().save_behavior())
-            )
-            .map_err(|e| {
-                AssemblerError::AssemblingError {
-                    msg: format!("Error while saving. {e}")
-                }
-            })?;
+                    Some(env.options().assemble_options().save_behavior())
+                )
+                .map_err(|e| {
+                    AssemblerError::AssemblingError {
+                        msg: format!("Error while saving. {e}")
+                    }
+                })?;
+        }
 
         if env.options().show_progress() {
             Progress::progress().remove_save(progress::normalize(&self.file.filename()));

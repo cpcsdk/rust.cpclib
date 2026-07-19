@@ -125,6 +125,39 @@ pub(super) fn collect_jinja_variables(document: &Document) -> Vec<(String, Strin
     vars
 }
 
+/// The names of every `{% macro NAME(...) %}` defined in `document` — used
+/// to tell a genuine user-defined macro call apart from a call to a
+/// built-in Jinja function (`fail(...)`, `basename(...)`, ...), which hover
+/// expansion deliberately doesn't handle.
+pub(super) fn macro_definition_names(document: &Document) -> Vec<String> {
+    let text = document.text();
+    let mut names = Vec::new();
+
+    for line in text.lines() {
+        let mut search_from = 0usize;
+        while let Some(rel) = line[search_from..].find("{%") {
+            let stmt_start = search_from + rel + 2;
+            let inner = &line[stmt_start..];
+            let inner = inner.strip_prefix('-').unwrap_or(inner);
+            let inner_trimmed = inner.trim_start();
+            if let Some(rest) = inner_trimmed.strip_prefix("macro")
+                && rest.starts_with(char::is_whitespace)
+            {
+                let name: String = rest
+                    .trim_start()
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !name.is_empty() && !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+            search_from = stmt_start;
+        }
+    }
+    names
+}
+
 /// All variables a bndbuild template could reference: locally `{% set %}`
 /// variables (paired with their source-text value) plus the built-in globals
 /// injected by `create_template_env`, for completion. Local variables shadow
@@ -221,5 +254,21 @@ mod tests {
         let names: Vec<String> = known_variables(&doc).into_iter().map(|(n, _)| n).collect();
         assert!(names.contains(&"root".to_string()));
         assert!(names.contains(&"AKG_PLAYER_PATH".to_string()));
+    }
+
+    #[test]
+    fn macro_definition_names_finds_a_defined_macro() {
+        let uri = Url::parse("file:///b.bnd").unwrap();
+        let text = "{% macro assemble(src) %}\nbasm {{ src }}\n{% endmacro %}\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        assert_eq!(macro_definition_names(&doc), vec!["assemble".to_string()]);
+    }
+
+    #[test]
+    fn macro_definition_names_ignores_other_statements() {
+        let uri = Url::parse("file:///b.bnd").unwrap();
+        let text = "{% set root = \"src\" %}\n{% if root %}{% endif %}\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        assert!(macro_definition_names(&doc).is_empty());
     }
 }
