@@ -40,6 +40,34 @@ impl AssemblyAnalyzer {
             new_text: formatted
         }])
     }
+
+    /// Delegates to BASIC on-type line-numbering when `position` falls
+    /// inside a `LOCOMOTIVE`/`ENDLOCOMOTIVE` block — basm files have no
+    /// on-type formatting of their own.
+    pub fn on_type_newline(
+        &self,
+        document: &Document,
+        position: Position
+    ) -> Option<Vec<TextEdit>> {
+        let text = document.text();
+        let loco_blocks = super::embedded_basic::extract_locomotive_blocks(&text);
+        let line_idx = position.line as usize;
+        let block = loco_blocks
+            .iter()
+            .find(|b| b.basic_range.contains(&line_idx))?;
+        let all_lines: Vec<&str> = text.lines().collect();
+        let basic_text: String = block
+            .basic_range
+            .clone()
+            .map(|i| all_lines[i])
+            .collect::<Vec<_>>()
+            .join("\n");
+        crate::locomotive::on_type_formatting::locomotive_basic_on_type_newline(
+            &basic_text,
+            position,
+            block.basic_range.start as u32
+        )
+    }
 }
 
 /// Strip a trailing `;`-comment from an ASM line (string-literal aware).
@@ -116,6 +144,49 @@ pub(super) fn split_at_colon(line: &str) -> Vec<String> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod on_type_newline_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    #[test]
+    fn continues_numbering_inside_a_locomotive_block() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "ORG 0x8000\nLOCOMOTIVE\n10 PRINT \"A\"\n\nENDLOCOMOTIVE\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on the blank new line 3, right after "10 PRINT \"A\"".
+        let edits = AssemblyAnalyzer::new()
+            .on_type_newline(
+                &doc,
+                Position {
+                    line: 3,
+                    character: 0
+                }
+            )
+            .expect("expected a line-numbering edit inside the LOCOMOTIVE block");
+        assert_eq!(edits[0].new_text, "20 ");
+        assert_eq!(edits[0].range.start.line, 3);
+    }
+
+    #[test]
+    fn outside_any_locomotive_block_yields_no_edit() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "ORG 0x8000\n\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        assert!(
+            AssemblyAnalyzer::new()
+                .on_type_newline(
+                    &doc,
+                    Position {
+                        line: 1,
+                        character: 0
+                    }
+                )
+                .is_none()
+        );
+    }
 }
 
 #[cfg(test)]

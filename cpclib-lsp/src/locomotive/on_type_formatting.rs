@@ -80,6 +80,36 @@ impl BasicAnalyzer {
     }
 }
 
+/// Entry point for a `LOCOMOTIVE`/`ENDLOCOMOTIVE` block embedded in a basm
+/// file: `position`/the returned edit are in the *outer* assembly
+/// document's coordinates, `basic_text` is just the block's own content
+/// (starting at `block_start_line` in the outer document) — translate in,
+/// delegate to the regular `on_type_newline`, translate the result back out.
+pub(crate) fn locomotive_basic_on_type_newline(
+    basic_text: &str,
+    position: Position,
+    block_start_line: u32
+) -> Option<Vec<TextEdit>> {
+    let relative_line = position.line.checked_sub(block_start_line)?;
+    let relative_position = Position {
+        line: relative_line,
+        character: position.character
+    };
+    let uri = Url::parse("file:///__embedded__.bas").ok()?;
+    let doc = Document::new(uri, basic_text.to_string(), 0);
+    let edits = BasicAnalyzer::new().on_type_newline(&doc, relative_position)?;
+    Some(
+        edits
+            .into_iter()
+            .map(|mut edit| {
+                edit.range.start.line += block_start_line;
+                edit.range.end.line += block_start_line;
+                edit
+            })
+            .collect()
+    )
+}
+
 /// Parse the line number at the very start of a BASIC line.
 fn leading_number(line: &str) -> Option<u32> {
     let trimmed = line.trim_start();

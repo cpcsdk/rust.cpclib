@@ -811,9 +811,21 @@ impl LanguageServer for CpcLspBackend {
         &self,
         params: ColorPresentationParams
     ) -> Result<Vec<ColorPresentation>> {
-        // Read-only swatches: no editable color-picker round trip, for
-        // either language.
-        let _ = params;
+        let uri = params.text_document.uri;
+        if let Some(entry) = self.documents.get(&uri) {
+            let document = entry.value();
+            return Ok(match document.doc_type {
+                DocumentType::Assembly => {
+                    self.asm_analyzer
+                        .color_presentations(document, params.color, params.range)
+                },
+                DocumentType::Basic => {
+                    self.basic_analyzer
+                        .color_presentations(params.color, params.range)
+                },
+                _ => Vec::new()
+            });
+        }
         Ok(Vec::new())
     }
 
@@ -832,6 +844,10 @@ impl LanguageServer for CpcLspBackend {
             if document.doc_type == DocumentType::Basic {
                 // Continue BASIC line numbering on the new line.
                 return Ok(self.basic_analyzer.on_type_newline(document, position));
+            }
+            if document.doc_type == DocumentType::Assembly {
+                // Same, but for BASIC embedded in a LOCOMOTIVE block.
+                return Ok(self.asm_analyzer.on_type_newline(document, position));
             }
         }
         Ok(None)

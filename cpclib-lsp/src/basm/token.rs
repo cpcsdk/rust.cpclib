@@ -236,51 +236,210 @@ pub(super) fn locate_name_in_statement<T: cpclib_asm::parser::obtained::MayHaveS
     (lsp_line, col)
 }
 
-/// Same text-based pre-filter as `starts_with_range_keyword`, for `SNASET`
-/// statements — needed before calling the costly (and partially
-/// unimplemented) `to_token()` conversion.
-pub(super) fn starts_with_snaset_keyword<T: cpclib_asm::parser::obtained::MayHaveSpan>(
-    token: &T
-) -> bool {
-    let span_text: &str = token.span().as_ref();
-    let first_line = span_text.lines().next().unwrap_or(span_text);
-    let first_word: String = first_line
-        .trim_start()
-        .chars()
-        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-        .collect();
-    first_word.eq_ignore_ascii_case("SNASET")
+/// A numeral literal's radix, and how many digits per byte it takes to
+/// write one (2 for hex, 8 for binary) — used to locate a 16-bit literal's
+/// high/low byte sub-spans.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum NumeralStyle {
+    Hex,
+    Decimal,
+    Binary
 }
 
-/// The `(line, start_col, end_col)` span of a `SNASET FLAG, value` token's
-/// `value` argument — the token's own span points at the `SNASET` keyword,
-/// not at the value. Finds the last top-level `,` on the statement's first
-/// line and takes the following run of non-whitespace/non-comment
-/// characters. Returns `None` if the statement has no comma (malformed).
-pub(super) fn locate_snaset_value_span<T: cpclib_asm::parser::obtained::MayHaveSpan>(
-    token: &T
-) -> Option<(u32, u32, u32)> {
-    let span = token.span();
-    let span_text: &str = span.as_ref();
-    let first_line = span_text.lines().next().unwrap_or(span_text);
-    let (line_1based, col_1based) = span.relative_line_and_column();
-    let lsp_line = line_1based.saturating_sub(1) as u32;
-    let base_col = col_1based.saturating_sub(1) as u32;
+impl NumeralStyle {
+    pub(super) fn radix(self) -> u32 {
+        match self {
+            NumeralStyle::Hex => 16,
+            NumeralStyle::Decimal => 10,
+            NumeralStyle::Binary => 2
+        }
+    }
 
-    let comma_off = first_line.rfind(',')?;
-    let bytes = first_line.as_bytes();
-    let mut i = comma_off + 1;
-    while i < bytes.len() && bytes[i] == b' ' {
-        i += 1;
+    /// Digits per byte, for splitting a 2-byte literal's digit run in half.
+    pub(super) fn digits_per_byte(self) -> usize {
+        match self {
+            NumeralStyle::Hex => 2,
+            NumeralStyle::Binary => 8,
+            NumeralStyle::Decimal => 0 // decimal is never byte-split
+        }
     }
-    let start = i;
-    while i < bytes.len() && !matches!(bytes[i], b' ' | b';' | b'\t') {
-        i += 1;
+}
+
+/// A numeral literal found while lexing, with enough detail to both
+/// evaluate it and precisely place/reformat a color swatch:
+/// `token_start` is the very first character of the literal (its base
+/// prefix included, e.g. the `0` of `0x54`), `prefix` is that captured
+/// prefix text (empty for decimal), and `digits`/`digits_start` are the
+/// digit run itself.
+pub(super) struct NumeralLiteral {
+    pub(super) line: u32,
+    pub(super) token_start: u32,
+    pub(super) prefix: String,
+    pub(super) digits_start: u32,
+    pub(super) digits: String,
+    pub(super) style: NumeralStyle
+}
+
+/// Lex every numeral literal in `text` (comment/string-aware, skipping
+/// `skip_lines` — LOCOMOTIVE block lines, tokenised separately as BASIC).
+/// Mirrors `semantic_tokens`'s numeral lexing (whitespace/comment/string
+/// skipping, `$`/`0x`/`%`/`0b` prefixes) but is self-contained here since it
+/// additionally needs to *parse* the value, not just highlight it.
+pub(super) fn scan_numeral_literals(
+    text: &str,
+    skip_lines: &std::collections::HashSet<usize>
+) -> Vec<NumeralLiteral> {
+    let mut out = Vec::new();
+
+    for (line_idx, line) in text.lines().enumerate() {
+        if skip_lines.contains(&line_idx) {
+            continue;
+        }
+        let line_u = line_idx as u32;
+        let bytes = line.as_bytes();
+        let mut col: usize = 0;
+
+        while col < bytes.len() {
+            match bytes[col] {
+                b' ' | b'\t' => col += 1,
+                b';' => break,
+                b'"' => {
+                    col += 1;
+                    while col < bytes.len() {
+                        if bytes[col] == b'\\' && col + 1 < bytes.len() {
+                            col += 2;
+                            continue;
+                        }
+                        let end = bytes[col] == b'"';
+                        col += 1;
+                        if end {
+                            break;
+                        }
+                    }
+                },
+                b'\''
+                    if !(col > 0
+                        && (bytes[col - 1].is_ascii_alphanumeric() || bytes[col - 1] == b'_')) =>
+                {
+                    col += 1;
+                    while col < bytes.len() {
+                        if bytes[col] == b'\\' && col + 1 < bytes.len() {
+                            col += 2;
+                            continue;
+                        }
+                        let end = bytes[col] == b'\'';
+                        col += 1;
+                        if end {
+                            break;
+                        }
+                    }
+                },
+                b'$' if col + 1 < bytes.len() && bytes[col + 1].is_ascii_hexdigit() => {
+                    let token_start = col;
+                    let digits_start = col + 1;
+                    let mut end = digits_start;
+                    while end < bytes.len() && bytes[end].is_ascii_hexdigit() {
+                        end += 1;
+                    }
+                    out.push(NumeralLiteral {
+                        line: line_u,
+                        token_start: token_start as u32,
+                        prefix: "$".to_string(),
+                        digits_start: digits_start as u32,
+                        digits: line[digits_start..end].to_string(),
+                        style: NumeralStyle::Hex
+                    });
+                    col = end;
+                },
+                b'%' if col + 1 < bytes.len() && matches!(bytes[col + 1], b'0' | b'1') => {
+                    let token_start = col;
+                    let digits_start = col + 1;
+                    let mut end = digits_start;
+                    while end < bytes.len() && matches!(bytes[end], b'0' | b'1') {
+                        end += 1;
+                    }
+                    out.push(NumeralLiteral {
+                        line: line_u,
+                        token_start: token_start as u32,
+                        prefix: "%".to_string(),
+                        digits_start: digits_start as u32,
+                        digits: line[digits_start..end].to_string(),
+                        style: NumeralStyle::Binary
+                    });
+                    col = end;
+                },
+                b'0' if matches!(bytes.get(col + 1), Some(b'x') | Some(b'X')) => {
+                    let token_start = col;
+                    let digits_start = col + 2;
+                    let mut end = digits_start;
+                    while end < bytes.len() && bytes[end].is_ascii_hexdigit() {
+                        end += 1;
+                    }
+                    out.push(NumeralLiteral {
+                        line: line_u,
+                        token_start: token_start as u32,
+                        prefix: line[token_start..digits_start].to_string(),
+                        digits_start: digits_start as u32,
+                        digits: line[digits_start..end].to_string(),
+                        style: NumeralStyle::Hex
+                    });
+                    col = end;
+                },
+                b'0' if matches!(bytes.get(col + 1), Some(b'b') | Some(b'B')) => {
+                    let token_start = col;
+                    let digits_start = col + 2;
+                    let mut end = digits_start;
+                    while end < bytes.len() && matches!(bytes[end], b'0' | b'1') {
+                        end += 1;
+                    }
+                    out.push(NumeralLiteral {
+                        line: line_u,
+                        token_start: token_start as u32,
+                        prefix: line[token_start..digits_start].to_string(),
+                        digits_start: digits_start as u32,
+                        digits: line[digits_start..end].to_string(),
+                        style: NumeralStyle::Binary
+                    });
+                    col = end;
+                },
+                c if c.is_ascii_digit() => {
+                    let start = col;
+                    let mut end = col;
+                    while end < bytes.len() && bytes[end].is_ascii_digit() {
+                        end += 1;
+                    }
+                    out.push(NumeralLiteral {
+                        line: line_u,
+                        token_start: start as u32,
+                        prefix: String::new(),
+                        digits_start: start as u32,
+                        digits: line[start..end].to_string(),
+                        style: NumeralStyle::Decimal
+                    });
+                    col = end;
+                },
+                // Identifier (label/symbol name): consumed as one unit so a
+                // trailing digit run (e.g. `STATE84`) is never mistaken for
+                // a standalone numeral.
+                c if c.is_ascii_alphabetic() || c == b'_' || c == b'@' || c == b'.' => {
+                    let mut end = col;
+                    while end < bytes.len() {
+                        let ch = bytes[end];
+                        if ch.is_ascii_alphanumeric() || ch == b'_' || ch == b'@' || ch == b'.' {
+                            end += 1;
+                        }
+                        else {
+                            break;
+                        }
+                    }
+                    col = end.max(col + 1);
+                },
+                _ => col += 1
+            }
+        }
     }
-    if i == start {
-        return None;
-    }
-    Some((lsp_line, base_col + start as u32, base_col + i as u32))
+
+    out
 }
 
 // ─── Generated directive documentation ────────────────────────────────────────

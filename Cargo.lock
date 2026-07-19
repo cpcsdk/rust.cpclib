@@ -3024,7 +3024,6 @@ dependencies = [
  "cpclib-bndbuild",
  "cpclib-common",
  "cpclib-runner",
- "cpclib-sna",
  "cpclib-tokens",
  "dashmap 6.2.1",
  "minijinja",

@@ -22,7 +22,6 @@ cpclib-runner = { workspace = true, default-features = false }
 cpclib-basic.workspace = true
 cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-tokens.workspace = true
-cpclib-sna = { workspace = true, default-features = false }
 camino.workspace = true
 minijinja.workspace = true
 

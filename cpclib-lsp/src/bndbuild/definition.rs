@@ -110,57 +110,159 @@ impl BuildFileAnalyzer {
             &file_key_names,
             &tgt_key_names,
             col
-        ) {
-            // Skip Jinja expressions — can't resolve them statically.
-            if !filename.contains("{{") && !filename.contains("{%") {
-                // Priority 1: only for dependency fields — jump to the rule
-                // that produces this filename elsewhere. For a target field
-                // this rule itself IS the producer, so "jumping to the
-                // declaring rule" would just point back at the same line;
-                // go straight to opening the file instead.
-                if !is_target_field {
-                    // Use a direct raw-text scan — it's reliable even when
-                    // Jinja expansion fails — and navigate to that rule,
-                    // never opening the file.
-                    let raw = document.text();
-                    if let Some(tgt_line) = Self::find_target_line(&raw, filename, &tgt_key_names) {
-                        return Some(Location {
-                            uri: document.uri.clone(),
-                            range: Range {
-                                start: Position {
-                                    line: tgt_line,
-                                    character: 0
-                                },
-                                end: Position {
-                                    line: tgt_line,
-                                    character: 0
-                                }
-                            }
-                        });
-                    }
-                }
+        ) && let Some(loc) =
+            Self::resolve_filename_location(document, filename, &tgt_key_names, is_target_field)
+        {
+            return Some(loc);
+        }
 
-                // Priority 2: open the file on disk (always for a target
-                // field; fallback for a dependency not produced elsewhere).
-                if let Some(base_dir) = document
-                    .uri
-                    .to_file_path()
-                    .ok()
-                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-                {
-                    let path = base_dir.join(filename);
-                    if path.exists() {
-                        if let Ok(uri) = Url::from_file_path(path) {
-                            return Some(Location {
-                                uri,
-                                range: Range::default()
-                            });
+        // ── cmd / tasks argument navigation ──────────────────────────────────
+        let task_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
+            .iter()
+            .find(|k| k.names.contains(&"tasks"))
+            .map(|k| k.names.to_vec())
+            .unwrap_or_default();
+
+        if let Some(filename) = Self::command_filename_under_cursor(
+            document,
+            position.line as usize,
+            &line,
+            &task_key_names,
+            col
+        ) && let Some(loc) =
+            Self::resolve_filename_location(document, filename, &tgt_key_names, false)
+        {
+            return Some(loc);
+        }
+
+        None
+    }
+
+    /// Resolve an already-extracted filename to a `Location`: jump to the
+    /// rule that declares it as a target (unless `is_target_field` — that
+    /// rule already IS the current one, so this would just point back at
+    /// itself), or fall back to opening the file on disk if it exists.
+    /// Skips Jinja expressions, which can't be resolved statically.
+    fn resolve_filename_location(
+        document: &Document,
+        filename: &str,
+        tgt_key_names: &[&str],
+        is_target_field: bool
+    ) -> Option<Location> {
+        if filename.contains("{{") || filename.contains("{%") {
+            return None;
+        }
+
+        if !is_target_field {
+            // Use a direct raw-text scan — it's reliable even when Jinja
+            // expansion fails — and navigate to that rule, never opening
+            // the file.
+            let raw = document.text();
+            if let Some(tgt_line) = Self::find_target_line(&raw, filename, tgt_key_names) {
+                return Some(Location {
+                    uri: document.uri.clone(),
+                    range: Range {
+                        start: Position {
+                            line: tgt_line,
+                            character: 0
+                        },
+                        end: Position {
+                            line: tgt_line,
+                            character: 0
                         }
                     }
-                }
+                });
             }
         }
 
+        // Open the file on disk (always for a target field; fallback for a
+        // dependency/argument not produced elsewhere).
+        let base_dir = document
+            .uri
+            .to_file_path()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))?;
+        let path = base_dir.join(filename);
+        if path.exists() {
+            let uri = Url::from_file_path(path).ok()?;
+            return Some(Location {
+                uri,
+                range: Range::default()
+            });
+        }
+        None
+    }
+
+    /// Like `filename_under_cursor`, but for `cmd:`/`tasks:` lines: the
+    /// first argv token is the command name (never a filename) and a
+    /// `-`-prefixed token is a flag — every other space-separated token is
+    /// offered, matching what completion already offers there
+    /// (`command_argv_at_cursor` in `autocomplete.rs`). Uses simple
+    /// whitespace splitting rather than shlex-aware tokenizing, consistent
+    /// with `token_at_col`'s handling of `tgt:`/`dep:` values.
+    fn command_filename_under_cursor<'a>(
+        document: &Document,
+        line_idx: usize,
+        line: &'a str,
+        task_key_names: &[&str],
+        col: usize
+    ) -> Option<&'a str> {
+        let bytes = line.as_bytes();
+        let len = bytes.len();
+
+        let mut i = 0;
+        while i < len && matches!(bytes[i], b' ' | b'\t') {
+            i += 1;
+        }
+        let is_dash = i + 1 < len && bytes[i] == b'-' && bytes[i + 1] == b' ';
+        if is_dash {
+            i += 2;
+            while i < len && bytes[i] == b' ' {
+                i += 1;
+            }
+        }
+
+        let value_start = task_key_names.iter().find_map(|&key| {
+            let prefix = format!("{key}:");
+            if !line[i..].starts_with(prefix.as_str()) {
+                return None;
+            }
+            let mut v = i + prefix.len();
+            while v < len && bytes[v] == b' ' {
+                v += 1;
+            }
+            Some(v)
+        });
+        let value_start = value_start.or_else(|| {
+            if is_dash && !line[i..].contains(':') {
+                let key = Self::enclosing_key_for_list_item(document, line_idx)?;
+                task_key_names.contains(&key.as_str()).then_some(i)
+            }
+            else {
+                None
+            }
+        })?;
+
+        let mut v = value_start;
+        let mut arg_index = 0usize;
+        while v < len && bytes[v] != b'#' {
+            while v < len && bytes[v] == b' ' {
+                v += 1;
+            }
+            if v >= len || bytes[v] == b'#' {
+                break;
+            }
+            let tok_start = v;
+            while v < len && bytes[v] != b' ' && bytes[v] != b'#' {
+                v += 1;
+            }
+            let tok_end = v;
+            if col >= tok_start && col < tok_end {
+                let tok = &line[tok_start..tok_end];
+                return (arg_index != 0 && !tok.starts_with('-')).then_some(tok);
+            }
+            arg_index += 1;
+        }
         None
     }
 
@@ -546,6 +648,104 @@ mod tests {
             loc.uri,
             Url::from_file_path(tmp.path().join("sna.asm")).unwrap(),
             "clicking a dependency should open the file, not jump to an unrelated bare-Jinja target"
+        );
+    }
+
+    #[test]
+    fn goto_definition_on_a_cmd_argument_opens_the_file() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("main.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  cmd: basm main.asm -o out.bin\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "main.asm" within the cmd argument list (line 1).
+        let loc = BuildFileAnalyzer::new()
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 1,
+                    character: 12
+                }
+            )
+            .expect("goto-definition on a cmd argument");
+        assert_eq!(
+            loc.uri,
+            Url::from_file_path(tmp.path().join("main.asm")).unwrap()
+        );
+    }
+
+    #[test]
+    fn goto_definition_on_a_cmd_argument_that_is_a_declared_target_jumps_to_its_rule() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        let text = "- tgt: helper.o\n  cmd: basm helper.asm -o helper.o\n- tgt: out.bin\n  cmd: link helper.o -o out.bin\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "helper.o" within the second rule's cmd line (line 3).
+        let loc = BuildFileAnalyzer::new()
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 3,
+                    character: 14
+                }
+            )
+            .expect("goto-definition on a cmd argument matching a declared target");
+        assert_eq!(loc.range.start.line, 0);
+    }
+
+    #[test]
+    fn goto_definition_on_the_command_name_itself_yields_nothing() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  cmd: basm main.asm -o out.bin\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "basm" itself (the command name, not an argument).
+        let loc = BuildFileAnalyzer::new().goto_definition(
+            &doc,
+            Position {
+                line: 1,
+                character: 8
+            }
+        );
+        assert!(loc.is_none(), "{loc:?}");
+    }
+
+    #[test]
+    fn goto_definition_on_a_flag_yields_nothing() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  cmd: basm main.asm -o out.bin\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "-o", a flag, not a filename.
+        let loc = BuildFileAnalyzer::new().goto_definition(
+            &doc,
+            Position {
+                line: 1,
+                character: 22
+            }
+        );
+        assert!(loc.is_none(), "{loc:?}");
+    }
+
+    #[test]
+    fn goto_definition_on_a_multi_line_cmd_list_argument_opens_the_file() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("main.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  cmd:\n    - basm main.asm -o out.bin\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "main.asm" within the list-form cmd item (line 2).
+        let loc = BuildFileAnalyzer::new()
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 2,
+                    character: 12
+                }
+            )
+            .expect("goto-definition on a multi-line cmd list argument");
+        assert_eq!(
+            loc.uri,
+            Url::from_file_path(tmp.path().join("main.asm")).unwrap()
         );
     }
 }

@@ -97,6 +97,9 @@
     "configurationDefaults": {
       "[locomotive-basic]": {
         "editor.formatOnType": true
+      },
+      "[basm]": {
+        "editor.formatOnType": true
       }
     }
   },
