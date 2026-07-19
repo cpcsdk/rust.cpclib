@@ -236,9 +236,9 @@ pub(super) fn locate_name_in_statement<T: cpclib_asm::parser::obtained::MayHaveS
     (lsp_line, col)
 }
 
-/// A numeral literal's radix, and how many digits per byte it takes to
-/// write one (2 for hex, 8 for binary) — used to locate a 16-bit literal's
-/// high/low byte sub-spans.
+/// A numeral literal's radix — used to locate a 16-bit literal's high/low
+/// byte sub-spans (2 hex digits or 8 binary digits per byte; decimal is
+/// never byte-split, since decimal digit boundaries don't align to bytes).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum NumeralStyle {
     Hex,
@@ -247,44 +247,45 @@ pub(super) enum NumeralStyle {
 }
 
 impl NumeralStyle {
-    pub(super) fn radix(self) -> u32 {
-        match self {
-            NumeralStyle::Hex => 16,
-            NumeralStyle::Decimal => 10,
-            NumeralStyle::Binary => 2
-        }
-    }
-
-    /// Digits per byte, for splitting a 2-byte literal's digit run in half.
     pub(super) fn digits_per_byte(self) -> usize {
         match self {
             NumeralStyle::Hex => 2,
             NumeralStyle::Binary => 8,
-            NumeralStyle::Decimal => 0 // decimal is never byte-split
+            NumeralStyle::Decimal => 0
         }
     }
 }
 
 /// A numeral literal found while lexing, with enough detail to both
-/// evaluate it and precisely place/reformat a color swatch:
-/// `token_start` is the very first character of the literal (its base
-/// prefix included, e.g. the `0` of `0x54`), `prefix` is that captured
-/// prefix text (empty for decimal), and `digits`/`digits_start` are the
-/// digit run itself.
+/// evaluate it and precisely place/reformat a color swatch: `token_start`/
+/// `token_end` bound the whole literal (base prefix and suffix included,
+/// e.g. all of `0x54` or `7F40h`); `prefix`/`suffix` are those captured
+/// verbatim (whichever the source actually used — `0x`/`#`/`$`/`&`/`0b`/`%`,
+/// or a trailing `h`/`b`) so an edit can preserve the exact same notation;
+/// `digits_start`/`digits_end` bound the digit run alone, for locating a
+/// 16-bit literal's byte midpoint.
 pub(super) struct NumeralLiteral {
     pub(super) line: u32,
     pub(super) token_start: u32,
+    pub(super) token_end: u32,
     pub(super) prefix: String,
+    pub(super) suffix: String,
     pub(super) digits_start: u32,
-    pub(super) digits: String,
+    pub(super) digits_end: u32,
+    pub(super) value: u32,
     pub(super) style: NumeralStyle
 }
 
-/// Lex every numeral literal in `text` (comment/string-aware, skipping
-/// `skip_lines` — LOCOMOTIVE block lines, tokenised separately as BASIC).
-/// Mirrors `semantic_tokens`'s numeral lexing (whitespace/comment/string
-/// skipping, `$`/`0x`/`%`/`0b` prefixes) but is self-contained here since it
-/// additionally needs to *parse* the value, not just highlight it.
+/// Lex every numeral literal in `text` (skipping `skip_lines` — LOCOMOTIVE
+/// block lines, tokenised separately as BASIC), delegating the actual
+/// lexing/parsing to `cpclib_common::parse::scan_numeric_literals` — the
+/// same numeral grammar the real assembler uses (every prefix/suffix form:
+/// `0x`/`0X`/`#`/`$`/`&` hex, `0b`/`0B`/`%` binary, trailing `h`/`b`
+/// suffixes — a hand-rolled lexer here would drift from it). That function
+/// already refuses to start a numeral right after an identifier character,
+/// so a label like `STATE84` is never misread as ending in a literal `84`.
+/// Only its own line-scoped double-quote-string skipping is built in, so
+/// `;` comments are stripped first via `format::strip_asm_comment`.
 pub(super) fn scan_numeral_literals(
     text: &str,
     skip_lines: &std::collections::HashSet<usize>
@@ -295,151 +296,70 @@ pub(super) fn scan_numeral_literals(
         if skip_lines.contains(&line_idx) {
             continue;
         }
-        let line_u = line_idx as u32;
-        let bytes = line.as_bytes();
-        let mut col: usize = 0;
-
-        while col < bytes.len() {
-            match bytes[col] {
-                b' ' | b'\t' => col += 1,
-                b';' => break,
-                b'"' => {
-                    col += 1;
-                    while col < bytes.len() {
-                        if bytes[col] == b'\\' && col + 1 < bytes.len() {
-                            col += 2;
-                            continue;
-                        }
-                        let end = bytes[col] == b'"';
-                        col += 1;
-                        if end {
-                            break;
-                        }
-                    }
-                },
-                b'\''
-                    if !(col > 0
-                        && (bytes[col - 1].is_ascii_alphanumeric() || bytes[col - 1] == b'_')) =>
-                {
-                    col += 1;
-                    while col < bytes.len() {
-                        if bytes[col] == b'\\' && col + 1 < bytes.len() {
-                            col += 2;
-                            continue;
-                        }
-                        let end = bytes[col] == b'\'';
-                        col += 1;
-                        if end {
-                            break;
-                        }
-                    }
-                },
-                b'$' if col + 1 < bytes.len() && bytes[col + 1].is_ascii_hexdigit() => {
-                    let token_start = col;
-                    let digits_start = col + 1;
-                    let mut end = digits_start;
-                    while end < bytes.len() && bytes[end].is_ascii_hexdigit() {
-                        end += 1;
-                    }
-                    out.push(NumeralLiteral {
-                        line: line_u,
-                        token_start: token_start as u32,
-                        prefix: "$".to_string(),
-                        digits_start: digits_start as u32,
-                        digits: line[digits_start..end].to_string(),
-                        style: NumeralStyle::Hex
-                    });
-                    col = end;
-                },
-                b'%' if col + 1 < bytes.len() && matches!(bytes[col + 1], b'0' | b'1') => {
-                    let token_start = col;
-                    let digits_start = col + 1;
-                    let mut end = digits_start;
-                    while end < bytes.len() && matches!(bytes[end], b'0' | b'1') {
-                        end += 1;
-                    }
-                    out.push(NumeralLiteral {
-                        line: line_u,
-                        token_start: token_start as u32,
-                        prefix: "%".to_string(),
-                        digits_start: digits_start as u32,
-                        digits: line[digits_start..end].to_string(),
-                        style: NumeralStyle::Binary
-                    });
-                    col = end;
-                },
-                b'0' if matches!(bytes.get(col + 1), Some(b'x') | Some(b'X')) => {
-                    let token_start = col;
-                    let digits_start = col + 2;
-                    let mut end = digits_start;
-                    while end < bytes.len() && bytes[end].is_ascii_hexdigit() {
-                        end += 1;
-                    }
-                    out.push(NumeralLiteral {
-                        line: line_u,
-                        token_start: token_start as u32,
-                        prefix: line[token_start..digits_start].to_string(),
-                        digits_start: digits_start as u32,
-                        digits: line[digits_start..end].to_string(),
-                        style: NumeralStyle::Hex
-                    });
-                    col = end;
-                },
-                b'0' if matches!(bytes.get(col + 1), Some(b'b') | Some(b'B')) => {
-                    let token_start = col;
-                    let digits_start = col + 2;
-                    let mut end = digits_start;
-                    while end < bytes.len() && matches!(bytes[end], b'0' | b'1') {
-                        end += 1;
-                    }
-                    out.push(NumeralLiteral {
-                        line: line_u,
-                        token_start: token_start as u32,
-                        prefix: line[token_start..digits_start].to_string(),
-                        digits_start: digits_start as u32,
-                        digits: line[digits_start..end].to_string(),
-                        style: NumeralStyle::Binary
-                    });
-                    col = end;
-                },
-                c if c.is_ascii_digit() => {
-                    let start = col;
-                    let mut end = col;
-                    while end < bytes.len() && bytes[end].is_ascii_digit() {
-                        end += 1;
-                    }
-                    out.push(NumeralLiteral {
-                        line: line_u,
-                        token_start: start as u32,
-                        prefix: String::new(),
-                        digits_start: start as u32,
-                        digits: line[start..end].to_string(),
-                        style: NumeralStyle::Decimal
-                    });
-                    col = end;
-                },
-                // Identifier (label/symbol name): consumed as one unit so a
-                // trailing digit run (e.g. `STATE84`) is never mistaken for
-                // a standalone numeral.
-                c if c.is_ascii_alphabetic() || c == b'_' || c == b'@' || c == b'.' => {
-                    let mut end = col;
-                    while end < bytes.len() {
-                        let ch = bytes[end];
-                        if ch.is_ascii_alphanumeric() || ch == b'_' || ch == b'@' || ch == b'.' {
-                            end += 1;
-                        }
-                        else {
-                            break;
-                        }
-                    }
-                    col = end.max(col + 1);
-                },
-                _ => col += 1
-            }
+        let code = super::format::strip_asm_comment(line);
+        for (start, end, value, kind) in cpclib_common::parse::scan_numeric_literals(code) {
+            let style = match kind {
+                cpclib_common::parse::EncodingKind::Hex => NumeralStyle::Hex,
+                cpclib_common::parse::EncodingKind::Bin => NumeralStyle::Binary,
+                cpclib_common::parse::EncodingKind::Dec => NumeralStyle::Decimal,
+                // Octal has no GA-byte meaning; the ambiguous/unknown
+                // states are internal to the parser and never returned.
+                _ => continue
+            };
+            let token_text = &code[start..end];
+            let (prefix_len, suffix_len) = prefix_and_suffix_len(token_text, style);
+            out.push(NumeralLiteral {
+                line: line_idx as u32,
+                token_start: start as u32,
+                token_end: end as u32,
+                prefix: token_text[..prefix_len].to_string(),
+                suffix: token_text[token_text.len() - suffix_len..].to_string(),
+                digits_start: (start + prefix_len) as u32,
+                digits_end: (end - suffix_len) as u32,
+                value,
+                style
+            });
         }
     }
 
     out
+}
+
+/// How many of a numeral token's leading/trailing characters are its base
+/// prefix/suffix (as opposed to digits) — e.g. `("0x", 2, 0)`, `("$", 1,
+/// 0)`, `("7F40h", 0, 1)`, `("84", 0, 0)` for a bare decimal.
+fn prefix_and_suffix_len(text: &str, style: NumeralStyle) -> (usize, usize) {
+    match style {
+        NumeralStyle::Hex => {
+            if text.len() >= 2 && matches!(&text[..2], "0x" | "0X") {
+                (2, 0)
+            }
+            else if text.starts_with(['#', '$', '&']) {
+                (1, 0)
+            }
+            else if text.ends_with(['h', 'H']) {
+                (0, 1)
+            }
+            else {
+                (0, 0)
+            }
+        },
+        NumeralStyle::Binary => {
+            if text.len() >= 2 && matches!(&text[..2], "0b" | "0B") {
+                (2, 0)
+            }
+            else if text.starts_with('%') {
+                (1, 0)
+            }
+            else if text.ends_with(['b', 'B']) {
+                (0, 1)
+            }
+            else {
+                (0, 0)
+            }
+        },
+        NumeralStyle::Decimal => (0, 0)
+    }
 }
 
 // ─── Generated directive documentation ────────────────────────────────────────

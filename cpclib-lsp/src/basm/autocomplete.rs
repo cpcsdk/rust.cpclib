@@ -1008,7 +1008,7 @@ impl AssemblyAnalyzer {
     /// Falls back to a text scan when the document does not parse — which is
     /// the common case while the user is mid-typing the very line being
     /// completed.
-    fn collect_symbols(&self, document: &Document) -> Vec<(String, String)> {
+    pub(super) fn collect_symbols(&self, document: &Document) -> Vec<(String, String)> {
         let Ok(listing) = self.parse_document(document)
         else {
             return collect_symbols_by_text(document);
@@ -1073,7 +1073,10 @@ impl AssemblyAnalyzer {
     /// `inner://...` resource — even when never opened by the editor.
     /// `source_name` identifies which included file a symbol came from, for
     /// the completion item's detail text.
-    fn collect_symbols_from_includes(&self, document: &Document) -> Vec<(String, String, String)> {
+    pub(super) fn collect_symbols_from_includes(
+        &self,
+        document: &Document
+    ) -> Vec<(String, String, String)> {
         let text = document.text();
         let mut out = Vec::new();
         for filename in super::definition::extract_include_filenames(&text) {
