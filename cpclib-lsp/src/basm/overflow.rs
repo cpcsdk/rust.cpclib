@@ -10,7 +10,7 @@
 use cpclib_asm::assembler::Env;
 use cpclib_asm::implementation::expression::ExprEvaluationExt;
 use cpclib_asm::parser::obtained::{LocatedDataAccess, LocatedExpr, LocatedListing, LocatedToken};
-use cpclib_asm::preamble::MayHaveSpan;
+use cpclib_asm::preamble::{MayHaveSpan, SourceString};
 use cpclib_tokens::{ListingElement, Mnemonic};
 use tower_lsp::lsp_types::*;
 
@@ -66,9 +66,23 @@ impl AssemblyAnalyzer {
                     continue;
                 };
                 if !width.range().contains(&value) {
+                    let mut message =
+                        format!("value {value} does not fit in {} bits", width.bits());
+                    // Show what the value actually becomes once truncated,
+                    // by re-assembling a version of this instruction with
+                    // the resolved value substituted in, then disassembling
+                    // the result - rather than hardcoding per-mnemonic
+                    // truncation logic, this stays correct for any
+                    // instruction shape (including ones added later).
+                    if let Some(snippet) = synthesize_replacement(token, expr, value)
+                        && let Some(disassembled) =
+                            super::disassemble::disassemble_snippet(&snippet)
+                    {
+                        message.push_str(&format!(" (assembles as: {disassembled})"));
+                    }
                     out.push(asm_diag(
                         Some(expr.span()),
-                        format!("value {value} does not fit in {} bits", width.bits()),
+                        message,
                         DiagnosticSeverity::WARNING
                     ));
                 }
@@ -139,6 +153,48 @@ fn overflow_candidates(token: &LocatedToken) -> Vec<(&LocatedExpr, SlotWidth)> {
     }
 
     candidates
+}
+
+/// Build a small, self-contained instruction snippet equivalent to `token`
+/// but with `target` (the operand that overflowed) replaced by its
+/// resolved `value` written out as a plain literal - every other operand
+/// (a register, `(HL)`, `(IX+2)`, ...) is kept verbatim, using its own
+/// original source text, so the result never depends on any symbol table:
+/// it can always be assembled in isolation, even when `target` itself came
+/// from a variable (`ld b, val`) that only exists in the surrounding file.
+fn synthesize_replacement(
+    token: &LocatedToken,
+    target: &LocatedExpr,
+    value: i32
+) -> Option<String> {
+    if token.is_db() {
+        return Some(format!("db {value}"));
+    }
+    if token.is_dw() {
+        return Some(format!("dw {value}"));
+    }
+
+    let mnemonic = token.mnemonic()?;
+    let mut operands = Vec::new();
+    for arg in [token.mnemonic_arg1(), token.mnemonic_arg2()]
+        .into_iter()
+        .flatten()
+    {
+        if let LocatedDataAccess::Expression(e) = arg
+            && std::ptr::eq(e, target)
+        {
+            operands.push(value.to_string());
+        }
+        else {
+            operands.push(arg.span().as_str().to_string());
+        }
+    }
+    if operands.is_empty() {
+        None
+    }
+    else {
+        Some(format!("{mnemonic} {}", operands.join(", ")))
+    }
 }
 
 /// The slot width a `LD` destination operand represents, or `None` for

@@ -108,6 +108,7 @@ impl AssemblyAnalyzer {
         {
             let mut env = super::expand::dry_run_env(&listing, &document.uri);
             collect_assembler_warnings(&env, &mut diagnostics);
+            enrich_fake_instruction_diagnostics(document, &mut diagnostics);
             Self::check_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
         }
 
@@ -125,6 +126,39 @@ pub(super) fn collect_assembler_warnings(
 ) {
     for warning in env.warnings() {
         collect_asm_diagnostics(warning, None, out);
+    }
+}
+
+/// A "fake instruction" warning's range is exactly the offending
+/// instruction's own source span (see `AlreadyRenderedWarningWithLocation`
+/// in `cpclib-asm`, which captures `line`/`column`/`len` straight from the
+/// token's `Z80Span`) - so re-extracting that same text from the live
+/// document, re-assembling it in isolation, and disassembling the result
+/// shows exactly what real opcode(s) it expands to, without hardcoding any
+/// per-fake-instruction knowledge. Fake instructions are always plain
+/// register-to-register forms (`ld hl, de`, `sub de, bc`, ...), so the
+/// extracted text never depends on a symbol table and is always safe to
+/// assemble on its own.
+fn enrich_fake_instruction_diagnostics(document: &Document, diagnostics: &mut [Diagnostic]) {
+    for diag in diagnostics.iter_mut() {
+        if diag.severity != Some(DiagnosticSeverity::WARNING)
+            || !diag.message.contains("fake instruction")
+        {
+            continue;
+        }
+        let Some(line) = document.line(diag.range.start.line as usize)
+        else {
+            continue;
+        };
+        let start = diag.range.start.character as usize;
+        let end = diag.range.end.character as usize;
+        let Some(snippet) = line.get(start..end)
+        else {
+            continue;
+        };
+        if let Some(disassembled) = super::disassemble::disassemble_snippet(snippet) {
+            diag.message = format!("{} (assembles as: {disassembled})", diag.message);
+        }
     }
 }
 
@@ -451,6 +485,14 @@ mod tests {
             diags[0].message
         );
         assert_eq!(diags[0].range.start.line, 1);
+        // Enriched with the real opcodes it expands to (derived by
+        // assembling `ld hl, de` in isolation and disassembling the
+        // result), not hardcoded per fake instruction.
+        assert!(
+            diags[0].message.contains("LD L, E") && diags[0].message.contains("LD H, D"),
+            "{:?}",
+            diags[0].message
+        );
     }
 
     #[test]
@@ -474,6 +516,17 @@ mod tests {
             overflow[0].message
         );
         assert_eq!(overflow[0].range.start.line, 1);
+        // Enriched with the real, truncated value it actually assembles to
+        // (300 & 0xFF == 44 == 0x2c) - derived by re-assembling `ld b, 300`
+        // with 300 substituted by its resolved value and disassembling the
+        // result, not by hardcoding the truncation arithmetic here.
+        assert!(
+            overflow[0].message.contains("assembles as")
+                && overflow[0].message.contains("LD B")
+                && overflow[0].message.contains("0x2c"),
+            "{:?}",
+            overflow[0].message
+        );
     }
 
     #[test]

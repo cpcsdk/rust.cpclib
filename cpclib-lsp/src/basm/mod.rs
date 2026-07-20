@@ -13,6 +13,7 @@ pub mod color;
 pub mod command;
 pub mod definition;
 pub mod diagnostics;
+pub mod disassemble;
 pub mod embedded_basic;
 pub mod expand;
 pub mod format;
