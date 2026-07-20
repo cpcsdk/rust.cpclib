@@ -4,6 +4,8 @@
 //! Logic (what is under the cursor) is in `hover()`; the markdown-building
 //! rendering lives in the free helper functions below it.
 
+use cpclib_asm::implementation::expression::ExprEvaluationExt;
+use cpclib_asm::parser::obtained::MayHaveSpan;
 use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::*;
 
@@ -50,11 +52,21 @@ impl AssemblyAnalyzer {
         // Hovering an included filename (INCLUDE/INCBIN/BINCLUDE): preview
         // its content — a real file on disk or an embedded `inner://...`
         // resource are equally valid directive arguments, and equally worth
-        // previewing without leaving the current file.
-        if let Some(filename) = super::definition::include_filename_at(&line, col)
-            && let Some(content) = super::includes::read_included_file(&filename, &document.uri)
+        // previewing without leaving the current file. `INCBIN` is binary
+        // data, so it gets a hex/ASCII dump instead of a text preview.
+        if let Some((directive, filename)) =
+            super::definition::include_directive_and_filename_at(&line, col)
         {
-            return Some(make_hover(format_include_preview(&filename, &content)));
+            if directive == "INCBIN" {
+                if let Some(hover) = self.incbin_hover(document, position, &filename) {
+                    return Some(hover);
+                }
+            }
+            else if let Some(content) =
+                super::includes::read_included_file(&filename, &document.uri)
+            {
+                return Some(make_hover(format_include_preview(&filename, &content)));
+            }
         }
 
         // Macro/struct call — show the expanded content for these arguments.
@@ -154,6 +166,105 @@ impl AssemblyAnalyzer {
 
         None
     }
+
+    /// Hover for an `INCBIN` directive: a hex/ASCII dump of the actual bytes
+    /// that get included, honoring `offset`/`length` arguments when present
+    /// — showing raw text (like `INCLUDE`/`BINCLUDE` do) makes no sense for
+    /// binary data.
+    fn incbin_hover(
+        &self,
+        document: &Document,
+        position: Position,
+        filename: &str
+    ) -> Option<Hover> {
+        let bytes = super::includes::read_included_file_bytes(filename, &document.uri)?;
+
+        // Resolve `offset`/`length` (possibly symbolic expressions) against
+        // the real document — same machinery macro/FUNCTION hover uses.
+        let listing = self.parse_document(document).ok()?;
+        let token = super::token::flatten_listing(listing.iter())
+            .into_iter()
+            .find(|t| t.is_incbin() && span_line(*t) == position.line)?;
+
+        let mut env = super::expand::dry_run_env(&listing, &document.uri);
+        let offset = token
+            .incbin_offset()
+            .and_then(|e| e.resolve(&mut env).ok())
+            .and_then(|v| v.int().ok())
+            .filter(|v| *v >= 0)
+            .map(|v| v as usize)
+            .unwrap_or(0);
+        let length = token
+            .incbin_length()
+            .and_then(|e| e.resolve(&mut env).ok())
+            .and_then(|v| v.int().ok())
+            .filter(|v| *v >= 0)
+            .map(|v| v as usize);
+
+        let start = offset.min(bytes.len());
+        let end = match length {
+            Some(len) => (start + len).min(bytes.len()),
+            None => bytes.len()
+        };
+        let slice = &bytes[start..end];
+
+        let mut md = format!("**{filename}** ({} bytes", slice.len());
+        if start > 0 || end < bytes.len() {
+            md.push_str(&format!(
+                ", showing bytes {start}..{end} of {}",
+                bytes.len()
+            ));
+        }
+        md.push_str(")\n\n");
+        md.push_str(&format_hex_dump(slice, 16));
+
+        Some(make_hover(md))
+    }
+}
+
+/// 0-based line of `token`'s own span.
+fn span_line<T: MayHaveSpan>(token: &T) -> u32 {
+    let (line_1based, _col) = token.span().relative_line_and_column();
+    line_1based.saturating_sub(1) as u32
+}
+
+/// Render `bytes` as a fixed-width hex + ASCII dump, 16 bytes per row,
+/// capped at `max_rows` rows (with a "... N more bytes" suffix if there's
+/// more) — used for `INCBIN` hover, where binary data would be nonsensical
+/// to show as raw text.
+///
+/// The fence is tagged `text` (not left bare): an unlabeled fence in a
+/// hover popup gets syntax-highlighted using the current document's
+/// language grammar (Z80 asm), which colors the hex digits as numbers and
+/// everything else differently — `text` disables highlighting entirely, so
+/// the dump renders in one uniform color.
+fn format_hex_dump(bytes: &[u8], max_rows: usize) -> String {
+    const ROW_WIDTH: usize = 16;
+
+    let mut out = String::from("```text\n");
+    let mut offset = 0usize;
+    for row in bytes.chunks(ROW_WIDTH).take(max_rows) {
+        let hex: String = row.iter().map(|b| format!("{b:02X} ")).collect();
+        let ascii: String = row
+            .iter()
+            .map(|&b| {
+                if (0x20..0x7F).contains(&b) {
+                    b as char
+                }
+                else {
+                    '.'
+                }
+            })
+            .collect();
+        out.push_str(&format!("{offset:04X}  {hex:<48}{ascii}\n"));
+        offset += row.len();
+    }
+    let shown_bytes = max_rows * ROW_WIDTH;
+    if bytes.len() > shown_bytes {
+        out.push_str(&format!("... {} more bytes\n", bytes.len() - shown_bytes));
+    }
+    out.push_str("```");
+    out
 }
 
 /// Detect a numeric literal under `col` and return its text + i64 value.
@@ -388,6 +499,46 @@ mod include_preview_tests {
         let text = "    include \"does_not_exist.asm\"\n";
         assert!(hover_at(text, uri, 0, 20).is_none());
     }
+
+    #[test]
+    fn hovering_an_incbin_filename_shows_a_hex_dump_not_raw_text() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("data.bin"), [0u8, 1, 2, 3, b'h', b'i']).unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let text = "    incbin \"data.bin\"\n";
+
+        // Cursor inside "data.bin".
+        let hover = hover_at(text, uri, 0, 15).expect("hover on data.bin");
+        let md = markdown(&hover);
+        assert!(md.contains("data.bin"), "{md}");
+        assert!(md.contains("6 bytes"), "{md}");
+        assert!(md.contains("00 01 02 03"), "{md}");
+        assert!(md.contains("hi"), "{md}");
+        // Fenced as `text`, not left bare — an unlabeled fence gets
+        // syntax-highlighted using the document's language grammar, which
+        // colors hex digits differently from the rest ("several colors").
+        assert!(md.contains("```text"), "{md}");
+    }
+
+    #[test]
+    fn incbin_hover_respects_offset_and_length_arguments() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("data.bin"),
+            [0u8, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        )
+        .unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let text = "    incbin \"data.bin\", 2, 3\n";
+
+        // Cursor inside "data.bin".
+        let hover = hover_at(text, uri, 0, 15).expect("hover on data.bin");
+        let md = markdown(&hover);
+        assert!(md.contains("3 bytes"), "{md}");
+        assert!(md.contains("showing bytes 2..5 of 10"), "{md}");
+        assert!(md.contains("02 03 04"), "{md}");
+        assert!(!md.contains("06 07"), "{md}");
+    }
 }
 
 #[cfg(test)]
@@ -417,6 +568,36 @@ mod symbol_hover_tests {
             _ => panic!("expected markdown hover contents")
         };
         assert!(md.contains("GUARDED_LABEL"), "{md}");
+    }
+}
+
+#[cfg(test)]
+mod timing_hover_tests {
+    use super::*;
+
+    /// The user only cares about NOPs, not T-states — trim the latter from
+    /// instruction hover text and keep the former.
+    #[test]
+    fn instruction_hover_shows_nops_but_not_t_states() {
+        let uri = Url::parse("file:///main.asm").unwrap();
+        let text = "    ld a, 1\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "ld".
+        let hover = AssemblyAnalyzer::new()
+            .hover(
+                &doc,
+                Position {
+                    line: 0,
+                    character: 5
+                }
+            )
+            .expect("hover on ld a, 1");
+        let md = match &hover.contents {
+            HoverContents::Markup(m) => m.value.as_str(),
+            _ => panic!("expected markdown hover contents")
+        };
+        assert!(md.contains("NOP"), "{md}");
+        assert!(!md.to_lowercase().contains("t-state"), "{md}");
     }
 }
 

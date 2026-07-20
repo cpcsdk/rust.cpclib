@@ -27,6 +27,13 @@ pub(super) fn read_inner_file(filename: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// As [`read_inner_file`], but the raw bytes — for `INCBIN` targets, which
+/// are binary data and not necessarily valid UTF-8.
+pub(super) fn read_inner_file_bytes(filename: &str) -> Option<Vec<u8>> {
+    let file = EmbeddedFiles::get(filename)?;
+    Some(file.data.as_ref().to_vec())
+}
+
 /// Read the content of a file referenced by an `INCLUDE`/`INCBIN`/`BINCLUDE`
 /// directive in the document at `doc_uri`, whether it's an embedded
 /// `inner://...` resource or a real file on disk — resolved the same way
@@ -37,6 +44,15 @@ pub(super) fn read_included_file(filename: &str, doc_uri: &Url) -> Option<String
     }
     let path = super::definition::resolve_include_path(filename, doc_uri)?;
     std::fs::read_to_string(path).ok()
+}
+
+/// As [`read_included_file`], but the raw bytes — for `INCBIN` targets.
+pub(super) fn read_included_file_bytes(filename: &str, doc_uri: &Url) -> Option<Vec<u8>> {
+    if is_inner_uri(filename) {
+        return read_inner_file_bytes(filename);
+    }
+    let path = super::definition::resolve_include_path(filename, doc_uri)?;
+    std::fs::read(path).ok()
 }
 
 #[cfg(test)]

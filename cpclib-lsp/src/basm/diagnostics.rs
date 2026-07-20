@@ -48,7 +48,7 @@ impl AssemblyAnalyzer {
                 break;
             }
 
-            let listing_with_errors = match Self::parse_source(&remaining) {
+            let listing_with_errors = match Self::parse_source(&remaining, Some(&document.uri)) {
                 Ok(_) => break, // the rest of the file parses cleanly
                 Err(e) => e
             };
@@ -342,6 +342,23 @@ mod tests {
         for d in &diags {
             assert_eq!(d.severity, Some(DiagnosticSeverity::ERROR));
         }
+    }
+
+    #[test]
+    fn diagnostic_message_shows_the_real_document_path_not_no_file() {
+        // Regression test: the LSP never threaded the document's own URI
+        // into the parser's `current_filename`, so every basm error message
+        // showed the placeholder "no file"/"no file specified" instead of
+        // the real path.
+        let text = "org 0x4000\n@#$ garbage @#$\n ld a, 1\n ret\n";
+        let diags = diagnostics_for(text);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert!(diags[0].message.contains("t.asm"), "{:?}", diags[0].message);
+        assert!(
+            !diags[0].message.to_lowercase().contains("no file"),
+            "{:?}",
+            diags[0].message
+        );
     }
 
     #[test]

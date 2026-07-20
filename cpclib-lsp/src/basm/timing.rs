@@ -167,23 +167,19 @@ pub fn format_hover(instruction_text: &str, entries: &[&TimingEntry]) -> String 
         md.push_str("---\n");
         md.push_str(&format!("`{}`\n\n", entry.pattern));
 
-        // NOPs / T-states
+        // NOPs
         match entry.nops_alt {
             None => {
                 md.push_str(&format!(
-                    "**{}** NOP{} ({} T-states)\n\n",
+                    "**{}** NOP{}\n\n",
                     entry.nops,
-                    if entry.nops == 1 { "" } else { "s" },
-                    entry.nops as u16 * 4
+                    if entry.nops == 1 { "" } else { "s" }
                 ))
             },
             Some(alt) => {
                 md.push_str(&format!(
-                    "**{}** / **{}** NOPs ({}/{} T-states — taken/not taken)\n\n",
-                    entry.nops,
-                    alt,
-                    entry.nops as u16 * 4,
-                    alt as u16 * 4
+                    "**{}** / **{}** NOPs (taken/not taken)\n\n",
+                    entry.nops, alt
                 ))
             },
         }

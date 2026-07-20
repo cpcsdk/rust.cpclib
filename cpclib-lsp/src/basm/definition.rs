@@ -284,6 +284,17 @@ fn resolve_include_at(line: &str, col: usize, doc_uri: &Url) -> Option<Url> {
 /// `inner://...` embedded-resource reference). Shared by ctrl+click
 /// navigation (`resolve_include_at`) and hover content preview.
 pub(super) fn include_filename_at(line: &str, col: usize) -> Option<String> {
+    include_directive_and_filename_at(line, col).map(|(_directive, filename)| filename)
+}
+
+/// As [`include_filename_at`], but also reports which directive matched
+/// (`"INCLUDE"`/`"INCBIN"`/`"BINCLUDE"`) — hover needs to tell them apart:
+/// `INCBIN` targets are raw binary data and get a hex/ASCII dump instead of
+/// a text preview.
+pub(super) fn include_directive_and_filename_at(
+    line: &str,
+    col: usize
+) -> Option<(&'static str, String)> {
     let bytes = line.as_bytes();
     if col >= bytes.len() {
         return None;
@@ -295,14 +306,45 @@ pub(super) fn include_filename_at(line: &str, col: usize) -> Option<String> {
 
     // The part before the string must end with a recognised include keyword.
     let before = line[..str_start].trim().to_uppercase();
-    let is_include = INCLUDE_DIRECTIVES.iter().any(|d| {
-        before == *d || before.ends_with(&format!(" {d}")) || before.ends_with(&format!("\t{d}"))
-    });
-    if !is_include {
-        return None;
-    }
+    let directive = INCLUDE_DIRECTIVES.iter().find(|d| {
+        before == **d || before.ends_with(&format!(" {d}")) || before.ends_with(&format!("\t{d}"))
+    })?;
 
-    Some(filename.to_string())
+    Some((directive, filename.to_string()))
+}
+
+/// Every ancestor directory of `doc_uri`'s own directory, closest first, up
+/// to and including the directory containing a project-root marker (or the
+/// filesystem root) — the same walk [`resolve_include_path`] performs when
+/// looking for one specific file, generalized into a search-path list.
+///
+/// Needed because real `include`s are conventionally written relative to a
+/// project root, not the including file's own directory — e.g. a file at
+/// `linking/src/hbl_inner.asm` doing `include 'src/demosystem/foo.asm'`
+/// means relative to `linking/`, not `linking/src/`. A single directory
+/// (just the file's own) isn't enough to resolve that.
+pub(super) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathBuf> {
+    let mut dirs = Vec::new();
+    let Ok(doc_path) = doc_uri.to_file_path()
+    else {
+        return dirs;
+    };
+    let Some(mut dir) = doc_path.parent().map(std::path::Path::to_path_buf)
+    else {
+        return dirs;
+    };
+    loop {
+        let at_root = PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists());
+        dirs.push(dir.clone());
+        if at_root {
+            break;
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent.to_path_buf(),
+            None => break
+        }
+    }
+    dirs
 }
 
 /// Walk up from `doc_uri`'s directory, trying each ancestor as a base for
