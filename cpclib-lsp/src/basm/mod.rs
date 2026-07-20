@@ -18,6 +18,7 @@ pub mod expand;
 pub mod format;
 pub mod hover;
 pub mod includes;
+pub mod overflow;
 pub mod parse;
 pub mod refactor;
 pub mod semantic_tokens;

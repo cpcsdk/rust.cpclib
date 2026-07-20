@@ -26,7 +26,7 @@ use super::function::{Function, FunctionBuilder};
 use super::r#macro::Expandable;
 use crate::implementation::expression::ExprEvaluationExt;
 use crate::implementation::instructions::Compressor;
-use crate::preamble::{LocatedListing, MayHaveSpan, Z80Span};
+use crate::preamble::{LocatedListing, MayHaveSpan, SourceString, Z80Span};
 use crate::progress::{self, Progress};
 use crate::{
     AssemblerCompressionResult, AssemblerError, Env, LocatedToken, Visited, r#macro,
@@ -1445,17 +1445,34 @@ where
                     },
 
                     Some(ProcessedTokenState::Warning(token)) => {
-                        let warning = AssemblerError::RelocatedWarning {
+                        // Extract the structured location *immediately*, while
+                        // the span's underlying source buffer is still known
+                        // valid: some spans (e.g. ones from macro-expansion
+                        // scratch text) are not safe to read from later, once
+                        // a subsequent pass has reused/overwritten that
+                        // buffer - see `AlreadyRenderedWarningWithLocation`'s
+                        // doc comment. `msg` renders through the same
+                        // `RelocatedWarning`/`Display` path as before, so the
+                        // human-readable text is unchanged.
+                        let span = self
+                            .token
+                            .possible_span()
+                            .expect("BUG: warning token should have a span");
+                        let (line, column) = span.relative_line_and_column();
+                        let len = span.as_str().len();
+                        let rendered = AssemblerError::RelocatedWarning {
                             warning: Box::new(AssemblerError::AssemblingError {
                                 msg: self.token.warning_message().to_owned()
                             }),
-                            span: self
-                                .token
-                                .possible_span()
-                                .expect("BUG: warning token should have a span")
-                                .clone()
+                            span: span.clone()
+                        }
+                        .to_string();
+                        let warning = AssemblerError::AlreadyRenderedWarningWithLocation {
+                            msg: rendered,
+                            line: line as u32,
+                            column: column as u32,
+                            len: len as u32
                         };
-                        let warning = AssemblerError::AlreadyRenderedError(warning.to_string());
                         env.add_warning(Box::new(warning));
                         token.visited(env)
                     },

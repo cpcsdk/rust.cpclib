@@ -4167,9 +4167,31 @@ impl Env {
 
         // handle warning if any
         if outer_token.is_warning() {
-            let warning =
-                AssemblerWarning::AlreadyRenderedError(outer_token.warning_message().into());
-            let warning = warning.locate(outer_token.span().clone());
+            // Extract the structured location and render *immediately*,
+            // while the span's underlying source buffer is still known
+            // valid - see `AlreadyRenderedWarningWithLocation`'s doc comment
+            // and the identical fix in `processed_token.rs`'s
+            // `ProcessedTokenState::Warning` arm. (Building the located
+            // variant directly rather than via `.locate()` also sidesteps a
+            // separate no-op: `AlreadyRenderedError` already reports itself
+            // as "located", so `.locate()` on one would silently drop the
+            // span.)
+            let warning_span = outer_token.span();
+            let (line, column) = warning_span.relative_line_and_column();
+            let len = warning_span.as_str().len();
+            let rendered = AssemblerWarning::RelocatedWarning {
+                warning: Box::new(AssemblerWarning::AssemblingError {
+                    msg: outer_token.warning_message().into()
+                }),
+                span: warning_span.clone()
+            }
+            .to_string();
+            let warning = AssemblerWarning::AlreadyRenderedWarningWithLocation {
+                msg: rendered,
+                line: line as u32,
+                column: column as u32,
+                len: len as u32
+            };
             self.add_warning(Box::new(warning));
         }
 
@@ -4959,9 +4981,24 @@ impl Env {
     }
 
     fn render_warnings(&mut self) {
-        // transform the warnings as strings
+        // Transform the warnings as strings. This must stay unconditional for
+        // anything still holding a live `Z80Span` (`RelocatedWarning` and
+        // friends): some spans (e.g. ones pointing into a macro-expansion
+        // scratch buffer) are not safe to read from once a later pass has
+        // reused/overwritten the buffer they point into, despite `Z80Span`'s
+        // `'static`-shaped internals - rendering promptly, here, is what
+        // keeps that access safe. `AlreadyRenderedWarningWithLocation` is the
+        // one exception: it holds no span, only plain owned data (message +
+        // line/column/len captured eagerly at construction time), so there is
+        // nothing unsafe to defer and flattening it would only discard the
+        // structured location a caller (e.g. the LSP, mapping this to a
+        // `Diagnostic` range) may still want.
         self.warnings.iter_mut().for_each(|w| {
-            if let AssemblerError::AssemblingError { .. } = &**w {
+            if matches!(
+                &**w,
+                AssemblerError::AssemblingError { .. }
+                    | AssemblerError::AlreadyRenderedWarningWithLocation { .. }
+            ) {
                 // nothing to do
             }
             else {

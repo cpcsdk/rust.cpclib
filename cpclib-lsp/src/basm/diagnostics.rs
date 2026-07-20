@@ -94,7 +94,37 @@ impl AssemblyAnalyzer {
             start_line += max_located_line as usize + 1;
         }
 
+        // The document parsed cleanly (the loop above only reaches here once
+        // `parse_source` succeeds, or the file is empty) - only then is it
+        // worth actually assembling to surface the assembler's own warnings
+        // (e.g. `ld hl, de`, a "fake instruction" basm accepts but which
+        // isn't real Z80). A document with syntax errors can't assemble
+        // meaningfully, so skip the extra dry-run pass for it - `analyze`
+        // runs far more often than `hover.rs`'s existing `dry_run_env`
+        // calls (on every edit, not just on demand), so this only pays the
+        // cost when it can actually produce something.
+        if diagnostics.is_empty()
+            && let Ok(listing) = Self::parse_source(&full_text, Some(&document.uri))
+        {
+            let mut env = super::expand::dry_run_env(&listing, &document.uri);
+            collect_assembler_warnings(&env, &mut diagnostics);
+            Self::check_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
+        }
+
         diagnostics
+    }
+}
+
+/// Walk `env.warnings()` (populated by a real assembling pass, e.g. via
+/// `dry_run_env`) into `Diagnostic`s. Distinct from `collect_asm_diagnostics`
+/// (which walks a *parse* error tree): warnings only exist after actually
+/// assembling, never from parsing alone.
+pub(super) fn collect_assembler_warnings(
+    env: &cpclib_asm::assembler::Env,
+    out: &mut Vec<Diagnostic>
+) {
+    for warning in env.warnings() {
+        collect_asm_diagnostics(warning, None, out);
     }
 }
 
@@ -226,6 +256,39 @@ pub(super) fn collect_asm_diagnostics(
                 strip_ansi(s),
                 DiagnosticSeverity::ERROR
             ));
+        },
+        // Warnings collected from a real assembling pass (`env.warnings()`,
+        // see `collect_assembler_warnings`) always arrive as this variant -
+        // it carries its own location (captured eagerly at construction
+        // time in cpclib-asm, since holding onto the originating `Z80Span`
+        // itself is not always safe - see its doc comment) rather than a
+        // `Z80Span`, so build the `Range` directly instead of going through
+        // `asm_diag`. Always `WARNING`: nothing pushes this variant into
+        // `env.warnings()` except an actual warning.
+        AssemblerError::AlreadyRenderedWarningWithLocation {
+            msg,
+            line,
+            column,
+            len
+        } => {
+            let line = line.saturating_sub(1);
+            let col = column.saturating_sub(1);
+            out.push(Diagnostic {
+                range: Range {
+                    start: Position {
+                        line,
+                        character: col
+                    },
+                    end: Position {
+                        line,
+                        character: col + (*len).max(1)
+                    }
+                },
+                severity: Some(DiagnosticSeverity::WARNING),
+                source: Some("basm".to_string()),
+                message: strip_ansi(msg),
+                ..Default::default()
+            });
         },
         other => {
             out.push(asm_diag(
@@ -369,5 +432,88 @@ mod tests {
         let text = "org 0x4000\n@#$ garbage @#$\n ret\n";
         let diags = diagnostics_for(text);
         assert!(!diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn fake_ld_instruction_is_reported_as_a_warning() {
+        // `ld hl, de` is accepted by basm (assembled using several real
+        // opcodes) but isn't a genuine Z80 instruction - the assembler
+        // already flags it as a warning; this exercises the LSP actually
+        // surfacing it, which required a real assembling pass (`analyze`
+        // used to only ever parse, never assemble).
+        let text = "org 0x4000\n ld hl, de\n ret\n";
+        let diags = diagnostics_for(text);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].severity, Some(DiagnosticSeverity::WARNING));
+        assert!(
+            diags[0].message.contains("fake instruction"),
+            "{:?}",
+            diags[0].message
+        );
+        assert_eq!(diags[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn a_valid_instruction_is_not_reported_as_a_fake_one() {
+        let text = "org 0x4000\n ld a, e\n ret\n";
+        assert!(diagnostics_for(text).is_empty());
+    }
+
+    #[test]
+    fn immediate_overflow_into_an_8bit_register_is_a_warning() {
+        let text = "org 0x4000\n ld b, 300\n ret\n";
+        let diags = diagnostics_for(text);
+        let overflow: Vec<_> = diags
+            .iter()
+            .filter(|d| d.severity == Some(DiagnosticSeverity::WARNING))
+            .collect();
+        assert_eq!(overflow.len(), 1, "{diags:?}");
+        assert!(
+            overflow[0].message.contains("does not fit"),
+            "{:?}",
+            overflow[0].message
+        );
+        assert_eq!(overflow[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn a_value_that_fits_an_8bit_register_is_not_reported() {
+        let text = "org 0x4000\n ld b, 200\n ret\n";
+        assert!(diagnostics_for(text).is_empty());
+    }
+
+    #[test]
+    fn overflow_through_a_variable_is_also_reported() {
+        // Per the original request: overflow detection must work "for
+        // indirection with variables", not just literal immediates -
+        // resolving `val` against the fully-assembled `Env`'s symbol table
+        // covers this the same way it covers a literal.
+        let text = "org 0x4000\nval equ 300\n ld b, val\n ret\n";
+        let diags = diagnostics_for(text);
+        let overflow: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("does not fit"))
+            .collect();
+        assert_eq!(overflow.len(), 1, "{diags:?}");
+    }
+
+    #[test]
+    fn a_16bit_immediate_load_is_not_flagged_as_an_8bit_overflow() {
+        let text = "org 0x4000\n ld bc, 40000\n ret\n";
+        assert!(diagnostics_for(text).is_empty());
+    }
+
+    #[test]
+    fn defb_item_overflow_is_reported() {
+        let text = "org 0x4000\n db 1, 2, 300\n ret\n";
+        let diags = diagnostics_for(text);
+        assert_eq!(
+            diags
+                .iter()
+                .filter(|d| d.message.contains("does not fit"))
+                .count(),
+            1,
+            "{diags:?}"
+        );
     }
 }

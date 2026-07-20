@@ -94,6 +94,30 @@ pub enum AssemblerError {
     /// Dirty trick to not play with memory
     AlreadyRenderedError(String),
 
+    /// Like `AlreadyRenderedError`, but additionally carries the warning's
+    /// approximate source location as plain, owned data. This must be built
+    /// *eagerly*, at the moment the originating `Z80Span` is known to still
+    /// be valid: some spans (e.g. ones pointing into a macro-expansion
+    /// scratch buffer) are not safe to read from later - the buffer they
+    /// point into is not guaranteed to outlive the pass that created it,
+    /// despite `Z80Span`'s `'static`-shaped internals. Holding onto the
+    /// `Z80Span` itself for later rendering (as `RelocatedWarning` does) has
+    /// caused real undefined behavior (`str::from_utf8_unchecked` on
+    /// since-overwritten bytes) when deferred past that point - see the
+    /// regression test in `cpclib-asm/src/lib.rs`. Consumers that want a
+    /// precise location (e.g. the LSP, mapping this to a `Diagnostic`
+    /// range) can use `line`/`column`/`len`; anything else can just use
+    /// `Display`, exactly like `AlreadyRenderedError`.
+    AlreadyRenderedWarningWithLocation {
+        msg: String,
+        /// 1-indexed, matches `Z80Span::relative_line_and_column()`.
+        line: u32,
+        /// 1-indexed, matches `Z80Span::relative_line_and_column()`.
+        column: u32,
+        /// Byte length of the highlighted span.
+        len: u32
+    },
+
     /// The maximum number of passes has been reached
     MaximumNumberOfPassesReached(usize),
 
@@ -409,6 +433,7 @@ impl AssemblerError {
             // re-wrapping it with an outer span (e.g. the IF token's line) would
             // produce a misleading second location in the error output.
             AssemblerError::AlreadyRenderedError(_) => true,
+            AssemblerError::AlreadyRenderedWarningWithLocation { .. } => true,
             // IfIssue already carries the full IF block span; no need to re-wrap
             AssemblerError::IfIssue { .. } => true,
             _ => false
@@ -472,6 +497,7 @@ impl AssemblerError {
     pub fn is_already_rendered(&self) -> bool {
         match self {
             AssemblerError::AlreadyRenderedError(_) => true,
+            AssemblerError::AlreadyRenderedWarningWithLocation { .. } => true,
             _ => false
         }
     }
@@ -479,6 +505,7 @@ impl AssemblerError {
     pub fn render(self) -> Self {
         match &self {
             Self::AlreadyRenderedError(_) => self,
+            Self::AlreadyRenderedWarningWithLocation { .. } => self,
             _ => Self::AlreadyRenderedError(self.to_string())
         }
     }
@@ -987,7 +1014,8 @@ impl AssemblerError {
             AssemblerError::LocatedListingError(arc) => {
                 write!(f, "{}", arc.as_ref().cpclib_error_unchecked())
             },
-            AssemblerError::AlreadyRenderedError(e) => write!(f, "{e}")
+            AssemblerError::AlreadyRenderedError(e) => write!(f, "{e}"),
+            AssemblerError::AlreadyRenderedWarningWithLocation { msg, .. } => write!(f, "{msg}")
         }
     }
 }

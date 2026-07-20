@@ -350,6 +350,57 @@ mod test_super {
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
     #[test]
+    fn fake_ld_instruction_warning_keeps_a_structured_location() {
+        // Regression test: `ld hl, de` is a "fake" instruction (accepted by
+        // basm, assembled using several real opcodes, but not a genuine Z80
+        // instruction) and is reported as a warning. That warning used to be
+        // flattened into a plain rendered string (`AlreadyRenderedError`)
+        // before it ever reached `env.warnings()`, discarding its source
+        // location entirely - callers (like the LSP, mapping this to a
+        // `Diagnostic` range) had no way to recover *where* the warning
+        // applies. It should now carry a structured line/column/len.
+        //
+        // Note: an earlier version of this fix kept the live `Z80Span`
+        // around instead (as `RelocatedWarning`) for later rendering. That
+        // caused real undefined behavior for warnings whose span pointed
+        // into a macro-expansion scratch buffer (`str::from_utf8_unchecked`
+        // on since-overwritten bytes, caught by nightly's UB checks) -
+        // `AlreadyRenderedWarningWithLocation` avoids this by rendering
+        // *and* capturing line/column/len eagerly, never holding the span
+        // itself past this point. See `good_fake_instructions2.asm` in
+        // `cpclib-basm`'s test fixtures for the macro case that surfaced it.
+        let code = "
+		org 0x4000
+		ld hl, de
+		ret
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+
+        assert_eq!(env.warnings().len(), 1, "{:?}", env.warnings());
+        match &*env.warnings()[0] {
+            AssemblerError::AlreadyRenderedWarningWithLocation {
+                msg,
+                line,
+                column,
+                len
+            } => {
+                assert!(msg.contains("fake instruction"), "{msg}");
+                assert_eq!(*line, 3);
+                assert_eq!(*column, 3);
+                assert_eq!(*len, "ld hl, de".len() as u32);
+            },
+            other => {
+                panic!("expected an AlreadyRenderedWarningWithLocation, got: {other:?}")
+            }
+        }
+    }
+
+    #[test]
     fn located_test_assemble() {
         let code = "
 		org 0x100
