@@ -139,6 +139,14 @@ pub(super) fn collect_assembler_warnings(
 /// register-to-register forms (`ld hl, de`, `sub de, bc`, ...), so the
 /// extracted text never depends on a symbol table and is always safe to
 /// assemble on its own.
+///
+/// Deliberately kept to this one short line (unlike the numbered
+/// bytes/flags breakdown `hover.rs`'s `format_fake_instruction_hover`
+/// shows) - the Problems panel / warning-squiggle tooltip only ever
+/// displays `Diagnostic.message` as plain text, never the rich hover
+/// response, so this is the only place a VSCode user browsing warnings
+/// (rather than hovering the instruction itself) ever sees which real
+/// instructions a fake one stands for.
 fn enrich_fake_instruction_diagnostics(document: &Document, diagnostics: &mut [Diagnostic]) {
     for diag in diagnostics.iter_mut() {
         if diag.severity != Some(DiagnosticSeverity::WARNING)
@@ -485,9 +493,11 @@ mod tests {
             diags[0].message
         );
         assert_eq!(diags[0].range.start.line, 1);
-        // Enriched with the real opcodes it expands to (derived by
-        // assembling `ld hl, de` in isolation and disassembling the
-        // result), not hardcoded per fake instruction.
+        // The Problems panel / warning-squiggle tooltip only ever shows
+        // this plain message text, never the rich hover response - so the
+        // replacement instructions must still be visible here too, even
+        // though `hover.rs` shows a much richer numbered breakdown for the
+        // same fake instruction when hovering it directly.
         assert!(
             diags[0].message.contains("LD L, E") && diags[0].message.contains("LD H, D"),
             "{:?}",
@@ -524,6 +534,48 @@ mod tests {
             overflow[0].message.contains("assembles as")
                 && overflow[0].message.contains("LD B")
                 && overflow[0].message.contains("0x2c"),
+            "{:?}",
+            overflow[0].message
+        );
+        // The offending value itself is shown in decimal, matching how the
+        // source actually wrote it ("300", not "0x12c").
+        assert!(
+            overflow[0].message.contains("value 300"),
+            "{:?}",
+            overflow[0].message
+        );
+    }
+
+    #[test]
+    fn overflow_value_is_shown_in_the_same_base_the_source_used() {
+        let text = "org 0x4000\n ld b, 0x12C\n ret\n";
+        let diags = diagnostics_for(text);
+        let overflow: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("does not fit"))
+            .collect();
+        assert_eq!(overflow.len(), 1, "{diags:?}");
+        assert!(
+            overflow[0].message.contains("value 0x12c"),
+            "{:?}",
+            overflow[0].message
+        );
+    }
+
+    #[test]
+    fn overflow_value_defaults_to_hex_when_the_source_is_a_symbol() {
+        // Per the original request: a bare literal keeps the source's own
+        // base, but a symbol/expression has no single "original base" of
+        // its own to preserve - default to hex.
+        let text = "org 0x4000\nval equ 300\n ld b, val\n ret\n";
+        let diags = diagnostics_for(text);
+        let overflow: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("does not fit"))
+            .collect();
+        assert_eq!(overflow.len(), 1, "{diags:?}");
+        assert!(
+            overflow[0].message.contains("value 0x12c"),
             "{:?}",
             overflow[0].message
         );

@@ -93,12 +93,35 @@ impl AssemblyAnalyzer {
         if INSTRUCTION_SET.contains(word_upper.as_str()) {
             let full = super::timing::extract_instruction_at_col(&line, col)
                 .unwrap_or_else(|| word.clone());
-            let entries = super::timing::find_timings(&full);
-            let md = if entries.is_empty() {
-                format!("**{}** — Z80 instruction", word_upper)
+
+            // A "fake instruction" (e.g. `ld hl, sp`, assembled as several
+            // real opcodes) isn't itself a real Z80 instruction, so looking
+            // it up directly in the timing table is the wrong move: several
+            // unrelated real entries can tie on `find_timings`'s scoring
+            // (e.g. `ld i,a` / `ld a,i` / `ld sp,hl` / `ld sp,ix` all score
+            // the same non-match against `hl,sp`) and all get shown at
+            // once. basm's parser already tags these tokens
+            // (`WarningWrapper`), so check that first via the real parsed
+            // listing and, when true, show what it actually expands to
+            // instead of querying the table with text that was never in it.
+            let is_fake = self.parse_document(document).ok().is_some_and(|listing| {
+                super::token::flatten_listing(listing.iter())
+                    .into_iter()
+                    .any(|t| t.is_warning() && span_line(t) == position.line)
+            });
+
+            let md = if is_fake {
+                format_fake_instruction_hover(&full)
+                    .unwrap_or_else(|| format!("**{}** — fake instruction", word_upper))
             }
             else {
-                super::timing::format_hover(&full, &entries)
+                let entries = super::timing::find_timings(&full);
+                if entries.is_empty() {
+                    format!("**{}** — Z80 instruction", word_upper)
+                }
+                else {
+                    super::timing::format_hover(&full, &entries)
+                }
             };
             return Some(make_hover(md));
         }
@@ -226,6 +249,59 @@ impl AssemblyAnalyzer {
 fn span_line<T: MayHaveSpan>(token: &T) -> u32 {
     let (line_1based, _col) = token.span().relative_line_and_column();
     line_1based.saturating_sub(1) as u32
+}
+
+/// Hover content for a "fake instruction" (e.g. `ld hl, sp`, assembled
+/// using several real opcodes): a numbered breakdown, one step per real
+/// instruction it actually expands to, each rendered with the *same*
+/// timing-table formatting (`find_timings`/`format_hover`) used for every
+/// other instruction hover in this file — bytes, NOPs, opcodes and flags
+/// all come from that one real reference table, not a separate/ad hoc one.
+/// The real instruction(s) themselves are recovered by actually assembling
+/// `full` and disassembling the result (`disassemble_snippet_lines`), so
+/// this stays correct for any current or future fake instruction without
+/// hardcoding its expansion here.
+fn format_fake_instruction_hover(full: &str) -> Option<String> {
+    let lines = super::disassemble::disassemble_snippet_lines(full)?;
+
+    // Positional S,Z,5,H,3,V,N,C notation, same convention as
+    // `TimingEntry.flags`/`describe_flags`. Since the flags register is one
+    // shared piece of state, the value it holds *after* the whole sequence
+    // runs is whichever step last touched each position - not simply "any
+    // step touched it" - so this keeps the *last* non-`.` character seen at
+    // each position while walking the steps in order, rather than merging
+    // them some other way.
+    let mut merged_flags = [b'.'; 8];
+    let mut sections = Vec::with_capacity(lines.len());
+    for (i, line) in lines.iter().enumerate() {
+        let entries = super::timing::find_timings(line);
+        let body = if entries.is_empty() {
+            format!("**{line}**")
+        }
+        else {
+            if let Some(entry) = entries.first() {
+                for (slot, ch) in merged_flags.iter_mut().zip(entry.flags.bytes()) {
+                    if ch != b'.' {
+                        *slot = ch;
+                    }
+                }
+            }
+            super::timing::format_hover(line, &entries)
+        };
+        sections.push(format!("**Step {}**\n\n{body}", i + 1));
+    }
+
+    let header = format!(
+        "**{full}** — fake instruction, expands to {} real opcode{}\n\n",
+        lines.len(),
+        if lines.len() == 1 { "" } else { "s" }
+    );
+    let merged_flags_str = std::str::from_utf8(&merged_flags).unwrap_or("........");
+    let footer = format!(
+        "\n\n---\n**Flags after this sequence** `{merged_flags_str}`: {}",
+        super::timing::describe_flags(merged_flags_str)
+    );
+    Some(format!("{header}{}{footer}", sections.join("\n---\n")))
 }
 
 /// Render `bytes` as a fixed-width hex + ASCII dump, 16 bytes per row,
@@ -598,6 +674,52 @@ mod timing_hover_tests {
         };
         assert!(md.contains("NOP"), "{md}");
         assert!(!md.to_lowercase().contains("t-state"), "{md}");
+    }
+
+    #[test]
+    fn fake_instruction_hover_shows_a_numbered_breakdown() {
+        // `ld hl, sp` has no direct Z80 equivalent - basm expands it as
+        // `ld hl, 0` followed by `add hl, sp`. Hovering it must show each
+        // real step individually (numbered), each rendered with the exact
+        // same timing-table format as a normal instruction hover (bytes,
+        // NOPs, opcodes, flags) - not a flat "assembles as" line, and not
+        // the unrelated multi-entry mess `find_timings("ld hl, sp")` would
+        // produce if queried directly (several real `LD`-family patterns
+        // tie on that unmatched text - see the regression test below).
+        let uri = Url::parse("file:///main.asm").unwrap();
+        let text = "    ld hl, sp\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let hover = AssemblyAnalyzer::new()
+            .hover(
+                &doc,
+                Position {
+                    line: 0,
+                    character: 5
+                }
+            )
+            .expect("hover on ld hl, sp");
+        let md = match &hover.contents {
+            HoverContents::Markup(m) => m.value.as_str(),
+            _ => panic!("expected markdown hover contents")
+        };
+        assert!(md.contains("fake instruction"), "{md}");
+        assert!(md.contains("Step 1") && md.contains("LD HL, 0x0"), "{md}");
+        assert!(md.contains("Step 2") && md.contains("ADD HL, SP"), "{md}");
+        // Each step's own NOPs/opcodes/flags, from the real timing table.
+        assert!(md.contains("NOP"), "{md}");
+        assert!(md.contains("Opcodes:"), "{md}");
+        assert!(md.contains("Flags"), "{md}");
+        // The merged, final flag state after the whole sequence runs: `ld
+        // hl, 0` never touches flags, so the result is entirely determined
+        // by `add hl, sp` (H, N, C affected; S, Z, P/V untouched, the one
+        // asymmetric case for 16-bit ADD on real Z80 hardware).
+        assert!(
+            md.contains("Flags after this sequence") && md.contains("`..!!!.0C`"),
+            "{md}"
+        );
+        // Not the unrelated real instructions a naive direct lookup of
+        // "ld hl, sp" would have tied on and shown all of.
+        assert!(!md.contains("ld i,a") && !md.contains("ld sp,ix"), "{md}");
     }
 }
 

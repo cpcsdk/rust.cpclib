@@ -199,7 +199,7 @@ pub fn format_hover(instruction_text: &str, entries: &[&TimingEntry]) -> String 
     md
 }
 
-fn describe_flags(flags: &str) -> String {
+pub(super) fn describe_flags(flags: &str) -> String {
     let names = ["S", "Z", "5", "H", "3", "V", "N", "C"];
     let mut modified = vec![];
     let mut forced0 = vec![];

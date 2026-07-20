@@ -11,6 +11,7 @@ use cpclib_asm::assembler::Env;
 use cpclib_asm::implementation::expression::ExprEvaluationExt;
 use cpclib_asm::parser::obtained::{LocatedDataAccess, LocatedExpr, LocatedListing, LocatedToken};
 use cpclib_asm::preamble::{MayHaveSpan, SourceString};
+use cpclib_common::parse::{EncodingKind, scan_numeric_literals};
 use cpclib_tokens::{ListingElement, Mnemonic};
 use tower_lsp::lsp_types::*;
 
@@ -66,8 +67,9 @@ impl AssemblyAnalyzer {
                     continue;
                 };
                 if !width.range().contains(&value) {
+                    let shown_value = format_value_like_source(expr.span().as_str(), value);
                     let mut message =
-                        format!("value {value} does not fit in {} bits", width.bits());
+                        format!("value {shown_value} does not fit in {} bits", width.bits());
                     // Show what the value actually becomes once truncated,
                     // by re-assembling a version of this instruction with
                     // the resolved value substituted in, then disassembling
@@ -212,5 +214,51 @@ fn ld_destination_width(dst: &LocatedDataAccess) -> Option<SlotWidth> {
             Some(SlotWidth::Sixteen)
         },
         _ => None
+    }
+}
+
+/// Format `value` the way the original source expression `source_text`
+/// wrote it - matching its base (decimal/hex/octal/binary) - so a warning
+/// about e.g. `ld b, 0x12C` shows the offending value in hex too, rather
+/// than a decimal number the user has to convert back themselves. Falls
+/// back to hexadecimal (matching the disassembler's own convention, e.g.
+/// `0x2c`) whenever `source_text` isn't a single bare literal: a symbol
+/// reference or a computed expression has no one "original base" of its
+/// own to preserve.
+fn format_value_like_source(source_text: &str, value: i32) -> String {
+    let trimmed = source_text.trim();
+    let literals = scan_numeric_literals(trimmed);
+    let kind = match literals.as_slice() {
+        [(start, end, _, kind)] if *start == 0 && *end == trimmed.len() => *kind,
+        _ => EncodingKind::Hex
+    };
+    match kind {
+        EncodingKind::Dec => value.to_string(),
+        EncodingKind::Oct => format_radix(value, 8, "0o"),
+        EncodingKind::Bin => format_radix(value, 2, "0b"),
+        // `Hex`, plus the internal `AmbiguousBinHex`/`Unk` states that
+        // `scan_numeric_literals` never actually returns - hex is the
+        // reasonable default either way.
+        _ => format_radix(value, 16, "0x")
+    }
+}
+
+/// Render `value`'s magnitude in the given `radix` with `prefix`, keeping
+/// a plain leading `-` for negative values rather than a two's-complement
+/// bit pattern (which would be confusing at an arbitrary, non-8/16-bit
+/// width like `i32`).
+fn format_radix(value: i32, radix: u32, prefix: &str) -> String {
+    let magnitude = value.unsigned_abs();
+    let digits = match radix {
+        16 => format!("{magnitude:x}"),
+        8 => format!("{magnitude:o}"),
+        2 => format!("{magnitude:b}"),
+        _ => magnitude.to_string()
+    };
+    if value < 0 {
+        format!("-{prefix}{digits}")
+    }
+    else {
+        format!("{prefix}{digits}")
     }
 }
