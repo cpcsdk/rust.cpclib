@@ -144,6 +144,195 @@ impl CpcLspBackend {
         let doc = Document::new(target_uri, text, 0);
         self.asm_analyzer.find_definition_in(&doc, word_upper)
     }
+
+    /// Workspace-wide rename of a `Global` basm label: unlike
+    /// `find_definition_via_workspace_scan` (stops at the first match),
+    /// this collects edits from *every* matching file — `.asm` files this
+    /// document itself `include`s, plus every `.asm` file under
+    /// `workspace_roots` (open or on disk). Inserts into `changes`,
+    /// skipping any URI already present (the current document's own edits,
+    /// added by the caller before this runs).
+    fn rename_label_across_workspace(
+        &self,
+        from_uri: &Url,
+        document_text: &str,
+        target: &crate::basm::definition::RenameTarget,
+        new_name: &str,
+        changes: &mut std::collections::HashMap<Url, Vec<TextEdit>>
+    ) {
+        for filename in crate::basm::definition::extract_include_filenames(document_text) {
+            if let Some(path) = crate::basm::definition::resolve_include_path(&filename, from_uri) {
+                self.rename_label_at_path(&path, target, new_name, changes);
+            }
+        }
+
+        let roots: Vec<PathBuf> = {
+            let guard = self.workspace_roots.read().unwrap();
+            if guard.is_empty() {
+                crate::basm::definition::project_root_for(from_uri)
+                    .into_iter()
+                    .collect()
+            }
+            else {
+                guard.clone()
+            }
+        };
+        let from_path = from_uri.to_file_path().ok();
+
+        for root in roots {
+            let walker = walkdir::WalkDir::new(&root)
+                .into_iter()
+                .filter_entry(|e| !is_ignored_dir(e));
+            for entry in walker.filter_map(|e| e.ok()) {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                let path = entry.path();
+                let is_asm = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
+                if !is_asm || from_path.as_deref() == Some(path) {
+                    continue;
+                }
+                self.rename_label_at_path(path, target, new_name, changes);
+            }
+        }
+    }
+
+    /// Shared by `rename_label_across_workspace`'s two sources of candidate
+    /// files: compute `target`'s rename edits for the file at `path` (the
+    /// already-open in-memory version if there is one, else read from
+    /// disk), inserting into `changes` if non-empty and not already present.
+    fn rename_label_at_path(
+        &self,
+        path: &std::path::Path,
+        target: &crate::basm::definition::RenameTarget,
+        new_name: &str,
+        changes: &mut std::collections::HashMap<Url, Vec<TextEdit>>
+    ) {
+        let Some(target_uri) = Url::from_file_path(path).ok()
+        else {
+            return;
+        };
+        if changes.contains_key(&target_uri) {
+            return;
+        }
+
+        let edits = if let Some(open_doc) = self.documents.get(&target_uri) {
+            self.asm_analyzer
+                .rename_occurrences_in(open_doc.value(), target, new_name)
+        }
+        else {
+            let Ok(text) = std::fs::read_to_string(path)
+            else {
+                return;
+            };
+            let doc = Document::new(target_uri.clone(), text, 0);
+            self.asm_analyzer
+                .rename_occurrences_in(&doc, target, new_name)
+        };
+
+        if !edits.is_empty() {
+            changes.insert(target_uri, edits);
+        }
+    }
+
+    /// Workspace-wide rename of a bndbuild Jinja variable: every file that
+    /// transitively `{% include %}`s the document containing the `{% set %}`
+    /// definition being renamed — e.g. renaming `CPCIP` in `common.build`
+    /// must also reach every `build.bnd` that (directly or indirectly)
+    /// `{% include %}`s it.
+    fn rename_jinja_variable_across_workspace(
+        &self,
+        from_uri: &Url,
+        document_text: &str,
+        position: Position,
+        new_name: &str,
+        changes: &mut std::collections::HashMap<Url, Vec<TextEdit>>
+    ) {
+        let Some(line) = document_text.lines().nth(position.line as usize)
+        else {
+            return;
+        };
+        let Some(word) =
+            crate::bndbuild::definition::jinja_word_at(line, position.character as usize)
+        else {
+            return;
+        };
+        // Only a *definition* site's own file is a graph root — renaming
+        // from a mere usage site only ever needs the current document
+        // (already handled by the caller), since other files can only be
+        // reached transitively from the file that actually defines it.
+        if !crate::bndbuild::jinja::collect_jinja_variables(&Document::new(
+            from_uri.clone(),
+            document_text.to_string(),
+            0
+        ))
+        .iter()
+        .any(|(name, ..)| *name == word)
+        {
+            return;
+        }
+        let Some(from_path) = from_uri.to_file_path().ok()
+        else {
+            return;
+        };
+
+        let roots: Vec<PathBuf> = self.workspace_roots.read().unwrap().clone();
+        let includers =
+            crate::bndbuild::definition::files_transitively_including(&roots, &from_path);
+
+        for path in includers {
+            let Some(target_uri) = Url::from_file_path(&path).ok()
+            else {
+                continue;
+            };
+            if changes.contains_key(&target_uri) {
+                continue;
+            }
+            let doc = if let Some(open_doc) = self.documents.get(&target_uri) {
+                open_doc.value().clone()
+            }
+            else {
+                let Ok(text) = std::fs::read_to_string(&path)
+                else {
+                    continue;
+                };
+                Document::new(target_uri.clone(), text, 0)
+            };
+            let edits: Vec<TextEdit> = self
+                .build_analyzer
+                .find_word_references(&doc, &word)
+                .into_iter()
+                .map(|loc| {
+                    TextEdit {
+                        range: loc.range,
+                        new_text: new_name.to_string()
+                    }
+                })
+                .collect();
+            if !edits.is_empty() {
+                changes.insert(target_uri, edits);
+            }
+        }
+    }
+}
+
+/// `None` when `changes` is empty (nothing to rename — the client should
+/// see "no changes" rather than an edit touching zero files).
+fn non_empty_workspace_edit(
+    changes: std::collections::HashMap<Url, Vec<TextEdit>>
+) -> Option<WorkspaceEdit> {
+    if changes.is_empty() {
+        None
+    }
+    else {
+        Some(WorkspaceEdit {
+            changes: Some(changes),
+            ..Default::default()
+        })
+    }
 }
 
 /// Directories never worth descending into while scanning the workspace for
@@ -251,6 +440,10 @@ impl LanguageServer for CpcLspBackend {
                     )
                 ),
                 color_provider: Some(ColorProviderCapability::Simple(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: Default::default()
+                })),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -490,6 +683,117 @@ impl LanguageServer for CpcLspBackend {
         }
         else {
             Ok(Some(all_refs))
+        }
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = params.text_document.uri;
+        let position = params.position;
+
+        let Some(entry) = self.documents.get(&uri)
+        else {
+            return Ok(None);
+        };
+
+        let range = match entry.value().doc_type {
+            DocumentType::Assembly => self.asm_analyzer.prepare_rename(entry.value(), position),
+            DocumentType::BuildFile => self.build_analyzer.prepare_rename(entry.value(), position),
+            DocumentType::Basic => self.basic_analyzer.prepare_rename(entry.value(), position),
+            DocumentType::Unknown => None
+        };
+
+        Ok(range.map(PrepareRenameResponse::Range))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+
+        tracing::debug!(
+            "Rename request at {}:{} to '{}'",
+            uri,
+            position.line,
+            new_name
+        );
+
+        let Some(entry) = self.documents.get(&uri)
+        else {
+            return Ok(None);
+        };
+
+        match entry.value().doc_type {
+            DocumentType::Basic => {
+                Ok(self
+                    .basic_analyzer
+                    .rename(entry.value(), position, &new_name))
+            },
+
+            DocumentType::BuildFile => {
+                let document_text = entry.value().text();
+                let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
+                    std::collections::HashMap::new();
+                if let Some(edit) = self
+                    .build_analyzer
+                    .rename(entry.value(), position, &new_name)
+                {
+                    if let Some(local_changes) = edit.changes {
+                        changes.extend(local_changes);
+                    }
+                }
+                drop(entry);
+                if !changes.is_empty() {
+                    self.rename_jinja_variable_across_workspace(
+                        &uri,
+                        &document_text,
+                        position,
+                        &new_name,
+                        &mut changes
+                    );
+                }
+                Ok(non_empty_workspace_edit(changes))
+            },
+
+            DocumentType::Assembly => {
+                // Determine whether this is workspace-wide (a `Global`
+                // label) — if not (a `Local`/`Qualified` label, or the
+                // cursor is inside a `LOCOMOTIVE` block), the single-file
+                // result from `asm_analyzer.rename` is already complete.
+                let target = self
+                    .asm_analyzer
+                    .resolve_rename_target(entry.value(), position);
+                let Some(crate::basm::definition::RenameTarget::Global(_)) = target
+                else {
+                    return Ok(self.asm_analyzer.rename(entry.value(), position, &new_name));
+                };
+                let target = target.unwrap();
+
+                let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
+                    std::collections::HashMap::new();
+                let current_edits =
+                    self.asm_analyzer
+                        .rename_occurrences_in(entry.value(), &target, &new_name);
+                if !current_edits.is_empty() {
+                    changes.insert(uri.clone(), current_edits);
+                }
+                let document_text = entry.value().text();
+                drop(entry);
+
+                self.rename_label_across_workspace(
+                    &uri,
+                    &document_text,
+                    &target,
+                    &new_name,
+                    &mut changes
+                );
+
+                Ok(non_empty_workspace_edit(changes))
+            },
+
+            DocumentType::Unknown => Ok(None)
         }
     }
 

@@ -63,7 +63,7 @@ pub(super) const JINJA_STATEMENT_KEYWORDS: &[(&str, &str)] = &[
 /// with the value expression's source text and the location of each
 /// definition. First definition wins. The value is the raw text of the
 /// expression as written (e.g. `"src"` or `["a", "b"]`), not evaluated.
-pub(super) fn collect_jinja_variables(document: &Document) -> Vec<(String, String, Location)> {
+pub(crate) fn collect_jinja_variables(document: &Document) -> Vec<(String, String, Location)> {
     let text = document.text();
     let mut vars: Vec<(String, String, Location)> = Vec::new();
 
@@ -123,6 +123,34 @@ pub(super) fn collect_jinja_variables(document: &Document) -> Vec<(String, Strin
         }
     }
     vars
+}
+
+/// Every `{% include "PATH" %}` (or `{%- include`) target path in `text`,
+/// raw as written (relative, to be resolved against the containing file's
+/// own directory). `{% import %}` isn't handled — not used anywhere in the
+/// real project this was designed against, and its namespaced references
+/// would need different reference-matching than a plain `{% include %}`'s
+/// shared scope.
+pub(crate) fn extract_jinja_include_paths(text: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    for line in text.lines() {
+        let mut search_from = 0usize;
+        while let Some(rel) = line[search_from..].find("{%") {
+            let stmt_start = search_from + rel + 2;
+            let inner = &line[stmt_start..];
+            let inner = inner.strip_prefix('-').unwrap_or(inner);
+            let inner_trimmed = inner.trim_start();
+            if let Some(rest) = inner_trimmed.strip_prefix("include")
+                && rest.starts_with(char::is_whitespace)
+                && let Some(q1) = rest.find('"')
+                && let Some(q2_rel) = rest[q1 + 1..].find('"')
+            {
+                paths.push(rest[q1 + 1..q1 + 1 + q2_rel].to_string());
+            }
+            search_from = stmt_start;
+        }
+    }
+    paths
 }
 
 /// The names of every `{% macro NAME(...) %}` defined in `document` — used

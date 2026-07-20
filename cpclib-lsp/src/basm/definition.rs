@@ -71,6 +71,69 @@ impl AssemblyAnalyzer {
         self.extract_word_at_position(&line, position.character as usize)
     }
 
+    /// `textDocument/prepareRename`: the range to offer renaming for, or
+    /// `None` to reject (cursor not on a real label/BASIC variable).
+    pub fn prepare_rename(&self, document: &Document, position: Position) -> Option<Range> {
+        // Delegate to BASIC for LOCOMOTIVE block content (same
+        // block-extraction dance as `goto_definition`/`hover`).
+        let text = document.text();
+        let loco_blocks = extract_locomotive_blocks(&text);
+        let line_idx = position.line as usize;
+        if let Some(block) = loco_blocks
+            .iter()
+            .find(|b| b.basic_range.contains(&line_idx))
+        {
+            let all_lines: Vec<&str> = text.lines().collect();
+            let basic_text: String = block
+                .basic_range
+                .clone()
+                .map(|i| all_lines[i])
+                .collect::<Vec<_>>()
+                .join("\n");
+            return crate::locomotive::definition::locomotive_basic_prepare_rename(
+                &basic_text,
+                position,
+                block.basic_range.start as u32
+            );
+        }
+
+        self.prepare_rename_label(document, position)
+    }
+
+    /// `textDocument/rename`: rename the label/BASIC variable under the
+    /// cursor to `new_name`.
+    pub fn rename(
+        &self,
+        document: &Document,
+        position: Position,
+        new_name: &str
+    ) -> Option<WorkspaceEdit> {
+        let text = document.text();
+        let loco_blocks = extract_locomotive_blocks(&text);
+        let line_idx = position.line as usize;
+        if let Some(block) = loco_blocks
+            .iter()
+            .find(|b| b.basic_range.contains(&line_idx))
+        {
+            let all_lines: Vec<&str> = text.lines().collect();
+            let basic_text: String = block
+                .basic_range
+                .clone()
+                .map(|i| all_lines[i])
+                .collect::<Vec<_>>()
+                .join("\n");
+            return crate::locomotive::definition::locomotive_basic_rename(
+                &basic_text,
+                position,
+                block.basic_range.start as u32,
+                &document.uri,
+                new_name
+            );
+        }
+
+        self.rename_label(document, position, new_name)
+    }
+
     /// Search `document` for a definition of `word_upper` (already uppercased).
     ///
     /// A *definition* is a label token, or a directive that assigns the symbol
@@ -253,6 +316,440 @@ impl AssemblyAnalyzer {
         };
         self.find_references_in(document, &word)
     }
+
+    fn prepare_rename_label(&self, document: &Document, position: Position) -> Option<Range> {
+        let line = document.line(position.line as usize)?;
+        let (word, start_col, end_col) =
+            word_range_at_position(&line, position.character as usize)?;
+        let word_upper = word.to_uppercase();
+
+        // Reject reserved words up front — they can never be a real label.
+        if super::token::INSTRUCTION_SET.contains(word_upper.as_str())
+            || super::token::DIRECTIVE_SET.contains(word_upper.as_str())
+            || super::token::REGISTER_SET.contains(word_upper.as_str())
+        {
+            return None;
+        }
+
+        Some(Range {
+            start: Position {
+                line: position.line,
+                character: start_col
+            },
+            end: Position {
+                line: position.line,
+                character: end_col
+            }
+        })
+    }
+
+    fn rename_label(
+        &self,
+        document: &Document,
+        position: Position,
+        new_name: &str
+    ) -> Option<WorkspaceEdit> {
+        let target = self.resolve_rename_target(document, position)?;
+
+        let edits = self.rename_occurrences_in(document, &target, new_name);
+        if edits.is_empty() {
+            return None;
+        }
+        Some(WorkspaceEdit {
+            changes: Some(std::collections::HashMap::from([(
+                document.uri.clone(),
+                edits
+            )])),
+            ..Default::default()
+        })
+    }
+
+    /// What kind of rename the label/word under the cursor calls for — see
+    /// [`RenameTarget`].
+    pub(crate) fn resolve_rename_target(
+        &self,
+        document: &Document,
+        position: Position
+    ) -> Option<RenameTarget> {
+        // Never treat BASIC content inside a LOCOMOTIVE block as a basm
+        // label — `rename`/`prepare_rename` already delegate that case to
+        // the BASIC analyzer (single-file), and callers use this method
+        // specifically to decide whether a rename needs to expand beyond
+        // the current document, which never applies to BASIC content.
+        let text = document.text();
+        let line_idx = position.line as usize;
+        if extract_locomotive_blocks(&text)
+            .iter()
+            .any(|b| b.basic_range.contains(&line_idx))
+        {
+            return None;
+        }
+
+        let line = document.line(position.line as usize)?;
+        let (word, ..) = word_range_at_position(&line, position.character as usize)?;
+
+        if let Some(local) = word.strip_prefix('.') {
+            let listing = self.parse_document(document).ok()?;
+            let (owner, scope) = super::token::label_scope_at_line(listing.iter(), position.line)?;
+            return Some(RenameTarget::Local {
+                owner,
+                name: local.to_string(),
+                scope
+            });
+        }
+
+        if word.contains('.') {
+            return Some(RenameTarget::Qualified(word));
+        }
+
+        // A `FUNCTION`'s own parameter, used bare within its body — scoped
+        // to that function, checked before falling back to a workspace-wide
+        // `Global` rename (a common parameter name like `x` isn't meant to
+        // rename every unrelated `x` in the workspace).
+        let word_upper = word.to_uppercase();
+        if let Ok(listing) = self.parse_document(document)
+            && let Some((function_name, name, scope)) = super::token::function_scoped_symbol_at(
+                listing.iter(),
+                &text,
+                position.line,
+                &word_upper
+            )
+        {
+            return Some(RenameTarget::FunctionLocal {
+                function_name,
+                name,
+                scope
+            });
+        }
+
+        Some(RenameTarget::Global(word))
+    }
+
+    /// The `TextEdit`s `target`'s rename produces *within `document`* —
+    /// callers handling `RenameTarget::Global` are expected to call this
+    /// once per file across the workspace and merge the results;
+    /// `RenameTarget::Local` is only ever meaningful for the one document
+    /// its scope was computed against.
+    pub(crate) fn rename_occurrences_in(
+        &self,
+        document: &Document,
+        target: &RenameTarget,
+        new_name: &str
+    ) -> Vec<TextEdit> {
+        match target {
+            RenameTarget::Global(old) => {
+                // Exclude any `FUNCTION` body in *this* document that
+                // shadows `old` as its own parameter or a local `EQU`/`=`
+                // symbol — inside such a function, `old` refers to that
+                // local definition, a different symbol entirely, and a
+                // rename of the outer one must not touch it (mirrors
+                // `RenameTarget::FunctionLocal`'s scoping in reverse).
+                let old_upper = old.to_uppercase();
+                let shadow_ranges = self
+                    .parse_document(document)
+                    .ok()
+                    .map(|listing| {
+                        super::token::all_function_shadow_ranges(
+                            listing.iter(),
+                            &document.text(),
+                            &old_upper
+                        )
+                    })
+                    .unwrap_or_default();
+
+                find_label_word_and_prefix_matches(document, old)
+                    .into_iter()
+                    .filter(|(range, _)| {
+                        !shadow_ranges
+                            .iter()
+                            .any(|scope| scope.contains(&range.start.line))
+                    })
+                    .map(|(range, matched)| {
+                        let suffix = &matched[old.len()..]; // "" or ".rest"
+                        TextEdit {
+                            range,
+                            new_text: format!("{new_name}{suffix}")
+                        }
+                    })
+                    .collect()
+            },
+            RenameTarget::Qualified(old) => {
+                self.find_references_in(document, &old.to_uppercase())
+                    .into_iter()
+                    .map(|loc| {
+                        TextEdit {
+                            range: loc.range,
+                            new_text: new_name.to_string()
+                        }
+                    })
+                    .collect()
+            },
+            RenameTarget::Local { name, scope, .. } => {
+                // `prepare_rename`'s range covers the leading `.` (it's
+                // part of the word), so an LSP client's pre-filled rename
+                // input typically includes it too (`.foo` rather than just
+                // `foo`) — strip it back off if present, or `new_text`
+                // would end up double-dotted (`..bar`).
+                let new_name = new_name.strip_prefix('.').unwrap_or(new_name);
+                find_local_matches_in_scope(document, name, scope)
+                    .into_iter()
+                    .map(|range| {
+                        TextEdit {
+                            range,
+                            new_text: format!(".{new_name}")
+                        }
+                    })
+                    .collect()
+            },
+            RenameTarget::FunctionLocal { name, scope, .. } => {
+                find_bare_word_matches_in_scope(document, name, scope)
+                    .into_iter()
+                    .map(|range| {
+                        TextEdit {
+                            range,
+                            new_text: new_name.to_string()
+                        }
+                    })
+                    .collect()
+            },
+        }
+    }
+}
+
+/// What kind of rename a resolved word calls for, mirroring basm's own
+/// label-scoping rules (`handle_global_and_local_labels` in
+/// `cpclib-asm/src/assembler/mod.rs`):
+///
+/// - `Global`: a bare label with no leading `.` — rename is workspace-wide,
+///   covering both plain occurrences and `.`-qualified references to its
+///   own locals (`OLD.foo` → `NEW.foo`).
+/// - `Local`: a bare `.foo` reference/definition — confined to the
+///   `scope` (line range) of the *specific* enclosing global it was
+///   resolved against; a same-named local under a different global is a
+///   different symbol and must not be touched.
+/// - `Qualified`: an already-`global.local`-qualified compound word — text
+///   extraction can't tell whether the cursor meant the global or the local
+///   part, so this renames the exact qualified string, workspace-wide,
+///   without trying to decompose it.
+/// - `FunctionLocal`: a bare word that's either a declared parameter of the
+///   `FUNCTION` enclosing the cursor, or a symbol `EQU`/`=`-defined within
+///   its body (basm functions can't contain genuine label definitions —
+///   `ParsingState::FunctionLimited` only accepts `Equ`/`Let` — so those are
+///   the only two shapes a function-local symbol takes) — confined to that
+///   function's own body (`FUNCTION` line through `ENDFUNCTION`, inclusive),
+///   checked *before* falling back to `Global` so a common name (`x`,
+///   `value`, ...) doesn't trigger an unrelated workspace-wide rename, and
+///   a same-named definition *outside* the function is a different symbol
+///   that must not be touched.
+#[derive(Debug)]
+pub(crate) enum RenameTarget {
+    Global(String),
+    Local {
+        owner: String,
+        name: String,
+        scope: std::ops::Range<u32>
+    },
+    Qualified(String),
+    FunctionLocal {
+        function_name: String,
+        name: String,
+        scope: std::ops::Range<u32>
+    }
+}
+
+/// As `AssemblyAnalyzer::extract_word_at_position`, but also returns the
+/// word's `[start, end)` column range.
+fn word_range_at_position(line: &str, column: usize) -> Option<(String, u32, u32)> {
+    let chars: Vec<char> = line.chars().collect();
+    if column >= chars.len() {
+        return None;
+    }
+    let is_word = |c: char| c.is_alphanumeric() || c == '_' || c == '.' || c == '@';
+    let mut start = column;
+    let mut end = column;
+    while start > 0 && is_word(chars[start - 1]) {
+        start -= 1;
+    }
+    while end < chars.len() && is_word(chars[end]) {
+        end += 1;
+    }
+    if start < end {
+        Some((chars[start..end].iter().collect(), start as u32, end as u32))
+    }
+    else {
+        None
+    }
+}
+
+/// Occurrences of `word_upper` in `document`, either as an exact whole word
+/// or as a `.`-qualifying prefix (`word_upper` immediately followed by `.`
+/// and further identifier characters, e.g. matching the `OLD` in
+/// `OLD.local`) — used for global label rename, which must also update
+/// qualified references to its own locals. Returns `(range, matched_text)`;
+/// `matched_text` is exactly `word_upper` for a plain match, or
+/// `word_upper` plus its `.suffix` for a qualified-prefix match.
+fn find_label_word_and_prefix_matches(document: &Document, word: &str) -> Vec<(Range, String)> {
+    // Callers pass the word as written (whatever case the source uses) —
+    // matching must be case-insensitive regardless, like every other
+    // symbol lookup in this module (`find_references_in`,
+    // `find_local_matches_in_scope`).
+    let word_upper = word.to_uppercase();
+    let text = document.text();
+    let mut matches = Vec::new();
+    for (line_idx, line) in text.lines().enumerate() {
+        let line_up = line.to_uppercase();
+        let wlen = word_upper.len();
+        let bytes = line.as_bytes();
+        let mut start = 0;
+        while start + wlen <= line_up.len() {
+            let Some(pos) = line_up[start..].find(word_upper.as_str())
+            else {
+                break;
+            };
+            let abs = start + pos;
+            let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
+            if !before_ok {
+                start = abs + 1;
+                continue;
+            }
+
+            let after = abs + wlen;
+            if after < bytes.len() && bytes[after] == b'.' {
+                let mut end = after + 1;
+                while end < bytes.len() && is_ident_byte(bytes[end]) {
+                    end += 1;
+                }
+                matches.push((
+                    Range {
+                        start: Position {
+                            line: line_idx as u32,
+                            character: abs as u32
+                        },
+                        end: Position {
+                            line: line_idx as u32,
+                            character: end as u32
+                        }
+                    },
+                    line[abs..end].to_string()
+                ));
+            }
+            else if after >= bytes.len() || !is_ident_byte(bytes[after]) {
+                matches.push((
+                    Range {
+                        start: Position {
+                            line: line_idx as u32,
+                            character: abs as u32
+                        },
+                        end: Position {
+                            line: line_idx as u32,
+                            character: after as u32
+                        }
+                    },
+                    word_upper.to_string()
+                ));
+            }
+            start = abs + 1;
+        }
+    }
+    matches
+}
+
+/// Occurrences of the bare local label `.name` (case-insensitive) within
+/// `scope` (a line range, exclusive end) in `document` — used for local
+/// label rename, confined to its owning global's scope.
+fn find_local_matches_in_scope(
+    document: &Document,
+    name: &str,
+    scope: &std::ops::Range<u32>
+) -> Vec<Range> {
+    let text = document.text();
+    let name_upper = name.to_uppercase();
+    let pattern = format!(".{name_upper}");
+    let mut matches = Vec::new();
+    for (line_idx, line) in text.lines().enumerate() {
+        let line_idx = line_idx as u32;
+        if line_idx < scope.start || line_idx >= scope.end {
+            continue;
+        }
+        let line_up = line.to_uppercase();
+        let bytes = line.as_bytes();
+        let plen = pattern.len();
+        let mut start = 0;
+        while start + plen <= line_up.len() {
+            let Some(pos) = line_up[start..].find(&pattern)
+            else {
+                break;
+            };
+            let abs = start + pos;
+            // The `.` itself must start the identifier run (not preceded by
+            // another identifier character, e.g. don't match inside
+            // `foo.name`) and the run must end exactly after `name`.
+            let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
+            let after = abs + plen;
+            let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
+            if before_ok && after_ok {
+                matches.push(Range {
+                    start: Position {
+                        line: line_idx,
+                        character: abs as u32
+                    },
+                    end: Position {
+                        line: line_idx,
+                        character: after as u32
+                    }
+                });
+            }
+            start = abs + 1;
+        }
+    }
+    matches
+}
+
+/// Occurrences of the bare word `name` (case-insensitive, no leading `.`)
+/// within `scope` (a line range, exclusive end) in `document` — used for
+/// `FUNCTION` parameter rename, confined to the function's own body.
+fn find_bare_word_matches_in_scope(
+    document: &Document,
+    name: &str,
+    scope: &std::ops::Range<u32>
+) -> Vec<Range> {
+    let text = document.text();
+    let name_upper = name.to_uppercase();
+    let mut matches = Vec::new();
+    for (line_idx, line) in text.lines().enumerate() {
+        let line_idx = line_idx as u32;
+        if line_idx < scope.start || line_idx >= scope.end {
+            continue;
+        }
+        let line_up = line.to_uppercase();
+        let bytes = line.as_bytes();
+        let wlen = name_upper.len();
+        let mut start = 0;
+        while start + wlen <= line_up.len() {
+            let Some(pos) = line_up[start..].find(name_upper.as_str())
+            else {
+                break;
+            };
+            let abs = start + pos;
+            let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
+            let after = abs + wlen;
+            let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
+            if before_ok && after_ok {
+                matches.push(Range {
+                    start: Position {
+                        line: line_idx,
+                        character: abs as u32
+                    },
+                    end: Position {
+                        line: line_idx,
+                        character: after as u32
+                    }
+                });
+            }
+            start = abs + 1;
+        }
+    }
+    matches
 }
 
 // ─── Include file navigation ──────────────────────────────────────────────────
@@ -559,5 +1056,364 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
             .expect("goto-definition on the section name inside its own definition");
         assert_eq!(loc.range.start.line, 0, "{loc:?}");
         assert_eq!(loc.range.start.character, 22, "{loc:?}");
+    }
+}
+
+#[cfg(test)]
+mod rename_tests {
+    use super::*;
+
+    fn doc(uri: &str, text: &str) -> crate::common::document::Document {
+        let uri = tower_lsp::lsp_types::Url::parse(uri).unwrap();
+        crate::common::document::Document::new(uri, text.to_string(), 1)
+    }
+
+    /// Regression test: renaming a `RANGE`/`DEFSECTION` section name must
+    /// also update every `SECTION name` usage and every quoted reference in
+    /// `section_start("name")`/`section_length("name")` calls — and, since
+    /// real basm code very commonly uses lowercase directives/names (as
+    /// this fixture, mirrored from `good_section.asm`, does), it must work
+    /// regardless of case: `find_label_word_and_prefix_matches` used to
+    /// compare an un-uppercased search word against an uppercased line,
+    /// silently matching nothing whenever the name itself wasn't already
+    /// all-caps.
+    #[test]
+    fn section_name_rename_updates_every_occurrence_including_lowercase() {
+        let text = "range $0080, $3FFF, code\nrange $4000, $7FFF, data\n\nsection code\n  ld hl, message_1\n  call print_message\n\nsection data\nmessage_1: db \"This is message #1.\", $00\n\nsection code\nprint_message:\n\tld a, (hl)\n\tret\n\n\tassert section_start(\"data\") ==  0x4000\n\tassert section_length(\"data\") == 0x4000\n";
+        let d = doc("file:///sect.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+
+        // Cursor on "data" in "range $4000, $7FFF, data" (line 1).
+        let col = text.lines().nth(1).unwrap().find("data").unwrap() as u32;
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                },
+                "info"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        // range definition, `section data`, and two quoted references.
+        assert_eq!(edits.len(), 4, "{edits:?}");
+        for e in &edits {
+            assert_eq!(e.new_text, "info");
+        }
+    }
+
+    /// Regression test: a `FUNCTION`'s own parameter (`x` in
+    /// `FUNCTION double(x)`) must rename within the function's body, not
+    /// trigger a workspace-wide rename of every unrelated `x`.
+    #[test]
+    fn function_parameter_rename_is_scoped_to_its_own_body() {
+        let text = "FUNCTION double(x)\n  RETURN x*2\nENDFUNCTION\n\nDB double(5)\n";
+        let d = doc("file:///fn.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "x" in "RETURN x*2" (line 1).
+        let col = text.lines().nth(1).unwrap().find('x').unwrap() as u32;
+
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(&target, RenameTarget::FunctionLocal { function_name, name, .. }
+                if function_name == "double" && name == "x"),
+            "{target:?}"
+        );
+
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                },
+                "y"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        // The parameter list ("(x)") and the RETURN expression's "x".
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 0);
+        assert_eq!(edits[1].range.start.line, 1);
+        for e in &edits {
+            assert_eq!(e.new_text, "y");
+        }
+    }
+
+    /// Regression test: a symbol `=`/`EQU`-defined *inside* a `FUNCTION`
+    /// body is local to that function (basm functions can't contain a
+    /// genuine label definition, only `Equ`/`Let` — see
+    /// `ParsingState::FunctionLimited`) — rename must stay confined to the
+    /// function and must not touch a same-named definition/reference
+    /// outside it, even elsewhere in the same file.
+    #[test]
+    fn function_local_symbol_rename_does_not_touch_an_unrelated_outer_definition() {
+        let text = "FUNCTION compute(x)\n  y = x * 2\n  RETURN y\nENDFUNCTION\n\nDB compute(5)\n\ny EQU 99\n";
+        let d = doc("file:///fnlocal.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "y" in "RETURN y" (line 2).
+        let col = text.lines().nth(2).unwrap().find('y').unwrap() as u32;
+
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 2,
+                    character: col
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(&target, RenameTarget::FunctionLocal { function_name, .. } if function_name == "compute"),
+            "{target:?}"
+        );
+
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 2,
+                    character: col
+                },
+                "z"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        // Only the assignment (line 1) and the RETURN usage (line 2) —
+        // never the unrelated `y EQU 99` outside the function (line 7).
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 1);
+        assert_eq!(edits[1].range.start.line, 2);
+        for e in &edits {
+            assert_eq!(e.new_text, "z");
+        }
+    }
+
+    /// Regression test, the inverse of
+    /// `function_local_symbol_rename_does_not_touch_an_unrelated_outer_definition`:
+    /// renaming an *outer* global symbol must not reach inside a `FUNCTION`
+    /// that shadows the same name with its own local definition — inside
+    /// that function, the name refers to the local, a different symbol.
+    #[test]
+    fn global_rename_does_not_reach_inside_a_function_that_shadows_it() {
+        let text =
+            "y EQU 99\n\nFUNCTION compute(x)\n  y = x * 2\n  RETURN y\nENDFUNCTION\n\nDB y\n";
+        let d = doc("file:///shadow.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "y" at "y EQU 99" (line 0) — the outer definition.
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 0,
+                    character: 0
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(&target, RenameTarget::Global(s) if s == "y"),
+            "{target:?}"
+        );
+
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 0,
+                    character: 0
+                },
+                "z"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        // Only the outer definition (line 0) and its outer usage (line 7) —
+        // never the function-local `y = x * 2` / `RETURN y` (lines 3, 4).
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 0);
+        assert_eq!(edits[1].range.start.line, 7);
+        for e in &edits {
+            assert_eq!(e.new_text, "z");
+        }
+    }
+
+    #[test]
+    fn global_label_rename_updates_definition_and_references() {
+        let text = "OLD_LABEL:\n    ret\n    call OLD_LABEL\n";
+        let d = doc("file:///g.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "OLD_LABEL" at its own definition (line 0).
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 0,
+                    character: 2
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(target, RenameTarget::Global(ref s) if s == "OLD_LABEL"),
+            "{target:?}"
+        );
+
+        let edits = analyzer.rename_occurrences_in(&d, &target, "NEW_LABEL");
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        for e in &edits {
+            assert_eq!(e.new_text, "NEW_LABEL");
+        }
+    }
+
+    #[test]
+    fn global_label_rename_also_rewrites_qualified_local_references() {
+        let text = "OLD_LABEL:\n.local\n    ret\n    jr OLD_LABEL.local\n";
+        let d = doc("file:///g2.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 0,
+                    character: 2
+                }
+            )
+            .expect("target");
+
+        let edits = analyzer.rename_occurrences_in(&d, &target, "NEW_LABEL");
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert!(edits.iter().any(|e| e.new_text == "NEW_LABEL"), "{edits:?}");
+        let qualified = edits
+            .iter()
+            .find(|e| e.new_text == "NEW_LABEL.local")
+            .expect("qualified rewrite");
+        assert_eq!(qualified.range.start.line, 3);
+    }
+
+    #[test]
+    fn local_label_rename_is_scoped_to_its_own_global() {
+        let text = "GLOBAL_A:\n.foo\n    ret\nGLOBAL_B:\n.foo\n    ret\n";
+        let d = doc("file:///l.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on ".foo" under GLOBAL_A (line 1).
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 1,
+                    character: 1
+                }
+            )
+            .expect("target");
+        assert!(matches!(&target, RenameTarget::Local { owner, .. } if owner == "GLOBAL_A"));
+
+        let edits = analyzer.rename_occurrences_in(&d, &target, "bar");
+        assert_eq!(edits.len(), 1, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 1);
+        assert_eq!(edits[0].new_text, ".bar");
+    }
+
+    /// Regression test: `prepare_rename`'s range for a local label covers
+    /// the leading `.` (it's part of the word), so an LSP client's
+    /// pre-filled rename input typically includes it too — `new_name`
+    /// arriving as `.bar` (not just `bar`) must not produce `..bar`.
+    #[test]
+    fn local_label_rename_does_not_duplicate_the_leading_dot() {
+        let text = "GLOBAL_A:\n.foo\n    ret\n";
+        let d = doc("file:///l2.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 1,
+                    character: 1
+                }
+            )
+            .expect("target");
+
+        let edits = analyzer.rename_occurrences_in(&d, &target, ".bar");
+        assert_eq!(edits.len(), 1, "{edits:?}");
+        assert_eq!(edits[0].new_text, ".bar", "{edits:?}");
+    }
+
+    #[test]
+    fn prepare_rename_rejects_a_mnemonic() {
+        let text = "    ld a,1\n";
+        let d = doc("file:///m.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(
+            analyzer
+                .prepare_rename(
+                    &d,
+                    Position {
+                        line: 0,
+                        character: 5
+                    }
+                )
+                .is_none()
+        );
+    }
+
+    /// Simulates the workspace-wide expansion `backend.rs` performs: the
+    /// same `RenameTarget` (resolved from one document) is applied to a
+    /// completely different document's own text.
+    #[test]
+    fn a_rename_target_can_be_applied_to_a_different_documents_text() {
+        let d1 = doc("file:///main.asm", "GLOBAL_X:\n    ret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let target = analyzer
+            .resolve_rename_target(
+                &d1,
+                Position {
+                    line: 0,
+                    character: 2
+                }
+            )
+            .unwrap();
+
+        let d2 = doc(
+            "file:///other.asm",
+            "    call GLOBAL_X\n    jr GLOBAL_X.sub\n"
+        );
+        let edits = analyzer.rename_occurrences_in(&d2, &target, "GLOBAL_Y");
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert!(edits.iter().any(|e| e.new_text == "GLOBAL_Y"), "{edits:?}");
+        assert!(
+            edits.iter().any(|e| e.new_text == "GLOBAL_Y.sub"),
+            "{edits:?}"
+        );
+    }
+
+    /// A BASIC variable rename inside a `LOCOMOTIVE` block embedded in a
+    /// `.asm` file must produce absolute document coordinates, not ones
+    /// relative to the extracted block.
+    #[test]
+    fn rename_delegates_to_basic_inside_a_locomotive_block() {
+        let text = "LOCOMOTIVE\n10 LET X=5\n20 PRINT X\nENDLOCOMOTIVE\n";
+        let d = doc("file:///embedded.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on the "X" in "10 LET X=5" (document line 1, column 7).
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: 7
+                },
+                "Y"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 1);
+        assert_eq!(edits[1].range.start.line, 2);
     }
 }

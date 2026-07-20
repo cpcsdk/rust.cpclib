@@ -106,53 +106,135 @@ impl BasicAnalyzer {
             Err(_) => return vec![]
         };
 
-        let cursor_line = position.line;
-        let cursor_col = position.character;
-
-        // Determine what the cursor is on.
-        let bline = match prog.lines.iter().find(|l| l.source_line == cursor_line) {
-            Some(l) => l,
-            None => return vec![]
+        let Some(var_key) = variable_at_position(&prog, position)
+        else {
+            return vec![];
         };
-        let tok = bline
-            .tokens
-            .iter()
-            .find(|t| t.span.col <= cursor_col && cursor_col < t.span.col + t.span.len);
-        let var_key = match tok {
-            Some(t) => {
-                match &t.kind {
-                    LocatedTokenKind::Variable(n) => n.to_uppercase(),
-                    _ => return vec![]
+
+        variable_occurrence_spans(&prog, &var_key)
+            .into_iter()
+            .map(|(line, col, len)| {
+                Location {
+                    uri: document.uri.clone(),
+                    range: span_range(line, col, len)
                 }
-            },
-            None => return vec![]
-        };
+            })
+            .collect()
+    }
 
-        // Collect all occurrences of this variable across the whole program.
-        let mut refs = Vec::new();
-        for bline in &prog.lines {
-            for t in &bline.tokens {
-                if let LocatedTokenKind::Variable(n) = &t.kind {
-                    if n.to_uppercase() == var_key {
-                        refs.push(Location {
-                            uri: document.uri.clone(),
-                            range: Range {
-                                start: Position {
-                                    line: t.span.line,
-                                    character: t.span.col
-                                },
-                                end: Position {
-                                    line: t.span.line,
-                                    character: t.span.col + t.span.len
-                                }
-                            }
-                        });
-                    }
+    /// The range of the variable occurrence under the cursor, or `None` if
+    /// the cursor isn't on a variable — used by `textDocument/prepareRename`
+    /// to decide whether to offer renaming at all.
+    pub fn prepare_rename(&self, document: &Document, position: Position) -> Option<Range> {
+        let text = document.text();
+        let prog = LocatedBasicProgram::parse(&text).ok()?;
+        let tok = token_at_position(&prog, position)?;
+        match &tok.kind {
+            LocatedTokenKind::Variable(_) => {
+                Some(span_range(tok.span.line, tok.span.col, tok.span.len))
+            },
+            _ => None
+        }
+    }
+
+    /// Rename every occurrence of the variable under the cursor to
+    /// `new_name`, within this single document — BASIC variables have no
+    /// cross-file consequences.
+    pub fn rename(
+        &self,
+        document: &Document,
+        position: Position,
+        new_name: &str
+    ) -> Option<WorkspaceEdit> {
+        let text = document.text();
+        let prog = LocatedBasicProgram::parse(&text).ok()?;
+        let var_key = variable_at_position(&prog, position)?;
+        variable_occurrences_to_workspace_edit(&prog, &var_key, 0, document.uri.clone(), new_name)
+    }
+}
+
+// ─── Shared variable-occurrence helpers (find_references, rename) ───────────
+
+/// The token at `position` (document/block-relative, whichever `prog` was
+/// parsed against), if any.
+fn token_at_position(
+    prog: &LocatedBasicProgram,
+    position: Position
+) -> Option<&cpclib_basic::located::LocatedBasicToken> {
+    let bline = prog.lines.iter().find(|l| l.source_line == position.line)?;
+    bline
+        .tokens
+        .iter()
+        .find(|t| t.span.col <= position.character && position.character < t.span.col + t.span.len)
+}
+
+/// The uppercased variable name under the cursor, or `None` if the cursor
+/// isn't on a `Variable` token.
+fn variable_at_position(prog: &LocatedBasicProgram, position: Position) -> Option<String> {
+    match &token_at_position(prog, position)?.kind {
+        LocatedTokenKind::Variable(n) => Some(n.to_uppercase()),
+        _ => None
+    }
+}
+
+/// Every occurrence of `var_key` (already uppercased) as a `Variable` token
+/// in `prog`, as raw `(line, col, len)` spans — shared by `find_references`
+/// and `rename`, which just wrap these in a `Location`/`TextEdit`, possibly
+/// at a line offset (for BASIC embedded in a `LOCOMOTIVE` block).
+fn variable_occurrence_spans(prog: &LocatedBasicProgram, var_key: &str) -> Vec<(u32, u32, u32)> {
+    let mut spans = Vec::new();
+    for bline in &prog.lines {
+        for t in &bline.tokens {
+            if let LocatedTokenKind::Variable(n) = &t.kind {
+                if n.to_uppercase() == var_key {
+                    spans.push((t.span.line, t.span.col, t.span.len));
                 }
             }
         }
-        refs
     }
+    spans
+}
+
+fn span_range(line: u32, col: u32, len: u32) -> Range {
+    Range {
+        start: Position {
+            line,
+            character: col
+        },
+        end: Position {
+            line,
+            character: col + len
+        }
+    }
+}
+
+/// Build a single-file `WorkspaceEdit` renaming every occurrence of
+/// `var_key` to `new_name`, with each occurrence's line offset by
+/// `line_offset` (0 for a standalone `.bas` document, the `LOCOMOTIVE`
+/// block's starting line when embedded in a `.asm` document).
+fn variable_occurrences_to_workspace_edit(
+    prog: &LocatedBasicProgram,
+    var_key: &str,
+    line_offset: u32,
+    uri: Url,
+    new_name: &str
+) -> Option<WorkspaceEdit> {
+    let edits: Vec<TextEdit> = variable_occurrence_spans(prog, var_key)
+        .into_iter()
+        .map(|(line, col, len)| {
+            TextEdit {
+                range: span_range(line_offset + line, col, len),
+                new_text: new_name.to_string()
+            }
+        })
+        .collect();
+    if edits.is_empty() {
+        return None;
+    }
+    Some(WorkspaceEdit {
+        changes: Some(std::collections::HashMap::from([(uri, edits)])),
+        ..Default::default()
+    })
 }
 
 // ─── Goto-definition helpers ──────────────────────────────────────────────────
@@ -396,5 +478,155 @@ pub(crate) fn locomotive_basic_goto_definition(
             Some(to_loc(target_line.source_line, col))
         },
         _ => None
+    }
+}
+
+/// As [`BasicAnalyzer::prepare_rename`], for BASIC embedded in a `LOCOMOTIVE`
+/// block inside a `.asm` file. See [`locomotive_basic_goto_definition`] for
+/// what the parameters mean.
+pub(crate) fn locomotive_basic_prepare_rename(
+    basic_text: &str,
+    position: Position,
+    block_start_line: u32
+) -> Option<Range> {
+    let prog = LocatedBasicProgram::parse(basic_text).ok()?;
+    let cursor_line = position.line.checked_sub(block_start_line)?;
+    let local_position = Position {
+        line: cursor_line,
+        character: position.character
+    };
+    let tok = token_at_position(&prog, local_position)?;
+    match &tok.kind {
+        LocatedTokenKind::Variable(_) => {
+            Some(span_range(
+                block_start_line + tok.span.line,
+                tok.span.col,
+                tok.span.len
+            ))
+        },
+        _ => None
+    }
+}
+
+/// As [`BasicAnalyzer::rename`], for BASIC embedded in a `LOCOMOTIVE` block
+/// inside a `.asm` file. See [`locomotive_basic_goto_definition`] for what
+/// the parameters mean.
+pub(crate) fn locomotive_basic_rename(
+    basic_text: &str,
+    position: Position,
+    block_start_line: u32,
+    document_uri: &Url,
+    new_name: &str
+) -> Option<WorkspaceEdit> {
+    let prog = LocatedBasicProgram::parse(basic_text).ok()?;
+    let cursor_line = position.line.checked_sub(block_start_line)?;
+    let local_position = Position {
+        line: cursor_line,
+        character: position.character
+    };
+    let var_key = variable_at_position(&prog, local_position)?;
+    variable_occurrences_to_workspace_edit(
+        &prog,
+        &var_key,
+        block_start_line,
+        document_uri.clone(),
+        new_name
+    )
+}
+
+#[cfg(test)]
+mod rename_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    fn doc(text: &str) -> Document {
+        let uri = Url::parse("file:///t.bas").unwrap();
+        Document::new(uri, text.to_string(), 1)
+    }
+
+    #[test]
+    fn rename_updates_every_occurrence_of_a_variable() {
+        // "10 LET X=5" / "20 PRINT X" / "30 X=X+1" — X appears 4 times:
+        // the LET target, the PRINT reference, and both sides of X=X+1.
+        let text = "10 LET X=5\n20 PRINT X\n30 X=X+1\n";
+        let d = doc(text);
+        let analyzer = BasicAnalyzer::new();
+        // Cursor on the "X" in "LET X=5" (column 7).
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 0,
+                    character: 7
+                },
+                "Y"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        assert_eq!(edits.len(), 4, "{edits:?}");
+        for e in &edits {
+            assert_eq!(e.new_text, "Y");
+        }
+    }
+
+    #[test]
+    fn prepare_rename_rejects_a_non_variable_word() {
+        let text = "10 PRINT \"HELLO\"\n";
+        let d = doc(text);
+        let analyzer = BasicAnalyzer::new();
+        // Cursor on the PRINT keyword.
+        assert!(
+            analyzer
+                .prepare_rename(
+                    &d,
+                    Position {
+                        line: 0,
+                        character: 4
+                    }
+                )
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn prepare_rename_accepts_a_variable() {
+        let text = "10 LET X=5\n";
+        let d = doc(text);
+        let analyzer = BasicAnalyzer::new();
+        let range = analyzer
+            .prepare_rename(
+                &d,
+                Position {
+                    line: 0,
+                    character: 7
+                }
+            )
+            .expect("expected a range");
+        assert_eq!(range.start.character, 7);
+        assert_eq!(range.end.character, 8);
+    }
+
+    #[test]
+    fn renaming_inside_a_locomotive_block_produces_absolute_document_coordinates() {
+        // Mirrors how `basm/definition.rs`'s `AssemblyAnalyzer::rename`
+        // delegates to this for `LOCOMOTIVE` block content embedded in a
+        // `.asm` file — the block starts at document line 3.
+        let basic_text = "10 LET X=5\n20 PRINT X\n";
+        let uri = Url::parse("file:///embedded.asm").unwrap();
+        let edit = locomotive_basic_rename(
+            basic_text,
+            Position {
+                line: 3,
+                character: 7
+            },
+            3,
+            &uri,
+            "Y"
+        )
+        .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&uri).unwrap();
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 3);
+        assert_eq!(edits[1].range.start.line, 4);
     }
 }

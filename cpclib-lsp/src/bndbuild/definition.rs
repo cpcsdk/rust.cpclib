@@ -1,6 +1,9 @@
 //! Goto-definition and references for bndbuild files: jump from a
 //! dependency to the rule producing it, or to the file on disk.
 
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::{Path, PathBuf};
+
 use tower_lsp::lsp_types::*;
 
 use super::BuildFileAnalyzer;
@@ -478,12 +481,21 @@ impl BuildFileAnalyzer {
             return Vec::new();
         }
 
+        self.find_word_references(document, &word)
+    }
+
+    /// As [`find_references`](Self::find_references), for an already-known
+    /// variable name rather than one resolved from a cursor position — used
+    /// when rename reaches a file via the `{% include %}` graph, where
+    /// there's no cursor to resolve from, only the name found at the
+    /// definition site.
+    pub(crate) fn find_word_references(&self, document: &Document, word: &str) -> Vec<Location> {
         let text = document.text();
         let mut refs = Vec::new();
         for (line_idx, line) in text.lines().enumerate() {
             let bytes = line.as_bytes();
             let mut start = 0;
-            while let Some(pos) = line[start..].find(&word) {
+            while let Some(pos) = line[start..].find(word) {
                 let abs = start + pos;
                 let before_ok =
                     abs == 0 || !(bytes[abs - 1].is_ascii_alphanumeric() || bytes[abs - 1] == b'_');
@@ -510,11 +522,69 @@ impl BuildFileAnalyzer {
         }
         refs
     }
+
+    /// `textDocument/prepareRename`: only offer rename when the cursor is on
+    /// a Jinja variable that actually has a `{% set %}` definition.
+    pub fn prepare_rename(&self, document: &Document, position: Position) -> Option<Range> {
+        let line = document.line(position.line as usize)?;
+        let word = jinja_word_at(&line, position.character as usize)?;
+        super::jinja::collect_jinja_variables(document)
+            .iter()
+            .any(|(name, ..)| *name == word)
+            .then_some(())?;
+        let bytes = line.as_bytes();
+        let col = (position.character as usize).min(bytes.len());
+        let mut start = col;
+        while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+            start -= 1;
+        }
+        Some(Range {
+            start: Position {
+                line: position.line,
+                character: start as u32
+            },
+            end: Position {
+                line: position.line,
+                character: (start + word.len()) as u32
+            }
+        })
+    }
+
+    /// `textDocument/rename` for a Jinja variable, within this single
+    /// document only — see `crate::server::backend` for the transitive
+    /// `{% include %}`-graph expansion across the workspace.
+    pub fn rename(
+        &self,
+        document: &Document,
+        position: Position,
+        new_name: &str
+    ) -> Option<WorkspaceEdit> {
+        let refs = self.find_references(document, position);
+        if refs.is_empty() {
+            return None;
+        }
+        let edits: Vec<TextEdit> = refs
+            .into_iter()
+            .map(|loc| {
+                TextEdit {
+                    range: loc.range,
+                    new_text: new_name.to_string()
+                }
+            })
+            .collect();
+        Some(WorkspaceEdit {
+            changes: Some(std::collections::HashMap::from([(
+                document.uri.clone(),
+                edits
+            )])),
+            ..Default::default()
+        })
+    }
 }
 
 /// The identifier under the cursor, when the cursor is inside Jinja braces
 /// (`{{ }}` / `{% %}`) on this line.
-fn jinja_word_at(line: &str, col: usize) -> Option<String> {
+pub(crate) fn jinja_word_at(line: &str, col: usize) -> Option<String> {
     super::jinja::jinja_context_at(line, col)?;
     let bytes = line.as_bytes();
     let col = col.min(bytes.len());
@@ -531,6 +601,228 @@ fn jinja_word_at(line: &str, col: usize) -> Option<String> {
     }
     else {
         None
+    }
+}
+
+// ─── `{% include %}` graph (for workspace-wide Jinja variable rename) ────────
+
+/// Directories never worth descending into while scanning the workspace:
+/// VCS metadata and build output can be huge and are never where hand-
+/// written build files live. Mirrors `server::backend::is_ignored_dir`.
+fn is_ignored_dir(entry: &walkdir::DirEntry) -> bool {
+    entry.file_type().is_dir()
+        && matches!(
+            entry.file_name().to_str(),
+            Some(".git" | ".hg" | ".svn" | "target" | "node_modules")
+        )
+}
+
+/// `true` when `path` is worth scanning for `{% include %}` directives: its
+/// name exactly matches a conventional bndbuild entry-point filename
+/// (`cpclib_bndbuild::builder::EXPECTED_FILENAMES`, e.g. `build.bnd`), or
+/// its extension is `.bnd`/`.build` case-insensitively — covers arbitrary
+/// included files too (`common.build`, `font.bnd`, `img.build`), which
+/// don't follow the entry-point naming convention at all.
+fn is_bndbuild_candidate(path: &Path) -> bool {
+    if let Some(name) = path.file_name().and_then(|n| n.to_str())
+        && cpclib_bndbuild::builder::EXPECTED_FILENAMES.contains(&name)
+    {
+        return true;
+    }
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("bnd") || e.eq_ignore_ascii_case("build"))
+}
+
+/// The `{% include %}` graph for every candidate bndbuild file under
+/// `roots`: an edge `A -> B` means `A` has `{% include "..." %}` resolving
+/// to `B` (paths canonicalized where possible, so the same file reached via
+/// different relative paths still compares equal).
+pub(crate) fn build_include_graph(roots: &[PathBuf]) -> HashMap<PathBuf, Vec<PathBuf>> {
+    let mut graph: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    for root in roots {
+        let walker = walkdir::WalkDir::new(root)
+            .into_iter()
+            .filter_entry(|e| !is_ignored_dir(e));
+        for entry in walker.filter_map(|e| e.ok()) {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let path = entry.path();
+            if !is_bndbuild_candidate(path) {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(path)
+            else {
+                continue;
+            };
+            let Some(dir) = path.parent()
+            else {
+                continue;
+            };
+            let edges: Vec<PathBuf> = super::jinja::extract_jinja_include_paths(&text)
+                .into_iter()
+                .map(|rel| {
+                    let candidate = dir.join(&rel);
+                    candidate.canonicalize().unwrap_or(candidate)
+                })
+                .collect();
+            if !edges.is_empty() {
+                let from = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                graph.insert(from, edges);
+            }
+        }
+    }
+    graph
+}
+
+/// Every file under `roots` that transitively `{% include %}`s `target`
+/// (directly or indirectly) — the set of files a rename of a variable
+/// defined in `target` needs to also update. Found by inverting
+/// [`build_include_graph`] and walking its reverse edges breadth-first from
+/// `target`. `target` itself is never included in the result.
+pub(crate) fn files_transitively_including(roots: &[PathBuf], target: &Path) -> Vec<PathBuf> {
+    let graph = build_include_graph(roots);
+    let target = target
+        .canonicalize()
+        .unwrap_or_else(|_| target.to_path_buf());
+
+    let mut reverse: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    for (from, tos) in &graph {
+        for to in tos {
+            reverse.entry(to.clone()).or_default().push(from.clone());
+        }
+    }
+
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    let mut queue: VecDeque<PathBuf> = VecDeque::new();
+    visited.insert(target.clone());
+    queue.push_back(target);
+
+    let mut result = Vec::new();
+    while let Some(current) = queue.pop_front() {
+        let Some(includers) = reverse.get(&current)
+        else {
+            continue;
+        };
+        for includer in includers {
+            if visited.insert(includer.clone()) {
+                result.push(includer.clone());
+                queue.push_back(includer.clone());
+            }
+        }
+    }
+    result
+}
+
+#[cfg(test)]
+mod rename_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    /// Mirrors the real project's shape (`demo.bnd5`): a shared
+    /// `common.build` at the workspace root, `{% include %}`d by a
+    /// `build.bnd` one directory down.
+    #[test]
+    fn build_include_graph_finds_edges_across_bnd_and_build_extensions() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("common.build"),
+            "{% set CPCIP = \"192.168.1.1\" %}\n"
+        )
+        .unwrap();
+        std::fs::create_dir_all(tmp.path().join("linking")).unwrap();
+        std::fs::write(
+            tmp.path().join("linking/build.bnd"),
+            "{% include \"../common.build\" %}\n- tgt: t\n  cmd: xfer {{CPCIP}} -y $<\n"
+        )
+        .unwrap();
+
+        let graph = build_include_graph(&[tmp.path().to_path_buf().into()]);
+        let linking_bnd = tmp.path().join("linking/build.bnd").canonicalize().unwrap();
+        let common_build = tmp.path().join("common.build").canonicalize().unwrap();
+        assert_eq!(
+            graph.get(&linking_bnd),
+            Some(&vec![common_build]),
+            "{graph:?}"
+        );
+    }
+
+    #[test]
+    fn files_transitively_including_finds_every_direct_includer() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("common.build"), "{% set X = 1 %}\n").unwrap();
+        std::fs::create_dir_all(tmp.path().join("linking")).unwrap();
+        std::fs::write(
+            tmp.path().join("linking/build.bnd"),
+            "{% include \"../common.build\" %}\n"
+        )
+        .unwrap();
+        std::fs::create_dir_all(tmp.path().join("polar_dots")).unwrap();
+        std::fs::write(
+            tmp.path().join("polar_dots/build.bnd"),
+            "{% include \"../common.build\" %}\n"
+        )
+        .unwrap();
+        // A file that does NOT include common.build — must not show up.
+        std::fs::write(
+            tmp.path().join("unrelated.bnd"),
+            "- tgt: t\n  cmd: echo hi\n"
+        )
+        .unwrap();
+
+        let common_build = tmp.path().join("common.build").canonicalize().unwrap();
+        let includers =
+            files_transitively_including(&[tmp.path().to_path_buf().into()], &common_build);
+        assert_eq!(includers.len(), 2, "{includers:?}");
+        assert!(includers.contains(&tmp.path().join("linking/build.bnd").canonicalize().unwrap()));
+        assert!(
+            includers.contains(
+                &tmp.path()
+                    .join("polar_dots/build.bnd")
+                    .canonicalize()
+                    .unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn files_transitively_including_follows_indirect_chains() {
+        // root.build <- middle.build <- leaf.bnd
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("root.build"), "{% set X = 1 %}\n").unwrap();
+        std::fs::write(
+            tmp.path().join("middle.build"),
+            "{% include \"root.build\" %}\n"
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("leaf.bnd"),
+            "{% include \"middle.build\" %}\n"
+        )
+        .unwrap();
+
+        let root_build = tmp.path().join("root.build").canonicalize().unwrap();
+        let includers =
+            files_transitively_including(&[tmp.path().to_path_buf().into()], &root_build);
+        assert_eq!(includers.len(), 2, "{includers:?}");
+        assert!(includers.contains(&tmp.path().join("middle.build").canonicalize().unwrap()));
+        assert!(includers.contains(&tmp.path().join("leaf.bnd").canonicalize().unwrap()));
+    }
+
+    /// Simulates the workspace-wide expansion `backend.rs` performs: a
+    /// variable name resolved from one document (the definition site) is
+    /// applied to a completely different document's own text.
+    #[test]
+    fn word_references_can_be_computed_in_an_includer_file_independently() {
+        let uri = Url::parse("file:///linking/build.bnd").unwrap();
+        let text = "{% include \"../common.build\" %}\n- tgt: t\n  cmd: xfer {{CPCIP}} -y $<\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+
+        let analyzer = BuildFileAnalyzer::new();
+        let refs = analyzer.find_word_references(&doc, "CPCIP");
+        assert_eq!(refs.len(), 1, "{refs:?}");
+        assert_eq!(refs[0].range.start.line, 2);
     }
 }
 

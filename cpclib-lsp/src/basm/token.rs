@@ -189,6 +189,232 @@ where T: cpclib_tokens::ListingElement + 'a {
     out
 }
 
+/// For a `.local`-shaped label at `line` (0-based) — its own definition, or
+/// any reference within its scope — the name of the owning (non-dotted)
+/// global label and that scope's line range (`start..end`, exclusive):
+/// from the global's own definition line up to (but not including) the
+/// next non-dotted global label's definition line, or to end-of-file
+/// (`u32::MAX`). Returns `None` when `line` isn't within any global's
+/// scope at all (e.g. before the first global label).
+///
+/// Used by rename to confine a local-label rename to its own global's
+/// scope — a `.foo` under a *different* global is basm's own rules make
+/// into a wholly different symbol, and must not be touched. Reimplements,
+/// rather than shares, the `current_global`-tracking walk duplicated in
+/// `symbols.rs`'s `document_symbols` and `autocomplete.rs`'s
+/// `collect_symbols` — those build a display string per label as they go,
+/// this only needs scope boundaries.
+pub(super) fn label_scope_at_line<'a, T>(
+    listing: impl IntoIterator<Item = &'a T>,
+    line: u32
+) -> Option<(String, std::ops::Range<u32>)>
+where
+    T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
+{
+    let tokens = flatten_listing(listing);
+    let mut current_global: Option<(String, u32)> = None;
+    for token in &tokens {
+        if !token.is_label() {
+            continue;
+        }
+        let raw = token.label_symbol();
+        if raw.starts_with('.') {
+            continue;
+        }
+        let (tok_line_1based, _col) = token.span().relative_line_and_column();
+        let tok_line = tok_line_1based.saturating_sub(1) as u32;
+        if let Some((name, start)) = current_global.take() {
+            if start <= line && line < tok_line {
+                return Some((name, start..tok_line));
+            }
+        }
+        current_global = Some((raw.to_string(), tok_line));
+    }
+    if let Some((name, start)) = current_global
+        && start <= line
+    {
+        return Some((name, start..u32::MAX));
+    }
+    None
+}
+
+// ─── FUNCTION parameters ───────────────────────────────────────────────────
+
+/// The line just past the end (exclusive) of the `FUNCTION` body starting
+/// at `start_line` (0-based, the `FUNCTION` line itself) — found by pairing
+/// `FUNCTION`/`ENDFUNCTION` keywords textually, tracking nesting depth in
+/// case a function body itself contains a nested `FUNCTION` (mirrors
+/// `embedded_basic::extract_locomotive_blocks`'s block-matching style).
+/// Falls back to end-of-file if no matching `ENDFUNCTION` is found (e.g. a
+/// document with a syntax error).
+fn function_body_end_line(text: &str, start_line: u32) -> u32 {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut depth = 1i32;
+    let mut i = start_line as usize + 1;
+    while i < lines.len() {
+        let upper = lines[i].trim().to_uppercase();
+        match upper.split_whitespace().next().unwrap_or("") {
+            "FUNCTION" => depth += 1,
+            "ENDFUNCTION" => {
+                depth -= 1;
+                if depth == 0 {
+                    return i as u32 + 1; // exclusive end — include ENDFUNCTION's own line
+                }
+            },
+            _ => {}
+        }
+        i += 1;
+    }
+    lines.len() as u32
+}
+
+/// `true` when some line within `text[start..end)` (0-based, exclusive end)
+/// defines `word_upper` (already uppercased) via `EQU` or bare `=` (not
+/// `==`) — basm's `FUNCTION` bodies can't contain a genuine label
+/// definition (`ParsingState::FunctionLimited` doesn't accept `Token::Label`,
+/// only `Equ`/`Let`), so this is the only shape a function-local "variable"
+/// definition takes. Mirrors `AssemblyAnalyzer::find_definition_by_text`'s
+/// EQU/`=` detection.
+fn symbol_defined_via_equ_or_assign_in(text: &str, start: u32, end: u32, word_upper: &str) -> bool {
+    for (i, line) in text.lines().enumerate() {
+        let i = i as u32;
+        if i < start || i >= end {
+            continue;
+        }
+        let trimmed = line.trim_start();
+        let upper = trimmed.to_uppercase();
+        let Some(rest) = upper.strip_prefix(word_upper)
+        else {
+            continue;
+        };
+        if rest.as_bytes().first().is_some_and(|&b| is_ident_byte(b)) {
+            continue; // not a whole-word match (e.g. "yy" when looking for "y")
+        }
+        let rest_trimmed = rest.trim_start();
+        let is_equ = rest_trimmed.starts_with("EQU")
+            && !rest_trimmed
+                .as_bytes()
+                .get(3)
+                .is_some_and(|&b| is_ident_byte(b));
+        let is_assign = rest_trimmed.starts_with('=') && !rest_trimmed.starts_with("==");
+        if is_equ || is_assign {
+            return true;
+        }
+    }
+    false
+}
+
+/// If `word_upper` (already uppercased) is scoped to the `FUNCTION`
+/// enclosing `line` (0-based) — either one of its declared parameters, or a
+/// symbol `EQU`/`=`-defined within its body (basm functions can't contain
+/// genuine label definitions, only these — see
+/// `symbol_defined_via_equ_or_assign_in`) — the function's name, `word`'s
+/// own spelling, and the function body's line scope (`start` inclusive,
+/// `end` exclusive — covering the `FUNCTION` line itself, since its
+/// parameter list lives there). Any such symbol is local to the function:
+/// a same-named definition outside it (even elsewhere in the same file) is
+/// a different symbol and must not be touched by a rename confined to this
+/// scope.
+///
+/// Declared parameters are matched with any enclosing `(`/`)` trimmed:
+/// basm's `FUNCTION name(params)` grammar doesn't strip the parens itself —
+/// a single-parameter `FUNCTION double(x)` stores its one declared
+/// parameter as the raw text `"(x)"` — so `(x` / `x)` / `(x)` / `x` all
+/// normalize to `x` here.
+pub(super) fn function_scoped_symbol_at<'a, T>(
+    listing: impl IntoIterator<Item = &'a T>,
+    text: &str,
+    line: u32,
+    word_upper: &str
+) -> Option<(String, String, std::ops::Range<u32>)>
+where
+    T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
+{
+    for token in flatten_listing(listing) {
+        if !token.is_function_definition() {
+            continue;
+        }
+        let (start_1based, _col) = token.span().relative_line_and_column();
+        let start_line = start_1based.saturating_sub(1) as u32;
+        let end_line = function_body_end_line(text, start_line);
+        if line < start_line || line >= end_line {
+            continue;
+        }
+        for raw_param in token.function_definition_params() {
+            let param = raw_param.trim_start_matches('(').trim_end_matches(')');
+            if param.to_uppercase() == word_upper {
+                return Some((
+                    token.function_definition_name().to_string(),
+                    param.to_string(),
+                    start_line..end_line
+                ));
+            }
+        }
+        if symbol_defined_via_equ_or_assign_in(text, start_line, end_line, word_upper) {
+            return Some((
+                token.function_definition_name().to_string(),
+                word_upper.to_string(),
+                start_line..end_line
+            ));
+        }
+    }
+    None
+}
+
+/// `true` when the `FUNCTION` token `token` (whose own body spans
+/// `start_line..end_line`) shadows `word_upper` (already uppercased) —
+/// declares it as one of its own parameters, or `EQU`/`=`-defines it
+/// within its body. Shared by `function_scoped_symbol_at` (checking the
+/// function enclosing the cursor) and `all_function_shadow_ranges`
+/// (checking every function in a document, for excluding a workspace-wide
+/// rename from reaching inside one that shadows the renamed name).
+fn function_shadows<T: cpclib_tokens::ListingElement>(
+    token: &T,
+    text: &str,
+    start_line: u32,
+    end_line: u32,
+    word_upper: &str
+) -> bool {
+    let is_param = token.function_definition_params().iter().any(|raw_param| {
+        raw_param
+            .trim_start_matches('(')
+            .trim_end_matches(')')
+            .to_uppercase()
+            == word_upper
+    });
+    is_param || symbol_defined_via_equ_or_assign_in(text, start_line, end_line, word_upper)
+}
+
+/// Every `FUNCTION` body's line range in `listing`/`text` that shadows
+/// `word_upper` (already uppercased) — used to exclude a workspace-wide
+/// `Global` rename of that name from reaching inside a function that
+/// redefines it as its own parameter or a local `EQU`/`=`-defined symbol
+/// (see `RenameTarget::FunctionLocal`): inside such a function, the name is
+/// a different symbol entirely, and a rename of the *outer* one must not
+/// touch it.
+pub(super) fn all_function_shadow_ranges<'a, T>(
+    listing: impl IntoIterator<Item = &'a T>,
+    text: &str,
+    word_upper: &str
+) -> Vec<std::ops::Range<u32>>
+where
+    T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
+{
+    let mut ranges = Vec::new();
+    for token in flatten_listing(listing) {
+        if !token.is_function_definition() {
+            continue;
+        }
+        let (start_1based, _col) = token.span().relative_line_and_column();
+        let start_line = start_1based.saturating_sub(1) as u32;
+        let end_line = function_body_end_line(text, start_line);
+        if function_shadows(token, text, start_line, end_line, word_upper) {
+            ranges.push(start_line..end_line);
+        }
+    }
+    ranges
+}
+
 // ─── RANGE / DEFSECTION (section definitions) ─────────────────────────────────
 
 /// `true` when `token`'s own statement starts with the `RANGE` or
