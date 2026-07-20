@@ -238,35 +238,252 @@ where
     None
 }
 
-// ─── FUNCTION parameters ───────────────────────────────────────────────────
+// ─── Block-scope helpers (FUNCTION / REPEAT / ITERATE) ────────────────────
 
-/// The line just past the end (exclusive) of the `FUNCTION` body starting
-/// at `start_line` (0-based, the `FUNCTION` line itself) — found by pairing
-/// `FUNCTION`/`ENDFUNCTION` keywords textually, tracking nesting depth in
-/// case a function body itself contains a nested `FUNCTION` (mirrors
+/// The line just past the end (exclusive) of a block starting at
+/// `start_line` (0-based, the opening keyword's own line) — found by
+/// pairing any of `open_words` against any of `close_words` textually,
+/// tracking nesting depth so a block that itself contains a nested instance
+/// of the same construct is handled correctly (mirrors
 /// `embedded_basic::extract_locomotive_blocks`'s block-matching style).
-/// Falls back to end-of-file if no matching `ENDFUNCTION` is found (e.g. a
-/// document with a syntax error).
-fn function_body_end_line(text: &str, start_line: u32) -> u32 {
+/// Falls back to end-of-file if no matching close is found (e.g. a document
+/// with a syntax error).
+fn block_end_line(text: &str, start_line: u32, open_words: &[&str], close_words: &[&str]) -> u32 {
     let lines: Vec<&str> = text.lines().collect();
     let mut depth = 1i32;
     let mut i = start_line as usize + 1;
     while i < lines.len() {
         let upper = lines[i].trim().to_uppercase();
-        match upper.split_whitespace().next().unwrap_or("") {
-            "FUNCTION" => depth += 1,
-            "ENDFUNCTION" => {
-                depth -= 1;
-                if depth == 0 {
-                    return i as u32 + 1; // exclusive end — include ENDFUNCTION's own line
-                }
-            },
-            _ => {}
+        let first_word = upper.split_whitespace().next().unwrap_or("");
+        if open_words.contains(&first_word) {
+            depth += 1;
+        }
+        else if close_words.contains(&first_word) {
+            depth -= 1;
+            if depth == 0 {
+                return i as u32 + 1; // exclusive end — include the closing keyword's own line
+            }
         }
         i += 1;
     }
     lines.len() as u32
 }
+
+/// As [`block_end_line`], specialized for `FUNCTION`/`ENDFUNCTION`.
+fn function_body_end_line(text: &str, start_line: u32) -> u32 {
+    block_end_line(text, start_line, &["FUNCTION"], &["ENDFUNCTION"])
+}
+
+/// As [`block_end_line`], specialized for `REPEAT`'s (`REPEAT`/`REPT`/`REP`
+/// opening; `ENDREPEAT`/`ENDREPT`/`ENDREP`/`ENDR`/`REND` closing) or
+/// `ITERATE`'s (`ITERATE`/`ITER` opening; `ENDITERATE`/`ENDITER`/`ENDI`/
+/// `IEND` closing) several keyword aliases — whichever `is_repeat` selects.
+fn loop_body_end_line(text: &str, start_line: u32, is_repeat: bool) -> u32 {
+    if is_repeat {
+        block_end_line(
+            text,
+            start_line,
+            &["REPEAT", "REPT", "REP"],
+            &["ENDREPEAT", "ENDREPT", "ENDREP", "ENDR", "REND"]
+        )
+    }
+    else {
+        block_end_line(
+            text,
+            start_line,
+            &["ITERATE", "ITER"],
+            &["ENDITERATE", "ENDITER", "ENDI", "IEND"]
+        )
+    }
+}
+
+/// As [`block_end_line`], specialized for `MACRO`'s single opening keyword
+/// and its three closing aliases (`ENDM`/`ENDMACRO`/`MEND`).
+fn macro_body_end_line(text: &str, start_line: u32) -> u32 {
+    block_end_line(text, start_line, &["MACRO"], &["ENDM", "ENDMACRO", "MEND"])
+}
+
+/// If `word_upper` (already uppercased) is a declared parameter of the
+/// `MACRO` enclosing `line` (0-based), the macro's name, the parameter's
+/// own spelling, and the macro body's line scope (`start` inclusive, `end`
+/// exclusive — covering the `MACRO` line itself, since its parameter list
+/// lives there). Unlike `FUNCTION`, a `MACRO` body is pure text
+/// substitution with no restricted grammar of its own — any `EQU`/label
+/// inside it becomes part of the real program at the *call* site once
+/// expanded, not a locally-scoped symbol — so only declared parameters are
+/// checked here, not body-defined symbols.
+pub(super) fn macro_scoped_symbol_at<'a, T>(
+    listing: impl IntoIterator<Item = &'a T>,
+    text: &str,
+    line: u32,
+    word_upper: &str
+) -> Option<(String, String, std::ops::Range<u32>)>
+where
+    T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
+{
+    for token in flatten_listing(listing) {
+        if !token.is_macro_definition() {
+            continue;
+        }
+        let (start_1based, _col) = token.span().relative_line_and_column();
+        let start_line = start_1based.saturating_sub(1) as u32;
+        let end_line = macro_body_end_line(text, start_line);
+        if line < start_line || line >= end_line {
+            continue;
+        }
+        for raw_param in token.macro_definition_arguments() {
+            let param = raw_param.trim_start_matches('(').trim_end_matches(')');
+            if param.to_uppercase() == word_upper {
+                return Some((
+                    token.macro_definition_name().to_string(),
+                    param.to_string(),
+                    start_line..end_line
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// Every `MACRO` body's line range in `listing`/`text` that shadows
+/// `word_upper` (already uppercased) as one of its own declared
+/// parameters — used to exclude a workspace-wide `Global` rename of that
+/// name from reaching inside a macro that redefines it, mirroring
+/// `all_function_shadow_ranges`/`all_loop_shadow_ranges`.
+pub(super) fn all_macro_shadow_ranges<'a, T>(
+    listing: impl IntoIterator<Item = &'a T>,
+    text: &str,
+    word_upper: &str
+) -> Vec<std::ops::Range<u32>>
+where
+    T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
+{
+    let mut ranges = Vec::new();
+    for token in flatten_listing(listing) {
+        if !token.is_macro_definition() {
+            continue;
+        }
+        let is_shadowed = token.macro_definition_arguments().iter().any(|raw_param| {
+            raw_param
+                .trim_start_matches('(')
+                .trim_end_matches(')')
+                .to_uppercase()
+                == word_upper
+        });
+        if !is_shadowed {
+            continue;
+        }
+        let (start_1based, _col) = token.span().relative_line_and_column();
+        let start_line = start_1based.saturating_sub(1) as u32;
+        let end_line = macro_body_end_line(text, start_line);
+        ranges.push(start_line..end_line);
+    }
+    ranges
+}
+
+/// If `word_upper` (already uppercased) is the counter variable of the
+/// `REPEAT`/`ITERATE` loop enclosing `line` (0-based) — REPEAT's counter is
+/// optional (`REPEAT 5 ... ENDREPEAT` names none), ITERATE's is mandatory —
+/// the loop's keyword (`"REPEAT"`/`"ITERATE"`, for diagnostics), the
+/// counter's own spelling, and the loop body's line scope (`start`
+/// inclusive, `end` exclusive — covering the opening line itself, since
+/// that's where the counter is declared).
+///
+/// When loops nest and an outer and inner loop happen to share a counter
+/// name, the *innermost* enclosing one wins (matching normal lexical
+/// scoping): `flatten_listing` visits outer blocks before the inner blocks
+/// nested in them, and both candidates' scopes contain `line` by
+/// definition, so the last (innermost) match found is kept rather than
+/// returning on the first hit.
+pub(super) fn loop_scoped_symbol_at<'a, T>(
+    listing: impl IntoIterator<Item = &'a T>,
+    text: &str,
+    line: u32,
+    word_upper: &str
+) -> Option<(String, String, std::ops::Range<u32>)>
+where
+    T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
+{
+    let mut result = None;
+    for token in flatten_listing(listing) {
+        let (keyword, counter_name, is_repeat) = if token.is_repeat() {
+            (
+                "REPEAT",
+                token.repeat_counter_name().map(str::to_string),
+                true
+            )
+        }
+        else if token.is_iterate() {
+            (
+                "ITERATE",
+                Some(token.iterate_counter_name().to_string()),
+                false
+            )
+        }
+        else {
+            continue;
+        };
+        let Some(counter_name) = counter_name
+        else {
+            continue;
+        };
+        if counter_name.to_uppercase() != word_upper {
+            continue;
+        }
+
+        let (start_1based, _col) = token.span().relative_line_and_column();
+        let start_line = start_1based.saturating_sub(1) as u32;
+        let end_line = loop_body_end_line(text, start_line, is_repeat);
+        if line < start_line || line >= end_line {
+            continue;
+        }
+
+        result = Some((keyword.to_string(), counter_name, start_line..end_line));
+    }
+    result
+}
+
+/// Every `REPEAT`/`ITERATE` loop body's line range in `listing`/`text` that
+/// shadows `word_upper` (already uppercased) as its own counter variable —
+/// used to exclude a workspace-wide `Global` rename of that name from
+/// reaching inside a loop that redefines it, mirroring
+/// `all_function_shadow_ranges`.
+pub(super) fn all_loop_shadow_ranges<'a, T>(
+    listing: impl IntoIterator<Item = &'a T>,
+    text: &str,
+    word_upper: &str
+) -> Vec<std::ops::Range<u32>>
+where
+    T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
+{
+    let mut ranges = Vec::new();
+    for token in flatten_listing(listing) {
+        let (counter_name, is_repeat) = if token.is_repeat() {
+            (token.repeat_counter_name().map(str::to_string), true)
+        }
+        else if token.is_iterate() {
+            (Some(token.iterate_counter_name().to_string()), false)
+        }
+        else {
+            continue;
+        };
+        let Some(counter_name) = counter_name
+        else {
+            continue;
+        };
+        if counter_name.to_uppercase() != word_upper {
+            continue;
+        }
+
+        let (start_1based, _col) = token.span().relative_line_and_column();
+        let start_line = start_1based.saturating_sub(1) as u32;
+        let end_line = loop_body_end_line(text, start_line, is_repeat);
+        ranges.push(start_line..end_line);
+    }
+    ranges
+}
+
+// ─── FUNCTION parameters ───────────────────────────────────────────────────
 
 /// `true` when some line within `text[start..end)` (0-based, exclusive end)
 /// defines `word_upper` (already uppercased) via `EQU` or bare `=` (not

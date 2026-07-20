@@ -323,10 +323,30 @@ impl AssemblyAnalyzer {
             word_range_at_position(&line, position.character as usize)?;
         let word_upper = word.to_uppercase();
 
-        // Reject reserved words up front — they can never be a real label.
-        if super::token::INSTRUCTION_SET.contains(word_upper.as_str())
-            || super::token::DIRECTIVE_SET.contains(word_upper.as_str())
-            || super::token::REGISTER_SET.contains(word_upper.as_str())
+        // A scoped local — a `.label`, a `FUNCTION` parameter/local, or a
+        // `REPEAT`/`ITERATE` counter — is always renamable regardless of
+        // whether its name happens to collide with a register/mnemonic/
+        // directive keyword: basm allows this (a REPEAT counter named `i`
+        // is extremely common and collides with the Z80 `I` register, but
+        // is a completely distinct namespace in that context). Only a bare
+        // word that falls back to a workspace-wide `Global` rename needs
+        // the reserved-word check below — a register/mnemonic name showing
+        // up there is essentially always genuine register/mnemonic use,
+        // not a label.
+        let is_scoped_local = matches!(
+            self.resolve_rename_target(document, position),
+            Some(
+                RenameTarget::Local { .. }
+                    | RenameTarget::FunctionLocal { .. }
+                    | RenameTarget::LoopLocal { .. }
+                    | RenameTarget::MacroLocal { .. }
+                    | RenameTarget::Qualified(_)
+            )
+        );
+        if !is_scoped_local
+            && (super::token::INSTRUCTION_SET.contains(word_upper.as_str())
+                || super::token::DIRECTIVE_SET.contains(word_upper.as_str())
+                || super::token::REGISTER_SET.contains(word_upper.as_str()))
         {
             return None;
         }
@@ -402,12 +422,34 @@ impl AssemblyAnalyzer {
             return Some(RenameTarget::Qualified(word));
         }
 
+        let word_upper = word.to_uppercase();
+        let listing = self.parse_document(document).ok();
+
+        // A `REPEAT`/`ITERATE` loop's own counter variable, used bare
+        // within its body — scoped to that loop, checked first since a
+        // loop nested inside a `FUNCTION` sharing a name with one of the
+        // function's own parameters should resolve to the (more deeply
+        // nested) loop counter, matching normal lexical scoping.
+        if let Some(listing) = &listing
+            && let Some((keyword, name, scope)) = super::token::loop_scoped_symbol_at(
+                listing.iter(),
+                &text,
+                position.line,
+                &word_upper
+            )
+        {
+            return Some(RenameTarget::LoopLocal {
+                keyword,
+                name,
+                scope
+            });
+        }
+
         // A `FUNCTION`'s own parameter, used bare within its body — scoped
         // to that function, checked before falling back to a workspace-wide
         // `Global` rename (a common parameter name like `x` isn't meant to
         // rename every unrelated `x` in the workspace).
-        let word_upper = word.to_uppercase();
-        if let Ok(listing) = self.parse_document(document)
+        if let Some(listing) = &listing
             && let Some((function_name, name, scope)) = super::token::function_scoped_symbol_at(
                 listing.iter(),
                 &text,
@@ -417,6 +459,24 @@ impl AssemblyAnalyzer {
         {
             return Some(RenameTarget::FunctionLocal {
                 function_name,
+                name,
+                scope
+            });
+        }
+
+        // A `MACRO`'s own declared parameter, used bare (or `{param}`
+        // brace-interpolated) within its body — scoped to that macro, same
+        // reasoning as `FUNCTION` parameters above.
+        if let Some(listing) = &listing
+            && let Some((macro_name, name, scope)) = super::token::macro_scoped_symbol_at(
+                listing.iter(),
+                &text,
+                position.line,
+                &word_upper
+            )
+        {
+            return Some(RenameTarget::MacroLocal {
+                macro_name,
                 name,
                 scope
             });
@@ -438,22 +498,32 @@ impl AssemblyAnalyzer {
     ) -> Vec<TextEdit> {
         match target {
             RenameTarget::Global(old) => {
-                // Exclude any `FUNCTION` body in *this* document that
-                // shadows `old` as its own parameter or a local `EQU`/`=`
-                // symbol — inside such a function, `old` refers to that
-                // local definition, a different symbol entirely, and a
-                // rename of the outer one must not touch it (mirrors
-                // `RenameTarget::FunctionLocal`'s scoping in reverse).
+                // Exclude any `FUNCTION`/`REPEAT`/`ITERATE`/`MACRO` body in
+                // *this* document that shadows `old` as its own parameter/
+                // counter or a local `EQU`/`=` symbol — inside such a
+                // block, `old` refers to that local definition, a different
+                // symbol entirely, and a rename of the outer one must not
+                // touch it (mirrors `RenameTarget::FunctionLocal`/
+                // `LoopLocal`/`MacroLocal`'s scoping in reverse).
                 let old_upper = old.to_uppercase();
-                let shadow_ranges = self
+                let text = document.text();
+                let shadow_ranges: Vec<std::ops::Range<u32>> = self
                     .parse_document(document)
                     .ok()
                     .map(|listing| {
-                        super::token::all_function_shadow_ranges(
-                            listing.iter(),
-                            &document.text(),
-                            &old_upper
-                        )
+                        super::token::all_function_shadow_ranges(listing.iter(), &text, &old_upper)
+                            .into_iter()
+                            .chain(super::token::all_loop_shadow_ranges(
+                                listing.iter(),
+                                &text,
+                                &old_upper
+                            ))
+                            .chain(super::token::all_macro_shadow_ranges(
+                                listing.iter(),
+                                &text,
+                                &old_upper
+                            ))
+                            .collect()
                     })
                     .unwrap_or_default();
 
@@ -501,6 +571,9 @@ impl AssemblyAnalyzer {
                     })
                     .collect()
             },
+            // `FUNCTION` bodies have a restricted grammar with no real Z80
+            // instructions, so a bare reference to a parameter/local is
+            // unambiguous.
             RenameTarget::FunctionLocal { name, scope, .. } => {
                 find_bare_word_matches_in_scope(document, name, scope)
                     .into_iter()
@@ -508,6 +581,29 @@ impl AssemblyAnalyzer {
                         TextEdit {
                             range,
                             new_text: new_name.to_string()
+                        }
+                    })
+                    .collect()
+            },
+            // `REPEAT`/`ITERATE`/`MACRO` bodies can contain arbitrary Z80
+            // code, where a bare single-letter name can equally be a real
+            // register (`ld a, {a}`) — only the declaration itself is
+            // matched bare, every other reference must be an explicit
+            // `{name}` interpolation (basm's own convention here, and what
+            // real code — including the reported case — actually writes).
+            RenameTarget::LoopLocal { name, scope, .. }
+            | RenameTarget::MacroLocal { name, scope, .. } => {
+                find_scoped_local_matches(document, name, scope)
+                    .into_iter()
+                    .map(|(range, is_braced)| {
+                        TextEdit {
+                            range,
+                            new_text: if is_braced {
+                                format!("{{{new_name}}}")
+                            }
+                            else {
+                                new_name.to_string()
+                            }
                         }
                     })
                     .collect()
@@ -541,6 +637,20 @@ impl AssemblyAnalyzer {
 ///   `value`, ...) doesn't trigger an unrelated workspace-wide rename, and
 ///   a same-named definition *outside* the function is a different symbol
 ///   that must not be touched.
+/// - `LoopLocal`: a bare word matching the counter variable of the
+///   `REPEAT`/`ITERATE` loop enclosing the cursor (`REPEAT count, counter,
+///   ...` / `ITERATE counter, ...`) — same treatment as `FunctionLocal`,
+///   confined to the loop's own body, checked *first* (a loop nested inside
+///   a `FUNCTION` takes precedence over an outer parameter of the same
+///   name, matching normal lexical scoping).
+/// - `MacroLocal`: a bare word matching a declared parameter of the
+///   `MACRO` enclosing the cursor — same treatment as `FunctionLocal`,
+///   confined to the macro's own body (`MACRO` line through
+///   `ENDM`/`ENDMACRO`/`MEND`). Unlike `FUNCTION`, a `MACRO` body has no
+///   restricted grammar of its own (it's pure text substitution — any
+///   `EQU`/label inside becomes part of the real program at the call site
+///   once expanded), so only declared parameters are checked, not
+///   body-defined symbols.
 #[derive(Debug)]
 pub(crate) enum RenameTarget {
     Global(String),
@@ -552,6 +662,16 @@ pub(crate) enum RenameTarget {
     Qualified(String),
     FunctionLocal {
         function_name: String,
+        name: String,
+        scope: std::ops::Range<u32>
+    },
+    LoopLocal {
+        keyword: String,
+        name: String,
+        scope: std::ops::Range<u32>
+    },
+    MacroLocal {
+        macro_name: String,
         name: String,
         scope: std::ops::Range<u32>
     }
@@ -747,6 +867,110 @@ fn find_bare_word_matches_in_scope(
                 });
             }
             start = abs + 1;
+        }
+    }
+    matches
+}
+
+/// Whole-word (case-insensitive) matches of `name_upper` (already
+/// uppercased) on a single `line`, as `[start, end)` column pairs.
+fn bare_word_matches_on_line(line: &str, name_upper: &str) -> Vec<(u32, u32)> {
+    let line_up = line.to_uppercase();
+    let bytes = line.as_bytes();
+    let wlen = name_upper.len();
+    let mut cols = Vec::new();
+    let mut start = 0;
+    while start + wlen <= line_up.len() {
+        let Some(pos) = line_up[start..].find(name_upper)
+        else {
+            break;
+        };
+        let abs = start + pos;
+        let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
+        let after = abs + wlen;
+        let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
+        if before_ok && after_ok {
+            cols.push((abs as u32, after as u32));
+        }
+        start = abs + 1;
+    }
+    cols
+}
+
+/// `{name_upper}` (case-insensitive, braces required) matches on a single
+/// `line`, as `[start, end)` column pairs covering the braces themselves.
+fn braced_word_matches_on_line(line: &str, name_upper: &str) -> Vec<(u32, u32)> {
+    let pattern = format!("{{{name_upper}}}");
+    let line_up = line.to_uppercase();
+    let plen = pattern.len();
+    let mut cols = Vec::new();
+    let mut start = 0;
+    while start + plen <= line_up.len() {
+        let Some(pos) = line_up[start..].find(pattern.as_str())
+        else {
+            break;
+        };
+        let abs = start + pos;
+        cols.push((abs as u32, (abs + plen) as u32));
+        start = abs + 1;
+    }
+    cols
+}
+
+/// Occurrences of `name` relevant for `MACRO`/`REPEAT`/`ITERATE` parameter/
+/// counter rename, as `(range, is_braced)` pairs — `is_braced` tells the
+/// caller whether the replacement needs to be re-wrapped in `{}` (an
+/// interpolation reference) or left bare (the declaration itself).
+///
+/// Unlike `FUNCTION` (whose body has a restricted grammar with no real
+/// instructions, so a bare `x` is unambiguous), a `MACRO`/`REPEAT`/
+/// `ITERATE` body can contain arbitrary Z80 code, where a bare
+/// single-letter name like `a` can equally be the real accumulator
+/// register (`ld a, {a}` — the first `a` is the register, the second is
+/// the parameter). So only the *declaration* line's own occurrence
+/// (unambiguous: a comma/paren-delimited name list, never an instruction
+/// operand) is matched bare; every other occurrence must be an explicit
+/// `{name}` interpolation — basm's actual convention for referencing these
+/// values from within arbitrary code.
+fn find_scoped_local_matches(
+    document: &Document,
+    name: &str,
+    scope: &std::ops::Range<u32>
+) -> Vec<(Range, bool)> {
+    let text = document.text();
+    let name_upper = name.to_uppercase();
+    let mut matches = Vec::new();
+    for (line_idx, line) in text.lines().enumerate() {
+        let line_idx = line_idx as u32;
+        if line_idx < scope.start || line_idx >= scope.end {
+            continue;
+        }
+        let cols_and_braced: Vec<(u32, u32, bool)> = if line_idx == scope.start {
+            bare_word_matches_on_line(line, &name_upper)
+                .into_iter()
+                .map(|(s, e)| (s, e, false))
+                .collect()
+        }
+        else {
+            braced_word_matches_on_line(line, &name_upper)
+                .into_iter()
+                .map(|(s, e)| (s, e, true))
+                .collect()
+        };
+        for (start_col, end_col, is_braced) in cols_and_braced {
+            matches.push((
+                Range {
+                    start: Position {
+                        line: line_idx,
+                        character: start_col
+                    },
+                    end: Position {
+                        line: line_idx,
+                        character: end_col
+                    }
+                },
+                is_braced
+            ));
         }
     }
     matches
@@ -1243,6 +1467,254 @@ mod rename_tests {
         for e in &edits {
             assert_eq!(e.new_text, "z");
         }
+    }
+
+    #[test]
+    /// Regression test: a `REPEAT`'s own counter variable (`i` in
+    /// `REPEAT 3, i, 0`), used bare within its body, must rename within
+    /// that loop only — mirroring `FunctionLocal` — and must not touch an
+    /// unrelated same-named symbol outside the loop.
+    #[test]
+    fn repeat_counter_rename_is_scoped_to_its_own_loop() {
+        // The body references the counter via `{i}` interpolation — basm's
+        // real convention (and what real code, including the reported
+        // case, actually writes) for referencing a loop counter from
+        // within a body that can contain arbitrary Z80 code, where a bare
+        // `i` could equally be something else entirely.
+        let text = "REPEAT 3, i, 0\n  db {i}\nENDR\n\ni EQU 99\nDB i\n";
+        let d = doc("file:///rep.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+
+        // Cursor on "i" inside "{i}" (line 1) — inside the loop.
+        let col = text.lines().nth(1).unwrap().find("{i}").unwrap() as u32 + 1;
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(&target, RenameTarget::LoopLocal { keyword, name, .. }
+                if keyword == "REPEAT" && name == "i"),
+            "{target:?}"
+        );
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                },
+                "idx"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        // Only the counter declaration (line 0, bare) and the body's `{i}`
+        // interpolation (line 1, re-wrapped in braces) — never the
+        // unrelated outer `i EQU 99` / `DB i` (lines 4, 5).
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 0);
+        assert_eq!(edits[0].new_text, "idx");
+        assert_eq!(edits[1].range.start.line, 1);
+        assert_eq!(edits[1].new_text, "{idx}");
+
+        // The inverse: renaming the *outer*, unrelated "i" must not reach
+        // inside the loop that shadows it with its own counter.
+        let target2 = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 4,
+                    character: 0
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(&target2, RenameTarget::Global(s) if s == "i"),
+            "{target2:?}"
+        );
+        let edit2 = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 4,
+                    character: 0
+                },
+                "idx"
+            )
+            .expect("expected a workspace edit");
+        let edits2 = edit2.changes.unwrap().remove(&d.uri).unwrap();
+        assert_eq!(edits2.len(), 2, "{edits2:?}");
+        assert_eq!(edits2[0].range.start.line, 4);
+        assert_eq!(edits2[1].range.start.line, 5);
+    }
+
+    /// Regression test: a `MACRO`'s own declared parameter, referenced via
+    /// `{param}` interpolation from within its body, must rename only that
+    /// interpolation — never a genuine register/mnemonic occurrence that
+    /// happens to share the same letter (`ld a, {a}`: the bare `a` is the
+    /// real accumulator register, only `{a}` is the parameter). This is the
+    /// reported real-world case, reproduced verbatim in spirit.
+    #[test]
+    fn macro_param_rename_does_not_touch_a_same_named_register() {
+        let text = "MACRO foo(a)\n  ld a, {a}\nENDM\n\nfoo(5)\n";
+        let d = doc("file:///macro_param.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "a" inside "{a}" (line 1).
+        let col = text.lines().nth(1).unwrap().find("{a}").unwrap() as u32 + 1;
+
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(&target, RenameTarget::MacroLocal { macro_name, name, .. }
+                if macro_name == "foo" && name == "a"),
+            "{target:?}"
+        );
+
+        let range = analyzer
+            .prepare_rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                }
+            )
+            .expect("prepare_rename must offer to rename the macro parameter");
+        assert_eq!(range.start.character, col);
+
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                },
+                "val"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        // The declaration "(a)" (bare) and the body's "{a}" (re-wrapped) —
+        // never the bare "a" register operand in "ld a,".
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 0);
+        assert_eq!(edits[0].new_text, "val");
+        assert_eq!(edits[1].range.start.line, 1);
+        assert_eq!(edits[1].range.start.character, 8);
+        assert_eq!(edits[1].new_text, "{val}");
+    }
+
+    /// Regression test: an `ITERATE`'s own counter variable, used bare
+    /// within its body, must rename within that loop only.
+    #[test]
+    fn iterate_counter_rename_is_scoped_to_its_own_loop() {
+        // The body references the counter via `{v}` interpolation, basm's
+        // real convention for referencing it from within arbitrary code.
+        let text = "ITERATE v, [1,2,3]\n  db {v}\nENDITERATE\n";
+        let d = doc("file:///iter.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        let col = text.lines().nth(1).unwrap().find("{v}").unwrap() as u32 + 1;
+
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(&target, RenameTarget::LoopLocal { keyword, name, .. }
+                if keyword == "ITERATE" && name == "v"),
+            "{target:?}"
+        );
+
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                },
+                "val"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 0);
+        assert_eq!(edits[0].new_text, "val");
+        assert_eq!(edits[1].range.start.line, 1);
+        assert_eq!(edits[1].new_text, "{val}");
+    }
+
+    /// Regression test: `prepare_rename` used to reject any word matching a
+    /// register/mnemonic/directive keyword *before* checking whether it was
+    /// actually a scoped local — a `REPEAT` counter named `i` (an extremely
+    /// common convention, and the reported real-world case) collides with
+    /// the Z80 `I` register, so VS Code's rename UI never even opened.
+    /// Scoped locals (loop counters, function parameters/locals, `.label`s)
+    /// must be renamable regardless of such a collision — only a bare
+    /// `Global` fallback should still reject genuine register/mnemonic use.
+    #[test]
+    fn prepare_rename_allows_a_repeat_counter_named_like_a_register() {
+        let text = "repeat 4, i, 0\n    inks = list_set(inks, {i}+1<<3+1<<2, list_get(writter, {i}))\n    inks = list_set(inks, {i}+1<<3, list_get(writter, {i}))\nendrepeat\n";
+        let d = doc("file:///vscode_repro.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "i" inside "{i}" on line 1.
+        let col = text.lines().nth(1).unwrap().find("{i}").unwrap() as u32 + 1;
+
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                }
+            )
+            .expect("target");
+        assert!(
+            matches!(&target, RenameTarget::LoopLocal { keyword, name, .. }
+                if keyword == "REPEAT" && name == "i"),
+            "{target:?}"
+        );
+
+        let range = analyzer
+            .prepare_rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: col
+                }
+            )
+            .expect("prepare_rename must offer to rename the loop counter");
+        assert_eq!(range.start.character, col);
+        assert_eq!(range.end.character, col + 1);
+
+        // A genuine register use (not scoped to any loop/function) must
+        // still be rejected.
+        let text2 = "    ld i, a\n";
+        let d2 = doc("file:///reg.asm", text2);
+        assert!(
+            analyzer
+                .prepare_rename(
+                    &d2,
+                    Position {
+                        line: 0,
+                        character: 7
+                    }
+                )
+                .is_none()
+        );
     }
 
     #[test]
