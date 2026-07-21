@@ -4,6 +4,7 @@ use std::{env, fs};
 
 fn main() {
     println!("cargo:rerun-if-changed=data/timings.txt");
+    println!("cargo:rerun-if-changed=data/pseudocode.txt");
     println!("cargo:rerun-if-changed=../docs/basm/directives.md");
     println!("cargo:rerun-if-changed=../cpclib-lsp-zed/snippets/basm.json");
     generate_directive_docs();
@@ -498,8 +499,38 @@ fn esc_str(s: &str) -> String {
         .replace('\r', "")
 }
 
+/// Collapse internal whitespace runs to a single space (in addition to
+/// trimming the ends) - `timings.txt`'s `pattern` column has a couple of
+/// stray-whitespace quirks (e.g. `"cp  r"`, double space) that a plain
+/// `.trim()` wouldn't fix, and `pseudocode.txt`'s keys are written in
+/// normal single-spaced form. Both sides of the join go through this so
+/// neither file has to match the other's incidental formatting exactly.
+fn normalize_pattern(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Parse `data/pseudocode.txt` into `normalized pattern -> pseudocode text`.
+/// Same comment/blank-line skipping convention as `timings.txt`.
+fn load_pseudocode() -> std::collections::HashMap<String, String> {
+    let src = fs::read_to_string("data/pseudocode.txt").expect("cannot read data/pseudocode.txt");
+    let mut map = std::collections::HashMap::new();
+    for raw_line in src.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with(';') {
+            continue;
+        }
+        let Some((pattern, pseudocode)) = line.split_once('|')
+        else {
+            continue;
+        };
+        map.insert(normalize_pattern(pattern), pseudocode.trim().to_string());
+    }
+    map
+}
+
 fn generate_timings() {
     let src = fs::read_to_string("data/timings.txt").expect("cannot read data/timings.txt");
+    let mut pseudocode = load_pseudocode();
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest = Path::new(&out_dir).join("timings_generated.rs");
@@ -515,6 +546,7 @@ fn generate_timings() {
     writeln!(out, "    pub nops:     u8,").unwrap();
     writeln!(out, "    pub nops_alt: Option<u8>,").unwrap();
     writeln!(out, "    pub notes:    &'static str,").unwrap();
+    writeln!(out, "    pub pseudocode: &'static str,").unwrap();
     writeln!(out, "}}").unwrap();
     writeln!(out).unwrap();
     writeln!(out, "pub static TIMINGS: &[TimingEntry] = &[").unwrap();
@@ -569,16 +601,32 @@ fn generate_timings() {
             None => "None".to_string()
         };
 
+        let entry_pseudocode = pseudocode
+            .remove(&normalize_pattern(pattern))
+            .unwrap_or_default();
+
         writeln!(
             out,
-            "    TimingEntry {{ mnemonic: \"{}\", pattern: \"{}\", opcodes: \"{}\", flags: \"{}\", nops: {}u8, nops_alt: {}, notes: \"{}\" }},",
-            esc(&mnemonic), esc(pattern), esc(opcodes), esc(flags), nops, nops_alt_lit, esc(notes)
+            "    TimingEntry {{ mnemonic: \"{}\", pattern: \"{}\", opcodes: \"{}\", flags: \"{}\", nops: {}u8, nops_alt: {}, notes: \"{}\", pseudocode: \"{}\" }},",
+            esc(&mnemonic), esc(pattern), esc(opcodes), esc(flags), nops, nops_alt_lit, esc(notes), esc(&entry_pseudocode)
         ).unwrap();
     }
 
-    emit_injected_alu_variants(&mut out);
+    emit_injected_alu_variants(&mut out, &mut pseudocode);
 
     writeln!(out, "];").unwrap();
+
+    if !pseudocode.is_empty() {
+        let mut orphans: Vec<&String> = pseudocode.keys().collect();
+        orphans.sort();
+        panic!(
+            "data/pseudocode.txt has {} pattern(s) that don't match any data/timings.txt \
+             pattern (after whitespace normalization) — fix the typo, or the entry never \
+             gets shown: {:?}",
+            orphans.len(),
+            orphans
+        );
+    }
 }
 
 /// The source table only lists the register form `r` for adc/sub/sbc/and/or/xor/cp.
@@ -588,7 +636,10 @@ fn generate_timings() {
 /// NOPs:  r → 1,  (hl) → 2,  (ix+n) → 5,  n → 2   (identical to add).
 /// Note:  the source table has `or r` and `xor r` bit-patterns swapped; the values
 ///        used here are the correct Z80 encodings from the assembler source.
-fn emit_injected_alu_variants(out: &mut std::fs::File) {
+fn emit_injected_alu_variants(
+    out: &mut std::fs::File,
+    pseudocode: &mut std::collections::HashMap<String, String>
+) {
     // (pattern, opcodes, flags_8char, nops, notes)
     const EXTRA: &[(&str, &str, &str, u8, &str)] = &[
         // ADC — flags identical to ADD
@@ -662,10 +713,13 @@ fn emit_injected_alu_variants(out: &mut std::fs::File) {
             .next()
             .unwrap_or("")
             .to_uppercase();
+        let entry_pseudocode = pseudocode
+            .remove(&normalize_pattern(pattern))
+            .unwrap_or_default();
         writeln!(
             out,
-            "    TimingEntry {{ mnemonic: \"{}\", pattern: \"{}\", opcodes: \"{}\", flags: \"{}\", nops: {}u8, nops_alt: None, notes: \"{}\" }},",
-            esc(&mnemonic), esc(pattern), esc(opcodes), esc(flags), nops, esc(notes)
+            "    TimingEntry {{ mnemonic: \"{}\", pattern: \"{}\", opcodes: \"{}\", flags: \"{}\", nops: {}u8, nops_alt: None, notes: \"{}\", pseudocode: \"{}\" }},",
+            esc(&mnemonic), esc(pattern), esc(opcodes), esc(flags), nops, esc(notes), esc(&entry_pseudocode)
         ).unwrap();
     }
 }

@@ -33,6 +33,17 @@ use crate::{
 
 include!(concat!(env!("OUT_DIR"), "/instructions_names_generated.rs"));
 
+/// The warning message used for every "fake instruction" this parser
+/// accepts as a convenience (assembled using several real opcodes rather
+/// than corresponding to one genuine Z80 instruction) - a single shared
+/// constant rather than a string repeated at each call site, so a token can
+/// be asked directly whether it's specifically a fake instruction
+/// (`LocatedToken::is_fake_instruction`, `obtained.rs`) instead of a caller
+/// having to guess from the generic "did this token produce *any* warning"
+/// signal.
+pub const FAKE_INSTRUCTION_WARNING: &str =
+    "This is a fake instruction assembled using several opcodes";
+
 /// Parse any opcode having no argument
 pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
     let cloned = *input;
@@ -273,10 +284,8 @@ pub fn parse_ld_fake(
 
         let token = LocatedTokenInner::new_opcode(Mnemonic::Ld, Some(dst), Some(src));
 
-        let warning = LocatedTokenInner::WarningWrapper(
-            Box::new(token),
-            "This is a fake instruction assembled using several opcodes".into()
-        );
+        let warning =
+            LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into());
 
         Ok(warning)
     }
@@ -549,10 +558,8 @@ pub fn parse_sub(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
 
         let token = LocatedTokenInner::new_opcode(Mnemonic::Sub, first, Some(operand));
 
-        let result = LocatedTokenInner::WarningWrapper(
-            Box::new(token),
-            "This is a fake instruction assembled using several opcodes".into()
-        );
+        let result =
+            LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into());
 
         Ok(result)
     }
@@ -611,10 +618,7 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
     let token = LocatedTokenInner::new_opcode(Mnemonic::Sbc, opera, Some(operb));
 
     let result = if is_fake {
-        LocatedTokenInner::WarningWrapper(
-            Box::new(token),
-            "This is a fake instruction assembled using several opcodes".into()
-        )
+        LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into())
     }
     else {
         token
@@ -676,10 +680,7 @@ pub fn parse_add_or_adc(
         let token = LocatedTokenInner::new_opcode(add_or_adc, first, Some(second));
 
         let result = if is_fake {
-            LocatedTokenInner::WarningWrapper(
-                Box::new(token),
-                "This is a fake instruction assembled using several opcodes".into()
-            )
+            LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into())
         }
         else {
             token
@@ -900,10 +901,8 @@ pub fn parse_rst_fake(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner
     };
 
     let token = LocatedTokenInner::new_opcode(Mnemonic::Rst, Some(flag), Some(val));
-    let warning = LocatedTokenInner::WarningWrapper(
-        Box::new(token),
-        "This is a fake instruction assembled using several opcodes".into()
-    );
+    let warning =
+        LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into());
 
     Ok(warning)
 }
@@ -960,10 +959,8 @@ pub fn parse_shifts_and_rotations_fake(
         let arg = alt((parse_register16,)).parse_next(input)?;
 
         let token = LocatedTokenInner::new_opcode(oper, Some(arg), None);
-        let warning = LocatedTokenInner::WarningWrapper(
-            Box::new(token),
-            "This is a fake instruction assembled using several opcodes".into()
-        );
+        let warning =
+            LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into());
 
         Ok(warning)
     }
@@ -974,10 +971,8 @@ pub fn parse_srl8(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z8
     let _ = ('8', my_space0).parse_next(input)?;
     let arg = alt((parse_register16, parse_indexregister16)).parse_next(input)?;
     let token = LocatedTokenInner::new_opcode(Mnemonic::Srl8, Some(arg), None);
-    let warning = LocatedTokenInner::WarningWrapper(
-        Box::new(token),
-        "This is a fake instruction assembled using several opcodes".into()
-    );
+    let warning =
+        LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into());
     Ok(warning)
 }
 

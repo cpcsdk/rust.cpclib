@@ -93,32 +93,80 @@ impl AssemblyAnalyzer {
             let full = super::timing::extract_instruction_at_col(&line, col)
                 .unwrap_or_else(|| word.clone());
 
-            // A "fake instruction" (e.g. `ld hl, sp`, assembled as several
-            // real opcodes) isn't itself a real Z80 instruction, so looking
-            // it up directly in the timing table is the wrong move: several
-            // unrelated real entries can tie on `find_timings`'s scoring
-            // (e.g. `ld i,a` / `ld a,i` / `ld sp,hl` / `ld sp,ix` all score
-            // the same non-match against `hl,sp`) and all get shown at
-            // once. basm's parser already tags these tokens
-            // (`WarningWrapper`), so check that first via the real parsed
-            // listing and, when true, show what it actually expands to
-            // instead of querying the table with text that was never in it.
-            let is_fake = self.parse_document(document).ok().is_some_and(|listing| {
-                super::token::flatten_listing(listing.iter())
-                    .any(|t| t.is_warning() && span_line(t) == position.line)
+            // Parse once and reuse for both of the checks below (a "fake
+            // instruction" needs its own breakdown; a real one can have its
+            // pseudocode's placeholders substituted with the real hovered
+            // operands) instead of parsing separately for each.
+            let listing = self.parse_document(document).ok();
+            let token = listing.as_ref().and_then(|l| {
+                super::token::flatten_listing(l.iter()).find(|t| span_line(*t) == position.line)
             });
 
-            let md = if is_fake {
-                format_fake_instruction_hover(&full)
-                    .unwrap_or_else(|| format!("**{}** — fake instruction", word_upper))
-            }
-            else {
-                let entries = super::timing::find_timings(&full);
-                if entries.is_empty() {
-                    format!("**{}** — Z80 instruction", word_upper)
-                }
-                else {
-                    super::timing::format_hover(&full, &entries)
+            let md = match token {
+                // A "fake instruction" (e.g. `ld hl, sp`, assembled as
+                // several real opcodes) isn't itself a real Z80
+                // instruction, so looking it up directly in the timing
+                // table is the wrong move: several unrelated real entries
+                // can tie on `find_timings`'s scoring (e.g. `ld i,a` /
+                // `ld a,i` / `ld sp,hl` / `ld sp,ix` all score the same
+                // non-match against `hl,sp`) and all get shown at once.
+                // basm's parser already tags these tokens with a real,
+                // specific `is_fake_instruction()` query (not just "did
+                // this token produce *any* warning", which `is_warning()`
+                // alone can't distinguish from an unrelated warning kind),
+                // so show what it actually expands to instead of querying
+                // the table with text that was never in it.
+                Some(token) if token.is_fake_instruction() => {
+                    format_fake_instruction_hover(&full)
+                        .unwrap_or_else(|| format!("**{}** — fake instruction", word_upper))
+                },
+                // A real, non-warning-wrapped token: resolve its operands
+                // (when they're plain expressions, e.g. a literal or an
+                // `EQU`-defined symbol) so the pseudocode can show the
+                // actual value instead of a generic placeholder. Guard on
+                // `!is_warning()` specifically (not just "didn't match the
+                // fake-instruction arm above") - any other warning-wrapped
+                // token (e.g. `WRITE DIRECT` in `directives.rs`) hits the
+                // exact same `mnemonic()`/`mnemonic_arg1()` panic landmine
+                // `overflow.rs` already had to guard against.
+                Some(token) if !token.is_warning() => {
+                    let (_, ops_text) = super::timing::split_head(&full);
+                    let src_ops = super::timing::parse_ops(ops_text);
+                    let mut resolved: Vec<Option<i32>> = vec![None; src_ops.len()];
+                    if let Some(l) = &listing {
+                        let mut env = super::expand::dry_run_env(l, &document.uri);
+                        for (i, arg) in [token.mnemonic_arg1(), token.mnemonic_arg2()]
+                            .into_iter()
+                            .flatten()
+                            .enumerate()
+                        {
+                            if let cpclib_asm::parser::obtained::LocatedDataAccess::Expression(expr) =
+                                arg
+                                && let Some(slot) = resolved.get_mut(i)
+                            {
+                                *slot = expr.resolve(&mut env).ok().and_then(|v| v.int().ok());
+                            }
+                        }
+                    }
+                    let entries = super::timing::find_timings(&full);
+                    if entries.is_empty() {
+                        format!("**{}** — Z80 instruction", word_upper)
+                    }
+                    else {
+                        super::timing::format_hover(&full, &entries, &src_ops, &resolved)
+                    }
+                },
+                // No usable token (parse failed, e.g. mid-edit syntax
+                // error, or an unrelated warning-wrapped construct) - fall
+                // back to the text-only path, no substitution possible.
+                _ => {
+                    let entries = super::timing::find_timings(&full);
+                    if entries.is_empty() {
+                        format!("**{}** — Z80 instruction", word_upper)
+                    }
+                    else {
+                        super::timing::format_hover(&full, &entries, &[], &[])
+                    }
                 }
             };
             return Some(make_hover(md));
@@ -277,7 +325,7 @@ fn format_fake_instruction_hover(full: &str) -> Option<String> {
                     }
                 }
             }
-            super::timing::format_hover(line, &entries)
+            super::timing::format_hover(line, &entries, &[], &[])
         };
         sections.push(format!("**Step {}**\n\n{body}", i + 1));
     }
@@ -641,6 +689,55 @@ mod symbol_hover_tests {
 #[cfg(test)]
 mod timing_hover_tests {
     use super::*;
+
+    fn hover_at_line(text: &str, line: u32, character: u32) -> String {
+        let uri = Url::parse("file:///main.asm").unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        let hover = AssemblyAnalyzer::new()
+            .hover(&doc, Position { line, character })
+            .expect("expected a hover result");
+        match &hover.contents {
+            HoverContents::Markup(m) => m.value.clone(),
+            _ => panic!("expected markdown hover contents")
+        }
+    }
+
+    #[test]
+    fn pseudocode_substitutes_a_literal_immediate() {
+        let md = hover_at_line("    org 0x4000\n    ld bc, 5\n", 1, 5);
+        assert!(md.contains("`BC <- 5`"), "{md}");
+    }
+
+    #[test]
+    fn pseudocode_substitutes_an_equ_resolved_symbol() {
+        // Per the original request: pseudocode substitution must work "for
+        // indirection with variables" too, not just literal immediates -
+        // resolving `val` against the fully-assembled `Env`'s symbol table
+        // (the same `dry_run_env` machinery used elsewhere in this crate)
+        // covers this the same way it covers a literal.
+        let md = hover_at_line("    org 0x4000\n    val equ 9\n    ld b, val\n", 2, 5);
+        assert!(md.contains("`B <- 9`"), "{md}");
+    }
+
+    #[test]
+    fn pseudocode_substitutes_register_operands_with_explicit_bit_semantics() {
+        let md = hover_at_line("    org 0x4000\n    rlc c\n", 1, 5);
+        assert!(
+            md.contains("`Carry <- C.7, C <- (C shl 1) | C.7(old)`"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn hover_still_works_without_substitution_when_the_document_has_a_syntax_error() {
+        // A syntax error elsewhere means the document doesn't currently
+        // parse, so no token/resolution data is available for the hovered
+        // instruction - the text-only fallback path must still produce a
+        // hover (just without value substitution), not panic or return
+        // nothing.
+        let md = hover_at_line("    org 0x4000\n@#$ garbage @#$\n    nop\n", 2, 5);
+        assert!(md.contains("NOP"), "{md}");
+    }
 
     /// The user only cares about NOPs, not T-states — trim the latter from
     /// instruction hover text and keep the former.

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use cpclib_basic::located::{LocatedBasicProgram, LocatedBasicToken, LocatedTokenKind};
 use cpclib_basic::tokens::BasicTokenNoPrefix;
+use tower_lsp::lsp_types::Position;
 
 use super::diagnostics::{collect_comma_separated_vars, collect_vars_after_input, record_var};
 
@@ -104,6 +105,61 @@ pub(super) fn is_followed_by_eq(toks: &[LocatedBasicToken], from: usize) -> bool
         }
     }
     false
+}
+
+/// The token at `position` (document/block-relative, whichever `prog` was
+/// parsed against), if any. Shared by `definition.rs` (rename/find-
+/// references) and `hover.rs` (line/token byte hover) - previously
+/// duplicated inline in each.
+pub(super) fn token_at_position(
+    prog: &LocatedBasicProgram,
+    position: Position
+) -> Option<&LocatedBasicToken> {
+    let bline = prog.lines.iter().find(|l| l.source_line == position.line)?;
+    bline
+        .tokens
+        .iter()
+        .find(|t| t.span.col <= position.character && position.character < t.span.col + t.span.len)
+}
+
+/// The token's own encoded byte(s), plus a short display label, for kinds
+/// whose encoding is an unambiguous, direct function of the token itself:
+/// keywords, prefixed ("additional") functions, operators, and the
+/// structural space/statement-separator/passthrough-character kinds. Shared
+/// by both hover entry points (`hover.rs`) so a hovered token — whether it's
+/// a keyword or just a space or a `:` — shows the same bytes as its own row
+/// in the line-level byte breakdown.
+///
+/// `Variable`/`Number`/`StringLit`/`Comment`/`LineNumber` need fuller
+/// multi-byte encoders (or already have their own dedicated hover) and are
+/// out of scope here.
+pub(super) fn token_bytes(kind: &LocatedTokenKind) -> Option<(String, Vec<u8>)> {
+    match kind {
+        LocatedTokenKind::Keyword(k) => Some((k.to_string(), vec![k.value()])),
+        LocatedTokenKind::Function(f) => {
+            Some((
+                f.to_string(),
+                vec![BasicTokenNoPrefix::AdditionalTokenMarker.value(), f.value()]
+            ))
+        },
+        LocatedTokenKind::Operator(op) => {
+            Some((op.to_string().trim().to_string(), vec![op.value()]))
+        },
+        LocatedTokenKind::Space => {
+            Some((
+                "(space)".to_string(),
+                vec![BasicTokenNoPrefix::CharSpace.value()]
+            ))
+        },
+        LocatedTokenKind::Separator => {
+            Some((":".to_string(), vec![BasicTokenNoPrefix::CharColon.value()]))
+        },
+        LocatedTokenKind::Other(c) => {
+            let mut buf = [0u8; 4];
+            Some((c.to_string(), c.encode_utf8(&mut buf).as_bytes().to_vec()))
+        },
+        _ => None
+    }
 }
 
 // ─── Variable collection ───────────────────────────────────────────────────────

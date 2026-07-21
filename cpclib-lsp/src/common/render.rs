@@ -59,6 +59,28 @@ pub fn first_doc_line(doc: &str) -> String {
     }
 }
 
+/// Render one `(label, bytes)` pair per row as a Markdown table, bytes
+/// column first — e.g. for splitting an encoded BASIC line into its
+/// header/token/terminator byte groups. A real table (rather than a padded
+/// fixed-width block) is what guarantees every row's byte and label column
+/// start at the same x position regardless of how their contents vary in
+/// width. Bytes are rendered as inline code, which Markdown renderers
+/// typically show in a visually distinct, monospaced style from the
+/// plain-text label column — hover popups don't allow arbitrary CSS/colors,
+/// so this is the closest available visual separation between the two.
+pub fn format_labeled_bytes(groups: &[(&str, &[u8])]) -> String {
+    let mut md = String::from("| Bytes | Token |\n|---|---|\n");
+    for (label, bytes) in groups {
+        let hex = bytes
+            .iter()
+            .map(|b| format!("{b:02X}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        md.push_str(&format!("| `{hex}` | {} |\n", label.replace('|', "\\|")));
+    }
+    md
+}
+
 /// Format an i64 as binary with `_` every 4 bits, sized to 8 or 16 bits.
 pub fn format_binary_cpc(value: i64) -> String {
     let bits: u32 = if value >= 0 && value <= 0xFF { 8 } else { 16 };

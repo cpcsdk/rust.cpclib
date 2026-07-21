@@ -146,7 +146,17 @@ fn extract_mnemonic_from_segment(seg: &str) -> Option<String> {
 
 // ─── formatting ─────────────────────────────────────────────────────────────
 
-pub fn format_hover(instruction_text: &str, entries: &[&TimingEntry]) -> String {
+/// `src_ops`/`resolved` provide known operand values for pseudocode
+/// substitution (see `render_pseudocode`) - pass empty slices when there's
+/// no real parsed instruction to draw them from (e.g. the text-only
+/// fallback path when the document doesn't currently parse), which just
+/// shows each entry's pseudocode with its symbolic placeholders untouched.
+pub fn format_hover(
+    instruction_text: &str,
+    entries: &[&TimingEntry],
+    src_ops: &[String],
+    resolved: &[Option<i32>]
+) -> String {
     let instr = instruction_text.trim();
     let mut md = format!("**{}**", instr);
 
@@ -195,8 +205,107 @@ pub fn format_hover(instruction_text: &str, entries: &[&TimingEntry]) -> String 
         if !entry.notes.is_empty() {
             md.push_str(&format!("\n{}\n", entry.notes));
         }
+
+        // Pseudocode, with any known operand values substituted in.
+        if let Some(pseudocode) = render_pseudocode(entry, src_ops, resolved) {
+            md.push_str(&format!("\n`{pseudocode}`\n"));
+        }
     }
     md
+}
+
+/// Substitute `entry.pattern`'s own operand-placeholder words (`r`, `rr`,
+/// `n`, `nn`, ...) in `entry.pseudocode` with the real hovered operands:
+/// register-class placeholders (`r`/`r'`/`r''`/`rr`/`qq`/`cc`/`ccc`) get the
+/// operand's own source text (e.g. `SP`); immediate-class placeholders
+/// (`n`/`nn`/`d`/`e`/`b`/`ttt`) get the *resolved* value when known
+/// (`resolved[i]`), otherwise the placeholder is left untouched rather than
+/// showing something potentially wrong. A placeholder that appears wrapped
+/// in one layer of parens in the pattern (e.g. `(n)` for an I/O port
+/// address, `(nn)` for a memory address) still substitutes correctly: the
+/// paren layer is stripped only for *classifying* the placeholder, so
+/// `port(n)`'s bare `n` in the pseudocode text is what actually gets
+/// replaced, and the surrounding parens are untouched literal text.
+///
+/// Returns `None` when this entry has no pseudocode at all (a
+/// `pseudocode.txt` gap - not every pattern is covered yet).
+fn render_pseudocode(
+    entry: &TimingEntry,
+    src_ops: &[String],
+    resolved: &[Option<i32>]
+) -> Option<String> {
+    if entry.pseudocode.is_empty() {
+        return None;
+    }
+
+    let (_, pat_ops_text) = split_head(entry.pattern);
+    let pat_ops = parse_ops(pat_ops_text);
+
+    let mut replacements: Vec<(&str, String)> = Vec::new();
+    for (i, placeholder) in pat_ops.iter().enumerate() {
+        let Some(src) = src_ops.get(i)
+        else {
+            continue;
+        };
+        let bare = placeholder
+            .strip_prefix('(')
+            .and_then(|s| s.strip_suffix(')'))
+            .unwrap_or(placeholder.as_str());
+        let replacement = match bare {
+            "r" | "r'" | "r''" | "rr" | "qq" | "cc" | "ccc" => Some(src.to_uppercase()),
+            "n" | "nn" | "d" | "e" | "b" | "ttt" => {
+                resolved.get(i).copied().flatten().map(|v| v.to_string())
+            },
+            _ => None
+        };
+        if let Some(replacement) = replacement {
+            replacements.push((bare, replacement));
+        }
+    }
+
+    if replacements.is_empty() {
+        Some(entry.pseudocode.to_string())
+    }
+    else {
+        Some(substitute_words(entry.pseudocode, &replacements))
+    }
+}
+
+/// Replace whole-word occurrences of each `(word, replacement)` pair in
+/// `text` - a "word" is a maximal run of ASCII alphanumerics/`'`, so this
+/// never touches a placeholder letter that's merely a substring of a larger
+/// word (e.g. the `r` in `Carry`, or the `n` in `port`).
+fn substitute_words(text: &str, replacements: &[(&str, String)]) -> String {
+    let mut result = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = text[i..].chars().next().unwrap();
+        if c.is_ascii_alphabetic() {
+            let start = i;
+            let mut j = i;
+            while j < bytes.len() {
+                let cj = text[j..].chars().next().unwrap();
+                if cj.is_ascii_alphanumeric() || cj == '\'' {
+                    j += cj.len_utf8();
+                }
+                else {
+                    break;
+                }
+            }
+            let word = &text[start..j];
+            match replacements.iter().find(|(k, _)| *k == word) {
+                Some((_, replacement)) => result.push_str(replacement),
+                None => result.push_str(word)
+            }
+            i = j;
+        }
+        else {
+            result.push(c);
+            i += c.len_utf8();
+        }
+    }
+    result
 }
 
 pub(super) fn describe_flags(flags: &str) -> String {
@@ -233,7 +342,7 @@ pub(super) fn describe_flags(flags: &str) -> String {
 
 // ─── internal helpers ────────────────────────────────────────────────────────
 
-fn split_head(s: &str) -> (&str, &str) {
+pub(super) fn split_head(s: &str) -> (&str, &str) {
     let s = s.trim();
     match s.find(|c: char| c.is_ascii_whitespace()) {
         Some(i) => (&s[..i], s[i..].trim()),
@@ -241,7 +350,7 @@ fn split_head(s: &str) -> (&str, &str) {
     }
 }
 
-fn parse_ops(s: &str) -> Vec<String> {
+pub(super) fn parse_ops(s: &str) -> Vec<String> {
     if s.is_empty() {
         return vec![];
     }

@@ -2268,6 +2268,17 @@ impl LocatedToken {
     pub fn context(&self) -> &ParserContext {
         self.span().context()
     }
+
+    /// Whether this token is specifically a "fake instruction" (accepted by
+    /// the parser as a convenience, assembled using several real opcodes,
+    /// e.g. `ld hl, de`) - not just "did this token trigger *some* warning",
+    /// which `is_warning()` alone can't distinguish from any other kind of
+    /// parse-time warning (e.g. the unrelated `WRITE DIRECT` case in
+    /// `directives.rs`). The token answers this directly, rather than a
+    /// caller having to guess from `is_warning()`/`warning_message()`.
+    pub fn is_fake_instruction(&self) -> bool {
+        self.is_warning() && self.warning_message() == super::instructions::FAKE_INSTRUCTION_WARNING
+    }
 }
 
 impl LocatedToken {

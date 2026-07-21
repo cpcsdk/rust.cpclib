@@ -170,7 +170,9 @@ pub(super) fn collect_assembler_warnings(
 fn enrich_fake_instruction_diagnostics(document: &Document, diagnostics: &mut [Diagnostic]) {
     for diag in diagnostics.iter_mut() {
         if diag.severity != Some(DiagnosticSeverity::WARNING)
-            || !diag.message.contains("fake instruction")
+            || !diag
+                .message
+                .contains(cpclib_asm::parser::instructions::FAKE_INSTRUCTION_WARNING)
         {
             continue;
         }

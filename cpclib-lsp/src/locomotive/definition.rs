@@ -155,19 +155,6 @@ impl BasicAnalyzer {
 
 // ─── Shared variable-occurrence helpers (find_references, rename) ───────────
 
-/// The token at `position` (document/block-relative, whichever `prog` was
-/// parsed against), if any.
-fn token_at_position(
-    prog: &LocatedBasicProgram,
-    position: Position
-) -> Option<&cpclib_basic::located::LocatedBasicToken> {
-    let bline = prog.lines.iter().find(|l| l.source_line == position.line)?;
-    bline
-        .tokens
-        .iter()
-        .find(|t| t.span.col <= position.character && position.character < t.span.col + t.span.len)
-}
-
 /// The uppercased variable name under the cursor, or `None` if the cursor
 /// isn't on a `Variable` token.
 fn variable_at_position(prog: &LocatedBasicProgram, position: Position) -> Option<String> {

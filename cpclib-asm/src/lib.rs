@@ -401,6 +401,32 @@ mod test_super {
     }
 
     #[test]
+    fn is_fake_instruction_distinguishes_fake_instructions_from_other_warnings() {
+        // Regression test: `is_warning()` alone just means "this token
+        // produced *some* parse-time warning" - it can't distinguish a fake
+        // instruction (`ld hl, de`) from any other kind of warning-wrapped
+        // token (e.g. the unrelated `WRITE DIRECT` case in
+        // `directives.rs`). `is_fake_instruction()` checks the actual
+        // warning message against the shared `FAKE_INSTRUCTION_WARNING`
+        // constant, so a caller (like the LSP) can ask the token directly
+        // rather than approximating from `is_warning()`.
+        let code = "org 0x4000\nld hl, de\nld a, 1\nret\n";
+        let listing = parser::parse_z80_str(code).unwrap();
+
+        let fake = listing
+            .iter()
+            .find(|t| t.is_warning())
+            .expect("ld hl, de should be warning-wrapped");
+        assert!(fake.is_fake_instruction(), "{fake:?}");
+
+        let real = listing
+            .iter()
+            .find(|t| !t.is_warning() && t.mnemonic() == Some(&Mnemonic::Ld))
+            .expect("ld a, 1 should be a plain, non-warning token");
+        assert!(!real.is_fake_instruction(), "{real:?}");
+    }
+
+    #[test]
     fn overflow_warning_fires_for_plain_macro_and_repeat_bodies() {
         // Regression test: an out-of-range immediate (`ld b, 300`, 300
         // doesn't fit in a byte) now gets caught right where the assembler
