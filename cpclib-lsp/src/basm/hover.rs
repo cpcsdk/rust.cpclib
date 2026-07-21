@@ -5,7 +5,6 @@
 //! rendering lives in the free helper functions below it.
 
 use cpclib_asm::implementation::expression::ExprEvaluationExt;
-use cpclib_asm::parser::obtained::MayHaveSpan;
 use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::*;
 
@@ -106,7 +105,6 @@ impl AssemblyAnalyzer {
             // instead of querying the table with text that was never in it.
             let is_fake = self.parse_document(document).ok().is_some_and(|listing| {
                 super::token::flatten_listing(listing.iter())
-                    .into_iter()
                     .any(|t| t.is_warning() && span_line(t) == position.line)
             });
 
@@ -206,7 +204,6 @@ impl AssemblyAnalyzer {
         // the real document — same machinery macro/FUNCTION hover uses.
         let listing = self.parse_document(document).ok()?;
         let token = super::token::flatten_listing(listing.iter())
-            .into_iter()
             .find(|t| t.is_incbin() && span_line(*t) == position.line)?;
 
         let mut env = super::expand::dry_run_env(&listing, &document.uri);
@@ -243,12 +240,6 @@ impl AssemblyAnalyzer {
 
         Some(make_hover(md))
     }
-}
-
-/// 0-based line of `token`'s own span.
-fn span_line<T: MayHaveSpan>(token: &T) -> u32 {
-    let (line_1based, _col) = token.span().relative_line_and_column();
-    line_1based.saturating_sub(1) as u32
 }
 
 /// Hover content for a "fake instruction" (e.g. `ld hl, sp`, assembled

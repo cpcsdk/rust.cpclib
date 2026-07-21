@@ -109,7 +109,7 @@ impl AssemblyAnalyzer {
             let mut env = super::expand::dry_run_env(&listing, &document.uri);
             collect_assembler_warnings(&env, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
-            Self::check_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
+            Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
         }
 
         diagnostics
@@ -120,12 +120,32 @@ impl AssemblyAnalyzer {
 /// `dry_run_env`) into `Diagnostic`s. Distinct from `collect_asm_diagnostics`
 /// (which walks a *parse* error tree): warnings only exist after actually
 /// assembling, never from parsing alone.
+///
+/// Forces every diagnostic produced here to `WARNING` severity, regardless
+/// of which `AssemblerError` variant a given warning currently wears.
+/// `collect_asm_diagnostics` has an explicit `RelocatedWarning`/
+/// `AlreadyRenderedWarningWithLocation` arm that already gets this right,
+/// but `Env::render_warnings()` flattens anything else (e.g. the
+/// pre-existing `OverrideMemory`, or a `checked_byte`/`checked_word`
+/// overflow warning once `render_warnings()` has run) into a plain
+/// `AssemblingError{msg}` - a shape `collect_asm_diagnostics`'s catch-all
+/// arm has no way to distinguish from a real error, so it defaults to
+/// `ERROR`. Since everything walked here came from `env.warnings()`, never
+/// the error tree, it's unconditionally a warning by construction -
+/// overriding after the fact is more robust than trying to enumerate every
+/// possible flattened shape in `collect_asm_diagnostics` itself (which is
+/// also used for real parse *errors* via a different caller, where `ERROR`
+/// is correct for most variants there).
 pub(super) fn collect_assembler_warnings(
     env: &cpclib_asm::assembler::Env,
     out: &mut Vec<Diagnostic>
 ) {
+    let start = out.len();
     for warning in env.warnings() {
         collect_asm_diagnostics(warning, None, out);
+    }
+    for diag in &mut out[start..] {
+        diag.severity = Some(DiagnosticSeverity::WARNING);
     }
 }
 
@@ -335,7 +355,7 @@ pub(super) fn collect_asm_diagnostics(
         other => {
             out.push(asm_diag(
                 parent_span,
-                format!("{other}"),
+                strip_ansi(&format!("{other}")),
                 DiagnosticSeverity::ERROR
             ));
         }
@@ -421,6 +441,25 @@ mod tests {
     fn valid_file_yields_no_diagnostics() {
         let text = "org 0x4000\n ld a, 1\n ret\n";
         assert!(diagnostics_for(text).is_empty());
+    }
+
+    #[test]
+    fn override_memory_warning_is_reported_as_a_warning_not_an_error() {
+        // Regression test: `Env::render_warnings()` flattens anything that
+        // isn't already `AssemblingError`/`AlreadyRenderedWarningWithLocation`
+        // into a plain `AssemblingError{msg}` - a shape
+        // `collect_asm_diagnostics`'s catch-all arm can't distinguish from a
+        // real error, so before this fix `OverrideMemory` (a real,
+        // pre-existing warning kind, never previously exercised through
+        // this path since the LSP didn't call `env.warnings()` at all until
+        // recently) rendered as `ERROR`.
+        let text = "org 0x4000\n db 1,2,3,4,5\n org 0x4002\n db 9,9\n";
+        let diags = diagnostics_for(text);
+        let override_diag = diags
+            .iter()
+            .find(|d| d.message.to_lowercase().contains("override"))
+            .unwrap_or_else(|| panic!("expected an override-memory diagnostic: {diags:?}"));
+        assert_eq!(override_diag.severity, Some(DiagnosticSeverity::WARNING));
     }
 
     #[test]

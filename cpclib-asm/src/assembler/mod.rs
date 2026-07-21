@@ -177,11 +177,11 @@ impl EnvOptions {
     }
 }
 
-fn add_index(m: &mut Bytes, idx: i32) -> Result<(), Box<AssemblerError>> {
-    //  if idx < -127 || idx > 128 {
+fn add_index(m: &mut Bytes, idx: i32, env: &mut Env) -> Result<(), Box<AssemblerError>> {
     if !(-128..=127).contains(&idx) {
-        // TODO raise a warning to get the line/file
-        eprintln!("Index error: {idx}");
+        env.add_warning(Box::new(AssemblerWarning::AssemblingError {
+            msg: format!("index {idx} does not fit in 8 bits")
+        }));
     }
     let val = (idx & 0xFF) as u8;
     add_byte(m, val);
@@ -2142,6 +2142,34 @@ impl Env {
         if self.options().assemble_options().enable_warnings {
             self.warnings.push(warning);
         }
+    }
+
+    /// Truncate `value` into an 8-bit slot, warning first if it doesn't
+    /// actually fit. Always returns the same truncated byte an unchecked
+    /// `(value & 0xFF) as u8` would have - this only adds a warning, it
+    /// never changes what gets assembled. The message text is a fixed
+    /// format (`cpclib-lsp` parses it back out to enrich its own
+    /// diagnostic, the same way it already treats "fake instruction" as an
+    /// implicit contract string) - keep it in sync if changed.
+    #[inline(always)]
+    pub fn checked_byte(&mut self, value: i32) -> u8 {
+        if !(-128..=255).contains(&value) {
+            self.add_warning(Box::new(AssemblerWarning::AssemblingError {
+                msg: format!("value {value} does not fit in 8 bits")
+            }));
+        }
+        (value & 0xFF) as u8
+    }
+
+    /// Like `checked_byte`, for a 16-bit slot.
+    #[inline(always)]
+    pub fn checked_word(&mut self, value: i32) -> u16 {
+        if !(-32768..=65535).contains(&value) {
+            self.add_warning(Box::new(AssemblerWarning::AssemblingError {
+                msg: format!("value {value} does not fit in 16 bits")
+            }));
+        }
+        (value & 0xFFFF) as u16
     }
 }
 
@@ -4165,34 +4193,22 @@ impl Env {
 
         let span = Some(outer_token.span());
 
-        // handle warning if any
+        // handle warning if any - in practice, `build_processed_token`
+        // (processed_token.rs) already intercepts every `is_warning()`
+        // token at classification time, unwrapping it via
+        // `token.warning_token()` before it can ever reach this generic
+        // dispatch with `is_warning()` still true, so this is not known to
+        // be reachable through the normal multi-pass pipeline (the real,
+        // reachable path is `ProcessedTokenState::Warning` in
+        // processed_token.rs). Kept as a defensive fallback, in the same
+        // plain-and-unlocated shape `checked_byte`/`checked_word` use
+        // elsewhere in this file - the loop just below already relocates
+        // any warning added since `nb_warnings`, so no eager span capture
+        // is needed here either.
         if outer_token.is_warning() {
-            // Extract the structured location and render *immediately*,
-            // while the span's underlying source buffer is still known
-            // valid - see `AlreadyRenderedWarningWithLocation`'s doc comment
-            // and the identical fix in `processed_token.rs`'s
-            // `ProcessedTokenState::Warning` arm. (Building the located
-            // variant directly rather than via `.locate()` also sidesteps a
-            // separate no-op: `AlreadyRenderedError` already reports itself
-            // as "located", so `.locate()` on one would silently drop the
-            // span.)
-            let warning_span = outer_token.span();
-            let (line, column) = warning_span.relative_line_and_column();
-            let len = warning_span.as_str().len();
-            let rendered = AssemblerWarning::RelocatedWarning {
-                warning: Box::new(AssemblerWarning::AssemblingError {
-                    msg: outer_token.warning_message().into()
-                }),
-                span: warning_span.clone()
-            }
-            .to_string();
-            let warning = AssemblerWarning::AlreadyRenderedWarningWithLocation {
-                msg: rendered,
-                line: line as u32,
-                column: column as u32,
-                len: len as u32
-            };
-            self.add_warning(Box::new(warning));
+            self.add_warning(Box::new(AssemblerWarning::AssemblingError {
+                msg: outer_token.warning_message().into()
+            }));
         }
 
         // get the token to handle (after remobing handling wrapping)
@@ -4988,23 +5004,43 @@ impl Env {
         // reused/overwritten the buffer they point into, despite `Z80Span`'s
         // `'static`-shaped internals - rendering promptly, here, is what
         // keeps that access safe. `AlreadyRenderedWarningWithLocation` is the
-        // one exception: it holds no span, only plain owned data (message +
-        // line/column/len captured eagerly at construction time), so there is
-        // nothing unsafe to defer and flattening it would only discard the
-        // structured location a caller (e.g. the LSP, mapping this to a
-        // `Diagnostic` range) may still want.
+        // one exception that doesn't need it: it holds no span, only plain
+        // owned data (message + line/column/len captured eagerly at
+        // construction time).
+        //
+        // `RelocatedWarning` specifically gets *converted into*
+        // `AlreadyRenderedWarningWithLocation` here (not just rendered to a
+        // bare `AssemblingError`, which was this function's original
+        // behavior): its span is still valid right now, so this is the last
+        // safe point to capture its structured line/column/len before the
+        // span itself is discarded - losing that structure meant every
+        // warning routed through this generic path (e.g. `OverrideMemory`,
+        // or a `checked_byte`/`checked_word` overflow warning routed through
+        // `visit_located_token`'s auto-locate wrapper) rendered with no
+        // usable location at all downstream (the LSP fell back to a
+        // location-less diagnostic for every one of them).
         self.warnings.iter_mut().for_each(|w| {
-            if matches!(
-                &**w,
+            match &**w {
                 AssemblerError::AssemblingError { .. }
-                    | AssemblerError::AlreadyRenderedWarningWithLocation { .. }
-            ) {
-                // nothing to do
-            }
-            else {
-                **w = AssemblerWarning::AssemblingError {
-                    msg: (**w).to_string()
-                }
+                | AssemblerError::AlreadyRenderedWarningWithLocation { .. } => {
+                    // already in a final, safe-to-keep shape
+                },
+                AssemblerError::RelocatedWarning { span, .. } => {
+                    let (line, column) = span.relative_line_and_column();
+                    let len = span.as_str().len();
+                    let msg = (**w).to_string();
+                    **w = AssemblerError::AlreadyRenderedWarningWithLocation {
+                        msg,
+                        line: line as u32,
+                        column: column as u32,
+                        len: len as u32
+                    };
+                },
+                _ => {
+                    **w = AssemblerWarning::AssemblingError {
+                        msg: (**w).to_string()
+                    }
+                },
             }
         });
     }
@@ -5281,11 +5317,13 @@ impl Env {
             let val: i32 = val + delta;
 
             if mask == 0xFF {
-                env.output_byte(val as u8)?;
+                let b = env.checked_byte(val);
+                env.output_byte(b)?;
             }
             else {
-                let high = ((val & 0xFF00) >> 8) as u8;
-                let low = (val & 0xFF) as u8;
+                let w = env.checked_word(val);
+                let high = (w >> 8) as u8;
+                let low = (w & 0xFF) as u8;
                 env.output_byte(low)?;
                 env.output_byte(high)?;
             }
@@ -5536,10 +5574,10 @@ impl Env {
             0
         }
         else {
-            let value = self
+            let raw = self
                 .resolve_expr_may_fail_in_first_pass(fill.unwrap())?
                 .int()?;
-            (value & 0xFF) as u8
+            self.checked_byte(raw)
         };
 
         let mut bytes = Bytes::with_capacity(count as usize);
@@ -5560,10 +5598,10 @@ impl Env {
             0
         }
         else {
-            let value = self
+            let raw = self
                 .resolve_expr_may_fail_in_first_pass(fill.unwrap())?
                 .int()?;
-            (value & 0xFF) as u8
+            self.checked_byte(raw)
         };
 
         // compute the number of 0 to put
@@ -5838,11 +5876,10 @@ impl Env {
         else if arg.is_expression() {
             let exp = arg.get_expression().unwrap();
             {
+                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let val = self.checked_byte(raw);
                 add_byte(&mut bytes, 0xFE);
-                add_byte(
-                    &mut bytes,
-                    self.resolve_expr_may_fail_in_first_pass(exp)?.int()? as _
-                );
+                add_byte(&mut bytes, val);
             }
         }
         else if arg.is_address_in_register16() && arg.get_register16().unwrap() == Register16::Hl
@@ -5892,7 +5929,8 @@ impl Env {
         if arg.is_expression() {
             let exp = arg.get_expression().unwrap();
             {
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let val = self.checked_byte(raw);
                 bytes.push(0xD6);
                 bytes.push(val);
             }
@@ -5969,7 +6007,8 @@ impl Env {
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
                 {
-                    let val = self.resolve_expr_may_fail_in_first_pass(exp)?.int()? as u8;
+                    let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                    let val = self.checked_byte(raw);
                     bytes.push(0xDE);
                     bytes.push(val);
                 }
@@ -6395,9 +6434,10 @@ impl Env {
                     Mnemonic::Xor => 0xEE,
                     _ => unreachable!()
                 };
-                let value = self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF;
+                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let value = self.checked_byte(raw);
                 bytes.push(base);
-                bytes.push(value as u8);
+                bytes.push(value);
             }
         }
         else if arg1.is_address_in_register16() {
@@ -6464,13 +6504,14 @@ impl Env {
                     else {
                         bytes.push(0x8E);
                     }
-                    add_index(&mut bytes, val)?;
+                    add_index(&mut bytes, val, self)?;
                 }
             }
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
                 {
-                    let val = self.resolve_expr_may_fail_in_first_pass(exp)?.int()? as u8;
+                    let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                    let val = self.checked_byte(raw);
                     if is_add {
                         bytes.push(0b1100_0110);
                     }
@@ -6876,7 +6917,8 @@ impl Env {
             }
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let val = self.checked_byte(raw);
                 bytes.push(0b0000_0110 | (dst << 3));
                 bytes.push(val);
             }
@@ -6886,7 +6928,7 @@ impl Env {
                 let val = self.resolve_index_may_fail_in_first_pass(idx)?.int()?;
                 add_index_register_code(&mut bytes, reg);
                 add_byte(&mut bytes, 0b0100_0110 | (dst << 3));
-                add_index(&mut bytes, val)?;
+                add_index(&mut bytes, val, self)?;
             }
             else if arg2.is_address_in_register16() {
                 match arg2.get_register16().unwrap() {
@@ -6934,7 +6976,8 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let val = self.checked_word(raw);
                 add_byte(&mut bytes, 0b0000_0001 | (dst_code << 4));
                 add_word(&mut bytes, val);
             }
@@ -7006,7 +7049,8 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFFFF) as u16;
+                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let val = self.checked_word(raw);
                 add_byte(&mut bytes, code);
                 add_byte(&mut bytes, 0x21);
                 add_word(&mut bytes, val);
@@ -7034,8 +7078,8 @@ impl Env {
                     }
                     else if arg2.is_expression() {
                         let exp = arg2.get_expression().unwrap();
-                        let val =
-                            (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                        let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                        let val = self.checked_byte(raw);
                         bytes.push(0x36);
                         bytes.push(val);
                     }
@@ -7065,7 +7109,8 @@ impl Env {
             }
             else if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let val = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let val = self.checked_byte(raw);
                 bytes.push(0x36);
                 bytes.push(val);
             }
@@ -7077,7 +7122,8 @@ impl Env {
 
             if arg2.is_expression() {
                 let exp = arg2.get_expression().unwrap();
-                let value = (self.resolve_expr_may_fail_in_first_pass(exp)?.int()? & 0xFF) as u8;
+                let raw = self.resolve_expr_may_fail_in_first_pass(exp)?.int()?;
+                let value = self.checked_byte(raw);
                 add_byte(&mut bytes, indexed_register16_to_code(reg));
                 let delta = (self.resolve_index_may_fail_in_first_pass(idx)?.int()? & 0xFF) as u8;
                 add_byte(&mut bytes, 0x36);

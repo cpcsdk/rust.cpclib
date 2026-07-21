@@ -167,7 +167,6 @@ fn expand_nested_calls(mut text: String, env: &mut Env) -> String {
         };
 
         let Some(call) = super::token::flatten_listing(listing.iter())
-            .into_iter()
             .find(|t| t.is_call_macro_or_build_struct())
         else {
             break; // nothing left to expand
@@ -234,7 +233,6 @@ impl AssemblyAnalyzer {
     ) -> Option<String> {
         let listing = self.parse_document(document).ok()?;
         let call = super::token::flatten_listing(listing.iter())
-            .into_iter()
             .find(|t| t.is_call_macro_or_build_struct() && span_contains(*t, position))?;
         let name = call.macro_call_name().to_string();
 

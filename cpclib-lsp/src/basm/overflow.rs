@@ -1,11 +1,19 @@
-//! Overflow detection: flag a value that doesn't fit the 8-bit or 16-bit
-//! slot it's being written into - e.g. `ld b, 300` (300 doesn't fit in a
-//! byte). Per the original feature request, this must work for immediate
-//! literals *and* for values reached through a variable (`val equ 300` /
-//! `ld b, val`) - both are handled uniformly here by resolving the
-//! expression against a fully-assembled `Env` (e.g. via `dry_run_env`),
-//! reusing the exact `expr.resolve(env)` pattern `hover.rs` already uses for
-//! `INCBIN`/`FUNCTION`-call value display.
+//! Overflow-warning display enrichment: `cpclib-asm` itself now detects and
+//! warns about a value that doesn't fit the 8/16-bit slot it's being
+//! written into (`Env::checked_byte`/`checked_word` in
+//! `cpclib-asm/src/assembler/mod.rs`) - shared with the `basm` CLI, not
+//! LSP-only, and already surfaced as a plain `WARNING` diagnostic by
+//! `diagnostics.rs`'s `collect_assembler_warnings`.
+//!
+//! This file only adds display polish on top of that already-detected
+//! warning: showing the offending value in the same base the source wrote
+//! it in, and what it actually assembles to once truncated. Both need to
+//! re-locate the *specific operand expression* the warning was about - the
+//! assembler's own warning is located to the whole instruction line (that's
+//! all `visit_located_token`'s auto-locate mechanism tracks), not the
+//! operand - which is why this still walks the listing structurally,
+//! re-resolving each candidate operand until one matches the warning's own
+//! parsed value.
 
 use cpclib_asm::assembler::Env;
 use cpclib_asm::implementation::expression::ExprEvaluationExt;
@@ -18,13 +26,6 @@ use tower_lsp::lsp_types::*;
 use super::AssemblyAnalyzer;
 use super::diagnostics::asm_diag;
 
-/// Accepted range for a value written into an 8-bit slot: permissive enough
-/// to accept both the signed (`-128..=127`) and unsigned (`0..=255`)
-/// conventional ways of writing a byte.
-const EIGHT_BIT_RANGE: std::ops::RangeInclusive<i32> = -128..=255;
-/// Same idea, for a 16-bit slot.
-const SIXTEEN_BIT_RANGE: std::ops::RangeInclusive<i32> = -32768..=65535;
-
 #[derive(Clone, Copy)]
 enum SlotWidth {
     Eight,
@@ -32,13 +33,6 @@ enum SlotWidth {
 }
 
 impl SlotWidth {
-    fn range(self) -> std::ops::RangeInclusive<i32> {
-        match self {
-            SlotWidth::Eight => EIGHT_BIT_RANGE,
-            SlotWidth::Sixteen => SIXTEEN_BIT_RANGE
-        }
-    }
-
     fn bits(self) -> u8 {
         match self {
             SlotWidth::Eight => 8,
@@ -48,53 +42,93 @@ impl SlotWidth {
 }
 
 impl AssemblyAnalyzer {
-    /// Walk `listing` looking for a value written into a slot it doesn't fit
-    /// in. `env` must already be fully assembled (e.g. via `dry_run_env`) so
-    /// `EQU`/`=`-assigned variables resolve to their real value, not just
-    /// literal immediates - the same evaluation covers both cases uniformly.
-    pub(super) fn check_overflow_diagnostics(
+    /// For every overflow-warning diagnostic `collect_assembler_warnings`
+    /// already produced, re-locate the specific operand expression it was
+    /// about and enrich the message (value shown in the source's own
+    /// number base, plus what it actually assembles to once truncated) -
+    /// tightening the diagnostic's range to just that operand along the
+    /// way. Diagnostics that don't match the expected message shape (e.g.
+    /// a real error, or some future warning kind) are left untouched.
+    pub(super) fn enrich_overflow_diagnostics(
         listing: &LocatedListing,
         env: &mut Env,
-        out: &mut Vec<Diagnostic>
+        diagnostics: &mut [Diagnostic]
     ) {
-        for token in super::token::flatten_listing(listing.iter()) {
-            for (expr, width) in overflow_candidates(token) {
-                let Some(value) = expr.resolve(env).ok().and_then(|v| v.int().ok())
-                else {
-                    // Forward reference, macro parameter not yet bound, or
-                    // anything else that doesn't resolve to a plain integer
-                    // right now - not something to diagnose here.
-                    continue;
-                };
-                if !width.range().contains(&value) {
-                    let shown_value = format_value_like_source(expr.span().as_str(), value);
-                    let mut message =
-                        format!("value {shown_value} does not fit in {} bits", width.bits());
-                    // Show what the value actually becomes once truncated,
-                    // by re-assembling a version of this instruction with
-                    // the resolved value substituted in, then disassembling
-                    // the result - rather than hardcoding per-mnemonic
-                    // truncation logic, this stays correct for any
-                    // instruction shape (including ones added later).
-                    if let Some(snippet) = synthesize_replacement(token, expr, value)
-                        && let Some(disassembled) =
-                            super::disassemble::disassemble_snippet(&snippet)
-                    {
-                        message.push_str(&format!(" (assembles as: {disassembled})"));
-                    }
-                    out.push(asm_diag(
-                        Some(expr.span()),
-                        message,
-                        DiagnosticSeverity::WARNING
-                    ));
-                }
+        for diag in diagnostics.iter_mut() {
+            if diag.severity != Some(DiagnosticSeverity::WARNING) {
+                continue;
             }
+            let Some((value, bits)) = parse_overflow_message(&diag.message)
+            else {
+                continue;
+            };
+            let Some((token, expr)) =
+                find_matching_overflow_operand(listing, env, diag.range.start.line, value, bits)
+            else {
+                continue;
+            };
+
+            let shown_value = format_value_like_source(expr.span().as_str(), value);
+            let mut message = format!("value {shown_value} does not fit in {bits} bits");
+            if let Some(snippet) = synthesize_replacement(token, expr, value)
+                && let Some(disassembled) = super::disassemble::disassemble_snippet(&snippet)
+            {
+                message.push_str(&format!(" (assembles as: {disassembled})"));
+            }
+            *diag = asm_diag(Some(expr.span()), message, DiagnosticSeverity::WARNING);
         }
     }
 }
 
-/// Every `(value expression, slot width)` pair worth range-checking in a
-/// single token, if any.
+/// `cpclib-asm`'s fixed overflow-warning message format
+/// (`Env::checked_byte`/`checked_word`, `cpclib-asm/src/assembler/mod.rs`)
+/// starts life as the plain `"value {v} does not fit in {bits} bits"` - but
+/// by the time it reaches `env.warnings()`, `Env::render_warnings()` has
+/// already flattened it into a fully rendered, `"warning: "`-prefixed,
+/// codespan-annotated block (the same rendering the `basm` CLI prints to
+/// stderr) - so this searches for the fixed phrase within that larger text
+/// rather than expecting it to start the string. Keep in sync with the
+/// message format in `cpclib-asm` if that ever changes.
+fn parse_overflow_message(msg: &str) -> Option<(i32, u8)> {
+    let idx = msg.find("value ")?;
+    let rest = &msg[idx + "value ".len()..];
+    let (value_str, rest) = rest.split_once(" does not fit in ")?;
+    let bits_str = rest.split_whitespace().next()?;
+    Some((
+        value_str.trim().parse().ok()?,
+        bits_str.trim().parse().ok()?
+    ))
+}
+
+/// Find the token/operand-expression pair on `target_line` whose resolved
+/// value and slot width match the assembler's own warning - i.e. the exact
+/// operand `checked_byte`/`checked_word` warned about.
+fn find_matching_overflow_operand<'a>(
+    listing: &'a LocatedListing,
+    env: &mut Env,
+    target_line: u32,
+    value: i32,
+    bits: u8
+) -> Option<(&'a LocatedToken, &'a LocatedExpr)> {
+    for token in super::token::flatten_listing(listing.iter()) {
+        if super::token::span_line(token) != target_line {
+            continue;
+        }
+        for (expr, width) in overflow_candidates(token) {
+            if width.bits() != bits {
+                continue;
+            }
+            if expr.resolve(env).ok().and_then(|v| v.int().ok()) == Some(value) {
+                return Some((token, expr));
+            }
+        }
+    }
+    None
+}
+
+/// Every `(value expression, slot width)` pair worth considering in a
+/// single token, if any - mirrors exactly which forms
+/// `Env::checked_byte`/`checked_word` are wired into in `cpclib-asm`.
 fn overflow_candidates(token: &LocatedToken) -> Vec<(&LocatedExpr, SlotWidth)> {
     let mut candidates = Vec::new();
 
@@ -201,8 +235,8 @@ fn synthesize_replacement(
 
 /// The slot width a `LD` destination operand represents, or `None` for
 /// anything that isn't a plain register/memory-through-register slot (e.g.
-/// `(nn)`, flags, `I`/`R` are all left alone - existing/`PortN`/etc. don't
-/// arise as `LD` destinations at all).
+/// `(nn)`, flags, `I`/`R` are all left alone - `PortN`/etc. don't arise as
+/// `LD` destinations at all).
 fn ld_destination_width(dst: &LocatedDataAccess) -> Option<SlotWidth> {
     match dst {
         LocatedDataAccess::Register8(..)

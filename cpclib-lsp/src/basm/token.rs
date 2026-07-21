@@ -129,64 +129,82 @@ pub(super) fn is_ident_byte(b: u8) -> bool {
 /// Symbol lookups (completion, hover, goto-definition) should use this
 /// instead of a shallow `.iter()` so they see everything, not just what
 /// happens to sit outside every conditional/loop/module.
-pub(super) fn flatten_listing<'a, T>(tokens: impl IntoIterator<Item = &'a T>) -> Vec<&'a T>
+///
+/// Lazy - every caller so far only needs a single pass, so this never pays
+/// for an eager `Vec` allocation. Assumes each token belongs to at most one
+/// of the nested-block categories below (true in practice for real parser
+/// output - a token can't simultaneously be a `MODULE` and an `IF`, say);
+/// harmless unless that assumption is ever violated, in which case this
+/// would visit fewer nested tokens than checking each independently would.
+pub(super) fn flatten_listing<'a, T>(
+    tokens: impl IntoIterator<Item = &'a T> + 'a
+) -> Box<dyn Iterator<Item = &'a T> + 'a>
 where T: cpclib_tokens::ListingElement + 'a {
-    fn walk<'a, T>(tokens: impl IntoIterator<Item = &'a T>, out: &mut Vec<&'a T>)
-    where T: cpclib_tokens::ListingElement + 'a {
-        for token in tokens {
-            out.push(token);
-            if token.is_module() {
-                walk(token.module_listing(), out);
-            }
-            if token.is_if() {
-                for i in 0..token.if_nb_tests() {
-                    walk(token.if_test(i).1, out);
-                }
-                if let Some(else_listing) = token.if_else() {
-                    walk(else_listing, out);
-                }
-            }
-            if token.is_repeat() {
-                walk(token.repeat_listing(), out);
-            }
-            if token.is_repeat_until() {
-                walk(token.repeat_until_listing(), out);
-            }
-            if token.is_while() {
-                walk(token.while_listing(), out);
-            }
-            if token.is_rorg() {
-                walk(token.rorg_listing(), out);
-            }
-            if token.is_for() {
-                walk(token.for_listing(), out);
-            }
-            if token.is_iterate() {
-                walk(token.iterate_listing(), out);
-            }
-            if token.is_switch() {
-                for (_, case_listing, _) in token.switch_cases() {
-                    walk(case_listing, out);
-                }
-                if let Some(default_listing) = token.switch_default() {
-                    walk(default_listing, out);
-                }
-            }
-            if token.is_confined() {
-                walk(token.confined_listing(), out);
-            }
-            if token.is_crunched_section() {
-                walk(token.crunched_section_listing(), out);
-            }
-            if token.is_assembler_control() {
-                walk(token.assembler_control_get_listing(), out);
-            }
-        }
-    }
+    Box::new(tokens.into_iter().flat_map(flatten_one))
+}
 
-    let mut out = Vec::new();
-    walk(tokens, &mut out);
-    out
+fn flatten_one<'a, T>(token: &'a T) -> Box<dyn Iterator<Item = &'a T> + 'a>
+where T: cpclib_tokens::ListingElement + 'a {
+    let nested: Box<dyn Iterator<Item = &'a T> + 'a> = if token.is_module() {
+        flatten_listing(token.module_listing())
+    }
+    else if token.is_if() {
+        let tests: Box<dyn Iterator<Item = &'a T> + 'a> = Box::new(
+            (0..token.if_nb_tests()).flat_map(move |i| flatten_listing(token.if_test(i).1))
+        );
+        let else_branch: Box<dyn Iterator<Item = &'a T> + 'a> = match token.if_else() {
+            Some(l) => flatten_listing(l),
+            None => Box::new(std::iter::empty())
+        };
+        Box::new(tests.chain(else_branch))
+    }
+    else if token.is_repeat() {
+        flatten_listing(token.repeat_listing())
+    }
+    else if token.is_repeat_until() {
+        flatten_listing(token.repeat_until_listing())
+    }
+    else if token.is_while() {
+        flatten_listing(token.while_listing())
+    }
+    else if token.is_rorg() {
+        flatten_listing(token.rorg_listing())
+    }
+    else if token.is_for() {
+        flatten_listing(token.for_listing())
+    }
+    else if token.is_iterate() {
+        flatten_listing(token.iterate_listing())
+    }
+    else if token.is_switch() {
+        let cases: Vec<_> = token.switch_cases().collect();
+        let cases_iter: Box<dyn Iterator<Item = &'a T> + 'a> =
+            Box::new(cases.into_iter().flat_map(|(_, l, _)| flatten_listing(l)));
+        let default_iter: Box<dyn Iterator<Item = &'a T> + 'a> = match token.switch_default() {
+            Some(l) => flatten_listing(l),
+            None => Box::new(std::iter::empty())
+        };
+        Box::new(cases_iter.chain(default_iter))
+    }
+    else if token.is_confined() {
+        flatten_listing(token.confined_listing())
+    }
+    else if token.is_crunched_section() {
+        flatten_listing(token.crunched_section_listing())
+    }
+    else if token.is_assembler_control() {
+        flatten_listing(token.assembler_control_get_listing())
+    }
+    else {
+        Box::new(std::iter::empty())
+    };
+    Box::new(std::iter::once(token).chain(nested))
+}
+
+/// 0-based line of `token`'s own span.
+pub(super) fn span_line<T: cpclib_asm::parser::obtained::MayHaveSpan>(token: &T) -> u32 {
+    let (line_1based, _col) = token.span().relative_line_and_column();
+    line_1based.saturating_sub(1) as u32
 }
 
 /// For a `.local`-shaped label at `line` (0-based) — its own definition, or
@@ -205,15 +223,14 @@ where T: cpclib_tokens::ListingElement + 'a {
 /// `collect_symbols` — those build a display string per label as they go,
 /// this only needs scope boundaries.
 pub(super) fn label_scope_at_line<'a, T>(
-    listing: impl IntoIterator<Item = &'a T>,
+    listing: impl IntoIterator<Item = &'a T> + 'a,
     line: u32
 ) -> Option<(String, std::ops::Range<u32>)>
 where
     T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
 {
-    let tokens = flatten_listing(listing);
     let mut current_global: Option<(String, u32)> = None;
-    for token in &tokens {
+    for token in flatten_listing(listing) {
         if !token.is_label() {
             continue;
         }
@@ -313,7 +330,7 @@ fn macro_body_end_line(text: &str, start_line: u32) -> u32 {
 /// expanded, not a locally-scoped symbol — so only declared parameters are
 /// checked here, not body-defined symbols.
 pub(super) fn macro_scoped_symbol_at<'a, T>(
-    listing: impl IntoIterator<Item = &'a T>,
+    listing: impl IntoIterator<Item = &'a T> + 'a,
     text: &str,
     line: u32,
     word_upper: &str
@@ -351,7 +368,7 @@ where
 /// name from reaching inside a macro that redefines it, mirroring
 /// `all_function_shadow_ranges`/`all_loop_shadow_ranges`.
 pub(super) fn all_macro_shadow_ranges<'a, T>(
-    listing: impl IntoIterator<Item = &'a T>,
+    listing: impl IntoIterator<Item = &'a T> + 'a,
     text: &str,
     word_upper: &str
 ) -> Vec<std::ops::Range<u32>>
@@ -396,7 +413,7 @@ where
 /// definition, so the last (innermost) match found is kept rather than
 /// returning on the first hit.
 pub(super) fn loop_scoped_symbol_at<'a, T>(
-    listing: impl IntoIterator<Item = &'a T>,
+    listing: impl IntoIterator<Item = &'a T> + 'a,
     text: &str,
     line: u32,
     word_upper: &str
@@ -449,7 +466,7 @@ where
 /// reaching inside a loop that redefines it, mirroring
 /// `all_function_shadow_ranges`.
 pub(super) fn all_loop_shadow_ranges<'a, T>(
-    listing: impl IntoIterator<Item = &'a T>,
+    listing: impl IntoIterator<Item = &'a T> + 'a,
     text: &str,
     word_upper: &str
 ) -> Vec<std::ops::Range<u32>>
@@ -539,7 +556,7 @@ fn symbol_defined_via_equ_or_assign_in(text: &str, start: u32, end: u32, word_up
 /// parameter as the raw text `"(x)"` — so `(x` / `x)` / `(x)` / `x` all
 /// normalize to `x` here.
 pub(super) fn function_scoped_symbol_at<'a, T>(
-    listing: impl IntoIterator<Item = &'a T>,
+    listing: impl IntoIterator<Item = &'a T> + 'a,
     text: &str,
     line: u32,
     word_upper: &str
@@ -610,7 +627,7 @@ fn function_shadows<T: cpclib_tokens::ListingElement>(
 /// a different symbol entirely, and a rename of the *outer* one must not
 /// touch it.
 pub(super) fn all_function_shadow_ranges<'a, T>(
-    listing: impl IntoIterator<Item = &'a T>,
+    listing: impl IntoIterator<Item = &'a T> + 'a,
     text: &str,
     word_upper: &str
 ) -> Vec<std::ops::Range<u32>>

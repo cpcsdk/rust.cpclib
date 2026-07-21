@@ -401,6 +401,112 @@ mod test_super {
     }
 
     #[test]
+    fn overflow_warning_fires_for_plain_macro_and_repeat_bodies() {
+        // Regression test: an out-of-range immediate (`ld b, 300`, 300
+        // doesn't fit in a byte) now gets caught right where the assembler
+        // already resolves the value and truncates it - `Env::checked_byte`
+        // - rather than only in the LSP. This must keep working identically
+        // when the offending line sits inside a MACRO body or a REPEAT
+        // block (each REPEAT iteration re-visits the same source line) -
+        // both are the exact "short source lifespan" scenario that caused
+        // real undefined behavior for a *different* warning kind earlier in
+        // this project's life (a warning holding onto a `Z80Span` whose
+        // underlying buffer got reused by a later pass). These warnings are
+        // safe from that: they're built as plain, unlocated
+        // `AssemblingError{msg}` values from the moment they're created
+        // (never holding a `Z80Span` themselves) - `visit_located_token`'s
+        // existing auto-locate-then-promptly-render machinery does the
+        // location/rendering entirely on its own, within the same pass.
+        let code = "
+		org 0x4000
+		ld b, 300
+		MACRO FOO
+			ld c, 300
+		ENDM
+		FOO()
+		repeat 2
+			ld d, 300
+		endrepeat
+		ret
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+
+        assert_eq!(env.warnings().len(), 4, "{:?}", env.warnings());
+        for warning in env.warnings() {
+            assert!(
+                warning
+                    .to_string()
+                    .contains("value 300 does not fit in 8 bits"),
+                "{warning}"
+            );
+        }
+        let rendered: Vec<String> = env.warnings().iter().map(|w| w.to_string()).collect();
+        assert!(rendered[0].contains("ld b, 300"), "{}", rendered[0]);
+        assert!(rendered[1].contains("MACRO FOO"), "{}", rendered[1]);
+        assert!(rendered[1].contains("ld c, 300"), "{}", rendered[1]);
+        assert!(rendered[2].contains("ld d, 300"), "{}", rendered[2]);
+        assert!(rendered[3].contains("ld d, 300"), "{}", rendered[3]);
+    }
+
+    #[test]
+    fn overflow_warning_fires_for_16bit_immediates_and_defb_defw() {
+        let code = "
+		org 0x4000
+		ld bc, 70000
+		db 1, 2, 300
+		dw 1, 70000
+		ret
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+
+        assert_eq!(env.warnings().len(), 3, "{:?}", env.warnings());
+        let rendered: Vec<String> = env.warnings().iter().map(|w| w.to_string()).collect();
+        assert!(
+            rendered[0].contains("value 70000 does not fit in 16 bits"),
+            "{}",
+            rendered[0]
+        );
+        assert!(
+            rendered[1].contains("value 300 does not fit in 8 bits"),
+            "{}",
+            rendered[1]
+        );
+        assert!(
+            rendered[2].contains("value 70000 does not fit in 16 bits"),
+            "{}",
+            rendered[2]
+        );
+    }
+
+    #[test]
+    fn value_that_fits_produces_no_overflow_warning() {
+        let code = "
+		org 0x4000
+		ld b, 200
+		ld bc, 40000
+		db 1, 2, 3
+		ret
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+        assert!(env.warnings().is_empty(), "{:?}", env.warnings());
+    }
+
+    #[test]
     fn located_test_assemble() {
         let code = "
 		org 0x100
