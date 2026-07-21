@@ -5,6 +5,7 @@
 //! `BasicAnalyzer` type through separate `impl` blocks.
 
 pub mod autocomplete;
+pub mod call_hierarchy;
 pub mod color;
 pub mod command;
 pub mod definition;

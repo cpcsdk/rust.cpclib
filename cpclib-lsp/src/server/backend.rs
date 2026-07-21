@@ -8,6 +8,7 @@ use tower_lsp::{Client, LanguageServer};
 
 use crate::basm::AssemblyAnalyzer;
 use crate::bndbuild::BuildFileAnalyzer;
+use crate::common::call_hierarchy::CallHierarchyData;
 use crate::common::document::{Document, DocumentType};
 use crate::locomotive::BasicAnalyzer;
 
@@ -444,6 +445,7 @@ impl LanguageServer for CpcLspBackend {
                     prepare_provider: Some(true),
                     work_done_progress_options: Default::default()
                 })),
+                call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -795,6 +797,177 @@ impl LanguageServer for CpcLspBackend {
 
             DocumentType::Unknown => Ok(None)
         }
+    }
+
+    async fn prepare_call_hierarchy(
+        &self,
+        params: CallHierarchyPrepareParams
+    ) -> Result<Option<Vec<CallHierarchyItem>>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let Some(entry) = self.documents.get(&uri)
+        else {
+            return Ok(None);
+        };
+
+        let item = match entry.value().doc_type {
+            DocumentType::Assembly => {
+                self.asm_analyzer
+                    .prepare_call_hierarchy(entry.value(), position)
+            },
+            DocumentType::Basic => {
+                self.basic_analyzer
+                    .prepare_call_hierarchy(entry.value(), position)
+            },
+            DocumentType::BuildFile | DocumentType::Unknown => None
+        };
+
+        Ok(item.map(|i| vec![i]))
+    }
+
+    async fn incoming_calls(
+        &self,
+        params: CallHierarchyIncomingCallsParams
+    ) -> Result<Option<Vec<CallHierarchyIncomingCall>>> {
+        let item = params.item;
+        let Some(data) = item.data.as_ref().and_then(CallHierarchyData::from_json)
+        else {
+            return Ok(None);
+        };
+        let Some(entry) = self.documents.get(&item.uri)
+        else {
+            return Ok(None);
+        };
+        let doc_type = entry.value().doc_type;
+
+        let calls = match (doc_type, data) {
+            (DocumentType::Assembly, CallHierarchyData::AsmLabel { name }) => {
+                let name_upper = name.to_uppercase();
+                drop(entry);
+                let mut calls = Vec::new();
+                for doc_entry in self.documents.iter() {
+                    if doc_entry.value().doc_type != DocumentType::Assembly {
+                        continue;
+                    }
+                    calls.extend(
+                        self.asm_analyzer
+                            .incoming_calls_in(doc_entry.value(), &name_upper)
+                    );
+                }
+                calls
+            },
+            (
+                DocumentType::Assembly,
+                CallHierarchyData::BasicLine {
+                    line_number,
+                    block_start_line: Some(start)
+                }
+            ) => {
+                self.asm_analyzer.incoming_calls_for_embedded_basic_line(
+                    entry.value(),
+                    line_number,
+                    start
+                )
+            },
+            (
+                DocumentType::Basic,
+                CallHierarchyData::BasicLine {
+                    line_number,
+                    block_start_line: None
+                }
+            ) => {
+                self.basic_analyzer
+                    .incoming_calls(entry.value(), line_number)
+            },
+            _ => Vec::new() // stale/mismatched `data` (doc_type changed since prepare)
+        };
+
+        Ok(if calls.is_empty() { None } else { Some(calls) })
+    }
+
+    async fn outgoing_calls(
+        &self,
+        params: CallHierarchyOutgoingCallsParams
+    ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>> {
+        let item = params.item;
+        let Some(data) = item.data.as_ref().and_then(CallHierarchyData::from_json)
+        else {
+            return Ok(None);
+        };
+        let Some(entry) = self.documents.get(&item.uri)
+        else {
+            return Ok(None);
+        };
+        let doc_type = entry.value().doc_type;
+
+        let calls = match (doc_type, data) {
+            (DocumentType::Assembly, CallHierarchyData::AsmLabel { name }) => {
+                let name_upper = name.to_uppercase();
+                let document = entry.value().clone();
+                drop(entry);
+
+                let targets = self
+                    .asm_analyzer
+                    .outgoing_call_targets(&document, &name_upper);
+                let mut calls = Vec::new();
+                for (target, ranges) in targets {
+                    let target_upper = target.to_uppercase();
+                    // Current document first, then every other open
+                    // Assembly document - same "current, then others" shape
+                    // as `goto_definition`'s own cross-file fallback (minus
+                    // the disk-scan step, per this feature's scoping).
+                    let to = self
+                        .asm_analyzer
+                        .call_hierarchy_item_for_label(&document, &target_upper)
+                        .or_else(|| {
+                            self.documents
+                                .iter()
+                                .filter(|e| {
+                                    *e.key() != item.uri
+                                        && e.value().doc_type == DocumentType::Assembly
+                                })
+                                .find_map(|e| {
+                                    self.asm_analyzer
+                                        .call_hierarchy_item_for_label(e.value(), &target_upper)
+                                })
+                        });
+                    if let Some(to) = to {
+                        calls.push(CallHierarchyOutgoingCall {
+                            to,
+                            from_ranges: ranges
+                        });
+                    }
+                }
+                calls
+            },
+            (
+                DocumentType::Assembly,
+                CallHierarchyData::BasicLine {
+                    line_number,
+                    block_start_line: Some(start)
+                }
+            ) => {
+                self.asm_analyzer.outgoing_calls_for_embedded_basic_line(
+                    entry.value(),
+                    line_number,
+                    start
+                )
+            },
+            (
+                DocumentType::Basic,
+                CallHierarchyData::BasicLine {
+                    line_number,
+                    block_start_line: None
+                }
+            ) => {
+                self.basic_analyzer
+                    .outgoing_calls(entry.value(), line_number)
+            },
+            _ => Vec::new()
+        };
+
+        Ok(if calls.is_empty() { None } else { Some(calls) })
     }
 
     async fn document_symbol(
