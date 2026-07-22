@@ -1,6 +1,8 @@
 use std::process::Command;
 
 use cpclib_common::camino::Utf8Path;
+#[cfg(any(target_os = "macos", target_os = "openbsd"))]
+use cpclib_common::camino::Utf8PathBuf;
 
 use crate::delegated::{ArchiveFormat, DelegateApplicationDescription, MutiplatformUrls};
 use crate::event::EventObserver;
@@ -143,6 +145,8 @@ impl Emulator1984Version {
                 dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>
             > = Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                    use std::thread::available_parallelism;
+
                     let source_root = locate_source_root(&desc.cache_folder())?;
 
                     ensure_autotools_available()?;
@@ -274,6 +278,8 @@ impl crate::delegated::DownloadableInformation for Emulator1984Version {
         let post_install: Box<dyn Fn(&DelegateApplicationDescription<E>) -> Result<(), String>> =
             Box::new(
                 |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
+                    use std::thread::available_parallelism;
+
                     let source_root = locate_source_root(&desc.cache_folder())?;
 
                     ensure_autotools_available()?;
@@ -392,6 +398,8 @@ fn locate_source_root(base: &Utf8Path) -> Result<Utf8PathBuf, String> {
         .map_err(|e| format!("Unable to inspect extracted 1984 files in {base}: {e}"))?;
 
     for entry in entries {
+        use cpclib_common::camino::Utf8PathBuf;
+
         let entry =
             entry.map_err(|e| format!("Unable to inspect extracted 1984 files in {base}: {e}"))?;
         let path = entry.path();

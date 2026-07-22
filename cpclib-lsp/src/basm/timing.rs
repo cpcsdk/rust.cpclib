@@ -15,6 +15,22 @@ static BY_MNEMONIC: LazyLock<HashMap<&'static str, Vec<&'static TimingEntry>>> =
         m
     });
 
+/// The four entries where `i`/`r` name the Z80's special interrupt-vector
+/// and refresh registers *literally* (`LD I,A`/`LD R,A`/`LD A,I`/`LD A,R`),
+/// not the generic 8-bit register-class placeholder that a bare `r` means
+/// everywhere else in this table. Since the literal and the placeholder
+/// happen to share the exact same spelling, `match_op`'s generic
+/// per-operand scoring can't tell them apart from text alone: for a source
+/// instruction like `ld b,a`, its second operand `a` earns the placeholder
+/// pattern `ld r,r'` no advantage over the literal pattern `ld r,a` (both
+/// treat `a` as matching), while `ld r,a`'s *first* operand additionally
+/// gets to treat `b` as satisfying its own `r`-class check too — so
+/// `ld r,a` (meant only for the real `LD R,A`) actually out-scores the
+/// intended generic match and wins outright. Handled as an exact
+/// whole-instruction match instead of routing through the generic scorer,
+/// which is otherwise correct for every other pattern in the table.
+const LITERAL_IR_REGISTER_PATTERNS: &[&str] = &["ld i,a", "ld r,a", "ld a,i", "ld a,r"];
+
 /// Given raw instruction text from the source line (e.g. `"LD A, (IX+5)"`),
 /// return the best-matching timing entries.
 pub fn find_timings(instruction_text: &str) -> Vec<&'static TimingEntry> {
@@ -40,7 +56,13 @@ pub fn find_timings(instruction_text: &str) -> Vec<&'static TimingEntry> {
         .map(|e| {
             let (_, pat_rest) = split_head(e.pattern);
             let pat_ops = parse_ops(pat_rest);
-            (score(&src_ops, &pat_ops), *e)
+            let entry_score = if LITERAL_IR_REGISTER_PATTERNS.contains(&e.pattern) {
+                if src_ops == pat_ops { 1000 } else { -1000 }
+            }
+            else {
+                score(&src_ops, &pat_ops)
+            };
+            (entry_score, *e)
         })
         .collect();
 
@@ -59,33 +81,23 @@ pub fn find_timings(instruction_text: &str) -> Vec<&'static TimingEntry> {
     }
 }
 
-/// Extract the instruction text that the cursor (at `col`) is on.
-///
-/// Lines may contain multiple instructions separated by `:`.  This function
-/// identifies which segment `col` falls into, then strips any leading label
-/// from that segment and returns the mnemonic + operands as a trimmed string.
-pub fn extract_instruction_at_col(line: &str, col: usize) -> Option<String> {
-    // Drop comment — byte indices are still valid because the comment is a suffix.
-    let without_comment = match line.find(';') {
-        Some(i) => &line[..i],
-        None => line
-    };
-
+/// Split `without_comment` into `:`-separated segment byte ranges, ignoring
+/// any `:` found inside parens (e.g. `(ix+n)` never contains one in
+/// practice, but this stays robust regardless). Shared by
+/// `extract_instruction_at_col` (find the one segment under a cursor) and
+/// `classify_line` (classify every segment on the line).
+fn split_segments(without_comment: &str) -> Vec<(usize, usize)> {
     let bytes = without_comment.as_bytes();
     let mut depth = 0u32;
     let mut seg_start = 0usize;
+    let mut segments = Vec::new();
 
-    // Walk byte-by-byte, splitting on `:` at paren-depth 0
     for i in 0..=bytes.len() {
         let at_end = i == bytes.len();
         let is_sep = !at_end && bytes[i] == b':' && depth == 0;
 
         if at_end || is_sep {
-            // Is the cursor inside [seg_start, i]?
-            if col >= seg_start && col <= i {
-                let seg = without_comment[seg_start..i].trim();
-                return extract_mnemonic_from_segment(seg);
-            }
+            segments.push((seg_start, i));
             if is_sep {
                 seg_start = i + 1;
             }
@@ -98,13 +110,153 @@ pub fn extract_instruction_at_col(line: &str, col: usize) -> Option<String> {
             }
         }
     }
+    segments
+}
+
+/// Extract the instruction text that the cursor (at `col`) is on.
+///
+/// Lines may contain multiple instructions separated by `:`.  This function
+/// identifies which segment `col` falls into, then strips any leading label
+/// from that segment and returns the mnemonic + operands as a trimmed string.
+pub fn extract_instruction_at_col(line: &str, col: usize) -> Option<String> {
+    // Drop comment — byte indices are still valid because the comment is a suffix.
+    let without_comment = match line.find(';') {
+        Some(i) => &line[..i],
+        None => line
+    };
+
+    for (start, end) in split_segments(without_comment) {
+        if col >= start && col <= end {
+            let seg = without_comment[start..end].trim();
+            return extract_mnemonic_from_segment(seg);
+        }
+    }
     None
+}
+
+/// What a single instruction slot on a line actually is, once any leading
+/// label(s) have been skipped.
+pub(super) enum LineSegment {
+    /// A real Z80 instruction: mnemonic + operands, ready for `find_timings`.
+    Instruction(String),
+    /// A known assembler directive (`DB`/`ORG`/`EQU`/...) — zero execution
+    /// cost, not a red flag.
+    Directive,
+    /// Blank, comment-only, or label-only — nothing to report.
+    Blank,
+    /// Leading word isn't a known instruction or directive — most likely a
+    /// macro invocation, whose real cost can't be computed here.
+    Unrecognized
+}
+
+/// Every instruction slot on `line` (a line may contain multiple
+/// `:`-separated instructions), each classified — the whole-line
+/// counterpart of `extract_instruction_at_col`, used by the selection
+/// cycle-count feature to walk every instruction in a range rather than
+/// just the one under a cursor.
+///
+/// Deliberately does **not** reuse `split_segments`/`extract_instruction_at_col`'s
+/// naive "every top-level `:` is a separator" model: that model happens to
+/// still work for cursor-position lookup (a bare label fragment left behind
+/// by the split resolves to `None`, same as no instruction found there —
+/// the cursor was never going to land exactly on a label with nothing
+/// else), but it actively misclassifies here, since a label like `loop:`
+/// would be treated as its own segment and wrongly flagged `Unrecognized`
+/// instead of being absorbed into the instruction that follows it. Labels
+/// must be skipped *before* deciding where the next separator is, not
+/// after splitting on every colon uniformly.
+pub(super) fn classify_line(line: &str) -> Vec<LineSegment> {
+    let without_comment = match line.find(';') {
+        Some(i) => &line[..i],
+        None => line
+    };
+    let bytes = without_comment.as_bytes();
+    let mut result = Vec::new();
+    let mut pos = 0usize;
+
+    loop {
+        let content_start = skip_label_prefixes(without_comment, pos);
+        let mut depth = 0u32;
+        let mut i = content_start;
+        while i < bytes.len() && !(bytes[i] == b':' && depth == 0) {
+            match bytes[i] {
+                b'(' => depth += 1,
+                b')' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+            i += 1;
+        }
+        let content = without_comment[content_start..i].trim();
+        result.push(classify_content(content));
+        if i >= bytes.len() {
+            break;
+        }
+        pos = i + 1; // past the separator ':'
+    }
+    result
+}
+
+/// From `pos`, skip whitespace then zero or more `identifier:` label
+/// prefixes, returning the byte offset where real content (if any) begins.
+fn skip_label_prefixes(s: &str, mut pos: usize) -> usize {
+    let bytes = s.as_bytes();
+    loop {
+        while pos < bytes.len() && matches!(bytes[pos], b' ' | b'\t') {
+            pos += 1;
+        }
+        let start = pos;
+        while pos < bytes.len()
+            && (bytes[pos].is_ascii_alphanumeric() || matches!(bytes[pos], b'_' | b'.'))
+        {
+            pos += 1;
+        }
+        if pos == start {
+            return start; // no word here - blank, or a stray separator
+        }
+        if pos < bytes.len() && bytes[pos] == b':' {
+            pos += 1; // consume the label's own colon, keep looking for more labels
+            continue;
+        }
+        return start; // real content begins at this word
+    }
+}
+
+fn classify_content(content: &str) -> LineSegment {
+    use super::token::{DIRECTIVE_SET, INSTRUCTION_SET};
+    if content.is_empty() {
+        return LineSegment::Blank;
+    }
+    let (mnemonic, _) = split_head(content);
+    let mnemonic_upper = mnemonic.to_uppercase();
+    if INSTRUCTION_SET.contains(mnemonic_upper.as_str()) {
+        LineSegment::Instruction(content.to_string())
+    }
+    else if DIRECTIVE_SET.contains(mnemonic_upper.as_str()) {
+        LineSegment::Directive
+    }
+    else {
+        LineSegment::Unrecognized
+    }
 }
 
 /// Given the text of a single segment (possibly `"label: LD A, B"` or just `"LD A, B"`),
 /// skip any leading label definitions and return the mnemonic + operands.
 fn extract_mnemonic_from_segment(seg: &str) -> Option<String> {
     use super::token::INSTRUCTION_SET;
+    let (word_start, word) = leading_word(seg)?;
+    if INSTRUCTION_SET.contains(word.to_uppercase().as_str()) {
+        Some(seg[word_start..].trim().to_string())
+    }
+    else {
+        None
+    }
+}
+
+/// Skip whitespace, then skip one or more `label:` prefixes, returning the
+/// byte offset and text of the first word that isn't itself immediately
+/// followed by `:` (i.e. the mnemonic/directive/whatever-comes-after-labels,
+/// or `None` if the segment is blank/label-only).
+fn leading_word(seg: &str) -> Option<(usize, &str)> {
     let bytes = seg.as_bytes();
     let mut pos = 0usize;
 
@@ -136,13 +288,7 @@ fn extract_mnemonic_from_segment(seg: &str) -> Option<String> {
             continue;
         }
 
-        // Check if this word is an instruction mnemonic
-        if INSTRUCTION_SET.contains(word.to_uppercase().as_str()) {
-            return Some(seg[start..].trim().to_string());
-        }
-
-        // Not a label and not a mnemonic — give up
-        return None;
+        return Some((start, word));
     }
 }
 
@@ -540,5 +686,43 @@ fn match_op(src: &str, pat: &str) -> i32 {
             }
         },
         _ => 0
+    }
+}
+
+#[cfg(test)]
+mod find_timings_tests {
+    use super::*;
+
+    /// Regression test for a real, previously-live scoring bug: `ld X,a`/
+    /// `ld a,X` (X a plain 8-bit register) used to resolve to the special
+    /// `LD R,A`/`LD A,R` (refresh-register) timing entries instead of the
+    /// generic 1-NOP `ld r,r'` form, because the literal `r` in those
+    /// special patterns was indistinguishable from the `r` register-class
+    /// placeholder used everywhere else in the table.
+    #[test]
+    fn generic_register_to_a_transfers_are_not_confused_with_the_special_ir_register_forms() {
+        for instr in [
+            "ld b,a", "ld a,b", "ld c,a", "ld a,c", "ld h,a", "ld a,h", "ld d,e"
+        ] {
+            let entries = find_timings(instr);
+            assert_eq!(entries.len(), 1, "{instr}: {entries:?}");
+            assert_eq!(entries[0].pattern, "ld r,r'", "{instr}: {entries:?}");
+            assert_eq!(entries[0].nops, 1, "{instr}: {entries:?}");
+        }
+    }
+
+    #[test]
+    fn the_special_ir_register_forms_still_resolve_to_themselves() {
+        for (instr, pattern) in [
+            ("ld i,a", "ld i,a"),
+            ("ld a,i", "ld a,i"),
+            ("ld r,a", "ld r,a"),
+            ("ld a,r", "ld a,r")
+        ] {
+            let entries = find_timings(instr);
+            assert_eq!(entries.len(), 1, "{instr}: {entries:?}");
+            assert_eq!(entries[0].pattern, pattern, "{instr}: {entries:?}");
+            assert_eq!(entries[0].nops, 3, "{instr}: {entries:?}");
+        }
     }
 }

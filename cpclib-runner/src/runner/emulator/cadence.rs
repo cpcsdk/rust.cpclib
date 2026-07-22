@@ -149,7 +149,7 @@ impl CadenceVersion {
                 move |desc: &DelegateApplicationDescription<E>| -> Result<(), String> {
                     let cache_folder = desc.cache_folder();
 
-                    match &version {
+                    match &_version {
                         CadenceVersion::V0_3a => install_macos_source_release(&cache_folder)?,
                         CadenceVersion::V1_1 | CadenceVersion::V1_4 => {
                             install_macos_dmg_release(&cache_folder, &desc.exec_fname())?
@@ -181,6 +181,7 @@ fn ensure_executable(path: &Utf8Path) -> Result<(), String> {
 #[cfg(target_os = "macos")]
 fn install_macos_source_release(cache_folder: &Utf8Path) -> Result<(), String> {
     use std::process::Command;
+    use std::thread::available_parallelism;
 
     let src_dir = if cache_folder.join("Cadence.pro").exists() {
         cache_folder.to_owned()

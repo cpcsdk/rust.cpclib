@@ -95,6 +95,8 @@ impl DownloadableInformation for RetroVmVersion {
         > = Box::new(|d| {
             use std::process::Command;
 
+use cpclib_common::camino::Utf8PathBuf;
+
             let exec_path = d.exec_fname();
             let dmg_path = d
                 .cache_folder()

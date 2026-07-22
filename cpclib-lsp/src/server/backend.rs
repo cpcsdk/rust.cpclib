@@ -412,6 +412,26 @@ impl CpcLspBackend {
         None
     }
 
+    /// Resolves a `CallHierarchyItem.uri` back to its document for
+    /// `incoming_calls`/`outgoing_calls`. The item may name a document that
+    /// isn't open in the editor (e.g. a shared bndbuild file pulled in only
+    /// via `resolve_bndbuild_item`'s include-graph walk), so this falls
+    /// back to reading it from disk - same "open doc, else read from disk"
+    /// shape as `bndbuild_incoming_candidate_docs`.
+    fn document_for_call_hierarchy_item(
+        &self,
+        uri: &Url,
+        _data: &CallHierarchyData
+    ) -> Option<(DocumentType, Document)> {
+        if let Some(entry) = self.documents.get(uri) {
+            return Some((entry.value().doc_type, entry.value().clone()));
+        }
+        let path = uri.to_file_path().ok()?;
+        let text = std::fs::read_to_string(&path).ok()?;
+        let document = Document::new(uri.clone(), text, 0);
+        Some((document.doc_type, document))
+    }
+
     /// Fallback for `prepare_call_hierarchy` when the cursor names a
     /// target/dependency or macro call site that isn't defined in this
     /// document itself - e.g. a macro call whose `{% macro %}` definition
@@ -439,33 +459,6 @@ impl CpcLspBackend {
                     self.build_analyzer.call_hierarchy_item_for_macro(doc, n)
                 })
             },
-        }
-    }
-
-    /// Resolve the document a `CallHierarchyItem` points at, for the
-    /// `incomingCalls`/`outgoingCalls` follow-up requests. The basm/BASIC
-    /// domains always start from an already-open document, so requiring
-    /// `self.documents.get` to succeed is fine there; but a bndbuild item
-    /// can legitimately point at a file that was never opened at all (e.g.
-    /// a macro's own `common.build` definition, reached purely by walking
-    /// the `{% include %}` graph from an open scene file) - cross-file
-    /// resolution is the whole point, so fall back to reading it straight
-    /// from disk for those two kinds.
-    fn document_for_call_hierarchy_item(
-        &self,
-        uri: &Url,
-        data: &CallHierarchyData
-    ) -> Option<(DocumentType, Document)> {
-        if let Some(entry) = self.documents.get(uri) {
-            return Some((entry.value().doc_type, entry.value().clone()));
-        }
-        match data {
-            CallHierarchyData::BndbuildTarget { .. } | CallHierarchyData::JinjaMacro { .. } => {
-                let path = uri.to_file_path().ok()?;
-                let text = std::fs::read_to_string(&path).ok()?;
-                Some((DocumentType::BuildFile, Document::new(uri.clone(), text, 0)))
-            },
-            _ => None
         }
     }
 }
@@ -576,6 +569,7 @@ impl LanguageServer for CpcLspBackend {
                         "cpclib.getTargets".to_string(),
                         "cpclib.selectRange".to_string(),
                         "cpclib.runRule".to_string(),
+                        "cpclib.cycleCountForSelection".to_string(),
                     ],
                     work_done_progress_options: WorkDoneProgressOptions::default()
                 }),
@@ -593,6 +587,7 @@ impl LanguageServer for CpcLspBackend {
                         code_action_kinds: Some(vec![
                             CodeActionKind::REFACTOR_REWRITE,
                             CodeActionKind::REFACTOR_EXTRACT,
+                            CodeActionKind::EMPTY,
                         ]),
                         work_done_progress_options: Default::default(),
                         resolve_provider: Some(false)
@@ -1409,6 +1404,46 @@ impl LanguageServer for CpcLspBackend {
                 }
             }
             return Ok(None);
+        }
+
+        if params.command == "cpclib.cycleCountForSelection" {
+            let Some(arg) = params.arguments.into_iter().next()
+            else {
+                return Ok(None);
+            };
+            let uri = arg
+                .get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<Url>().ok());
+            let range = arg
+                .get("range")
+                .and_then(|v| serde_json::from_value::<Range>(v.clone()).ok());
+            let (Some(uri), Some(range)) = (uri, range)
+            else {
+                return Ok(None);
+            };
+
+            // Use the open document when available, else load from disk -
+            // mirrors `document_for_call_hierarchy_item`'s fallback.
+            let document = if let Some(entry) = self.documents.get(&uri) {
+                entry.value().clone()
+            }
+            else {
+                let Some(path) = uri.to_file_path().ok()
+                else {
+                    return Ok(None);
+                };
+                let Ok(text) = std::fs::read_to_string(&path)
+                else {
+                    return Ok(None);
+                };
+                Document::new(uri, text, 0)
+            };
+
+            let summary = self
+                .asm_analyzer
+                .cycle_count_for_selection(&document, range);
+            return Ok(summary.map(|s| serde_json::to_value(s).unwrap_or(serde_json::Value::Null)));
         }
 
         if params.command != "cpclib.getTargets" {

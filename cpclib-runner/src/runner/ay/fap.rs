@@ -50,7 +50,9 @@ impl FAPVersion {
 
         #[cfg(target_os = "macos")]
         let builder = {
+            use std::io::Cursor;
             use std::os::unix::fs::PermissionsExt;
+            use std::process::Command;
 
             // On macOS, build the cruncher from git tag v1.0.2.
             let compile: Box<dyn Fn(&cpclib_common::camino::Utf8Path, &E) -> Result<(), String>> =

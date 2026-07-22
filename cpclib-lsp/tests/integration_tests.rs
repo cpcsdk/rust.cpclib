@@ -990,3 +990,129 @@ async fn test_goto_definition_workspace_scan_finds_the_one_match_among_many_cand
     );
     assert_eq!(location.range.start.line, 0);
 }
+
+// ─── cpclib.cycleCountForSelection ─────────────────────────────────────────
+
+#[tokio::test]
+async fn test_cycle_count_for_selection_command() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let uri = Url::parse("file:///cycle_count.asm").unwrap();
+    // A conditional jump (djnz) mixed with a plain instruction - exercises
+    // both the min/max range and the plain-sum paths in one selection.
+    let text = "loop: djnz loop\n    nop\n";
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "basm".to_string(),
+                version: 1,
+                text: text.to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let range = Range {
+        start: Position {
+            line: 0,
+            character: 0
+        },
+        end: Position {
+            line: 2,
+            character: 0
+        }
+    };
+    let result = backend
+        .execute_command(ExecuteCommandParams {
+            command: "cpclib.cycleCountForSelection".to_string(),
+            arguments: vec![serde_json::json!({
+                "uri": uri.to_string(),
+                "range": range,
+            })],
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap()
+        .expect("expected a cycle count result");
+
+    // djnz loop: 3 (not taken) or 4 (taken), plus nop's own fixed 1.
+    assert_eq!(result["min_nops"], 4);
+    assert_eq!(result["max_nops"], 5);
+    assert_eq!(result["instruction_count"], 2);
+    assert_eq!(result["unrecognized_count"], 0);
+}
+
+#[tokio::test]
+async fn test_cycle_count_for_selection_command_with_no_selection_returns_none() {
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let uri = Url::parse("file:///cycle_count_none.asm").unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "basm".to_string(),
+                version: 1,
+                text: "    nop\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let collapsed = Range {
+        start: Position {
+            line: 0,
+            character: 0
+        },
+        end: Position {
+            line: 0,
+            character: 0
+        }
+    };
+    let result = backend
+        .execute_command(ExecuteCommandParams {
+            command: "cpclib.cycleCountForSelection".to_string(),
+            arguments: vec![serde_json::json!({
+                "uri": uri.to_string(),
+                "range": collapsed,
+            })],
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap();
+
+    assert!(result.is_none());
+}

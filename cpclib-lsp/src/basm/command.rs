@@ -4,6 +4,7 @@
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
+use super::cycles::{self, SelectionCycleCount};
 use super::embedded_basic::extract_locomotive_blocks;
 use crate::common::document::Document;
 
@@ -56,23 +57,10 @@ impl AssemblyAnalyzer {
             }
         }
 
-        let has_selection = range.start != range.end;
-        if !has_selection {
-            return actions;
-        }
-        let start_line = range.start.line as usize;
-        // end.line is exclusive when character == 0; include last non-empty line
-        let end_line = if range.end.character == 0 && range.end.line > range.start.line {
-            (range.end.line as usize).saturating_sub(1)
-        }
+        let Some((start_line, end_line)) = line_range_from_selection(range, all_lines.len())
         else {
-            range.end.line as usize
-        }
-        .min(all_lines.len().saturating_sub(1));
-
-        if start_line > end_line {
             return actions;
-        }
+        };
 
         // Wrap in MACRO / ENDM
         actions.push(self.wrap_action(
@@ -112,7 +100,69 @@ impl AssemblyAnalyzer {
             actions.push(a);
         }
 
+        // Cycle count for the selection - an intentionally informational,
+        // no-op action (no `edit`, no `command`): the answer is the title
+        // itself, shown right in the Quick Fix menu. There's no better
+        // existing mechanism in this codebase for "just show a computed
+        // value tied to a selection" than this established trick.
+        if let Some(summary) = self.cycle_count_for_selection(document, range) {
+            actions.push(CodeAction {
+                title: cycles::format_title(&summary),
+                kind: Some(CodeActionKind::EMPTY),
+                edit: None,
+                command: None,
+                ..Default::default()
+            });
+        }
+
         actions
+    }
+
+    /// Total NOP count for the instructions in `range`, or `None` when
+    /// there's no real selection or nothing recognizable in it. Shared by
+    /// the `code_actions` Quick Fix entry above and the
+    /// `cpclib.cycleCountForSelection` command (`backend.rs`) that drives
+    /// the VS Code status-bar live display.
+    pub fn cycle_count_for_selection(
+        &self,
+        document: &Document,
+        range: Range
+    ) -> Option<SelectionCycleCount> {
+        let text = document.text();
+        let all_lines: Vec<&str> = text.lines().collect();
+        let (start_line, end_line) = line_range_from_selection(range, all_lines.len())?;
+        let summary = cycles::count_cycles_in_lines(&all_lines, start_line, end_line);
+        if summary.is_empty() {
+            None
+        }
+        else {
+            Some(summary)
+        }
+    }
+}
+
+/// `range` (an LSP selection) to an inclusive `(start_line, end_line)` pair,
+/// or `None` when there's no real selection (`range.start == range.end`) or
+/// it's empty/inverted after clamping to `line_count`. Handles the
+/// "`end.line` is exclusive when `character == 0`" LSP quirk.
+pub(super) fn line_range_from_selection(range: Range, line_count: usize) -> Option<(usize, usize)> {
+    if range.start == range.end {
+        return None;
+    }
+    let start_line = range.start.line as usize;
+    let end_line = if range.end.character == 0 && range.end.line > range.start.line {
+        (range.end.line as usize).saturating_sub(1)
+    }
+    else {
+        range.end.line as usize
+    }
+    .min(line_count.saturating_sub(1));
+
+    if start_line > end_line {
+        None
+    }
+    else {
+        Some((start_line, end_line))
     }
 }
 
@@ -140,5 +190,85 @@ pub(super) fn select_range_command(uri: &Url, range: Range) -> Command {
             "uri": uri.to_string(),
             "range": range,
         })])
+    }
+}
+
+#[cfg(test)]
+mod cycle_count_action_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn full_line_range(start: u32, end: u32) -> Range {
+        Range {
+            start: Position {
+                line: start,
+                character: 0
+            },
+            end: Position {
+                line: end,
+                character: 0
+            }
+        }
+    }
+
+    #[test]
+    fn the_action_appears_with_the_right_title_for_a_real_selection() {
+        let d = doc("    ld a,b\n    nop\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 2));
+        let cycle_action = actions
+            .iter()
+            .find(|a| a.title.starts_with("Cycle count:"))
+            .expect("expected a cycle-count action");
+        assert_eq!(cycle_action.title, "Cycle count: 2 NOPs");
+        assert!(cycle_action.edit.is_none());
+        assert!(cycle_action.command.is_none());
+        assert_eq!(cycle_action.kind, Some(CodeActionKind::EMPTY));
+    }
+
+    #[test]
+    fn no_cycle_count_action_without_a_selection() {
+        let d = doc("    ld a,b\n    nop\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let collapsed = Range {
+            start: Position {
+                line: 0,
+                character: 4
+            },
+            end: Position {
+                line: 0,
+                character: 4
+            }
+        };
+        let actions = analyzer.code_actions(&d, collapsed);
+        assert!(!actions.iter().any(|a| a.title.starts_with("Cycle count:")));
+    }
+
+    #[test]
+    fn no_cycle_count_action_when_the_selection_has_nothing_recognizable() {
+        let d = doc("    ; just a comment\n\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 2));
+        assert!(!actions.iter().any(|a| a.title.starts_with("Cycle count:")));
+    }
+
+    #[test]
+    fn cycle_count_for_selection_returns_none_for_a_collapsed_range() {
+        let d = doc("    nop\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let collapsed = Range {
+            start: Position {
+                line: 0,
+                character: 0
+            },
+            end: Position {
+                line: 0,
+                character: 0
+            }
+        };
+        assert!(analyzer.cycle_count_for_selection(&d, collapsed).is_none());
     }
 }

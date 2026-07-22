@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { workspace, ExtensionContext, window } from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import {
     LanguageClient,
     LanguageClientOptions,
@@ -10,9 +12,40 @@ import {
 
 let client: LanguageClient;
 
+// Selection cycle-count status bar item - created in `activate()`, updated
+// by `updateCycleCountStatusBar` (see "Cycle count for selection" section
+// below).
+let cycleCountStatusBarItem: vscode.StatusBarItem;
+
+/// Resolves the `cpclib-lsp` binary when `cpclib-lsp.serverPath` is left at
+/// its default. GUI-launched editors on macOS/Linux commonly don't inherit
+/// the PATH a login shell would have (`cargo install`'s `~/.cargo/bin` is
+/// added there, not system-wide), so a bare PATH lookup alone silently
+/// fails with no indication of *why*. Scans PATH first, then falls back to
+/// `~/.cargo/bin` - `cargo install --path cpclib-lsp`'s own install
+/// location - before giving up and returning the bare name so the normal
+/// ENOENT error still surfaces if truly not found anywhere.
+function resolveServerPath(configured: string): string {
+    if (configured !== 'cpclib-lsp') {
+        return configured; // explicit user override - respect as-is
+    }
+    const exeName = process.platform === 'win32' ? 'cpclib-lsp.exe' : 'cpclib-lsp';
+    const candidateDirs = [
+        ...(process.env.PATH ?? '').split(path.delimiter),
+        path.join(os.homedir(), '.cargo', 'bin')
+    ];
+    for (const dir of candidateDirs) {
+        const candidate = path.join(dir, exeName);
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    return configured;
+}
+
 export function activate(context: ExtensionContext) {
     const config = workspace.getConfiguration('cpclib-lsp');
-    const serverPath = config.get<string>('serverPath', 'cpclib-lsp');
+    const serverPath = resolveServerPath(config.get<string>('serverPath', 'cpclib-lsp'));
 
     const serverOptions: ServerOptions = {
         run: { command: serverPath, transport: TransportKind.stdio },
@@ -103,6 +136,26 @@ export function activate(context: ExtensionContext) {
         }),
     );
     void updateCursorContext(window.activeTextEditor);
+
+    // Live cycle-count status bar item for the current selection - see
+    // "Cycle count for selection" section below.
+    cycleCountStatusBarItem = window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    context.subscriptions.push(cycleCountStatusBarItem);
+    let cycleCountTimer: ReturnType<typeof setTimeout> | undefined;
+    context.subscriptions.push(
+        window.onDidChangeActiveTextEditor(editor => { void updateCycleCountStatusBar(editor); }),
+        window.onDidChangeTextEditorSelection(e => {
+            if (cycleCountTimer) {
+                clearTimeout(cycleCountTimer);
+            }
+            // Debounced: dragging out a selection fires this repeatedly:
+            // querying the server on every tick would be wasteful, and the
+            // status bar only needs to catch up shortly after the drag
+            // settles, not track it live keystroke-by-keystroke.
+            cycleCountTimer = setTimeout(() => { void updateCycleCountStatusBar(e.textEditor); }, 250);
+        }),
+    );
+    void updateCycleCountStatusBar(window.activeTextEditor);
 }
 
 export function deactivate(): Thenable<void> | undefined {
@@ -359,4 +412,62 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
             ),
         );
     }
+}
+
+// ── Cycle count for selection ───────────────────────────────────────────────
+//
+// The server-side `cpclib.cycleCountForSelection` command (backed by
+// `cpclib-lsp/src/basm/cycles.rs`) is also directly usable from the Quick
+// Fix menu (a purely informational code action showing the same numbers in
+// its title - works in any LSP client, no extension code needed). This is
+// the VS Code-only, richer counterpart: a status bar item that stays in
+// sync with the current selection live, mirroring `updateCursorContext`'s
+// debounced-selection-listener shape above.
+
+interface CycleCountResult {
+    min_nops: number;
+    max_nops: number;
+    instruction_count: number;
+    unrecognized_count: number;
+}
+
+async function updateCycleCountStatusBar(editor: vscode.TextEditor | undefined): Promise<void> {
+    if (!editor || editor.document.languageId !== 'basm' || editor.selection.isEmpty) {
+        cycleCountStatusBarItem.hide();
+        return;
+    }
+
+    let result: CycleCountResult | null | undefined;
+    try {
+        result = await client.sendRequest<CycleCountResult | null>('workspace/executeCommand', {
+            command: 'cpclib.cycleCountForSelection',
+            arguments: [{
+                uri: editor.document.uri.toString(),
+                range: client.code2ProtocolConverter.asRange(editor.selection),
+            }],
+        });
+    } catch {
+        // LSP not ready yet, or the request failed - same "treat as
+        // nothing to show" handling as `colorsFor`'s own try/catch.
+        cycleCountStatusBarItem.hide();
+        return;
+    }
+    if (!result) {
+        cycleCountStatusBarItem.hide();
+        return;
+    }
+
+    const { min_nops, max_nops, unrecognized_count } = result;
+    const range = min_nops === max_nops ? `${min_nops}` : `${min_nops}-${max_nops}`;
+    const warning = unrecognized_count > 0 ? ' ⚠' : '';
+    cycleCountStatusBarItem.text = `$(watch) ${range} NOPs${warning}`;
+
+    let tooltip = min_nops === max_nops
+        ? `Selection cycle count: ${min_nops} NOPs`
+        : `Selection cycle count: ${min_nops} NOPs (best case) - ${max_nops} NOPs (worst case, branch taken)`;
+    if (unrecognized_count > 0) {
+        tooltip += `\n${unrecognized_count} line(s) not counted (macro call or unrecognized instruction) - actual total may be higher.`;
+    }
+    cycleCountStatusBarItem.tooltip = tooltip;
+    cycleCountStatusBarItem.show();
 }

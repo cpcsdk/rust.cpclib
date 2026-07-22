@@ -18,6 +18,7 @@ pub mod autocomplete;
 pub mod call_hierarchy;
 pub mod color;
 pub mod command;
+pub mod cycles;
 pub mod definition;
 pub mod diagnostics;
 pub mod disassemble;
