@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+use super::overflow::format_value_like_source;
+
 include!(concat!(env!("OUT_DIR"), "/timings_generated.rs"));
 
 // Index by uppercase mnemonic for O(1) lookup
@@ -219,13 +221,19 @@ pub fn format_hover(
 /// register-class placeholders (`r`/`r'`/`r''`/`rr`/`qq`/`cc`/`ccc`) get the
 /// operand's own source text (e.g. `SP`); immediate-class placeholders
 /// (`n`/`nn`/`d`/`e`/`b`/`ttt`) get the *resolved* value when known
-/// (`resolved[i]`), otherwise the placeholder is left untouched rather than
-/// showing something potentially wrong. A placeholder that appears wrapped
-/// in one layer of parens in the pattern (e.g. `(n)` for an I/O port
-/// address, `(nn)` for a memory address) still substitutes correctly: the
-/// paren layer is stripped only for *classifying* the placeholder, so
-/// `port(n)`'s bare `n` in the pseudocode text is what actually gets
-/// replaced, and the surrounding parens are untouched literal text.
+/// (`resolved[i]`), formatted in the same base the source wrote it in via
+/// `format_value_like_source` (e.g. `&05` stays `&5`, not `5`) - falling
+/// back to hexadecimal when the operand isn't a single bare literal (a
+/// symbol reference or computed expression has no "original base" of its
+/// own to preserve), same convention `overflow.rs` already established for
+/// overflow-warning values. Otherwise the placeholder is left untouched
+/// rather than showing something potentially wrong. A placeholder that
+/// appears wrapped in one layer of parens in the pattern (e.g. `(n)` for an
+/// I/O port address, `(nn)` for a memory address) still substitutes
+/// correctly: the paren layer is stripped only for *classifying* the
+/// placeholder, so `port(n)`'s bare `n` in the pseudocode text is what
+/// actually gets replaced, and the surrounding parens are untouched literal
+/// text.
 ///
 /// Returns `None` when this entry has no pseudocode at all (a
 /// `pseudocode.txt` gap - not every pattern is covered yet).
@@ -254,7 +262,11 @@ fn render_pseudocode(
         let replacement = match bare {
             "r" | "r'" | "r''" | "rr" | "qq" | "cc" | "ccc" => Some(src.to_uppercase()),
             "n" | "nn" | "d" | "e" | "b" | "ttt" => {
-                resolved.get(i).copied().flatten().map(|v| v.to_string())
+                resolved
+                    .get(i)
+                    .copied()
+                    .flatten()
+                    .map(|v| format_value_like_source(src, v))
             },
             _ => None
         };

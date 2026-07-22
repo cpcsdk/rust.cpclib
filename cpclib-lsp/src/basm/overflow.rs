@@ -259,7 +259,7 @@ fn ld_destination_width(dst: &LocatedDataAccess) -> Option<SlotWidth> {
 /// `0x2c`) whenever `source_text` isn't a single bare literal: a symbol
 /// reference or a computed expression has no one "original base" of its
 /// own to preserve.
-fn format_value_like_source(source_text: &str, value: i32) -> String {
+pub(super) fn format_value_like_source(source_text: &str, value: i32) -> String {
     let trimmed = source_text.trim();
     let literals = scan_numeric_literals(trimmed);
     let kind = match literals.as_slice() {

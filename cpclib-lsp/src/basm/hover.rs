@@ -709,14 +709,32 @@ mod timing_hover_tests {
     }
 
     #[test]
+    fn pseudocode_substitutes_a_hex_literal_immediate_in_hex() {
+        // The substituted value must be shown in the same base the source
+        // wrote it in - not silently converted to decimal.
+        let md = hover_at_line("    org 0x4000\n    ld bc, 0x2c\n", 1, 5);
+        assert!(md.contains("`BC <- 0x2c`"), "{md}");
+    }
+
+    #[test]
+    fn pseudocode_substitutes_a_binary_literal_immediate_in_binary() {
+        let md = hover_at_line("    org 0x4000\n    ld bc, 0b101\n", 1, 5);
+        assert!(md.contains("`BC <- 0b101`"), "{md}");
+    }
+
+    #[test]
     fn pseudocode_substitutes_an_equ_resolved_symbol() {
         // Per the original request: pseudocode substitution must work "for
         // indirection with variables" too, not just literal immediates -
         // resolving `val` against the fully-assembled `Env`'s symbol table
         // (the same `dry_run_env` machinery used elsewhere in this crate)
-        // covers this the same way it covers a literal.
+        // covers this the same way it covers a literal. A symbol reference
+        // has no "original base" of its own to preserve (the base only
+        // lives in `val`'s own definition, not at this use site), so it
+        // falls back to hexadecimal - the same convention `overflow.rs`
+        // already established for overflow-warning values.
         let md = hover_at_line("    org 0x4000\n    val equ 9\n    ld b, val\n", 2, 5);
-        assert!(md.contains("`B <- 9`"), "{md}");
+        assert!(md.contains("`B <- 0x9`"), "{md}");
     }
 
     #[test]
