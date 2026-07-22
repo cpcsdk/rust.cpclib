@@ -10,6 +10,7 @@ use tower_lsp::{Client, LanguageServer};
 
 use crate::basm::AssemblyAnalyzer;
 use crate::bndbuild::BuildFileAnalyzer;
+use crate::bndbuild::call_hierarchy::CallHierarchyCandidate;
 use crate::common::call_hierarchy::CallHierarchyData;
 use crate::common::document::{Document, DocumentType};
 use crate::locomotive::BasicAnalyzer;
@@ -335,6 +336,136 @@ impl CpcLspBackend {
             if !edits.is_empty() {
                 changes.insert(target_uri, edits);
             }
+        }
+    }
+
+    /// `current` plus every bndbuild file that transitively `{% include %}`s
+    /// the document at `item_uri` — the set of documents whose own scan
+    /// could contain an incoming call to something defined there. Mirrors
+    /// `rename_jinja_variable_across_workspace`'s load-each-file-and-scan
+    /// shape exactly.
+    fn bndbuild_incoming_candidate_docs(
+        &self,
+        current: &Document,
+        item_uri: &Url
+    ) -> Vec<Document> {
+        let mut docs = vec![current.clone()];
+        let Some(path) = item_uri.to_file_path().ok()
+        else {
+            return docs;
+        };
+        let roots: Vec<PathBuf> = self.workspace_roots.read().unwrap().clone();
+        for includer_path in
+            crate::bndbuild::definition::files_transitively_including(&roots, &path)
+        {
+            let Some(includer_uri) = Url::from_file_path(&includer_path).ok()
+            else {
+                continue;
+            };
+            if let Some(open) = self.documents.get(&includer_uri) {
+                docs.push(open.value().clone());
+            }
+            else if let Ok(text) = std::fs::read_to_string(&includer_path) {
+                docs.push(Document::new(includer_uri, text, 0));
+            }
+        }
+        docs
+    }
+
+    /// Resolve `name` to a `CallHierarchyItem` via `resolve`, trying
+    /// `current` first, then every bndbuild file transitively
+    /// `{% include %}`d by the document at `item_uri` (where a
+    /// shared/common definition typically lives, e.g. macros in a
+    /// project's `common.build`).
+    fn resolve_bndbuild_item(
+        &self,
+        current: &Document,
+        item_uri: &Url,
+        name: &str,
+        resolve: impl Fn(&Document, &str) -> Option<CallHierarchyItem>
+    ) -> Option<CallHierarchyItem> {
+        if let Some(item) = resolve(current, name) {
+            return Some(item);
+        }
+        let path = item_uri.to_file_path().ok()?;
+        let roots: Vec<PathBuf> = self.workspace_roots.read().unwrap().clone();
+        for included_path in
+            crate::bndbuild::definition::files_transitively_included_by(&roots, &path)
+        {
+            let Some(included_uri) = Url::from_file_path(&included_path).ok()
+            else {
+                continue;
+            };
+            let doc = if let Some(open) = self.documents.get(&included_uri) {
+                open.value().clone()
+            }
+            else if let Ok(text) = std::fs::read_to_string(&included_path) {
+                Document::new(included_uri, text, 0)
+            }
+            else {
+                continue;
+            };
+            if let Some(item) = resolve(&doc, name) {
+                return Some(item);
+            }
+        }
+        None
+    }
+
+    /// Fallback for `prepare_call_hierarchy` when the cursor names a
+    /// target/dependency or macro call site that isn't defined in this
+    /// document itself - e.g. a macro call whose `{% macro %}` definition
+    /// lives only in an `{% include %}`d file. Extracts what the cursor is
+    /// pointing at via `call_hierarchy_candidate_at`, then retries
+    /// resolution across the include graph the same way outgoing-call
+    /// resolution already does.
+    fn bndbuild_cross_file_prepare(
+        &self,
+        document: &Document,
+        uri: &Url,
+        position: Position
+    ) -> Option<CallHierarchyItem> {
+        match self
+            .build_analyzer
+            .call_hierarchy_candidate_at(document, position)?
+        {
+            CallHierarchyCandidate::Target(name) => {
+                self.resolve_bndbuild_item(document, uri, &name, |doc, n| {
+                    self.build_analyzer.call_hierarchy_item_for_target(doc, n)
+                })
+            },
+            CallHierarchyCandidate::Macro(name) => {
+                self.resolve_bndbuild_item(document, uri, &name, |doc, n| {
+                    self.build_analyzer.call_hierarchy_item_for_macro(doc, n)
+                })
+            },
+        }
+    }
+
+    /// Resolve the document a `CallHierarchyItem` points at, for the
+    /// `incomingCalls`/`outgoingCalls` follow-up requests. The basm/BASIC
+    /// domains always start from an already-open document, so requiring
+    /// `self.documents.get` to succeed is fine there; but a bndbuild item
+    /// can legitimately point at a file that was never opened at all (e.g.
+    /// a macro's own `common.build` definition, reached purely by walking
+    /// the `{% include %}` graph from an open scene file) - cross-file
+    /// resolution is the whole point, so fall back to reading it straight
+    /// from disk for those two kinds.
+    fn document_for_call_hierarchy_item(
+        &self,
+        uri: &Url,
+        data: &CallHierarchyData
+    ) -> Option<(DocumentType, Document)> {
+        if let Some(entry) = self.documents.get(uri) {
+            return Some((entry.value().doc_type, entry.value().clone()));
+        }
+        match data {
+            CallHierarchyData::BndbuildTarget { .. } | CallHierarchyData::JinjaMacro { .. } => {
+                let path = uri.to_file_path().ok()?;
+                let text = std::fs::read_to_string(&path).ok()?;
+                Some((DocumentType::BuildFile, Document::new(uri.clone(), text, 0)))
+            },
+            _ => None
         }
     }
 }
@@ -901,7 +1032,12 @@ impl LanguageServer for CpcLspBackend {
                 self.basic_analyzer
                     .prepare_call_hierarchy(entry.value(), position)
             },
-            DocumentType::BuildFile | DocumentType::Unknown => None
+            DocumentType::BuildFile => {
+                self.build_analyzer
+                    .prepare_call_hierarchy(entry.value(), position)
+                    .or_else(|| self.bndbuild_cross_file_prepare(entry.value(), &uri, position))
+            },
+            DocumentType::Unknown => None
         };
 
         Ok(item.map(|i| vec![i]))
@@ -916,16 +1052,14 @@ impl LanguageServer for CpcLspBackend {
         else {
             return Ok(None);
         };
-        let Some(entry) = self.documents.get(&item.uri)
+        let Some((doc_type, document)) = self.document_for_call_hierarchy_item(&item.uri, &data)
         else {
             return Ok(None);
         };
-        let doc_type = entry.value().doc_type;
 
         let calls = match (doc_type, data) {
             (DocumentType::Assembly, CallHierarchyData::AsmLabel { name }) => {
                 let name_upper = name.to_uppercase();
-                drop(entry);
                 let mut calls = Vec::new();
                 for doc_entry in self.documents.iter() {
                     if doc_entry.value().doc_type != DocumentType::Assembly {
@@ -946,7 +1080,7 @@ impl LanguageServer for CpcLspBackend {
                 }
             ) => {
                 self.asm_analyzer.incoming_calls_for_embedded_basic_line(
-                    entry.value(),
+                    &document,
                     line_number,
                     start
                 )
@@ -957,9 +1091,34 @@ impl LanguageServer for CpcLspBackend {
                     line_number,
                     block_start_line: None
                 }
-            ) => {
-                self.basic_analyzer
-                    .incoming_calls(entry.value(), line_number)
+            ) => self.basic_analyzer.incoming_calls(&document, line_number),
+            (DocumentType::BuildFile, CallHierarchyData::BndbuildTarget { target }) => {
+                let docs = self.bndbuild_incoming_candidate_docs(&document, &item.uri);
+
+                let mut calls = Vec::new();
+                for doc in &docs {
+                    for (caller, ranges) in self.build_analyzer.incoming_calls_in(doc, &target) {
+                        if let Some(from) = self
+                            .build_analyzer
+                            .call_hierarchy_item_for_target(doc, &caller)
+                        {
+                            calls.push(CallHierarchyIncomingCall {
+                                from,
+                                from_ranges: ranges
+                            });
+                        }
+                    }
+                }
+                calls
+            },
+            (DocumentType::BuildFile, CallHierarchyData::JinjaMacro { name }) => {
+                let docs = self.bndbuild_incoming_candidate_docs(&document, &item.uri);
+
+                let mut calls = Vec::new();
+                for doc in &docs {
+                    calls.extend(self.build_analyzer.incoming_calls_for_macro_in(doc, &name));
+                }
+                calls
             },
             _ => Vec::new() // stale/mismatched `data` (doc_type changed since prepare)
         };
@@ -976,17 +1135,14 @@ impl LanguageServer for CpcLspBackend {
         else {
             return Ok(None);
         };
-        let Some(entry) = self.documents.get(&item.uri)
+        let Some((doc_type, document)) = self.document_for_call_hierarchy_item(&item.uri, &data)
         else {
             return Ok(None);
         };
-        let doc_type = entry.value().doc_type;
 
         let calls = match (doc_type, data) {
             (DocumentType::Assembly, CallHierarchyData::AsmLabel { name }) => {
                 let name_upper = name.to_uppercase();
-                let document = entry.value().clone();
-                drop(entry);
 
                 let targets = self
                     .asm_analyzer
@@ -1030,7 +1186,7 @@ impl LanguageServer for CpcLspBackend {
                 }
             ) => {
                 self.asm_analyzer.outgoing_calls_for_embedded_basic_line(
-                    entry.value(),
+                    &document,
                     line_number,
                     start
                 )
@@ -1041,9 +1197,51 @@ impl LanguageServer for CpcLspBackend {
                     line_number,
                     block_start_line: None
                 }
-            ) => {
-                self.basic_analyzer
-                    .outgoing_calls(entry.value(), line_number)
+            ) => self.basic_analyzer.outgoing_calls(&document, line_number),
+            (DocumentType::BuildFile, CallHierarchyData::BndbuildTarget { target }) => {
+                let targets = self
+                    .build_analyzer
+                    .outgoing_call_targets_in(&document, &target);
+
+                let mut calls = Vec::new();
+                for (target_name, ranges) in targets {
+                    let to = self.resolve_bndbuild_item(
+                        &document,
+                        &item.uri,
+                        &target_name,
+                        |doc, name| {
+                            self.build_analyzer
+                                .call_hierarchy_item_for_target(doc, name)
+                        }
+                    );
+                    if let Some(to) = to {
+                        calls.push(CallHierarchyOutgoingCall {
+                            to,
+                            from_ranges: ranges
+                        });
+                    }
+                }
+                calls
+            },
+            (DocumentType::BuildFile, CallHierarchyData::JinjaMacro { name }) => {
+                let targets = self
+                    .build_analyzer
+                    .outgoing_calls_for_macro_targets_in(&document, &name);
+
+                let mut calls = Vec::new();
+                for (callee_name, ranges) in targets {
+                    let to =
+                        self.resolve_bndbuild_item(&document, &item.uri, &callee_name, |doc, n| {
+                            self.build_analyzer.call_hierarchy_item_for_macro(doc, n)
+                        });
+                    if let Some(to) = to {
+                        calls.push(CallHierarchyOutgoingCall {
+                            to,
+                            from_ranges: ranges
+                        });
+                    }
+                }
+                calls
             },
             _ => Vec::new()
         };

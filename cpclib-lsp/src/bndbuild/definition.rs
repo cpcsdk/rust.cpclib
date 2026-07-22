@@ -279,7 +279,7 @@ impl BuildFileAnalyzer {
     /// form (`dep:\n  - a.bin\n  - b.bin`) — where a bare `- ` item's
     /// governing key is resolved via `enclosing_key_for_list_item`, since
     /// the item's own line never repeats it. Strips trailing YAML comments.
-    fn filename_under_cursor<'a>(
+    pub(super) fn filename_under_cursor<'a>(
         document: &Document,
         line_idx: usize,
         line: &'a str,
@@ -709,6 +709,38 @@ pub(crate) fn files_transitively_including(roots: &[PathBuf], target: &Path) -> 
             if visited.insert(includer.clone()) {
                 result.push(includer.clone());
                 queue.push_back(includer.clone());
+            }
+        }
+    }
+    result
+}
+
+/// Every file transitively `{% include %}`d *by* `from` (directly or
+/// indirectly) — the downward counterpart of
+/// [`files_transitively_including`], used to search for a target/macro
+/// definition that isn't in `from` itself but lives in a shared/common file
+/// it pulls in. Same [`build_include_graph`] adjacency map, walked forward
+/// over its direct edges instead of the other function's reverse-edge walk.
+/// `from` itself is never included in the result.
+pub(crate) fn files_transitively_included_by(roots: &[PathBuf], from: &Path) -> Vec<PathBuf> {
+    let graph = build_include_graph(roots);
+    let from = from.canonicalize().unwrap_or_else(|_| from.to_path_buf());
+
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    let mut queue: VecDeque<PathBuf> = VecDeque::new();
+    visited.insert(from.clone());
+    queue.push_back(from);
+
+    let mut result = Vec::new();
+    while let Some(current) = queue.pop_front() {
+        let Some(includes) = graph.get(&current)
+        else {
+            continue;
+        };
+        for included in includes {
+            if visited.insert(included.clone()) {
+                result.push(included.clone());
+                queue.push_back(included.clone());
             }
         }
     }

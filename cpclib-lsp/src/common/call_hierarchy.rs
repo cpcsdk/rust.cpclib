@@ -2,10 +2,10 @@
 //! between `textDocument/prepareCallHierarchy` and
 //! `callHierarchy/incomingCalls`/`callHierarchy/outgoingCalls` - those two
 //! only receive the `CallHierarchyItem` back, not the original request
-//! context, so this is how `backend.rs` and the two domain analyzers learn
-//! what kind of "function" a given item actually is (a basm label, or a
-//! BASIC line - standalone or embedded in a `LOCOMOTIVE` block) without
-//! re-parsing its `name`/`range`.
+//! context, so this is how `backend.rs` and the domain analyzers learn what
+//! kind of "function" a given item actually is (a basm label, a BASIC line
+//! - standalone or embedded in a `LOCOMOTIVE` block, a bndbuild target, or
+//! a Jinja macro) without re-parsing its `name`/`range`.
 
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +24,13 @@ pub enum CallHierarchyData {
     BasicLine {
         line_number: u16,
         block_start_line: Option<u32>
-    }
+    },
+    /// One specific bndbuild target filename/token. Identity is per-output
+    /// file, not per-rule, since one rule's `tgt:` field can list several.
+    BndbuildTarget { target: String },
+    /// A Jinja `{% macro NAME(...) %}` defined somewhere reachable from the
+    /// current document's `{% include %}` graph.
+    JinjaMacro { name: String }
 }
 
 impl CallHierarchyData {

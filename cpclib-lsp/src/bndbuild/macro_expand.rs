@@ -96,7 +96,7 @@ fn render_error(header: &str, action: &str, err: &minijinja::Error) -> String {
 /// If `col` sits on an identifier immediately (optionally after whitespace)
 /// followed by `(...)`, inside `{{ }}`/`{% %}`, return its name and the raw
 /// text between the parens (single-line only, matching `jinja_context_at`).
-fn macro_call_at(line: &str, col: usize) -> Option<(String, String)> {
+pub(super) fn macro_call_at(line: &str, col: usize) -> Option<(String, String)> {
     super::jinja::jinja_context_at(line, col)?;
 
     let bytes = line.as_bytes();

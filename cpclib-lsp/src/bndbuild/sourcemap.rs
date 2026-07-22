@@ -44,6 +44,17 @@ pub(super) fn build_environment(file_dir: Option<&std::path::Path>) -> Environme
     // This lets the expansion proceed even when external build-time variables
     // (e.g. definitions passed via `bndbuild -D`) are absent.
     env.set_undefined_behavior(UndefinedBehavior::Chainable);
+    // Without this, minijinja strips exactly one trailing newline when
+    // parsing *each* template - including an `{% include %}`d file's own
+    // content, compiled as its own template. That strip makes the
+    // included content's last line merge onto the same output line as
+    // whatever immediately follows the `{% include %}` tag in the
+    // includer (here, this module's own line-number marker), so that
+    // marker ends up wrongly attached to the included file's content
+    // instead of landing on its own line. Keeping the trailing newline
+    // keeps included content and includer markers on separate lines, so
+    // `to_original` correctly reports `None` for every included line.
+    env.set_keep_trailing_newline(true);
 
     if let Some(dir) = file_dir {
         let dir = dir.to_path_buf();
