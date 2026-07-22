@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use cpclib_basic::located::{LocatedBasicProgram, LocatedBasicToken, LocatedTokenKind};
+use cpclib_basic::located::{LocatedBasicToken, LocatedTokenKind};
 use cpclib_basic::tokens::BasicTokenNoPrefix;
 use tower_lsp::lsp_types::*;
 
@@ -12,9 +12,8 @@ use crate::common::document::Document;
 
 impl BasicAnalyzer {
     pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
-        let text = document.text();
         // Parse error → one diagnostic at line 0.
-        let prog = match LocatedBasicProgram::parse(&text) {
+        let prog = match self.parse_cached(document) {
             Ok(p) => p,
             Err(e) => {
                 return vec![Diagnostic {

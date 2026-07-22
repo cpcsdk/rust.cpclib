@@ -912,3 +912,81 @@ async fn test_goto_definition_finds_symbol_via_workspace_scan_without_an_include
     );
     assert_eq!(location.range.start.line, 0);
 }
+
+#[tokio::test]
+async fn test_goto_definition_workspace_scan_finds_the_one_match_among_many_candidates() {
+    // The workspace scan searches candidate files in parallel (rayon) - this
+    // exercises that path with several decoy .asm files plus exactly one
+    // real match, guarding against a panic/race/wrong-result from
+    // concurrent access to `self.documents`/disk during the parallel scan.
+    let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    for i in 0..8 {
+        std::fs::write(
+            tmp.path().join(format!("decoy{i}.asm")),
+            format!("UNRELATED_LABEL_{i}:\n    ret\n")
+        )
+        .unwrap();
+    }
+    std::fs::write(tmp.path().join("real.asm"), "SOME_LABEL:\n    ret\n").unwrap();
+
+    backend
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: Some(vec![WorkspaceFolder {
+                uri: Url::from_file_path(tmp.path()).unwrap(),
+                name: "test-workspace".to_string()
+            }]),
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+
+    let main_uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: main_uri.clone(),
+                language_id: "z80-asm".to_string(),
+                version: 1,
+                text: "    call some_label\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let result = backend
+        .goto_definition(GotoDefinitionParams {
+            text_document_position_params: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: main_uri.clone()
+                },
+                position: Position {
+                    line: 0,
+                    character: 11
+                }
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap();
+
+    let GotoDefinitionResponse::Scalar(location) = result.expect("definition should be found")
+    else {
+        panic!("expected a scalar location");
+    };
+    assert_eq!(
+        location.uri,
+        Url::from_file_path(tmp.path().join("real.asm")).unwrap()
+    );
+    assert_eq!(location.range.start.line, 0);
+}

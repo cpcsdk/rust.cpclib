@@ -195,7 +195,7 @@ impl BasicAnalyzer {
         position: Position
     ) -> Option<CallHierarchyItem> {
         let text = document.text();
-        let prog = LocatedBasicProgram::parse(&text).ok()?;
+        let prog = self.parse_cached(document).ok()?;
         let bline = prog.lines.iter().find(|l| l.source_line == position.line)?;
         Some(basic_line_to_call_hierarchy_item(
             &text,
@@ -212,7 +212,7 @@ impl BasicAnalyzer {
         line_number: u16
     ) -> Vec<CallHierarchyIncomingCall> {
         let text = document.text();
-        let Ok(prog) = LocatedBasicProgram::parse(&text)
+        let Ok(prog) = self.parse_cached(document)
         else {
             return Vec::new();
         };
@@ -225,7 +225,7 @@ impl BasicAnalyzer {
         line_number: u16
     ) -> Vec<CallHierarchyOutgoingCall> {
         let text = document.text();
-        let Ok(prog) = LocatedBasicProgram::parse(&text)
+        let Ok(prog) = self.parse_cached(document)
         else {
             return Vec::new();
         };

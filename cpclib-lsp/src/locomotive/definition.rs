@@ -14,8 +14,7 @@ use crate::common::document::Document;
 
 impl BasicAnalyzer {
     pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
-        let text = document.text();
-        let prog = LocatedBasicProgram::parse(&text).ok()?;
+        let prog = self.parse_cached(document).ok()?;
 
         // Find which token the cursor is on.
         let cursor_line = position.line;
@@ -100,8 +99,7 @@ impl BasicAnalyzer {
     }
 
     pub fn find_references(&self, document: &Document, position: Position) -> Vec<Location> {
-        let text = document.text();
-        let prog = match LocatedBasicProgram::parse(&text) {
+        let prog = match self.parse_cached(document) {
             Ok(p) => p,
             Err(_) => return vec![]
         };
@@ -126,8 +124,7 @@ impl BasicAnalyzer {
     /// the cursor isn't on a variable — used by `textDocument/prepareRename`
     /// to decide whether to offer renaming at all.
     pub fn prepare_rename(&self, document: &Document, position: Position) -> Option<Range> {
-        let text = document.text();
-        let prog = LocatedBasicProgram::parse(&text).ok()?;
+        let prog = self.parse_cached(document).ok()?;
         let tok = token_at_position(&prog, position)?;
         match &tok.kind {
             LocatedTokenKind::Variable(_) => {
@@ -146,8 +143,7 @@ impl BasicAnalyzer {
         position: Position,
         new_name: &str
     ) -> Option<WorkspaceEdit> {
-        let text = document.text();
-        let prog = LocatedBasicProgram::parse(&text).ok()?;
+        let prog = self.parse_cached(document).ok()?;
         let var_key = variable_at_position(&prog, position)?;
         variable_occurrences_to_workspace_edit(&prog, &var_key, 0, document.uri.clone(), new_name)
     }

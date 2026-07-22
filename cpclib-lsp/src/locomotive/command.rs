@@ -1,6 +1,5 @@
 //! Code actions for Locomotive BASIC (renumbering) and the code-lens stub.
 
-use cpclib_basic::located::LocatedBasicProgram;
 use tower_lsp::lsp_types::*;
 
 use super::BasicAnalyzer;
@@ -14,8 +13,7 @@ impl BasicAnalyzer {
     pub fn code_actions(&self, document: &Document, _range: Range) -> Vec<CodeAction> {
         use cpclib_basic::renum::Renumber;
         let mut actions = Vec::new();
-        let text = document.text();
-        let prog = match LocatedBasicProgram::parse(&text) {
+        let prog = match self.parse_cached(document) {
             Ok(p) => p,
             Err(_) => return actions
         };

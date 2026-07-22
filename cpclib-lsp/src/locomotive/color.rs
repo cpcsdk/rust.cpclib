@@ -21,8 +21,7 @@ use crate::common::document::Document;
 
 impl BasicAnalyzer {
     pub fn document_colors(&self, document: &Document) -> Vec<ColorInformation> {
-        let text = document.text();
-        let Ok(prog) = LocatedBasicProgram::parse(&text)
+        let Ok(prog) = self.parse_cached(document)
         else {
             return Vec::new();
         };

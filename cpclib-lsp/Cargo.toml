@@ -57,6 +57,7 @@ dashmap = "6"
 
 # Cross-file goto-definition: walking the workspace for .asm files
 walkdir.workspace = true
+rayon.workspace = true
 
 [build-dependencies]
 serde_json = "1"

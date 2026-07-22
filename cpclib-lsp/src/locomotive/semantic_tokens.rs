@@ -1,6 +1,6 @@
 //! Semantic tokens (syntax highlighting) for Locomotive BASIC.
 
-use cpclib_basic::located::{LocatedBasicProgram, LocatedTokenKind};
+use cpclib_basic::located::LocatedTokenKind;
 use tower_lsp::lsp_types::*;
 
 use super::BasicAnalyzer;
@@ -9,8 +9,7 @@ use crate::common::document::Document;
 
 impl BasicAnalyzer {
     pub fn semantic_tokens(&self, document: &Document) -> Vec<SemanticToken> {
-        let text = document.text();
-        let prog = match LocatedBasicProgram::parse(&text) {
+        let prog = match self.parse_cached(document) {
             Ok(p) => p,
             Err(_) => return vec![]
         };

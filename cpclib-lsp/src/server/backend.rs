@@ -1,7 +1,9 @@
 use std::path::PathBuf;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use dashmap::DashMap;
+use rayon::prelude::*;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
@@ -12,12 +14,24 @@ use crate::common::call_hierarchy::CallHierarchyData;
 use crate::common::document::{Document, DocumentType};
 use crate::locomotive::BasicAnalyzer;
 
+/// How long `did_change` waits for edits to stop arriving before actually
+/// re-analyzing and publishing diagnostics - matches the VS Code
+/// extension's own existing client-side debounce for color-swatch refresh
+/// (`cpclib-vscode/src/extension.ts`, 300ms), the established precedent for
+/// "the right timescale for this app."
+const DID_CHANGE_DEBOUNCE: Duration = Duration::from_millis(250);
+
 pub struct CpcLspBackend {
     client: Client,
-    documents: DashMap<Url, Document>,
-    asm_analyzer: AssemblyAnalyzer,
-    build_analyzer: BuildFileAnalyzer,
-    basic_analyzer: BasicAnalyzer,
+    documents: Arc<DashMap<Url, Document>>,
+    asm_analyzer: Arc<AssemblyAnalyzer>,
+    build_analyzer: Arc<BuildFileAnalyzer>,
+    basic_analyzer: Arc<BasicAnalyzer>,
+    /// The latest version `did_change` has requested analysis for, per URI -
+    /// lets a debounced re-analysis task scheduled by an *older* edit detect
+    /// "a newer edit has since arrived, I'm stale" and no-op instead of
+    /// publishing outdated diagnostics over newer ones.
+    pending_versions: Arc<DashMap<Url, i32>>,
     /// Workspace folder(s) reported at `initialize`, used to bound the eager
     /// cross-file goto-definition fallback (`find_definition_via_workspace_scan`).
     /// Empty when the client sent neither `workspaceFolders` nor `rootUri`
@@ -30,10 +44,11 @@ impl CpcLspBackend {
     pub fn new(client: Client) -> Self {
         Self {
             client,
-            documents: DashMap::new(),
-            asm_analyzer: AssemblyAnalyzer::new(),
-            build_analyzer: BuildFileAnalyzer::new(),
-            basic_analyzer: BasicAnalyzer::new(),
+            documents: Arc::new(DashMap::new()),
+            asm_analyzer: Arc::new(AssemblyAnalyzer::new()),
+            build_analyzer: Arc::new(BuildFileAnalyzer::new()),
+            basic_analyzer: Arc::new(BasicAnalyzer::new()),
+            pending_versions: Arc::new(DashMap::new()),
             workspace_roots: RwLock::new(Vec::new())
         }
     }
@@ -45,13 +60,12 @@ impl CpcLspBackend {
     }
 
     async fn analyze_document(&self, document: &Document) {
-        let diagnostics = match document.doc_type {
-            DocumentType::Assembly => self.asm_analyzer.analyze(document),
-            DocumentType::BuildFile => self.build_analyzer.analyze(document),
-            DocumentType::Basic => self.basic_analyzer.analyze(document),
-            DocumentType::Unknown => Vec::new()
-        };
-
+        let diagnostics = compute_diagnostics(
+            &self.asm_analyzer,
+            &self.build_analyzer,
+            &self.basic_analyzer,
+            document
+        );
         self.publish_diagnostics(document.uri.clone(), diagnostics)
             .await;
     }
@@ -81,13 +95,33 @@ impl CpcLspBackend {
 
     /// Symbol defined in any `.asm` file under the workspace root(s) (or, if
     /// the client reported none, the nearest project-root ancestor of
-    /// `from_uri`), even when never opened by the editor. Stops at the first
-    /// match; `.git`/`target`/etc. are pruned from the walk.
+    /// `from_uri`), even when never opened by the editor. `.git`/`target`/
+    /// etc. are pruned from the walk.
+    ///
+    /// The directory walk itself stays sequential (cheap - just filesystem
+    /// metadata), but candidate files are then searched in parallel via
+    /// rayon's `find_map_any`, since parsing+scanning each file is the
+    /// actually expensive part on a large workspace. This changes "first
+    /// match wins" from strict directory-walk order to "first match found
+    /// across parallel workers" - an acceptable difference, since a symbol
+    /// should only have one real definition.
     fn find_definition_via_workspace_scan(
         &self,
         from_uri: &Url,
         word_upper: &str
     ) -> Option<Location> {
+        let paths = self.candidate_asm_paths(from_uri);
+        paths
+            .par_iter()
+            .find_map_any(|path| self.find_definition_at_path(path, word_upper))
+    }
+
+    /// Every `.asm` file under the workspace root(s) (or, if the client
+    /// reported none, the nearest project-root ancestor of `from_uri`),
+    /// excluding `from_uri` itself and pruning `.git`/`target`/etc. - the
+    /// candidate-file list shared by both `find_definition_via_workspace_scan`
+    /// and `rename_label_across_workspace`.
+    fn candidate_asm_paths(&self, from_uri: &Url) -> Vec<PathBuf> {
         let roots: Vec<PathBuf> = {
             let guard = self.workspace_roots.read().unwrap();
             if guard.is_empty() {
@@ -101,6 +135,7 @@ impl CpcLspBackend {
         };
 
         let from_path = from_uri.to_file_path().ok();
+        let mut paths = Vec::new();
 
         for root in roots {
             let walker = walkdir::WalkDir::new(&root)
@@ -118,12 +153,10 @@ impl CpcLspBackend {
                 if !is_asm || from_path.as_deref() == Some(path) {
                     continue;
                 }
-                if let Some(loc) = self.find_definition_at_path(path, word_upper) {
-                    return Some(loc);
-                }
+                paths.push(path.to_path_buf());
             }
         }
-        None
+        paths
     }
 
     /// Shared by both cross-file fallbacks: look up `word_upper` in the file
@@ -167,37 +200,18 @@ impl CpcLspBackend {
             }
         }
 
-        let roots: Vec<PathBuf> = {
-            let guard = self.workspace_roots.read().unwrap();
-            if guard.is_empty() {
-                crate::basm::definition::project_root_for(from_uri)
-                    .into_iter()
-                    .collect()
-            }
-            else {
-                guard.clone()
-            }
-        };
-        let from_path = from_uri.to_file_path().ok();
-
-        for root in roots {
-            let walker = walkdir::WalkDir::new(&root)
-                .into_iter()
-                .filter_entry(|e| !is_ignored_dir(e));
-            for entry in walker.filter_map(|e| e.ok()) {
-                if !entry.file_type().is_file() {
-                    continue;
-                }
-                let path = entry.path();
-                let is_asm = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
-                if !is_asm || from_path.as_deref() == Some(path) {
-                    continue;
-                }
-                self.rename_label_at_path(path, target, new_name, changes);
-            }
+        // The workspace-wide part (unlike the small include list above) is
+        // where parallelizing actually matters: compute every candidate
+        // file's edits independently via rayon (no shared mutable state
+        // during the parallel phase), then merge sequentially, preserving
+        // today's "skip a URI already present" semantics via `or_insert`.
+        let paths = self.candidate_asm_paths(from_uri);
+        let results: Vec<(Url, Vec<TextEdit>)> = paths
+            .par_iter()
+            .filter_map(|path| self.rename_edits_at_path(path, target, new_name))
+            .collect();
+        for (uri, edits) in results {
+            changes.entry(uri).or_insert(edits);
         }
     }
 
@@ -212,31 +226,36 @@ impl CpcLspBackend {
         new_name: &str,
         changes: &mut std::collections::HashMap<Url, Vec<TextEdit>>
     ) {
-        let Some(target_uri) = Url::from_file_path(path).ok()
-        else {
-            return;
-        };
-        if changes.contains_key(&target_uri) {
-            return;
+        if let Some((uri, edits)) = self.rename_edits_at_path(path, target, new_name) {
+            changes.entry(uri).or_insert(edits);
         }
+    }
+
+    /// Compute `target`'s rename edits for the file at `path` (the
+    /// already-open in-memory version if there is one, else read from
+    /// disk), or `None` if the path doesn't resolve to a URI, can't be read,
+    /// or yields no edits. Stateless (no shared `changes` map) so it's safe
+    /// to call from parallel workers.
+    fn rename_edits_at_path(
+        &self,
+        path: &std::path::Path,
+        target: &crate::basm::definition::RenameTarget,
+        new_name: &str
+    ) -> Option<(Url, Vec<TextEdit>)> {
+        let target_uri = Url::from_file_path(path).ok()?;
 
         let edits = if let Some(open_doc) = self.documents.get(&target_uri) {
             self.asm_analyzer
                 .rename_occurrences_in(open_doc.value(), target, new_name)
         }
         else {
-            let Ok(text) = std::fs::read_to_string(path)
-            else {
-                return;
-            };
+            let text = std::fs::read_to_string(path).ok()?;
             let doc = Document::new(target_uri.clone(), text, 0);
             self.asm_analyzer
                 .rename_occurrences_in(&doc, target, new_name)
         };
 
-        if !edits.is_empty() {
-            changes.insert(target_uri, edits);
-        }
+        (!edits.is_empty()).then_some((target_uri, edits))
     }
 
     /// Workspace-wide rename of a bndbuild Jinja variable: every file that
@@ -317,6 +336,24 @@ impl CpcLspBackend {
                 changes.insert(target_uri, edits);
             }
         }
+    }
+}
+
+/// Dispatches `document` to whichever analyzer its `doc_type` owns. A free
+/// function (not a `&self` method) so it's callable from `did_change`'s
+/// debounced `tokio::spawn` task, which only holds the individually
+/// `Arc`-cloned analyzers, not a full `&CpcLspBackend`.
+fn compute_diagnostics(
+    asm_analyzer: &AssemblyAnalyzer,
+    build_analyzer: &BuildFileAnalyzer,
+    basic_analyzer: &BasicAnalyzer,
+    document: &Document
+) -> Vec<Diagnostic> {
+    match document.doc_type {
+        DocumentType::Assembly => asm_analyzer.analyze(document),
+        DocumentType::BuildFile => build_analyzer.analyze(document),
+        DocumentType::Basic => basic_analyzer.analyze(document),
+        DocumentType::Unknown => Vec::new()
     }
 }
 
@@ -481,19 +518,60 @@ impl LanguageServer for CpcLspBackend {
         self.documents.insert(params.text_document.uri, document);
     }
 
+    /// Applies the edit immediately (needed right away by hover/completion/
+    /// etc.), but defers the actual re-analysis + diagnostics publish by
+    /// `DID_CHANGE_DEBOUNCE` — a rapid burst of keystrokes would otherwise
+    /// re-run full analysis on every single one. `pending_versions` lets a
+    /// task scheduled by an edit that's since been superseded detect that
+    /// and no-op, rather than publish stale diagnostics after a newer edit's
+    /// own (possibly still-pending) analysis.
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         tracing::info!("Document changed: {}", params.text_document.uri);
 
-        if let Some(mut entry) = self.documents.get_mut(&params.text_document.uri) {
+        let uri = params.text_document.uri;
+        let version = params.text_document.version;
+
+        if let Some(mut entry) = self.documents.get_mut(&uri) {
             for change in params.content_changes {
-                entry.apply_change(&change, params.text_document.version);
+                entry.apply_change(&change, version);
+            }
+        }
+        else {
+            return;
+        }
+
+        self.pending_versions.insert(uri.clone(), version);
+
+        let client = self.client.clone();
+        let documents = Arc::clone(&self.documents);
+        let pending_versions = Arc::clone(&self.pending_versions);
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+
+        tokio::spawn(async move {
+            tokio::time::sleep(DID_CHANGE_DEBOUNCE).await;
+
+            // A newer edit arrived while we slept - that edit's own
+            // (already-scheduled) task will publish instead.
+            if pending_versions.get(&uri).map(|v| *v) != Some(version) {
+                return;
             }
 
-            let document = entry.value().clone();
-            drop(entry); // Release the lock before async call
+            let Some(document) = documents.get(&uri).map(|d| d.value().clone())
+            else {
+                return; // closed in the meantime
+            };
+            // Guards a close-then-reopen race: same URI, but the version
+            // sequence restarted.
+            if document.version != version {
+                return;
+            }
 
-            self.analyze_document(&document).await;
-        }
+            let diagnostics =
+                compute_diagnostics(&asm_analyzer, &build_analyzer, &basic_analyzer, &document);
+            client.publish_diagnostics(uri, diagnostics, None).await;
+        });
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
@@ -510,6 +588,8 @@ impl LanguageServer for CpcLspBackend {
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         tracing::info!("Document closed: {}", params.text_document.uri);
         self.documents.remove(&params.text_document.uri);
+        self.pending_versions.remove(&params.text_document.uri);
+        self.basic_analyzer.evict(&params.text_document.uri);
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -1328,5 +1408,119 @@ impl LanguageServer for CpcLspBackend {
             }
         }
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod did_change_debounce_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    fn init_params() -> InitializeParams {
+        InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        }
+    }
+
+    #[tokio::test]
+    async fn rapid_edits_leave_only_the_latest_version_pending() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        backend.initialize(init_params()).await.unwrap();
+
+        let uri = Url::parse("file:///t.asm").unwrap();
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "    ld a, 1\n".to_string()
+                }
+            })
+            .await;
+
+        // Fire a burst of rapid edits, all comfortably inside one debounce
+        // window - this is the scenario a real editor produces while the
+        // user is actively typing.
+        for v in 2..=5 {
+            backend
+                .did_change(DidChangeTextDocumentParams {
+                    text_document: VersionedTextDocumentIdentifier {
+                        uri: uri.clone(),
+                        version: v
+                    },
+                    content_changes: vec![TextDocumentContentChangeEvent {
+                        range: None,
+                        range_length: None,
+                        text: format!("    ld a, {v}\n")
+                    }]
+                })
+                .await;
+        }
+
+        // `pending_versions` must reflect only the *last* requested version
+        // immediately - this is exactly what lets the four earlier-
+        // scheduled debounce tasks recognize they've been superseded and
+        // no-op instead of racing to publish stale diagnostics.
+        assert_eq!(backend.pending_versions.get(&uri).map(|v| *v), Some(5));
+        // The document text itself is updated synchronously, independent of
+        // the debounce (hover/completion must never see a stale edit).
+        assert_eq!(backend.documents.get(&uri).unwrap().version, 5);
+
+        // Let every spawned debounce task (the four superseded ones and the
+        // one live one) run to completion - must not panic/deadlock under
+        // this rapid-fire burst.
+        tokio::time::sleep(DID_CHANGE_DEBOUNCE + Duration::from_millis(150)).await;
+        assert_eq!(backend.pending_versions.get(&uri).map(|v| *v), Some(5));
+    }
+
+    #[tokio::test]
+    async fn did_close_evicts_the_pending_version() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        backend.initialize(init_params()).await.unwrap();
+
+        let uri = Url::parse("file:///t.asm").unwrap();
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "    ld a, 1\n".to_string()
+                }
+            })
+            .await;
+        backend
+            .did_change(DidChangeTextDocumentParams {
+                text_document: VersionedTextDocumentIdentifier {
+                    uri: uri.clone(),
+                    version: 2
+                },
+                content_changes: vec![TextDocumentContentChangeEvent {
+                    range: None,
+                    range_length: None,
+                    text: "    ld a, 2\n".to_string()
+                }]
+            })
+            .await;
+        assert!(backend.pending_versions.get(&uri).is_some());
+
+        backend
+            .did_close(DidCloseTextDocumentParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() }
+            })
+            .await;
+        assert!(backend.pending_versions.get(&uri).is_none());
     }
 }

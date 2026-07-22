@@ -19,7 +19,7 @@ impl BasicAnalyzer {
         let line = source_line.trim_end_matches(|c| c == '\n' || c == '\r');
 
         let text = document.text();
-        let prog = LocatedBasicProgram::parse(&text).ok();
+        let prog = self.parse_cached(document).ok();
         let tok = prog.as_ref().and_then(|p| token_at_position(p, position));
 
         // Try keyword hover first (alphabetic words), enriched with the

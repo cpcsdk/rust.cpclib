@@ -3,7 +3,6 @@
 //! elsewhere in the document. Keywords follow the case the user started
 //! typing (lowercase prefix → lowercase completion).
 
-use cpclib_basic::located::LocatedBasicProgram;
 use tower_lsp::lsp_types::*;
 
 use super::BasicAnalyzer;
@@ -64,8 +63,7 @@ impl BasicAnalyzer {
     /// the outline (`symbols.rs`) shows, so completion doesn't miss what the
     /// outline already knows about.
     fn variable_completions(&self, document: &Document) -> Vec<CompletionItem> {
-        let text = document.text();
-        let Ok(prog) = LocatedBasicProgram::parse(&text)
+        let Ok(prog) = self.parse_cached(document)
         else {
             return Vec::new();
         };
