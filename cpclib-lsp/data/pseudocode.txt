@@ -1,0 +1,197 @@
+; Z80 instruction pseudocode, keyed by the exact `pattern` column of
+; timings.txt (whitespace-normalized at build time) so cpclib-lsp/build.rs
+; can join a pseudocode line onto the matching TimingEntry.
+;
+; Hand-curated from standard, well-documented Z80 semantics, cross-checked
+; against the "Z80 instruction set" Wikipedia article's register-transfer
+; notation tables (fetched 2026). Uses `<-` for assignment throughout (not
+; the source material's mixed `:=`/`<-`/arrow notation) for one consistent
+; style. Placeholder words (r, r', rr, qq, cc, ccc, n, nn, d, b, ttt, ...)
+; match timings.txt's own vocabulary (see `match_op` in
+; cpclib-lsp/src/basm/timing.rs) so value/operand substitution at hover time
+; can pair them positionally against the real hovered operands.
+;
+; Format: pattern | pseudocode
+
+; ── 8-bit Load ──────────────────────────────────────────────────────────
+ld r,r'      | r <- r'
+ld r,(hl)    | r <- (HL)
+ld r,(ix+n)  | r <- (IX+n)
+ld r,n       | r <- n
+ld (hl),r    | (HL) <- r
+ld (ix+n),r  | (IX+n) <- r
+ld (hl),n    | (HL) <- n
+ld a,(bc)    | A <- (BC)
+ld a,(de)    | A <- (DE)
+ld a,(nn)    | A <- (nn)
+ld (bc),a    | (BC) <- A
+ld (de),a    | (DE) <- A
+ld (nn),a    | (nn) <- A
+ld i,a       | I <- A
+ld r,a       | R <- A
+ld a,i       | A <- I ; S,Z,P/V(:=IFF2),H(:=0),N(:=0) affected
+ld a,r       | A <- R ; S,Z,P/V(:=IFF2),H(:=0),N(:=0) affected
+
+; ── 16-bit Load ─────────────────────────────────────────────────────────
+ld rr,nn     | rr <- nn
+ld ix,nn     | IX <- nn
+ld hl,(nn)   | HL <- (nn)
+ld ix,(nn)   | IX <- (nn)
+ld rr,(nn)   | rr <- (nn)
+ld (nn),hl   | (nn) <- HL
+ld (nn),ix   | (nn) <- IX
+ld (nn),rr   | (nn) <- rr
+ld sp,hl     | SP <- HL
+ld sp,ix     | SP <- IX
+push qq      | SP <- SP-2, (SP) <- qq
+push ix      | SP <- SP-2, (SP) <- IX
+pop qq       | qq <- (SP), SP <- SP+2
+pop ix       | IX <- (SP), SP <- SP+2
+
+; ── Exchange, Block Transfer, Block Search ─────────────────────────────
+ex de,hl     | DE <-> HL
+ex af,af'    | AF <-> AF'
+exx          | BC <-> BC', DE <-> DE', HL <-> HL'
+ex (sp),hl   | (SP) <-> HL
+ex (sp),ix   | (SP) <-> IX
+ldi          | (DE) <- (HL), HL <- HL+1, DE <- DE+1, BC <- BC-1
+ldd          | (DE) <- (HL), HL <- HL-1, DE <- DE-1, BC <- BC-1
+ldir         | repeat ldi while BC <> 0
+lddr         | repeat ldd while BC <> 0
+cpi          | compare A - (HL), HL <- HL+1, BC <- BC-1
+cpd          | compare A - (HL), HL <- HL-1, BC <- BC-1
+cpir         | repeat cpi while BC <> 0 and A <> (HL)
+cpdr         | repeat cpd while BC <> 0 and A <> (HL)
+
+; ── 8-bit Arithmetic and Logical ────────────────────────────────────────
+add r        | A <- A + r
+add (hl)     | A <- A + (HL)
+add (ix+n)   | A <- A + (IX+n)
+add n        | A <- A + n
+adc r        | A <- A + r + Carry
+adc (hl)     | A <- A + (HL) + Carry
+adc (ix+n)   | A <- A + (IX+n) + Carry
+adc n        | A <- A + n + Carry
+sub r        | A <- A - r
+sub (hl)     | A <- A - (HL)
+sub (ix+n)   | A <- A - (IX+n)
+sub n        | A <- A - n
+sbc r        | A <- A - r - Carry
+sbc (hl)     | A <- A - (HL) - Carry
+sbc (ix+n)   | A <- A - (IX+n) - Carry
+sbc n        | A <- A - n - Carry
+and r        | A <- A AND r
+and (hl)     | A <- A AND (HL)
+and (ix+n)   | A <- A AND (IX+n)
+and n        | A <- A AND n
+or r         | A <- A OR r
+or (hl)      | A <- A OR (HL)
+or (ix+n)    | A <- A OR (IX+n)
+or n         | A <- A OR n
+xor r        | A <- A XOR r
+xor (hl)     | A <- A XOR (HL)
+xor (ix+n)   | A <- A XOR (IX+n)
+xor n        | A <- A XOR n
+cp  r        | compare A - r
+cp (hl)      | compare A - (HL)
+cp (ix+n)    | compare A - (IX+n)
+cp n         | compare A - n
+inc r        | r <- r + 1
+inc (hl)     | (HL) <- (HL) + 1
+inc (ix+n)   | (IX+n) <- (IX+n) + 1
+dec r        | r <- r - 1
+dec (hl)     | (HL) <- (HL) - 1
+dec (ix+n)   | (IX+n) <- (IX+n) - 1
+
+; ── 16-bit Arithmetic ───────────────────────────────────────────────────
+add hl,rr    | HL <- HL + rr
+add ix,rr    | IX <- IX + rr
+adc hl,rr    | HL <- HL + rr + Carry
+sbc hl,rr    | HL <- HL - rr - Carry
+inc rr       | rr <- rr + 1
+inc ix       | IX <- IX + 1
+dec rr       | rr <- rr - 1
+dec ix       | IX <- IX - 1
+
+; ── General-purpose arithmetic and cpu control ─────────────────────────
+daa          | A <- decimal-adjust(A)
+neg          | A <- 0 - A
+cpl          | A <- NOT A
+ccf          | Carry <- NOT Carry
+scf          | Carry <- 1
+nop          | (no operation)
+halt         | suspend until interrupt or reset
+di           | IFF1 <- 0, IFF2 <- 0
+ei           | IFF1 <- 1, IFF2 <- 1
+im 0         | interrupt mode <- 0
+im 1         | interrupt mode <- 1
+im 2         | interrupt mode <- 2
+
+; ── Rotate and shift ────────────────────────────────────────────────────
+; Explicit per bit 7<->0 movement and Carry in/out - not left to the reader
+; to infer from a generic "rotate"/"shift" name. `x.7`/`x.0` = bit 7/bit 0
+; of x; `(old)` marks a value read *before* this instruction's own updates
+; (so e.g. in `rl r`, "Carry(old)" is the flag's value walking in, distinct
+; from the new Carry the same instruction also sets from r.7).
+rlca         | Carry <- A.7, A <- (A shl 1) | A.7(old)
+rrca         | Carry <- A.0, A <- (A shr 1) | (A.0(old) shl 7)
+rla          | Carry <- A.7, A <- (A shl 1) | Carry(old)
+rra          | Carry <- A.0, A <- (A shr 1) | (Carry(old) shl 7)
+rlc r        | Carry <- r.7, r <- (r shl 1) | r.7(old)
+rlc (hl)     | Carry <- (HL).7, (HL) <- ((HL) shl 1) | (HL).7(old)
+rlc (ix+n)   | Carry <- (IX+n).7, (IX+n) <- ((IX+n) shl 1) | (IX+n).7(old)
+rlc (ix+n),r | Carry <- (IX+n).7, r <- ((IX+n) shl 1) | (IX+n).7(old), (IX+n) <- r
+rrc r        | Carry <- r.0, r <- (r shr 1) | (r.0(old) shl 7)
+rl r         | Carry <- r.7, r <- (r shl 1) | Carry(old)
+rr r         | Carry <- r.0, r <- (r shr 1) | (Carry(old) shl 7)
+sla r        | Carry <- r.7, r <- (r shl 1) ; bit 0 <- 0
+sra r        | Carry <- r.0, r <- (r shr 1) ; bit 7 unchanged (sign preserved)
+sl1 r        | Carry <- r.7, r <- (r shl 1) | 1 ; undocumented: bit 0 <- 1
+srl r        | Carry <- r.0, r <- (r shr 1) ; bit 7 <- 0
+rld          | A.lo <- (HL).hi(old), (HL).hi <- (HL).lo(old), (HL).lo <- A.lo(old)
+rrd          | A.lo <- (HL).lo(old), (HL).lo <- (HL).hi(old), (HL).hi <- A.lo(old)
+
+; ── Bit test, reset, set ────────────────────────────────────────────────
+bit b,r        | Z <- NOT r.b
+bit b,(hl)     | Z <- NOT (HL).b
+bit b,(ix+n)   | Z <- NOT (IX+n).b
+res b,r        | r.b <- 0
+res b,(hl)     | (HL).b <- 0
+res b,(ix+n)   | (IX+n).b <- 0
+res b,(ix+n),r | (IX+n).b <- 0, r <- (IX+n)
+set b,r        | r.b <- 1
+set b,(hl)     | (HL).b <- 1
+set b,(ix+n)   | (IX+n).b <- 1
+set b,(ix+n),r | (IX+n).b <- 1, r <- (IX+n)
+
+; ── Jump, Call and Return ──────────────────────────────────────────────
+jp nn        | PC <- nn
+jp ccc,nn    | if ccc then PC <- nn
+jp hl        | PC <- HL
+jp ix        | PC <- IX
+jr n         | PC <- PC + n
+jr cc,nn     | if cc then PC <- PC + n
+djnz n       | B <- B-1, if B <> 0 then PC <- PC + n
+call nn      | SP <- SP-2, (SP) <- PC, PC <- nn
+call ccc,nn  | if ccc then (SP <- SP-2, (SP) <- PC, PC <- nn)
+rst ttt      | SP <- SP-2, (SP) <- PC, PC <- ttt
+ret          | PC <- (SP), SP <- SP+2
+ret ccc      | if ccc then (PC <- (SP), SP <- SP+2)
+reti         | PC <- (SP), SP <- SP+2, IFF1 <- IFF2
+retn         | PC <- (SP), SP <- SP+2, IFF1 <- IFF2
+
+; ── Input and output ────────────────────────────────────────────────────
+in a,(n)     | A <- port(A|n)
+in r,(C)     | r <- port(BC)
+in 0,(C)     | port(C) read, result discarded
+ini          | (HL) <- port(C), HL <- HL+1, B <- B-1
+ind          | (HL) <- port(C), HL <- HL-1, B <- B-1
+inir         | repeat ini while B <> 0
+indr         | repeat ind while B <> 0
+out (n),a    | port(A|n) <- A
+out (C),r    | port(BC) <- r
+out (C),0    | port(BC) <- 0
+outi         | port(BC) <- (HL), HL <- HL+1, B <- B-1
+outd         | port(BC) <- (HL), HL <- HL-1, B <- B-1
+outir        | repeat outi while B <> 0
+outdr        | repeat outd while B <> 0
