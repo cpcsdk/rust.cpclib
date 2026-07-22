@@ -590,6 +590,7 @@ impl LanguageServer for CpcLspBackend {
         self.documents.remove(&params.text_document.uri);
         self.pending_versions.remove(&params.text_document.uri);
         self.basic_analyzer.evict(&params.text_document.uri);
+        self.asm_analyzer.evict(&params.text_document.uri);
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
