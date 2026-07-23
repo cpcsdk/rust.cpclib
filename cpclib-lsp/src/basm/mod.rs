@@ -10,6 +10,7 @@
 
 use std::sync::Arc;
 
+use cpclib_asm::assembler::Env;
 use cpclib_asm::parser::obtained::LocatedListing;
 use dashmap::DashMap;
 use tower_lsp::lsp_types::Url;
@@ -30,6 +31,7 @@ pub mod includes;
 pub mod overflow;
 pub mod parse;
 pub mod refactor;
+pub mod registers;
 pub mod semantic_tokens;
 pub mod symbols;
 pub mod timing;
@@ -54,20 +56,45 @@ pub(crate) use token::semantic_tokens_legend;
 /// `Arc` - parsed once, shared by reference, never cloned - is exactly as
 /// safe as it is for BASIC's fully-owned `LocatedBasicProgram`.
 pub struct AssemblyAnalyzer {
-    parse_cache: DashMap<Url, (i32, Result<Arc<LocatedListing>, Arc<LocatedListing>>)>
+    parse_cache: DashMap<Url, (i32, Result<Arc<LocatedListing>, Arc<LocatedListing>>)>,
+    /// Cache for `expand::dry_run_env`'s result (a *real, full multi-pass
+    /// assemble* of the whole document) - only used by features that
+    /// genuinely need one (cross-file macro/`FUNCTION`/`STRUCT` lookup,
+    /// real assembler warnings). Same `(version, Arc<T>)` shape as
+    /// `parse_cache`.
+    env_cache: DashMap<Url, (i32, Arc<Env>)>,
+    /// Cache for `expand::local_symbols_env`'s result (a lightweight,
+    /// non-assembling local `EQU`/`SET` resolution) - what most hover
+    /// value-substitution needs actually use, since `dry_run_env`'s real
+    /// assemble only produces a correct result from a project's actual
+    /// root/entry file (any other file either errors out or gets an
+    /// incomplete symbol table) and is needlessly expensive for what's
+    /// usually just "what number did this `EQU` resolve to" - recomputing
+    /// it on every hover request made hovering visibly slow once
+    /// register-value tracking made *some* form of this fire on almost
+    /// every hover (any register name), not just the relatively rare
+    /// "hovering an instruction mnemonic" case. A separate map from
+    /// `env_cache` since it holds a different `Env` for the same
+    /// document/version.
+    local_env_cache: DashMap<Url, (i32, Arc<Env>)>
 }
 
 impl AssemblyAnalyzer {
     pub fn new() -> Self {
         Self {
-            parse_cache: DashMap::new()
+            parse_cache: DashMap::new(),
+            env_cache: DashMap::new(),
+            local_env_cache: DashMap::new()
         }
     }
 
-    /// Drop `uri`'s cached parse, if any - called on `textDocument/didClose`
-    /// so a closed document's cache entry doesn't linger indefinitely.
+    /// Drop `uri`'s cached parse/env(s), if any - called on
+    /// `textDocument/didClose` so a closed document's cache entries don't
+    /// linger indefinitely.
     pub fn evict(&self, uri: &Url) {
         self.parse_cache.remove(uri);
+        self.env_cache.remove(uri);
+        self.local_env_cache.remove(uri);
     }
 }
 

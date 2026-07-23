@@ -2,6 +2,7 @@
 /// ! This should be deprecated in favor of a real emulator (WIP in another repo)
 pub mod emul;
 mod preamble;
+pub mod track;
 mod z80;
 
 use cpclib_asm::preamble::*;

@@ -99,14 +99,17 @@ impl AssemblyAnalyzer {
         // worth actually assembling to surface the assembler's own warnings
         // (e.g. `ld hl, de`, a "fake instruction" basm accepts but which
         // isn't real Z80). A document with syntax errors can't assemble
-        // meaningfully, so skip the extra dry-run pass for it - `analyze`
-        // runs far more often than `hover.rs`'s existing `dry_run_env`
-        // calls (on every edit, not just on demand), so this only pays the
-        // cost when it can actually produce something.
+        // meaningfully, so skip the extra dry-run pass for it. `dry_run_env_cached`
+        // (a real assemble, needed here for actual assembler warnings -
+        // unlike most hover value-substitution, which only needs
+        // `local_symbols_env_cached`'s lightweight local `EQU`/`SET`
+        // resolution) is cached per document version, so this only pays
+        // the real cost once per edit even though `analyze` and hover can
+        // both request it for the same version.
         if diagnostics.is_empty()
             && let Ok(listing) = Self::parse_source(&full_text, Some(&document.uri))
         {
-            let mut env = super::expand::dry_run_env(&listing, &document.uri);
+            let mut env = self.dry_run_env_cached(document, &listing);
             collect_assembler_warnings(&env, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
             Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);

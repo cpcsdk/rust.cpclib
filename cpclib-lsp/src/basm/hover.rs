@@ -134,7 +134,7 @@ impl AssemblyAnalyzer {
                     let src_ops = super::timing::parse_ops(ops_text);
                     let mut resolved: Vec<Option<i32>> = vec![None; src_ops.len()];
                     if let Some(l) = &listing {
-                        let mut env = super::expand::dry_run_env(l, &document.uri);
+                        let mut env = self.local_symbols_env_cached(document, l);
                         for (i, arg) in [token.mnemonic_arg1(), token.mnemonic_arg2()]
                             .into_iter()
                             .flatten()
@@ -172,8 +172,26 @@ impl AssemblyAnalyzer {
             return Some(make_hover(md));
         }
 
-        // Register / condition code
-        if let Some(md) = register_description(&word_upper) {
+        // Register / condition code - plus, when this is a tracked
+        // register, its statically-known value (or an explicit "not known")
+        // at this exact point, walked forward from the nearest control-flow
+        // boundary via `registers::register_state_at`.
+        if let Some(mut md) = register_description(&word_upper) {
+            if let Ok(listing) = self.parse_document(document) {
+                let mut env = self.local_symbols_env_cached(document, &listing);
+                let state =
+                    super::registers::register_state_at(&listing, &mut env, position, &word_upper);
+                let contract = super::token::label_scope_at_line(listing.iter(), position.line)
+                    .and_then(|(_, scope)| {
+                        super::registers::parse_function_contract(&document.text(), scope.start)
+                    });
+                if let Some(extra) =
+                    super::registers::format_known_value(&word_upper, &state, contract.as_ref())
+                {
+                    md.push_str("\n\n---\n");
+                    md.push_str(&extra);
+                }
+            }
             return Some(make_hover(md));
         }
 
@@ -254,7 +272,7 @@ impl AssemblyAnalyzer {
         let token = super::token::flatten_listing(listing.iter())
             .find(|t| t.is_incbin() && span_line(*t) == position.line)?;
 
-        let mut env = super::expand::dry_run_env(&listing, &document.uri);
+        let mut env = self.local_symbols_env_cached(document, &listing);
         let offset = token
             .incbin_offset()
             .and_then(|e| e.resolve(&mut env).ok())
@@ -826,6 +844,59 @@ mod timing_hover_tests {
         // Not the unrelated real instructions a naive direct lookup of
         // "ld hl, sp" would have tied on and shown all of.
         assert!(!md.contains("ld i,a") && !md.contains("ld sp,ix"), "{md}");
+    }
+}
+
+#[cfg(test)]
+mod register_value_hover_tests {
+    use super::*;
+
+    fn hover_at_line(text: &str, line: u32, character: u32) -> String {
+        let uri = Url::parse("file:///main.asm").unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        let hover = AssemblyAnalyzer::new()
+            .hover(&doc, Position { line, character })
+            .expect("expected a hover result");
+        match &hover.contents {
+            HoverContents::Markup(m) => m.value.clone(),
+            _ => panic!("expected markdown hover contents")
+        }
+    }
+
+    #[test]
+    fn hovering_a_tracked_register_shows_its_known_value() {
+        let md = hover_at_line("    ld a,5\n    ld b,a\n", 1, 9);
+        assert!(md.contains("Known value at this point"), "{md}");
+        assert!(md.contains("0x05"), "{md}");
+    }
+
+    #[test]
+    fn hovering_a_register_with_no_known_value_says_so_explicitly() {
+        // A fresh register at the very start of the file, never assigned -
+        // must explicitly say "not known", not silently omit the line.
+        let md = hover_at_line("    ld b,a\n", 0, 7);
+        assert!(
+            md.contains("Value not statically known at this point"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn hovering_after_a_label_resets_to_unknown_in_the_hover_too() {
+        let md = hover_at_line("    ld a,5\nfoo:\n    ld b,a\n", 2, 9);
+        assert!(
+            md.contains("Value not statically known at this point"),
+            "{md}"
+        );
+    }
+
+    #[test]
+    fn hovering_an_ld_destination_shows_the_value_this_line_gives_it() {
+        let text = "    ld bc, 6*256 + 7\n";
+        let col_b = text.lines().next().unwrap().find('b').unwrap() as u32;
+        let md = hover_at_line(text, 0, col_b);
+        assert!(md.contains("Known value at this point"), "{md}");
+        assert!(md.contains("0x06"), "{md}");
     }
 }
 

@@ -142,6 +142,107 @@ pub(super) fn dry_run_env(listing: &LocatedListing, doc_uri: &Url) -> Env {
     }
 }
 
+/// Build an `Env` good enough to resolve *this file's own* `EQU`/`SET`
+/// values, without a real assemble.
+///
+/// `dry_run_env` (a real, full multi-pass assemble) only produces a
+/// correct result when run from a project's actual root/entry file — it
+/// needs the real include graph, `ORG`/address tracking, and everything
+/// else a real build does. For any other file (which is most files a user
+/// might be hovering in — a shared routines/library file, anything that's
+/// only ever `include`d, never assembled standalone), it either aborts on
+/// an unresolvable `include` or produces an incomplete/wrong symbol table
+/// — and either way, it's needlessly expensive for what most hover
+/// features actually need, which is just "what number did this `EQU`
+/// resolve to."
+///
+/// This instead walks the document's own `EQU`/`SET`/`ASSIGN` tokens
+/// top-to-bottom, resolving each one's expression against whatever's
+/// already been resolved so far (so `B EQU A+1` sees `A`'s value once `A`'s
+/// own line has been processed) and inserting the result directly into a
+/// fresh `Env`'s symbol table via `assign_symbol_to_value` — the same
+/// direct-insert primitive `seed_bracketed_identifier_placeholders` already
+/// uses, no assembler pipeline involved. Handles bare literals (needs no
+/// symbols at all — `Env::default()` alone already resolves those) and
+/// local, non-forward-referencing `EQU`/`SET` chains, the overwhelming
+/// common case for hover value substitution. Does **not** resolve label
+/// addresses (needs real address tracking) or symbols defined in another
+/// file (needs real `include`-following) — those stay unresolved, same as
+/// any other symbol this document doesn't itself define.
+pub(super) fn local_symbols_env(listing: &LocatedListing) -> Env {
+    let mut env = Env::default();
+    for token in super::token::flatten_listing(listing.iter()) {
+        if token.is_equ() {
+            let sym = token.equ_symbol().to_string();
+            if let Ok(v) = token.equ_value().resolve(&mut env)
+                && let Ok(i) = v.int()
+            {
+                let _ = env
+                    .symbols_mut()
+                    .assign_symbol_to_value(sym, Value::from(i));
+            }
+        }
+        else if token.is_assign() {
+            let sym = token.assign_symbol().to_string();
+            if let Ok(v) = token.assign_value().resolve(&mut env)
+                && let Ok(i) = v.int()
+            {
+                let _ = env
+                    .symbols_mut()
+                    .assign_symbol_to_value(sym, Value::from(i));
+            }
+        }
+    }
+    env
+}
+
+impl AssemblyAnalyzer {
+    /// `dry_run_env`, cached per `(document.uri, document.version)` -
+    /// reuses the same `(i32, Arc<T>)` shape and eviction (`evict`, on
+    /// `textDocument/didClose`) as `parse_cache`. Only for features that
+    /// genuinely need a real assemble (cross-file macro/`FUNCTION`/`STRUCT`
+    /// lookup, or real assembler warnings) — most hover value-substitution
+    /// needs should use `local_symbols_env_cached` instead, see its own
+    /// doc comment for why.
+    pub(super) fn dry_run_env_cached(&self, document: &Document, listing: &LocatedListing) -> Env {
+        if let Some(entry) = self.env_cache.get(&document.uri)
+            && entry.0 == document.version
+        {
+            return (*entry.1).clone();
+        }
+        let env = dry_run_env(listing, &document.uri);
+        self.env_cache.insert(
+            document.uri.clone(),
+            (document.version, Arc::new(env.clone()))
+        );
+        env
+    }
+
+    /// `local_symbols_env`, cached per `(document.uri, document.version)` -
+    /// the right choice for most hover value-substitution needs (see
+    /// `local_symbols_env`'s own doc comment for why it's preferred over
+    /// `dry_run_env_cached`'s real assemble). Same cache shape, own cache
+    /// map (`local_env_cache`) since it holds a different `Env` than
+    /// `dry_run_env_cached` for the same document/version.
+    pub(super) fn local_symbols_env_cached(
+        &self,
+        document: &Document,
+        listing: &LocatedListing
+    ) -> Env {
+        if let Some(entry) = self.local_env_cache.get(&document.uri)
+            && entry.0 == document.version
+        {
+            return (*entry.1).clone();
+        }
+        let env = local_symbols_env(listing);
+        self.local_env_cache.insert(
+            document.uri.clone(),
+            (document.version, Arc::new(env.clone()))
+        );
+        env
+    }
+}
+
 /// Expand `text` (the result of one macro/struct `expand()` call) further:
 /// for any of its lines that is itself a whole macro/struct call resolvable
 /// in `env`, replace that line with *its* expansion too — repeated up to
@@ -236,7 +337,7 @@ impl AssemblyAnalyzer {
             .find(|t| t.is_call_macro_or_build_struct() && span_contains(*t, position))?;
         let name = call.macro_call_name().to_string();
 
-        let mut env = dry_run_env(&listing, &document.uri);
+        let mut env = self.dry_run_env_cached(document, &listing);
 
         let header = format!("**{name}({})**", macro_call_args_display(call));
 
@@ -303,7 +404,7 @@ impl AssemblyAnalyzer {
         let (name, call_text) = function_call_at(line, col)?;
 
         let listing = self.parse_document(document).ok()?;
-        let mut env = dry_run_env(&listing, &document.uri);
+        let mut env = self.dry_run_env_cached(document, &listing);
 
         if env.user_defined_function(&name).is_err() {
             // Not a user-defined FUNCTION — could be a hard-coded builtin
@@ -637,5 +738,115 @@ mod tests {
             )
             .expect("expected an expansion hover");
         assert!(hover.contains("hello"), "{hover}");
+    }
+}
+
+#[cfg(test)]
+mod dry_run_env_cache_tests {
+    use super::*;
+
+    fn doc(text: &str, version: i32) -> Document {
+        Document::new(
+            Url::parse("file:///t.asm").unwrap(),
+            text.to_string(),
+            version
+        )
+    }
+
+    #[test]
+    fn same_version_reuses_the_cached_env_without_recomputing() {
+        let analyzer = AssemblyAnalyzer::new();
+        let d = doc("val equ 9\n", 1);
+        let listing = analyzer.parse_document(&d).ok().unwrap();
+
+        let _ = analyzer.dry_run_env_cached(&d, &listing);
+        let first = analyzer.env_cache.get(&d.uri).unwrap().1.clone();
+
+        let _ = analyzer.dry_run_env_cached(&d, &listing);
+        let second = analyzer.env_cache.get(&d.uri).unwrap().1.clone();
+
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn a_version_bump_recomputes_the_cached_env() {
+        let analyzer = AssemblyAnalyzer::new();
+        let d1 = doc("val equ 9\n", 1);
+        let listing1 = analyzer.parse_document(&d1).ok().unwrap();
+        let _ = analyzer.dry_run_env_cached(&d1, &listing1);
+        let first = analyzer.env_cache.get(&d1.uri).unwrap().1.clone();
+
+        let d2 = doc("val equ 10\n", 2);
+        let listing2 = analyzer.parse_document(&d2).ok().unwrap();
+        let _ = analyzer.dry_run_env_cached(&d2, &listing2);
+        let second = analyzer.env_cache.get(&d2.uri).unwrap().1.clone();
+
+        assert!(!Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn evict_clears_the_cached_env() {
+        let analyzer = AssemblyAnalyzer::new();
+        let d = doc("val equ 9\n", 1);
+        let listing = analyzer.parse_document(&d).ok().unwrap();
+        let _ = analyzer.dry_run_env_cached(&d, &listing);
+        assert_eq!(analyzer.env_cache.len(), 1);
+
+        analyzer.evict(&d.uri);
+        assert_eq!(analyzer.env_cache.len(), 0);
+    }
+}
+
+#[cfg(test)]
+mod local_symbols_env_tests {
+    use cpclib_asm::parser::context::ParserContextBuilder;
+
+    use super::*;
+
+    fn env_for(text: &str) -> Env {
+        let builder = ParserContextBuilder::default().set_quiet(true);
+        let listing = LocatedListing::new_complete_source(text, builder)
+            .unwrap_or_else(|_| panic!("expected {text:?} to parse cleanly"));
+        local_symbols_env(&listing)
+    }
+
+    fn resolve(env: &mut Env, symbol: &str) -> Option<i32> {
+        cpclib_asm::preamble::Expr::Label(symbol.into())
+            .resolve(env)
+            .ok()
+            .and_then(|v| v.int().ok())
+    }
+
+    #[test]
+    fn resolves_a_bare_equ() {
+        let mut env = env_for("val equ 9\n");
+        assert_eq!(resolve(&mut env, "val"), Some(9));
+    }
+
+    #[test]
+    fn resolves_a_local_equ_chain_in_order() {
+        let mut env = env_for("a equ 5\nb equ a+1\n");
+        assert_eq!(resolve(&mut env, "a"), Some(5));
+        assert_eq!(resolve(&mut env, "b"), Some(6));
+    }
+
+    #[test]
+    fn resolves_a_set_assignment_too() {
+        let mut env = env_for("val: set 3\n");
+        assert_eq!(resolve(&mut env, "val"), Some(3));
+    }
+
+    #[test]
+    fn never_errors_on_a_file_that_cannot_be_assembled_standalone() {
+        // The user's own reported scenario: a file that `include`s
+        // something that doesn't exist on disk here (as would be true for
+        // almost any file that isn't a project's actual root/entry file) -
+        // a real assemble (`dry_run_env`) would either abort or produce an
+        // incomplete/wrong symbol table; `local_symbols_env` doesn't
+        // attempt real inclusion at all, so this file's own local EQU
+        // still resolves correctly regardless.
+        let text = "include \"this/file/does/not/exist.asm\"\nval equ 42\n";
+        let mut env = env_for(text);
+        assert_eq!(resolve(&mut env, "val"), Some(42));
     }
 }
