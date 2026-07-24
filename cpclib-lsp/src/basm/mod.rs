@@ -76,7 +76,19 @@ pub struct AssemblyAnalyzer {
     /// "hovering an instruction mnemonic" case. A separate map from
     /// `env_cache` since it holds a different `Env` for the same
     /// document/version.
-    local_env_cache: DashMap<Url, (i32, Arc<Env>)>
+    local_env_cache: DashMap<Url, (i32, Arc<Env>)>,
+    /// Cache for `autocomplete::collect_symbols`'s result (labels/`EQU`/
+    /// `ASSIGN`/macro/module/section names, extracted by walking a
+    /// document's full flattened token listing) - same `(version, Arc<T>)`
+    /// shape as `env_cache`/`local_env_cache`. Completion needs this for
+    /// every *other* open Assembly document too (cross-file label
+    /// completion), and unlike the current document (whose version bumps on
+    /// every keystroke, so this cache never hits for it while actively
+    /// typing there), those other documents' versions typically stay stable
+    /// while typing elsewhere - so this turns their full-listing walk from
+    /// "redone on every completion keystroke" into "redone only when that
+    /// other document itself actually changes".
+    symbols_cache: DashMap<Url, (i32, Arc<Vec<(String, String)>>)>
 }
 
 impl AssemblyAnalyzer {
@@ -84,7 +96,8 @@ impl AssemblyAnalyzer {
         Self {
             parse_cache: DashMap::new(),
             env_cache: DashMap::new(),
-            local_env_cache: DashMap::new()
+            local_env_cache: DashMap::new(),
+            symbols_cache: DashMap::new()
         }
     }
 
@@ -95,6 +108,7 @@ impl AssemblyAnalyzer {
         self.parse_cache.remove(uri);
         self.env_cache.remove(uri);
         self.local_env_cache.remove(uri);
+        self.symbols_cache.remove(uri);
     }
 }
 

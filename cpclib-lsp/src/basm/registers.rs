@@ -76,38 +76,48 @@ fn is_boundary(token: &LocatedToken) -> bool {
 /// span starts at or before `position`, walks backward to the nearest
 /// boundary, then walks forward from there applying `track::apply` to a
 /// fresh, all-unknown state.
+///
+/// Single forward pass over `flatten_listing`'s lazy stream (never
+/// materializes the whole document into a `Vec`, and stops as soon as it
+/// passes `position`): `target` holds the latest token seen whose position
+/// is `<= position` - the *previous* held value, once superseded by a later
+/// one, is definitely not the final target, so it's folded into `state`
+/// right then (reset on a boundary, else `track::apply`), exactly mirroring
+/// the old two-pass `start_idx..target_idx` walk. The final `target` itself
+/// is deliberately never folded in this loop - only conditionally applied
+/// after, via the LD-destination exception below - matching the old code
+/// excluding `target_idx` from the `start_idx..target_idx` range.
 pub(super) fn register_state_at(
     listing: &LocatedListing,
     env: &mut Env,
     position: Position,
     hovered_register_upper: &str
 ) -> TrackedState {
-    let tokens: Vec<&LocatedToken> = flatten_listing(listing.iter()).collect();
+    let target_pos = (position.line, position.character);
 
-    let target_idx = tokens.iter().rposition(|t| {
-        let (line, col) = token_position(*t);
-        (line, col) <= (position.line, position.character)
-    });
+    let mut state = TrackedState::default();
+    let mut target: Option<&LocatedToken> = None;
 
-    let Some(target_idx) = target_idx
+    for token in flatten_listing(listing.iter()) {
+        if token_position(token) > target_pos {
+            break;
+        }
+        if let Some(prev) = target.replace(token) {
+            if is_boundary(prev) {
+                state = TrackedState::default();
+            }
+            else {
+                track::apply(&mut state, prev, env);
+            }
+        }
+    }
+
+    let Some(target) = target
     else {
         return TrackedState::default();
     };
 
-    let start_idx = tokens[..target_idx]
-        .iter()
-        .rposition(|t| is_boundary(t))
-        .map(|i| i + 1)
-        .unwrap_or(0);
-
-    let mut state = TrackedState::default();
-    for token in &tokens[start_idx..target_idx] {
-        track::apply(&mut state, token, env);
-    }
-
-    if let Some(target) = tokens.get(target_idx)
-        && is_ld_destination(target, hovered_register_upper)
-    {
+    if is_ld_destination(target, hovered_register_upper) {
         track::apply(&mut state, target, env);
     }
 
@@ -395,6 +405,23 @@ mod tests {
     fn resets_on_entering_a_repeat_block() {
         let s = state_at("    ld a,5\n    repeat 3\n    nop\n    endrepeat\n", 2, 4);
         assert_eq!(s.get8(Register8::A), None);
+    }
+
+    /// Regression test for the single-pass streaming rewrite of
+    /// `register_state_at`: a boundary mid-sequence, followed by *several*
+    /// tracked instructions before the hovered position - stresses that
+    /// resetting `state` when a superseded candidate turns out to be a
+    /// boundary doesn't interfere with correctly folding the *subsequent*
+    /// (post-boundary) candidates one at a time as later tokens keep
+    /// superseding them.
+    #[test]
+    fn resets_at_a_mid_sequence_boundary_then_tracks_forward_across_several_instructions() {
+        let text = "    ld a,1\n    ld c,2\nfoo:\n    ld b,10\n    ld d,20\n    nop\n";
+        let s = state_at(text, 5, 4);
+        assert_eq!(s.get8(Register8::A), None);
+        assert_eq!(s.get8(Register8::C), None);
+        assert_eq!(s.get8(Register8::B), Some(10));
+        assert_eq!(s.get8(Register8::D), Some(20));
     }
 
     #[test]

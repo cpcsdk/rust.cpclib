@@ -5,6 +5,8 @@
 //! The second half is the analyzer entry point that renders the candidates
 //! into LSP `CompletionItem`s.
 
+use std::sync::Arc;
+
 use cpclib_tokens::{ListingElement, Token};
 use tower_lsp::lsp_types::*;
 
@@ -909,30 +911,39 @@ impl AssemblyAnalyzer {
         let ctx = analyze_context(&line, col);
         let case = case_pref_at(&line, col);
 
-        // Collect symbols (labels, EQU constants, macros) from this document,
-        // every other open assembly document, and every file this document
+        // Symbols (labels, EQU constants, macros) from this document, every
+        // other open assembly document, and every file this document
         // INCLUDEs/INCBINs/BINCLUDEs (on-disk or an embedded `inner://...`
         // resource) — read straight from disk/the embedded asset table even
-        // when never opened by the editor.
-        let mut doc_symbols: Vec<(String, String)> = self.collect_symbols(document);
-        for other in other_documents {
-            let fname = other
-                .uri
-                .path_segments()
-                .and_then(|mut s| s.next_back())
-                .unwrap_or("")
-                .to_string();
-            for (sym, detail) in self.collect_symbols(other) {
+        // when never opened by the editor. Some completion contexts below
+        // (a bare register/condition operand, a filename or `SNASET` flag
+        // argument) can never use this, so it's computed lazily, only at the
+        // specific points that actually consume it — avoiding the full
+        // per-document listing walk entirely for those contexts, and hitting
+        // `collect_symbols_cached` (rather than a fresh walk every keystroke)
+        // for every document actually visited.
+        let collect_doc_symbols = || -> Vec<(String, String)> {
+            let mut doc_symbols: Vec<(String, String)> = self.collect_symbols_cached(document);
+            for other in other_documents {
+                let fname = other
+                    .uri
+                    .path_segments()
+                    .and_then(|mut s| s.next_back())
+                    .unwrap_or("")
+                    .to_string();
+                for (sym, detail) in self.collect_symbols_cached(other) {
+                    if !doc_symbols.iter().any(|(s, _)| *s == sym) {
+                        doc_symbols.push((sym, format!("{detail} ({fname})")));
+                    }
+                }
+            }
+            for (fname, sym, detail) in self.collect_symbols_from_includes(document) {
                 if !doc_symbols.iter().any(|(s, _)| *s == sym) {
                     doc_symbols.push((sym, format!("{detail} ({fname})")));
                 }
             }
-        }
-        for (fname, sym, detail) in self.collect_symbols_from_includes(document) {
-            if !doc_symbols.iter().any(|(s, _)| *s == sym) {
-                doc_symbols.push((sym, format!("{detail} ({fname})")));
-            }
-        }
+            doc_symbols
+        };
 
         let mut completions = Vec::new();
 
@@ -962,7 +973,7 @@ impl AssemblyAnalyzer {
                     }
                 }
                 // Labels / macros — macros can be invoked like mnemonics.
-                for (sym, detail) in &doc_symbols {
+                for (sym, detail) in &collect_doc_symbols() {
                     completions.push(symbol_item(sym, detail));
                 }
                 // Snippets (shared with the Zed extension).
@@ -990,7 +1001,7 @@ impl AssemblyAnalyzer {
                             completions.push(operand_item(token, detail, case));
                         }
                         if accepts_expr {
-                            for (sym, detail) in &doc_symbols {
+                            for (sym, detail) in &collect_doc_symbols() {
                                 completions.push(symbol_item(sym, detail));
                             }
                         }
@@ -1005,7 +1016,7 @@ impl AssemblyAnalyzer {
                             completions.push(operand_item(token, detail, case));
                         }
                         if mask_accepts_expression(mask) {
-                            for (sym, detail) in &doc_symbols {
+                            for (sym, detail) in &collect_doc_symbols() {
                                 completions.push(symbol_item(sym, detail));
                             }
                         }
@@ -1031,7 +1042,7 @@ impl AssemblyAnalyzer {
                 }
                 else {
                     // Directives accept any expression — offer symbols.
-                    for (sym, detail) in &doc_symbols {
+                    for (sym, detail) in &collect_doc_symbols() {
                         completions.push(symbol_item(sym, detail));
                     }
                 }
@@ -1103,6 +1114,25 @@ impl AssemblyAnalyzer {
                 }
             }
         }
+        syms
+    }
+
+    /// `collect_symbols`, cached per `(document.uri, document.version)` -
+    /// same shape and eviction (`evict`, on `textDocument/didClose`) as
+    /// `env_cache`/`local_env_cache`. See `symbols_cache`'s own doc comment
+    /// (`basm/mod.rs`) for why this matters most for *other* open documents
+    /// during completion, not the one actively being typed in.
+    pub(super) fn collect_symbols_cached(&self, document: &Document) -> Vec<(String, String)> {
+        if let Some(entry) = self.symbols_cache.get(&document.uri)
+            && entry.0 == document.version
+        {
+            return (*entry.1).clone();
+        }
+        let syms = self.collect_symbols(document);
+        self.symbols_cache.insert(
+            document.uri.clone(),
+            (document.version, Arc::new(syms.clone()))
+        );
         syms
     }
 
@@ -1972,6 +2002,109 @@ mod directive_detail_and_symbol_parity_tests {
         assert!(
             items.iter().any(|i| i.label == "global_label.local"),
             "{items:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod symbols_cache_tests {
+    use super::*;
+
+    fn doc(text: &str, version: i32) -> Document {
+        Document::new(
+            Url::parse("file:///t.asm").unwrap(),
+            text.to_string(),
+            version
+        )
+    }
+
+    #[test]
+    fn same_version_reuses_the_cached_symbols_without_recomputing() {
+        let analyzer = AssemblyAnalyzer::new();
+        let d = doc("label1\n", 1);
+
+        let _ = analyzer.collect_symbols_cached(&d);
+        let first = analyzer.symbols_cache.get(&d.uri).unwrap().1.clone();
+
+        let _ = analyzer.collect_symbols_cached(&d);
+        let second = analyzer.symbols_cache.get(&d.uri).unwrap().1.clone();
+
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn a_version_bump_recomputes_the_cached_symbols() {
+        let analyzer = AssemblyAnalyzer::new();
+        let d1 = doc("label1\n", 1);
+        let _ = analyzer.collect_symbols_cached(&d1);
+        let first = analyzer.symbols_cache.get(&d1.uri).unwrap().1.clone();
+
+        let d2 = doc("label2\n", 2);
+        let _ = analyzer.collect_symbols_cached(&d2);
+        let second = analyzer.symbols_cache.get(&d2.uri).unwrap().1.clone();
+
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert_eq!(second[0].0, "label2");
+    }
+
+    #[test]
+    fn evict_clears_the_cached_symbols() {
+        let analyzer = AssemblyAnalyzer::new();
+        let d = doc("label1\n", 1);
+        let _ = analyzer.collect_symbols_cached(&d);
+        assert_eq!(analyzer.symbols_cache.len(), 1);
+
+        analyzer.evict(&d.uri);
+        assert_eq!(analyzer.symbols_cache.len(), 0);
+    }
+
+    /// Regression test for the lazy-gating rewrite of
+    /// `completion_with_documents`: a completion context that cannot use
+    /// symbols at all (`SNASET`'s flag-name argument) must not include any
+    /// cross-document symbol in its results, while a context that does
+    /// accept expressions must still see them - confirming the closure is
+    /// invoked exactly where (and only where) the eager code used to run.
+    #[test]
+    fn snaset_flag_context_does_not_offer_symbols_but_an_expression_slot_still_does() {
+        let text = "SNASET \nglobal_label\n ld a, ";
+        let other = Document::new(
+            Url::parse("file:///other.asm").unwrap(),
+            "other_label\n".to_string(),
+            1
+        );
+        let analyzer = AssemblyAnalyzer::new();
+
+        let d = doc(text, 1);
+        let snaset_items = analyzer.completion_with_documents(
+            &d,
+            Position {
+                line: 0,
+                character: 7
+            },
+            &[other.clone()]
+        );
+        assert!(
+            !snaset_items
+                .iter()
+                .any(|i| i.label == "global_label" || i.label == "other_label"),
+            "{snaset_items:?}"
+        );
+
+        let operand_items = analyzer.completion_with_documents(
+            &d,
+            Position {
+                line: 2,
+                character: 6
+            },
+            &[other]
+        );
+        assert!(
+            operand_items.iter().any(|i| i.label == "global_label"),
+            "{operand_items:?}"
+        );
+        assert!(
+            operand_items.iter().any(|i| i.label == "other_label"),
+            "{operand_items:?}"
         );
     }
 }

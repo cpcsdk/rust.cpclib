@@ -1182,7 +1182,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                         {
                             break;
                         }
-                        offset += 1;
+                        offset += current.len_utf8();
                     }
                     offset
                 },
@@ -1197,7 +1197,7 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
                         {
                             break;
                         }
-                        offset += 1;
+                        offset += current.len_utf8();
                     }
                     offset
                 }
@@ -1218,13 +1218,52 @@ fn guess_error_end(code: &str, offset: usize, ctx: &str) -> usize {
     // remove whitespace from selection
     for previous in code[offset..end].chars().rev() {
         if previous.is_whitespace() {
-            end -= 1;
+            end -= previous.len_utf8();
         }
         else {
             break;
         }
     }
     end
+}
+
+#[cfg(test)]
+mod guess_error_end_tests {
+    use super::*;
+
+    /// Regression test: `EndKind::guess`'s scan loop advanced its byte
+    /// offset by 1 per `char` iterated instead of `char.len_utf8()`,
+    /// undercounting for any multi-byte UTF-8 character before the
+    /// terminator. "café" is 4 chars but 5 bytes ('é' is 2 bytes) - the
+    /// undercounted offset (4) lands on 'é''s second byte, which isn't a
+    /// char boundary, so the immediately following `code[offset..end]`
+    /// slice (the whitespace-trim loop just above) panicked outright with
+    /// the unfixed code, rather than merely returning a wrong value.
+    #[test]
+    fn guess_error_end_handles_a_multibyte_char_before_the_terminator() {
+        let code = "caf\u{e9}: nop\n";
+        let end = guess_error_end(code, 0, "unused context");
+        assert_eq!(end, "caf\u{e9}".len());
+        assert!(
+            code.is_char_boundary(end),
+            "end={end} must be a char boundary"
+        );
+    }
+
+    /// Same bug, second site: the trailing-whitespace trim loop (just above
+    /// `guess_error_end`'s closing brace) decremented `end` by 1 per
+    /// whitespace `char` instead of its byte length. U+00A0 (non-breaking
+    /// space) is whitespace per `char::is_whitespace` but 2 UTF-8 bytes.
+    #[test]
+    fn guess_error_end_trims_multibyte_whitespace_by_its_real_byte_length() {
+        let code = "x\u{a0}\u{a0}:";
+        let end = guess_error_end(code, 0, "unused context");
+        assert_eq!(end, "x".len());
+        assert!(
+            code.is_char_boundary(end),
+            "end={end} must be a char boundary"
+        );
+    }
 }
 
 fn get_additional_notes(ctx: &str) -> Option<Vec<String>> {
