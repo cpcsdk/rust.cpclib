@@ -487,6 +487,31 @@ fn compute_diagnostics(
     }
 }
 
+/// Dispatch by `document.doc_type` to the matching analyzer, returning
+/// `unknown_default` for `DocumentType::Unknown`. Shared by the handlers
+/// whose per-arm bodies are all `self.X_analyzer.method(document, ...)`
+/// with no other per-arm logic (`hover`, `prepare_rename`,
+/// `document_symbol`, `semantic_tokens_full`). Most other doc_type
+/// dispatches in this file have real per-arm differences (extra fallback
+/// logic, differing argument counts, a different match key entirely) and
+/// are deliberately not routed through this — forcing them through a
+/// shared shape would obscure real behavioral differences rather than
+/// remove genuine duplication.
+fn dispatch_by_doc_type<T>(
+    document: &Document,
+    unknown_default: T,
+    on_assembly: impl FnOnce(&Document) -> T,
+    on_build_file: impl FnOnce(&Document) -> T,
+    on_basic: impl FnOnce(&Document) -> T
+) -> T {
+    match document.doc_type {
+        DocumentType::Assembly => on_assembly(document),
+        DocumentType::BuildFile => on_build_file(document),
+        DocumentType::Basic => on_basic(document),
+        DocumentType::Unknown => unknown_default
+    }
+}
+
 /// `None` when `changes` is empty (nothing to rename — the client should
 /// see "no changes" rather than an edit touching zero files).
 fn non_empty_workspace_edit(
@@ -738,12 +763,13 @@ impl LanguageServer for CpcLspBackend {
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
 
-            let hover = match document.doc_type {
-                DocumentType::Assembly => self.asm_analyzer.hover(document, position),
-                DocumentType::BuildFile => self.build_analyzer.hover(document, position),
-                DocumentType::Basic => self.basic_analyzer.hover(document, position),
-                DocumentType::Unknown => None
-            };
+            let hover = dispatch_by_doc_type(
+                document,
+                None,
+                |doc| self.asm_analyzer.hover(doc, position),
+                |doc| self.build_analyzer.hover(doc, position),
+                |doc| self.basic_analyzer.hover(doc, position)
+            );
 
             return Ok(hover);
         }
@@ -917,12 +943,13 @@ impl LanguageServer for CpcLspBackend {
             return Ok(None);
         };
 
-        let range = match entry.value().doc_type {
-            DocumentType::Assembly => self.asm_analyzer.prepare_rename(entry.value(), position),
-            DocumentType::BuildFile => self.build_analyzer.prepare_rename(entry.value(), position),
-            DocumentType::Basic => self.basic_analyzer.prepare_rename(entry.value(), position),
-            DocumentType::Unknown => None
-        };
+        let range = dispatch_by_doc_type(
+            entry.value(),
+            None,
+            |doc| self.asm_analyzer.prepare_rename(doc, position),
+            |doc| self.build_analyzer.prepare_rename(doc, position),
+            |doc| self.basic_analyzer.prepare_rename(doc, position)
+        );
 
         Ok(range.map(PrepareRenameResponse::Range))
     }
@@ -1275,12 +1302,13 @@ impl LanguageServer for CpcLspBackend {
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
 
-            let symbols = match document.doc_type {
-                DocumentType::Assembly => self.asm_analyzer.document_symbols(document),
-                DocumentType::BuildFile => self.build_analyzer.document_symbols(document),
-                DocumentType::Basic => self.basic_analyzer.document_symbols(document),
-                DocumentType::Unknown => Vec::new()
-            };
+            let symbols = dispatch_by_doc_type(
+                document,
+                Vec::new(),
+                |doc| self.asm_analyzer.document_symbols(doc),
+                |doc| self.build_analyzer.document_symbols(doc),
+                |doc| self.basic_analyzer.document_symbols(doc)
+            );
 
             if !symbols.is_empty() {
                 return Ok(Some(DocumentSymbolResponse::Nested(symbols)));
@@ -1521,12 +1549,13 @@ impl LanguageServer for CpcLspBackend {
 
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
-            let data = match document.doc_type {
-                DocumentType::Assembly => self.asm_analyzer.semantic_tokens(document),
-                DocumentType::BuildFile => self.build_analyzer.semantic_tokens(document),
-                DocumentType::Basic => self.basic_analyzer.semantic_tokens(document),
-                DocumentType::Unknown => vec![]
-            };
+            let data = dispatch_by_doc_type(
+                document,
+                vec![],
+                |doc| self.asm_analyzer.semantic_tokens(doc),
+                |doc| self.build_analyzer.semantic_tokens(doc),
+                |doc| self.basic_analyzer.semantic_tokens(doc)
+            );
             if !data.is_empty() {
                 return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
                     result_id: None,
@@ -1905,6 +1934,126 @@ mod outgoing_calls_tests {
         assert_eq!(calls.len(), 1, "{calls:?}");
         assert_eq!(calls[0].to.uri, callee_uri);
         assert_eq!(calls[0].to.name.to_uppercase(), "TARGET");
+    }
+}
+
+/// Regression tests for the `dispatch_by_doc_type` refactor of `hover`/
+/// `prepare_rename`/`document_symbol`/`semantic_tokens_full`: each must
+/// still dispatch correctly end-to-end through the LSP service after
+/// factoring their shared match block into the helper. The underlying
+/// analyzer logic already has extensive dedicated coverage elsewhere in the
+/// crate - these exist to catch a wiring mistake in the dispatch helper
+/// itself, not to re-test hover/rename/symbol/token logic.
+#[cfg(test)]
+mod dispatch_by_doc_type_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    async fn open_asm_doc(backend: &CpcLspBackend, uri: &Url) {
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "start:\n  ld a,1\n  ret\n".to_string()
+                }
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn hover_still_dispatches_to_the_assembly_analyzer() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+        open_asm_doc(backend, &uri).await;
+
+        let hover = backend
+            .hover(HoverParams {
+                text_document_position_params: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri },
+                    position: Position {
+                        line: 1,
+                        character: 5
+                    }
+                },
+                work_done_progress_params: Default::default()
+            })
+            .await
+            .unwrap();
+
+        assert!(hover.is_some(), "{hover:?}");
+    }
+
+    #[tokio::test]
+    async fn prepare_rename_still_dispatches_to_the_assembly_analyzer() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+        open_asm_doc(backend, &uri).await;
+
+        let response = backend
+            .prepare_rename(TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: Position {
+                    line: 0,
+                    character: 0
+                }
+            })
+            .await
+            .unwrap();
+
+        assert!(response.is_some(), "{response:?}");
+    }
+
+    #[tokio::test]
+    async fn document_symbol_still_dispatches_to_the_assembly_analyzer() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+        open_asm_doc(backend, &uri).await;
+
+        let response = backend
+            .document_symbol(DocumentSymbolParams {
+                text_document: TextDocumentIdentifier { uri },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default()
+            })
+            .await
+            .unwrap();
+
+        match response {
+            Some(DocumentSymbolResponse::Nested(symbols)) => {
+                assert!(symbols.iter().any(|s| s.name == "start"), "{symbols:?}");
+            },
+            other => panic!("expected nested document symbols, got {other:?}")
+        }
+    }
+
+    #[tokio::test]
+    async fn semantic_tokens_full_still_dispatches_to_the_assembly_analyzer() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asm").unwrap();
+        open_asm_doc(backend, &uri).await;
+
+        let response = backend
+            .semantic_tokens_full(SemanticTokensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri }
+            })
+            .await
+            .unwrap();
+
+        match response {
+            Some(SemanticTokensResult::Tokens(tokens)) => {
+                assert!(!tokens.data.is_empty(), "{tokens:?}");
+            },
+            other => panic!("expected semantic tokens, got {other:?}")
+        }
     }
 }
 
