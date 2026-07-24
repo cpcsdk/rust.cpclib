@@ -234,7 +234,7 @@ impl AssemblyAnalyzer {
         if let Err(listing_with_errors) = self.parse_document(document) {
             let error = listing_with_errors.cpclib_error_unchecked();
             let mut diags = Vec::new();
-            collect_asm_diagnostics(error, None, &mut diags);
+            collect_asm_diagnostics(error, None, document, &mut diags);
             if diags.iter().any(|d| d.range.start.line == position.line) {
                 return Some(make_hover(format!("```ansi\n{error}\n```")));
             }

@@ -58,7 +58,7 @@ impl AssemblyAnalyzer {
             let error = listing_with_errors.cpclib_error_unchecked();
 
             let mut chunk = Vec::new();
-            collect_asm_diagnostics(error, None, &mut chunk);
+            collect_asm_diagnostics(error, None, document, &mut chunk);
             if chunk.is_empty() {
                 chunk.push(Diagnostic {
                     range: NO_LOCATION_RANGE,
@@ -113,7 +113,7 @@ impl AssemblyAnalyzer {
             && let Ok(listing) = Self::parse_source(&full_text, Some(&document.uri))
         {
             let mut env = self.dry_run_env_cached(document, &listing);
-            collect_assembler_warnings(&env, &mut diagnostics);
+            collect_assembler_warnings(&env, document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
             Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
         }
@@ -144,11 +144,12 @@ impl AssemblyAnalyzer {
 /// is correct for most variants there).
 pub(super) fn collect_assembler_warnings(
     env: &cpclib_asm::assembler::Env,
+    document: &Document,
     out: &mut Vec<Diagnostic>
 ) {
     let start = out.len();
     for warning in env.warnings() {
-        collect_asm_diagnostics(warning, None, out);
+        collect_asm_diagnostics(warning, None, document, out);
     }
     for diag in &mut out[start..] {
         diag.severity = Some(DiagnosticSeverity::WARNING);
@@ -186,8 +187,12 @@ fn enrich_fake_instruction_diagnostics(document: &Document, diagnostics: &mut [D
         else {
             continue;
         };
-        let start = diag.range.start.character as usize;
-        let end = diag.range.end.character as usize;
+        // `diag.range`'s `character` fields are UTF-16 code units (LSP
+        // convention - see `collect_asm_diagnostics`'s
+        // `AlreadyRenderedWarningWithLocation` arm, which produces them)
+        // - convert back to byte offsets to slice `line`.
+        let start = document.byte_column(diag.range.start);
+        let end = document.byte_column(diag.range.end);
         let Some(snippet) = line.get(start..end)
         else {
             continue;
@@ -214,21 +219,26 @@ const NO_LOCATION_RANGE: Range = Range {
 // ─── Per-error diagnostics ─────────────────────────────────────────────────────
 
 /// Recursively walk an `AssemblerError` tree, emitting one `Diagnostic` per leaf
-/// error with the closest known source location.
+/// error with the closest known source location. `document` is only needed
+/// by the `AlreadyRenderedWarningWithLocation` arm (it carries a raw
+/// `line`/`column`/`len`, not a `Z80Span`, so converting its byte-based
+/// column to UTF-16 needs the actual line text) - threaded through every
+/// recursive call the same way `parent_span` already is.
 pub(super) fn collect_asm_diagnostics(
     error: &cpclib_asm::AssemblerError,
     parent_span: Option<&cpclib_asm::parser::Z80Span>,
+    document: &Document,
     out: &mut Vec<Diagnostic>
 ) {
     use cpclib_asm::AssemblerError;
     match error {
         AssemblerError::MultipleErrors { errors } => {
             for e in errors {
-                collect_asm_diagnostics(e, parent_span, out);
+                collect_asm_diagnostics(e, parent_span, document, out);
             }
         },
         AssemblerError::RelocatedError { span, error: inner } => {
-            collect_asm_diagnostics(inner, Some(span), out);
+            collect_asm_diagnostics(inner, Some(span), document, out);
         },
         AssemblerError::RelocatedWarning { warning, span } => {
             out.push(asm_diag(
@@ -252,18 +262,18 @@ pub(super) fn collect_asm_diagnostics(
             ));
         },
         AssemblerError::IfIssue { span, error: inner } => {
-            collect_asm_diagnostics(inner, Some(span), out);
+            collect_asm_diagnostics(inner, Some(span), document, out);
         },
         AssemblerError::ForIssue { span, error: inner } => {
-            collect_asm_diagnostics(inner, span.as_ref(), out);
+            collect_asm_diagnostics(inner, span.as_ref(), document, out);
         },
         AssemblerError::RepeatIssue {
             span, error: inner, ..
         } => {
-            collect_asm_diagnostics(inner, span.as_ref(), out);
+            collect_asm_diagnostics(inner, span.as_ref(), document, out);
         },
         AssemblerError::WhileIssue { span, error: inner } => {
-            collect_asm_diagnostics(inner, span.as_ref(), out);
+            collect_asm_diagnostics(inner, span.as_ref(), document, out);
         },
         AssemblerError::MacroError {
             name,
@@ -277,14 +287,14 @@ pub(super) fn collect_asm_diagnostics(
                 format!("Macro {}: ", name)
             };
             let mut sub = Vec::new();
-            collect_asm_diagnostics(root, parent_span, &mut sub);
+            collect_asm_diagnostics(root, parent_span, document, &mut sub);
             for mut d in sub {
                 d.message = format!("{}{}", prefix, d.message);
                 out.push(d);
             }
         },
         AssemblerError::CrunchedSectionError { error: inner } => {
-            collect_asm_diagnostics(inner, parent_span, out);
+            collect_asm_diagnostics(inner, parent_span, document, out);
         },
         AssemblerError::FunctionError(name, inner) => {
             let msg = format!("Function {name}: {inner}");
@@ -296,17 +306,27 @@ pub(super) fn collect_asm_diagnostics(
             if let Some((span, end_off)) = parse_err.primary_span_and_end() {
                 let (line_1, col_1) = span.relative_line_and_column();
                 let line = line_1.saturating_sub(1) as u32;
-                let col = col_1.saturating_sub(1) as u32;
-                let len = end_off.saturating_sub(span.offset_from_start()) as u32;
+                let col = col_1.saturating_sub(1);
+                let len = end_off.saturating_sub(span.offset_from_start());
+                // Byte offsets above -> UTF-16 code units, per the LSP spec
+                // (same conversion as `asm_diag`, using the same
+                // `complete_line()`-derived line text `col`/`len` were
+                // computed against).
+                let line_text = span.complete_line();
+                let start_char =
+                    crate::common::document::byte_offset_to_utf16_col(line_text, col) as u32;
+                let end_char =
+                    crate::common::document::byte_offset_to_utf16_col(line_text, col + len.max(1))
+                        as u32;
                 out.push(Diagnostic {
                     range: Range {
                         start: Position {
                             line,
-                            character: col
+                            character: start_char
                         },
                         end: Position {
                             line,
-                            character: col + len.max(1)
+                            character: end_char
                         }
                     },
                     severity: Some(DiagnosticSeverity::ERROR),
@@ -343,15 +363,26 @@ pub(super) fn collect_asm_diagnostics(
         } => {
             let line = line.saturating_sub(1);
             let col = column.saturating_sub(1);
+            // `column`/`len` are byte-based (see this variant's own field
+            // docs in cpclib-asm) - convert to UTF-16 code units, per the
+            // LSP spec, via the document's own line text.
+            // `enrich_fake_instruction_diagnostics` converts back on read.
+            let line_text = document.line(line as usize).unwrap_or_default();
+            let start_char =
+                crate::common::document::byte_offset_to_utf16_col(&line_text, col as usize) as u32;
+            let end_char = crate::common::document::byte_offset_to_utf16_col(
+                &line_text,
+                (col + (*len).max(1)) as usize
+            ) as u32;
             out.push(Diagnostic {
                 range: Range {
                     start: Position {
                         line,
-                        character: col
+                        character: start_char
                     },
                     end: Position {
                         line,
-                        character: col + (*len).max(1)
+                        character: end_char
                     }
                 },
                 severity: Some(DiagnosticSeverity::WARNING),
@@ -378,19 +409,27 @@ pub(super) fn asm_diag(
     let range = if let Some(s) = span {
         let (line_1, col_1) = s.relative_line_and_column();
         let line = line_1.saturating_sub(1) as u32;
-        let col = col_1.saturating_sub(1) as u32;
+        let col = col_1.saturating_sub(1);
         let span_text: &str = s.as_ref();
         // Highlight to end of the current instruction (next `:` separator) or end of line.
         let first_line = span_text.lines().next().unwrap_or(span_text);
-        let len = (first_line.find(':').unwrap_or(first_line.len()) as u32).max(1);
+        let len = first_line.find(':').unwrap_or(first_line.len()).max(1);
+        // `col`/`len` above are byte offsets/lengths (from `relative_line_and_column`,
+        // byte-based like the rest of `line-col`) - convert to UTF-16 code
+        // units, per the LSP spec, via the same line text they were computed
+        // against.
+        let line_text = s.complete_line();
+        let start_char = crate::common::document::byte_offset_to_utf16_col(line_text, col) as u32;
+        let end_char =
+            crate::common::document::byte_offset_to_utf16_col(line_text, col + len) as u32;
         Range {
             start: Position {
                 line,
-                character: col
+                character: start_char
             },
             end: Position {
                 line,
-                character: col + len
+                character: end_char
             }
         }
     }
@@ -449,6 +488,108 @@ mod tests {
     fn valid_file_yields_no_diagnostics() {
         let text = "org 0x4000\n ld a, 1\n ret\n";
         assert!(diagnostics_for(text).is_empty());
+    }
+
+    /// Regression test for `asm_diag` treating `relative_line_and_column`'s
+    /// byte-based column as a raw UTF-16 `Position.character` (an LSP-spec
+    /// violation for any line with non-ASCII content before the span). Uses
+    /// a real `Z80Span` from a cleanly-parsed source rather than a synthetic
+    /// one, since `Z80Span` isn't hand-constructible outside `cpclib-asm`.
+    /// "xcaféxx: " (10 chars, all in the Basic Multilingual Plane) precedes
+    /// `nop` - `é` is 2 UTF-8 bytes but 1 UTF-16 unit, so the byte column
+    /// (11, 0-based) and the correct UTF-16 column (10) differ by exactly 1.
+    #[test]
+    fn asm_diag_range_is_utf16_aware_with_a_multibyte_char_before_the_span() {
+        use cpclib_asm::MayHaveSpan;
+        let text = "org 0x4000\n xcaf\u{e9}xx: nop\n ret\n";
+        let listing = AssemblyAnalyzer::parse_source(text, None).expect("should parse cleanly");
+        let tokens: Vec<_> = super::super::token::flatten_listing(listing.iter()).collect();
+        let nop_span = tokens
+            .iter()
+            .find(|t| t.span().as_ref() as &str == "nop")
+            .expect("expected a nop token")
+            .span();
+        let diag = asm_diag(
+            Some(nop_span),
+            "test".to_string(),
+            DiagnosticSeverity::ERROR
+        );
+        assert_eq!(diag.range.start.line, 1);
+        assert_eq!(diag.range.start.character, 10, "{diag:?}");
+        assert_eq!(diag.range.end.character, 13, "{diag:?}");
+    }
+
+    /// Regression test for `AlreadyRenderedWarningWithLocation`'s `column`
+    /// (also byte-based, per its own field docs in cpclib-asm) being used
+    /// directly as `Position.character` - constructs the `AssemblerError`
+    /// directly (its fields are public) rather than trying to trigger this
+    /// exact variant through a real assembling pass, since it's only ever
+    /// produced deep inside `cpclib-asm`'s warning-rendering pipeline. Same
+    /// "xcaféxx: " prefix and byte/UTF-16 divergence as the `asm_diag` test
+    /// above.
+    #[test]
+    fn already_rendered_warning_with_location_column_is_utf16_aware() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "org 0x4000\n xcaf\u{e9}xx: nop\n ret\n";
+        let document = Document::new(uri, text.to_string(), 1);
+        let error = cpclib_asm::AssemblerError::AlreadyRenderedWarningWithLocation {
+            msg: "test warning".to_string(),
+            line: 2,
+            column: 12,
+            len: 3
+        };
+        let mut out = Vec::new();
+        collect_asm_diagnostics(&error, None, &document, &mut out);
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(out[0].severity, Some(DiagnosticSeverity::WARNING));
+        assert_eq!(out[0].range.start.line, 1);
+        assert_eq!(out[0].range.start.character, 10, "{out:?}");
+        assert_eq!(out[0].range.end.character, 13, "{out:?}");
+    }
+
+    /// Regression test for `enrich_fake_instruction_diagnostics`'s read-back:
+    /// once its input `Diagnostic.range` is UTF-16 (as produced by
+    /// `AlreadyRenderedWarningWithLocation` above), slicing the source line
+    /// with the raw `character` values as byte offsets would grab the wrong
+    /// (or a panicking, non-char-boundary) substring on a line with
+    /// multi-byte content before the warning - must convert back to bytes
+    /// via `Document::byte_column` first.
+    #[test]
+    fn enrich_fake_instruction_diagnostics_reads_the_correct_byte_slice_via_utf16_range() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "org 0x4000\n xcaf\u{e9}xx: ld hl, de\n ret\n";
+        let document = Document::new(uri, text.to_string(), 1);
+        // UTF-16 range of "ld hl, de" on line 1: "xcaféxx: " is 10 chars
+        // (all BMP), so it spans UTF-16 columns 10..19.
+        let mut diags = vec![Diagnostic {
+            range: Range {
+                start: Position {
+                    line: 1,
+                    character: 10
+                },
+                end: Position {
+                    line: 1,
+                    character: 19
+                }
+            },
+            severity: Some(DiagnosticSeverity::WARNING),
+            message: format!(
+                "{} something",
+                cpclib_asm::parser::instructions::FAKE_INSTRUCTION_WARNING
+            ),
+            ..Default::default()
+        }];
+        enrich_fake_instruction_diagnostics(&document, &mut diags);
+        assert!(
+            diags[0].message.contains("assembles as"),
+            "{:?}",
+            diags[0].message
+        );
+        assert!(
+            diags[0].message.contains("LD L, E") && diags[0].message.contains("LD H, D"),
+            "{:?}",
+            diags[0].message
+        );
     }
 
     #[test]

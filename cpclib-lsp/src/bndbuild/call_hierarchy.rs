@@ -161,8 +161,9 @@ fn line_span_range(lines: &[&str], start: u32, end: u32) -> Range {
 /// The line and indentation of the `- ` marker that starts the rule
 /// containing `line_idx` — either that line itself (if it starts with
 /// `- `), or found by walking backward to the nearest line whose own
-/// indentation is `<=` this line's (mirrors `enclosing_key_for_list_item`'s
-/// backward-walk shape, `cpclib-lsp/src/bndbuild/token.rs:81-108`).
+/// indentation is `<=` this line's (similar backward-walk shape to
+/// `enclosing_key_for_list_item`, `cpclib-lsp/src/bndbuild/token.rs:126-153`,
+/// but not the same stop condition: that one wants strictly-less indentation).
 fn rule_marker(lines: &[&str], line_idx: u32) -> (u32, usize) {
     let line = lines[line_idx as usize];
     let indent = indent_of(line);
