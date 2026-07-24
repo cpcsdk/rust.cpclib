@@ -294,15 +294,17 @@ fn failure_outcome(
     full_output: &str
 ) -> RuleRunOutcome {
     let text = document.text();
-    let tgt_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
-        .iter()
-        .find(|k| k.names.contains(&"targets"))
-        .map(|k| k.names.to_vec())
-        .unwrap_or_default();
 
-    let rule_line = BuildFileAnalyzer::find_target_line(&text, failing_target, &tgt_keys)
-        .or_else(|| BuildFileAnalyzer::find_target_line(&text, requested_rule, &tgt_keys))
-        .unwrap_or(0);
+    let rule_line =
+        BuildFileAnalyzer::find_target_line(&text, failing_target, &super::token::TGT_KEY_NAMES)
+            .or_else(|| {
+                BuildFileAnalyzer::find_target_line(
+                    &text,
+                    requested_rule,
+                    &super::token::TGT_KEY_NAMES
+                )
+            })
+            .unwrap_or(0);
 
     // Prefer the task line identified precisely from the executor's own
     // task-start events; fall back to a text-based guess (e.g. for failures
@@ -358,12 +360,6 @@ fn task_lines_in_rule(text: &str, rule_line: usize) -> Vec<(usize, &str)> {
         .get(rule_line)
         .map(|l| l.len() - l.trim_start().len())
         .unwrap_or(0);
-    let task_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
-        .iter()
-        .find(|k| k.names.contains(&"tasks"))
-        .map(|k| k.names.to_vec())
-        .unwrap_or_default();
-
     let mut out = Vec::new();
     for (idx, line) in lines.iter().enumerate().skip(rule_line + 1) {
         let trimmed = line.trim_start();
@@ -380,7 +376,7 @@ fn task_lines_in_rule(text: &str, rule_line: usize) -> Vec<(usize, &str)> {
         }
         else if let Some((key, value)) = trimmed.split_once(':') {
             let value = value.trim_start();
-            if task_keys.contains(&key.trim())
+            if super::token::TASK_KEY_NAMES.contains(&key.trim())
                 && !value.is_empty()
                 && !value.starts_with('>')
                 && !value.starts_with('|')
@@ -419,16 +415,15 @@ fn ignored_error_diagnostics(
         return Vec::new();
     }
     let text = document.text();
-    let tgt_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
-        .iter()
-        .find(|k| k.names.contains(&"targets"))
-        .map(|k| k.names.to_vec())
-        .unwrap_or_default();
 
     ignored
         .into_iter()
         .filter_map(|entry| {
-            let rule_line = BuildFileAnalyzer::find_target_line(&text, &entry.rule, &tgt_keys)?;
+            let rule_line = BuildFileAnalyzer::find_target_line(
+                &text,
+                &entry.rule,
+                &super::token::TGT_KEY_NAMES
+            )?;
             let line_idx = nth_task_line(&text, rule_line as usize, entry.task_index)
                 .unwrap_or(rule_line as usize);
             let line_text = text.lines().nth(line_idx).unwrap_or_default();

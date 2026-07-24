@@ -111,13 +111,19 @@ impl AssemblyAnalyzer {
             return Vec::new();
         };
 
+        // Precomputed once (not once per matched call site, see
+        // `global_label_scopes`'s own doc comment) - `incoming_calls_in`
+        // gets worse exactly when it matters most, a widely-called
+        // subroutine with many call sites to attribute.
+        let scopes = super::token::global_label_scopes(listing.iter());
+
         // owner name -> call-site ranges
         let mut groups: Vec<(String, Vec<Range>)> = Vec::new();
 
         for token in flatten_listing(listing.iter()) {
             for call_range in call_targets_in_token(token, name_upper) {
                 let call_line = call_range.start.line;
-                let Some((owner, _)) = label_scope_at_line(listing.iter(), call_line)
+                let Some((owner, _)) = super::token::scope_containing(&scopes, call_line)
                 else {
                     continue;
                 };

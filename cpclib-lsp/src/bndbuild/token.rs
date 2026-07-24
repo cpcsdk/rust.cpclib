@@ -25,6 +25,51 @@ pub(super) static RULE_KEYS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| 
         .collect()
 });
 
+/// Every alias of the `targets:` key group (`targets`/`tgt`/`target`/
+/// `build`, per `cpclib_bndbuild::lsp::RULE_KEYS`) — hoisted here since
+/// nearly every feature module (`definition.rs`, `call_hierarchy.rs`,
+/// `autocomplete.rs`, `command.rs`, `symbols.rs`) previously recomputed this
+/// exact `.iter().find(...).map(...)` scan independently, on every call.
+pub(super) static TGT_KEY_NAMES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    cpclib_bndbuild::lsp::RULE_KEYS
+        .iter()
+        .find(|k| k.names.contains(&"targets"))
+        .map(|k| k.names.to_vec())
+        .unwrap_or_default()
+});
+
+/// Every alias of the `dependencies:` key group (`dependencies`/`dep`/
+/// `dependency`/`requires`). See `TGT_KEY_NAMES`.
+pub(super) static DEP_KEY_NAMES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    cpclib_bndbuild::lsp::RULE_KEYS
+        .iter()
+        .find(|k| k.names.contains(&"dependencies"))
+        .map(|k| k.names.to_vec())
+        .unwrap_or_default()
+});
+
+/// Every alias of the `tasks:` key group (`tasks`/`cmd`/`task`/`run`/...).
+/// See `TGT_KEY_NAMES`.
+pub(super) static TASK_KEY_NAMES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    cpclib_bndbuild::lsp::RULE_KEYS
+        .iter()
+        .find(|k| k.names.contains(&"tasks"))
+        .map(|k| k.names.to_vec())
+        .unwrap_or_default()
+});
+
+/// `TGT_KEY_NAMES` and `DEP_KEY_NAMES` combined — every key whose value is a
+/// filename (as opposed to a command line or a boolean/help string), used
+/// wherever a field is navigated/completed as a file regardless of whether
+/// it's a target or a dependency.
+pub(super) static FILE_KEY_NAMES: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    cpclib_bndbuild::lsp::RULE_KEYS
+        .iter()
+        .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
+        .flat_map(|k| k.names.iter().copied())
+        .collect()
+});
+
 /// What multi-line block value is currently being accumulated while scanning.
 #[derive(PartialEq)]
 pub(super) enum Collecting {
@@ -105,5 +150,41 @@ impl BuildFileAnalyzer {
             };
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod rule_key_alias_tests {
+    use super::*;
+
+    #[test]
+    fn tgt_key_names_contains_every_targets_alias() {
+        assert!(TGT_KEY_NAMES.contains(&"targets"));
+        assert!(TGT_KEY_NAMES.contains(&"tgt"));
+        assert!(!TGT_KEY_NAMES.contains(&"dep"));
+    }
+
+    #[test]
+    fn dep_key_names_contains_every_dependencies_alias() {
+        assert!(DEP_KEY_NAMES.contains(&"dependencies"));
+        assert!(DEP_KEY_NAMES.contains(&"dep"));
+        assert!(!DEP_KEY_NAMES.contains(&"tgt"));
+    }
+
+    #[test]
+    fn task_key_names_contains_cmd() {
+        assert!(TASK_KEY_NAMES.contains(&"tasks"));
+        assert!(TASK_KEY_NAMES.contains(&"cmd"));
+    }
+
+    #[test]
+    fn file_key_names_is_the_union_of_targets_and_dependencies() {
+        for &k in TGT_KEY_NAMES.iter() {
+            assert!(FILE_KEY_NAMES.contains(&k), "missing tgt alias {k}");
+        }
+        for &k in DEP_KEY_NAMES.iter() {
+            assert!(FILE_KEY_NAMES.contains(&k), "missing dep alias {k}");
+        }
+        assert!(!FILE_KEY_NAMES.contains(&"cmd"));
     }
 }

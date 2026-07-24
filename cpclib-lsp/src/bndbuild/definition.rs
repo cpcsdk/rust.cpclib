@@ -12,7 +12,7 @@ use crate::common::document::Document;
 impl BuildFileAnalyzer {
     pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
         let line = document.line(position.line as usize)?;
-        let col = position.character as usize;
+        let col = document.byte_column(position);
 
         // Jinja variable: the definition is its `{% set NAME = ... %}` line;
         // every other occurrence is a reference.
@@ -95,45 +95,31 @@ impl BuildFileAnalyzer {
         }
 
         // ── tgt / dep field navigation ───────────────────────────────────────
-        let file_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
-            .iter()
-            .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
-            .flat_map(|k| k.names.iter().copied())
-            .collect();
-        let tgt_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
-            .iter()
-            .find(|k| k.names.contains(&"targets"))
-            .map(|k| k.names.to_vec())
-            .unwrap_or_default();
-
         if let Some((filename, is_target_field)) = Self::filename_under_cursor(
             document,
             position.line as usize,
             &line,
-            &file_key_names,
-            &tgt_key_names,
+            &super::token::FILE_KEY_NAMES,
+            &super::token::TGT_KEY_NAMES,
             col
-        ) && let Some(loc) =
-            Self::resolve_filename_location(document, filename, &tgt_key_names, is_target_field)
-        {
+        ) && let Some(loc) = Self::resolve_filename_location(
+            document,
+            filename,
+            &super::token::TGT_KEY_NAMES,
+            is_target_field
+        ) {
             return Some(loc);
         }
 
         // ── cmd / tasks argument navigation ──────────────────────────────────
-        let task_key_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
-            .iter()
-            .find(|k| k.names.contains(&"tasks"))
-            .map(|k| k.names.to_vec())
-            .unwrap_or_default();
-
         if let Some(filename) = Self::command_filename_under_cursor(
             document,
             position.line as usize,
             &line,
-            &task_key_names,
+            &super::token::TASK_KEY_NAMES,
             col
         ) && let Some(loc) =
-            Self::resolve_filename_location(document, filename, &tgt_key_names, false)
+            Self::resolve_filename_location(document, filename, &super::token::TGT_KEY_NAMES, false)
         {
             return Some(loc);
         }
@@ -226,11 +212,8 @@ impl BuildFileAnalyzer {
         }
 
         let value_start = task_key_names.iter().find_map(|&key| {
-            let prefix = format!("{key}:");
-            if !line[i..].starts_with(prefix.as_str()) {
-                return None;
-            }
-            let mut v = i + prefix.len();
+            line[i..].strip_prefix(key)?.strip_prefix(':')?;
+            let mut v = i + key.len() + 1;
             while v < len && bytes[v] == b' ' {
                 v += 1;
             }
@@ -304,12 +287,15 @@ impl BuildFileAnalyzer {
         }
 
         for &key in key_names {
-            let prefix = format!("{}:", key);
-            if !line[i..].starts_with(prefix.as_str()) {
+            if line[i..]
+                .strip_prefix(key)
+                .and_then(|r| r.strip_prefix(':'))
+                .is_none()
+            {
                 continue;
             }
 
-            let mut v = i + prefix.len();
+            let mut v = i + key.len() + 1;
             // Skip spaces after colon.
             while v < len && bytes[v] == b' ' {
                 v += 1;
@@ -387,8 +373,7 @@ impl BuildFileAnalyzer {
             };
 
             for &key in tgt_key_names {
-                let prefix = format!("{}:", key);
-                if let Some(rest) = content.strip_prefix(prefix.as_str()) {
+                if let Some(rest) = content.strip_prefix(key).and_then(|r| r.strip_prefix(':')) {
                     let value = rest.split('#').next().unwrap_or("").trim();
                     for tok in value.split_whitespace() {
                         if tok == filename {
@@ -469,7 +454,7 @@ impl BuildFileAnalyzer {
         else {
             return Vec::new();
         };
-        let Some(word) = jinja_word_at(&line, position.character as usize)
+        let Some(word) = jinja_word_at(&line, document.byte_column(position))
         else {
             return Vec::new();
         };
@@ -527,25 +512,27 @@ impl BuildFileAnalyzer {
     /// a Jinja variable that actually has a `{% set %}` definition.
     pub fn prepare_rename(&self, document: &Document, position: Position) -> Option<Range> {
         let line = document.line(position.line as usize)?;
-        let word = jinja_word_at(&line, position.character as usize)?;
+        let col = document.byte_column(position);
+        let word = jinja_word_at(&line, col)?;
         super::jinja::collect_jinja_variables(document)
             .iter()
             .any(|(name, ..)| *name == word)
             .then_some(())?;
         let bytes = line.as_bytes();
-        let col = (position.character as usize).min(bytes.len());
+        let col = col.min(bytes.len());
         let mut start = col;
         while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
             start -= 1;
         }
+        let start_utf16 = crate::common::document::byte_offset_to_utf16_col(&line, start);
         Some(Range {
             start: Position {
                 line: position.line,
-                character: start as u32
+                character: start_utf16 as u32
             },
             end: Position {
                 line: position.line,
-                character: (start + word.len()) as u32
+                character: (start_utf16 + word.len()) as u32
             }
         })
     }
@@ -1048,6 +1035,37 @@ mod tests {
             }
         );
         assert!(loc.is_none(), "{loc:?}");
+    }
+
+    #[test]
+    fn goto_definition_on_a_dep_field_handles_utf16_columns_with_multibyte_content_before_it() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("helper.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        // "comment_é" is 9 Rust `char`s but 10 UTF-8 bytes ('é' is 2 bytes) -
+        // the LSP `character` field counts UTF-16 code units (9, since 'é'
+        // is in the Basic Multilingual Plane), so treating it as a raw byte
+        // offset would land one byte short of "helper.asm"'s start and fail
+        // to resolve it.
+        let text = "- tgt: out.bin\n  dep: comment_\u{e9} helper.asm\n  cmd: basm helper.asm\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor right at the start of "helper.asm" (line 1, UTF-16 column 17).
+        let loc = BuildFileAnalyzer::new()
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 1,
+                    character: 17
+                }
+            )
+            .expect(
+                "goto-definition should resolve helper.asm despite the multibyte char earlier \
+                 on the line"
+            );
+        assert_eq!(
+            loc.uri,
+            Url::from_file_path(tmp.path().join("helper.asm")).unwrap()
+        );
     }
 
     #[test]

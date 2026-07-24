@@ -20,13 +20,9 @@ impl BuildFileAnalyzer {
             // syntax errors are still caught; structural/dependency checks
             // run either way — they scan line-by-line and tolerate leftover
             // template syntax on lines expansion couldn't resolve.
-            let file_dir = document
-                .uri
-                .to_file_path()
-                .ok()
-                .and_then(|p| p.parent().map(|d| d.to_path_buf()));
-            match super::sourcemap::expand_with_source_map(&text, file_dir.as_deref()) {
-                Ok((expanded, _map)) => {
+            match self.expand_cached(document) {
+                Ok(result) => {
+                    let expanded = &result.0;
                     if let Err(e) = serde_yaml::from_str::<serde_yaml::Value>(&expanded) {
                         diagnostics.push(Diagnostic {
                             range: Range {
@@ -133,28 +129,11 @@ impl BuildFileAnalyzer {
         // target would be flagged as undefined. Fall back to raw text (an
         // identity source map) when expansion fails, preserving the old
         // best-effort behavior on templates that don't fully render.
-        let file_dir = document
-            .uri
-            .to_file_path()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
-        let (expanded_text, source_map) =
-            match super::sourcemap::expand_with_source_map(&raw_text, file_dir.as_deref()) {
-                Ok((text, map)) => (text, map),
-                Err(_) => {
-                    let lines = raw_text.lines().count();
-                    (
-                        raw_text.clone(),
-                        super::sourcemap::SourceMap::identity(lines)
-                    )
-                }
-            };
+        let expand_result = self.expand_or_identity(document);
+        let (expanded_text, source_map) = (&expand_result.0, &expand_result.1);
         let raw_lines: Vec<&str> = raw_text.lines().collect();
 
         // ── Collect declared target names (from the expanded text) ─────────
-        let tgt_keys: &[&str] = &["targets", "tgt", "target", "build"];
-        let dep_keys: &[&str] = &["dependencies", "dep", "dependency", "requires"];
-
         let mut declared: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for line in expanded_text.lines() {
@@ -165,9 +144,8 @@ impl BuildFileAnalyzer {
             else {
                 trimmed
             };
-            for &key in tgt_keys {
-                let prefix = format!("{}:", key);
-                if let Some(rest) = content.strip_prefix(prefix.as_str()) {
+            for &key in super::token::TGT_KEY_NAMES.iter() {
+                if let Some(rest) = content.strip_prefix(key).and_then(|r| r.strip_prefix(':')) {
                     let value = rest.split('#').next().unwrap_or("").trim();
                     // Skip block-scalar indicators; any remaining `{{`/`{%`
                     // means expansion fell back to raw text for this line.
@@ -183,7 +161,11 @@ impl BuildFileAnalyzer {
         }
 
         // ── Resolve base directory for file-existence checks ───────────────
-        let base_dir = file_dir;
+        let base_dir = document
+            .uri
+            .to_file_path()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
 
         // Avoid emitting the same diagnostic once per loop iteration when a
         // `{% for %}`-generated dependency line repeats an undefined token.
@@ -199,9 +181,8 @@ impl BuildFileAnalyzer {
                 trimmed
             };
 
-            for &key in dep_keys {
-                let prefix = format!("{}:", key);
-                if let Some(rest) = content.strip_prefix(prefix.as_str()) {
+            for &key in super::token::DEP_KEY_NAMES.iter() {
+                if let Some(rest) = content.strip_prefix(key).and_then(|r| r.strip_prefix(':')) {
                     let value = rest.split('#').next().unwrap_or("").trim();
                     if value.starts_with('>') || value.starts_with('|') {
                         break;
@@ -221,7 +202,8 @@ impl BuildFileAnalyzer {
                     let was_templated =
                         orig_line_text.contains("{{") || orig_line_text.contains("{%");
 
-                    let mut col_offset = line.len() - content.len() + prefix.len();
+                    // `key.len() + 1` accounts for the stripped `key:` prefix.
+                    let mut col_offset = line.len() - content.len() + key.len() + 1;
                     // skip spaces after colon
                     let value_bytes = value.as_bytes();
                     let mut vi = 0;

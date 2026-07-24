@@ -24,6 +24,28 @@ impl BuildFileAnalyzer {
             let line_u = line_num as u32;
             let mut col = 0usize;
 
+            // Map every byte offset on this line to its UTF-16 code-unit
+            // column, so the byte-offset token spans the scanner below finds
+            // can be reported to the client in UTF-16 units — what the LSP
+            // semantic-tokens protocol requires. Without this, any
+            // non-ASCII content (an accented character in a comment or
+            // string) would misplace every subsequent token's highlight on
+            // that line.
+            let mut byte_to_utf16 = vec![0u32; len + 1];
+            {
+                let mut utf16 = 0u32;
+                let mut byte_pos = 0usize;
+                for c in line_str.chars() {
+                    let clen = c.len_utf8();
+                    for b in byte_pos..byte_pos + clen {
+                        byte_to_utf16[b] = utf16;
+                    }
+                    byte_pos += clen;
+                    utf16 += c.len_utf16() as u32;
+                }
+                byte_to_utf16[len] = utf16;
+            }
+
             // Skip leading whitespace
             while col < len && matches!(bytes[col], b' ' | b'\t') {
                 col += 1;
@@ -34,13 +56,19 @@ impl BuildFileAnalyzer {
 
             // Full-line comment
             if bytes[col] == b'#' {
-                raw.push((line_u, col as u32, (len - col) as u32, TT_COMMENT, 0));
+                raw.push((
+                    line_u,
+                    byte_to_utf16[col],
+                    byte_to_utf16[len] - byte_to_utf16[col],
+                    TT_COMMENT,
+                    0
+                ));
                 continue;
             }
 
             // YAML list item marker `- `
             if bytes[col] == b'-' && (col + 1 >= len || matches!(bytes[col + 1], b' ' | b'\t')) {
-                raw.push((line_u, col as u32, 1, TT_OPERATOR, 0));
+                raw.push((line_u, byte_to_utf16[col], 1, TT_OPERATOR, 0));
                 col += 1;
                 while col < len && matches!(bytes[col], b' ' | b'\t') {
                     col += 1;
@@ -51,7 +79,13 @@ impl BuildFileAnalyzer {
                 // Inline YAML comment — but only if not inside a Jinja construct.
                 // A bare `#` that follows `{` or `%` is handled by the Jinja branches below.
                 if bytes[col] == b'#' && (col == 0 || !matches!(bytes[col - 1], b'{' | b'%')) {
-                    raw.push((line_u, col as u32, (len - col) as u32, TT_COMMENT, 0));
+                    raw.push((
+                        line_u,
+                        byte_to_utf16[col],
+                        byte_to_utf16[len] - byte_to_utf16[col],
+                        TT_COMMENT,
+                        0
+                    ));
                     break;
                 }
 
@@ -96,7 +130,13 @@ impl BuildFileAnalyzer {
                         }
                         col += 1;
                     }
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_STRING, 0));
+                    raw.push((
+                        line_u,
+                        byte_to_utf16[start],
+                        byte_to_utf16[col] - byte_to_utf16[start],
+                        TT_STRING,
+                        0
+                    ));
                     continue;
                 }
 
@@ -110,7 +150,13 @@ impl BuildFileAnalyzer {
                     if col < len {
                         col += 1;
                     }
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_STRING, 0));
+                    raw.push((
+                        line_u,
+                        byte_to_utf16[start],
+                        byte_to_utf16[col] - byte_to_utf16[start],
+                        TT_STRING,
+                        0
+                    ));
                     continue;
                 }
 
@@ -135,12 +181,12 @@ impl BuildFileAnalyzer {
                         };
                         raw.push((
                             line_u,
-                            start as u32,
-                            (col - start) as u32,
+                            byte_to_utf16[start],
+                            byte_to_utf16[col] - byte_to_utf16[start],
                             TT_ENUM_MEMBER,
                             mods
                         ));
-                        raw.push((line_u, col as u32, 1, TT_OPERATOR, 0));
+                        raw.push((line_u, byte_to_utf16[col], 1, TT_OPERATOR, 0));
                         col += 1;
                         continue;
                     }
@@ -159,7 +205,13 @@ impl BuildFileAnalyzer {
                             | "null"
                             | "Null"
                     ) {
-                        raw.push((line_u, start as u32, (col - start) as u32, TT_KEYWORD, 0));
+                        raw.push((
+                            line_u,
+                            byte_to_utf16[start],
+                            byte_to_utf16[col] - byte_to_utf16[start],
+                            TT_KEYWORD,
+                            0
+                        ));
                     }
                     // (other identifiers emitted with no token — they're uncoloured)
                     continue;
@@ -231,5 +283,47 @@ impl BuildFileAnalyzer {
                 }
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn decode_positions(tokens: &[SemanticToken]) -> Vec<(u32, u32)> {
+        let mut line = 0u32;
+        let mut col = 0u32;
+        let mut out = Vec::new();
+        for t in tokens {
+            if t.delta_line == 0 {
+                col += t.delta_start;
+            }
+            else {
+                line += t.delta_line;
+                col = t.delta_start;
+            }
+            out.push((line, col));
+        }
+        out
+    }
+
+    #[test]
+    fn semantic_tokens_use_utf16_columns_not_byte_offsets() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        // 'é' is 2 bytes in UTF-8 but a single UTF-16 code unit - the
+        // "flag" key token must be reported at UTF-16 column 14, not the
+        // byte column 15 a naive byte-offset scan would produce.
+        let text = "  dep: \"caf\u{e9}\" flag: 1\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let tokens = BuildFileAnalyzer::new().semantic_tokens(&doc);
+        let positions = decode_positions(&tokens);
+        assert!(
+            positions.contains(&(0, 14)),
+            "expected a token starting at UTF-16 column 14 (the 'flag' key); got {positions:?}"
+        );
+        assert!(
+            !positions.iter().any(|&(_, c)| c == 15),
+            "no token should be reported at byte column 15; got {positions:?}"
+        );
     }
 }

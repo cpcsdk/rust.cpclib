@@ -29,34 +29,13 @@ impl BuildFileAnalyzer {
     /// grouping — used by callers that need one entry per actual buildable
     /// target (e.g. `code_lens`'s "▶ Run" buttons, `cpclib.getTargets`).
     pub(crate) fn target_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
-        let target_names: Vec<&'static str> = cpclib_bndbuild::lsp::RULE_KEYS
-            .iter()
-            .find(|k| k.names.contains(&"targets"))
-            .map(|k| k.names.to_vec())
-            .unwrap_or_default();
-
         // Try Jinja expansion so loop-generated rules appear in the outline.
         // Fall back to raw text when expansion fails (missing variables, syntax
         // errors, etc.) so the outline still works on template-only edits.
-        let file_dir = document
-            .uri
-            .to_file_path()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
-        let raw_text = document.text();
-        let (expanded_text, source_map) =
-            match super::sourcemap::expand_with_source_map(&raw_text, file_dir.as_deref()) {
-                Ok((text, map)) => (text, map),
-                Err(_) => {
-                    let lines = raw_text.lines().count();
-                    (
-                        raw_text.clone(),
-                        super::sourcemap::SourceMap::identity(lines)
-                    )
-                }
-            };
+        let expand_result = self.expand_or_identity(document);
+        let (expanded_text, source_map) = (&expand_result.0, &expand_result.1);
 
-        self.scan_symbols_from_text(&expanded_text, &source_map, &target_names)
+        self.scan_symbols_from_text(expanded_text, source_map, &super::token::TGT_KEY_NAMES)
     }
 
     /// One symbol per `{% set NAME = VALUE %}`, `detail` set to the value's

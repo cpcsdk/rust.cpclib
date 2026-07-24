@@ -229,6 +229,22 @@ pub(super) fn label_scope_at_line<'a, T>(
 where
     T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a
 {
+    scope_containing(&global_label_scopes(listing), line)
+}
+
+/// Every global label's own `(name, start..end)` scope in `listing`, in
+/// document order — the boundary computation `label_scope_at_line` does,
+/// but for every label at once. Callers that need to resolve many lines to
+/// their enclosing label (e.g. `call_hierarchy.rs::incoming_calls_in`, once
+/// per matched call site) should compute this once via this function and
+/// look up each line with `scope_containing`, rather than calling
+/// `label_scope_at_line` (a full listing walk) per line — O(labels) to
+/// build plus O(labels) per lookup, instead of O(tokens) per lookup.
+pub(super) fn global_label_scopes<'a, T>(
+    listing: impl IntoIterator<Item = &'a T> + 'a
+) -> Vec<(String, std::ops::Range<u32>)>
+where T: cpclib_asm::parser::obtained::MayHaveSpan + cpclib_tokens::ListingElement + 'a {
+    let mut scopes = Vec::new();
     let mut current_global: Option<(String, u32)> = None;
     for token in flatten_listing(listing) {
         if !token.is_label() {
@@ -241,18 +257,26 @@ where
         let (tok_line_1based, _col) = token.span().relative_line_and_column();
         let tok_line = tok_line_1based.saturating_sub(1) as u32;
         if let Some((name, start)) = current_global.take() {
-            if start <= line && line < tok_line {
-                return Some((name, start..tok_line));
-            }
+            scopes.push((name, start..tok_line));
         }
         current_global = Some((raw.to_string(), tok_line));
     }
-    if let Some((name, start)) = current_global
-        && start <= line
-    {
-        return Some((name, start..u32::MAX));
+    if let Some((name, start)) = current_global {
+        scopes.push((name, start..u32::MAX));
     }
-    None
+    scopes
+}
+
+/// The scope in `scopes` (as computed by `global_label_scopes`) containing
+/// `line`, if any.
+pub(super) fn scope_containing(
+    scopes: &[(String, std::ops::Range<u32>)],
+    line: u32
+) -> Option<(String, std::ops::Range<u32>)> {
+    scopes
+        .iter()
+        .find(|(_, range)| range.start <= line && line < range.end)
+        .cloned()
 }
 
 // ─── Block-scope helpers (FUNCTION / REPEAT / ITERATE) ────────────────────
@@ -834,4 +858,54 @@ pub(super) fn directive_first_doc_line(word_upper: &str) -> Option<String> {
         .iter()
         .find(|(names, _)| names.iter().any(|n| n.to_uppercase() == word_upper))
         .map(|(_, doc)| crate::common::render::first_doc_line(doc))
+}
+
+#[cfg(test)]
+mod global_label_scope_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    #[test]
+    fn global_label_scopes_covers_every_label_in_order() {
+        let text = "start:\n  call target\n  ret\ntarget:\n  ret\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).unwrap();
+        let scopes = global_label_scopes(listing.iter());
+        assert_eq!(scopes.len(), 2, "{scopes:?}");
+        assert_eq!(scopes[0].0, "start");
+        assert_eq!(scopes[0].1, 0..3);
+        assert_eq!(scopes[1].0, "target");
+        assert_eq!(scopes[1].1, 3..u32::MAX);
+    }
+
+    #[test]
+    fn scope_containing_matches_label_scope_at_line_for_every_line() {
+        let text = "start:\n  call target\n  ret\ntarget:\n  ret\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).unwrap();
+        let scopes = global_label_scopes(listing.iter());
+        for line in 0..5u32 {
+            assert_eq!(
+                scope_containing(&scopes, line),
+                label_scope_at_line(listing.iter(), line),
+                "mismatch at line {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn scope_containing_returns_none_before_the_first_label() {
+        let text = "  nop\nstart:\n  ret\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).unwrap();
+        let scopes = global_label_scopes(listing.iter());
+        assert_eq!(scope_containing(&scopes, 0), None);
+    }
 }

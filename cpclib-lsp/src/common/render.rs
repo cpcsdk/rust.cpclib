@@ -15,7 +15,7 @@ pub fn make_hover(md: String) -> Hover {
 ///   decimal — no prefix, hex — `&`, binary — `%` with `_` every 4 bits.
 /// The value column is right-aligned.
 pub fn format_number_hover(label: &str, value: i64) -> String {
-    let hex = format!("&{:X}", value as u64 & 0xFFFF_FFFF_FFFF_FFFF);
+    let hex = format_hex_cpc(value);
     let bin = format_binary_cpc(value);
     format!(
         "**`{label}`**\n\n\
@@ -81,6 +81,17 @@ pub fn format_labeled_bytes(groups: &[(&str, &[u8])]) -> String {
     md
 }
 
+/// Format an i64 as hex, sized to 8 or 16 bits (2 or 4 digits) using the same
+/// width rule as `format_binary_cpc`, so the two columns of a hover table
+/// stay consistent — e.g. a negative literal renders as `&FF`/`&FFFF`
+/// (two's complement), not a full 16-digit 64-bit value.
+pub fn format_hex_cpc(value: i64) -> String {
+    let bits: u32 = if value >= 0 && value <= 0xFF { 8 } else { 16 };
+    let digits = (bits / 4) as usize;
+    let mask = (1u64 << bits) - 1;
+    format!("&{:0digits$X}", value as u64 & mask, digits = digits)
+}
+
 /// Format an i64 as binary with `_` every 4 bits, sized to 8 or 16 bits.
 pub fn format_binary_cpc(value: i64) -> String {
     let bits: u32 = if value >= 0 && value <= 0xFF { 8 } else { 16 };
@@ -92,4 +103,33 @@ pub fn format_binary_cpc(value: i64) -> String {
         s.push(if value & (1 << i) != 0 { '1' } else { '0' });
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_hex_cpc_sizes_small_positive_values_as_8_bit() {
+        assert_eq!(format_hex_cpc(0x2A), "&2A");
+    }
+
+    #[test]
+    fn format_hex_cpc_sizes_larger_values_as_16_bit() {
+        assert_eq!(format_hex_cpc(0x1234), "&1234");
+    }
+
+    #[test]
+    fn format_hex_cpc_sizes_negative_values_by_two_s_complement_not_64_bit() {
+        // -1 fits in 16 bits two's complement (&FFFF) - it must not render
+        // as a 16-digit 64-bit hex value (the previous no-op-bitmask bug).
+        assert_eq!(format_hex_cpc(-1), "&FFFF");
+    }
+
+    #[test]
+    fn format_number_hover_hex_column_matches_binary_column_width() {
+        let md = format_number_hover("x", -1);
+        assert!(md.contains("&FFFF"), "{md}");
+        assert!(!md.contains("&FFFFFFFFFFFFFFFF"), "{md}");
+    }
 }

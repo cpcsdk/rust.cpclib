@@ -11,6 +11,7 @@ use tower_lsp::lsp_types::*;
 use super::BasicAnalyzer;
 use super::token::*;
 use crate::common::document::Document;
+use crate::common::render::make_hover;
 
 impl BasicAnalyzer {
     pub fn hover(&self, document: &Document, position: Position) -> Option<Hover> {
@@ -37,13 +38,7 @@ impl BasicAnalyzer {
                         bytes.as_slice()
                     )]));
                 }
-                return Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: md
-                    }),
-                    range: None
-                });
+                return Some(make_hover(md));
             }
         }
 
@@ -98,25 +93,15 @@ impl BasicAnalyzer {
                         md.push_str(&crate::common::render::format_labeled_bytes(&group_refs));
                     }
                 }
-                return Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: md
-                    }),
-                    range: None
-                });
+                return Some(make_hover(md));
             },
 
             // Any other number → show base conversions.
             LocatedTokenKind::Number(num_text) => {
                 if let Some(value) = parse_basic_integer(num_text) {
-                    return Some(Hover {
-                        contents: HoverContents::Markup(MarkupContent {
-                            kind: MarkupKind::Markdown,
-                            value: crate::common::render::format_number_hover(num_text, value)
-                        }),
-                        range: None
-                    });
+                    return Some(make_hover(crate::common::render::format_number_hover(
+                        num_text, value
+                    )));
                 }
             },
 
@@ -128,16 +113,9 @@ impl BasicAnalyzer {
             | LocatedTokenKind::Separator
             | LocatedTokenKind::Other(_) => {
                 if let Some((label, bytes)) = token_bytes(&tok.kind) {
-                    return Some(Hover {
-                        contents: HoverContents::Markup(MarkupContent {
-                            kind: MarkupKind::Markdown,
-                            value: crate::common::render::format_labeled_bytes(&[(
-                                label.as_str(),
-                                bytes.as_slice()
-                            )])
-                        }),
-                        range: None
-                    });
+                    return Some(make_hover(crate::common::render::format_labeled_bytes(&[
+                        (label.as_str(), bytes.as_slice())
+                    ])));
                 }
             },
 
@@ -177,13 +155,7 @@ pub(crate) fn locomotive_basic_hover(
                     bytes.as_slice()
                 )]));
             }
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: md
-                }),
-                range: None
-            });
+            return Some(make_hover(md));
         }
     }
 
@@ -191,29 +163,18 @@ pub(crate) fn locomotive_basic_hover(
     if let Some(tok) = tok {
         if let LocatedTokenKind::Number(num_text) = &tok.kind {
             if let Some(value) = parse_basic_integer(num_text) {
-                return Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: crate::common::render::format_number_hover(num_text, value)
-                    }),
-                    range: None
-                });
+                return Some(make_hover(crate::common::render::format_number_hover(
+                    num_text, value
+                )));
             }
         }
 
         // 3. Space, statement separator, operator, or any other raw
         // passthrough character → show its own byte(s) directly.
         if let Some((label, bytes)) = token_bytes(&tok.kind) {
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: crate::common::render::format_labeled_bytes(&[(
-                        label.as_str(),
-                        bytes.as_slice()
-                    )])
-                }),
-                range: None
-            });
+            return Some(make_hover(crate::common::render::format_labeled_bytes(&[
+                (label.as_str(), bytes.as_slice())
+            ])));
         }
     }
 

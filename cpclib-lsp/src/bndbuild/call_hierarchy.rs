@@ -35,40 +35,6 @@ use super::sourcemap::SourceMap;
 use crate::common::call_hierarchy::CallHierarchyData;
 use crate::common::document::Document;
 
-fn tgt_key_names() -> Vec<&'static str> {
-    cpclib_bndbuild::lsp::RULE_KEYS
-        .iter()
-        .find(|k| k.names.contains(&"targets"))
-        .map(|k| k.names.to_vec())
-        .unwrap_or_default()
-}
-
-fn dep_key_names() -> Vec<&'static str> {
-    cpclib_bndbuild::lsp::RULE_KEYS
-        .iter()
-        .find(|k| k.names.contains(&"dependencies"))
-        .map(|k| k.names.to_vec())
-        .unwrap_or_default()
-}
-
-/// Jinja-expand `document`, falling back to an identity source map on
-/// expansion failure — the exact dance `symbols.rs`/`diagnostics.rs` use.
-fn expand(document: &Document) -> (String, SourceMap) {
-    let raw_text = document.text();
-    let file_dir = document
-        .uri
-        .to_file_path()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
-    match super::sourcemap::expand_with_source_map(&raw_text, file_dir.as_deref()) {
-        Ok((text, map)) => (text, map),
-        Err(_) => {
-            let lines = raw_text.lines().count();
-            (raw_text, SourceMap::identity(lines))
-        }
-    }
-}
-
 fn indent_of(line: &str) -> usize {
     line.len() - line.trim_start().len()
 }
@@ -245,8 +211,7 @@ fn all_target_definitions(expanded_text: &str, tgt_key_names: &[&str]) -> Vec<(S
         let trimmed = line.trim_start();
         let content = trimmed.strip_prefix("- ").unwrap_or(trimmed);
         for &key in tgt_key_names {
-            let prefix = format!("{key}:");
-            if let Some(rest) = content.strip_prefix(prefix.as_str()) {
+            if let Some(rest) = content.strip_prefix(key).and_then(|r| r.strip_prefix(':')) {
                 let value = rest.split('#').next().unwrap_or("").trim();
                 if !value.is_empty() && value != ">" && value != "|" {
                     out.push((value.to_string(), line_num as u32));
@@ -272,8 +237,7 @@ fn target_token_span(
     let content = trimmed.strip_prefix("- ").unwrap_or(trimmed);
     let content_col = (line.len() - content.len()) as u32;
     for &key in tgt_key_names {
-        let prefix = format!("{key}:");
-        if let Some(rest) = content.strip_prefix(prefix.as_str()) {
+        if let Some(rest) = content.strip_prefix(key).and_then(|r| r.strip_prefix(':')) {
             let value_full = rest.split('#').next().unwrap_or("");
             let leading_ws = (value_full.len() - value_full.trim_start().len()) as u32;
             let mut col = content_col + key.len() as u32 + 1 + leading_ws;
@@ -310,9 +274,9 @@ fn rule_dependency_tokens(
         let content_col = (line.len() - content.len()) as u32;
 
         let Some((key, rest)) = dep_key_names.iter().find_map(|&key| {
-            let prefix = format!("{key}:");
             content
-                .strip_prefix(prefix.as_str())
+                .strip_prefix(key)
+                .and_then(|r| r.strip_prefix(':'))
                 .map(|rest| (key, rest))
         })
         else {
@@ -532,13 +496,13 @@ impl BuildFileAnalyzer {
         document: &Document,
         target: &str
     ) -> Option<CallHierarchyItem> {
-        let (expanded, source_map) = expand(document);
+        let expand_result = self.expand_or_identity(document);
+        let (expanded, source_map) = (&expand_result.0, &expand_result.1);
         let lines: Vec<&str> = expanded.lines().collect();
         let raw_text = document.text();
         let raw_lines: Vec<&str> = raw_text.lines().collect();
-        let tgt_keys = tgt_key_names();
 
-        let tgt_exp_line = Self::find_target_line(&expanded, target, &tgt_keys)?;
+        let tgt_exp_line = Self::find_target_line(&expanded, target, &super::token::TGT_KEY_NAMES)?;
         // The `tgt:` line itself must have a real counterpart in *this*
         // document's own raw text - otherwise it was spliced in wholesale
         // from an `{% include %}`d file (content from an include has no
@@ -553,7 +517,8 @@ impl BuildFileAnalyzer {
         let (body_start, body_end) = rule_bounds(&lines, tgt_exp_line);
         let range = translate_line_range(&source_map, &raw_lines, body_start, body_end)?;
         let (col, len) =
-            target_token_span(&lines, tgt_exp_line, target, &tgt_keys).unwrap_or((0, 0));
+            target_token_span(&lines, tgt_exp_line, target, &super::token::TGT_KEY_NAMES)
+                .unwrap_or((0, 0));
         let selection_range =
             translate_span(&source_map, &raw_lines, tgt_exp_line, col, len).unwrap_or(range);
 
@@ -582,14 +547,14 @@ impl BuildFileAnalyzer {
         document: &Document,
         target: &str
     ) -> Vec<(String, Vec<Range>)> {
-        let (expanded, source_map) = expand(document);
+        let expand_result = self.expand_or_identity(document);
+        let (expanded, source_map) = (&expand_result.0, &expand_result.1);
         let lines: Vec<&str> = expanded.lines().collect();
         let raw_text = document.text();
         let raw_lines: Vec<&str> = raw_text.lines().collect();
-        let tgt_keys = tgt_key_names();
-        let dep_keys = dep_key_names();
 
-        let Some(tgt_exp_line) = Self::find_target_line(&expanded, target, &tgt_keys)
+        let Some(tgt_exp_line) =
+            Self::find_target_line(&expanded, target, &super::token::TGT_KEY_NAMES)
         else {
             return Vec::new();
         };
@@ -602,7 +567,9 @@ impl BuildFileAnalyzer {
         }
 
         let mut groups: Vec<(String, Vec<Range>)> = Vec::new();
-        for (tok, exp_line, col, len) in rule_dependency_tokens(&lines, tgt_exp_line, &dep_keys) {
+        for (tok, exp_line, col, len) in
+            rule_dependency_tokens(&lines, tgt_exp_line, &super::token::DEP_KEY_NAMES)
+        {
             let Some(range) = translate_span(&source_map, &raw_lines, exp_line, col, len)
             else {
                 continue;
@@ -623,26 +590,28 @@ impl BuildFileAnalyzer {
         document: &Document,
         target: &str
     ) -> Vec<(String, Vec<Range>)> {
-        let (expanded, source_map) = expand(document);
+        let expand_result = self.expand_or_identity(document);
+        let (expanded, source_map) = (&expand_result.0, &expand_result.1);
         let lines: Vec<&str> = expanded.lines().collect();
         let raw_text = document.text();
         let raw_lines: Vec<&str> = raw_text.lines().collect();
-        let tgt_keys = tgt_key_names();
-        let dep_keys = dep_key_names();
 
         let mut groups: Vec<(String, Vec<Range>)> = Vec::new();
-        for (owner_tgt, owner_line) in all_target_definitions(&expanded, &tgt_keys) {
+        for (owner_tgt, owner_line) in
+            all_target_definitions(&expanded, &super::token::TGT_KEY_NAMES)
+        {
             // Same rationale as `call_hierarchy_item_for_target`: only
             // attribute an incoming call to a rule this document actually
             // defines, not one merely visible here via `{% include %}`.
             if source_map.to_original(owner_line).is_none() {
                 continue;
             }
-            let matching: Vec<Range> = rule_dependency_tokens(&lines, owner_line, &dep_keys)
-                .into_iter()
-                .filter(|(t, ..)| t == target)
-                .filter_map(|(_, l, c, len)| translate_span(&source_map, &raw_lines, l, c, len))
-                .collect();
+            let matching: Vec<Range> =
+                rule_dependency_tokens(&lines, owner_line, &super::token::DEP_KEY_NAMES)
+                    .into_iter()
+                    .filter(|(t, ..)| t == target)
+                    .filter_map(|(_, l, c, len)| translate_span(&source_map, &raw_lines, l, c, len))
+                    .collect();
             if matching.is_empty() {
                 continue;
             }
@@ -757,7 +726,6 @@ impl BuildFileAnalyzer {
     ) -> Vec<CallHierarchyIncomingCall> {
         let text = document.text();
         let lines: Vec<&str> = text.lines().collect();
-        let tgt_keys = tgt_key_names();
 
         let mut macro_groups: Vec<(String, Vec<Range>)> = Vec::new();
         let mut rule_groups: Vec<(String, Vec<Range>)> = Vec::new();
@@ -771,7 +739,7 @@ impl BuildFileAnalyzer {
                 }
                 continue;
             }
-            let owner = all_target_definitions(&text, &tgt_keys)
+            let owner = all_target_definitions(&text, &super::token::TGT_KEY_NAMES)
                 .into_iter()
                 .find_map(|(owner_tgt, owner_line)| {
                     let (start, end) = rule_bounds(&lines, owner_line);
@@ -824,15 +792,12 @@ impl BuildFileAnalyzer {
         let line = document.line(position.line as usize)?;
         let col = position.character as usize;
 
-        let tgt_keys = tgt_key_names();
-        let file_key_names: Vec<&str> = tgt_keys.iter().copied().chain(dep_key_names()).collect();
-
         if let Some((token, _is_target_field)) = Self::filename_under_cursor(
             document,
             position.line as usize,
             &line,
-            &file_key_names,
-            &tgt_keys,
+            &super::token::FILE_KEY_NAMES,
+            &super::token::TGT_KEY_NAMES,
             col
         ) && !token.contains("{{")
             && !token.contains("{%")
@@ -873,15 +838,12 @@ impl BuildFileAnalyzer {
         let line = document.line(position.line as usize)?;
         let col = position.character as usize;
 
-        let tgt_keys = tgt_key_names();
-        let file_key_names: Vec<&str> = tgt_keys.iter().copied().chain(dep_key_names()).collect();
-
         if let Some((token, _is_target_field)) = Self::filename_under_cursor(
             document,
             position.line as usize,
             &line,
-            &file_key_names,
-            &tgt_keys,
+            &super::token::FILE_KEY_NAMES,
+            &super::token::TGT_KEY_NAMES,
             col
         ) && !token.contains("{{")
             && !token.contains("{%")

@@ -97,20 +97,9 @@ impl BuildFileAnalyzer {
     /// to a task list under `cmd:`/`tasks:`/... (offer task invocations), by
     /// finding the closest enclosing key (see `enclosing_key_for_list_item`).
     fn list_context_at(&self, document: &Document, line_idx: usize) -> ListContext {
-        let task_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
-            .iter()
-            .find(|k| k.names.contains(&"tasks"))
-            .map(|k| k.names.to_vec())
-            .unwrap_or_default();
-        let file_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
-            .iter()
-            .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
-            .flat_map(|k| k.names.iter().copied())
-            .collect();
-
         match Self::enclosing_key_for_list_item(document, line_idx) {
-            Some(key) if task_keys.contains(&key.as_str()) => ListContext::Tasks,
-            Some(key) if file_keys.contains(&key.as_str()) => ListContext::Files,
+            Some(key) if super::token::TASK_KEY_NAMES.contains(&key.as_str()) => ListContext::Tasks,
+            Some(key) if super::token::FILE_KEY_NAMES.contains(&key.as_str()) => ListContext::Files,
             _ => ListContext::Rule
         }
     }
@@ -293,13 +282,11 @@ impl BuildFileAnalyzer {
         line_text: &str,
         cursor_column: usize
     ) -> Option<(&'static str, Vec<std::ffi::OsString>, usize)> {
-        let task_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
-            .iter()
-            .find(|k| k.names.contains(&"tasks"))
-            .map(|k| k.names.to_vec())
-            .unwrap_or_default();
-        let prefix_before_cursor =
-            self.value_prefix_before_cursor(line_text, cursor_column, &task_keys)?;
+        let prefix_before_cursor = self.value_prefix_before_cursor(
+            line_text,
+            cursor_column,
+            &super::token::TASK_KEY_NAMES
+        )?;
 
         // Tokenize with the streaming lexer (not shlex::split, which just
         // returns None on an unterminated quote - exactly the state a user is
@@ -350,12 +337,6 @@ impl BuildFileAnalyzer {
         line_text: &str,
         cursor_column: usize
     ) -> Option<String> {
-        let file_keys: Vec<&str> = cpclib_bndbuild::lsp::RULE_KEYS
-            .iter()
-            .filter(|k| k.names.contains(&"targets") || k.names.contains(&"dependencies"))
-            .flat_map(|k| k.names.iter().copied())
-            .collect();
-
         let trimmed = line_text.trim_start();
         if trimmed.starts_with("- ") && !trimmed.contains(':') {
             // Multi-line list form: a bare item with no key of its own.
@@ -364,7 +345,7 @@ impl BuildFileAnalyzer {
             // rule keys instead, via the `list_context_at` fallback), and a
             // `cmd:`/`tasks:` item is a task invocation, not a filename.
             let key = Self::enclosing_key_for_list_item(document, line_idx)?;
-            if !file_keys.contains(&key.as_str()) {
+            if !super::token::FILE_KEY_NAMES.contains(&key.as_str()) {
                 return None;
             }
         }
@@ -372,8 +353,11 @@ impl BuildFileAnalyzer {
             // Neither a bare list item nor a `key: value` line.
             return None;
         }
-        let prefix_before_cursor =
-            self.value_prefix_before_cursor(line_text, cursor_column, &file_keys)?;
+        let prefix_before_cursor = self.value_prefix_before_cursor(
+            line_text,
+            cursor_column,
+            &super::token::FILE_KEY_NAMES
+        )?;
 
         let mut lexer = shlex::Shlex::new(&prefix_before_cursor);
         let mut tokens: Vec<String> = (&mut lexer).collect();

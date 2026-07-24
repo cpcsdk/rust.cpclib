@@ -99,22 +99,35 @@ impl CpcLspBackend {
     /// `from_uri`), even when never opened by the editor. `.git`/`target`/
     /// etc. are pruned from the walk.
     ///
-    /// The directory walk itself stays sequential (cheap - just filesystem
-    /// metadata), but candidate files are then searched in parallel via
-    /// rayon's `find_map_any`, since parsing+scanning each file is the
-    /// actually expensive part on a large workspace. This changes "first
-    /// match wins" from strict directory-walk order to "first match found
-    /// across parallel workers" - an acceptable difference, since a symbol
-    /// should only have one real definition.
-    fn find_definition_via_workspace_scan(
+    /// The directory walk itself runs on a blocking-pool thread (see
+    /// `candidate_asm_paths`), but candidate files are then searched in
+    /// parallel via rayon's `find_map_any`, since parsing+scanning each file
+    /// is the actually expensive part on a large workspace. This changes
+    /// "first match wins" from strict directory-walk order to "first match
+    /// found across parallel workers" - an acceptable difference, since a
+    /// symbol should only have one real definition.
+    async fn find_definition_via_workspace_scan(
         &self,
         from_uri: &Url,
         word_upper: &str
     ) -> Option<Location> {
-        let paths = self.candidate_asm_paths(from_uri);
+        let paths = self.candidate_asm_paths(from_uri).await;
         paths
             .par_iter()
             .find_map_any(|path| self.find_definition_at_path(path, word_upper))
+    }
+
+    /// The configured workspace root(s), or an empty `Vec` if the client
+    /// reported none. Uses `.unwrap_or_else(|e| e.into_inner())` rather than
+    /// `.unwrap()` so a panic while any thread holds this lock can't poison
+    /// it for the rest of the server's lifetime - `RwLock` poisoning never
+    /// clears on its own, and every goto-definition/rename/call-hierarchy
+    /// workspace fallback reads this lock.
+    fn workspace_roots(&self) -> Vec<PathBuf> {
+        self.workspace_roots
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Every `.asm` file under the workspace root(s) (or, if the client
@@ -122,42 +135,68 @@ impl CpcLspBackend {
     /// excluding `from_uri` itself and pruning `.git`/`target`/etc. - the
     /// candidate-file list shared by both `find_definition_via_workspace_scan`
     /// and `rename_label_across_workspace`.
-    fn candidate_asm_paths(&self, from_uri: &Url) -> Vec<PathBuf> {
-        let roots: Vec<PathBuf> = {
-            let guard = self.workspace_roots.read().unwrap();
-            if guard.is_empty() {
-                crate::basm::definition::project_root_for(from_uri)
-                    .into_iter()
-                    .collect()
-            }
-            else {
-                guard.clone()
-            }
+    ///
+    /// The walk itself runs on a blocking-pool thread via `spawn_blocking`,
+    /// mirroring how `execute_command`'s `cpclib.runRule` already offloads
+    /// its own heavy synchronous work - a large workspace's directory walk
+    /// (filesystem metadata for every entry under every root) can take long
+    /// enough to noticeably stall the async runtime's worker threads, which
+    /// `tower-lsp` shares across every concurrent request (hover,
+    /// completion, ...), not just this one.
+    async fn candidate_asm_paths(&self, from_uri: &Url) -> Vec<PathBuf> {
+        let configured = self.workspace_roots();
+        let roots: Vec<PathBuf> = if configured.is_empty() {
+            crate::basm::definition::project_root_for(from_uri)
+                .into_iter()
+                .collect()
+        }
+        else {
+            configured
         };
 
         let from_path = from_uri.to_file_path().ok();
-        let mut paths = Vec::new();
 
-        for root in roots {
-            let walker = walkdir::WalkDir::new(&root)
-                .into_iter()
-                .filter_entry(|e| !is_ignored_dir(e));
-            for entry in walker.filter_map(|e| e.ok()) {
-                if !entry.file_type().is_file() {
-                    continue;
+        tokio::task::spawn_blocking(move || {
+            let mut paths = Vec::new();
+            for root in roots {
+                let walker = walkdir::WalkDir::new(&root)
+                    .into_iter()
+                    .filter_entry(|e| !is_ignored_dir(e));
+                for entry in walker.filter_map(|e| e.ok()) {
+                    if !entry.file_type().is_file() {
+                        continue;
+                    }
+                    let path = entry.path();
+                    let is_asm = path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
+                    if !is_asm || from_path.as_deref() == Some(path) {
+                        continue;
+                    }
+                    paths.push(path.to_path_buf());
                 }
-                let path = entry.path();
-                let is_asm = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
-                if !is_asm || from_path.as_deref() == Some(path) {
-                    continue;
-                }
-                paths.push(path.to_path_buf());
             }
+            paths
+        })
+        .await
+        .unwrap_or_default()
+    }
+
+    /// Look up `uri` among open documents; fall back to reading it from disk
+    /// (as a synthetic `version = 0` document) if it isn't open. `None` only
+    /// when the URI isn't a file path or the file can't be read. The "open
+    /// doc, else disk" shape this replaces was independently duplicated 9
+    /// times across this file's cross-file features (goto-definition/rename
+    /// workspace fallbacks, call-hierarchy include-graph traversal, and
+    /// several `executeCommand` handlers).
+    fn load_document(&self, uri: &Url) -> Option<Document> {
+        if let Some(entry) = self.documents.get(uri) {
+            return Some(entry.value().clone());
         }
-        paths
+        let path = uri.to_file_path().ok()?;
+        let text = std::fs::read_to_string(&path).ok()?;
+        Some(Document::new(uri.clone(), text, 0))
     }
 
     /// Shared by both cross-file fallbacks: look up `word_upper` in the file
@@ -168,15 +207,7 @@ impl CpcLspBackend {
         word_upper: &str
     ) -> Option<Location> {
         let target_uri = Url::from_file_path(path).ok()?;
-
-        if let Some(open_doc) = self.documents.get(&target_uri) {
-            return self
-                .asm_analyzer
-                .find_definition_in(open_doc.value(), word_upper);
-        }
-
-        let text = std::fs::read_to_string(path).ok()?;
-        let doc = Document::new(target_uri, text, 0);
+        let doc = self.load_document(&target_uri)?;
         self.asm_analyzer.find_definition_in(&doc, word_upper)
     }
 
@@ -187,7 +218,7 @@ impl CpcLspBackend {
     /// `workspace_roots` (open or on disk). Inserts into `changes`,
     /// skipping any URI already present (the current document's own edits,
     /// added by the caller before this runs).
-    fn rename_label_across_workspace(
+    async fn rename_label_across_workspace(
         &self,
         from_uri: &Url,
         document_text: &str,
@@ -206,7 +237,7 @@ impl CpcLspBackend {
         // file's edits independently via rayon (no shared mutable state
         // during the parallel phase), then merge sequentially, preserving
         // today's "skip a URI already present" semantics via `or_insert`.
-        let paths = self.candidate_asm_paths(from_uri);
+        let paths = self.candidate_asm_paths(from_uri).await;
         let results: Vec<(Url, Vec<TextEdit>)> = paths
             .par_iter()
             .filter_map(|path| self.rename_edits_at_path(path, target, new_name))
@@ -244,17 +275,10 @@ impl CpcLspBackend {
         new_name: &str
     ) -> Option<(Url, Vec<TextEdit>)> {
         let target_uri = Url::from_file_path(path).ok()?;
-
-        let edits = if let Some(open_doc) = self.documents.get(&target_uri) {
-            self.asm_analyzer
-                .rename_occurrences_in(open_doc.value(), target, new_name)
-        }
-        else {
-            let text = std::fs::read_to_string(path).ok()?;
-            let doc = Document::new(target_uri.clone(), text, 0);
-            self.asm_analyzer
-                .rename_occurrences_in(&doc, target, new_name)
-        };
+        let doc = self.load_document(&target_uri)?;
+        let edits = self
+            .asm_analyzer
+            .rename_occurrences_in(&doc, target, new_name);
 
         (!edits.is_empty()).then_some((target_uri, edits))
     }
@@ -276,8 +300,9 @@ impl CpcLspBackend {
         else {
             return;
         };
-        let Some(word) =
-            crate::bndbuild::definition::jinja_word_at(line, position.character as usize)
+        let col =
+            crate::common::document::utf16_col_to_byte_offset(line, position.character as usize);
+        let Some(word) = crate::bndbuild::definition::jinja_word_at(line, col)
         else {
             return;
         };
@@ -300,7 +325,7 @@ impl CpcLspBackend {
             return;
         };
 
-        let roots: Vec<PathBuf> = self.workspace_roots.read().unwrap().clone();
+        let roots: Vec<PathBuf> = self.workspace_roots();
         let includers =
             crate::bndbuild::definition::files_transitively_including(&roots, &from_path);
 
@@ -312,15 +337,9 @@ impl CpcLspBackend {
             if changes.contains_key(&target_uri) {
                 continue;
             }
-            let doc = if let Some(open_doc) = self.documents.get(&target_uri) {
-                open_doc.value().clone()
-            }
+            let Some(doc) = self.load_document(&target_uri)
             else {
-                let Ok(text) = std::fs::read_to_string(&path)
-                else {
-                    continue;
-                };
-                Document::new(target_uri.clone(), text, 0)
+                continue;
             };
             let edits: Vec<TextEdit> = self
                 .build_analyzer
@@ -354,7 +373,7 @@ impl CpcLspBackend {
         else {
             return docs;
         };
-        let roots: Vec<PathBuf> = self.workspace_roots.read().unwrap().clone();
+        let roots: Vec<PathBuf> = self.workspace_roots();
         for includer_path in
             crate::bndbuild::definition::files_transitively_including(&roots, &path)
         {
@@ -362,11 +381,8 @@ impl CpcLspBackend {
             else {
                 continue;
             };
-            if let Some(open) = self.documents.get(&includer_uri) {
-                docs.push(open.value().clone());
-            }
-            else if let Ok(text) = std::fs::read_to_string(&includer_path) {
-                docs.push(Document::new(includer_uri, text, 0));
+            if let Some(doc) = self.load_document(&includer_uri) {
+                docs.push(doc);
             }
         }
         docs
@@ -388,7 +404,7 @@ impl CpcLspBackend {
             return Some(item);
         }
         let path = item_uri.to_file_path().ok()?;
-        let roots: Vec<PathBuf> = self.workspace_roots.read().unwrap().clone();
+        let roots: Vec<PathBuf> = self.workspace_roots();
         for included_path in
             crate::bndbuild::definition::files_transitively_included_by(&roots, &path)
         {
@@ -396,12 +412,7 @@ impl CpcLspBackend {
             else {
                 continue;
             };
-            let doc = if let Some(open) = self.documents.get(&included_uri) {
-                open.value().clone()
-            }
-            else if let Ok(text) = std::fs::read_to_string(&included_path) {
-                Document::new(included_uri, text, 0)
-            }
+            let Some(doc) = self.load_document(&included_uri)
             else {
                 continue;
             };
@@ -423,12 +434,7 @@ impl CpcLspBackend {
         uri: &Url,
         _data: &CallHierarchyData
     ) -> Option<(DocumentType, Document)> {
-        if let Some(entry) = self.documents.get(uri) {
-            return Some((entry.value().doc_type, entry.value().clone()));
-        }
-        let path = uri.to_file_path().ok()?;
-        let text = std::fs::read_to_string(&path).ok()?;
-        let document = Document::new(uri.clone(), text, 0);
+        let document = self.load_document(uri)?;
         Some((document.doc_type, document))
     }
 
@@ -531,7 +537,10 @@ impl LanguageServer for CpcLspBackend {
                 roots.push(path);
             }
         }
-        *self.workspace_roots.write().unwrap() = roots;
+        *self
+            .workspace_roots
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = roots;
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -717,6 +726,7 @@ impl LanguageServer for CpcLspBackend {
         self.pending_versions.remove(&params.text_document.uri);
         self.basic_analyzer.evict(&params.text_document.uri);
         self.asm_analyzer.evict(&params.text_document.uri);
+        self.build_analyzer.evict(&params.text_document.uri);
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -833,7 +843,7 @@ impl LanguageServer for CpcLspBackend {
             if let Some(loc) = self.find_definition_via_includes(&document_text, &uri, &word) {
                 return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
             }
-            if let Some(loc) = self.find_definition_via_workspace_scan(&uri, &word) {
+            if let Some(loc) = self.find_definition_via_workspace_scan(&uri, &word).await {
                 return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
             }
         }
@@ -974,11 +984,10 @@ impl LanguageServer for CpcLspBackend {
                 let target = self
                     .asm_analyzer
                     .resolve_rename_target(entry.value(), position);
-                let Some(crate::basm::definition::RenameTarget::Global(_)) = target
+                let Some(target @ crate::basm::definition::RenameTarget::Global(_)) = target
                 else {
                     return Ok(self.asm_analyzer.rename(entry.value(), position, &new_name));
                 };
-                let target = target.unwrap();
 
                 let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
                     std::collections::HashMap::new();
@@ -997,7 +1006,8 @@ impl LanguageServer for CpcLspBackend {
                     &target,
                     &new_name,
                     &mut changes
-                );
+                )
+                .await;
 
                 Ok(non_empty_workspace_edit(changes))
             },
@@ -1142,6 +1152,22 @@ impl LanguageServer for CpcLspBackend {
                 let targets = self
                     .asm_analyzer
                     .outgoing_call_targets(&document, &name_upper);
+
+                // Collected once per request rather than once per target:
+                // the loop below used to re-filter `self.documents` (a full
+                // DashMap iteration) for every one of a routine's outgoing
+                // calls, which gets worse exactly when it matters most (a
+                // routine with many calls in a workspace with many open
+                // files).
+                let other_asm_docs: Vec<Document> = self
+                    .documents
+                    .iter()
+                    .filter(|e| {
+                        *e.key() != item.uri && e.value().doc_type == DocumentType::Assembly
+                    })
+                    .map(|e| e.value().clone())
+                    .collect();
+
                 let mut calls = Vec::new();
                 for (target, ranges) in targets {
                     let target_upper = target.to_uppercase();
@@ -1153,16 +1179,10 @@ impl LanguageServer for CpcLspBackend {
                         .asm_analyzer
                         .call_hierarchy_item_for_label(&document, &target_upper)
                         .or_else(|| {
-                            self.documents
-                                .iter()
-                                .filter(|e| {
-                                    *e.key() != item.uri
-                                        && e.value().doc_type == DocumentType::Assembly
-                                })
-                                .find_map(|e| {
-                                    self.asm_analyzer
-                                        .call_hierarchy_item_for_label(e.value(), &target_upper)
-                                })
+                            other_asm_docs.iter().find_map(|doc| {
+                                self.asm_analyzer
+                                    .call_hierarchy_item_for_label(doc, &target_upper)
+                            })
                         });
                     if let Some(to) = to {
                         calls.push(CallHierarchyOutgoingCall {
@@ -1304,12 +1324,7 @@ impl LanguageServer for CpcLspBackend {
             };
 
             // Use the open document when available, else load from disk.
-            let document = if let Some(entry) = self.documents.get(&uri) {
-                entry.value().clone()
-            }
-            else if let Ok(text) = std::fs::read_to_string(&fname) {
-                Document::new(uri.clone(), text, 0)
-            }
+            let Some(document) = self.load_document(&uri)
             else {
                 return Ok(None);
             };
@@ -1425,19 +1440,9 @@ impl LanguageServer for CpcLspBackend {
 
             // Use the open document when available, else load from disk -
             // mirrors `document_for_call_hierarchy_item`'s fallback.
-            let document = if let Some(entry) = self.documents.get(&uri) {
-                entry.value().clone()
-            }
+            let Some(document) = self.load_document(&uri)
             else {
-                let Some(path) = uri.to_file_path().ok()
-                else {
-                    return Ok(None);
-                };
-                let Ok(text) = std::fs::read_to_string(&path)
-                else {
-                    return Ok(None);
-                };
-                Document::new(uri, text, 0)
+                return Ok(None);
             };
 
             let summary = self
@@ -1466,28 +1471,15 @@ impl LanguageServer for CpcLspBackend {
         };
 
         // Use cached document if available; otherwise read from disk.
-        let targets: Vec<String> = if let Some(entry) = self.documents.get(&uri) {
-            self.build_analyzer
-                .target_symbols(entry.value())
-                .into_iter()
-                .map(|s| s.name)
-                .collect()
-        }
-        else if let Ok(path) = uri.to_file_path() {
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                let doc = Document::new(uri, text, 0);
+        let targets: Vec<String> = match self.load_document(&uri) {
+            Some(doc) => {
                 self.build_analyzer
                     .target_symbols(&doc)
                     .into_iter()
                     .map(|s| s.name)
                     .collect()
-            }
-            else {
-                vec![]
-            }
-        }
-        else {
-            vec![]
+            },
+            None => vec![]
         };
 
         Ok(Some(serde_json::json!(targets)))
@@ -1756,5 +1748,199 @@ mod did_change_debounce_tests {
             })
             .await;
         assert!(backend.pending_versions.get(&uri).is_none());
+    }
+}
+
+#[cfg(test)]
+mod load_document_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn returns_the_open_in_memory_document_when_present() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        let uri = Url::parse("file:///open.asm").unwrap();
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 3,
+                    text: "    ld a, 1\n".to_string()
+                }
+            })
+            .await;
+
+        let doc = backend.load_document(&uri).expect("document is open");
+        assert_eq!(doc.version, 3);
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_reading_the_file_from_disk_when_not_open() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let path = tmp.path().join("disk.asm");
+        std::fs::write(&path, "    ld a, 2\n").unwrap();
+        let uri = Url::from_file_path(&path).unwrap();
+
+        let doc = backend
+            .load_document(&uri)
+            .expect("document should be read from disk");
+        assert_eq!(doc.text(), "    ld a, 2\n");
+        assert_eq!(doc.version, 0);
+    }
+
+    #[tokio::test]
+    async fn returns_none_for_a_path_that_does_not_exist() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        let uri = Url::parse("file:///does/not/exist.asm").unwrap();
+        assert!(backend.load_document(&uri).is_none());
+    }
+}
+
+#[cfg(test)]
+mod workspace_roots_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn workspace_roots_survives_a_poisoned_lock() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        // Poison the lock the same way a panic while holding it would:
+        // acquire a write guard, then unwind without releasing it cleanly.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = backend.workspace_roots.write().unwrap();
+            panic!("simulated panic while holding the write lock");
+        }));
+        assert!(result.is_err());
+        assert!(backend.workspace_roots.is_poisoned());
+
+        // Both the read helper and a fresh write must still work instead of
+        // panicking on every subsequent call for the rest of the process.
+        assert_eq!(backend.workspace_roots(), Vec::<PathBuf>::new());
+        *backend
+            .workspace_roots
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = vec![PathBuf::from("/tmp")];
+        assert_eq!(backend.workspace_roots(), vec![PathBuf::from("/tmp")]);
+    }
+}
+
+#[cfg(test)]
+mod outgoing_calls_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// Regression test for the `outgoing_calls` `AsmLabel` branch refactor
+    /// (collecting `other_asm_docs` once per request instead of re-filtering
+    /// `self.documents` once per target): a call target defined only in a
+    /// *different* open document must still resolve, exercising exactly the
+    /// cross-file fallback path that was restructured.
+    #[tokio::test]
+    async fn outgoing_call_resolves_a_target_defined_in_another_open_document() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        let caller_uri = Url::parse("file:///caller.asm").unwrap();
+        let callee_uri = Url::parse("file:///callee.asm").unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: caller_uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "start:\n  call target\n  ret\n".to_string()
+                }
+            })
+            .await;
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: callee_uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: "target:\n  ret\n".to_string()
+                }
+            })
+            .await;
+
+        let item = CallHierarchyItem {
+            name: "start".to_string(),
+            kind: SymbolKind::FUNCTION,
+            tags: None,
+            detail: None,
+            uri: caller_uri,
+            range: Range::default(),
+            selection_range: Range::default(),
+            data: Some(
+                CallHierarchyData::AsmLabel {
+                    name: "start".to_string()
+                }
+                .to_json()
+            )
+        };
+
+        let calls = backend
+            .outgoing_calls(CallHierarchyOutgoingCallsParams {
+                item,
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default()
+            })
+            .await
+            .unwrap()
+            .expect("expected outgoing calls");
+
+        assert_eq!(calls.len(), 1, "{calls:?}");
+        assert_eq!(calls[0].to.uri, callee_uri);
+        assert_eq!(calls[0].to.name.to_uppercase(), "TARGET");
+    }
+}
+
+#[cfg(test)]
+mod candidate_asm_paths_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// Regression test for moving the workspace directory walk onto a
+    /// blocking-pool thread (`tokio::task::spawn_blocking`): it must still
+    /// find every `.asm` file under the configured root, still exclude the
+    /// file being searched *from*, and still ignore non-`.asm` files -
+    /// exactly the behavior the synchronous version had.
+    #[tokio::test]
+    async fn finds_every_asm_file_under_the_root_except_the_source_file() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("from.asm"), "").unwrap();
+        std::fs::write(tmp.path().join("other.asm"), "").unwrap();
+        std::fs::write(tmp.path().join("readme.txt"), "").unwrap();
+
+        *backend
+            .workspace_roots
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = vec![tmp.path().to_path_buf().into()];
+
+        let from_uri = Url::from_file_path(tmp.path().join("from.asm")).unwrap();
+        let paths = backend.candidate_asm_paths(&from_uri).await;
+
+        assert_eq!(paths.len(), 1, "{paths:?}");
+        assert_eq!(
+            paths[0].file_name().and_then(|n| n.to_str()),
+            Some("other.asm")
+        );
     }
 }

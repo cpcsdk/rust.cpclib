@@ -12,7 +12,7 @@
 //! `normalized()` below papers over that one exception so callers never special-case it.
 
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 
 use cpclib_bndbuild::runners::assembler::{BasmRunner, OrgamsRunner};
 use cpclib_bndbuild::runners::disassembler::BdasmRunner;
@@ -228,15 +228,35 @@ static INTERNAL_COMMANDS: LazyLock<HashMap<&'static str, CommandBuilder>> = Lazy
     m
 });
 
-/// Returns a freshly built, normalized `Command` for `name` if it's a known
-/// internal command. Returns `None` for delegated commands, unknown words, and
-/// feature-gated-out commands (e.g. `rtzx`, not compiled into this crate).
+/// Built-`Command` cache, keyed by canonical name — building a runner's
+/// `Command` (constructing a fresh runner via `::default()` and walking its
+/// full `clap::Command` tree of args/subcommands via `get_clap_command()`)
+/// isn't free, and `get_command_for` used to redo it from scratch on every
+/// single call — every hover/completion request touching a `cmd:` line,
+/// i.e. essentially every keystroke there. Mirrors `delegated_help.rs`'s
+/// `HELP_CACHE` for the analogous problem one file over. Callers still get
+/// an owned `Command` (`clap_complete::engine::complete` needs `&mut`), so
+/// each call still pays one `Command::clone()` — what's avoided is
+/// reconstructing the runner and its whole arg tree from scratch.
+static COMMAND_CACHE: LazyLock<Mutex<HashMap<String, Command>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Returns a normalized `Command` for `name` if it's a known internal
+/// command (built once and cached — see `COMMAND_CACHE`). Returns `None`
+/// for delegated commands, unknown words, and feature-gated-out commands
+/// (e.g. `rtzx`, not compiled into this crate).
 ///
 /// `name` should be the *canonical* name (`TASK_TYPES[].names[0]`), not an
 /// arbitrary alias — callers are expected to resolve aliases via `TASK_TYPES`
 /// first (hover/completion code already does this).
 pub fn get_command_for(name: &str) -> Option<Command> {
-    INTERNAL_COMMANDS.get(name).map(|f| f())
+    let mut cache = COMMAND_CACHE.lock().unwrap();
+    if let Some(cmd) = cache.get(name) {
+        return Some(cmd.clone());
+    }
+    let cmd = INTERNAL_COMMANDS.get(name)?();
+    cache.insert(name.to_string(), cmd.clone());
+    Some(cmd)
 }
 
 #[cfg(test)]
@@ -271,6 +291,32 @@ mod tests {
             "rasm is a delegated command"
         );
         assert!(get_command_for("nonexistent").is_none());
+    }
+
+    #[test]
+    fn get_command_for_populates_and_reuses_the_command_cache() {
+        // Use a name not touched by other tests running concurrently in
+        // this same process, so the shared static cache's pre-existing
+        // state can't make this test flaky.
+        {
+            let mut cache = COMMAND_CACHE.lock().unwrap();
+            cache.remove("mkdir");
+        }
+        assert!(!COMMAND_CACHE.lock().unwrap().contains_key("mkdir"));
+
+        let first = get_command_for("mkdir").expect("mkdir is a known internal command");
+        assert!(
+            COMMAND_CACHE.lock().unwrap().contains_key("mkdir"),
+            "get_command_for should populate the cache on first call"
+        );
+
+        let second = get_command_for("mkdir").unwrap();
+        // Both come from (or were just inserted into) the same cache entry
+        // - same name, same set of top-level args either way.
+        assert_eq!(
+            first.get_arguments().count(),
+            second.get_arguments().count()
+        );
     }
 
     #[test]

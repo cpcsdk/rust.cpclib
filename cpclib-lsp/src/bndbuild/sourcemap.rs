@@ -1,4 +1,9 @@
+use std::sync::Arc;
+
 use minijinja::{Environment, UndefinedBehavior};
+
+use super::BuildFileAnalyzer;
+use crate::common::document::Document;
 
 const MARKER_PREFIX: &str = "#_SRCL:";
 const MARKER_SUFFIX: &str = "_#";
@@ -151,6 +156,59 @@ pub fn expand_with_source_map(
     ))
 }
 
+impl BuildFileAnalyzer {
+    /// `expand_with_source_map` on `document`'s own text/directory, cached
+    /// per document version — every hover/definition/symbols/diagnostics/
+    /// call-hierarchy/semantic-tokens request that needs the expanded text
+    /// reuses the same `Arc` for a given `(uri, version)` instead of
+    /// redoing a full minijinja parse+render (including a filesystem read
+    /// for every `{% include %}`) from scratch. Errors are never cached
+    /// (cheap to reproduce, and `minijinja::Error` isn't `Clone`) — every
+    /// caller already has its own fallback (typically an identity source
+    /// map) for that case.
+    pub(super) fn expand_cached(
+        &self,
+        document: &Document
+    ) -> Result<Arc<(String, SourceMap)>, minijinja::Error> {
+        if let Some(entry) = self.expand_cache.get(&document.uri)
+            && entry.0 == document.version
+        {
+            return Ok(Arc::clone(&entry.1));
+        }
+
+        let raw_text = document.text();
+        let file_dir = document
+            .uri
+            .to_file_path()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        let result = Arc::new(expand_with_source_map(&raw_text, file_dir.as_deref())?);
+
+        self.expand_cache.insert(
+            document.uri.clone(),
+            (document.version, Arc::clone(&result))
+        );
+        Ok(result)
+    }
+
+    /// `expand_cached`, falling back to an identity source map on expansion
+    /// failure (missing variables, unresolvable includes, syntax errors,
+    /// ...) — the common "best-effort" shape every caller that doesn't
+    /// itself need the specific error wants. Returns the cached `Arc`
+    /// directly rather than cloning its contents, so a cache hit stays
+    /// cheap regardless of document size.
+    pub(super) fn expand_or_identity(&self, document: &Document) -> Arc<(String, SourceMap)> {
+        match self.expand_cached(document) {
+            Ok(result) => result,
+            Err(_) => {
+                let raw_text = document.text();
+                let lines = raw_text.lines().count();
+                Arc::new((raw_text, SourceMap::identity(lines)))
+            }
+        }
+    }
+}
+
 // ─── internal helpers ────────────────────────────────────────────────────────
 
 fn annotate(source: &str) -> String {
@@ -214,4 +272,89 @@ fn strip_marker(line: &str) -> (String, Option<u32>) {
         }
     }
     (line.to_string(), None)
+}
+
+#[cfg(test)]
+mod expand_cache_tests {
+    use tower_lsp::lsp_types::Url;
+
+    use super::*;
+
+    fn doc(text: &str, version: i32) -> Document {
+        Document::new(
+            Url::parse("file:///build.bnd").unwrap(),
+            text.to_string(),
+            version
+        )
+    }
+
+    #[test]
+    fn same_version_returns_the_identical_cached_arc() {
+        let analyzer = BuildFileAnalyzer::new();
+        let d = doc("- tgt: a\n  cmd: echo hi\n", 1);
+        let first = analyzer.expand_cached(&d).unwrap();
+        let second = analyzer.expand_cached(&d).unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn a_version_bump_reexpands_and_returns_a_different_arc() {
+        let analyzer = BuildFileAnalyzer::new();
+        let d1 = doc("- tgt: a\n  cmd: echo hi\n", 1);
+        let first = analyzer.expand_cached(&d1).unwrap();
+
+        let d2 = doc("- tgt: b\n  cmd: echo hi\n", 2);
+        let second = analyzer.expand_cached(&d2).unwrap();
+
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert!(second.0.contains("tgt: b"), "{}", second.0);
+    }
+
+    #[test]
+    fn evict_forces_a_fresh_expansion_even_at_the_same_version() {
+        let analyzer = BuildFileAnalyzer::new();
+        let d = doc("- tgt: a\n  cmd: echo hi\n", 1);
+        let first = analyzer.expand_cached(&d).unwrap();
+        analyzer.evict(&d.uri);
+        let second = analyzer.expand_cached(&d).unwrap();
+        assert!(!Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn expand_or_identity_also_hits_the_cache() {
+        let analyzer = BuildFileAnalyzer::new();
+        let d = doc("- tgt: a\n  cmd: echo hi\n", 1);
+        let via_cached = analyzer.expand_cached(&d).unwrap();
+        let via_identity = analyzer.expand_or_identity(&d);
+        assert!(Arc::ptr_eq(&via_cached, &via_identity));
+    }
+
+    /// Regression test for the double-expand bug in `diagnostics::analyze`:
+    /// it used to call `expand_with_source_map` once directly, then again
+    /// (from scratch) via `validate_build_structure`. Both call sites now
+    /// go through `expand_cached`/`expand_or_identity`, so `analyze()`
+    /// leaves a populated cache entry behind — a plain call to
+    /// `expand_with_source_map` bypassing the cache entirely (the old
+    /// behavior) would leave `expand_cache` empty.
+    #[test]
+    fn diagnostics_analyze_populates_the_expand_cache() {
+        let analyzer = BuildFileAnalyzer::new();
+        let d = doc(
+            "{% for i in [1, 2] %}\n- tgt: out{{i}}.bin\n  cmd: echo {{i}}\n{% endfor %}\n",
+            1
+        );
+        analyzer.analyze(&d);
+
+        let cached = analyzer
+            .expand_cache
+            .get(&d.uri)
+            .map(|entry| Arc::clone(&entry.1))
+            .expect("analyze() should have populated the expand cache");
+        // A further lookup for the same version must be the exact same
+        // `Arc` `analyze()` already produced — i.e. everything downstream
+        // of `analyze()`'s first expansion, including its own
+        // `validate_build_structure` call, shares this one result.
+        let again = analyzer.expand_cached(&d).unwrap();
+        assert!(Arc::ptr_eq(&cached, &again));
+    }
 }

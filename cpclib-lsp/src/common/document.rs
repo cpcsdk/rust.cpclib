@@ -59,6 +59,43 @@ impl DocumentType {
     }
 }
 
+/// Shared core of `Document::byte_column`/`utf16_col_to_byte_offset`: walk
+/// `chars` accumulating UTF-16 code units until `utf16_col` is reached,
+/// returning the byte offset at that point. Generic over the char source so
+/// it works against both a rope line slice (no allocation) and a plain
+/// `&str` line.
+fn utf16_units_to_byte_offset(chars: impl Iterator<Item = char>, utf16_col: usize) -> usize {
+    let mut utf16_units = 0usize;
+    let mut byte_offset = 0usize;
+    for c in chars {
+        if utf16_units >= utf16_col {
+            break;
+        }
+        utf16_units += c.len_utf16();
+        byte_offset += c.len_utf8();
+    }
+    byte_offset
+}
+
+/// Convert an LSP `Position`'s `character` (UTF-16 code units) to a byte
+/// offset within `line` — for callers that only have a raw `&str` line (no
+/// `Document`/rope at hand), e.g. a line already extracted from plain text.
+/// See `Document::byte_column` for the rope-backed equivalent.
+pub fn utf16_col_to_byte_offset(line: &str, utf16_col: usize) -> usize {
+    utf16_units_to_byte_offset(line.chars(), utf16_col)
+}
+
+/// The inverse of `utf16_col_to_byte_offset`: convert a byte offset within
+/// `line` to a UTF-16 code-unit column — for callers that computed a byte
+/// offset via manual `&str`/`&[u8]` scanning and need to hand an LSP
+/// `Position` back to the client.
+pub fn byte_offset_to_utf16_col(line: &str, byte_offset: usize) -> usize {
+    line[..byte_offset.min(line.len())]
+        .chars()
+        .map(|c| c.len_utf16())
+        .sum()
+}
+
 /// Represents a document managed by the LSP
 #[derive(Debug, Clone)]
 pub struct Document {
@@ -123,35 +160,129 @@ impl Document {
         Some(line.to_string())
     }
 
-    /// Convert LSP Position to rope byte offset
+    /// Convert an LSP `Position` to a rope byte offset. Per the LSP spec,
+    /// `position.character` counts **UTF-16 code units**, not Rust `char`s
+    /// or bytes — a character outside the Basic Multilingual Plane (e.g. an
+    /// emoji) is 1 `char` but 2 UTF-16 units, so counting `char`s directly
+    /// would desync every column past it on the line.
     pub fn offset_from_position(&self, position: Position) -> usize {
         let line_idx = position.line as usize;
-        let char_idx = position.character as usize;
 
         if line_idx >= self.rope.len_lines() {
             return self.rope.len_bytes();
         }
 
         let line_start = self.rope.line_to_byte(line_idx);
-        let line = self.rope.line(line_idx);
-        let char_offset = line
-            .chars()
-            .take(char_idx)
-            .map(|c| c.len_utf8())
-            .sum::<usize>();
-
-        line_start + char_offset
+        line_start + self.byte_column(position)
     }
 
-    /// Convert rope byte offset to LSP Position
+    /// Convert an LSP `Position`'s `character` (UTF-16 code units) to a byte
+    /// offset within its own line, i.e. the byte-offset analogue of
+    /// `position.character` — for hand-rolled per-line byte scanners
+    /// elsewhere in this crate that index into a `&str`/`&[u8]` line rather
+    /// than going through the whole rope. Returns 0 for an out-of-range
+    /// line.
+    pub fn byte_column(&self, position: Position) -> usize {
+        let line_idx = position.line as usize;
+
+        if line_idx >= self.rope.len_lines() {
+            return 0;
+        }
+
+        utf16_units_to_byte_offset(
+            self.rope.line(line_idx).chars(),
+            position.character as usize
+        )
+    }
+
+    /// Convert a rope byte offset to an LSP `Position` (a UTF-16 code-unit
+    /// column - see `offset_from_position`).
     pub fn position_from_offset(&self, offset: usize) -> Position {
         let line = self.rope.byte_to_line(offset);
         let line_start = self.rope.line_to_byte(line);
-        let char = self.rope.slice(line_start..offset).chars().count();
+        // `Rope::slice` takes a *char* range, not bytes - `byte_slice` is
+        // the byte-indexed equivalent; passing byte offsets to `slice`
+        // panics (or silently misbehaves) as soon as the line contains any
+        // multi-byte character before `offset`.
+        let utf16_col: usize = self
+            .rope
+            .byte_slice(line_start..offset)
+            .chars()
+            .map(|c| c.len_utf16())
+            .sum();
 
         Position {
             line: line as u32,
-            character: char as u32
+            character: utf16_col as u32
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///test.asm").unwrap(), text.to_string(), 1)
+    }
+
+    #[test]
+    fn offset_from_position_counts_utf16_units_not_chars() {
+        // "😀" is one `char` but two UTF-16 code units, so the LSP position
+        // just after it must be character=2, not character=1.
+        let d = doc("😀X");
+        let offset = d.offset_from_position(Position {
+            line: 0,
+            character: 2
+        });
+        assert_eq!(&d.text()[offset..], "X");
+    }
+
+    #[test]
+    fn position_from_offset_is_the_inverse_for_supplementary_plane_chars() {
+        let d = doc("😀X");
+        let byte_offset = "😀".len();
+        let pos = d.position_from_offset(byte_offset);
+        assert_eq!(
+            pos,
+            Position {
+                line: 0,
+                character: 2
+            }
+        );
+    }
+
+    #[test]
+    fn offset_from_position_handles_ascii_as_before() {
+        let d = doc("hello");
+        let offset = d.offset_from_position(Position {
+            line: 0,
+            character: 3
+        });
+        assert_eq!(offset, 3);
+    }
+
+    #[test]
+    fn byte_column_converts_utf16_units_to_a_line_relative_byte_offset() {
+        let d = doc("café ABC");
+        // 'c','a','f','é' = 4 UTF-16 units, landing right before the space.
+        assert_eq!(
+            d.byte_column(Position {
+                line: 0,
+                character: 4
+            }),
+            "café".len()
+        );
+    }
+
+    #[test]
+    fn offset_from_position_two_byte_utf8_char_counts_as_one_utf16_unit() {
+        // 'é' is 2 bytes in UTF-8 but a single UTF-16 code unit (BMP).
+        let d = doc("café");
+        let offset = d.offset_from_position(Position {
+            line: 0,
+            character: 4
+        });
+        assert_eq!(offset, d.text().len());
     }
 }

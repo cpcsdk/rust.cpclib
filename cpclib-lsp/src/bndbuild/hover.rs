@@ -7,6 +7,7 @@ use tower_lsp::lsp_types::*;
 
 use super::BuildFileAnalyzer;
 use crate::common::document::Document;
+use crate::common::render::make_hover;
 
 impl BuildFileAnalyzer {
     /// Provide hover information for build file keywords
@@ -18,13 +19,7 @@ impl BuildFileAnalyzer {
         // A call to a `{% macro %}` defined in this file: show what it
         // expands to for these exact arguments.
         if let Some(md) = super::macro_expand::macro_call_hover(document, &line, cursor) {
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: md
-                }),
-                range: None
-            });
+            return Some(make_hover(md));
         }
 
         // Extract word at cursor
@@ -41,35 +36,17 @@ impl BuildFileAnalyzer {
         if let Some((cmd_name, _args, _idx)) = self.command_argv_at_cursor(&line, cursor)
             && let Some(description) = self.get_task_argument_help(cmd_name, &word)
         {
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: description
-                }),
-                range: None
-            });
+            return Some(make_hover(description));
         }
 
         // Check if it's a build file keyword
         if let Some(description) = self.get_keyword_help(&word) {
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: description
-                }),
-                range: None
-            });
+            return Some(make_hover(description));
         }
 
         // Check if it's a task type
         if let Some(description) = self.get_task_type_help(&word) {
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: description
-                }),
-                range: None
-            });
+            return Some(make_hover(description));
         }
 
         None

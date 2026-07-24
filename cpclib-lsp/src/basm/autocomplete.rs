@@ -187,10 +187,22 @@ pub enum CompletionContext {
     }
 }
 
+/// Convert a char-count column into a byte offset into `line`, clamping to
+/// the line's length so an out-of-range cursor never lands mid-character.
+/// `col` is a count of Rust `char`s (this crate's convention for a line
+/// column), not bytes — `line.len()` is a byte length, so a raw
+/// `line[..col]` slice panics as soon as any non-ASCII content precedes the
+/// cursor.
+fn byte_offset_for_col(line: &str, col: usize) -> usize {
+    line.char_indices()
+        .nth(col)
+        .map(|(i, _)| i)
+        .unwrap_or(line.len())
+}
+
 /// Analyse the current line up to `col` and return the completion context.
 pub fn analyze_context(line: &str, col: usize) -> CompletionContext {
-    let col = col.min(line.len());
-    let before = &line[..col];
+    let before = &line[..byte_offset_for_col(line, col)];
 
     let trimmed = before.trim_start();
     // Check for a label definition at start of line (word + ':' + optional whitespace)
@@ -532,6 +544,33 @@ mod tests {
         assert_eq!(operand_mask("NOP", 0), Some(0));
         assert_eq!(operand_mask("EI", 0), Some(0));
     }
+
+    // Regression tests for a char/byte-boundary panic: a non-ASCII character
+    // (e.g. an accented letter in a comment) before the cursor used to make
+    // `&line[..col]` slice mid-character and panic.
+    #[test]
+    fn analyze_context_does_not_panic_on_non_ascii_prefix() {
+        let line = "café ld a,";
+        // `col` counts chars, so 10 lands right after the trailing comma,
+        // past the multi-byte 'é' — a raw byte slice at this index would
+        // land mid-character and panic.
+        ctx(line, 10);
+    }
+
+    #[test]
+    fn typed_operands_before_does_not_panic_on_non_ascii_prefix() {
+        let line = "; café\nld a,b";
+        typed_operands_before(line, line.chars().count());
+    }
+
+    #[test]
+    fn byte_offset_for_col_lands_on_a_char_boundary() {
+        let line = "café";
+        // 3 chars in ('c','a','f') lands right before the 2-byte 'é'.
+        assert_eq!(byte_offset_for_col(line, 3), 3);
+        // Past the end clamps to the byte length, not the char count.
+        assert_eq!(byte_offset_for_col(line, 100), line.len());
+    }
 }
 
 // ─── Generated tables ─────────────────────────────────────────────────────────
@@ -787,8 +826,7 @@ pub(super) fn form_slot_candidates(
 /// Split the operand region of the statement (after the mnemonic, up to the
 /// cursor) at top-level commas. The last element is the in-progress operand.
 pub(super) fn typed_operands_before(line: &str, col: usize) -> Vec<String> {
-    let col = col.min(line.len());
-    let before = &line[..col];
+    let before = &line[..byte_offset_for_col(line, col)];
     let trimmed = before.trim_start();
 
     // Skip an optional label definition.
@@ -1276,7 +1314,7 @@ fn directive_filename_completions(
     col: usize
 ) -> Vec<CompletionItem> {
     // Detect an open quote before the cursor.
-    let before = &line[..col.min(line.len())];
+    let before = &line[..byte_offset_for_col(line, col)];
     let in_string = before.matches('"').count() % 2 == 1;
     let prefix = if in_string {
         before.rsplit('"').next().unwrap_or("")
