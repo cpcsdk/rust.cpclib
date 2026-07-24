@@ -14,11 +14,16 @@ impl BuildFileAnalyzer {
     pub fn hover(&self, document: &Document, position: Position) -> Option<Hover> {
         let line_idx = position.line as usize;
         let line = document.line(line_idx)?;
-        let cursor = position.character as usize;
+        // `macro_call_hover` (via `macro_call_at`) indexes by byte, while
+        // `extract_word_at_position`/`command_argv_at_cursor` index by
+        // `char` - two different conversions of the same UTF-16
+        // `position.character`.
+        let byte_cursor = document.byte_column(position);
+        let cursor = document.char_column(position);
 
         // A call to a `{% macro %}` defined in this file: show what it
         // expands to for these exact arguments.
-        if let Some(md) = super::macro_expand::macro_call_hover(document, &line, cursor) {
+        if let Some(md) = super::macro_expand::macro_call_hover(document, &line, byte_cursor) {
             return Some(make_hover(md));
         }
 
@@ -183,6 +188,21 @@ mod tests {
             HoverContents::Markup(m) => m.value.as_str(),
             _ => panic!("expected markdown hover contents")
         }
+    }
+
+    /// Regression test for treating `position.character` (UTF-16 code
+    /// units) as a raw byte offset for `macro_call_hover`'s `byte_cursor`:
+    /// a supplementary-plane character (😀, 4 UTF-8 bytes / 2 UTF-16 units)
+    /// earlier on the line must not desync the two.
+    #[test]
+    fn hovering_a_macro_call_with_a_supplementary_plane_char_before_it_still_expands() {
+        let text = "{% macro assemble(src) %}basm {{ src }}{% endmacro %}\n\
+                     - cmd: \u{1F600}{{ assemble(\"main.asm\") }}\n";
+        // UTF-16 column 15 on line 1 lands 3 chars into "assemble" once
+        // correctly converted to a byte offset.
+        let hover = hover_at(text, 1, 15).expect("expected an expansion hover");
+        let md = markdown(&hover);
+        assert!(md.contains("basm main.asm"), "{md}");
     }
 
     #[test]

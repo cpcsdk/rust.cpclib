@@ -96,6 +96,31 @@ pub fn byte_offset_to_utf16_col(line: &str, byte_offset: usize) -> usize {
         .sum()
 }
 
+/// Shared core of `Document::char_column`: walk `chars` accumulating UTF-16
+/// code units until `utf16_col` is reached, returning the `char` count at
+/// that point. Generic over the char source so it works against both a rope
+/// line slice (no allocation) and a plain `&str` line.
+fn utf16_units_to_char_count(chars: impl Iterator<Item = char>, utf16_col: usize) -> usize {
+    let mut utf16_units = 0usize;
+    let mut char_count = 0usize;
+    for c in chars {
+        if utf16_units >= utf16_col {
+            break;
+        }
+        utf16_units += c.len_utf16();
+        char_count += 1;
+    }
+    char_count
+}
+
+/// The inverse of `Document::char_column`: convert a `char` count within
+/// `line` to a UTF-16 code-unit column — for callers that computed a
+/// `char`-indexed position (e.g. `token::word_range_at_position`'s span)
+/// and need to hand an LSP `Position`/`Range` back to the client.
+pub fn char_count_to_utf16_col(line: &str, char_count: usize) -> usize {
+    line.chars().take(char_count).map(|c| c.len_utf16()).sum()
+}
+
 /// Represents a document managed by the LSP
 #[derive(Debug, Clone)]
 pub struct Document {
@@ -195,6 +220,23 @@ impl Document {
         )
     }
 
+    /// Convert an LSP `Position`'s `character` (UTF-16 code units) to a
+    /// Rust `char` count within its own line — for basm's word-boundary
+    /// scanners, which index by `char` rather than byte. Returns 0 for an
+    /// out-of-range line.
+    pub fn char_column(&self, position: Position) -> usize {
+        let line_idx = position.line as usize;
+
+        if line_idx >= self.rope.len_lines() {
+            return 0;
+        }
+
+        utf16_units_to_char_count(
+            self.rope.line(line_idx).chars(),
+            position.character as usize
+        )
+    }
+
     /// Convert a rope byte offset to an LSP `Position` (a UTF-16 code-unit
     /// column - see `offset_from_position`).
     pub fn position_from_offset(&self, offset: usize) -> Position {
@@ -284,5 +326,19 @@ mod tests {
             character: 4
         });
         assert_eq!(offset, d.text().len());
+    }
+
+    #[test]
+    fn char_column_counts_chars_not_utf16_units_for_a_supplementary_plane_char() {
+        // "😀" is one `char` but two UTF-16 code units - the char count
+        // right after it must be 1, not 2.
+        let d = doc("😀X");
+        assert_eq!(
+            d.char_column(Position {
+                line: 0,
+                character: 2
+            }),
+            1
+        );
     }
 }

@@ -44,7 +44,6 @@ impl AssemblyAnalyzer {
         // Raw tokens collected in document order: (line, col, len, type, modifiers)
         let mut raw: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
         let text = document.text();
-        let all_lines: Vec<&str> = text.lines().collect();
 
         // Detect LOCOMOTIVE blocks — their lines receive BASIC tokens, not ASM tokens.
         let loco_blocks = extract_locomotive_blocks(&text);
@@ -234,7 +233,7 @@ impl AssemblyAnalyzer {
                     }
 
                     let word_upper: String = if is_af_prime {
-                        format!("AF'")
+                        "AF'".to_string()
                     }
                     else {
                         word_upper_base
@@ -301,9 +300,14 @@ impl AssemblyAnalyzer {
             }
         }
 
-        // Emit BASIC semantic tokens for LOCOMOTIVE blocks.
-        for block in &loco_blocks {
-            push_locomotive_basic_tokens(block, &all_lines, &mut raw);
+        // Emit BASIC semantic tokens for LOCOMOTIVE blocks - `all_lines` is
+        // only ever needed here, so it's only built when there's at least
+        // one block to use it (the common case for `.asm` files has none).
+        if !loco_blocks.is_empty() {
+            let all_lines: Vec<&str> = text.lines().collect();
+            for block in &loco_blocks {
+                push_locomotive_basic_tokens(block, &all_lines, &mut raw);
+            }
         }
 
         // Sort by (line, col) — LOCOMOTIVE tokens were appended out of document order.
@@ -332,5 +336,60 @@ impl AssemblyAnalyzer {
             prev_start = start;
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    #[test]
+    fn af_prime_is_tokenized_as_a_single_register_token() {
+        let d = doc("ex af, af'\n");
+        let tokens = AssemblyAnalyzer::new().semantic_tokens(&d);
+        // "af'" spans 3 characters (a, f, ') as one token, not split apart.
+        assert!(
+            tokens
+                .iter()
+                .any(|t| t.token_type == TT_VARIABLE && t.length == 3),
+            "{tokens:?}"
+        );
+    }
+
+    #[test]
+    fn locomotive_block_still_gets_basic_tokens_when_all_lines_is_lazily_built() {
+        let text = "ORG 0x8000\nLOCOMOTIVE\n10 PRINT \"A\"\nENDLOCOMOTIVE\n";
+        let d = doc(text);
+        let tokens = AssemblyAnalyzer::new().semantic_tokens(&d);
+        // The BASIC line number token (TT_NUMBER) on line 2 proves
+        // `push_locomotive_basic_tokens` still ran correctly after
+        // `all_lines` became conditionally built.
+        let mut line = 0u32;
+        let mut col = 0u32;
+        let mut found_on_line_2 = false;
+        for t in &tokens {
+            if t.delta_line == 0 {
+                col += t.delta_start;
+            }
+            else {
+                line += t.delta_line;
+                col = t.delta_start;
+            }
+            if line == 2 && t.token_type == TT_NUMBER {
+                found_on_line_2 = true;
+            }
+        }
+        assert!(found_on_line_2, "{tokens:?}");
+    }
+
+    #[test]
+    fn a_document_with_no_locomotive_block_still_tokenizes_normally() {
+        let d = doc("start:\n  ld a, 1\n  ret\n");
+        let tokens = AssemblyAnalyzer::new().semantic_tokens(&d);
+        assert!(!tokens.is_empty());
     }
 }

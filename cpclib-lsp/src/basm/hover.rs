@@ -10,7 +10,7 @@ use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
 use super::diagnostics::collect_asm_diagnostics;
-use super::embedded_basic::extract_locomotive_blocks;
+use super::embedded_basic::block_and_text_at;
 use super::token::*;
 use crate::common::document::Document;
 use crate::common::render::make_hover;
@@ -25,18 +25,7 @@ impl AssemblyAnalyzer {
         // Delegate to BASIC hover when the cursor is inside a LOCOMOTIVE block.
         {
             let text = document.text();
-            let loco_blocks = extract_locomotive_blocks(&text);
-            if let Some(block) = loco_blocks
-                .iter()
-                .find(|b| b.basic_range.contains(&line_idx))
-            {
-                let all_lines: Vec<&str> = text.lines().collect();
-                let basic_text: String = block
-                    .basic_range
-                    .clone()
-                    .map(|i| all_lines[i])
-                    .collect::<Vec<_>>()
-                    .join("\n");
+            if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
                 let basic_line = position.line - block.basic_range.start as u32;
                 let line_trimmed = line.trim_end_matches(|c: char| c == '\n' || c == '\r');
                 return crate::locomotive::hover::locomotive_basic_hover(
@@ -582,6 +571,35 @@ fn snaset_flag_hover(word_upper: &str) -> Option<String> {
         .iter()
         .find(|(name, _)| name.strip_suffix(":n").unwrap_or(name).to_uppercase() == word_upper)
         .map(|(name, desc)| format!("**{name}** — SNASET flag\n\n{desc}"))
+}
+
+#[cfg(test)]
+mod locomotive_block_tests {
+    use super::*;
+
+    /// Regression test for the LOCOMOTIVE-block dedup (`block_and_text_at`):
+    /// hovering inside a `LOCOMOTIVE` block must still delegate to BASIC
+    /// hover with the correctly-reconstructed block text.
+    #[test]
+    fn hovering_inside_a_locomotive_block_delegates_to_basic_hover() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "ORG 0x8000\nLOCOMOTIVE\n10 CLS\nENDLOCOMOTIVE\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        // Cursor on "CLS" (line 2, a BASIC keyword).
+        let hover = AssemblyAnalyzer::new()
+            .hover(
+                &doc,
+                Position {
+                    line: 2,
+                    character: 4
+                }
+            )
+            .expect("expected BASIC hover inside the LOCOMOTIVE block");
+        match hover.contents {
+            HoverContents::Markup(m) => assert!(m.value.contains("CLS"), "{}", m.value),
+            _ => panic!("expected markdown hover contents")
+        }
+    }
 }
 
 #[cfg(test)]

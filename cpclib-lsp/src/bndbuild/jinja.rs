@@ -43,6 +43,31 @@ pub(super) fn jinja_context_at(line: &str, col: usize) -> Option<JinjaContext> {
     }
 }
 
+/// The identifier (alphanumeric + `_`, byte-based) at byte column `col` on
+/// `line`, as `(word, start, end)` — shared by `definition.rs::jinja_word_at`
+/// and `macro_expand.rs::macro_call_at`, which independently reimplemented
+/// this exact scan. Does **not** gate on `jinja_context_at` itself (both of
+/// those callers already do that check with their own semantics around it);
+/// this is purely the character-boundary walk.
+pub(super) fn identifier_at(line: &str, col: usize) -> Option<(String, usize, usize)> {
+    let bytes = line.as_bytes();
+    let col = col.min(bytes.len());
+    let mut start = col;
+    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
+        start -= 1;
+    }
+    let mut end = col;
+    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+        end += 1;
+    }
+    if start < end {
+        Some((line[start..end].to_string(), start, end))
+    }
+    else {
+        None
+    }
+}
+
 /// All Jinja statement keywords worth completing inside `{% ... %}`.
 pub(super) const JINJA_STATEMENT_KEYWORDS: &[(&str, &str)] = &[
     ("if", "Conditional block"),
@@ -160,27 +185,11 @@ pub(crate) fn extract_jinja_include_paths(text: &str) -> Vec<String> {
 pub(super) fn macro_definition_names(document: &Document) -> Vec<String> {
     let text = document.text();
     let mut names = Vec::new();
-
     for line in text.lines() {
-        let mut search_from = 0usize;
-        while let Some(rel) = line[search_from..].find("{%") {
-            let stmt_start = search_from + rel + 2;
-            let inner = &line[stmt_start..];
-            let inner = inner.strip_prefix('-').unwrap_or(inner);
-            let inner_trimmed = inner.trim_start();
-            if let Some(rest) = inner_trimmed.strip_prefix("macro")
-                && rest.starts_with(char::is_whitespace)
-            {
-                let name: String = rest
-                    .trim_start()
-                    .chars()
-                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                    .collect();
-                if !name.is_empty() && !names.contains(&name) {
-                    names.push(name);
-                }
+        for (name, ..) in super::call_hierarchy::macro_definitions_in_line(line) {
+            if !names.contains(&name) {
+                names.push(name);
             }
-            search_from = stmt_start;
         }
     }
     names
@@ -298,5 +307,30 @@ mod tests {
         let text = "{% set root = \"src\" %}\n{% if root %}{% endif %}\n";
         let doc = Document::new(uri, text.to_string(), 1);
         assert!(macro_definition_names(&doc).is_empty());
+    }
+
+    /// Regression test for the dedup with `call_hierarchy.rs::macro_definitions_in_line`:
+    /// both must agree on the same input.
+    #[test]
+    fn macro_definition_names_agrees_with_macro_definitions_in_line() {
+        let uri = Url::parse("file:///b.bnd").unwrap();
+        let text = "{% macro assemble(src) %}\nbasm {{ src }}\n{% endmacro %}\n{%- macro link(a, b) %}\n{% endmacro %}\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+
+        let from_names_only = macro_definition_names(&doc);
+        let from_positions: Vec<String> = text
+            .lines()
+            .flat_map(|line| {
+                super::super::call_hierarchy::macro_definitions_in_line(line)
+                    .into_iter()
+                    .map(|(name, ..)| name)
+            })
+            .collect();
+
+        assert_eq!(from_names_only, from_positions);
+        assert_eq!(
+            from_names_only,
+            vec!["assemble".to_string(), "link".to_string()]
+        );
     }
 }

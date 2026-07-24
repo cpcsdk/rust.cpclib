@@ -26,6 +26,18 @@ impl AssemblyAnalyzer {
     pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
         let full_text = document.text();
         let total_lines = full_text.lines().count();
+        // Byte offset of the start of each line, indexed by 0-based line
+        // number, precomputed once so `remaining` below can be a zero-copy
+        // slice instead of `full_text.lines().skip(n).collect::<Vec<_>>().join("\n")`
+        // rebuilt on every one of up to `MAX_RECOVERY_ATTEMPTS` retries -
+        // for a file with errors scattered throughout it, that used to be
+        // O(n²) in the worst case (each retry re-copying the whole
+        // remaining tail). `line_starts.len()` is always >= `total_lines`
+        // (an extra trailing entry for a final `\n` is harmless, never
+        // indexed), so `line_starts[start_line]` is safe for every
+        // `start_line < total_lines`.
+        let mut line_starts: Vec<usize> = vec![0];
+        line_starts.extend(full_text.match_indices('\n').map(|(i, _)| i + 1));
 
         let mut diagnostics = Vec::new();
         let mut start_line = 0usize;
@@ -34,21 +46,12 @@ impl AssemblyAnalyzer {
         while start_line < total_lines && attempts < MAX_RECOVERY_ATTEMPTS {
             attempts += 1;
 
-            let remaining: String = if start_line == 0 {
-                full_text.clone()
-            }
-            else {
-                full_text
-                    .lines()
-                    .skip(start_line)
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            };
+            let remaining = &full_text[line_starts[start_line]..];
             if remaining.trim().is_empty() {
                 break;
             }
 
-            let listing_with_errors = match Self::parse_source(&remaining, Some(&document.uri)) {
+            let listing_with_errors = match Self::parse_source(remaining, Some(&document.uri)) {
                 Ok(_) => break, // the rest of the file parses cleanly
                 Err(e) => e
             };
@@ -491,6 +494,29 @@ mod tests {
         for d in &diags {
             assert_eq!(d.severity, Some(DiagnosticSeverity::ERROR));
         }
+    }
+
+    /// Regression test for the `analyze` recovery loop's byte-offset
+    /// rewrite (`line_starts`, replacing a `lines().skip().collect().join()`
+    /// rebuild every retry): three scattered errors, several lines apart,
+    /// with a multi-byte comment on an intervening line - the byte slice
+    /// must still land exactly on each `start_line`'s own text, and never
+    /// panic on a non-UTF-8 boundary (line starts are always right after a
+    /// single-byte `\n`, so this is safe regardless of what's on the line).
+    #[test]
+    fn three_scattered_errors_with_multibyte_content_are_all_reported_correctly() {
+        let text = "org 0x4000\n\
+                     @#$ garbage1 @#$\n\
+                     ld a, 1\n\
+                     ; caf\u{e9} commentaire\n\
+                     @#$ garbage2 @#$\n\
+                     ld b, 2\n\
+                     @#$ garbage3 @#$\n\
+                     ret\n";
+        let diags = diagnostics_for(text);
+        assert_eq!(diags.len(), 3, "{diags:?}");
+        let lines: Vec<u32> = diags.iter().map(|d| d.range.start.line).collect();
+        assert_eq!(lines, vec![1, 4, 6], "{diags:?}");
     }
 
     #[test]

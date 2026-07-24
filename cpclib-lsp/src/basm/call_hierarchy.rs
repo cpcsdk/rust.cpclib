@@ -11,7 +11,7 @@ use cpclib_tokens::{ListingElement, Mnemonic};
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
-use super::embedded_basic::extract_locomotive_blocks;
+use super::embedded_basic::{block_and_text_at, extract_locomotive_blocks, text_for_block};
 use super::token::{flatten_listing, label_scope_at_line, span_line};
 use crate::common::call_hierarchy::CallHierarchyData;
 use crate::common::document::Document;
@@ -68,19 +68,8 @@ impl AssemblyAnalyzer {
         position: Position
     ) -> Option<CallHierarchyItem> {
         let text = document.text();
-        let loco_blocks = extract_locomotive_blocks(&text);
         let line_idx = position.line as usize;
-        if let Some(block) = loco_blocks
-            .iter()
-            .find(|b| b.basic_range.contains(&line_idx))
-        {
-            let all_lines: Vec<&str> = text.lines().collect();
-            let basic_text: String = block
-                .basic_range
-                .clone()
-                .map(|i| all_lines[i])
-                .collect::<Vec<_>>()
-                .join("\n");
+        if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
             return crate::locomotive::call_hierarchy::locomotive_basic_prepare_call_hierarchy(
                 &basic_text,
                 position,
@@ -248,15 +237,7 @@ fn embedded_basic_text_at(document: &Document, block_start_line: u32) -> Option<
     let block = extract_locomotive_blocks(&text)
         .into_iter()
         .find(|b| b.basic_range.start as u32 == block_start_line)?;
-    let all_lines: Vec<&str> = text.lines().collect();
-    Some(
-        block
-            .basic_range
-            .clone()
-            .map(|i| all_lines[i])
-            .collect::<Vec<_>>()
-            .join("\n")
-    )
+    Some(text_for_block(&text, &block))
 }
 
 /// LSP `Range` for a label-name `Z80Span` (e.g. a `CALL` operand).
@@ -327,6 +308,27 @@ mod tests {
     fn doc(text: &str) -> Document {
         let uri = Url::parse("file:///main.asm").unwrap();
         Document::new(uri, text.to_string(), 1)
+    }
+
+    /// Regression test for the LOCOMOTIVE-block dedup (`block_and_text_at`):
+    /// preparing call hierarchy inside a `LOCOMOTIVE` block must still
+    /// delegate to BASIC call hierarchy with the correctly-reconstructed
+    /// block text.
+    #[test]
+    fn prepare_call_hierarchy_inside_a_locomotive_block_delegates_to_basic() {
+        let text = "ORG 0x8000\nLOCOMOTIVE\n10 GOSUB 20\n20 RETURN\nENDLOCOMOTIVE\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let item = analyzer
+            .prepare_call_hierarchy(
+                &d,
+                Position {
+                    line: 2,
+                    character: 0
+                }
+            )
+            .expect("expected a BASIC call hierarchy item inside the LOCOMOTIVE block");
+        assert_eq!(item.name, "Line 10");
     }
 
     #[test]

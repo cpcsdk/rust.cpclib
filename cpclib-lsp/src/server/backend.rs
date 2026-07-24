@@ -302,7 +302,7 @@ impl CpcLspBackend {
         };
         let col =
             crate::common::document::utf16_col_to_byte_offset(line, position.character as usize);
-        let Some(word) = crate::bndbuild::definition::jinja_word_at(line, col)
+        let Some((word, ..)) = crate::bndbuild::definition::jinja_word_at(line, col)
         else {
             return;
         };

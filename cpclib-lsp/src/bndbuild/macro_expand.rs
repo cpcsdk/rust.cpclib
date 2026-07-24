@@ -100,19 +100,7 @@ pub(super) fn macro_call_at(line: &str, col: usize) -> Option<(String, String)> 
     super::jinja::jinja_context_at(line, col)?;
 
     let bytes = line.as_bytes();
-    let col = col.min(bytes.len());
-    let mut start = col;
-    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
-        start -= 1;
-    }
-    let mut end = col;
-    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-        end += 1;
-    }
-    if start >= end {
-        return None;
-    }
-    let name = &line[start..end];
+    let (name, _start, end) = super::jinja::identifier_at(line, col)?;
 
     let mut i = end;
     while i < bytes.len() && bytes[i] == b' ' {
@@ -137,7 +125,7 @@ pub(super) fn macro_call_at(line: &str, col: usize) -> Option<(String, String)> 
     if depth != 0 {
         return None; // unterminated call on this line
     }
-    Some((name.to_string(), line[args_start..i].to_string()))
+    Some((name, line[args_start..i].to_string()))
 }
 
 /// Split a call's argument text on top-level commas (respecting nested

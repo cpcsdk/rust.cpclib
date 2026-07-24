@@ -16,7 +16,7 @@ impl BuildFileAnalyzer {
 
         // Jinja variable: the definition is its `{% set NAME = ... %}` line;
         // every other occurrence is a reference.
-        if let Some(word) = jinja_word_at(&line, col)
+        if let Some((word, ..)) = jinja_word_at(&line, col)
             && let Some((_, _, location)) = super::jinja::collect_jinja_variables(document)
                 .into_iter()
                 .find(|(name, ..)| *name == word)
@@ -454,7 +454,7 @@ impl BuildFileAnalyzer {
         else {
             return Vec::new();
         };
-        let Some(word) = jinja_word_at(&line, document.byte_column(position))
+        let Some((word, ..)) = jinja_word_at(&line, document.byte_column(position))
         else {
             return Vec::new();
         };
@@ -513,17 +513,11 @@ impl BuildFileAnalyzer {
     pub fn prepare_rename(&self, document: &Document, position: Position) -> Option<Range> {
         let line = document.line(position.line as usize)?;
         let col = document.byte_column(position);
-        let word = jinja_word_at(&line, col)?;
+        let (word, start, _end) = jinja_word_at(&line, col)?;
         super::jinja::collect_jinja_variables(document)
             .iter()
             .any(|(name, ..)| *name == word)
             .then_some(())?;
-        let bytes = line.as_bytes();
-        let col = col.min(bytes.len());
-        let mut start = col;
-        while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
-            start -= 1;
-        }
         let start_utf16 = crate::common::document::byte_offset_to_utf16_col(&line, start);
         Some(Range {
             start: Position {
@@ -570,25 +564,12 @@ impl BuildFileAnalyzer {
 }
 
 /// The identifier under the cursor, when the cursor is inside Jinja braces
-/// (`{{ }}` / `{% %}`) on this line.
-pub(crate) fn jinja_word_at(line: &str, col: usize) -> Option<String> {
+/// (`{{ }}` / `{% %}`) on this line, as `(word, start, end)` byte-offset
+/// span. `prepare_rename` needs the span (to build its `Range` without
+/// re-scanning); other callers just discard it via `(word, ..)`.
+pub(crate) fn jinja_word_at(line: &str, col: usize) -> Option<(String, usize, usize)> {
     super::jinja::jinja_context_at(line, col)?;
-    let bytes = line.as_bytes();
-    let col = col.min(bytes.len());
-    let mut start = col;
-    while start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_') {
-        start -= 1;
-    }
-    let mut end = col;
-    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
-        end += 1;
-    }
-    if start < end {
-        Some(line[start..end].to_string())
-    }
-    else {
-        None
-    }
+    super::jinja::identifier_at(line, col)
 }
 
 // ─── `{% include %}` graph (for workspace-wide Jinja variable rename) ────────
@@ -1066,6 +1047,32 @@ mod tests {
             loc.uri,
             Url::from_file_path(tmp.path().join("helper.asm")).unwrap()
         );
+    }
+
+    /// Regression test for the `jinja_word_at`/`identifier_at` dedup: the
+    /// returned span must still convert to UTF-16 columns correctly for
+    /// `prepare_rename`'s `Range`, even with multi-byte content earlier on
+    /// the line.
+    #[test]
+    fn prepare_rename_handles_utf16_columns_with_multibyte_content_before_the_variable() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        // "café" is 4 chars / 4 UTF-16 units but 5 bytes ('é' is 2 bytes) -
+        // the returned Range's `character` must be reported in UTF-16
+        // units (matching the LSP spec), not raw bytes.
+        let text = "{% set x = 1 %}\n; café {{ x }}\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let range = BuildFileAnalyzer::new()
+            .prepare_rename(
+                &doc,
+                Position {
+                    line: 1,
+                    character: 10
+                }
+            )
+            .expect("expected a rename range for the Jinja variable 'x'");
+        assert_eq!(range.start.line, 1);
+        assert_eq!(range.start.character, 10);
+        assert_eq!(range.end.character, 11);
     }
 
     #[test]

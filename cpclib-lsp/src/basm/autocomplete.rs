@@ -1123,7 +1123,7 @@ impl AssemblyAnalyzer {
                 continue;
             };
             let source_name = filename.rsplit('/').next().unwrap_or(&filename).to_string();
-            let synthetic_uri = Url::parse(&filename).unwrap_or_else(|_| document.uri.clone());
+            let synthetic_uri = synthetic_include_uri(&filename, &document.uri);
             let included_doc = Document::new(synthetic_uri, content, 0);
             for (sym, detail) in self.collect_symbols(&included_doc) {
                 out.push((source_name.clone(), sym, detail));
@@ -1131,6 +1131,35 @@ impl AssemblyAnalyzer {
         }
         out
     }
+}
+
+/// A collision-free URI for `filename` (an `INCLUDE`/`INCBIN`/`BINCLUDE`
+/// target resolved relative to `doc_uri`), for use as a synthetic
+/// document's own `parse_cache` key. `Url::parse(&filename)` fails for
+/// every ordinary relative include path (it's not an absolute URL) - the
+/// previous fallback of reusing `doc_uri` unmodified meant the included
+/// file's synthetic document silently got the *including* document's own
+/// real URI, so parsing it (`parse_document`, keyed by URI) overwrote the
+/// including document's own cached listing on every completion keystroke
+/// that touched an include.
+fn synthetic_include_uri(filename: &str, doc_uri: &Url) -> Url {
+    if super::includes::is_inner_uri(filename)
+        && let Ok(u) = Url::parse(filename)
+    {
+        // Already a real, globally unique URI (e.g. `inner://firmware/kernel.asm`).
+        return u;
+    }
+    if let Some(path) = super::definition::resolve_include_path(filename, doc_uri)
+        && let Ok(u) = Url::from_file_path(&path)
+    {
+        return u;
+    }
+    // Last-resort fallback (e.g. the file doesn't exist on disk yet): never
+    // collide with `doc_uri` itself - a distinct fragment keeps this a
+    // different cache key even though it isn't a real, resolvable location.
+    let mut u = doc_uri.clone();
+    u.set_fragment(Some(&format!("include={filename}")));
+    u
 }
 
 /// Text-based symbol scan used when the document does not parse: labels at
@@ -1680,6 +1709,34 @@ mod include_tests {
             syms.iter()
                 .any(|(src, sym, _)| sym == "HELPER_LABEL" && src == "helper.asm"),
             "{syms:?}"
+        );
+    }
+
+    /// Regression test for the synthetic include-doc URI collision bug:
+    /// `collect_symbols_from_includes` used to give the included file's
+    /// throwaway `Document` the *parent's own URI* (since `Url::parse` on
+    /// an ordinary relative path fails), so parsing it overwrote the
+    /// parent's real `parse_cache` entry on every call.
+    #[test]
+    fn collect_symbols_from_includes_does_not_clobber_the_parent_s_own_parse_cache() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("helper.asm"), "HELPER_LABEL:\n    ret\n").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let doc = Document::new(uri, "    include \"helper.asm\"\n".to_string(), 1);
+
+        let analyzer = AssemblyAnalyzer::new();
+        let before = analyzer
+            .parse_document(&doc)
+            .expect("parent document should parse cleanly");
+
+        analyzer.collect_symbols_from_includes(&doc);
+
+        let after = analyzer
+            .parse_document(&doc)
+            .expect("parent document should still parse cleanly");
+        assert!(
+            std::sync::Arc::ptr_eq(&before, &after),
+            "collect_symbols_from_includes must not evict the parent's own cache entry"
         );
     }
 

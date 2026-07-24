@@ -50,18 +50,8 @@ impl AssemblyAnalyzer {
         position: Position
     ) -> Option<Vec<TextEdit>> {
         let text = document.text();
-        let loco_blocks = super::embedded_basic::extract_locomotive_blocks(&text);
         let line_idx = position.line as usize;
-        let block = loco_blocks
-            .iter()
-            .find(|b| b.basic_range.contains(&line_idx))?;
-        let all_lines: Vec<&str> = text.lines().collect();
-        let basic_text: String = block
-            .basic_range
-            .clone()
-            .map(|i| all_lines[i])
-            .collect::<Vec<_>>()
-            .join("\n");
+        let (block, basic_text) = super::embedded_basic::block_and_text_at(&text, line_idx)?;
         crate::locomotive::on_type_formatting::locomotive_basic_on_type_newline(
             &basic_text,
             position,

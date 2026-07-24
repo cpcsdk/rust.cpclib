@@ -6,7 +6,7 @@ use cpclib_tokens::{ListingElement, Token};
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
-use super::embedded_basic::extract_locomotive_blocks;
+use super::embedded_basic::{block_and_text_at, extract_locomotive_blocks};
 use super::token::is_ident_byte;
 use crate::common::document::Document;
 
@@ -14,10 +14,14 @@ impl AssemblyAnalyzer {
     /// Find the definition of a symbol — looks up the word under the cursor in the parsed listing.
     pub fn goto_definition(&self, document: &Document, position: Position) -> Option<Location> {
         let line = document.line(position.line as usize)?;
-        let col = position.character as usize;
+        // `resolve_include_at` indexes by byte (it scans `line.as_bytes()`
+        // directly), while `extract_word_at_position` below indexes by
+        // `char` — these are two different conversions of the same UTF-16
+        // `position.character`, not interchangeable.
+        let byte_col = document.byte_column(position);
 
         // CTRL+CLICK on a filename string inside INCLUDE / INCBIN / BINCLUDE.
-        if let Some(target_uri) = resolve_include_at(&line, col, &document.uri) {
+        if let Some(target_uri) = resolve_include_at(&line, byte_col, &document.uri) {
             return Some(Location {
                 uri: target_uri,
                 range: Range {
@@ -36,19 +40,8 @@ impl AssemblyAnalyzer {
         // Delegate to BASIC goto-definition for LOCOMOTIVE block content.
         {
             let text = document.text();
-            let loco_blocks = extract_locomotive_blocks(&text);
             let line_idx = position.line as usize;
-            if let Some(block) = loco_blocks
-                .iter()
-                .find(|b| b.basic_range.contains(&line_idx))
-            {
-                let all_lines: Vec<&str> = text.lines().collect();
-                let basic_text: String = block
-                    .basic_range
-                    .clone()
-                    .map(|i| all_lines[i])
-                    .collect::<Vec<_>>()
-                    .join("\n");
+            if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
                 return crate::locomotive::definition::locomotive_basic_goto_definition(
                     &basic_text,
                     position,
@@ -58,7 +51,7 @@ impl AssemblyAnalyzer {
             }
         }
 
-        let word = self.extract_word_at_position(&line, col)?;
+        let word = self.extract_word_at_position(&line, document.char_column(position))?;
         let word_upper = word.to_uppercase();
 
         // The backend will try other open documents if this returns None.
@@ -68,7 +61,7 @@ impl AssemblyAnalyzer {
     /// Extract the word (ASM identifier) under the cursor, or `None`.
     pub fn word_at_position(&self, document: &Document, position: Position) -> Option<String> {
         let line = document.line(position.line as usize)?;
-        self.extract_word_at_position(&line, position.character as usize)
+        self.extract_word_at_position(&line, document.char_column(position))
     }
 
     /// `textDocument/prepareRename`: the range to offer renaming for, or
@@ -77,19 +70,8 @@ impl AssemblyAnalyzer {
         // Delegate to BASIC for LOCOMOTIVE block content (same
         // block-extraction dance as `goto_definition`/`hover`).
         let text = document.text();
-        let loco_blocks = extract_locomotive_blocks(&text);
         let line_idx = position.line as usize;
-        if let Some(block) = loco_blocks
-            .iter()
-            .find(|b| b.basic_range.contains(&line_idx))
-        {
-            let all_lines: Vec<&str> = text.lines().collect();
-            let basic_text: String = block
-                .basic_range
-                .clone()
-                .map(|i| all_lines[i])
-                .collect::<Vec<_>>()
-                .join("\n");
+        if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
             return crate::locomotive::definition::locomotive_basic_prepare_rename(
                 &basic_text,
                 position,
@@ -109,19 +91,8 @@ impl AssemblyAnalyzer {
         new_name: &str
     ) -> Option<WorkspaceEdit> {
         let text = document.text();
-        let loco_blocks = extract_locomotive_blocks(&text);
         let line_idx = position.line as usize;
-        if let Some(block) = loco_blocks
-            .iter()
-            .find(|b| b.basic_range.contains(&line_idx))
-        {
-            let all_lines: Vec<&str> = text.lines().collect();
-            let basic_text: String = block
-                .basic_range
-                .clone()
-                .map(|i| all_lines[i])
-                .collect::<Vec<_>>()
-                .join("\n");
+        if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
             return crate::locomotive::definition::locomotive_basic_rename(
                 &basic_text,
                 position,
@@ -274,35 +245,20 @@ impl AssemblyAnalyzer {
         let text = document.text();
         let mut refs = Vec::new();
         for (line_idx, line) in text.lines().enumerate() {
-            let line_up = line.to_uppercase();
-            let wlen = word_upper.len();
-            let mut start = 0;
-            while start + wlen <= line_up.len() {
-                if let Some(pos) = line_up[start..].find(word_upper) {
-                    let abs = start + pos;
-                    let before_ok = abs == 0 || !is_ident_byte(line.as_bytes()[abs - 1]);
-                    let after_ok =
-                        abs + wlen >= line.len() || !is_ident_byte(line.as_bytes()[abs + wlen]);
-                    if before_ok && after_ok {
-                        refs.push(Location {
-                            uri: document.uri.clone(),
-                            range: Range {
-                                start: Position {
-                                    line: line_idx as u32,
-                                    character: abs as u32
-                                },
-                                end: Position {
-                                    line: line_idx as u32,
-                                    character: (abs + wlen) as u32
-                                }
-                            }
-                        });
+            for (abs, after) in word_matches_on_line(line, word_upper) {
+                refs.push(Location {
+                    uri: document.uri.clone(),
+                    range: Range {
+                        start: Position {
+                            line: line_idx as u32,
+                            character: abs as u32
+                        },
+                        end: Position {
+                            line: line_idx as u32,
+                            character: after as u32
+                        }
                     }
-                    start = abs + 1;
-                }
-                else {
-                    break;
-                }
+                });
             }
         }
         refs
@@ -320,7 +276,7 @@ impl AssemblyAnalyzer {
     fn prepare_rename_label(&self, document: &Document, position: Position) -> Option<Range> {
         let line = document.line(position.line as usize)?;
         let (word, start_col, end_col) =
-            word_range_at_position(&line, position.character as usize)?;
+            super::token::word_range_at_position(&line, document.char_column(position))?;
         let word_upper = word.to_uppercase();
 
         // A scoped local — a `.label`, a `FUNCTION` parameter/local, or a
@@ -354,11 +310,15 @@ impl AssemblyAnalyzer {
         Some(Range {
             start: Position {
                 line: position.line,
-                character: start_col
+                character: crate::common::document::char_count_to_utf16_col(
+                    &line,
+                    start_col as usize
+                ) as u32
             },
             end: Position {
                 line: position.line,
-                character: end_col
+                character: crate::common::document::char_count_to_utf16_col(&line, end_col as usize)
+                    as u32
             }
         })
     }
@@ -406,7 +366,8 @@ impl AssemblyAnalyzer {
         }
 
         let line = document.line(position.line as usize)?;
-        let (word, ..) = word_range_at_position(&line, position.character as usize)?;
+        let (word, ..) =
+            super::token::word_range_at_position(&line, document.char_column(position))?;
 
         if let Some(local) = word.strip_prefix('.') {
             let listing = self.parse_document(document).ok()?;
@@ -677,28 +638,49 @@ pub(crate) enum RenameTarget {
     }
 }
 
-/// As `AssemblyAnalyzer::extract_word_at_position`, but also returns the
-/// word's `[start, end)` column range.
-fn word_range_at_position(line: &str, column: usize) -> Option<(String, u32, u32)> {
-    let chars: Vec<char> = line.chars().collect();
-    if column >= chars.len() {
-        return None;
+/// Case-insensitive occurrences of `pattern_upper` (already uppercased) in
+/// `line`, as byte-offset `[start, start+len)` pairs — only the leading
+/// word-boundary check (`before_ok`: not preceded by another identifier
+/// character) is applied here. The shared core every scanner in this file
+/// used to reimplement independently: `word_matches_on_line` (below)
+/// builds on this by also checking the trailing boundary, for the four
+/// scanners that need a strict "whole word" match;
+/// `find_label_word_and_prefix_matches` uses this lower-level function
+/// directly since it needs its own, different trailing-boundary rule (a
+/// match immediately followed by `.` must be *accepted*, not rejected —
+/// `.` is itself an `is_ident_byte` character).
+fn pattern_starts_on_line(line: &str, pattern_upper: &str) -> Vec<(usize, usize)> {
+    let line_up = line.to_uppercase();
+    let bytes = line.as_bytes();
+    let plen = pattern_upper.len();
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start + plen <= line_up.len() {
+        let Some(pos) = line_up[start..].find(pattern_upper)
+        else {
+            break;
+        };
+        let abs = start + pos;
+        let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
+        if before_ok {
+            out.push((abs, abs + plen));
+        }
+        start = abs + 1;
     }
-    let is_word = |c: char| c.is_alphanumeric() || c == '_' || c == '.' || c == '@';
-    let mut start = column;
-    let mut end = column;
-    while start > 0 && is_word(chars[start - 1]) {
-        start -= 1;
-    }
-    while end < chars.len() && is_word(chars[end]) {
-        end += 1;
-    }
-    if start < end {
-        Some((chars[start..end].iter().collect(), start as u32, end as u32))
-    }
-    else {
-        None
-    }
+    out
+}
+
+/// As `pattern_starts_on_line`, additionally requiring the trailing
+/// boundary too (not immediately followed by another identifier
+/// character) — the strict "whole word" match `find_references_in`,
+/// `find_local_matches_in_scope`, `find_bare_word_matches_in_scope`, and
+/// `bare_word_matches_on_line` all need.
+fn word_matches_on_line(line: &str, pattern_upper: &str) -> Vec<(usize, usize)> {
+    let bytes = line.as_bytes();
+    pattern_starts_on_line(line, pattern_upper)
+        .into_iter()
+        .filter(|&(_, after)| after >= bytes.len() || !is_ident_byte(bytes[after]))
+        .collect()
 }
 
 /// Occurrences of `word_upper` in `document`, either as an exact whole word
@@ -717,23 +699,8 @@ fn find_label_word_and_prefix_matches(document: &Document, word: &str) -> Vec<(R
     let text = document.text();
     let mut matches = Vec::new();
     for (line_idx, line) in text.lines().enumerate() {
-        let line_up = line.to_uppercase();
-        let wlen = word_upper.len();
         let bytes = line.as_bytes();
-        let mut start = 0;
-        while start + wlen <= line_up.len() {
-            let Some(pos) = line_up[start..].find(word_upper.as_str())
-            else {
-                break;
-            };
-            let abs = start + pos;
-            let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
-            if !before_ok {
-                start = abs + 1;
-                continue;
-            }
-
-            let after = abs + wlen;
+        for (abs, after) in pattern_starts_on_line(line, &word_upper) {
             if after < bytes.len() && bytes[after] == b'.' {
                 let mut end = after + 1;
                 while end < bytes.len() && is_ident_byte(bytes[end]) {
@@ -765,10 +732,9 @@ fn find_label_word_and_prefix_matches(document: &Document, word: &str) -> Vec<(R
                             character: after as u32
                         }
                     },
-                    word_upper.to_string()
+                    word_upper.clone()
                 ));
             }
-            start = abs + 1;
         }
     }
     matches
@@ -783,43 +749,24 @@ fn find_local_matches_in_scope(
     scope: &std::ops::Range<u32>
 ) -> Vec<Range> {
     let text = document.text();
-    let name_upper = name.to_uppercase();
-    let pattern = format!(".{name_upper}");
+    let pattern = format!(".{}", name.to_uppercase());
     let mut matches = Vec::new();
     for (line_idx, line) in text.lines().enumerate() {
         let line_idx = line_idx as u32;
         if line_idx < scope.start || line_idx >= scope.end {
             continue;
         }
-        let line_up = line.to_uppercase();
-        let bytes = line.as_bytes();
-        let plen = pattern.len();
-        let mut start = 0;
-        while start + plen <= line_up.len() {
-            let Some(pos) = line_up[start..].find(&pattern)
-            else {
-                break;
-            };
-            let abs = start + pos;
-            // The `.` itself must start the identifier run (not preceded by
-            // another identifier character, e.g. don't match inside
-            // `foo.name`) and the run must end exactly after `name`.
-            let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
-            let after = abs + plen;
-            let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
-            if before_ok && after_ok {
-                matches.push(Range {
-                    start: Position {
-                        line: line_idx,
-                        character: abs as u32
-                    },
-                    end: Position {
-                        line: line_idx,
-                        character: after as u32
-                    }
-                });
-            }
-            start = abs + 1;
+        for (abs, after) in word_matches_on_line(line, &pattern) {
+            matches.push(Range {
+                start: Position {
+                    line: line_idx,
+                    character: abs as u32
+                },
+                end: Position {
+                    line: line_idx,
+                    character: after as u32
+                }
+            });
         }
     }
     matches
@@ -841,32 +788,17 @@ fn find_bare_word_matches_in_scope(
         if line_idx < scope.start || line_idx >= scope.end {
             continue;
         }
-        let line_up = line.to_uppercase();
-        let bytes = line.as_bytes();
-        let wlen = name_upper.len();
-        let mut start = 0;
-        while start + wlen <= line_up.len() {
-            let Some(pos) = line_up[start..].find(name_upper.as_str())
-            else {
-                break;
-            };
-            let abs = start + pos;
-            let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
-            let after = abs + wlen;
-            let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
-            if before_ok && after_ok {
-                matches.push(Range {
-                    start: Position {
-                        line: line_idx,
-                        character: abs as u32
-                    },
-                    end: Position {
-                        line: line_idx,
-                        character: after as u32
-                    }
-                });
-            }
-            start = abs + 1;
+        for (abs, after) in word_matches_on_line(line, &name_upper) {
+            matches.push(Range {
+                start: Position {
+                    line: line_idx,
+                    character: abs as u32
+                },
+                end: Position {
+                    line: line_idx,
+                    character: after as u32
+                }
+            });
         }
     }
     matches
@@ -875,26 +807,10 @@ fn find_bare_word_matches_in_scope(
 /// Whole-word (case-insensitive) matches of `name_upper` (already
 /// uppercased) on a single `line`, as `[start, end)` column pairs.
 fn bare_word_matches_on_line(line: &str, name_upper: &str) -> Vec<(u32, u32)> {
-    let line_up = line.to_uppercase();
-    let bytes = line.as_bytes();
-    let wlen = name_upper.len();
-    let mut cols = Vec::new();
-    let mut start = 0;
-    while start + wlen <= line_up.len() {
-        let Some(pos) = line_up[start..].find(name_upper)
-        else {
-            break;
-        };
-        let abs = start + pos;
-        let before_ok = abs == 0 || !is_ident_byte(bytes[abs - 1]);
-        let after = abs + wlen;
-        let after_ok = after >= bytes.len() || !is_ident_byte(bytes[after]);
-        if before_ok && after_ok {
-            cols.push((abs as u32, after as u32));
-        }
-        start = abs + 1;
-    }
-    cols
+    word_matches_on_line(line, name_upper)
+        .into_iter()
+        .map(|(s, e)| (s as u32, e as u32))
+        .collect()
 }
 
 /// `{name_upper}` (case-insensitive, braces required) matches on a single
@@ -1200,6 +1116,35 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
             "definition should be found even with parse errors"
         );
         assert_eq!(loc.unwrap().range.start.line, 2);
+    }
+
+    /// Regression test for treating `position.character` (UTF-16 code
+    /// units) as a raw `char` count: a supplementary-plane character (😀,
+    /// 2 UTF-16 units but 1 `char`) earlier on the line desyncs the two by
+    /// one. Positioned so the desync pushes the *uncorrected* char index
+    /// out of bounds entirely (`column >= chars.len()`), not just to a
+    /// different offset within the same word - so a regression here fails
+    /// outright (`None`) rather than silently landing on the right word by
+    /// luck.
+    #[test]
+    fn goto_definition_handles_utf16_columns_with_a_supplementary_plane_char_before_it() {
+        let text = "GOAL:\n  ret\n  ; \u{1F600} call GOAL";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///utf16.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        // UTF-16 column 15 lands on the last char of "GOAL" once correctly
+        // converted (char index 14); treated as a raw char index it's
+        // `>= chars.len()` (15) and finds nothing.
+        let loc = analyzer
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 2,
+                    character: 15
+                }
+            )
+            .expect("goto-definition should resolve GOAL despite the emoji earlier on the line");
+        assert_eq!(loc.range.start.line, 0);
     }
 
     #[test]
@@ -1744,6 +1689,33 @@ mod rename_tests {
         }
     }
 
+    /// Regression test for the `pattern_starts_on_line`/
+    /// `find_label_word_and_prefix_matches` dedup: a longer identifier that
+    /// merely starts with the rename target (`OLD_LABELFOO`, not followed
+    /// by `.`) must not be touched — only the `.`-qualified-suffix case
+    /// gets the special "accept even though followed by an ident byte"
+    /// treatment, everything else still needs a real word boundary.
+    #[test]
+    fn global_label_rename_does_not_touch_a_longer_identifier_with_the_same_prefix() {
+        let text = "OLD_LABEL:\n    ret\n    call OLD_LABELFOO\n";
+        let d = doc("file:///g3.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        let target = analyzer
+            .resolve_rename_target(
+                &d,
+                Position {
+                    line: 0,
+                    character: 2
+                }
+            )
+            .expect("target");
+
+        let edits = analyzer.rename_occurrences_in(&d, &target, "NEW_LABEL");
+        // Only the definition itself - "OLD_LABELFOO" must not be touched.
+        assert_eq!(edits.len(), 1, "{edits:?}");
+        assert_eq!(edits[0].range.start.line, 0);
+    }
+
     #[test]
     fn global_label_rename_also_rewrites_qualified_local_references() {
         let text = "OLD_LABEL:\n.local\n    ret\n    jr OLD_LABEL.local\n";
@@ -1887,5 +1859,38 @@ mod rename_tests {
         assert_eq!(edits.len(), 2, "{edits:?}");
         assert_eq!(edits[0].range.start.line, 1);
         assert_eq!(edits[1].range.start.line, 2);
+    }
+}
+
+#[cfg(test)]
+mod word_scanner_tests {
+    use super::*;
+
+    #[test]
+    fn pattern_starts_on_line_only_checks_the_leading_boundary() {
+        // "OLD" followed by "." (an ident byte) is still reported here -
+        // rejecting on the trailing side is left to the caller.
+        let hits = pattern_starts_on_line("call OLD.local", "OLD");
+        assert_eq!(hits, vec![(5, 8)]);
+    }
+
+    #[test]
+    fn pattern_starts_on_line_rejects_a_match_preceded_by_an_ident_byte() {
+        // "OLD" inside "FOO_OLD" is not preceded by a word boundary.
+        let hits = pattern_starts_on_line("call FOO_OLD", "OLD");
+        assert!(hits.is_empty(), "{hits:?}");
+    }
+
+    #[test]
+    fn word_matches_on_line_rejects_a_match_followed_by_an_ident_byte() {
+        // "OLD" inside "OLDFOO" fails the trailing boundary check.
+        let hits = word_matches_on_line("call OLDFOO", "OLD");
+        assert!(hits.is_empty(), "{hits:?}");
+    }
+
+    #[test]
+    fn word_matches_on_line_accepts_a_standalone_word() {
+        let hits = word_matches_on_line("call OLD", "OLD");
+        assert_eq!(hits, vec![(5, 8)]);
     }
 }

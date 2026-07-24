@@ -73,16 +73,30 @@ impl BuildFileAnalyzer {
                 Err(e) => {
                     let line = e.location().map(|l| l.line()).unwrap_or(0);
                     let column = e.location().map(|l| l.column()).unwrap_or(0);
+                    let line_idx = line.saturating_sub(1);
+                    // `serde_yaml`'s `column` is a Unicode *character*
+                    // count (from libyaml's `mark.column`), not UTF-16
+                    // code units - convert via the error line's own text
+                    // so wide characters earlier on the line don't desync
+                    // the reported squiggle position. (Numeric convention
+                    // otherwise unchanged from before - still 1-based-ish,
+                    // still a fixed 10-char-wide guess for the end, since
+                    // `serde_yaml` only reports a point, not a range.)
+                    let error_line = text.lines().nth(line_idx as usize).unwrap_or("");
+                    let start_utf16 =
+                        crate::common::document::char_count_to_utf16_col(error_line, column);
+                    let end_utf16 =
+                        crate::common::document::char_count_to_utf16_col(error_line, column + 10);
 
                     diagnostics.push(Diagnostic {
                         range: Range {
                             start: Position {
-                                line: line.saturating_sub(1) as u32,
-                                character: column as u32
+                                line: line_idx as u32,
+                                character: start_utf16 as u32
                             },
                             end: Position {
-                                line: line.saturating_sub(1) as u32,
-                                character: (column + 10) as u32
+                                line: line_idx as u32,
+                                character: end_utf16 as u32
                             }
                         },
                         severity: Some(DiagnosticSeverity::ERROR),
@@ -291,6 +305,28 @@ mod tests {
         let uri = Url::from_file_path(dir.path().join("build.bnd")).unwrap();
         let document = Document::new(uri, text.to_string(), 1);
         BuildFileAnalyzer::new().analyze(&document)
+    }
+
+    /// Regression test for treating `serde_yaml`'s `column` (a Unicode
+    /// *character* count) directly as an LSP UTF-16 `character`: a
+    /// supplementary-plane character (😀, 1 Rust `char` but 2 UTF-16
+    /// units) earlier on the error's own line must not desync the two.
+    /// Confirmed empirically that this exact snippet reports its error at
+    /// line 2 column 7 (`serde_yaml`'s own 1-based char count landing on
+    /// the unexpected `:`); the correctly-converted UTF-16 column is 8
+    /// (the emoji contributes 2 units, not 1).
+    #[test]
+    fn yaml_syntax_error_column_is_utf16_aware_with_a_supplementary_plane_char_before_it() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        let text = "\u{1F600}: [1, 2\n\u{1F600} next: value\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let diags = BuildFileAnalyzer::new().analyze(&doc);
+        let yaml_diag = diags
+            .iter()
+            .find(|d| d.source.as_deref() == Some("yaml"))
+            .expect("expected a YAML diagnostic");
+        assert_eq!(yaml_diag.range.start.line, 1);
+        assert_eq!(yaml_diag.range.start.character, 8);
     }
 
     #[test]

@@ -70,9 +70,17 @@ impl ColorSpan {
 
 impl AssemblyAnalyzer {
     pub fn document_colors(&self, document: &Document) -> Vec<ColorInformation> {
-        let mut colors: Vec<ColorInformation> = asm_spans(document)
+        let text = document.text();
+        // Computed once and threaded through - `asm_spans`/`symbol_spans`
+        // (and the LOCOMOTIVE loop below) used to each independently
+        // re-extract the same blocks from the same text, three times total
+        // per request.
+        let blocks = extract_locomotive_blocks(&text);
+        let skip_lines = skip_lines_for(&blocks);
+
+        let mut colors: Vec<ColorInformation> = asm_spans(document, &skip_lines)
             .iter()
-            .chain(symbol_spans(self, document).iter())
+            .chain(symbol_spans(self, document, &skip_lines).iter())
             .filter_map(|s| {
                 Some(ColorInformation {
                     range: s.range(),
@@ -81,8 +89,7 @@ impl AssemblyAnalyzer {
             })
             .collect();
 
-        let text = document.text();
-        for block in &extract_locomotive_blocks(&text) {
+        for block in &blocks {
             let basic_doc = embedded_basic_document(&text, block);
             for mut c in crate::locomotive::BasicAnalyzer::new().document_colors(&basic_doc) {
                 c.range.start.line += block.basic_range.start as u32;
@@ -110,8 +117,9 @@ impl AssemblyAnalyzer {
         range: Range
     ) -> Vec<ColorPresentation> {
         let text = document.text();
-        if let Some(block) = extract_locomotive_blocks(&text)
-            .into_iter()
+        let blocks = extract_locomotive_blocks(&text);
+        if let Some(block) = blocks
+            .iter()
             .find(|b| b.basic_range.contains(&(range.start.line as usize)))
         {
             let relative_range = Range {
@@ -136,7 +144,8 @@ impl AssemblyAnalyzer {
         }
 
         let target = from_lsp_color(color);
-        let spans = asm_spans(document);
+        let skip_lines = skip_lines_for(&blocks);
+        let spans = asm_spans(document, &skip_lines);
         // A range with no matching numeral span is a symbol-reference
         // swatch (e.g. `GA_WHITE`) — those are read-only, no presentations.
         let Some(matched) = spans.iter().find(|s| s.range() == range)
@@ -169,23 +178,21 @@ impl AssemblyAnalyzer {
 }
 
 fn embedded_basic_document(text: &str, block: &super::embedded_basic::LocomotiveBlock) -> Document {
-    let all_lines: Vec<&str> = text.lines().collect();
-    let basic_text: String = block
-        .basic_range
-        .clone()
-        .map(|i| all_lines[i])
-        .collect::<Vec<_>>()
-        .join("\n");
+    let basic_text = super::embedded_basic::text_for_block(text, block);
     let uri = Url::parse("file:///__embedded__.bas").unwrap();
     Document::new(uri, basic_text, 0)
 }
 
-/// Line indices that belong to a LOCOMOTIVE block (directive/HIDE_LINES/
+/// Line indices that belong to LOCOMOTIVE blocks (directive/HIDE_LINES/
 /// BASIC content/ENDLOCOMOTIVE) — their content is BASIC, not Z80, and is
-/// scanned separately via delegation.
-fn locomotive_skip_lines(text: &str) -> std::collections::HashSet<usize> {
+/// scanned separately via delegation. Takes already-extracted `blocks`
+/// rather than re-extracting them, so callers that already have them (or
+/// need them for another purpose too) don't pay for a second scan.
+fn skip_lines_for(
+    blocks: &[super::embedded_basic::LocomotiveBlock]
+) -> std::collections::HashSet<usize> {
     let mut skip_lines = std::collections::HashSet::new();
-    for block in &extract_locomotive_blocks(text) {
+    for block in blocks {
         skip_lines.insert(block.directive_line);
         if let Some(hl) = block.hide_lines_line {
             skip_lines.insert(hl);
@@ -200,10 +207,9 @@ fn locomotive_skip_lines(text: &str) -> std::collections::HashSet<usize> {
 
 /// Every colorizable byte on the assembly (non-LOCOMOTIVE) side of the
 /// document.
-fn asm_spans(document: &Document) -> Vec<ColorSpan> {
+fn asm_spans(document: &Document, skip_lines: &std::collections::HashSet<usize>) -> Vec<ColorSpan> {
     let text = document.text();
-    let skip_lines = locomotive_skip_lines(&text);
-    scan_numeral_literals(&text, &skip_lines)
+    scan_numeral_literals(&text, skip_lines)
         .iter()
         .flat_map(spans_for)
         .collect()
@@ -212,7 +218,11 @@ fn asm_spans(document: &Document) -> Vec<ColorSpan> {
 /// Every bare identifier in the document whose `EQU`/`=` definition
 /// (possibly in an included file, possibly through a chain of aliases)
 /// resolves to a GA byte — e.g. `GA_WHITE` in `db GA_WHITE, ...`.
-fn symbol_spans(analyzer: &AssemblyAnalyzer, document: &Document) -> Vec<ColorSpan> {
+fn symbol_spans(
+    analyzer: &AssemblyAnalyzer,
+    document: &Document,
+    skip_lines: &std::collections::HashSet<usize>
+) -> Vec<ColorSpan> {
     let mut table: HashMap<String, String> = HashMap::new();
     for (name, detail) in analyzer.collect_symbols(document) {
         if let Some(rhs) = detail.strip_prefix("= ") {
@@ -229,7 +239,6 @@ fn symbol_spans(analyzer: &AssemblyAnalyzer, document: &Document) -> Vec<ColorSp
     }
 
     let text = document.text();
-    let skip_lines = locomotive_skip_lines(&text);
     let mut out = Vec::new();
 
     for (line_idx, line) in text.lines().enumerate() {

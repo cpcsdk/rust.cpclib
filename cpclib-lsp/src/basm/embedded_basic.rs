@@ -72,6 +72,37 @@ pub(super) fn extract_locomotive_blocks(text: &str) -> Vec<LocomotiveBlock> {
     blocks
 }
 
+/// Re-join `block`'s own source lines out of `text` - the "reconstruct"
+/// half of the "find a block, then rejoin its lines" pattern duplicated
+/// across every feature that delegates to BASIC analysis for a LOCOMOTIVE
+/// block's content. Checked indexing (`.get(i)`): `basic_range` always
+/// derives from the very same `text.lines()` call in practice, but nothing
+/// enforces that in general, so an unchecked `all_lines[i]` is a latent
+/// panic waiting for a future caller that doesn't hold that invariant.
+pub(super) fn text_for_block(text: &str, block: &LocomotiveBlock) -> String {
+    let all_lines: Vec<&str> = text.lines().collect();
+    block
+        .basic_range
+        .clone()
+        .filter_map(|i| all_lines.get(i).copied())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The LOCOMOTIVE block containing `line_idx` (if any) plus its
+/// reconstructed source text - the combined "find by containment, then
+/// reconstruct" step every cursor-driven feature (hover, goto-definition,
+/// rename, call hierarchy, on-type formatting) needs to delegate to BASIC
+/// analysis. See `text_for_block` for a block already in hand (e.g. found
+/// by exact-start-line match, or while iterating every block).
+pub(super) fn block_and_text_at(text: &str, line_idx: usize) -> Option<(LocomotiveBlock, String)> {
+    let block = extract_locomotive_blocks(text)
+        .into_iter()
+        .find(|b| b.basic_range.contains(&line_idx))?;
+    let basic_text = text_for_block(text, &block);
+    Some((block, basic_text))
+}
+
 /// Emit semantic tokens for a LOCOMOTIVE block's BASIC content.
 /// Appends raw `(line, col, len, token_type, modifiers)` tuples into `raw`.
 pub(super) fn push_locomotive_basic_tokens(
@@ -153,5 +184,39 @@ pub(super) fn push_locomotive_basic_tokens(
         if let Some(pos) = line.to_uppercase().find("ENDLOCOMOTIVE") {
             raw.push((src_line, pos as u32, 13, TT_MACRO, 0));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn block_and_text_at_finds_the_containing_block_and_reconstructs_its_text() {
+        let text = "ORG 0x8000\nLOCOMOTIVE\n10 PRINT \"A\"\n20 PRINT \"B\"\nENDLOCOMOTIVE\n";
+        let (block, basic_text) = block_and_text_at(text, 3).expect("line 3 is inside the block");
+        assert_eq!(block.basic_range, 2..4);
+        assert_eq!(basic_text, "10 PRINT \"A\"\n20 PRINT \"B\"");
+    }
+
+    #[test]
+    fn block_and_text_at_returns_none_outside_any_block() {
+        let text = "ORG 0x8000\nLOCOMOTIVE\n10 PRINT \"A\"\nENDLOCOMOTIVE\n";
+        assert!(block_and_text_at(text, 0).is_none());
+    }
+
+    /// Regression test for the panic-risk drift fixed alongside the dedup
+    /// (`#basm-10`): a `basic_range` that outruns `text`'s actual line
+    /// count must not panic - `text_for_block` uses checked indexing.
+    #[test]
+    fn text_for_block_does_not_panic_on_an_out_of_range_basic_range() {
+        let text = "line0\nline1\n";
+        let block = LocomotiveBlock {
+            directive_line: 0,
+            hide_lines_line: None,
+            basic_range: 1..10,
+            end_line: 1
+        };
+        assert_eq!(text_for_block(text, &block), "line1");
     }
 }

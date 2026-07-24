@@ -33,7 +33,13 @@ impl BuildFileAnalyzer {
 
         let line_idx = position.line as usize;
         if let Some(line) = document.line(line_idx) {
-            let cursor = position.character as usize;
+            // `jinja_context_at`/`command_argv_at_cursor`/
+            // `filename_prefix_at_cursor` (via `value_prefix_before_cursor`)
+            // all index by `char`, while `boolean_key_value_at_cursor`
+            // indexes by byte (`line.find(':')`) - two different
+            // conversions of the same UTF-16 `position.character`.
+            let cursor = document.char_column(position);
+            let byte_cursor = document.byte_column(position);
 
             // Inside `{{ }}` / `{% %}`: offer Jinja-context completions only
             // (never the brace snippets - the braces are already there).
@@ -69,7 +75,7 @@ impl BuildFileAnalyzer {
                 completions.extend(self.get_filename_completions(document, &prefix));
                 completions.extend(self.get_variable_brace_completions(document));
             }
-            else if let Some(values) = self.boolean_key_value_at_cursor(&line, cursor) {
+            else if let Some(values) = self.boolean_key_value_at_cursor(&line, byte_cursor) {
                 // `phony:` takes a boolean
                 completions.extend(values);
             }
@@ -691,6 +697,34 @@ mod filename_prefix_at_cursor_tests {
         let line = "  dep: hello.asm ";
         let result = prefix_at(line, line.chars().count());
         assert_eq!(result, Some(String::new()));
+    }
+
+    /// Regression test for treating `position.character` (UTF-16 code
+    /// units) as a raw `char` count in `completion()`: a supplementary-
+    /// plane character (😀, 2 UTF-16 units but 1 `char`) earlier in the
+    /// value desyncs the two by one. Uncorrected, the cursor would land one
+    /// char too far into "hel", producing a spurious `"h"` prefix instead
+    /// of the correct empty one.
+    #[test]
+    fn correctly_handles_utf16_columns_with_a_supplementary_plane_char_before_the_value() {
+        let uri = Url::parse("file:///t.bnd").unwrap();
+        let line = "  dep: \u{1F600}o.asm hel";
+        let document = Document::new(uri, line.to_string(), 1);
+        // UTF-16 column 15 lands right before "hel" once correctly
+        // converted to a char count (14, via `document.char_column` - what
+        // `completion()` now does); treated as a raw char count (the old
+        // bug) it lands one char later, inside "hel".
+        let char_col = document.char_column(Position {
+            line: 0,
+            character: 15
+        });
+        let result =
+            BuildFileAnalyzer::new().filename_prefix_at_cursor(&document, 0, line, char_col);
+        assert_eq!(
+            result,
+            Some(String::new()),
+            "expected an empty prefix, not into \"hel\""
+        );
     }
 
     #[test]

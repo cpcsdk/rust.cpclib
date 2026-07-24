@@ -337,7 +337,7 @@ fn rule_dependency_tokens(
 /// `macro_definition_locations` (whole document) and
 /// `macro_definition_name_at` (cursor-position check). Same matching shape
 /// as `jinja::macro_definition_names` (`jinja.rs:160-187`), plus position.
-fn macro_definitions_in_line(line: &str) -> Vec<(String, usize, usize)> {
+pub(super) fn macro_definitions_in_line(line: &str) -> Vec<(String, usize, usize)> {
     let mut out = Vec::new();
     let mut search_from = 0usize;
     while let Some(rel) = line[search_from..].find("{%") {
@@ -790,7 +790,7 @@ impl BuildFileAnalyzer {
         position: Position
     ) -> Option<CallHierarchyItem> {
         let line = document.line(position.line as usize)?;
-        let col = position.character as usize;
+        let col = document.byte_column(position);
 
         if let Some((token, _is_target_field)) = Self::filename_under_cursor(
             document,
@@ -836,7 +836,7 @@ impl BuildFileAnalyzer {
         position: Position
     ) -> Option<CallHierarchyCandidate> {
         let line = document.line(position.line as usize)?;
-        let col = position.character as usize;
+        let col = document.byte_column(position);
 
         if let Some((token, _is_target_field)) = Self::filename_under_cursor(
             document,
@@ -1021,6 +1021,31 @@ mod tests {
             "  dep: link.sna\n",
             "  cmd: {{emu_launch_sna(\"link.sna\")}}\n"
         ))
+    }
+
+    /// Regression test for treating `position.character` (UTF-16 code
+    /// units) as a raw byte offset: a supplementary-plane character (😀, 4
+    /// UTF-8 bytes / 2 UTF-16 units) earlier on the line must not desync
+    /// the two for `prepare_call_hierarchy`'s macro-call detection.
+    #[test]
+    fn prepare_call_hierarchy_handles_utf16_columns_with_a_supplementary_plane_char_before_it() {
+        let d = doc(concat!(
+            "{% macro assemble(src) %}basm {{ src }}{% endmacro %}\n",
+            "- cmd: \u{1F600}{{ assemble(\"main.asm\") }}\n"
+        ));
+        let analyzer = BuildFileAnalyzer::new();
+        // UTF-16 column 15 on line 1 lands 3 chars into "assemble" once
+        // correctly converted to a byte offset.
+        let item = analyzer
+            .prepare_call_hierarchy(
+                &d,
+                Position {
+                    line: 1,
+                    character: 15
+                }
+            )
+            .expect("expected an item at the macro call site");
+        assert_eq!(item.name, "assemble");
     }
 
     #[test]

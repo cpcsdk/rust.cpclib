@@ -16,10 +16,9 @@ use crate::common::render::make_hover;
 impl BasicAnalyzer {
     pub fn hover(&self, document: &Document, position: Position) -> Option<Hover> {
         let source_line = document.line(position.line as usize)?;
-        let col = position.character as usize;
+        let col = document.byte_column(position);
         let line = source_line.trim_end_matches(|c| c == '\n' || c == '\r');
 
-        let text = document.text();
         let prog = self.parse_cached(document).ok();
         let tok = prog.as_ref().and_then(|p| token_at_position(p, position));
 
@@ -48,7 +47,11 @@ impl BasicAnalyzer {
             // Line number at the start of a line → show byte size of that
             // line, split into header / each token / end marker.
             LocatedTokenKind::LineNumber(n) => {
-                // Look up the compiled line from BasicProgram (binary encoding).
+                // Look up the compiled line from BasicProgram (binary
+                // encoding) - only this branch needs the whole document's
+                // text, so it's fetched here rather than unconditionally
+                // at the top of every hover request.
+                let text = document.text();
                 let mut md = format!("**Line {}**", n);
                 if let Ok(mut compiled) = BasicProgram::parse(&text) {
                     use cpclib_basic::BasicProgramLineIdx;
@@ -199,6 +202,35 @@ mod byte_hover_tests {
             .expect("expected a hover result");
         match hover.contents {
             HoverContents::Markup(MarkupContent { value, .. }) => value,
+            _ => panic!("expected markdown hover contents")
+        }
+    }
+
+    /// Regression test for treating `position.character` (UTF-16 code
+    /// units) as a raw byte offset: a supplementary-plane character (😀, 4
+    /// UTF-8 bytes / 2 UTF-16 units) earlier on the line must not desync
+    /// the two - `alpha_word_at` requires the cursor to land *exactly* on
+    /// a word byte (no absorbing/robustness for a near miss), so an
+    /// unconverted position lands mid-emoji and finds nothing.
+    #[test]
+    fn keyword_hover_handles_utf16_columns_with_a_supplementary_plane_char_before_it() {
+        let text = "10 \u{1F600}CLS\n";
+        // UTF-16 column 5 lands exactly on 'C' once correctly converted to
+        // a byte offset (7).
+        let d = doc(text);
+        let hover = BasicAnalyzer::new()
+            .hover(
+                &d,
+                Position {
+                    line: 0,
+                    character: 5
+                }
+            )
+            .expect("expected keyword hover on CLS despite the emoji earlier on the line");
+        match hover.contents {
+            HoverContents::Markup(MarkupContent { value, .. }) => {
+                assert!(value.to_uppercase().contains("CLS"), "{value}");
+            },
             _ => panic!("expected markdown hover contents")
         }
     }

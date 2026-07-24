@@ -17,7 +17,7 @@ impl BasicAnalyzer {
             .line(position.line as usize)
             .map(|line| {
                 let bytes = line.as_bytes();
-                let col = (position.character as usize).min(bytes.len());
+                let col = document.byte_column(position).min(bytes.len());
                 let mut start = col;
                 while start > 0 && bytes[start - 1].is_ascii_alphanumeric() {
                     start -= 1;
@@ -87,6 +87,32 @@ impl BasicAnalyzer {
 mod tests {
     use super::*;
     use crate::common::document::Document;
+
+    /// Regression test for treating `position.character` (UTF-16 code
+    /// units) as a raw byte offset: several supplementary-plane characters
+    /// (😀, 4 UTF-8 bytes / 2 UTF-16 units each) earlier on the line create
+    /// a large enough byte/UTF-16 deficit that the *uncorrected* value
+    /// lands mid-emoji (a continuation byte, never alphanumeric) instead of
+    /// on the lowercase text actually typed - flipping the detected case
+    /// from lowercase to the uppercase default.
+    #[test]
+    fn completion_case_detection_handles_utf16_columns_with_supplementary_plane_chars_before_it() {
+        let uri = Url::parse("file:///t.bas").unwrap();
+        let text = "\u{1F600}\u{1F600}\u{1F600}xY";
+        let document = Document::new(uri, text.to_string(), 1);
+        // UTF-16 column 8 is right after "xY" once correctly converted to
+        // a byte offset (14); the first alphabetic char found scanning
+        // backward is 'x' (lowercase).
+        let items = BasicAnalyzer::new().completion(
+            &document,
+            Position {
+                line: 0,
+                character: 8
+            }
+        );
+        let goto = items.iter().find(|i| i.label.eq_ignore_ascii_case("goto"));
+        assert_eq!(goto.map(|i| i.label.as_str()), Some("goto"));
+    }
 
     #[test]
     fn keyword_completions_carry_a_one_line_detail() {
