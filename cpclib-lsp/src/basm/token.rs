@@ -53,6 +53,22 @@ pub(super) static REGISTER_SET: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| REGISTER_LIST.iter().copied().collect());
 
 /// Returns the SemanticTokensLegend that must be advertised in `initialize()`.
+///
+/// `cpclib-vscode/package.json`'s `contributes.semanticTokenScopes` pins most
+/// of these types to the exact TextMate scope `syntaxes/z80-asm.tmLanguage.json`
+/// already uses for the equivalent construct, so a semantic-token-capable
+/// client renders identically to plain TextMate highlighting. One pair is
+/// deliberately *not* kept visually distinct: the TextMate grammar has no
+/// dedicated scope for an `EQU`/`=` constant's name — it's colored by the
+/// same generic "bare identifier at column 0" rule as an ordinary label — so
+/// `ENUM_MEMBER` (EQU/assign constants) is pinned to that same
+/// `entity.name.function.label.z80` scope rather than left to invent a new
+/// one. Giving constants their own distinct color would need a new,
+/// more-specific TextMate pattern (matching only when the identifier is
+/// followed by `EQU`/`=`) ahead of the generic label pattern in the
+/// grammar — a real, if small, grammar change, not just a scope rename;
+/// left for whenever that visual distinction is actually wanted rather than
+/// bundled into a colors-should-match fix.
 pub(crate) fn semantic_tokens_legend() -> SemanticTokensLegend {
     SemanticTokensLegend {
         token_types: vec![

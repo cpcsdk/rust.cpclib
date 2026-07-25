@@ -5,7 +5,7 @@
 //! rendering lives in the free helper functions below it.
 
 use cpclib_asm::implementation::expression::ExprEvaluationExt;
-use cpclib_tokens::ListingElement;
+use cpclib_tokens::{ListingElement, Register16};
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
@@ -140,7 +140,10 @@ impl AssemblyAnalyzer {
                         format!("**{}** — Z80 instruction", word_upper)
                     }
                     else {
-                        super::timing::format_hover(&full, &entries, &src_ops, &resolved)
+                        let known_bc = listing
+                            .as_ref()
+                            .and_then(|l| self.known_bc_for_hover(document, l, position, &entries));
+                        super::timing::format_hover(&full, &entries, &src_ops, &resolved, known_bc)
                     }
                 },
                 // No usable token (parse failed, e.g. mid-edit syntax
@@ -152,7 +155,10 @@ impl AssemblyAnalyzer {
                         format!("**{}** — Z80 instruction", word_upper)
                     }
                     else {
-                        super::timing::format_hover(&full, &entries, &[], &[])
+                        let known_bc = listing
+                            .as_ref()
+                            .and_then(|l| self.known_bc_for_hover(document, l, position, &entries));
+                        super::timing::format_hover(&full, &entries, &[], &[], known_bc)
                     }
                 }
             };
@@ -293,6 +299,29 @@ impl AssemblyAnalyzer {
 
         Some(make_hover(md))
     }
+
+    /// BC's statically-known value entering `position`'s instruction, via
+    /// `registers::register_state_at` - only worth computing (a full
+    /// backward walk) when `entries` actually includes a block-repeat
+    /// mnemonic (`timing::is_block_repeat`, e.g. LDIR/OTIR), the only place
+    /// `format_hover` uses it; `None` otherwise, including when BC's value
+    /// isn't statically known at this point.
+    fn known_bc_for_hover(
+        &self,
+        document: &Document,
+        listing: &cpclib_asm::parser::obtained::LocatedListing,
+        position: Position,
+        entries: &[&super::timing::TimingEntry]
+    ) -> Option<i32> {
+        if !entries
+            .iter()
+            .any(|e| super::timing::is_block_repeat(e.mnemonic))
+        {
+            return None;
+        }
+        let mut env = self.local_symbols_env_cached(document, listing);
+        super::registers::register_state_at(listing, &mut env, position, "BC").get16(Register16::Bc)
+    }
 }
 
 /// Hover content for a "fake instruction" (e.g. `ld hl, sp`, assembled
@@ -330,7 +359,7 @@ fn format_fake_instruction_hover(full: &str) -> Option<String> {
                     }
                 }
             }
-            super::timing::format_hover(line, &entries, &[], &[])
+            super::timing::format_hover(line, &entries, &[], &[], None)
         };
         sections.push(format!("**Step {}**\n\n{body}", i + 1));
     }
@@ -789,6 +818,24 @@ mod timing_hover_tests {
         // nothing.
         let md = hover_at_line("    org 0x4000\n@#$ garbage @#$\n    nop\n", 2, 5);
         assert!(md.contains("NOP"), "{md}");
+    }
+
+    /// End-to-end regression test for `known_bc_for_hover`: when BC's value
+    /// is statically known before an LDIR, hover must show the exact total,
+    /// not the generic "unbounded" text.
+    #[test]
+    fn hovering_ldir_with_a_known_bc_shows_the_exact_total() {
+        let md = hover_at_line("    org 0x4000\n    ld bc, 3\n    ldir\n", 2, 5);
+        assert!(md.contains("17"), "{md}"); // 2*6 + 5
+        assert!(!md.contains("unbounded"), "{md}");
+    }
+
+    /// Same instruction, but BC's value is never set - hover must say the
+    /// total is unbounded, not a wrong flat number.
+    #[test]
+    fn hovering_ldir_with_an_unknown_bc_shows_unbounded() {
+        let md = hover_at_line("    org 0x4000\n    ldir\n", 1, 5);
+        assert!(md.contains("unbounded"), "{md}");
     }
 
     /// The user only cares about NOPs, not T-states — trim the latter from

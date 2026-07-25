@@ -427,6 +427,12 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
 interface CycleCountResult {
     min_nops: number;
     max_nops: number;
+    // True when the selection contains a block-repeat instruction (LDIR/
+    // LDDR/CPIR/CPDR/INIR/INDR/OTIR/OTDR) whose iteration count (BC) isn't
+    // statically known - `max_nops` is then a meaningless partial sum, not
+    // a real upper bound (see `cpclib-lsp/src/basm/cycles.rs`'s
+    // `SelectionCycleCount::max_unbounded` doc comment).
+    max_unbounded: boolean;
     instruction_count: number;
     unrecognized_count: number;
 }
@@ -457,14 +463,18 @@ async function updateCycleCountStatusBar(editor: vscode.TextEditor | undefined):
         return;
     }
 
-    const { min_nops, max_nops, unrecognized_count } = result;
-    const range = min_nops === max_nops ? `${min_nops}` : `${min_nops}-${max_nops}`;
+    const { min_nops, max_nops, max_unbounded, unrecognized_count } = result;
+    const range = max_unbounded
+        ? `${min_nops}-?`
+        : min_nops === max_nops ? `${min_nops}` : `${min_nops}-${max_nops}`;
     const warning = unrecognized_count > 0 ? ' ⚠' : '';
     cycleCountStatusBarItem.text = `$(watch) ${range} NOPs${warning}`;
 
-    let tooltip = min_nops === max_nops
-        ? `Selection cycle count: ${min_nops} NOPs`
-        : `Selection cycle count: ${min_nops} NOPs (best case) - ${max_nops} NOPs (worst case, branch taken)`;
+    let tooltip = max_unbounded
+        ? `Selection cycle count: ${min_nops} NOPs (best case) - unbounded (a repeat-block instruction's loop count isn't statically known)`
+        : min_nops === max_nops
+            ? `Selection cycle count: ${min_nops} NOPs`
+            : `Selection cycle count: ${min_nops} NOPs (best case) - ${max_nops} NOPs (worst case, branch taken)`;
     if (unrecognized_count > 0) {
         tooltip += `\n${unrecognized_count} line(s) not counted (macro call or unrecognized instruction) - actual total may be higher.`;
     }

@@ -22,5 +22,5 @@
         "increaseIndentPattern": "(?i)^\\s*(MACRO|REPEAT|REPT|IF|IFDEF|IFNDEF|WHILE|FOR|MODULE|STRUCT)\\b",
         "decreaseIndentPattern": "(?i)^\\s*(MEND|REND|ENDM|ENDIF|WEND|ENDFOR|ENDMODULE|ENDS)\\b"
     },
-    "wordPattern": "[A-Za-z_][A-Za-z0-9_@.]*"
+    "wordPattern": "[.@]?[A-Za-z_][A-Za-z0-9_@.]*"
 }

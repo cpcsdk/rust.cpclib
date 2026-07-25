@@ -12,7 +12,7 @@
 //! instruction apart from a directive, a label/blank line, or unrecognized
 //! text (most likely a macro invocation).
 
-use super::timing::{LineSegment, classify_line, find_timings};
+use super::timing::{LineSegment, classify_line, find_timings, is_block_repeat};
 
 /// Total NOP-count summary for a selected line range.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
@@ -21,8 +21,19 @@ pub struct SelectionCycleCount {
     /// instruction's only cost if unconditional).
     pub min_nops: u32,
     /// Sum of each instruction's costlier cost (branch taken); equals
-    /// `min_nops` when nothing in range is conditional.
+    /// `min_nops` when nothing in range is conditional. Meaningless as a
+    /// real upper bound when `max_unbounded` is true (see below) - a
+    /// partial sum, not the actual worst case.
     pub max_nops: u32,
+    /// True when the range contains a block-repeat instruction (LDIR/LDDR/
+    /// CPIR/CPDR/INIR/INDR/OTIR/OTDR) whose iteration count isn't
+    /// statically known here - this text-only pass has no way to resolve
+    /// BC's value (that needs the AST-based `registers::register_state_at`,
+    /// only wired up for instruction hover so far), so the real worst case
+    /// is unbounded (BC could be anywhere up to 65536 iterations), not the
+    /// small per-iteration constant `max_nops` would otherwise sum in.
+    /// Sticky: sums with any other contributor stay unbounded too.
+    pub max_unbounded: bool,
     pub instruction_count: u32,
     /// Non-blank, non-directive content that didn't match any known Z80
     /// mnemonic (most likely a macro invocation) - the total is a lower
@@ -32,7 +43,7 @@ pub struct SelectionCycleCount {
 
 impl SelectionCycleCount {
     pub fn is_conditional(&self) -> bool {
-        self.min_nops != self.max_nops
+        self.max_unbounded || self.min_nops != self.max_nops
     }
 
     pub fn is_empty(&self) -> bool {
@@ -58,8 +69,19 @@ pub(super) fn count_cycles_in_lines(
                         continue;
                     };
                     let alt = entry.nops_alt.unwrap_or(entry.nops);
-                    summary.min_nops += entry.nops.min(alt) as u32;
-                    summary.max_nops += entry.nops.max(alt) as u32;
+                    if entry.nops_alt.is_some() && is_block_repeat(entry.mnemonic) {
+                        // BC's value isn't known in this text-only pass -
+                        // `alt` (the last-iteration cost) is a real lower
+                        // bound (BC=1 costs exactly that), but the worst
+                        // case is unbounded, not `entry.nops` (see
+                        // `SelectionCycleCount::max_unbounded`'s doc).
+                        summary.min_nops += alt as u32;
+                        summary.max_unbounded = true;
+                    }
+                    else {
+                        summary.min_nops += entry.nops.min(alt) as u32;
+                        summary.max_nops += entry.nops.max(alt) as u32;
+                    }
                     summary.instruction_count += 1;
                 },
                 LineSegment::Unrecognized => summary.unrecognized_count += 1,
@@ -74,7 +96,13 @@ pub(super) fn count_cycles_in_lines(
 /// never T-states (see the module doc comment on `timing.rs`'s own
 /// established "NOPs, not T-states" convention).
 pub(super) fn format_title(summary: &SelectionCycleCount) -> String {
-    let mut title = if summary.is_conditional() {
+    let mut title = if summary.max_unbounded {
+        format!(
+            "Cycle count: {}-? NOPs (unbounded: a repeat-block instruction's loop count isn't known)",
+            summary.min_nops
+        )
+    }
+    else if summary.is_conditional() {
         format!(
             "Cycle count: {}-{} NOPs (branch not taken/taken)",
             summary.min_nops, summary.max_nops
@@ -128,6 +156,50 @@ mod tests {
         assert_eq!(summary.instruction_count, 1);
     }
 
+    /// Regression test: a block-repeat instruction's iteration count isn't
+    /// known in this text-only pass, so the worst case must be reported as
+    /// unbounded, not the wrong flat "6" the old taken/not-taken model used
+    /// (which didn't correspond to any real BC value at all).
+    #[test]
+    fn a_block_repeat_instruction_reports_an_unbounded_max_not_a_flat_wrong_number() {
+        let l = lines("    ldir\n");
+        let summary = count_cycles_in_lines(&l, 0, 0);
+        assert!(summary.max_unbounded, "{summary:?}");
+        assert!(summary.is_conditional(), "{summary:?}");
+        // The last-iteration cost (5) is still a real, correct lower bound.
+        assert_eq!(summary.min_nops, 5);
+        assert_eq!(summary.instruction_count, 1);
+        assert_eq!(
+            format_title(&summary),
+            "Cycle count: 5-? NOPs (unbounded: a repeat-block instruction's loop count isn't known)"
+        );
+    }
+
+    #[test]
+    fn otir_otdr_now_resolve_to_real_timing_data() {
+        // Regression test for the `outir`/`outdr` -> `otir`/`otdr` spelling
+        // fix in data/timings.txt (the real Z80 mnemonic drops the "u" for
+        // the repeat forms, unlike `outi`/`outd`) - typing the mnemonic
+        // anyone actually writes used to find zero timing data.
+        let l = lines("    otir\n    otdr\n");
+        let summary = count_cycles_in_lines(&l, 0, 1);
+        assert_eq!(summary.instruction_count, 2, "{summary:?}");
+        assert_eq!(summary.unrecognized_count, 0, "{summary:?}");
+        assert!(summary.max_unbounded, "{summary:?}");
+    }
+
+    /// A block-repeat instruction mixed with an ordinary conditional stays
+    /// unbounded overall (sticky), and the ordinary instruction's own
+    /// min/max still contribute correctly alongside it.
+    #[test]
+    fn max_unbounded_is_sticky_across_the_whole_selection() {
+        let l = lines("    ldir\n    djnz $\n");
+        let summary = count_cycles_in_lines(&l, 0, 1);
+        assert!(summary.max_unbounded, "{summary:?}");
+        assert_eq!(summary.min_nops, 5 + 3, "{summary:?}");
+        assert_eq!(summary.instruction_count, 2);
+    }
+
     #[test]
     fn a_directive_line_contributes_zero_and_is_not_flagged_unrecognized() {
         let l = lines("    db 1,2,3\n    org 0x4000\n");
@@ -178,6 +250,7 @@ mod tests {
         let summary = SelectionCycleCount {
             min_nops: 8,
             max_nops: 12,
+            max_unbounded: false,
             instruction_count: 4,
             unrecognized_count: 0
         };
@@ -192,6 +265,7 @@ mod tests {
         let summary = SelectionCycleCount {
             min_nops: 4,
             max_nops: 4,
+            max_unbounded: false,
             instruction_count: 2,
             unrecognized_count: 1
         };

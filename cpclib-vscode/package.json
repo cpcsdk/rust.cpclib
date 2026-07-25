@@ -50,6 +50,22 @@
         }
       }
     ],
+    "semanticTokenScopes": [
+      {
+        "language": "basm",
+        "scopes": {
+          "keyword": ["keyword.control.instruction.z80"],
+          "macro": ["keyword.other.directive.z80"],
+          "variable": ["variable.language.register.z80"],
+          "number": ["constant.numeric.z80"],
+          "string": ["string.quoted.z80"],
+          "comment": ["comment.z80"],
+          "operator": ["keyword.operator.z80"],
+          "type": ["entity.name.function.label.z80"],
+          "enumMember": ["entity.name.function.label.z80"]
+        }
+      }
+    ],
     "commands": [
       {
         "command": "cpclib.runRule",

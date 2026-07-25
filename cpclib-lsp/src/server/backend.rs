@@ -65,7 +65,8 @@ impl CpcLspBackend {
             &self.asm_analyzer,
             &self.build_analyzer,
             &self.basic_analyzer,
-            document
+            document,
+            &self.workspace_roots()
         );
         self.publish_diagnostics(document.uri.clone(), diagnostics)
             .await;
@@ -200,16 +201,14 @@ impl CpcLspBackend {
         Some(Document::new(uri.clone(), text, disk_file_version(&path)))
     }
 
-    /// Shared by both cross-file fallbacks: look up `word_upper` in the file
+    /// Shared by both cross-file fallbacks: look up `word` (case-sensitively
+    /// - basm labels are case-sensitive by default, see
+    /// `AssemblyAnalyzer::find_definition_in`'s own doc comment) in the file
     /// at `path`, using the already-open in-memory document if there is one.
-    fn find_definition_at_path(
-        &self,
-        path: &std::path::Path,
-        word_upper: &str
-    ) -> Option<Location> {
+    fn find_definition_at_path(&self, path: &std::path::Path, word: &str) -> Option<Location> {
         let target_uri = Url::from_file_path(path).ok()?;
         let doc = self.load_document(&target_uri)?;
-        self.asm_analyzer.find_definition_in(&doc, word_upper)
+        self.asm_analyzer.find_definition_in(&doc, word, true)
     }
 
     /// Workspace-wide rename of a `Global` basm label: unlike
@@ -470,21 +469,58 @@ impl CpcLspBackend {
     }
 }
 
-/// Dispatches `document` to whichever analyzer its `doc_type` owns. A free
+/// Dispatches `document` to whichever analyzer its `doc_type` owns, then
+/// relativizes every diagnostic's message against `workspace_roots`. A free
 /// function (not a `&self` method) so it's callable from `did_change`'s
 /// debounced `tokio::spawn` task, which only holds the individually
-/// `Arc`-cloned analyzers, not a full `&CpcLspBackend`.
+/// `Arc`-cloned analyzers (and an owned `workspace_roots` snapshot taken
+/// before spawning), not a full `&CpcLspBackend`.
 fn compute_diagnostics(
     asm_analyzer: &AssemblyAnalyzer,
     build_analyzer: &BuildFileAnalyzer,
     basic_analyzer: &BasicAnalyzer,
-    document: &Document
+    document: &Document,
+    workspace_roots: &[PathBuf]
 ) -> Vec<Diagnostic> {
-    match document.doc_type {
+    let mut diagnostics = match document.doc_type {
         DocumentType::Assembly => asm_analyzer.analyze(document),
         DocumentType::BuildFile => build_analyzer.analyze(document),
         DocumentType::Basic => basic_analyzer.analyze(document),
         DocumentType::Unknown => Vec::new()
+    };
+    relativize_diagnostic_messages(&mut diagnostics, workspace_roots);
+    diagnostics
+}
+
+/// Rewrites every absolute path under one of `workspace_roots` that appears
+/// in `diagnostics`' messages to be relative to that root - e.g.
+/// `/home/x/project/src/sna.asm:24:5` becomes `src/sna.asm:24:5` when
+/// `/home/x/project` is a configured root. `AssemblerError`'s `Display`
+/// (rendered via `codespan-reporting`, see `collect_asm_diagnostics`) embeds
+/// the parser's `current_filename` - necessarily absolute, since that's what
+/// `parse_source` hands it, built from the document's real on-disk path -
+/// which is noisy in a workspace (and can be genuinely long for a
+/// deeply-nested project). Only the message *text* is touched here; a
+/// `Diagnostic`'s own `range` and the URI it's published under (what the
+/// editor actually uses to place the squiggle and jump to it) are untouched
+/// - this only affects what a human reads in the Problems panel/hover
+/// tooltip. A no-op with no configured root, or when a message contains no
+/// root's path at all (e.g. an error inside an `inner://` firmware asset).
+fn relativize_diagnostic_messages(diagnostics: &mut [Diagnostic], workspace_roots: &[PathBuf]) {
+    let prefixes: Vec<String> = workspace_roots
+        .iter()
+        .filter_map(|r| r.to_str())
+        .map(|r| format!("{r}{}", std::path::MAIN_SEPARATOR))
+        .collect();
+    if prefixes.is_empty() {
+        return;
+    }
+    for diag in diagnostics.iter_mut() {
+        for prefix in &prefixes {
+            if diag.message.contains(prefix.as_str()) {
+                diag.message = diag.message.replace(prefix.as_str(), "");
+            }
+        }
     }
 }
 
@@ -727,6 +763,7 @@ impl LanguageServer for CpcLspBackend {
         let asm_analyzer = Arc::clone(&self.asm_analyzer);
         let build_analyzer = Arc::clone(&self.build_analyzer);
         let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let workspace_roots = self.workspace_roots();
 
         tokio::spawn(async move {
             tokio::time::sleep(DID_CHANGE_DEBOUNCE).await;
@@ -747,8 +784,13 @@ impl LanguageServer for CpcLspBackend {
                 return;
             }
 
-            let diagnostics =
-                compute_diagnostics(&asm_analyzer, &build_analyzer, &basic_analyzer, &document);
+            let diagnostics = compute_diagnostics(
+                &asm_analyzer,
+                &build_analyzer,
+                &basic_analyzer,
+                &document,
+                &workspace_roots
+            );
             client.publish_diagnostics(uri, diagnostics, None).await;
         });
     }
@@ -857,10 +899,13 @@ impl LanguageServer for CpcLspBackend {
         }
 
         // For Assembly: if the symbol was not defined locally, search all other
-        // open Assembly documents (cross-file navigation).
+        // open Assembly documents (cross-file navigation). Kept as-typed
+        // (not uppercased) - basm labels are case-sensitive by default, and
+        // every cross-file lookup below now compares case-sensitively too
+        // (see `AssemblyAnalyzer::find_definition_in`'s own doc comment).
         if doc_type == DocumentType::Assembly {
             let word = match self.asm_analyzer.word_at_position(entry.value(), position) {
-                Some(w) => w.to_uppercase(),
+                Some(w) => w,
                 None => return Ok(None)
             };
             let document_text = entry.value().text();
@@ -873,7 +918,10 @@ impl LanguageServer for CpcLspBackend {
                 if other.value().doc_type != DocumentType::Assembly {
                     continue;
                 }
-                if let Some(loc) = self.asm_analyzer.find_definition_in(other.value(), &word) {
+                if let Some(loc) = self
+                    .asm_analyzer
+                    .find_definition_in(other.value(), &word, true)
+                {
                     return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
                 }
             }
@@ -1889,6 +1937,68 @@ mod workspace_roots_tests {
 }
 
 #[cfg(test)]
+mod relativize_diagnostic_messages_tests {
+    use super::*;
+
+    fn diag(message: &str) -> Diagnostic {
+        Diagnostic {
+            message: message.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn strips_a_configured_root_s_absolute_prefix() {
+        let mut diagnostics = vec![diag(
+            "error: Syntax error\n  --> /home/x/project/src/sna.asm:24:5"
+        )];
+        relativize_diagnostic_messages(&mut diagnostics, &[PathBuf::from("/home/x/project")]);
+        assert_eq!(
+            diagnostics[0].message,
+            "error: Syntax error\n  --> src/sna.asm:24:5"
+        );
+    }
+
+    #[test]
+    fn leaves_the_message_untouched_when_no_root_is_configured() {
+        let mut diagnostics = vec![diag("--> /home/x/project/src/sna.asm:24:5")];
+        relativize_diagnostic_messages(&mut diagnostics, &[]);
+        assert_eq!(
+            diagnostics[0].message,
+            "--> /home/x/project/src/sna.asm:24:5"
+        );
+    }
+
+    #[test]
+    fn leaves_the_message_untouched_when_it_matches_no_configured_root() {
+        let mut diagnostics = vec![diag("--> /home/x/project/src/sna.asm:24:5")];
+        relativize_diagnostic_messages(&mut diagnostics, &[PathBuf::from("/some/other/root")]);
+        assert_eq!(
+            diagnostics[0].message,
+            "--> /home/x/project/src/sna.asm:24:5"
+        );
+    }
+
+    #[test]
+    fn strips_every_occurrence_across_multiple_configured_roots() {
+        let mut diagnostics = vec![diag(
+            "In included file: /home/x/lib/util.asm:3:1\n  --> /home/x/project/src/sna.asm:24:5"
+        )];
+        relativize_diagnostic_messages(
+            &mut diagnostics,
+            &[
+                PathBuf::from("/home/x/project"),
+                PathBuf::from("/home/x/lib")
+            ]
+        );
+        assert_eq!(
+            diagnostics[0].message,
+            "In included file: util.asm:3:1\n  --> src/sna.asm:24:5"
+        );
+    }
+}
+
+#[cfg(test)]
 mod outgoing_calls_tests {
     use tower_lsp::LspService;
 
@@ -2163,8 +2273,10 @@ mod disk_file_version_tests {
 
         let from_uri = Url::from_file_path(tmp.path().join("from.asm")).unwrap();
 
+        // Queried in the same case as declared - goto-definition's
+        // cross-file lookup is case-sensitive by default (basm labels are).
         let found_foo = backend
-            .find_definition_via_workspace_scan(&from_uri, "FOO")
+            .find_definition_via_workspace_scan(&from_uri, "foo")
             .await;
         assert!(found_foo.is_some(), "{found_foo:?}");
 
@@ -2176,7 +2288,7 @@ mod disk_file_version_tests {
             .unwrap();
 
         let found_bar = backend
-            .find_definition_via_workspace_scan(&from_uri, "BAR")
+            .find_definition_via_workspace_scan(&from_uri, "bar")
             .await;
         assert!(found_bar.is_some(), "{found_bar:?}");
     }

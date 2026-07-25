@@ -45,6 +45,11 @@ impl AssemblyAnalyzer {
         let mut raw: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
         let text = document.text();
 
+        // Carries an unterminated `/* ...` across the per-line loop below,
+        // so a block comment spanning several physical lines greys out
+        // every line it covers, not just the one it opens on.
+        let mut in_block_comment = false;
+
         // Detect LOCOMOTIVE blocks — their lines receive BASIC tokens, not ASM tokens.
         let loco_blocks = extract_locomotive_blocks(&text);
         let mut loco_lines: HashSet<usize> = HashSet::new();
@@ -68,6 +73,23 @@ impl AssemblyAnalyzer {
             let bytes = line.as_bytes();
             let mut col: usize = 0;
 
+            if in_block_comment {
+                match line.find("*/") {
+                    Some(rel_end) => {
+                        col = rel_end + 2;
+                        raw.push((line_u, 0, col as u32, TT_COMMENT, 0));
+                        in_block_comment = false;
+                        // Falls through — code can follow `*/` on this line.
+                    },
+                    None => {
+                        if !bytes.is_empty() {
+                            raw.push((line_u, 0, bytes.len() as u32, TT_COMMENT, 0));
+                        }
+                        continue 'line;
+                    }
+                }
+            }
+
             while col < bytes.len() {
                 let c = bytes[col];
 
@@ -87,6 +109,43 @@ impl AssemblyAnalyzer {
                         0
                     ));
                     continue 'line;
+                }
+
+                // Comment: `//` through end of line
+                if c == b'/' && col + 1 < bytes.len() && bytes[col + 1] == b'/' {
+                    raw.push((
+                        line_u,
+                        col as u32,
+                        (bytes.len() - col) as u32,
+                        TT_COMMENT,
+                        0
+                    ));
+                    continue 'line;
+                }
+
+                // Comment: `/* ... */`, possibly spanning several physical
+                // lines (an unterminated one is picked back up at the top
+                // of the next iterations via `in_block_comment`).
+                if c == b'/' && col + 1 < bytes.len() && bytes[col + 1] == b'*' {
+                    let start = col;
+                    match line[col..].find("*/") {
+                        Some(rel_end) => {
+                            col += rel_end + 2;
+                            raw.push((line_u, start as u32, (col - start) as u32, TT_COMMENT, 0));
+                        },
+                        None => {
+                            raw.push((
+                                line_u,
+                                start as u32,
+                                (bytes.len() - start) as u32,
+                                TT_COMMENT,
+                                0
+                            ));
+                            in_block_comment = true;
+                            continue 'line;
+                        }
+                    }
+                    continue;
                 }
 
                 // Double-quoted string
@@ -138,6 +197,26 @@ impl AssemblyAnalyzer {
 
                 // Hex literal: $hexdigits
                 if c == b'$' && col + 1 < bytes.len() && bytes[col + 1].is_ascii_hexdigit() {
+                    let start = col;
+                    col += 1;
+                    while col < bytes.len() && bytes[col].is_ascii_hexdigit() {
+                        col += 1;
+                    }
+                    raw.push((line_u, start as u32, (col - start) as u32, TT_NUMBER, 0));
+                    continue;
+                }
+
+                // Hex literal: #hexdigits or &hexdigits — the same
+                // operator-vs-literal ambiguity as `$` above (and resolved
+                // the same way, by requiring a hex digit immediately after);
+                // `cpclib_common::parse::scan_numeric_literals` (the real
+                // lexer, used by `color.rs`'s own numeral scan) already
+                // treats both as hex prefixes, e.g. every firmware `equ`
+                // constant's `#BBC0`-style value.
+                if (c == b'#' || c == b'&')
+                    && col + 1 < bytes.len()
+                    && bytes[col + 1].is_ascii_hexdigit()
+                {
                     let start = col;
                     col += 1;
                     while col < bytes.len() && bytes[col].is_ascii_hexdigit() {
@@ -345,6 +424,161 @@ mod tests {
 
     fn doc(text: &str) -> Document {
         Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    /// Decode delta-encoded `SemanticToken`s back to absolute
+    /// `(line, col, length, token_type)`, for assertions that don't want to
+    /// reason about deltas directly.
+    fn decode(tokens: &[SemanticToken]) -> Vec<(u32, u32, u32, u32)> {
+        let mut line = 0u32;
+        let mut col = 0u32;
+        let mut out = Vec::with_capacity(tokens.len());
+        for t in tokens {
+            if t.delta_line == 0 {
+                col += t.delta_start;
+            }
+            else {
+                line += t.delta_line;
+                col = t.delta_start;
+            }
+            out.push((line, col, t.length, t.token_type));
+        }
+        out
+    }
+
+    #[test]
+    fn slash_slash_comment_is_recognized() {
+        let text = "ld a, 1 // BUFFER\n";
+        let d = doc(text);
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        let comment_start = text.find("//").unwrap() as u32;
+        assert!(
+            decoded.contains(&(0, comment_start, "// BUFFER".len() as u32, TT_COMMENT)),
+            "{decoded:?}"
+        );
+        // "BUFFER" inside the comment must not also show up as its own
+        // (mis-highlighted) label-reference token.
+        assert!(
+            !decoded
+                .iter()
+                .any(|&(l, c, _, ty)| l == 0 && c > comment_start && ty != TT_COMMENT),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn inline_block_comment_closing_on_the_same_line_is_recognized() {
+        let text = "ld a, /* x */ 1\n";
+        let d = doc(text);
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        let comment_start = text.find("/*").unwrap() as u32;
+        assert!(
+            decoded.contains(&(0, comment_start, "/* x */".len() as u32, TT_COMMENT)),
+            "{decoded:?}"
+        );
+        // Code after the closed block comment, on the same line, is still
+        // tokenized normally.
+        let number_start = text.find('1').unwrap() as u32;
+        assert!(
+            decoded.contains(&(0, number_start, 1, TT_NUMBER)),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn unterminated_block_comment_spans_multiple_lines() {
+        // "start"/"done" (not "a"/"b"!) - single-letter label names would
+        // collide with the Z80 A/B registers and be tokenized as TT_VARIABLE
+        // instead, regardless of the `:` - irrelevant to what this test is
+        // actually checking.
+        let line0 = "start: /* note";
+        let line1 = "still comment BUFFER";
+        let line2 = "end */ done:";
+        let text = format!("{line0}\n{line1}\n{line2}\n");
+        let d = doc(&text);
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+
+        // Line 0: the label + colon before the comment opens are still real
+        // tokens, then the comment covers the rest of the line.
+        assert!(
+            decoded.contains(&(0, 0, "start".len() as u32, TT_LABEL)),
+            "{decoded:?}"
+        );
+        let comment_start0 = line0.find("/*").unwrap() as u32;
+        assert!(
+            decoded.contains(&(
+                0,
+                comment_start0,
+                line0.len() as u32 - comment_start0,
+                TT_COMMENT
+            )),
+            "{decoded:?}"
+        );
+
+        // Line 1 is entirely inside the still-open comment - nothing on it
+        // (in particular "BUFFER") is tokenized as anything else.
+        assert!(
+            decoded
+                .iter()
+                .all(|&(l, _, _, ty)| l != 1 || ty == TT_COMMENT),
+            "{decoded:?}"
+        );
+        assert!(
+            decoded.contains(&(1, 0, line1.len() as u32, TT_COMMENT)),
+            "{decoded:?}"
+        );
+
+        // Line 2: the comment closes mid-line ("end " is still comment
+        // content), and the label after `*/` is tokenized normally again.
+        let close_end = line2.find("*/").unwrap() as u32 + 2;
+        assert!(
+            decoded.contains(&(2, 0, close_end, TT_COMMENT)),
+            "{decoded:?}"
+        );
+        let done_col = line2.find("done").unwrap() as u32;
+        assert!(
+            decoded.contains(&(2, done_col, "done".len() as u32, TT_LABEL)),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn hash_and_ampersand_prefixed_hex_literals_are_recognized_as_numbers() {
+        // Every firmware `equ` constant is written this way, e.g.
+        // `GRA_MOVE_ABSOLUTE equ #BBC0` — before this fix, `#`/`&` only ever
+        // matched the plain-operator fallback, and the hex digits after them
+        // were left to be misread as a bare label reference.
+        let text = "GRA_MOVE_ABSOLUTE equ #BBC0\nGRA_MOVE_ABSOLUTE2 equ &BBC0\n";
+        let d = doc(text);
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+
+        let hash_col = text.find("#BBC0").unwrap() as u32;
+        assert!(
+            decoded.contains(&(0, hash_col, "#BBC0".len() as u32, TT_NUMBER)),
+            "{decoded:?}"
+        );
+        assert!(
+            !decoded
+                .iter()
+                .any(|&(l, c, _, ty)| l == 0 && c == hash_col && ty == TT_OPERATOR)
+        );
+
+        let amp_col = "GRA_MOVE_ABSOLUTE2 equ &BBC0".find('&').unwrap() as u32;
+        assert!(
+            decoded.contains(&(1, amp_col, "&BBC0".len() as u32, TT_NUMBER)),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn a_bare_hash_or_ampersand_not_followed_by_a_hex_digit_is_still_an_operator() {
+        let d = doc("ld a, hl & 5\n");
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        let amp_col = "ld a, hl & 5".find('&').unwrap() as u32;
+        assert!(
+            decoded.contains(&(0, amp_col, 1, TT_OPERATOR)),
+            "{decoded:?}"
+        );
     }
 
     #[test]

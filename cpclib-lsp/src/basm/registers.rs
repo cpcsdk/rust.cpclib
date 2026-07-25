@@ -449,6 +449,20 @@ mod tests {
         assert_eq!(s.get8(Register8::A), Some(5));
     }
 
+    /// Regression test for the reported bug, end to end through
+    /// `register_state_at` (not just `cpclib_z80emu::track::apply` in
+    /// isolation, see that crate's own `implicit_accumulator_shorthand_is_not_a_no_op`
+    /// test): `add d` (implicit-accumulator shorthand) must invalidate A,
+    /// so hovering D as the destination of the following `ld d, a` must not
+    /// still report the pre-`add` value of A.
+    #[test]
+    fn add_shorthand_invalidates_a_before_a_following_ld_destination() {
+        let text = "    ld a, 0x8\n    add d\n    ld d, a\n";
+        let col_d = text.lines().nth(2).unwrap().find('d').unwrap() as u32;
+        let s = state_at_hovering(text, 2, col_d, "D");
+        assert_eq!(s.get8(Register8::D), None);
+    }
+
     #[test]
     fn hovering_the_ld_destination_of_an_unresolvable_source_still_reports_unknown() {
         // The destination-after exception must not silently guess when the

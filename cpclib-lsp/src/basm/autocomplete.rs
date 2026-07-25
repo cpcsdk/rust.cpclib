@@ -615,6 +615,23 @@ fn apply_case(s: &str, pref: CasePref) -> String {
     }
 }
 
+/// Does the identifier-like run ending at `col` (the partial word currently
+/// being completed) itself start with `.`? True only for a bare local-label
+/// reference typed directly (`.foo`) - an already-qualified reference being
+/// typed out (`owner.foo`) scans back past the dot to `owner`'s own first
+/// character (identifier scanning doesn't stop at `.`, matching how
+/// `collect_symbols` qualifies locals as one unbroken `"{owner}{.foo}"`
+/// run), so it's correctly *not* flagged as dotted here.
+fn word_before_cursor_is_dotted(line: &str, col: usize) -> bool {
+    let bytes = line.as_bytes();
+    let col = col.min(bytes.len());
+    let mut start = col;
+    while start > 0 && is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    start < col && bytes[start] == b'.'
+}
+
 // ─── Instruction-form matching (data-driven operand filtering) ───────────────
 
 /// Does the already-typed operand `typed` (trimmed) match the form pattern
@@ -910,6 +927,13 @@ impl AssemblyAnalyzer {
         let col = position.character as usize;
         let ctx = analyze_context(&line, col);
         let case = case_pref_at(&line, col);
+        // Whether the identifier currently being typed itself starts with
+        // `.` — basm's own bare-local-label marker, resolvable only within
+        // the enclosing global label's scope. Anything else (a plain global
+        // name, or an already-qualified `owner.local` being typed out) is a
+        // fully-qualified-or-global reference, valid from anywhere, so only
+        // *this* case should ever restrict candidates to the current scope.
+        let completing_a_dotted_reference = word_before_cursor_is_dotted(&line, col);
 
         // Symbols (labels, EQU constants, macros) from this document, every
         // other open assembly document, and every file this document
@@ -923,7 +947,16 @@ impl AssemblyAnalyzer {
         // `collect_symbols_cached` (rather than a fresh walk every keystroke)
         // for every document actually visited.
         let collect_doc_symbols = || -> Vec<(String, String)> {
-            let mut doc_symbols: Vec<(String, String)> = self.collect_symbols_cached(document);
+            let mut doc_symbols: Vec<(String, String)> = if completing_a_dotted_reference {
+                self.scope_filtered_symbols(document, position.line)
+            }
+            else {
+                // Typing a plain/qualified reference (e.g. `gl` towards
+                // `global1.g1l1`) - every local label, from every scope, is
+                // fair game (each only ever offered in its qualified form
+                // here), same as any other symbol kind.
+                self.collect_symbols_cached(document)
+            };
             for other in other_documents {
                 let fname = other
                     .uri
@@ -1134,6 +1167,67 @@ impl AssemblyAnalyzer {
             (document.version, Arc::new(syms.clone()))
         );
         syms
+    }
+
+    /// `collect_symbols_cached(document)`, with local-label entries
+    /// (qualified as `"{owner}{.name}"` by `collect_symbols`) restricted to
+    /// the global label whose scope contains `line` — matching basm's own
+    /// resolution rule for a bare `.name` reference. Each kept local label
+    /// is offered in both its bare (`.name`) and qualified (`owner.name`)
+    /// form; every other entry (global labels, `EQU`/assign constants,
+    /// macros, modules, sections) passes through unchanged, since those
+    /// aren't scoped to a global label at all.
+    ///
+    /// Known gap, deliberately left as-is rather than "fixed" either way:
+    /// `global_label_scopes` (like rename's own `label_scope_at_line`, which
+    /// it backs) only treats non-dotted *labels* as scope boundaries, not
+    /// MACRO/MODULE definitions — while `collect_symbols` qualifies locals
+    /// nested under a MACRO/MODULE using *that* definition's name instead of
+    /// the preceding global label's. Such an owner never appears in
+    /// `scopes`, so those entries don't match any recognized owner below and
+    /// fall through unfiltered (today's un-scoped behavior) rather than
+    /// being dropped.
+    ///
+    /// Only scope-filters when `document` currently parses cleanly: unlike
+    /// `parse_cache`'s other consumers, `LocatedListing::deref` (which
+    /// `.iter()` needs) panics on the `Err` case for this parse path — it
+    /// only ever wraps `ParseResult::FailureComplete`, never a partial
+    /// listing — so, exactly like `collect_symbols`'s own text-scan
+    /// fallback, a parse error here means "can't determine scope," not "no
+    /// scope": every entry passes through unfiltered rather than risking a
+    /// panic or hiding valid completions while the cursor's own line is
+    /// still mid-edit.
+    fn scope_filtered_symbols(&self, document: &Document, line: u32) -> Vec<(String, String)> {
+        let all = self.collect_symbols_cached(document);
+
+        let Ok(listing) = self.parse_document(document)
+        else {
+            return all;
+        };
+        let scopes = super::token::global_label_scopes(listing.iter());
+        let current_owner = super::token::scope_containing(&scopes, line).map(|(o, _)| o);
+
+        let mut out = Vec::with_capacity(all.len());
+        for (name, detail) in all {
+            let Some((prefix, _)) = name.split_once('.')
+            else {
+                out.push((name, detail));
+                continue;
+            };
+            if !scopes.iter().any(|(o, _)| o == prefix) {
+                // Not a recognized local-label qualification — see the "known
+                // gap" note above.
+                out.push((name, detail));
+                continue;
+            }
+            if current_owner.as_deref() != Some(prefix) {
+                continue; // a different global label's local — out of scope
+            }
+            let bare = name[prefix.len()..].to_string(); // leading `.` included
+            out.push((bare, detail.clone()));
+            out.push((name, detail));
+        }
+        out
     }
 
     /// Collect `(source_name, symbol, detail)` for every file this document
@@ -2003,6 +2097,118 @@ mod directive_detail_and_symbol_parity_tests {
             items.iter().any(|i| i.label == "global_label.local"),
             "{items:?}"
         );
+    }
+
+    #[test]
+    fn local_labels_offer_bare_and_qualified_forms_within_their_scope_only() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        // Cursor sits right after the `.` of a real, already-parseable
+        // instruction operand (`jp .g1l1`, mid-token) - unlike a
+        // syntactically-invalid lone `.` on its own line, this keeps the
+        // whole document parsing cleanly, so real scope computation runs
+        // instead of falling back to the unqualified text-scan path.
+        let line3 = "    jp .g1l1";
+        let text = format!("g1\n.g1l1\n.g1l2\n{line3}\ng2\n.g2l1\n.g2l2\n");
+        let doc = Document::new(uri, text, 1);
+        let col = line3.find('.').unwrap() as u32 + 1;
+        let items = AssemblyAnalyzer::new().completion_with_documents(
+            &doc,
+            Position {
+                line: 3,
+                character: col
+            },
+            &[]
+        );
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+        for expected in [".g1l1", ".g1l2", "g1.g1l1", "g1.g1l2", "g1", "g2"] {
+            assert!(
+                labels.contains(&expected),
+                "expected {expected:?} in {labels:?}"
+            );
+        }
+        for unexpected in [".g2l1", ".g2l2", "g2.g2l1", "g2.g2l2"] {
+            assert!(
+                !labels.contains(&unexpected),
+                "did not expect {unexpected:?} in {labels:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn bare_word_completion_offers_qualified_locals_from_every_scope_not_just_the_current_one() {
+        // Regression test for a user report: completing a *bare* (non-dotted)
+        // reference must not be scope-filtered at all - `.g1l1`/`.g1l2`
+        // belong to `global1`, but the cursor sits inside `global2`'s scope
+        // on the last line, and no `.` has been typed. Every local label,
+        // from every scope, must still be offered (in its qualified form).
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "global1\n.g1l1\n.g1l2\nglobal2\n.g2l1\n.g2l2\n\nld hl, gl\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let last_line_text = "ld hl, gl";
+        let items = AssemblyAnalyzer::new().completion_with_documents(
+            &doc,
+            Position {
+                line: 7,
+                character: last_line_text.len() as u32
+            },
+            &[]
+        );
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+        for expected in [
+            "global1.g1l1",
+            "global1.g1l2",
+            "global2.g2l1",
+            "global2.g2l2"
+        ] {
+            assert!(
+                labels.contains(&expected),
+                "expected {expected:?} in {labels:?}"
+            );
+        }
+        // Bare (unqualified) local forms are never offered outside a dotted
+        // context - they'd never even match the (non-dotted) text typed.
+        for unexpected in [".g1l1", ".g1l2", ".g2l1", ".g2l2"] {
+            assert!(
+                !labels.contains(&unexpected),
+                "did not expect {unexpected:?} in {labels:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn dotted_completion_after_a_comma_scopes_to_the_enclosing_global_label() {
+        // Regression test matching a user report: `ld hl, .g` (cursor right
+        // after the `.`) inside `global2`'s scope must offer `.g2l1`/
+        // `.g2l2` (bare, in-scope) and `global2.g2l1`/`global2.g2l2`
+        // (qualified), but never `global1`'s locals.
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "global1\n.g1l1\n.g1l2\nglobal2\n.g2l1\n.g2l2\n\nld hl, .g\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let last_line_text = "ld hl, .g";
+        let items = AssemblyAnalyzer::new().completion_with_documents(
+            &doc,
+            Position {
+                line: 7,
+                character: last_line_text.len() as u32
+            },
+            &[]
+        );
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+        for expected in [".g2l1", ".g2l2", "global2.g2l1", "global2.g2l2"] {
+            assert!(
+                labels.contains(&expected),
+                "expected {expected:?} in {labels:?}"
+            );
+        }
+        for unexpected in [".g1l1", ".g1l2", "global1.g1l1", "global1.g1l2"] {
+            assert!(
+                !labels.contains(&unexpected),
+                "did not expect {unexpected:?} in {labels:?}"
+            );
+        }
     }
 }
 

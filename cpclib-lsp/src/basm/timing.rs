@@ -15,6 +15,38 @@ static BY_MNEMONIC: LazyLock<HashMap<&'static str, Vec<&'static TimingEntry>>> =
         m
     });
 
+/// The 8 Z80 "block repeat" instructions: their `(nops, nops_alt)` pair
+/// (e.g. LDIR's `6 / 5 for last iteration`) does *not* mean "branch taken/
+/// not taken" like every other dual-value entry in the table (`djnz`/
+/// `jr cc`/`call cc`/`ret cc`) - it means "6 NOPs per iteration except the
+/// last, which costs 5", for a loop that repeats 1-65536 times (BC=0 wraps
+/// to 65536). The generic taken/not-taken framing is wrong for these: the
+/// real worst case isn't a fixed small number, it's unbounded unless BC's
+/// value is statically known. See `is_block_repeat`/`block_repeat_total_nops`.
+const BLOCK_REPEAT_MNEMONICS: &[&str] = &[
+    "LDIR", "LDDR", "CPIR", "CPDR", "INIR", "INDR", "OTIR", "OTDR"
+];
+
+pub(super) fn is_block_repeat(mnemonic: &str) -> bool {
+    BLOCK_REPEAT_MNEMONICS.contains(&mnemonic)
+}
+
+/// How many times a block-repeat instruction actually iterates for a given
+/// `bc` value entering it. `bc == 0` is the real Z80 wraparound case (the
+/// loop runs 65536 times, not zero).
+fn block_repeat_iterations(bc: i32) -> u32 {
+    let bc = (bc as u32) & 0xFFFF;
+    if bc == 0 { 65536 } else { bc }
+}
+
+/// The exact NOP cost of a block-repeat instruction given a statically-known
+/// `bc` value entering it - `per_iteration` NOPs for each iteration but the
+/// last, which costs `last_iteration`.
+fn block_repeat_total_nops(bc: i32, per_iteration: u8, last_iteration: u8) -> u32 {
+    let iterations = block_repeat_iterations(bc);
+    (iterations - 1) * per_iteration as u32 + last_iteration as u32
+}
+
 /// The four entries where `i`/`r` name the Z80's special interrupt-vector
 /// and refresh registers *literally* (`LD I,A`/`LD R,A`/`LD A,I`/`LD A,R`),
 /// not the generic 8-bit register-class placeholder that a bare `r` means
@@ -299,11 +331,16 @@ fn leading_word(seg: &str) -> Option<(usize, &str)> {
 /// no real parsed instruction to draw them from (e.g. the text-only
 /// fallback path when the document doesn't currently parse), which just
 /// shows each entry's pseudocode with its symbolic placeholders untouched.
+/// `known_bc` is BC's statically-known value entering this instruction (via
+/// `registers::register_state_at`), used only for the 8 block-repeat
+/// mnemonics (`BLOCK_REPEAT_MNEMONICS`) to show an exact total instead of
+/// "unbounded" - pass `None` when it isn't known or wasn't looked up.
 pub fn format_hover(
     instruction_text: &str,
     entries: &[&TimingEntry],
     src_ops: &[String],
-    resolved: &[Option<i32>]
+    resolved: &[Option<i32>],
+    known_bc: Option<i32>
 ) -> String {
     let instr = instruction_text.trim();
     let mut md = format!("**{}**", instr);
@@ -333,6 +370,29 @@ pub fn format_hover(
                     entry.nops,
                     if entry.nops == 1 { "" } else { "s" }
                 ))
+            },
+            Some(alt) if is_block_repeat(entry.mnemonic) => {
+                match known_bc {
+                    Some(bc) => {
+                        let iterations = block_repeat_iterations(bc);
+                        let total = block_repeat_total_nops(bc, entry.nops, alt);
+                        md.push_str(&format!(
+                            "**{total}** NOPs total (BC = {bc}, {iterations} iteration{}: \
+                             {}× **{}**, then **{alt}** for the last iteration)\n\n",
+                            if iterations == 1 { "" } else { "s" },
+                            iterations - 1,
+                            entry.nops
+                        ));
+                    },
+                    None => {
+                        md.push_str(&format!(
+                            "**{alt}** NOPs for the last iteration, **{}** NOPs per iteration \
+                             before that - BC's value isn't statically known here, so the total is \
+                             unbounded (not just {alt}/{})\n\n",
+                            entry.nops, entry.nops
+                        ));
+                    }
+                }
             },
             Some(alt) => {
                 md.push_str(&format!(
@@ -724,5 +784,74 @@ mod find_timings_tests {
             assert_eq!(entries[0].pattern, pattern, "{instr}: {entries:?}");
             assert_eq!(entries[0].nops, 3, "{instr}: {entries:?}");
         }
+    }
+
+    #[test]
+    fn otir_otdr_resolve_to_real_timing_data() {
+        // Regression test for the `outir`/`outdr` -> `otir`/`otdr` spelling
+        // fix in data/timings.txt.
+        for instr in ["otir", "otdr"] {
+            let entries = find_timings(instr);
+            assert_eq!(entries.len(), 1, "{instr}: {entries:?}");
+            assert_eq!(entries[0].nops, 6, "{instr}: {entries:?}");
+            assert_eq!(entries[0].nops_alt, Some(5), "{instr}: {entries:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod format_hover_block_repeat_tests {
+    use super::*;
+
+    #[test]
+    fn block_repeat_iterations_handles_the_bc_zero_wraparound() {
+        assert_eq!(block_repeat_iterations(1), 1);
+        assert_eq!(block_repeat_iterations(3), 3);
+        assert_eq!(block_repeat_iterations(0), 65536);
+    }
+
+    #[test]
+    fn block_repeat_total_nops_matches_the_documented_formula() {
+        // BC=1: a single iteration, costing exactly the last-iteration NOPs.
+        assert_eq!(block_repeat_total_nops(1, 6, 5), 5);
+        // BC=3: two iterations at 6, one (the last) at 5.
+        assert_eq!(block_repeat_total_nops(3, 6, 5), 2 * 6 + 5);
+        // BC=0 wraps to 65536 iterations.
+        assert_eq!(block_repeat_total_nops(0, 6, 5), 65535 * 6 + 5);
+    }
+
+    #[test]
+    fn format_hover_shows_unbounded_for_ldir_without_a_known_bc() {
+        let entries = find_timings("ldir");
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        let md = format_hover("ldir", &entries, &[], &[], None);
+        assert!(md.contains("unbounded"), "{md}");
+        // Must not show the old, wrong "6 / 5" taken/not-taken framing.
+        assert!(!md.contains("taken/not taken"), "{md}");
+    }
+
+    #[test]
+    fn format_hover_shows_the_exact_total_for_ldir_with_a_known_bc() {
+        let entries = find_timings("ldir");
+        let md = format_hover("ldir", &entries, &[], &[], Some(3));
+        assert!(md.contains("17"), "{md}"); // 2*6 + 5
+        assert!(md.contains("3 iterations"), "{md}");
+    }
+
+    #[test]
+    fn format_hover_handles_the_bc_zero_wraparound() {
+        let entries = find_timings("ldir");
+        let md = format_hover("ldir", &entries, &[], &[], Some(0));
+        assert!(md.contains(&(65535 * 6 + 5).to_string()), "{md}");
+        assert!(md.contains("65536 iterations"), "{md}");
+    }
+
+    #[test]
+    fn format_hover_leaves_ordinary_conditional_instructions_unaffected() {
+        // djnz is dual-valued (branch taken/not taken) but not a
+        // block-repeat instruction - must keep the original framing.
+        let entries = find_timings("djnz $");
+        let md = format_hover("djnz $", &entries, &[], &[], None);
+        assert!(md.contains("taken/not taken"), "{md}");
     }
 }

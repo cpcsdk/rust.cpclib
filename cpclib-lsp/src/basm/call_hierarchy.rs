@@ -33,7 +33,12 @@ impl AssemblyAnalyzer {
         document: &Document,
         name_upper: &str
     ) -> Option<CallHierarchyItem> {
-        let loc = self.find_definition_in(document, name_upper)?;
+        // `false`: call hierarchy canonicalizes label names to uppercase
+        // throughout its own data model (see this function's own doc
+        // comment) - preserve that existing, deliberate identity
+        // convention rather than switching to goto-definition's
+        // case-sensitive default.
+        let loc = self.find_definition_in(document, name_upper, false)?;
         let listing = self.parse_document(document).ok()?;
         let (name, scope) = label_scope_at_line(listing.iter(), loc.range.start.line)?;
         let end = scope.end.min(document.line_count() as u32);
@@ -156,7 +161,8 @@ impl AssemblyAnalyzer {
         else {
             return Vec::new();
         };
-        let Some(loc) = self.find_definition_in(document, name_upper)
+        // `false`: same reasoning as `call_hierarchy_item_for_label` above.
+        let Some(loc) = self.find_definition_in(document, name_upper, false)
         else {
             return Vec::new();
         };

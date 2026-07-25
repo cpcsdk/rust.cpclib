@@ -14,8 +14,11 @@
     ],
     "repository": {
         "comment": {
-            "name": "comment.line.semicolon.z80",
-            "match": ";.*$"
+            "patterns": [
+                { "name": "comment.line.semicolon.z80", "match": ";.*$" },
+                { "name": "comment.line.double-slash.z80", "match": "//.*$" },
+                { "name": "comment.block.z80", "begin": "/\\*", "end": "\\*/" }
+            ]
         },
         "string": {
             "patterns": [
@@ -79,6 +82,14 @@
                 {
                     "name": "constant.numeric.hex.z80",
                     "match": "(?i)\\$[0-9A-F]+"
+                },
+                {
+                    "name": "constant.numeric.hex.z80",
+                    "match": "(?i)#[0-9A-F]+"
+                },
+                {
+                    "name": "constant.numeric.hex.z80",
+                    "match": "(?i)&[0-9A-F]+"
                 },
                 {
                     "name": "constant.numeric.hex.z80",

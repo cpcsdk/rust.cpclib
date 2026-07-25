@@ -797,6 +797,28 @@ MEND";
         assert!(res.is_ok(), "{:?}", &res);
     }
 
+    /// `parse_multiline_comment` above only exercises the primitive in
+    /// isolation. This checks it doesn't disturb the surrounding real
+    /// tokens once embedded in an actual listing: a `/* ... */` closing
+    /// mid-line (two statements sharing one physical line, `:`-separated,
+    /// same as this grammar already requires without any comment involved)
+    /// and one spanning several physical lines between two statements.
+    #[test]
+    fn multiline_comment_embedded_in_a_real_listing_does_not_break_parsing() {
+        let listing =
+            parse_z80_str("ld a, 1 /* inline */ : nop\n/* spans\nseveral\nlines */\nret\n")
+                .unwrap();
+        let mnemonics: Vec<Option<&Mnemonic>> = listing.iter().map(|t| t.mnemonic()).collect();
+        assert_eq!(
+            mnemonics,
+            vec![
+                Some(&Mnemonic::Ld),
+                Some(&Mnemonic::Nop),
+                Some(&Mnemonic::Ret)
+            ]
+        );
+    }
+
     #[test]
     fn test_parse_ticker() {
         let res = parse_test(parse_stable_ticker_start, "start mc");

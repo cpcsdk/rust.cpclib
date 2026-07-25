@@ -60,8 +60,21 @@ impl AssemblyAnalyzer {
     }
 }
 
-/// Strip a trailing `;`-comment from an ASM line (string-literal aware).
-/// Returns the slice up to (but not including) the `;`.
+/// Strip a trailing comment (`;`, `//`, or `/* ...`) from an ASM line
+/// (string-literal aware). Returns the slice up to (but not including) the
+/// comment marker.
+///
+/// This is a single-line, best-effort scan like the rest of this module's
+/// callers (see `token::scan_numeral_literals`'s own doc comment) — a `/*
+/// ... */` that both opens and closes on this same line is (like every
+/// other comment form here) simply truncated from its opening marker
+/// onward, so any real code following it later on the *same* line is lost
+/// too, not just the comment. That's a deliberate, conservative simplicity
+/// trade-off, not a limitation worth a cross-line-aware rewrite here: it
+/// trades a rarer under-scan (code after an inline-closed block comment
+/// going unscanned) for fixing the actual reported bug, a much more common
+/// over-scan (comment *content* — e.g. a stray `#40`-looking number in a
+/// note — being misread as real code).
 pub(super) fn strip_asm_comment(line: &str) -> &str {
     let bytes = line.as_bytes();
     let mut in_str = false;
@@ -69,6 +82,9 @@ pub(super) fn strip_asm_comment(line: &str) -> &str {
         match b {
             b'"' => in_str = !in_str,
             b';' if !in_str => return &line[..i],
+            b'/' if !in_str && matches!(bytes.get(i + 1), Some(b'/') | Some(b'*')) => {
+                return &line[..i];
+            },
             _ => {}
         }
     }
@@ -211,5 +227,37 @@ mod split_at_colon_tests {
     fn trailing_label_with_no_following_instruction() {
         let parts = split_at_colon(".end:");
         assert_eq!(parts, vec![".end:"]);
+    }
+}
+
+#[cfg(test)]
+mod strip_asm_comment_tests {
+    use super::strip_asm_comment;
+
+    #[test]
+    fn semicolon_comment_is_stripped() {
+        assert_eq!(strip_asm_comment("ld a, 1 ; note"), "ld a, 1 ");
+    }
+
+    #[test]
+    fn slash_slash_comment_is_stripped() {
+        assert_eq!(strip_asm_comment("ld a, 1 // note"), "ld a, 1 ");
+    }
+
+    #[test]
+    fn block_comment_start_truncates_the_rest_of_the_line() {
+        // A same-line-closed `/* */` still truncates here — see this
+        // function's own doc comment for why that's a deliberate trade-off.
+        assert_eq!(strip_asm_comment("ld a, 1 /* note */ nop"), "ld a, 1 ");
+    }
+
+    #[test]
+    fn comment_markers_inside_a_string_literal_are_not_comments() {
+        assert_eq!(strip_asm_comment("db \"a;b//c/*d\""), "db \"a;b//c/*d\"");
+    }
+
+    #[test]
+    fn a_lone_slash_with_no_second_slash_or_star_is_not_a_comment() {
+        assert_eq!(strip_asm_comment("ld a, hl / 2"), "ld a, hl / 2");
     }
 }

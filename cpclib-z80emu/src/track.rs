@@ -559,11 +559,19 @@ fn apply_accumulator_two_op(
     arg2: Option<&LocatedDataAccess>,
     env: &mut Env
 ) {
-    let (Some(arg1), Some(arg2)) = (arg1, arg2)
+    let Some(arg2) = arg2
     else {
         return;
     };
-    if !matches!(arg1, LocatedDataAccess::Register8(Register8::A, _)) {
+    // `arg1 == None` is the parser's implicit-accumulator shorthand
+    // (`ADD D` / `ADC D` / `SBC D`, no explicit `A,` - see
+    // `parse_add_or_adc`/`parse_sbc` in cpclib-asm) - it means A, so it
+    // must fall through to the accumulator logic below, not bail out (an
+    // early return here silently treated the whole instruction as a no-op,
+    // leaving A's stale tracked value in place).
+    if let Some(arg1) = arg1
+        && !matches!(arg1, LocatedDataAccess::Register8(Register8::A, _))
+    {
         // 16-bit form (`ADD HL,rr` etc.) - not precisely modeled.
         invalidate_write_target(state, Some(arg1));
         return;
@@ -819,6 +827,34 @@ mod tests {
         let s = apply_all("ld a,3\nadd a,b\n");
         assert_eq!(s.get8(Register8::A), None);
         assert_eq!(s.flag_z(), None);
+    }
+
+    /// Regression test: the implicit-accumulator shorthand (`add d`, no
+    /// explicit `A,`) parses with `arg1 = None` (see `parse_add_or_adc`/
+    /// `parse_sbc` in cpclib-asm) - it used to hit an early `return` in
+    /// `apply_accumulator_two_op` and be treated as a complete no-op,
+    /// leaving A's stale pre-instruction value in place (the reported bug:
+    /// `ld a, 0x8 : add d : ld d, a` still claimed D was 8).
+    #[test]
+    fn implicit_accumulator_shorthand_is_not_a_no_op() {
+        // Unknown operand: A must become unknown, not keep its old value.
+        let s = apply_all("ld a,8\nadd d\n");
+        assert_eq!(s.get8(Register8::A), None);
+        assert_eq!(s.flag_z(), None);
+
+        // Known operand: same result as the explicit `add a,d` form.
+        let s = apply_all("ld a,3\nld d,4\nadd d\n");
+        assert_eq!(s.get8(Register8::A), Some(7));
+        assert_eq!(s.flag_c(), Some(false));
+
+        // SBC's shorthand parses the same way (see `parse_sbc`).
+        let s = apply_all("ld a,8\nsbc d\n");
+        assert_eq!(s.get8(Register8::A), None);
+
+        // The exact reported scenario, end to end: after `add d`, the
+        // value LD copies into D must be unknown.
+        let s = apply_all("ld a, 0x8\nadd d\nld d, a\n");
+        assert_eq!(s.get8(Register8::D), None);
     }
 
     #[test]

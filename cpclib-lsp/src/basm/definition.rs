@@ -52,10 +52,9 @@ impl AssemblyAnalyzer {
         }
 
         let word = self.extract_word_at_position(&line, document.char_column(position))?;
-        let word_upper = word.to_uppercase();
 
         // The backend will try other open documents if this returns None.
-        self.find_definition_in(document, &word_upper)
+        self.find_definition_in(document, &word, true)
     }
 
     /// Extract the word (ASM identifier) under the cursor, or `None`.
@@ -105,14 +104,27 @@ impl AssemblyAnalyzer {
         self.rename_label(document, position, new_name)
     }
 
-    /// Search `document` for a definition of `word_upper` (already uppercased).
+    /// Search `document` for a definition of `word`.
     ///
     /// A *definition* is a label token, or a directive that assigns the symbol
     /// (`EQU` / `=`), or a macro/module declaration — never a mere reference
     /// (e.g. the operand of a `CALL`/`JR`).
     ///
+    /// `case_sensitive` controls the symbol-NAME match only - basm labels
+    /// are case-sensitive by default (`buffer`/`BUFFER` are different
+    /// symbols), so goto-definition passes `true`. Some callers with their
+    /// own established case-insensitive identity convention (e.g. call
+    /// hierarchy, which canonicalizes label names to uppercase throughout
+    /// its own data model) deliberately pass `false` to preserve their
+    /// existing behavior - not something this function should force.
+    ///
     /// Returns the first matching `Location`, or `None`.
-    pub fn find_definition_in(&self, document: &Document, word_upper: &str) -> Option<Location> {
+    pub fn find_definition_in(
+        &self,
+        document: &Document,
+        word: &str,
+        case_sensitive: bool
+    ) -> Option<Location> {
         if let Ok(listing) = self.parse_document(document) {
             for token in super::token::flatten_listing(listing.iter()) {
                 let source_name: &str = if token.is_label() {
@@ -133,7 +145,7 @@ impl AssemblyAnalyzer {
                 }
                 else {
                     // A section's *definition*: `RANGE`/`DEFSECTION` start,
-                    // stop, name — the name is the last argument, so `word_upper`
+                    // stop, name — the name is the last argument, so `word`
                     // here is what a `SECTION name` usage (or the definition
                     // itself) resolves to. `to_token()` is needed to extract it
                     // (no `is_range`/`range_*` accessor exists) and is only
@@ -142,7 +154,7 @@ impl AssemblyAnalyzer {
                     if token.is_directive()
                         && super::token::starts_with_range_keyword(token)
                         && let Token::Range(name, ..) = token.to_token().into_owned()
-                        && name.to_uppercase() == word_upper
+                        && names_match(&name, word, case_sensitive)
                     {
                         let (lsp_line, lsp_char) =
                             super::token::locate_name_in_statement(token, &name);
@@ -162,7 +174,7 @@ impl AssemblyAnalyzer {
                     }
                     continue;
                 };
-                if source_name.to_uppercase() == word_upper {
+                if names_match(source_name, word, case_sensitive) {
                     let span = token.span();
                     let (line_1based, col_1based) = span.relative_line_and_column();
                     let lsp_line = line_1based.saturating_sub(1) as u32;
@@ -188,32 +200,55 @@ impl AssemblyAnalyzer {
         // parse (goto-definition must keep working in files that don't
         // assemble yet, e.g. work-in-progress or disassembler output) and
         // when the parsed listing did not yield the symbol.
-        self.find_definition_by_text(document, word_upper)
+        self.find_definition_by_text(document, word, case_sensitive)
     }
 
     /// Line-oriented definition scan, used when the parsed listing yields
     /// nothing: matches `word:` / `word` at line start, and `word EQU ...` /
-    /// `word = ...` anywhere the symbol starts the statement.
-    fn find_definition_by_text(&self, document: &Document, word_upper: &str) -> Option<Location> {
+    /// `word = ...` anywhere the symbol starts the statement. `case_sensitive`
+    /// controls only the symbol-name match - the `EQU`/`=` keyword check
+    /// afterward is always case-insensitive, since directive keywords
+    /// themselves are (independent of the symbol-name policy).
+    fn find_definition_by_text(
+        &self,
+        document: &Document,
+        word: &str,
+        case_sensitive: bool
+    ) -> Option<Location> {
         let text = document.text();
+        let word_for_match = if case_sensitive {
+            word.to_string()
+        }
+        else {
+            word.to_uppercase()
+        };
         for (line_idx, line) in text.lines().enumerate() {
             let trimmed = line.trim_start();
             let indent = line.len() - trimmed.len();
-            let upper = trimmed.to_uppercase();
-
-            let Some(rest) = upper.strip_prefix(word_upper)
+            let trimmed_for_match = if case_sensitive {
+                trimmed.to_string()
+            }
             else {
-                continue;
+                trimmed.to_uppercase()
             };
+
+            if !trimmed_for_match.starts_with(word_for_match.as_str()) {
+                continue;
+            }
+            // ASCII case-folding never changes byte length, so slicing the
+            // original-case `trimmed` at `word_for_match`'s byte length
+            // lands on the same boundary `strip_prefix` would have.
+            let rest = &trimmed[word_for_match.len()..];
             // Must be a whole word.
             if rest.as_bytes().first().is_some_and(|&b| is_ident_byte(b)) {
                 continue;
             }
 
             let rest_trimmed = rest.trim_start();
+            let rest_trimmed_upper = rest_trimmed.to_uppercase();
             let is_label_def = (rest.starts_with(':') && !rest.starts_with("::"))
                 || (indent == 0 && (rest_trimmed.is_empty() || rest_trimmed.starts_with(';')));
-            let is_symbol_def = rest_trimmed.starts_with("EQU")
+            let is_symbol_def = rest_trimmed_upper.starts_with("EQU")
                 && !rest_trimmed
                     .as_bytes()
                     .get(3)
@@ -230,7 +265,7 @@ impl AssemblyAnalyzer {
                         },
                         end: Position {
                             line: line_idx as u32,
-                            character: (indent + word_upper.len()) as u32
+                            character: (indent + word.len()) as u32
                         }
                     }
                 });
@@ -635,6 +670,20 @@ pub(crate) enum RenameTarget {
         macro_name: String,
         name: String,
         scope: std::ops::Range<u32>
+    }
+}
+
+/// `a == b`, either exactly (`case_sensitive`) or ASCII-case-insensitively -
+/// used by `find_definition_in`/`find_definition_by_text` for the
+/// symbol-NAME comparison specifically (basm labels are case-sensitive by
+/// default; see those functions' own doc comments for why a caller might
+/// deliberately pass `false`).
+fn names_match(a: &str, b: &str, case_sensitive: bool) -> bool {
+    if case_sensitive {
+        a == b
+    }
+    else {
+        a.eq_ignore_ascii_case(b)
     }
 }
 
@@ -1094,7 +1143,7 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         let uri = tower_lsp::lsp_types::Url::parse("file:///test.asm").unwrap();
         let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
         let analyzer = AssemblyAnalyzer::new();
-        let loc = analyzer.find_definition_in(&doc, "OUTPUT_CHAR");
+        let loc = analyzer.find_definition_in(&doc, "output_char", true);
         assert!(loc.is_some(), "definition of output_char should be found");
         let loc = loc.unwrap();
         assert_eq!(
@@ -1110,7 +1159,7 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         let uri = tower_lsp::lsp_types::Url::parse("file:///test2.asm").unwrap();
         let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
         let analyzer = AssemblyAnalyzer::new();
-        let loc = analyzer.find_definition_in(&doc, "OUTPUT_CHAR");
+        let loc = analyzer.find_definition_in(&doc, "output_char", true);
         assert!(
             loc.is_some(),
             "definition should be found even with parse errors"
@@ -1153,9 +1202,9 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         let uri = tower_lsp::lsp_types::Url::parse("file:///test3.asm").unwrap();
         let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
         let analyzer = AssemblyAnalyzer::new();
-        let loc = analyzer.find_definition_in(&doc, "SCREEN_BASE");
+        let loc = analyzer.find_definition_in(&doc, "screen_base", true);
         assert_eq!(loc.expect("equ definition").range.start.line, 1);
-        let loc = analyzer.find_definition_in(&doc, "OTHER_SYM");
+        let loc = analyzer.find_definition_in(&doc, "other_sym", true);
         assert_eq!(loc.expect("= definition").range.start.line, 2);
     }
 
@@ -1168,7 +1217,7 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         let uri = tower_lsp::lsp_types::Url::parse("file:///guarded.asm").unwrap();
         let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
         let analyzer = AssemblyAnalyzer::new();
-        let loc = analyzer.find_definition_in(&doc, "GUARDED_LABEL");
+        let loc = analyzer.find_definition_in(&doc, "GUARDED_LABEL", true);
         assert_eq!(loc.expect("label inside ifndef").range.start.line, 1);
     }
 
@@ -1182,11 +1231,58 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
         let analyzer = AssemblyAnalyzer::new();
         let loc = analyzer
-            .find_definition_in(&doc, "MY_SECTION")
+            .find_definition_in(&doc, "MY_SECTION", true)
             .expect("section definition");
         assert_eq!(loc.range.start.line, 0, "{loc:?}");
         assert_eq!(loc.range.start.character, 22, "{loc:?}");
         assert_eq!(loc.range.end.character, 32, "{loc:?}");
+    }
+
+    /// Regression test for the reported bug: basm is case-sensitive by
+    /// default, so `buffer` and `BUFFER` are two distinct symbols - looking
+    /// up one must never resolve to the other's declaration.
+    #[test]
+    fn case_sensitive_lookup_does_not_confuse_differently_cased_symbols() {
+        let text = "buffer:\n    ret\nBUFFER:\n    ret\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///case.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let loc = analyzer
+            .find_definition_in(&doc, "buffer", true)
+            .expect("lowercase declaration");
+        assert_eq!(loc.range.start.line, 0, "{loc:?}");
+
+        let loc = analyzer
+            .find_definition_in(&doc, "BUFFER", true)
+            .expect("uppercase declaration");
+        assert_eq!(loc.range.start.line, 2, "{loc:?}");
+
+        // A case that matches neither declaration must not fall back to
+        // either one.
+        assert!(analyzer.find_definition_in(&doc, "Buffer", true).is_none());
+    }
+
+    /// Same fix, exercised through the text-only fallback path
+    /// (`find_definition_by_text`) rather than the parsed-listing path -
+    /// a syntax error elsewhere forces the fallback, per
+    /// `label_definition_found_despite_parse_error_elsewhere` above.
+    #[test]
+    fn case_sensitive_lookup_holds_in_the_text_only_fallback_too() {
+        let text = "buffer:\n    ret\n!!! invalid line !!!\nBUFFER:\n    ret\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///case2.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let loc = analyzer
+            .find_definition_in(&doc, "buffer", true)
+            .expect("lowercase declaration");
+        assert_eq!(loc.range.start.line, 0, "{loc:?}");
+
+        let loc = analyzer
+            .find_definition_in(&doc, "BUFFER", true)
+            .expect("uppercase declaration");
+        assert_eq!(loc.range.start.line, 3, "{loc:?}");
     }
 
     #[test]

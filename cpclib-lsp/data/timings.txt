@@ -296,8 +296,8 @@ out (C),r | ED 01rrr001   | ........ | 4 ; 'out (BC),r'
 out (C),0 | ED 01110001   | ........ | 4 ; Unundocumented
 outi      | ED A3         | !!!!!!!! | 5 ; B decremented before write
 outd      | ED AB         | !!!!!!!! | 5 ; B decremented before write
-outir     | ED B3         | !!!!!!!! | 6 / 5 for last iteration
-outdr     | ED BB         | !!!!!!!! | 6 / 5 for last iteration
+otir      | ED B3         | !!!!!!!! | 6 / 5 for last iteration
+otdr      | ED BB         | !!!!!!!! | 6 / 5 for last iteration
 
 ; 'in a,(n)' and 'out (x),x' doesn't affect flags.
 
