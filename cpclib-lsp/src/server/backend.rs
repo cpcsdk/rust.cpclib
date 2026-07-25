@@ -184,19 +184,20 @@ impl CpcLspBackend {
     }
 
     /// Look up `uri` among open documents; fall back to reading it from disk
-    /// (as a synthetic `version = 0` document) if it isn't open. `None` only
-    /// when the URI isn't a file path or the file can't be read. The "open
-    /// doc, else disk" shape this replaces was independently duplicated 9
-    /// times across this file's cross-file features (goto-definition/rename
-    /// workspace fallbacks, call-hierarchy include-graph traversal, and
-    /// several `executeCommand` handlers).
+    /// (as a synthetic document versioned by the file's own mtime - see
+    /// `disk_file_version`) if it isn't open. `None` only when the URI isn't
+    /// a file path or the file can't be read. The "open doc, else disk"
+    /// shape this replaces was independently duplicated 9 times across this
+    /// file's cross-file features (goto-definition/rename workspace
+    /// fallbacks, call-hierarchy include-graph traversal, and several
+    /// `executeCommand` handlers).
     fn load_document(&self, uri: &Url) -> Option<Document> {
         if let Some(entry) = self.documents.get(uri) {
             return Some(entry.value().clone());
         }
         let path = uri.to_file_path().ok()?;
         let text = std::fs::read_to_string(&path).ok()?;
-        Some(Document::new(uri.clone(), text, 0))
+        Some(Document::new(uri.clone(), text, disk_file_version(&path)))
     }
 
     /// Shared by both cross-file fallbacks: look up `word_upper` in the file
@@ -537,6 +538,24 @@ fn is_ignored_dir(entry: &walkdir::DirEntry) -> bool {
             entry.file_name().to_str(),
             Some(".git" | ".hg" | ".svn" | "target" | "node_modules")
         )
+}
+
+/// A version for a not-open-in-the-editor document, derived from the
+/// file's own mtime rather than a fixed `0` - `parse_document`'s cache is
+/// keyed on `(uri, version)`, and a fixed version would serve a stale
+/// cached parse forever for a file that changes on disk without ever being
+/// opened in the editor (no `didClose` ever fires to `evict()` it).
+/// Truncating a Unix timestamp to `i32` wraps every ~136 years - harmless
+/// here, since all that matters is "did this differ from the last read",
+/// not an accurate absolute time. Falls back to 0 (the previous fixed
+/// behavior) if the mtime can't be read.
+fn disk_file_version(path: &std::path::Path) -> i32 {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i32)
+        .unwrap_or(0)
 }
 
 #[tower_lsp::async_trait]
@@ -1821,7 +1840,11 @@ mod load_document_tests {
             .load_document(&uri)
             .expect("document should be read from disk");
         assert_eq!(doc.text(), "    ld a, 2\n");
-        assert_eq!(doc.version, 0);
+        // Not a fixed 0 - `disk_file_version` (see `disk_file_version_tests`
+        // for why) - the exact value depends on the file's own mtime, so
+        // just confirm `load_document` actually uses it rather than a
+        // stale hardcoded constant.
+        assert_eq!(doc.version, disk_file_version(path.as_std_path()));
     }
 
     #[tokio::test]
@@ -2091,5 +2114,70 @@ mod candidate_asm_paths_tests {
             paths[0].file_name().and_then(|n| n.to_str()),
             Some("other.asm")
         );
+    }
+}
+
+#[cfg(test)]
+mod disk_file_version_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    #[test]
+    fn changes_when_the_file_s_mtime_changes() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let path = tmp.path().join("t.asm");
+        std::fs::write(&path, "org 0\n").unwrap();
+        let v1 = disk_file_version(path.as_std_path());
+
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::File::open(&path)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+        let v2 = disk_file_version(path.as_std_path());
+
+        assert_ne!(v1, v2);
+    }
+
+    /// Regression test for the actual bug `disk_file_version` fixes: a file
+    /// that changes on disk *without ever being opened in the editor*
+    /// between two workspace scans must not keep serving its stale
+    /// first-visit parse forever (the previous hardcoded `version = 0`
+    /// meant `parse_document`'s `(uri, version)` cache always "hit" for an
+    /// unopened file, regardless of on-disk changes).
+    #[tokio::test]
+    async fn workspace_scan_picks_up_a_file_that_changed_on_disk_without_being_opened() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("from.asm"), "").unwrap();
+        let target_path = tmp.path().join("target.asm");
+        std::fs::write(&target_path, "foo:\n  ret\n").unwrap();
+
+        *backend
+            .workspace_roots
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = vec![tmp.path().to_path_buf().into()];
+
+        let from_uri = Url::from_file_path(tmp.path().join("from.asm")).unwrap();
+
+        let found_foo = backend
+            .find_definition_via_workspace_scan(&from_uri, "FOO")
+            .await;
+        assert!(found_foo.is_some(), "{found_foo:?}");
+
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::write(&target_path, "bar:\n  ret\n").unwrap();
+        std::fs::File::open(&target_path)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+
+        let found_bar = backend
+            .find_definition_via_workspace_scan(&from_uri, "BAR")
+            .await;
+        assert!(found_bar.is_some(), "{found_bar:?}");
     }
 }

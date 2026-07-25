@@ -21,20 +21,18 @@ impl AssemblyAnalyzer {
         let line_idx = position.line as usize;
         let line = document.line(line_idx)?;
         let col = position.character as usize;
+        let text = document.text();
 
         // Delegate to BASIC hover when the cursor is inside a LOCOMOTIVE block.
-        {
-            let text = document.text();
-            if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
-                let basic_line = position.line - block.basic_range.start as u32;
-                let line_trimmed = line.trim_end_matches(|c: char| c == '\n' || c == '\r');
-                return crate::locomotive::hover::locomotive_basic_hover(
-                    line_trimmed,
-                    &basic_text,
-                    basic_line,
-                    position.character
-                );
-            }
+        if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
+            let basic_line = position.line - block.basic_range.start as u32;
+            let line_trimmed = line.trim_end_matches(|c: char| c == '\n' || c == '\r');
+            return crate::locomotive::hover::locomotive_basic_hover(
+                line_trimmed,
+                &basic_text,
+                basic_line,
+                position.character
+            );
         }
 
         // Hovering an included filename (INCLUDE/INCBIN/BINCLUDE): preview
@@ -172,7 +170,7 @@ impl AssemblyAnalyzer {
                     super::registers::register_state_at(&listing, &mut env, position, &word_upper);
                 let contract = super::token::label_scope_at_line(listing.iter(), position.line)
                     .and_then(|(_, scope)| {
-                        super::registers::parse_function_contract(&document.text(), scope.start)
+                        super::registers::parse_function_contract(&text, scope.start)
                     });
                 if let Some(extra) =
                     super::registers::format_known_value(&word_upper, &state, contract.as_ref())

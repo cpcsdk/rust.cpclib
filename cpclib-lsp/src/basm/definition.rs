@@ -748,14 +748,14 @@ fn find_local_matches_in_scope(
     name: &str,
     scope: &std::ops::Range<u32>
 ) -> Vec<Range> {
-    let text = document.text();
     let pattern = format!(".{}", name.to_uppercase());
     let mut matches = Vec::new();
-    for (line_idx, line) in text.lines().enumerate() {
-        let line_idx = line_idx as u32;
-        if line_idx < scope.start || line_idx >= scope.end {
-            continue;
-        }
+    for line_idx in scope.start..scope.end {
+        let Some(line) = document.line(line_idx as usize)
+        else {
+            break;
+        };
+        let line = line.trim_end_matches(['\n', '\r']);
         for (abs, after) in word_matches_on_line(line, &pattern) {
             matches.push(Range {
                 start: Position {
@@ -780,14 +780,14 @@ fn find_bare_word_matches_in_scope(
     name: &str,
     scope: &std::ops::Range<u32>
 ) -> Vec<Range> {
-    let text = document.text();
     let name_upper = name.to_uppercase();
     let mut matches = Vec::new();
-    for (line_idx, line) in text.lines().enumerate() {
-        let line_idx = line_idx as u32;
-        if line_idx < scope.start || line_idx >= scope.end {
-            continue;
-        }
+    for line_idx in scope.start..scope.end {
+        let Some(line) = document.line(line_idx as usize)
+        else {
+            break;
+        };
+        let line = line.trim_end_matches(['\n', '\r']);
         for (abs, after) in word_matches_on_line(line, &name_upper) {
             matches.push(Range {
                 start: Position {
@@ -853,14 +853,14 @@ fn find_scoped_local_matches(
     name: &str,
     scope: &std::ops::Range<u32>
 ) -> Vec<(Range, bool)> {
-    let text = document.text();
     let name_upper = name.to_uppercase();
     let mut matches = Vec::new();
-    for (line_idx, line) in text.lines().enumerate() {
-        let line_idx = line_idx as u32;
-        if line_idx < scope.start || line_idx >= scope.end {
-            continue;
-        }
+    for line_idx in scope.start..scope.end {
+        let Some(line) = document.line(line_idx as usize)
+        else {
+            break;
+        };
+        let line = line.trim_end_matches(['\n', '\r']);
         let cols_and_braced: Vec<(u32, u32, bool)> = if line_idx == scope.start {
             bare_word_matches_on_line(line, &name_upper)
                 .into_iter()
