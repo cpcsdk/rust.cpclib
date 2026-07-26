@@ -1251,7 +1251,7 @@ impl ListingElement for LocatedToken {
         is_db is_dw is_str is_set is_comment is_org
         is_assembler_control is_while is_assert
         is_run is_breakpoint is_save
-        is_repeat_token
+        is_repeat_token is_return
     );
 
     any_delegate!(
@@ -1302,6 +1302,7 @@ impl ListingElement for LocatedToken {
         fn run_expr(&self) -> &Self::Expr;
         fn org_first(&self) -> &Self::Expr;
         fn org_second(&self) -> Option<&Self::Expr>;
+        fn return_value(&self) -> &Self::Expr;
     );
 
     fn to_token(&self) -> Cow<'_, cpclib_tokens::Token> {

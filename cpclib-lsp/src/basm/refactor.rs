@@ -5,8 +5,9 @@ use cpclib_asm::unused_bindings::UnusedBindingKind;
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
-use super::command::{select_range_command, single_file_edit};
+use super::command::{remove_unused_parameter_command, select_range_command, single_file_edit};
 use super::format::{split_at_colon, strip_asm_comment};
+use super::remove_parameter::RemoveParameterKind;
 use crate::common::document::{Document, byte_offset_to_utf16_col};
 
 impl AssemblyAnalyzer {
@@ -23,11 +24,13 @@ impl AssemblyAnalyzer {
     ///
     /// Only `RepeatCounter` bindings with a `removable_clause` are ever
     /// offered here: ITERATE/FOR counters are mandatory (nothing to
-    /// remove), MACRO/FUNCTION parameter removal needs a call-site-aware
-    /// rewrite (tracked separately, not built here - see the roadmap), and
-    /// a REPEAT counter with an explicit start/step value is deliberately
-    /// left warning-only too (see `removable_clause`'s own doc comment in
-    /// `cpclib-asm`).
+    /// remove), a REPEAT counter with an explicit start/step value is
+    /// deliberately left warning-only too (see `removable_clause`'s own doc
+    /// comment in `cpclib-asm`). MACRO/FUNCTION parameter removal is a
+    /// separate action, `unused_macro_or_function_parameter_removal_action`
+    /// below - it needs a call-site-aware, cross-file rewrite, a
+    /// structurally different (async, command-based) shape than this
+    /// synchronous single-file edit.
     pub(super) fn unused_repeat_counter_removal_action(
         &self,
         document: &Document,
@@ -70,6 +73,63 @@ impl AssemblyAnalyzer {
                     document.uri.clone(),
                     edit_range,
                     String::new()
+                )),
+                ..Default::default()
+            });
+        }
+        None
+    }
+
+    /// Offer to remove an unused MACRO/FUNCTION parameter when the
+    /// cursor/selection sits on its declaring definition's header line -
+    /// same cheap, synchronous, same-file gating as
+    /// `unused_repeat_counter_removal_action` above, reusing the
+    /// already-detected `UnusedBinding.owner` data (which macro/function
+    /// owns the parameter, and its 0-based position) - no cross-file work
+    /// happens here.
+    ///
+    /// Unlike every other `CodeAction` in this file, this one carries a
+    /// `command` and **no** synchronous `edit`: finding and rewriting every
+    /// call site across the workspace is real I/O (parsing every candidate
+    /// file), far too expensive to do on every `codeAction` request (which
+    /// fires on essentially every cursor move in many clients) - the actual
+    /// edit is only computed once the user picks this from the Quick Fix
+    /// menu, in `execute_command` (`server/backend.rs`). The title
+    /// therefore promises *behavior*, not a specific file/call-site count,
+    /// since that isn't known yet at this point.
+    pub(super) fn unused_macro_or_function_parameter_removal_action(
+        &self,
+        document: &Document,
+        range: Range
+    ) -> Option<CodeAction> {
+        let listing = self.parse_document(document).ok()?;
+        let (lo, hi) = (range.start.line, range.end.line);
+
+        for binding in cpclib_asm::unused_bindings::find_unused_bindings(listing.iter()) {
+            let kind = match binding.kind {
+                UnusedBindingKind::MacroParameter => RemoveParameterKind::Macro,
+                UnusedBindingKind::FunctionParameter => RemoveParameterKind::Function,
+                _ => continue
+            };
+            let Some(owner) = &binding.owner
+            else {
+                continue;
+            };
+            let def_line = (binding.line as u32).saturating_sub(1);
+            if def_line < lo || def_line > hi {
+                continue;
+            }
+            return Some(CodeAction {
+                title: format!(
+                    "Remove unused parameter '{}' and update all call sites",
+                    binding.name
+                ),
+                kind: Some(CodeActionKind::QUICKFIX),
+                command: Some(remove_unused_parameter_command(
+                    &document.uri,
+                    kind,
+                    &owner.name,
+                    owner.param_index
                 )),
                 ..Default::default()
             });
@@ -399,5 +459,110 @@ mod unused_repeat_counter_removal_tests {
                 .unused_repeat_counter_removal_action(&d, range)
                 .is_some()
         );
+    }
+}
+
+#[cfg(test)]
+mod unused_macro_or_function_parameter_removal_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn cursor(line: u32, character: u32) -> Range {
+        Range {
+            start: Position { line, character },
+            end: Position { line, character }
+        }
+    }
+
+    #[test]
+    fn offers_the_action_for_an_unused_macro_parameter_under_the_cursor() {
+        let d = doc("MACRO foo, a, b, c\n    ld a, {a}\n    ld b, {b}\nENDM\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let action = analyzer
+            .unused_macro_or_function_parameter_removal_action(&d, cursor(0, 3))
+            .expect("expected the action");
+        assert_eq!(
+            action.title,
+            "Remove unused parameter 'c' and update all call sites"
+        );
+        assert_eq!(action.kind, Some(CodeActionKind::QUICKFIX));
+        assert!(action.edit.is_none(), "the edit isn't known synchronously");
+        let command = action.command.expect("expected a command");
+        assert_eq!(command.command, "cpclib.removeUnusedParameter");
+        let args = &command.arguments.expect("expected arguments")[0];
+        assert_eq!(args["kind"], "macro");
+        assert_eq!(args["ownerName"], "foo");
+        assert_eq!(args["paramIndex"], 2);
+    }
+
+    #[test]
+    fn offers_the_action_for_an_unused_function_parameter_under_the_cursor() {
+        let d = doc("FUNCTION f, a, b\n    RETURN {a}\nENDFUNCTION\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let action = analyzer
+            .unused_macro_or_function_parameter_removal_action(&d, cursor(0, 3))
+            .expect("expected the action");
+        assert_eq!(
+            action.title,
+            "Remove unused parameter 'b' and update all call sites"
+        );
+        let command = action.command.expect("expected a command");
+        let args = &command.arguments.expect("expected arguments")[0];
+        assert_eq!(args["kind"], "function");
+        assert_eq!(args["ownerName"], "f");
+        assert_eq!(args["paramIndex"], 1);
+    }
+
+    #[test]
+    fn no_action_when_every_macro_parameter_is_used() {
+        let d = doc("MACRO foo, a, b\n    ld a, {a}\n    ld b, {b}\nENDM\n");
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(
+            analyzer
+                .unused_macro_or_function_parameter_removal_action(&d, cursor(0, 3))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn no_action_when_the_cursor_is_on_an_unrelated_line() {
+        let d = doc("MACRO foo, a, b, c\n    ld a, {a}\n    ld b, {b}\nENDM\n\nld a, b\n");
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(
+            analyzer
+                .unused_macro_or_function_parameter_removal_action(&d, cursor(5, 0))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn no_action_for_an_unused_repeat_counter_it_stays_routed_through_the_other_action() {
+        let d = doc("REPEAT 5, i\n    nop\nENDR\n");
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(
+            analyzer
+                .unused_macro_or_function_parameter_removal_action(&d, cursor(0, 3))
+                .is_none()
+        );
+        // ...but the REPEAT-specific action still offers it.
+        assert!(
+            analyzer
+                .unused_repeat_counter_removal_action(&d, cursor(0, 3))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn is_wired_into_code_actions() {
+        let d = doc("MACRO foo, a, b, c\n    ld a, {a}\n    ld b, {b}\nENDM\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, cursor(0, 3));
+        assert!(actions.iter().any(|a| {
+            a.title == "Remove unused parameter 'c' and update all call sites"
+                && a.kind == Some(CodeActionKind::QUICKFIX)
+        }));
     }
 }

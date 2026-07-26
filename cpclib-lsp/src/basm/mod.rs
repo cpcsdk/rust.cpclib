@@ -32,6 +32,7 @@ pub mod overflow;
 pub mod parse;
 pub mod refactor;
 pub mod registers;
+pub mod remove_parameter;
 pub mod semantic_tokens;
 pub mod symbols;
 pub mod timing;

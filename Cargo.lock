@@ -3028,6 +3028,7 @@ dependencies = [
  "cpclib-tokens",
  "cpclib-z80emu",
  "dashmap 6.2.1",
+ "either",
  "futures-util",
  "minijinja",
  "rayon",

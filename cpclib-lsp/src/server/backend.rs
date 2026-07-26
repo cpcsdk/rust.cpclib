@@ -295,6 +295,144 @@ impl CpcLspBackend {
         (!edits.is_empty()).then_some((target_uri, edits))
     }
 
+    /// Workspace-wide, all-or-nothing removal of an unused MACRO/FUNCTION
+    /// parameter: every call site (the current document itself, its own
+    /// direct `INCLUDE`s, and every other `.asm` file under the workspace
+    /// root - mirrors `rename_label_across_workspace`'s own three-source
+    /// discovery shape) plus the definition's own header, rewritten as one
+    /// atomic multi-file edit - or, if even one call site anywhere couldn't
+    /// be confidently found and safely rewritten (or the name turned out to
+    /// be ambiguous), nothing at all, with every blocker reported so the
+    /// user knows exactly what to check manually. Unlike rename (where a
+    /// missed occurrence is merely a stale name), a missed call site here
+    /// would break that call's own arity - see `basm::remove_parameter`'s
+    /// own module doc comment for why this can never be a partial edit.
+    ///
+    /// Unlike `rename_label_across_workspace`, every candidate file is
+    /// *parsed*, not just text-scanned - real work, wrapped in
+    /// `spawn_blocking` (off the async runtime's own worker threads) with
+    /// the same rayon-parallel-then-sequential-merge shape.
+    async fn remove_unused_parameter_across_workspace(
+        &self,
+        from_uri: &Url,
+        from_document: &Document,
+        target: &crate::basm::remove_parameter::RemoveParameterTarget
+    ) -> RemoveParameterOutcome {
+        let mut changes: std::collections::HashMap<Url, Vec<TextEdit>> =
+            std::collections::HashMap::new();
+        let mut blockers: Vec<crate::basm::remove_parameter::RemovalBlocker> = Vec::new();
+        let mut total_matching_definitions = 0usize;
+        let mut seen: std::collections::HashSet<Url> = std::collections::HashSet::new();
+
+        {
+            let mut record = |uri: Url, scan: crate::basm::remove_parameter::FileScan| {
+                total_matching_definitions += scan.matching_definitions.len();
+                if !scan.edits.is_empty() {
+                    changes.insert(uri.clone(), scan.edits);
+                }
+                for mut blocker in scan.blockers {
+                    blocker.uri.get_or_insert_with(|| uri.clone());
+                    blockers.push(blocker);
+                }
+            };
+
+            seen.insert(from_uri.clone());
+            let from_scan = self
+                .asm_analyzer
+                .scan_document_for_parameter_removal(from_document, target);
+            record(from_uri.clone(), from_scan);
+
+            for filename in
+                crate::basm::definition::extract_include_filenames(&from_document.text())
+            {
+                if let Some(path) =
+                    crate::basm::definition::resolve_include_path(&filename, from_uri)
+                    && let Ok(uri) = Url::from_file_path(&path)
+                    && seen.insert(uri.clone())
+                    && let Some(doc) = self.load_document(&uri)
+                {
+                    let scan = self
+                        .asm_analyzer
+                        .scan_document_for_parameter_removal(&doc, target);
+                    record(uri, scan);
+                }
+            }
+        }
+
+        let paths = self.candidate_asm_paths(from_uri).await;
+        let candidate_docs: Vec<(Url, Document)> = paths
+            .into_iter()
+            .filter_map(|path| {
+                let uri = Url::from_file_path(&path).ok()?;
+                if seen.contains(&uri) {
+                    return None;
+                }
+                let doc = self.load_document(&uri)?;
+                Some((uri, doc))
+            })
+            .collect();
+
+        let analyzer = self.asm_analyzer.clone();
+        let target_owned = target.clone();
+        let results: Vec<(Url, crate::basm::remove_parameter::FileScan)> =
+            tokio::task::spawn_blocking(move || {
+                candidate_docs
+                    .into_par_iter()
+                    .map(|(uri, doc)| {
+                        let scan =
+                            analyzer.scan_document_for_parameter_removal(&doc, &target_owned);
+                        (uri, scan)
+                    })
+                    .collect()
+            })
+            .await
+            .unwrap_or_default();
+
+        for (uri, scan) in results {
+            total_matching_definitions += scan.matching_definitions.len();
+            if !scan.edits.is_empty() {
+                changes.insert(uri.clone(), scan.edits);
+            }
+            for mut blocker in scan.blockers {
+                blocker.uri.get_or_insert_with(|| uri.clone());
+                blockers.push(blocker);
+            }
+        }
+
+        if total_matching_definitions > 1 {
+            blockers.push(crate::basm::remove_parameter::RemovalBlocker {
+                uri: None,
+                line: None,
+                reason: format!(
+                    "'{}' is ambiguous - more than one MACRO/FUNCTION/STRUCT definition with \
+                     this name was found across the workspace, so it isn't safe to guess which \
+                     one every call site refers to",
+                    target.owner_name
+                )
+            });
+        }
+
+        if !blockers.is_empty() {
+            return RemoveParameterOutcome::Blocked(blockers);
+        }
+
+        match non_empty_workspace_edit(changes) {
+            Some(edit) => RemoveParameterOutcome::Ready(edit),
+            None => {
+                RemoveParameterOutcome::Blocked(vec![
+                    crate::basm::remove_parameter::RemovalBlocker {
+                        uri: None,
+                        line: None,
+                        reason: format!(
+                            "no call sites or definition were found for '{}' - nothing to remove",
+                            target.owner_name
+                        )
+                    },
+                ])
+            },
+        }
+    }
+
     /// Workspace-wide rename of a bndbuild Jinja variable: every file that
     /// transitively `{% include %}`s the document containing the `{% set %}`
     /// definition being renamed — e.g. renaming `CPCIP` in `common.build`
@@ -567,6 +705,52 @@ fn dispatch_by_doc_type<T>(
     }
 }
 
+/// Outcome of `remove_unused_parameter_across_workspace`: either every call
+/// site was confidently found and safely rewritten (`Ready`, carrying the
+/// complete multi-file edit), or something, somewhere, blocked the whole
+/// operation (`Blocked`) - nothing is ever partially applied.
+enum RemoveParameterOutcome {
+    Blocked(Vec<crate::basm::remove_parameter::RemovalBlocker>),
+    Ready(WorkspaceEdit)
+}
+
+/// Reports every blocker from a `RemoveParameterOutcome::Blocked` to the
+/// client: one `file:line - reason` line per blocker (or `- reason` for a
+/// workspace-wide one with no location) via `log_message` - detail suited
+/// to the output channel, since there can be several - followed by a single
+/// summary `show_message(ERROR, ...)` pointing the user at it. Mirrors
+/// `cpclib.runRule`'s own established "stream detail via log_message,
+/// summarize via show_message" shape.
+async fn report_removal_blockers(
+    client: &Client,
+    owner_name: &str,
+    blockers: &[crate::basm::remove_parameter::RemovalBlocker]
+) {
+    for blocker in blockers {
+        let location = blocker.uri.as_ref().map(|uri| {
+            uri.to_file_path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| uri.to_string())
+        });
+        let line = match (location, blocker.line) {
+            (Some(path), Some(l)) => format!("{path}:{l} - {}", blocker.reason),
+            (Some(path), None) => format!("{path} - {}", blocker.reason),
+            (None, _) => format!("- {}", blocker.reason)
+        };
+        client.log_message(MessageType::WARNING, line).await;
+    }
+    client
+        .show_message(
+            MessageType::ERROR,
+            format!(
+                "Couldn't safely remove the parameter from '{owner_name}': {} issue(s) found - \
+                 see the output panel for details.",
+                blockers.len()
+            )
+        )
+        .await;
+}
+
 /// `None` when `changes` is empty (nothing to rename — the client should
 /// see "no changes" rather than an edit touching zero files).
 fn non_empty_workspace_edit(
@@ -677,6 +861,7 @@ impl LanguageServer for CpcLspBackend {
                         "cpclib.selectRange".to_string(),
                         "cpclib.runRule".to_string(),
                         "cpclib.cycleCountForSelection".to_string(),
+                        "cpclib.removeUnusedParameter".to_string(),
                     ],
                     work_done_progress_options: WorkDoneProgressOptions::default()
                 }),
@@ -1599,6 +1784,110 @@ impl LanguageServer for CpcLspBackend {
             return Ok(summary.map(|s| serde_json::to_value(s).unwrap_or(serde_json::Value::Null)));
         }
 
+        if params.command == "cpclib.removeUnusedParameter" {
+            let Some(arg) = params.arguments.into_iter().next()
+            else {
+                return Ok(None);
+            };
+            let uri = arg
+                .get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<Url>().ok());
+            let kind = arg.get("kind").and_then(|v| v.as_str()).and_then(|s| {
+                match s {
+                    "macro" => Some(crate::basm::remove_parameter::RemoveParameterKind::Macro),
+                    "function" => {
+                        Some(crate::basm::remove_parameter::RemoveParameterKind::Function)
+                    },
+                    _ => None
+                }
+            });
+            let owner_name = arg
+                .get("ownerName")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let param_index = arg
+                .get("paramIndex")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+
+            let (Some(uri), Some(kind), Some(owner_name), Some(param_index)) =
+                (uri, kind, owner_name, param_index)
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            let target = match self.asm_analyzer.resolve_remove_parameter_target(
+                &document,
+                kind,
+                &owner_name,
+                param_index
+            ) {
+                Ok(t) => t,
+                Err(blocker) => {
+                    report_removal_blockers(&self.client, &owner_name, &[blocker]).await;
+                    return Ok(None);
+                }
+            };
+
+            match self
+                .remove_unused_parameter_across_workspace(&uri, &document, &target)
+                .await
+            {
+                RemoveParameterOutcome::Blocked(blockers) => {
+                    report_removal_blockers(&self.client, &owner_name, &blockers).await;
+                },
+                RemoveParameterOutcome::Ready(edit) => {
+                    let file_count = edit.changes.as_ref().map_or(0, |c| c.len());
+                    match self.client.apply_edit(edit).await {
+                        Ok(response) if response.applied => {
+                            self.client
+                                .show_message(
+                                    MessageType::INFO,
+                                    format!(
+                                        "Removed unused parameter '{}' from '{owner_name}' and \
+                                         updated call sites across {file_count} file(s) under \
+                                         the workspace root. If any Z80 source lives outside \
+                                         this workspace root, verify it separately.",
+                                        target.param_name
+                                    )
+                                )
+                                .await;
+                        },
+                        Ok(response) => {
+                            self.client
+                                .show_message(
+                                    MessageType::ERROR,
+                                    format!(
+                                        "The edit to remove '{}' from '{owner_name}' was not \
+                                         applied{}.",
+                                        target.param_name,
+                                        response
+                                            .failure_reason
+                                            .map(|r| format!(": {r}"))
+                                            .unwrap_or_default()
+                                    )
+                                )
+                                .await;
+                        },
+                        Err(_) => {
+                            self.client
+                                .show_message(
+                                    MessageType::ERROR,
+                                    "Failed to apply the edit to the client."
+                                )
+                                .await;
+                        }
+                    }
+                }
+            }
+            return Ok(None);
+        }
+
         if params.command != "cpclib.getTargets" {
             return Ok(None);
         }
@@ -2503,5 +2792,223 @@ mod disk_file_version_tests {
             .find_definition_via_workspace_scan(&from_uri, "bar")
             .await;
         assert!(found_bar.is_some(), "{found_bar:?}");
+    }
+}
+
+#[cfg(test)]
+mod remove_unused_parameter_tests {
+    use futures_util::{SinkExt, StreamExt};
+    use tower_lsp::LspService;
+    use tower_lsp::jsonrpc::Response;
+
+    use super::*;
+
+    /// Drains a `ClientSocket`'s outgoing requests: a `workspace/applyEdit`
+    /// *request* is answered with a synthetic `{applied: true}` response
+    /// (required - unlike a notification such as `log_message`/
+    /// `show_message`, the sender's own `self.client.apply_edit(...).await`
+    /// blocks forever without one, since it correlates a real response by
+    /// id) and its `WorkspaceEdit` is forwarded onto the returned channel
+    /// for the test to assert against. Every other message is simply
+    /// dropped, matching the drain-and-discard precedent already
+    /// established for `log_message`/`show_message` elsewhere in this file
+    /// (`build_error_diagnostics_tests`) - that pattern alone is
+    /// insufficient here since it never answers anything.
+    fn drain_client_socket_applying_edits(
+        socket: tower_lsp::ClientSocket
+    ) -> tokio::sync::mpsc::UnboundedReceiver<WorkspaceEdit> {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let (mut requests, mut responses) = socket.split();
+            while let Some(request) = requests.next().await {
+                if request.method() != "workspace/applyEdit" {
+                    continue;
+                }
+                if let Some(params) = request.params()
+                    && let Ok(apply_params) =
+                        serde_json::from_value::<ApplyWorkspaceEditParams>(params.clone())
+                {
+                    let _ = tx.send(apply_params.edit);
+                }
+                if let Some(id) = request.id() {
+                    let response = Response::from_parts(
+                        id.clone(),
+                        Ok(serde_json::json!({ "applied": true }))
+                    );
+                    let _ = responses.send(response).await;
+                }
+            }
+        });
+        rx
+    }
+
+    fn write_file(root: &camino::Utf8Path, name: &str, content: &str) -> Url {
+        let path = root.join(name);
+        std::fs::write(path.as_std_path(), content).unwrap();
+        Url::from_file_path(path.as_std_path()).unwrap()
+    }
+
+    async fn open(backend: &CpcLspBackend, uri: &Url, content: &str) {
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".to_string(),
+                    version: 1,
+                    text: content.to_string()
+                }
+            })
+            .await;
+    }
+
+    async fn run_remove(
+        backend: &CpcLspBackend,
+        uri: &Url,
+        kind: &str,
+        owner_name: &str,
+        param_index: usize
+    ) -> Result<Option<serde_json::Value>> {
+        backend
+            .execute_command(ExecuteCommandParams {
+                command: "cpclib.removeUnusedParameter".to_string(),
+                arguments: vec![serde_json::json!({
+                    "uri": uri.to_string(),
+                    "kind": kind,
+                    "ownerName": owner_name,
+                    "paramIndex": param_index,
+                })],
+                work_done_progress_params: Default::default()
+            })
+            .await
+    }
+
+    fn set_workspace_root(backend: &CpcLspBackend, root: &camino::Utf8Path) {
+        *backend
+            .workspace_roots
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = vec![root.to_path_buf().into()];
+    }
+
+    /// Drives a real `initialize` request through the *full* tower
+    /// `Service` stack (not just calling `CpcLspBackend::initialize`
+    /// directly, which bypasses it) - required because `Client::apply_edit`
+    /// uses the gated `send_request`, which unconditionally errors out
+    /// without ever touching the socket unless the server's shared
+    /// `ServerState` has actually transitioned to `Initialized`. That
+    /// transition itself happens in a `tower::Layer` wrapping the service
+    /// (`tower_lsp::service::layers`), which only ever runs requests
+    /// dispatched through `Service::call` on `service` itself - calling the
+    /// `LanguageServer::initialize` trait method on `backend` directly (as
+    /// every other test in this file already does, since none of them
+    /// needed a *state-gated* outgoing request before this one) would skip
+    /// that layer entirely and leave the state stuck at `Uninitialized`.
+    /// Mirrors tower-lsp's own test suite (`service.rs`'s
+    /// `initializes_only_once`), the only real precedent for this exact
+    /// need.
+    async fn initialize_backend(service: &mut LspService<CpcLspBackend>) {
+        use tower::{Service, ServiceExt};
+        let request = tower_lsp::jsonrpc::Request::build("initialize")
+            .params(serde_json::json!({ "capabilities": {} }))
+            .id(1)
+            .finish();
+        let _ = service.ready().await.unwrap().call(request).await;
+    }
+
+    #[tokio::test]
+    async fn single_file_case_removes_the_call_site_and_the_definition_as_one_edit() {
+        let (mut service, socket) = LspService::build(CpcLspBackend::new).finish();
+        initialize_backend(&mut service).await;
+        let backend = service.inner();
+        let mut edits = drain_client_socket_applying_edits(socket);
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        set_workspace_root(backend, tmp.path());
+
+        let content = "MACRO foo, a, b, c\nENDM\nfoo(1, 2, 3)\n";
+        let uri = write_file(tmp.path(), "main.asm", content);
+        open(backend, &uri, content).await;
+
+        let result = run_remove(backend, &uri, "macro", "foo", 2).await;
+        assert!(result.is_ok(), "{result:?}");
+
+        let edit = edits.recv().await.expect("expected an applied edit");
+        let changes = edit.changes.expect("expected changes");
+        assert_eq!(changes.len(), 1, "{changes:?}");
+        assert_eq!(changes[&uri].len(), 2, "{:?}", changes[&uri]); // call site + header
+    }
+
+    #[tokio::test]
+    async fn multi_file_case_touches_every_file_with_a_call_site() {
+        let (mut service, socket) = LspService::build(CpcLspBackend::new).finish();
+        initialize_backend(&mut service).await;
+        let backend = service.inner();
+        let mut edits = drain_client_socket_applying_edits(socket);
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        set_workspace_root(backend, tmp.path());
+
+        let def_content = "MACRO foo, a, b\nENDM\n";
+        let def_uri = write_file(tmp.path(), "def.asm", def_content);
+        open(backend, &def_uri, def_content).await;
+
+        // Not opened - discovered purely via `candidate_asm_paths`' disk walk.
+        write_file(tmp.path(), "caller.asm", "foo(1, 2)\n");
+
+        let result = run_remove(backend, &def_uri, "macro", "foo", 1).await;
+        assert!(result.is_ok(), "{result:?}");
+
+        let edit = edits.recv().await.expect("expected an applied edit");
+        let changes = edit.changes.expect("expected changes");
+        assert_eq!(changes.len(), 2, "{changes:?}"); // def.asm + caller.asm
+    }
+
+    #[tokio::test]
+    async fn a_blocked_call_site_prevents_any_edit_from_ever_being_applied() {
+        let (mut service, socket) = LspService::build(CpcLspBackend::new).finish();
+        initialize_backend(&mut service).await;
+        let backend = service.inner();
+        let mut edits = drain_client_socket_applying_edits(socket);
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        set_workspace_root(backend, tmp.path());
+
+        // A bracketed-list argument at the target position can't be safely
+        // rewritten (see `remove_parameter`'s own module doc comment) - the
+        // whole operation must abort, not apply the (independently
+        // computed, otherwise-valid) definition-header edit on its own.
+        let content = "MACRO foo, a, b\nENDM\nfoo([1, 2, 3], 5)\n";
+        let uri = write_file(tmp.path(), "main.asm", content);
+        open(backend, &uri, content).await;
+
+        let result = run_remove(backend, &uri, "macro", "foo", 0).await;
+        assert!(result.is_ok(), "{result:?}");
+
+        tokio::time::timeout(std::time::Duration::from_millis(500), edits.recv())
+            .await
+            .expect_err("no edit should ever have been sent to apply_edit");
+    }
+
+    #[tokio::test]
+    async fn an_ambiguous_name_across_files_prevents_any_edit_from_ever_being_applied() {
+        let (mut service, socket) = LspService::build(CpcLspBackend::new).finish();
+        initialize_backend(&mut service).await;
+        let backend = service.inner();
+        let mut edits = drain_client_socket_applying_edits(socket);
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        set_workspace_root(backend, tmp.path());
+
+        let content = "MACRO foo, a, b\nENDM\nfoo(1, 2)\n";
+        let uri = write_file(tmp.path(), "main.asm", content);
+        open(backend, &uri, content).await;
+        // A second, same-named macro elsewhere in the workspace.
+        write_file(tmp.path(), "other.asm", "MACRO foo, x\nENDM\n");
+
+        let result = run_remove(backend, &uri, "macro", "foo", 1).await;
+        assert!(result.is_ok(), "{result:?}");
+
+        tokio::time::timeout(std::time::Duration::from_millis(500), edits.recv())
+            .await
+            .expect_err("no edit should ever have been sent to apply_edit");
     }
 }

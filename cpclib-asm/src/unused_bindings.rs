@@ -20,12 +20,29 @@ pub enum UnusedBindingKind {
     ForCounter
 }
 
+/// Which MACRO/FUNCTION a `MacroParameter`/`FunctionParameter` binding
+/// belongs to, and its 0-based position in that definition's own declared
+/// parameter list. basm's call sites are strictly positional (no named
+/// arguments anywhere), so "definition param index N" maps exactly onto
+/// "call-site argument index N" - a consumer that wants to find/rewrite
+/// every call site needs both, and neither is derivable from
+/// `UnusedBinding`'s other fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnusedBindingOwner {
+    pub name: String,
+    pub param_index: usize
+}
+
 /// One declared-but-never-referenced macro/function parameter or
 /// REPEAT/ITERATE/FOR loop counter.
 #[derive(Debug, Clone)]
 pub struct UnusedBinding {
     pub name: String,
     pub kind: UnusedBindingKind,
+    /// `Some` only for `MacroParameter`/`FunctionParameter` - REPEAT/
+    /// ITERATE/FOR counters aren't called by name elsewhere, so no consumer
+    /// needs "which construct owns this" for them.
+    pub owner: Option<UnusedBindingOwner>,
     /// 1-based line/column of the *owning definition's own* span (matching
     /// `Z80Span::relative_line_and_column()`'s convention), and that span's
     /// byte length - anchors a diagnostic on the whole definition, not a
@@ -228,10 +245,15 @@ fn check_macro<T: MayHaveSpan + ListingElement>(token: &T, out: &mut Vec<UnusedB
     }
     let tokenized = tokenize_macro_body(token.macro_definition_code(), &params);
     let (line, column, len) = definition_location(token);
+    let owner_name = token.macro_definition_name().to_string();
     for index in unused_macro_parameter_indices(&params, &tokenized) {
         out.push(UnusedBinding {
             name: params[index].to_string(),
             kind: UnusedBindingKind::MacroParameter,
+            owner: Some(UnusedBindingOwner {
+                name: owner_name.clone(),
+                param_index: index
+            }),
             line,
             column,
             len,
@@ -247,11 +269,16 @@ fn check_function<T: MayHaveSpan + ListingElement>(token: &T, out: &mut Vec<Unus
     }
     let text: &str = token.span().as_ref();
     let (line, column, len) = definition_location(token);
-    for name in params {
+    let owner_name = token.function_definition_name().to_string();
+    for (index, name) in params.iter().enumerate() {
         if !references(text, name) {
             out.push(UnusedBinding {
                 name: name.to_string(),
                 kind: UnusedBindingKind::FunctionParameter,
+                owner: Some(UnusedBindingOwner {
+                    name: owner_name.clone(),
+                    param_index: index
+                }),
                 line,
                 column,
                 len,
@@ -271,6 +298,7 @@ fn check_iterate<T: MayHaveSpan + ListingElement>(token: &T, out: &mut Vec<Unuse
     out.push(UnusedBinding {
         name: name.to_string(),
         kind: UnusedBindingKind::IterateCounter,
+        owner: None,
         line,
         column,
         len,
@@ -288,6 +316,7 @@ fn check_for<T: MayHaveSpan + ListingElement>(token: &T, out: &mut Vec<UnusedBin
     out.push(UnusedBinding {
         name: name.to_string(),
         kind: UnusedBindingKind::ForCounter,
+        owner: None,
         line,
         column,
         len,
@@ -317,6 +346,7 @@ fn check_repeat<T: MayHaveSpan + ListingElement>(token: &T, out: &mut Vec<Unused
     out.push(UnusedBinding {
         name: name.to_string(),
         kind: UnusedBindingKind::RepeatCounter,
+        owner: None,
         line,
         column,
         len,
@@ -374,6 +404,27 @@ mod tests {
         assert_eq!(found[0].name, "c");
         assert_eq!(found[0].kind, UnusedBindingKind::MacroParameter);
         assert!(found[0].removable_clause.is_none());
+        assert_eq!(
+            found[0].owner,
+            Some(UnusedBindingOwner {
+                name: "foo".to_string(),
+                param_index: 2
+            })
+        );
+    }
+
+    #[test]
+    fn an_unused_middle_macro_parameter_reports_its_own_index_not_just_the_last() {
+        let found = unused_in("MACRO foo, a, b, c\n    ld a, {a}\n    ld c, {c}\nENDM\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].name, "b");
+        assert_eq!(
+            found[0].owner,
+            Some(UnusedBindingOwner {
+                name: "foo".to_string(),
+                param_index: 1
+            })
+        );
     }
 
     /// The construct's own `.span()` covers the *whole* multi-line body
@@ -404,6 +455,27 @@ mod tests {
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].name, "b");
         assert_eq!(found[0].kind, UnusedBindingKind::FunctionParameter);
+        assert_eq!(
+            found[0].owner,
+            Some(UnusedBindingOwner {
+                name: "f".to_string(),
+                param_index: 1
+            })
+        );
+    }
+
+    #[test]
+    fn an_unused_middle_function_parameter_reports_its_own_index_not_just_the_last() {
+        let found = unused_in("FUNCTION f, a, b, c\n    RETURN {a} + {c}\nENDFUNCTION\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].name, "b");
+        assert_eq!(
+            found[0].owner,
+            Some(UnusedBindingOwner {
+                name: "f".to_string(),
+                param_index: 1
+            })
+        );
     }
 
     #[test]
@@ -423,6 +495,7 @@ mod tests {
         // "REPEAT 5, i" - the removable clause is ", i" starting right after "REPEAT 5".
         let header = "REPEAT 5, i";
         assert_eq!(&header[column - 1..column - 1 + len], ", i");
+        assert!(found[0].owner.is_none());
     }
 
     #[test]
@@ -455,6 +528,7 @@ mod tests {
         assert_eq!(found[0].name, "i");
         assert_eq!(found[0].kind, UnusedBindingKind::IterateCounter);
         assert!(found[0].removable_clause.is_none());
+        assert!(found[0].owner.is_none());
     }
 
     #[test]
@@ -464,6 +538,7 @@ mod tests {
         assert_eq!(found[0].name, "i");
         assert_eq!(found[0].kind, UnusedBindingKind::ForCounter);
         assert!(found[0].removable_clause.is_none());
+        assert!(found[0].owner.is_none());
     }
 
     #[test]

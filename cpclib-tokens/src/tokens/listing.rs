@@ -168,6 +168,9 @@ where Self: Debug + Sized + Sync
     fn is_run(&self) -> bool;
     fn run_expr(&self) -> &Self::Expr;
 
+    fn is_return(&self) -> bool;
+    fn return_value(&self) -> &Self::Expr;
+
     fn is_print(&self) -> bool;
     fn is_breakpoint(&self) -> bool;
     fn is_save(&self) -> bool;

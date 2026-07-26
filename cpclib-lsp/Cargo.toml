@@ -25,6 +25,7 @@ cpclib-tokens.workspace = true
 cpclib-z80emu.workspace = true
 camino.workspace = true
 minijinja.workspace = true
+either.workspace = true
 
 # LSP
 tower-lsp = "0.19"

@@ -20,6 +20,14 @@ macro_rules! listing_element_impl_most_methods {
         }
 
         #[inline]
+        fn is_return(&self) -> bool {
+            match self {
+                Self::Return(..) => true,
+                _ => false
+            }
+        }
+
+        #[inline]
         fn is_repeat_token(&self) -> bool {
             match self {
                 Self::RepeatToken { .. } => true,
@@ -55,6 +63,14 @@ macro_rules! listing_element_impl_most_methods {
         fn run_expr(&self) -> &Self::Expr {
             match self {
                 Self::Run(exp, _) => exp,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
+        fn return_value(&self) -> &Self::Expr {
+            match self {
+                Self::Return(exp) => exp,
                 _ => unreachable!()
             }
         }

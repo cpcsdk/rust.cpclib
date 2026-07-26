@@ -193,6 +193,9 @@ where T: cpclib_tokens::ListingElement + 'a {
     else if token.is_for() {
         flatten_listing(token.for_listing())
     }
+    else if token.is_function_definition() {
+        flatten_listing(token.function_definition_inner())
+    }
     else if token.is_iterate() {
         flatten_listing(token.iterate_listing())
     }

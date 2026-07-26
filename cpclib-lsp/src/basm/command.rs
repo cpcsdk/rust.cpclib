@@ -57,12 +57,16 @@ impl AssemblyAnalyzer {
             }
         }
 
-        // Offer removal of an unused REPEAT loop counter when the cursor/
-        // selection sits on its declaring header line - checked before the
-        // real-selection gate below since this must also work for a plain
-        // cursor position (the common way a quickfix gets triggered), not
-        // just an explicit multi-line selection.
+        // Offer removal of an unused REPEAT loop counter, or an unused
+        // MACRO/FUNCTION parameter, when the cursor/selection sits on its
+        // declaring header line - checked before the real-selection gate
+        // below since this must also work for a plain cursor position (the
+        // common way a quickfix gets triggered), not just an explicit
+        // multi-line selection.
         if let Some(a) = self.unused_repeat_counter_removal_action(document, range) {
+            actions.push(a);
+        }
+        if let Some(a) = self.unused_macro_or_function_parameter_removal_action(document, range) {
             actions.push(a);
         }
 
@@ -198,6 +202,37 @@ pub(super) fn select_range_command(uri: &Url, range: Range) -> Command {
         arguments: Some(vec![serde_json::json!({
             "uri": uri.to_string(),
             "range": range,
+        })])
+    }
+}
+
+/// Build a `cpclib.removeUnusedParameter` command - unlike every other
+/// action in this file/`refactor.rs`, this one has no synchronous `edit` at
+/// all: finding every call site across the workspace is real I/O (parsing
+/// every candidate file), too expensive to do on every `codeAction` request
+/// (which fires on essentially every cursor move in many clients). The
+/// command name is reached only from here (no client-side contribution
+/// needed, mirroring `cpclib.selectRange`'s own precedent) - the actual
+/// cross-file work happens in `execute_command` (`server/backend.rs`) once
+/// the user picks this from the Quick Fix menu.
+pub(super) fn remove_unused_parameter_command(
+    uri: &Url,
+    kind: crate::basm::remove_parameter::RemoveParameterKind,
+    owner_name: &str,
+    param_index: usize
+) -> Command {
+    let kind_str = match kind {
+        crate::basm::remove_parameter::RemoveParameterKind::Macro => "macro",
+        crate::basm::remove_parameter::RemoveParameterKind::Function => "function"
+    };
+    Command {
+        title: "Remove unused parameter".to_string(),
+        command: "cpclib.removeUnusedParameter".to_string(),
+        arguments: Some(vec![serde_json::json!({
+            "uri": uri.to_string(),
+            "kind": kind_str,
+            "ownerName": owner_name,
+            "paramIndex": param_index,
         })])
     }
 }
