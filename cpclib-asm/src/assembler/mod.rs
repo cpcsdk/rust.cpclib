@@ -2747,10 +2747,36 @@ impl Env {
             ))));
         }
 
+        let tokenized_content = cpclib_tokens::macro_segment::tokenize_macro_body(code, arguments);
+        for index in
+            crate::unused_bindings::unused_macro_parameter_indices(arguments, &tokenized_content)
+        {
+            let msg = format!("'{}' is never used in this macro's body", arguments[index]);
+            match source {
+                Some(source_span) => {
+                    let (line, column) = source_span.relative_line_and_column();
+                    let len = {
+                        let text: &str = source_span.as_ref();
+                        text.lines().next().map(str::len).unwrap_or(0)
+                    };
+                    self.add_warning(Box::new(
+                        AssemblerWarning::AlreadyRenderedWarningWithLocation {
+                            msg,
+                            line: line as u32,
+                            column: column as u32,
+                            len: len as u32
+                        }
+                    ));
+                },
+                None => {
+                    self.add_warning(Box::new(AssemblerWarning::AlreadyRenderedError(msg)));
+                }
+            }
+        }
+
         let location: Option<SourceLocation> = source.map(|s| s.into());
         let source = source.map(|s| s.into());
 
-        let tokenized_content = cpclib_tokens::macro_segment::tokenize_macro_body(code, arguments);
         let r#macro = ValueMacro::new(
             name.into(),
             arguments,
@@ -4388,6 +4414,8 @@ impl Env {
 
         // Apply the iteration
 
+        self.warn_if_counter_unused(counter_name, span, "ITERATE loop");
+
         // TODO restore a previous value if any
         self.symbols_mut().remove_symbol(counter_name)?;
 
@@ -4586,6 +4614,7 @@ impl Env {
             i += 1;
         }
 
+        self.warn_if_counter_unused(&counter_name, span, "FOR loop");
         self.symbols_mut().remove_symbol(counter_name)?;
 
         Ok(())
@@ -4661,6 +4690,49 @@ impl Env {
         Ok(())
     }
 
+    /// Push a warning if `bracketed_counter_name` (e.g. `"{i}"`) was never
+    /// referenced during the loop body that just finished assembling -
+    /// shared by REPEAT/ITERATE/FOR, called right before each removes its
+    /// own counter symbol. Mirrors `cpclib_asm::unused_bindings`'s own
+    /// static check (used by the LSP) for these same three construct
+    /// kinds - see that module's doc comment for why MACRO parameters
+    /// can't use this real-time approach at all (pure text substitution,
+    /// never touches the symbol table).
+    fn warn_if_counter_unused(
+        &mut self,
+        bracketed_counter_name: &str,
+        span: Option<&Z80Span>,
+        construct: &str
+    ) {
+        if self.symbols().is_used(bracketed_counter_name) {
+            return;
+        }
+        let name = bracketed_counter_name
+            .trim_start_matches('{')
+            .trim_end_matches('}');
+        let msg = format!("'{name}' is never used in this {construct}'s body");
+        match span {
+            Some(span) => {
+                let (line, column) = span.relative_line_and_column();
+                let len = {
+                    let text: &str = span.as_ref();
+                    text.lines().next().map(str::len).unwrap_or(0)
+                };
+                self.add_warning(Box::new(
+                    AssemblerError::AlreadyRenderedWarningWithLocation {
+                        msg,
+                        line: line as u32,
+                        column: column as u32,
+                        len: len as u32
+                    }
+                ));
+            },
+            None => {
+                self.add_warning(Box::new(AssemblerError::AlreadyRenderedError(msg)));
+            }
+        }
+    }
+
     /// Handle the standard repetition directive
     pub fn visit_repeat<'token, T, E>(
         &mut self,
@@ -4723,6 +4795,7 @@ impl Env {
         }
 
         if let Some(counter_name) = counter_name {
+            self.warn_if_counter_unused(counter_name, span, "REPEAT loop");
             self.symbols_mut().remove_symbol(counter_name)?;
         }
         Ok(())

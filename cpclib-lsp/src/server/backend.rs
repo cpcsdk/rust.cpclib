@@ -694,6 +694,7 @@ impl LanguageServer for CpcLspBackend {
                         code_action_kinds: Some(vec![
                             CodeActionKind::REFACTOR_REWRITE,
                             CodeActionKind::REFACTOR_EXTRACT,
+                            CodeActionKind::QUICKFIX,
                             CodeActionKind::EMPTY,
                         ]),
                         work_done_progress_options: Default::default(),

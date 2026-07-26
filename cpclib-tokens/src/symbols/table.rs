@@ -924,6 +924,15 @@ impl SymbolsTableTrait for SymbolsTable {
     {
         let symbol: Symbol = symbol.into();
 
+        // A removed symbol is a wholly fresh binding if the same name is
+        // ever reused later (e.g. a REPEAT/ITERATE/FOR counter name reused
+        // across two separate, non-nested loops) - clear its "used" flag
+        // too, not just its value, so `is_used` doesn't leak a stale
+        // answer from an unrelated, earlier binding of the same name.
+        if let Ok(extended) = self.extend_readable_symbol::<Symbol>(symbol.clone()) {
+            self.used_symbols.remove(&extended);
+        }
+
         // try to remove for the function first
         if let Some(frame) = self.functions_stack.current_frame_mut() {
             let res = frame.remove(&symbol);

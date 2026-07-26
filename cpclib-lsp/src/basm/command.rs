@@ -57,6 +57,15 @@ impl AssemblyAnalyzer {
             }
         }
 
+        // Offer removal of an unused REPEAT loop counter when the cursor/
+        // selection sits on its declaring header line - checked before the
+        // real-selection gate below since this must also work for a plain
+        // cursor position (the common way a quickfix gets triggered), not
+        // just an explicit multi-line selection.
+        if let Some(a) = self.unused_repeat_counter_removal_action(document, range) {
+            actions.push(a);
+        }
+
         let Some((start_line, end_line)) = line_range_from_selection(range, all_lines.len())
         else {
             return actions;

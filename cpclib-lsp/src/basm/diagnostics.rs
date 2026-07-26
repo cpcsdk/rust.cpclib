@@ -116,6 +116,7 @@ impl AssemblyAnalyzer {
             collect_assembler_warnings(&env, document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
             Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
+            collect_unused_binding_warnings(&listing, document, &mut diagnostics);
         }
 
         diagnostics
@@ -153,6 +154,74 @@ pub(super) fn collect_assembler_warnings(
     }
     for diag in &mut out[start..] {
         diag.severity = Some(DiagnosticSeverity::WARNING);
+    }
+}
+
+/// Walk `cpclib_asm::unused_bindings::find_unused_bindings` into
+/// `Diagnostic`s - one `WARNING` per declared-but-never-referenced FUNCTION
+/// parameter. The detection itself lives in `cpclib-asm` (see that crate's
+/// own module doc comment) so any other consumer can reuse it without
+/// recoding it; this is purely the "turn a structured finding into an LSP
+/// diagnostic" glue, matching `collect_assembler_warnings`'s own role for
+/// real assembler warnings.
+///
+/// Only `FunctionParameter` is reported here, even though
+/// `find_unused_bindings` also detects unused MACRO parameters and REPEAT/
+/// ITERATE/FOR loop counters. Those other four kinds have a *real-time*
+/// equivalent check wired into `cpclib-asm`'s own assembler
+/// (`Env::warn_if_counter_unused`, and `visit_macro_definition`'s own
+/// `unused_macro_parameter_indices` call) that fires during the real
+/// `dry_run_env_cached` assemble a few lines above and already reaches this
+/// same `diagnostics` vector via `collect_assembler_warnings`'s
+/// `env.warnings()` walk - reporting them again here would duplicate every
+/// one of those warnings. FUNCTION parameters are the one kind with no
+/// real-time equivalent (`leave_function` never clears `used_symbols`, see
+/// the module doc comment on `unused_bindings` for why), so the static
+/// method is still the only source of truth for that kind specifically.
+fn collect_unused_binding_warnings(
+    listing: &cpclib_asm::parser::obtained::LocatedListing,
+    document: &Document,
+    out: &mut Vec<Diagnostic>
+) {
+    use cpclib_asm::unused_bindings::UnusedBindingKind;
+
+    for binding in cpclib_asm::unused_bindings::find_unused_bindings(listing.iter()) {
+        if binding.kind != UnusedBindingKind::FunctionParameter {
+            continue;
+        }
+        let line = binding.line.saturating_sub(1) as u32;
+        let col = binding.column.saturating_sub(1);
+        let line_text = document.line(line as usize).unwrap_or_default();
+        let start_char = crate::common::document::byte_offset_to_utf16_col(&line_text, col) as u32;
+        let end_char =
+            crate::common::document::byte_offset_to_utf16_col(&line_text, col + binding.len.max(1))
+                as u32;
+        let construct = match binding.kind {
+            UnusedBindingKind::MacroParameter => "macro",
+            UnusedBindingKind::FunctionParameter => "function",
+            UnusedBindingKind::RepeatCounter => "REPEAT loop",
+            UnusedBindingKind::IterateCounter => "ITERATE loop",
+            UnusedBindingKind::ForCounter => "FOR loop"
+        };
+        out.push(Diagnostic {
+            range: Range {
+                start: Position {
+                    line,
+                    character: start_char
+                },
+                end: Position {
+                    line,
+                    character: end_char
+                }
+            },
+            severity: Some(DiagnosticSeverity::WARNING),
+            source: Some("basm".to_string()),
+            message: format!(
+                "'{}' is never used in this {construct}'s body",
+                binding.name
+            ),
+            ..Default::default()
+        });
     }
 }
 
@@ -829,6 +898,53 @@ mod tests {
                 .filter(|d| d.message.contains("does not fit"))
                 .count(),
             1,
+            "{diags:?}"
+        );
+    }
+
+    #[test]
+    fn unused_macro_parameter_is_a_warning() {
+        let text = "MACRO foo, a, b, c\n    ld a, {a}\n    ld b, {b}\nENDM\nfoo(1, 2, 3)\n";
+        let diags = diagnostics_for(text);
+        let found: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("is never used"))
+            .collect();
+        assert_eq!(found.len(), 1, "{diags:?}");
+        assert_eq!(found[0].severity, Some(DiagnosticSeverity::WARNING));
+        assert!(found[0].message.contains('c'), "{}", found[0].message);
+    }
+
+    #[test]
+    fn unused_function_parameter_is_a_warning() {
+        let text = "FUNCTION f, a, b\n    IF {a} > 0\n        RETURN 1\n    ENDIF\n    RETURN 0\nENDFUNCTION\nval equ f(1, 2)\n";
+        let diags = diagnostics_for(text);
+        let found: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("is never used"))
+            .collect();
+        assert_eq!(found.len(), 1, "{diags:?}");
+        assert!(found[0].message.contains('b'), "{}", found[0].message);
+    }
+
+    #[test]
+    fn unused_repeat_counter_is_a_warning() {
+        let text = "org 0x4000\nREPEAT 3, i\n    nop\nENDR\n";
+        let diags = diagnostics_for(text);
+        let found: Vec<_> = diags
+            .iter()
+            .filter(|d| d.message.contains("is never used"))
+            .collect();
+        assert_eq!(found.len(), 1, "{diags:?}");
+        assert!(found[0].message.contains('i'), "{}", found[0].message);
+    }
+
+    #[test]
+    fn no_false_positive_when_every_macro_function_and_loop_binding_is_used() {
+        let text = "MACRO foo, a\n    ld a, {a}\nENDM\nfoo(1)\nREPEAT 3, i\n    db {i}\nENDR\n";
+        let diags = diagnostics_for(text);
+        assert!(
+            !diags.iter().any(|d| d.message.contains("is never used")),
             "{diags:?}"
         );
     }
