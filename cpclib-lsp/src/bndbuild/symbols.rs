@@ -6,6 +6,7 @@ use tower_lsp::lsp_types::*;
 use super::BuildFileAnalyzer;
 use super::token::Collecting;
 use crate::common::document::Document;
+use crate::common::symbols::container_symbol;
 
 impl BuildFileAnalyzer {
     /// Outline for the editor: two top-level groups, "Variables" (the
@@ -17,10 +18,10 @@ impl BuildFileAnalyzer {
 
         let mut root = Vec::new();
         if !variables.is_empty() {
-            root.push(Self::container_symbol("Variables", variables));
+            root.push(container_symbol("Variables", variables));
         }
         if !targets.is_empty() {
-            root.push(Self::container_symbol("Artifacts", targets));
+            root.push(container_symbol("Artifacts", targets));
         }
         root
     }
@@ -57,35 +58,6 @@ impl BuildFileAnalyzer {
                 }
             })
             .collect()
-    }
-
-    /// Group `children` under a synthetic namespace symbol spanning their
-    /// combined range. `children` must be non-empty.
-    fn container_symbol(name: &str, children: Vec<DocumentSymbol>) -> DocumentSymbol {
-        let mut start = children[0].range.start;
-        let mut end = children[0].range.end;
-        for child in &children[1..] {
-            if (child.range.start.line, child.range.start.character) < (start.line, start.character)
-            {
-                start = child.range.start;
-            }
-            if (child.range.end.line, child.range.end.character) > (end.line, end.character) {
-                end = child.range.end;
-            }
-        }
-        let range = Range { start, end };
-
-        #[allow(deprecated)]
-        DocumentSymbol {
-            name: name.to_string(),
-            detail: None,
-            kind: SymbolKind::NAMESPACE,
-            tags: None,
-            deprecated: None,
-            range,
-            selection_range: range,
-            children: Some(children)
-        }
     }
 
     fn scan_symbols_from_text(

@@ -21,6 +21,14 @@ pub struct RuleRunOutcome {
     pub message: String,
     /// Error diagnostic anchored on the failing line; empty on success.
     pub diagnostics: Vec<Diagnostic>,
+    /// A diagnostic for a *different* file the failing tool's own output
+    /// referenced (e.g. `basm`'s own `┌─ sna.asm:24:5` syntax-error locus) —
+    /// `None` when the failure carries no such reference, or it couldn't be
+    /// resolved to a real file. Unlike `diagnostics` (always for the build
+    /// file itself, republished fresh on every run), the caller is expected
+    /// to store this and keep it visible on the target file until the next
+    /// successful build, not just until that file's own next edit.
+    pub build_error: Option<(Url, Diagnostic)>,
     pub success: bool
 }
 
@@ -239,6 +247,7 @@ impl BuildFileAnalyzer {
                 RuleRunOutcome {
                     message: format!("Rule '{rule}' built successfully"),
                     diagnostics: Vec::new(),
+                    build_error: None,
                     success: true
                 }
             },
@@ -343,11 +352,92 @@ fn failure_outcome(
         ..Default::default()
     };
 
+    // In addition to the bnd-file-anchored diagnostic above, the failing
+    // tool's own output may reference a specific *other* source file/line
+    // (e.g. a `basm` syntax error) - surface that as a second diagnostic on
+    // that file too, if it can be resolved to a real one on disk.
+    let build_error =
+        extract_referenced_location(full_output).and_then(|(path, ref_line, ref_col)| {
+            let target_uri = resolve_referenced_path(&path, &document.uri)?;
+            let line = ref_line.saturating_sub(1);
+            let character = ref_col.saturating_sub(1);
+            let diagnostic = Diagnostic {
+                range: Range {
+                    start: Position { line, character },
+                    end: Position {
+                        line,
+                        character: character + 1
+                    }
+                },
+                severity: Some(DiagnosticSeverity::ERROR),
+                source: Some("bndbuild".to_string()),
+                message: format!("Build error (from rule '{failing_target}'): {msg}"),
+                ..Default::default()
+            };
+            Some((target_uri, diagnostic))
+        });
+
     RuleRunOutcome {
         message: format!("Rule '{requested_rule}' failed: {msg}"),
         diagnostics: vec![diagnostic],
+        build_error,
         success: false
     }
+}
+
+/// Extract a `path:line:col` location referenced in a failing tool's own
+/// captured output (e.g. a `codespan-reporting`-rendered `basm` syntax
+/// error) - `line`/`col` both 1-based, exactly as reported. Scans line by
+/// line for one containing the `"┌─ "` locus marker `codespan-reporting`
+/// actually renders by default in this workspace (`colored_errors` is a
+/// default Cargo feature on `cpclib-asm`, empirically confirmed by running
+/// the real `basm` binary against a broken file) or the ASCII `"--> "` form
+/// (a differently-configured build, or a different tool). `path` may itself
+/// contain `:` (rare on Linux, but not impossible), so only the *last two*
+/// colon-separated segments are required to be plain digits.
+fn extract_referenced_location(text: &str) -> Option<(String, u32, u32)> {
+    for line in text.lines() {
+        let after_marker = line
+            .split_once("┌─ ")
+            .or_else(|| line.split_once("--> "))
+            .map(|(_, rest)| rest.trim());
+        let Some(rest) = after_marker
+        else {
+            continue;
+        };
+
+        let mut parts = rest.rsplitn(3, ':');
+        let (Some(col_str), Some(line_str), Some(path)) =
+            (parts.next(), parts.next(), parts.next())
+        else {
+            continue;
+        };
+        let (Ok(col), Ok(line_no)) = (col_str.parse::<u32>(), line_str.parse::<u32>())
+        else {
+            continue;
+        };
+        if path.is_empty() {
+            continue;
+        }
+        return Some((path.to_string(), line_no, col));
+    }
+    None
+}
+
+/// Resolve `path_str` (as reported by a failing tool, possibly absolute,
+/// possibly relative to wherever it was invoked from) to a real file's
+/// `Url`. Tries it directly first (covers an absolute path, the common case
+/// for an in-process/embedded task); falls back to resolving it relative to
+/// the build file's own directory (walking up to the nearest project-root
+/// marker) via the same `resolve_include_path` basm's own include
+/// navigation already uses. `None` when neither resolves to a real file.
+fn resolve_referenced_path(path_str: &str, doc_uri: &Url) -> Option<Url> {
+    let direct = std::path::Path::new(path_str);
+    if direct.exists() {
+        return Url::from_file_path(direct).ok();
+    }
+    let resolved = crate::basm::definition::resolve_include_path(path_str, doc_uri)?;
+    Url::from_file_path(resolved).ok()
 }
 
 /// Enumerate the task lines declared under the rule starting at `rule_line`,
@@ -699,5 +789,101 @@ mod tests {
              the generic error string, got: {}",
             diag.message
         );
+    }
+
+    #[test]
+    fn extract_referenced_location_finds_the_unicode_locus_line() {
+        // The real, empirically-confirmed shape `codespan-reporting`
+        // renders by default in this workspace (`colored_errors` is a
+        // default Cargo feature on `cpclib-asm`).
+        let text = "error: Syntax error\n  ┌─ /tmp/broken.asm:2:7\n  │\n2 │ ld a, ,\n  │       ^ invalid LD: wrong source\n";
+        assert_eq!(
+            extract_referenced_location(text),
+            Some(("/tmp/broken.asm".to_string(), 2, 7))
+        );
+    }
+
+    #[test]
+    fn extract_referenced_location_finds_the_ascii_locus_line_too() {
+        let text = "error: Syntax error\n  --> /tmp/broken.asm:2:7\n";
+        assert_eq!(
+            extract_referenced_location(text),
+            Some(("/tmp/broken.asm".to_string(), 2, 7))
+        );
+    }
+
+    #[test]
+    fn extract_referenced_location_handles_a_path_containing_a_colon() {
+        let text = "  ┌─ C:/weird/path.asm:10:3\n";
+        assert_eq!(
+            extract_referenced_location(text),
+            Some(("C:/weird/path.asm".to_string(), 10, 3))
+        );
+    }
+
+    #[test]
+    fn extract_referenced_location_returns_none_without_a_locus_line() {
+        let text = "Error while launching the command.\nsome generic message\n";
+        assert_eq!(extract_referenced_location(text), None);
+    }
+
+    #[test]
+    fn extract_referenced_location_returns_none_for_a_malformed_locus_line() {
+        let text = "  ┌─ not_a_real_location\n";
+        assert_eq!(extract_referenced_location(text), None);
+    }
+
+    #[test]
+    fn failure_outcome_surfaces_a_cross_file_diagnostic_for_a_referenced_source_file() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let bnd_content = "- tgt: broken\n  phony: true\n  cmd: basm broken.asm\n";
+        let document = doc(tmp.path().as_std_path(), bnd_content);
+        let asm_path = tmp.path().as_std_path().join("broken.asm");
+        std::fs::write(&asm_path, "ld a, ,\n").unwrap();
+
+        let full_output = format!(
+            "error: Syntax error\n  ┌─ {}:1:7\n  │\n1 │ ld a, ,\n  │       ^ invalid LD: wrong source\n",
+            asm_path.display()
+        );
+        let outcome = failure_outcome(
+            &document,
+            "broken",
+            "broken",
+            "invalid LD: wrong source".to_string(),
+            None,
+            &full_output
+        );
+
+        let (target_uri, diag) = outcome
+            .build_error
+            .expect("expected a cross-file diagnostic");
+        assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
+        assert_eq!(
+            diag.range.start,
+            Position {
+                line: 0,
+                character: 6
+            }
+        );
+        assert!(diag.message.contains("Build error"), "{}", diag.message);
+        assert!(diag.message.contains("invalid LD"), "{}", diag.message);
+    }
+
+    #[test]
+    fn failure_outcome_has_no_cross_file_diagnostic_when_output_references_nothing() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let content =
+            "- tgt: broken\n  phony: true\n  cmd: cp does_not_exist_anywhere.src dst.bin\n";
+        let document = doc(tmp.path().as_std_path(), content);
+
+        let outcome = failure_outcome(
+            &document,
+            "broken",
+            "broken",
+            "generic failure".to_string(),
+            None,
+            "cp: cannot stat 'does_not_exist_anywhere.src': No such file or directory\n"
+        );
+        assert!(outcome.build_error.is_none(), "{:?}", outcome.message);
     }
 }

@@ -38,7 +38,17 @@ pub struct CpcLspBackend {
     /// Empty when the client sent neither `workspaceFolders` nor `rootUri`
     /// (e.g. single-file mode) - the fallback then derives a root from the
     /// document itself, see `basm::definition::project_root_for`.
-    workspace_roots: RwLock<Vec<PathBuf>>
+    workspace_roots: RwLock<Vec<PathBuf>>,
+    /// A bndbuild rule failure's diagnostic for a *referenced source file*
+    /// (see `bndbuild::command::RuleRunOutcome::build_error`), keyed by that
+    /// file's own URI. Deliberately *not* version-gated like `parse_cache`/
+    /// `symbols_cache` - it must specifically survive `did_change`/`did_save`
+    /// of its own target URI (a build error persists until the next build,
+    /// unlike a live parse error, which clears on re-edit); `compute_diagnostics`
+    /// merges an entry in here into every analyze/publish cycle for that URI
+    /// until `execute_command`'s `"cpclib.runRule"` handler clears it (on the
+    /// next successful run) or overwrites it (on the next failing one).
+    build_error_diagnostics: Arc<DashMap<Url, Diagnostic>>
 }
 
 impl CpcLspBackend {
@@ -50,7 +60,8 @@ impl CpcLspBackend {
             build_analyzer: Arc::new(BuildFileAnalyzer::new()),
             basic_analyzer: Arc::new(BasicAnalyzer::new()),
             pending_versions: Arc::new(DashMap::new()),
-            workspace_roots: RwLock::new(Vec::new())
+            workspace_roots: RwLock::new(Vec::new()),
+            build_error_diagnostics: Arc::new(DashMap::new())
         }
     }
 
@@ -66,7 +77,8 @@ impl CpcLspBackend {
             &self.build_analyzer,
             &self.basic_analyzer,
             document,
-            &self.workspace_roots()
+            &self.workspace_roots(),
+            &self.build_error_diagnostics
         );
         self.publish_diagnostics(document.uri.clone(), diagnostics)
             .await;
@@ -470,17 +482,20 @@ impl CpcLspBackend {
 }
 
 /// Dispatches `document` to whichever analyzer its `doc_type` owns, then
-/// relativizes every diagnostic's message against `workspace_roots`. A free
-/// function (not a `&self` method) so it's callable from `did_change`'s
-/// debounced `tokio::spawn` task, which only holds the individually
-/// `Arc`-cloned analyzers (and an owned `workspace_roots` snapshot taken
-/// before spawning), not a full `&CpcLspBackend`.
+/// relativizes every diagnostic's message against `workspace_roots` and
+/// merges in a sticky `build_error_diagnostics` entry for this URI, if any
+/// (see that field's own doc comment on `CpcLspBackend`). A free function
+/// (not a `&self` method) so it's callable from `did_change`'s debounced
+/// `tokio::spawn` task, which only holds the individually `Arc`-cloned
+/// analyzers/maps (and an owned `workspace_roots` snapshot taken before
+/// spawning), not a full `&CpcLspBackend`.
 fn compute_diagnostics(
     asm_analyzer: &AssemblyAnalyzer,
     build_analyzer: &BuildFileAnalyzer,
     basic_analyzer: &BasicAnalyzer,
     document: &Document,
-    workspace_roots: &[PathBuf]
+    workspace_roots: &[PathBuf],
+    build_error_diagnostics: &DashMap<Url, Diagnostic>
 ) -> Vec<Diagnostic> {
     let mut diagnostics = match document.doc_type {
         DocumentType::Assembly => asm_analyzer.analyze(document),
@@ -489,6 +504,9 @@ fn compute_diagnostics(
         DocumentType::Unknown => Vec::new()
     };
     relativize_diagnostic_messages(&mut diagnostics, workspace_roots);
+    if let Some(build_error) = build_error_diagnostics.get(&document.uri) {
+        diagnostics.push(build_error.clone());
+    }
     diagnostics
 }
 
@@ -764,6 +782,7 @@ impl LanguageServer for CpcLspBackend {
         let build_analyzer = Arc::clone(&self.build_analyzer);
         let basic_analyzer = Arc::clone(&self.basic_analyzer);
         let workspace_roots = self.workspace_roots();
+        let build_error_diagnostics = Arc::clone(&self.build_error_diagnostics);
 
         tokio::spawn(async move {
             tokio::time::sleep(DID_CHANGE_DEBOUNCE).await;
@@ -789,7 +808,8 @@ impl LanguageServer for CpcLspBackend {
                 &build_analyzer,
                 &basic_analyzer,
                 &document,
-                &workspace_roots
+                &workspace_roots,
+                &build_error_diagnostics
             );
             client.publish_diagnostics(uri, diagnostics, None).await;
         });
@@ -1478,6 +1498,38 @@ impl LanguageServer for CpcLspBackend {
             diagnostics.extend(outcome.diagnostics);
             self.publish_diagnostics(uri, diagnostics).await;
 
+            if failed {
+                // A referenced *source* file's own build-error diagnostic
+                // (distinct from the bnd-file diagnostic above) - sticky
+                // until the next successful build, not just this file's own
+                // next edit. Stored, then republished immediately so it's
+                // visible without waiting for that.
+                if let Some((target_uri, diagnostic)) = outcome.build_error {
+                    self.build_error_diagnostics
+                        .insert(target_uri.clone(), diagnostic);
+                    if let Some(target_document) = self.load_document(&target_uri) {
+                        self.analyze_document(&target_document).await;
+                    }
+                }
+            }
+            else {
+                // Every previously-stored build error is now stale - clear
+                // them all and republish so the clearing is reflected right
+                // away rather than only on each affected file's next
+                // unrelated edit.
+                let stale: Vec<Url> = self
+                    .build_error_diagnostics
+                    .iter()
+                    .map(|entry| entry.key().clone())
+                    .collect();
+                self.build_error_diagnostics.clear();
+                for stale_uri in stale {
+                    if let Some(stale_document) = self.load_document(&stale_uri) {
+                        self.analyze_document(&stale_document).await;
+                    }
+                }
+            }
+
             self.client
                 .show_message(
                     if failed {
@@ -1999,6 +2051,154 @@ mod relativize_diagnostic_messages_tests {
 }
 
 #[cfg(test)]
+mod build_error_diagnostics_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    fn build_error_diag(message: &str) -> Diagnostic {
+        Diagnostic {
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0
+                },
+                end: Position {
+                    line: 0,
+                    character: 1
+                }
+            },
+            severity: Some(DiagnosticSeverity::ERROR),
+            source: Some("bndbuild".to_string()),
+            message: message.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// The core persistence mechanism: `compute_diagnostics` is the one
+    /// function every analyze path (`analyze_document`, and `did_change`'s
+    /// debounced task) funnels through - proving it merges in a stored
+    /// entry proves both call sites keep a build-error diagnostic visible
+    /// across a live re-analysis of its own target file, unlike a live
+    /// parse-error diagnostic (which only exists when re-analysis itself
+    /// finds one).
+    #[test]
+    fn a_stored_build_error_survives_a_normal_analyze_cycle() {
+        let asm_analyzer = AssemblyAnalyzer::new();
+        let build_analyzer = BuildFileAnalyzer::new();
+        let basic_analyzer = BasicAnalyzer::new();
+        let build_error_diagnostics: DashMap<Url, Diagnostic> = DashMap::new();
+
+        let uri = Url::parse("file:///sna.asm").unwrap();
+        let stored = build_error_diag("Build error (from rule 'x'): boom");
+        build_error_diagnostics.insert(uri.clone(), stored.clone());
+
+        // Clean, valid code - live analysis alone finds nothing.
+        let document = Document::new(uri, "org 0x8000\n    ret\n".to_string(), 1);
+        let diagnostics = compute_diagnostics(
+            &asm_analyzer,
+            &build_analyzer,
+            &basic_analyzer,
+            &document,
+            &[],
+            &build_error_diagnostics
+        );
+
+        assert_eq!(diagnostics, vec![stored], "{diagnostics:?}");
+    }
+
+    #[test]
+    fn a_stored_build_error_for_a_different_uri_does_not_leak_in() {
+        let asm_analyzer = AssemblyAnalyzer::new();
+        let build_analyzer = BuildFileAnalyzer::new();
+        let basic_analyzer = BasicAnalyzer::new();
+        let build_error_diagnostics: DashMap<Url, Diagnostic> = DashMap::new();
+
+        build_error_diagnostics.insert(
+            Url::parse("file:///other.asm").unwrap(),
+            build_error_diag("Build error (from rule 'x'): boom")
+        );
+
+        let document = Document::new(
+            Url::parse("file:///sna.asm").unwrap(),
+            "org 0x8000\n    ret\n".to_string(),
+            1
+        );
+        let diagnostics = compute_diagnostics(
+            &asm_analyzer,
+            &build_analyzer,
+            &basic_analyzer,
+            &document,
+            &[],
+            &build_error_diagnostics
+        );
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    #[tokio::test]
+    async fn a_successful_build_clears_previously_stored_build_error_diagnostics() {
+        use futures_util::StreamExt;
+
+        let (service, socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        // `execute_command`'s "cpclib.runRule" branch calls
+        // `self.client.log_message`/`show_message`, both of which (unlike
+        // `publish_diagnostics`) send unconditionally - not gated behind the
+        // server having gone through `initialize` - over a `ClientSocket`
+        // backed by a capacity-1 channel. With nothing draining `socket`,
+        // that first send blocks forever once the single buffer slot fills,
+        // hanging the whole test (confirmed empirically: it does). Draining
+        // it here in the background is what a real client's message loop
+        // does, and what a `_socket`-only test (fine for handlers that never
+        // proactively message the client) can't skip once one actually does.
+        tokio::spawn(socket.for_each(|_| async {}));
+
+        // Seed a stale entry, as if an earlier failing build had stored one.
+        let target_uri = Url::parse("file:///sna.asm").unwrap();
+        backend.build_error_diagnostics.insert(
+            target_uri,
+            build_error_diag("Build error (from rule 'x'): stale")
+        );
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let bnd_path = tmp.path().as_std_path().join("bndbuild.yml");
+        let bnd_content = "- tgt: fine\n  phony: true\n  cmd: echo all good\n";
+        std::fs::write(&bnd_path, bnd_content).unwrap();
+        let bnd_uri = Url::from_file_path(&bnd_path).unwrap();
+
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: bnd_uri,
+                    language_id: "bndbuild".to_string(),
+                    version: 1,
+                    text: bnd_content.to_string()
+                }
+            })
+            .await;
+
+        let result = backend
+            .execute_command(ExecuteCommandParams {
+                command: "cpclib.runRule".to_string(),
+                arguments: vec![
+                    serde_json::Value::String("fine".to_string()),
+                    serde_json::Value::String(bnd_path.to_string_lossy().to_string()),
+                ],
+                work_done_progress_params: Default::default()
+            })
+            .await;
+
+        assert!(result.is_ok(), "{result:?}");
+        assert!(
+            backend.build_error_diagnostics.is_empty(),
+            "{:?}",
+            backend.build_error_diagnostics
+        );
+    }
+}
+
+#[cfg(test)]
 mod outgoing_calls_tests {
     use tower_lsp::LspService;
 
@@ -2159,7 +2359,18 @@ mod dispatch_by_doc_type_tests {
 
         match response {
             Some(DocumentSymbolResponse::Nested(symbols)) => {
-                assert!(symbols.iter().any(|s| s.name == "start"), "{symbols:?}");
+                // "start" is nested one level deep now (under a "Labels"
+                // container, see basm/symbols.rs's own nested-outline tests
+                // for the full shape) - this test only cares that the
+                // dispatch reached the assembly analyzer at all, not the
+                // exact tree shape.
+                let found = symbols.iter().any(|s| {
+                    s.name == "start"
+                        || s.children
+                            .as_ref()
+                            .is_some_and(|c| c.iter().any(|child| child.name == "start"))
+                });
+                assert!(found, "{symbols:?}");
             },
             other => panic!("expected nested document symbols, got {other:?}")
         }
