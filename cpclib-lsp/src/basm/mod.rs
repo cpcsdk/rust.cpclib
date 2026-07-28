@@ -6,7 +6,9 @@
 //! Assembly sources can embed Locomotive BASIC blocks (`LOCOMOTIVE`
 //! directive); those are detected here (`embedded_basic`) but analyzed by
 //! the `locomotive` module — a one-directional `basm -> locomotive`
-//! dependency.
+//! dependency. Similarly, a `.asm` file's comments can embed a `#!bndbuild`
+//! rule; that's detected here (`embedded_bndbuild`) but executed by the
+//! `bndbuild` module — a one-directional `basm -> bndbuild` dependency.
 
 use std::sync::Arc;
 
@@ -24,6 +26,7 @@ pub mod definition;
 pub mod diagnostics;
 pub mod disassemble;
 pub mod embedded_basic;
+pub mod embedded_bndbuild;
 pub mod expand;
 pub mod format;
 pub mod hover;

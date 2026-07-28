@@ -287,6 +287,159 @@ impl BuildFileAnalyzer {
         ));
         outcome
     }
+
+    /// Like `run_rule`, but for a rule embedded in a `.asm` file's own
+    /// comments (`basm::embedded_bndbuild`) rather than a real standalone
+    /// build file — `yaml_text`/`yaml_start_line` come from
+    /// `basm::embedded_bndbuild::EmbeddedBndbuildBlock`; `host_document` is
+    /// the *.asm* file itself, since there is no separate on-disk build
+    /// file to load.
+    ///
+    /// Builds the `BndBuilder` from the extracted text directly
+    /// (`BndBuilder::decode_from_reader` + `from_string`) instead of
+    /// `BndBuilder::from_path`, with `working_directory` set to the `.asm`
+    /// file's own parent directory so `{% include %}`/relative task paths
+    /// resolve the same way a real build file's would.
+    ///
+    /// Reuses `failure_outcome`/`ignored_error_diagnostics` unmodified
+    /// against a synthetic in-memory `Document` whose text is just the
+    /// block's own YAML (so their internal task-line-identification logic
+    /// runs against precise, block-relative line numbers) but whose `uri`
+    /// stays the real `.asm` file's own (so a cross-file `build_error`
+    /// reference still resolves correctly) — the resulting block-relative
+    /// diagnostic line numbers are then shifted by `yaml_start_line` to
+    /// land back on the right line in the real `.asm` file. `build_error`'s
+    /// diagnostic, if any, already carries real, absolute coordinates for a
+    /// *different* file and must not be shifted.
+    pub(crate) fn run_embedded_rule(
+        &self,
+        host_document: &Document,
+        yaml_text: &str,
+        yaml_start_line: u32,
+        rule: &str,
+        output: Option<UnboundedSender<OutputLine>>
+    ) -> RuleRunOutcome {
+        let Ok(path) = host_document.uri.to_file_path()
+        else {
+            return failure_outcome(
+                host_document,
+                rule,
+                rule,
+                "invalid .asm file path".to_string(),
+                None,
+                ""
+            );
+        };
+        let Some(utf8_path) = path.to_str().map(camino::Utf8PathBuf::from)
+        else {
+            return failure_outcome(
+                host_document,
+                rule,
+                rule,
+                "non-UTF8 .asm file path".to_string(),
+                None,
+                ""
+            );
+        };
+        let working_directory = utf8_path.parent().map(|d| d.to_owned());
+        let synthetic_name = camino::Utf8PathBuf::from(format!("{utf8_path}#{rule} (embedded)"));
+
+        let rendered = cpclib_bndbuild::BndBuilder::decode_from_reader(
+            std::io::Cursor::new(yaml_text.as_bytes()),
+            working_directory.as_ref(),
+            &Vec::<(String, String)>::new(),
+            &synthetic_name
+        );
+        let rendered = match rendered {
+            Ok(r) => r,
+            Err(e) => {
+                return failure_outcome(
+                    host_document,
+                    rule,
+                    rule,
+                    strip_ansi(&e.to_string()),
+                    None,
+                    ""
+                );
+            }
+        };
+
+        let builder =
+            cpclib_bndbuild::BndBuilder::from_string(rendered, Some(&synthetic_name), false);
+        let mut builder = match builder {
+            Ok(b) => b,
+            Err(e) => {
+                return failure_outcome(
+                    host_document,
+                    rule,
+                    rule,
+                    strip_ansi(&e.to_string()),
+                    None,
+                    ""
+                );
+            }
+        };
+
+        let task_tracker = TaskTracker::default();
+        builder.add_observer(BndBuilderObserverRc::new(task_tracker.clone()));
+
+        if let Some(tx) = output {
+            builder.add_observer(BndBuilderObserverRc::new(StreamingObserver { tx }));
+        }
+
+        let block_document = Document::new(host_document.uri.clone(), yaml_text.to_string(), 0);
+
+        let mut outcome = match builder.execute(rule) {
+            Ok(()) => {
+                RuleRunOutcome {
+                    message: format!("Rule '{rule}' built successfully"),
+                    diagnostics: Vec::new(),
+                    build_error: None,
+                    success: true
+                }
+            },
+            Err(e) => {
+                let (failing_target, msg) = match &e {
+                    cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
+                        (fname.clone(), msg.clone())
+                    },
+                    cpclib_bndbuild::BndBuilderError::DefaultTargetError { source } => {
+                        match source.as_ref() {
+                            cpclib_bndbuild::BndBuilderError::ExecuteError { fname, msg } => {
+                                (fname.clone(), msg.clone())
+                            },
+                            other => (rule.to_string(), other.to_string())
+                        }
+                    },
+                    other => (rule.to_string(), other.to_string())
+                };
+                let failed_task_index = task_tracker.failed_index_for(&failing_target);
+                let full_output = strip_ansi(&task_tracker.output_for(&failing_target));
+                let mut o = failure_outcome(
+                    &block_document,
+                    rule,
+                    &failing_target,
+                    strip_ansi(&msg),
+                    failed_task_index,
+                    &full_output
+                );
+                for d in o.diagnostics.iter_mut() {
+                    d.range.start.line += yaml_start_line;
+                    d.range.end.line += yaml_start_line;
+                }
+                o
+            }
+        };
+
+        let mut ignored =
+            ignored_error_diagnostics(&block_document, task_tracker.take_ignored_errors());
+        for d in ignored.iter_mut() {
+            d.range.start.line += yaml_start_line;
+            d.range.end.line += yaml_start_line;
+        }
+        outcome.diagnostics.extend(ignored);
+        outcome
+    }
 }
 
 /// Build the failure outcome: locate the best line to highlight and produce
@@ -356,8 +509,24 @@ fn failure_outcome(
     // tool's own output may reference a specific *other* source file/line
     // (e.g. a `basm` syntax error) - surface that as a second diagnostic on
     // that file too, if it can be resolved to a real one on disk.
-    let build_error =
-        extract_referenced_location(full_output).and_then(|(path, ref_line, ref_col)| {
+    //
+    // Tried against `full_output` first (a real subprocess's captured
+    // stdout+stderr), falling back to `msg` itself - `msg` is where the
+    // locus line actually lives for an *in-process* task (e.g. `basm` run
+    // as bndbuild's own `Assembler::Basm`/`TaskKind::Embedded`, not spawned
+    // as a subprocess: no `TaskStdout`/`TaskStderr` events ever fire for it,
+    // so `TaskTracker` never captures anything and `full_output` stays
+    // empty). This also covers a rule whose failure got wrapped in
+    // `BndBuilderError::AnyError("Error N:\n...")` by `BndBuilder::execute`'s
+    // own multi-task aggregation (falls through to the generic `other` match
+    // arm in `run_rule`/`run_embedded_rule`, so `msg` is that whole
+    // aggregated string) - real case that surfaced this gap: clicking a
+    // "test" rule whose `basm` task failed produced a correct-looking
+    // `showMessage` (built from `msg`) but no clickable cross-file
+    // diagnostic, because only `full_output` (empty here) was ever scanned.
+    let build_error = extract_referenced_location(full_output)
+        .or_else(|| extract_referenced_location(&msg))
+        .and_then(|(path, ref_line, ref_col)| {
             let target_uri = resolve_referenced_path(&path, &document.uri)?;
             let line = ref_line.saturating_sub(1);
             let character = ref_col.saturating_sub(1);
@@ -583,6 +752,8 @@ fn strip_ansi(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
+
     use super::*;
 
     fn doc(dir: &std::path::Path, content: &str) -> Document {
@@ -592,6 +763,18 @@ mod tests {
         Document::new(uri, content.to_string(), 1)
     }
 
+    /// Writes `content` to `filename` (typically a `.asm` name) and returns
+    /// a `Document` for it — the host document `run_embedded_rule` needs,
+    /// standing in for the real `.asm` file whose comments the rule was
+    /// extracted from.
+    fn doc_asm(dir: &std::path::Path, filename: &str, content: &str) -> Document {
+        let path = dir.join(filename);
+        std::fs::write(&path, content).unwrap();
+        let uri = Url::from_file_path(&path).unwrap();
+        Document::new(uri, content.to_string(), 1)
+    }
+
+    #[serial]
     #[test]
     fn failing_rule_yields_diagnostic_on_its_line() {
         let tmp = camino_tempfile::tempdir().unwrap();
@@ -611,6 +794,7 @@ mod tests {
         assert!(diag.message.contains("broken"), "{}", diag.message);
     }
 
+    #[serial]
     #[test]
     fn successful_rule_yields_no_diagnostics() {
         let tmp = camino_tempfile::tempdir().unwrap();
@@ -622,6 +806,7 @@ mod tests {
         assert!(outcome.diagnostics.is_empty());
     }
 
+    #[serial]
     #[test]
     fn output_is_streamed_as_the_build_runs() {
         let tmp = camino_tempfile::tempdir().unwrap();
@@ -644,6 +829,7 @@ mod tests {
         );
     }
 
+    #[serial]
     #[test]
     fn failure_output_is_streamed_too() {
         let tmp = camino_tempfile::tempdir().unwrap();
@@ -665,6 +851,7 @@ mod tests {
         );
     }
 
+    #[serial]
     #[test]
     fn highlights_the_specific_failing_task_not_the_first_one() {
         let tmp = camino_tempfile::tempdir().unwrap();
@@ -742,6 +929,7 @@ mod tests {
         assert!(tracker.take_ignored_errors().is_empty());
     }
 
+    #[serial]
     #[test]
     fn ignored_task_error_is_reported_as_a_warning_not_a_failure() {
         let tmp = camino_tempfile::tempdir().unwrap();
@@ -766,6 +954,7 @@ mod tests {
         assert!(diag.message.contains("ignored"), "{}", diag.message);
     }
 
+    #[serial]
     #[test]
     fn failure_diagnostic_includes_the_command_s_full_output() {
         // `extern` shells out via ExternRunner (the real PTY-based path used
@@ -870,6 +1059,42 @@ mod tests {
     }
 
     #[test]
+    fn failure_outcome_finds_the_locus_line_inside_msg_when_full_output_is_empty() {
+        // Regression test for a real failure reported against the shipped
+        // embedded-rule feature: a `basm` task run as bndbuild's own
+        // in-process `Assembler::Basm` (`TaskKind::Embedded`, not a spawned
+        // subprocess) never emits `TaskStdout`/`TaskStderr` events, so
+        // `TaskTracker` never captures anything and `full_output` stays
+        // empty - the locus line only ever exists inside `msg` itself (and,
+        // in the real case that triggered this, `msg` was actually the
+        // whole "Error 1:\n..." string `BndBuilder::execute`'s own
+        // multi-task-failure aggregation produces). Without falling back to
+        // scanning `msg`, no cross-file diagnostic was ever built, so the
+        // referenced source file's error line was never highlighted/
+        // clickable in the editor.
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let bnd_content = "- tgt: test\n  phony: true\n  cmd: basm demo_code.asm\n";
+        let document = doc(tmp.path().as_std_path(), bnd_content);
+        let asm_path = tmp.path().as_std_path().join("demo_code.asm");
+        std::fs::write(&asm_path, "    jp demo_run\n").unwrap();
+
+        let msg = format!(
+            "Error 1:\nUnable to build birthtro.sna: Error while assembling.\n\
+             Assembling error:\nerror: Unknown symbol: demo_run\n   --> {}:1:8\n   |\n\
+             1 |     jp demo_run\n   |        ^^^^^^^^\n   |\n   = Closest one is: demo_init\n",
+            asm_path.display()
+        );
+        let outcome = failure_outcome(&document, "test", "test", msg, None, "");
+
+        let (target_uri, diag) = outcome
+            .build_error
+            .expect("expected a cross-file diagnostic even though full_output is empty");
+        assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
+        assert_eq!(diag.range.start.line, 0);
+        assert!(diag.message.contains("Unknown symbol"), "{}", diag.message);
+    }
+
+    #[test]
     fn failure_outcome_has_no_cross_file_diagnostic_when_output_references_nothing() {
         let tmp = camino_tempfile::tempdir().unwrap();
         let content =
@@ -885,5 +1110,177 @@ mod tests {
             "cp: cannot stat 'does_not_exist_anywhere.src': No such file or directory\n"
         );
         assert!(outcome.build_error.is_none(), "{:?}", outcome.message);
+    }
+
+    // ── run_embedded_rule ────────────────────────────────────────────────
+
+    #[serial]
+    #[test]
+    fn run_embedded_rule_executes_successfully_and_streams_output() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let host_document = doc_asm(
+            tmp.path().as_std_path(),
+            "foo.asm",
+            "; #!bndbuild\n; - tgt: fine\n;   cmd: echo hello from embedded\nORG 0x8000\n"
+        );
+        let yaml_text = "- tgt: fine\n  cmd: echo hello from embedded";
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let outcome = BuildFileAnalyzer::new().run_embedded_rule(
+            &host_document,
+            yaml_text,
+            1,
+            "fine",
+            Some(tx)
+        );
+        assert!(outcome.success, "{}", outcome.message);
+        assert!(outcome.diagnostics.is_empty());
+
+        let mut lines = Vec::new();
+        while let Ok(line) = rx.try_recv() {
+            lines.push(line);
+        }
+        assert!(
+            lines
+                .iter()
+                .any(|(is_err, text)| !is_err && text.contains("hello from embedded")),
+            "expected the echoed text to be streamed, got: {lines:?}"
+        );
+    }
+
+    #[serial]
+    #[test]
+    fn run_embedded_rule_failure_anchors_the_diagnostic_on_the_correct_shifted_line() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let host_document = doc_asm(
+            tmp.path().as_std_path(),
+            "foo.asm",
+            "ORG 0\n; #!bndbuild\n; - tgt: multi\n;   phony: true\n;   cmd:\n;    - echo first task ok\n;    - cp does_not_exist_anywhere.src dst.bin\n;    - echo third task never runs\n"
+        );
+        // Mirrors `highlights_the_specific_failing_task_not_the_first_one`'s
+        // fixture: the failing task is at block-relative (0-based) line 4.
+        let yaml_text = "- tgt: multi\n  phony: true\n  cmd:\n    - echo first task ok\n    - cp does_not_exist_anywhere.src dst.bin\n    - echo third task never runs";
+
+        let outcome =
+            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 2, "multi", None);
+        assert!(!outcome.success);
+        assert_eq!(outcome.diagnostics.len(), 1);
+        let diag = &outcome.diagnostics[0];
+        // Block-relative line 4 shifted by yaml_start_line=2 -> absolute 6.
+        assert_eq!(
+            diag.range.start.line, 6,
+            "unexpected line: {:?}",
+            diag.range
+        );
+        assert!(diag.message.contains("multi"), "{}", diag.message);
+    }
+
+    #[serial]
+    #[test]
+    fn run_embedded_rule_resolves_relative_paths_against_the_asm_files_own_directory() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("data.txt"), "hello\n").unwrap();
+        // `wc` (not `cat` - that's one of bndbuild's own internal command
+        // aliases, `task::CATALOG_CMDS`, and would be dispatched to its
+        // catalog tool instead of a real subprocess) so this genuinely
+        // exercises the external-command path where `working_directory`
+        // actually matters.
+        let host_document = doc_asm(
+            tmp.path().as_std_path(),
+            "foo.asm",
+            "; #!bndbuild\n; - tgt: count\n;   phony: true\n;   cmd: extern wc -l data.txt\n"
+        );
+        let yaml_text = "- tgt: count\n  phony: true\n  cmd: extern wc -l data.txt";
+
+        let outcome =
+            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 1, "count", None);
+        assert!(outcome.success, "{}", outcome.message);
+    }
+
+    #[serial]
+    #[test]
+    fn run_embedded_rule_still_surfaces_a_cross_file_diagnostic_for_a_referenced_source_file() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let asm_path = tmp.path().join("broken.asm");
+        std::fs::write(&asm_path, "ld a, ,\n").unwrap();
+
+        // A tiny failing script standing in for a real failing tool (e.g.
+        // `basm`), whose own stderr references `broken.asm`'s locus in the
+        // exact shape `codespan-reporting` renders - avoids depending on a
+        // real `basm` binary being on PATH for this test.
+        let script_path = tmp.path().join("fail.sh");
+        std::fs::write(
+            &script_path,
+            format!(
+                "#!/bin/sh\necho 'error: Syntax error' >&2\necho '  \u{250c}\u{2500} {}:1:7' >&2\nexit 1\n",
+                asm_path
+            )
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        // Referenced by its absolute path (not just "fail.sh", relative to
+        // `working_directory`) - this test's own concern is cross-file
+        // diagnostic surfacing, not CWD wiring (that's
+        // `run_embedded_rule_resolves_relative_paths_against_the_asm_files_own_directory`'s
+        // job), and other tests in this suite that run *concurrently* also
+        // mutate the process-wide CWD via `decode_from_reader` (a known,
+        // pre-existing hazard - see its own `XXX` comment), so avoiding a
+        // relative reference here keeps this test robust regardless of
+        // scheduling.
+        let host_document = doc_asm(
+            tmp.path().as_std_path(),
+            "foo.asm",
+            &format!("; #!bndbuild\n; - tgt: broken\n;   cmd: extern sh {script_path}\n")
+        );
+        let yaml_text = format!("- tgt: broken\n  cmd: extern sh {script_path}");
+
+        let outcome = BuildFileAnalyzer::new().run_embedded_rule(
+            &host_document,
+            &yaml_text,
+            1,
+            "broken",
+            None
+        );
+        assert!(!outcome.success);
+        let (target_uri, diag) = outcome.build_error.unwrap_or_else(|| {
+            panic!(
+                "expected a cross-file diagnostic; message was: {}",
+                outcome.message
+            )
+        });
+        assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
+        assert_eq!(diag.range.start.line, 0);
+        assert!(diag.message.contains("Build error"), "{}", diag.message);
+    }
+
+    #[serial]
+    #[test]
+    fn run_embedded_rule_ignored_error_diagnostic_is_shifted_too() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let host_document = doc_asm(
+            tmp.path().as_std_path(),
+            "foo.asm",
+            "ORG 0\n; #!bndbuild\n; - tgt: lax\n;   phony: true\n;   cmd:\n;    - -cp does_not_exist_anywhere.src dst.bin\n;    - echo still runs\n"
+        );
+        let yaml_text = "- tgt: lax\n  phony: true\n  cmd:\n    - -cp does_not_exist_anywhere.src dst.bin\n    - echo still runs";
+
+        let outcome =
+            BuildFileAnalyzer::new().run_embedded_rule(&host_document, yaml_text, 2, "lax", None);
+        assert!(outcome.success, "{}", outcome.message);
+        assert_eq!(outcome.diagnostics.len(), 1);
+        let diag = &outcome.diagnostics[0];
+        assert_eq!(diag.severity, Some(DiagnosticSeverity::WARNING));
+        // Block-relative line 3 (the ignored `-cp ...` task) shifted by
+        // yaml_start_line=2 -> absolute 5.
+        assert_eq!(
+            diag.range.start.line, 5,
+            "unexpected line: {:?}",
+            diag.range
+        );
     }
 }

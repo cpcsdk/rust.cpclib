@@ -68,6 +68,11 @@ serde_json = "1"
 tower = { version = "0.4", features = ["util"] }
 camino-tempfile.workspace = true
 futures-util = "0.3"
+# Serializes tests that go through `BndBuilder::decode_from_reader`, which
+# mutates the process-wide working directory (`std::env::set_current_dir`) -
+# same hazard, same fix already established in `cpclib-bndbuild`'s own test
+# suite.
+serial_test.workspace = true
 
 [features]
 default = []

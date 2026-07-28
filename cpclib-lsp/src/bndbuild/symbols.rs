@@ -60,7 +60,7 @@ impl BuildFileAnalyzer {
             .collect()
     }
 
-    fn scan_symbols_from_text(
+    pub(super) fn scan_symbols_from_text(
         &self,
         text: &str,
         source_map: &super::sourcemap::SourceMap,

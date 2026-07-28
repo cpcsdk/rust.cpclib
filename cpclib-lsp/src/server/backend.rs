@@ -1597,11 +1597,13 @@ impl LanguageServer for CpcLspBackend {
 
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
-            if document.doc_type == DocumentType::BuildFile {
-                let lenses = self.build_analyzer.code_lens(document);
-                if !lenses.is_empty() {
-                    return Ok(Some(lenses));
-                }
+            let lenses = match document.doc_type {
+                DocumentType::BuildFile => self.build_analyzer.code_lens(document),
+                DocumentType::Assembly => self.asm_analyzer.code_lens(document),
+                _ => Vec::new()
+            };
+            if !lenses.is_empty() {
+                return Ok(Some(lenses));
             }
         }
         Ok(None)
@@ -1662,8 +1664,39 @@ impl LanguageServer for CpcLspBackend {
             let outcome = {
                 let document = document.clone();
                 let rule = rule.clone();
+                let asm_analyzer = Arc::clone(&self.asm_analyzer);
                 tokio::task::spawn_blocking(move || {
-                    crate::bndbuild::BuildFileAnalyzer::new().run_rule(&document, &rule, Some(tx))
+                    if document.doc_type == DocumentType::Assembly {
+                        let blocks = asm_analyzer.embedded_bndbuild_blocks(&document);
+                        match crate::basm::embedded_bndbuild::find_block_for_rule(&blocks, &rule) {
+                            Some(block) => {
+                                crate::bndbuild::BuildFileAnalyzer::new().run_embedded_rule(
+                                    &document,
+                                    &block.yaml_text,
+                                    block.yaml_start_line as u32,
+                                    &rule,
+                                    Some(tx)
+                                )
+                            },
+                            None => {
+                                crate::bndbuild::command::RuleRunOutcome {
+                                    message: format!(
+                                        "No embedded bndbuild rule '{rule}' found in this file"
+                                    ),
+                                    diagnostics: Vec::new(),
+                                    build_error: None,
+                                    success: false
+                                }
+                            },
+                        }
+                    }
+                    else {
+                        crate::bndbuild::BuildFileAnalyzer::new().run_rule(
+                            &document,
+                            &rule,
+                            Some(tx)
+                        )
+                    }
                 })
                 .await
                 .map_err(|e| {

@@ -248,7 +248,10 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                 Ok(())
             }
             else {
-                Err("Error while launching the command.".to_owned())
+                Err(match status.code() {
+                    Some(code) => format!("Error while launching the command. (exit code {code})"),
+                    None => "Error while launching the command. (terminated by signal)".to_owned()
+                })
             };
         }
 
@@ -327,7 +330,10 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
                 Ok(())
             }
             else {
-                Err("Error while launching the command.".to_owned())
+                Err(match status.code() {
+                    Some(code) => format!("Error while launching the command. (exit code {code})"),
+                    None => "Error while launching the command. (terminated by signal)".to_owned()
+                })
             };
         }
         // is forwarded to emit_stdout.
@@ -414,7 +420,10 @@ impl<E: EventObserver> Runner for ExternRunner<E> {
         }
 
         if !status.success() {
-            return Err("Error while launching the command.".to_owned());
+            return Err(format!(
+                "Error while launching the command. (exit code {})",
+                status.exit_code()
+            ));
         }
 
         Ok(())

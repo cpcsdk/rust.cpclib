@@ -284,6 +284,68 @@ impl BuildFileAnalyzer {
             })
             .collect()
     }
+
+    /// Target/rule names declared in an already-extracted embedded block's
+    /// own YAML text (`basm::embedded_bndbuild::EmbeddedBndbuildBlock`).
+    /// Shared by `code_lens_for_embedded_block` and
+    /// `basm::embedded_bndbuild::find_block_for_rule` (execution-time block
+    /// disambiguation, when a file has more than one `#!bndbuild` block).
+    pub(crate) fn target_names_for_embedded_block(&self, yaml_text: &str) -> Vec<String> {
+        let identity = super::sourcemap::SourceMap::identity(yaml_text.lines().count());
+        self.scan_symbols_from_text(yaml_text, &identity, &super::token::TGT_KEY_NAMES)
+            .into_iter()
+            .map(|s| s.name)
+            .collect()
+    }
+
+    /// `code_lens`'s embedded-block counterpart: `yaml_text` is an
+    /// already-extracted, line-preserving block
+    /// (`basm::embedded_bndbuild::EmbeddedBndbuildBlock`); `line_offset` is
+    /// added to every produced line number to translate block-relative
+    /// coordinates back into the hosting `.asm` file's own coordinates.
+    /// `host_file_path` becomes arg[1] of `"cpclib.runRule"` — the *.asm*
+    /// file's own absolute path, since (unlike a real build file) there is
+    /// no separate on-disk YAML file to reference.
+    ///
+    /// Unlike `code_lens`, this does not run Jinja expansion on the block
+    /// (uses `SourceMap::identity` instead of `expand_or_identity`) —
+    /// embedded blocks are expected to be static rule definitions in
+    /// practice, and skipping expansion keeps the line mapping a plain
+    /// constant offset instead of composing two source maps.
+    ///
+    /// Character-column offsets are deliberately not corrected for the
+    /// stripped comment prefix — only line numbers are remapped. A client
+    /// renders a CodeLens per-line regardless of `character`, and the
+    /// dedented line is always shorter than or equal to its real `.asm`
+    /// counterpart, so the (uncorrected) `character` value stays in-bounds.
+    pub(crate) fn code_lens_for_embedded_block(
+        &self,
+        yaml_text: &str,
+        line_offset: u32,
+        host_file_path: &str
+    ) -> Vec<CodeLens> {
+        let identity = super::sourcemap::SourceMap::identity(yaml_text.lines().count());
+        self.scan_symbols_from_text(yaml_text, &identity, &super::token::TGT_KEY_NAMES)
+            .into_iter()
+            .map(|sym| {
+                let mut sel = sym.selection_range;
+                sel.start.line += line_offset;
+                sel.end.line += line_offset;
+                CodeLens {
+                    range: sel,
+                    command: Some(Command {
+                        title: format!("▶ Run: {}", sym.name),
+                        command: "cpclib.runRule".to_string(),
+                        arguments: Some(vec![
+                            serde_json::json!(sym.name),
+                            serde_json::json!(host_file_path),
+                        ])
+                    }),
+                    data: None
+                }
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -325,5 +387,34 @@ mod tests {
             !positions.iter().any(|&(_, c)| c == 15),
             "no token should be reported at byte column 15; got {positions:?}"
         );
+    }
+
+    #[test]
+    fn code_lens_for_embedded_block_shifts_lines_by_the_given_offset() {
+        let yaml_text = "- tgt: test\n  cmd: echo hi\n";
+        let lenses =
+            BuildFileAnalyzer::new().code_lens_for_embedded_block(yaml_text, 5, "/tmp/foo.asm");
+        assert_eq!(lenses.len(), 1);
+        let lens = &lenses[0];
+        assert_eq!(lens.range.start.line, 5);
+        let command = lens.command.as_ref().unwrap();
+        assert_eq!(command.title, "▶ Run: test");
+        assert_eq!(command.command, "cpclib.runRule");
+        assert_eq!(
+            command.arguments.as_ref().unwrap(),
+            &vec![serde_json::json!("test"), serde_json::json!("/tmp/foo.asm")]
+        );
+    }
+
+    #[test]
+    fn code_lens_for_embedded_block_handles_multiple_targets_in_one_block() {
+        let yaml_text = "- tgt: one\n  cmd: echo one\n- tgt: two\n  cmd: echo two\n";
+        let lenses =
+            BuildFileAnalyzer::new().code_lens_for_embedded_block(yaml_text, 0, "/tmp/foo.asm");
+        let titles: Vec<&str> = lenses
+            .iter()
+            .map(|l| l.command.as_ref().unwrap().title.as_str())
+            .collect();
+        assert_eq!(titles, vec!["▶ Run: one", "▶ Run: two"]);
     }
 }

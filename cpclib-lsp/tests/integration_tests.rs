@@ -1,8 +1,87 @@
 //! Integration tests that actually launch the LSP server and query it
 
 use cpclib_lsp::CpcLspBackend;
+use futures_util::StreamExt;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{LanguageServer, LspService};
+
+async fn initialized_backend() -> (LspService<CpcLspBackend>, tower_lsp::ClientSocket) {
+    let (service, socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    service
+        .inner()
+        .initialize(InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        })
+        .await
+        .unwrap();
+    (service, socket)
+}
+
+/// Like `initialized_backend`, but drives `initialize` through the *full*
+/// tower `Service` stack instead of calling `CpcLspBackend::initialize`
+/// directly on `service.inner()`. The state transition to
+/// `State::Initialized` happens in a `tower::Layer` wrapping the service,
+/// which only runs for requests dispatched through `Service::call` on the
+/// service itself - calling the trait method directly skips that layer,
+/// leaving the state stuck at `Uninitialized`. That's invisible for
+/// `log_message`/`show_message` (`Client` sends those via the *unchecked*
+/// notification path regardless of state, so `initialized_backend` is fine
+/// for tests that only check those) but `publish_diagnostics` uses the
+/// *gated* `send_notification`, which silently drops the message outside
+/// `Initialized`/`ShutDown` - needed for `cpclib.runRule`'s failure
+/// diagnostics to reach a test at all. Mirrors the identical, previously
+/// established fix in `cpclib-lsp/src/server/backend.rs`'s own
+/// `remove_unused_parameter_tests::initialize_backend`.
+///
+/// The notification drain is spawned *before* the real `initialize` call
+/// (not left to the caller, unlike `drain_client_notifications`'s other
+/// callers) - once genuinely `Initialized`, `publish_diagnostics`'s gated
+/// send can actually reach the socket's channel, and with nothing reading
+/// it, a call sending on a full channel would block forever, hanging any
+/// caller here that produces enough notification traffic before getting
+/// around to draining it themselves (`did_open`'s own diagnostics pass
+/// included, not just `cpclib.runRule`'s).
+async fn initialized_backend_with_drained_notifications() -> (
+    LspService<CpcLspBackend>,
+    tokio::sync::mpsc::UnboundedReceiver<tower_lsp::jsonrpc::Request>
+) {
+    use tower::{Service, ServiceExt};
+
+    let (mut service, socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
+    let notifications = drain_client_notifications(socket);
+    let request = tower_lsp::jsonrpc::Request::build("initialize")
+        .params(serde_json::json!({ "capabilities": {} }))
+        .id(1)
+        .finish();
+    let _ = service.ready().await.unwrap().call(request).await;
+    (service, notifications)
+}
+
+/// Collects every outgoing notification (`log_message`/`show_message`/
+/// `publishDiagnostics`) sent through `socket` onto a channel for later
+/// inspection. None of `cpclib.runRule`'s outgoing messages are *requests*
+/// (unlike `workspace/applyEdit` elsewhere in this server), so nothing here
+/// needs to send a response back - just drain and forward.
+fn drain_client_notifications(
+    socket: tower_lsp::ClientSocket
+) -> tokio::sync::mpsc::UnboundedReceiver<tower_lsp::jsonrpc::Request> {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        let (mut requests, _responses) = socket.split();
+        while let Some(request) = requests.next().await {
+            let _ = tx.send(request);
+        }
+    });
+    rx
+}
 
 #[tokio::test]
 async fn test_server_initialization() {
@@ -1115,4 +1194,221 @@ async fn test_cycle_count_for_selection_command_with_no_selection_returns_none()
         .unwrap();
 
     assert!(result.is_none());
+}
+
+#[tokio::test]
+async fn test_code_lens_appears_for_an_asm_file_with_an_embedded_bndbuild_block() {
+    let (service, _socket) = initialized_backend().await;
+    let backend = service.inner();
+
+    let uri = Url::parse("file:///shadebobs.asm").unwrap();
+    let text = "; #!bndbuild\n; - tgt: test\n;   phony: true\n;   cmd:\n;    - basm --snapshot shadebobs.asm -o shadebobs.sna --lst shadebobs.lst\n;    - -ace shadebobs.sna\nORG 0x8000\n";
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "basm".to_string(),
+                version: 1,
+                text: text.to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let lenses = backend
+        .code_lens(CodeLensParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap()
+        .expect("expected a code lens for the embedded rule");
+
+    assert_eq!(lenses.len(), 1);
+    let command = lenses[0].command.as_ref().expect("expected a command");
+    assert_eq!(command.title, "▶ Run: test");
+    assert_eq!(command.command, "cpclib.runRule");
+    let args = command.arguments.as_ref().unwrap();
+    assert_eq!(args[0], serde_json::json!("test"));
+    assert_eq!(
+        args[1],
+        serde_json::json!(uri.to_file_path().unwrap().to_string_lossy().to_string())
+    );
+    // The lens sits on the "- tgt: test" line inside the embedded block
+    // (line 1), not on the "#!bndbuild" marker line (line 0).
+    assert_eq!(lenses[0].range.start.line, 1);
+}
+
+#[tokio::test]
+async fn test_run_embedded_bndbuild_rule_command_executes_and_streams_output() {
+    let (service, socket) = initialized_backend().await;
+    let backend = service.inner();
+    let mut notifications = drain_client_notifications(socket);
+
+    // A real tempdir-backed path, not a bare `file:///embedded_ok.asm` -
+    // `cpclib.runRule` execution sets the process-wide working directory to
+    // this URI's own parent (`BndBuilder::decode_from_reader`), and doing
+    // that against a real directory (rather than filesystem root) keeps
+    // this test from disturbing any other test that runs afterward in the
+    // same process.
+    let tmp = camino_tempfile::tempdir().unwrap();
+    let uri = Url::from_file_path(tmp.path().join("embedded_ok.asm")).unwrap();
+    let text = "; #!bndbuild\n; - tgt: fine\n;   cmd: echo hello from embedded lens\nORG 0x8000\n";
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "basm".to_string(),
+                version: 1,
+                text: text.to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let result = backend
+        .execute_command(ExecuteCommandParams {
+            command: "cpclib.runRule".to_string(),
+            arguments: vec![
+                serde_json::json!("fine"),
+                serde_json::json!(uri.to_file_path().unwrap().to_string_lossy().to_string()),
+            ],
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap();
+    assert!(result.is_none());
+
+    // `execute_command` has already awaited every `self.client.*` call, so
+    // the notifications are queued on the socket - but `drain_client_notifications`'s
+    // background task still needs a chance to actually be scheduled and
+    // pull them off before a non-blocking `try_recv` below will see them.
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    // Drain the notifications sent while the command ran and confirm a
+    // success `window/showMessage` arrived.
+    let mut saw_success = false;
+    while let Ok(request) = notifications.try_recv() {
+        if request.method() == "window/showMessage"
+            && let Some(params) = request.params()
+            && params
+                .get("message")
+                .and_then(|m| m.as_str())
+                .is_some_and(|m| m.contains("built successfully"))
+        {
+            saw_success = true;
+        }
+    }
+    assert!(saw_success, "expected a success showMessage notification");
+}
+
+#[tokio::test]
+async fn test_run_embedded_bndbuild_rule_command_failure_produces_a_diagnostic() {
+    let (service, mut notifications) = initialized_backend_with_drained_notifications().await;
+    let backend = service.inner();
+
+    let tmp = camino_tempfile::tempdir().unwrap();
+    let uri = Url::from_file_path(tmp.path().join("embedded_fail.asm")).unwrap();
+    let text = "; #!bndbuild\n; - tgt: broken\n;   cmd: cp does_not_exist_anywhere.src dst.bin\nORG 0x8000\n";
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "basm".to_string(),
+                version: 1,
+                text: text.to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    backend
+        .execute_command(ExecuteCommandParams {
+            command: "cpclib.runRule".to_string(),
+            arguments: vec![
+                serde_json::json!("broken"),
+                serde_json::json!(uri.to_file_path().unwrap().to_string_lossy().to_string()),
+            ],
+            work_done_progress_params: WorkDoneProgressParams::default()
+        })
+        .await
+        .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let mut saw_diagnostic_on_asm_file = false;
+    while let Ok(request) = notifications.try_recv() {
+        if request.method() == "textDocument/publishDiagnostics"
+            && let Some(params) = request.params()
+            && params.get("uri").and_then(|u| u.as_str()) == Some(uri.as_str())
+            && params
+                .get("diagnostics")
+                .and_then(|d| d.as_array())
+                .is_some_and(|d| !d.is_empty())
+        {
+            saw_diagnostic_on_asm_file = true;
+        }
+    }
+    assert!(
+        saw_diagnostic_on_asm_file,
+        "expected a non-empty publishDiagnostics notification for the .asm file"
+    );
+}
+
+#[tokio::test]
+async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_code_lens_is_unaffected()
+ {
+    let (service, _socket) = initialized_backend().await;
+    let backend = service.inner();
+
+    let asm_uri = Url::parse("file:///plain.asm").unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: asm_uri.clone(),
+                language_id: "basm".to_string(),
+                version: 1,
+                text: "; just a normal comment\nORG 0x8000\n".to_string()
+            }
+        })
+        .await;
+
+    let bnd_uri = Url::parse("file:///bndbuild.yml").unwrap();
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: bnd_uri.clone(),
+                language_id: "bndbuild".to_string(),
+                version: 1,
+                text: "- tgt: real\n  phony: true\n  cmd: echo hi\n".to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let asm_lenses = backend
+        .code_lens(CodeLensParams {
+            text_document: TextDocumentIdentifier { uri: asm_uri },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap();
+    assert!(
+        asm_lenses.is_none(),
+        "expected no code lens for a plain .asm file"
+    );
+
+    let bnd_lenses = backend
+        .code_lens(CodeLensParams {
+            text_document: TextDocumentIdentifier { uri: bnd_uri },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default()
+        })
+        .await
+        .unwrap()
+        .expect("a real .bnd file should still get its own code lens");
+    assert_eq!(bnd_lenses.len(), 1);
+    assert_eq!(bnd_lenses[0].command.as_ref().unwrap().title, "▶ Run: real");
 }
