@@ -10,6 +10,12 @@ pub enum DocumentType {
     BuildFile,
     /// Locomotive BASIC source file (.bas)
     Basic,
+    /// CatArt source (`.CAT`/`.ASC`): the same Locomotive BASIC syntax as
+    /// `Basic`, restricted by convention to a whitelist of drawing commands
+    /// (INK/PAPER/PEN/PRINT/CURSOR/MODE/LOCATE/WINDOW/BORDER/CLS/SYMBOL).
+    /// Reuses `BasicAnalyzer` for everything except diagnostics (see
+    /// `locomotive::catart`).
+    CatartBasic,
     /// Unknown file type
     Unknown
 }
@@ -31,6 +37,13 @@ impl DocumentType {
         else if path.ends_with(".bas") || path.ends_with(".BAS") {
             Self::Basic
         }
+        else if path.ends_with(".CAT")
+            || path.ends_with(".cat")
+            || path.ends_with(".ASC")
+            || path.ends_with(".asc")
+        {
+            Self::CatartBasic
+        }
         else {
             Self::Unknown
         }
@@ -43,6 +56,7 @@ impl DocumentType {
             "basm" | "asm" | "z80" | "Assembly" => Self::Assembly,
             "bndbuild" | "Buildfile" => Self::BuildFile,
             "locomotive-basic" => Self::Basic,
+            "catart-basic" => Self::CatartBasic,
             _ => Self::Unknown
         }
     }
@@ -340,5 +354,40 @@ mod tests {
             }),
             1
         );
+    }
+}
+
+#[cfg(test)]
+mod document_type_tests {
+    use super::*;
+
+    #[test]
+    fn cat_and_asc_extensions_detect_as_catart_basic() {
+        for ext in [".CAT", ".cat", ".ASC", ".asc"] {
+            let uri = Url::parse(&format!("file:///t{ext}")).unwrap();
+            assert_eq!(
+                DocumentType::from_uri(&uri),
+                DocumentType::CatartBasic,
+                "extension {ext}"
+            );
+        }
+    }
+
+    #[test]
+    fn catart_basic_language_id_detects_as_catart_basic() {
+        assert_eq!(
+            DocumentType::from_language_id("catart-basic"),
+            DocumentType::CatartBasic
+        );
+    }
+
+    #[test]
+    fn detect_prefers_language_id_over_extension_for_catart() {
+        let uri = Url::parse("file:///t.CAT").unwrap();
+        assert_eq!(
+            DocumentType::detect(&uri, Some("catart-basic")),
+            DocumentType::CatartBasic
+        );
+        assert_eq!(DocumentType::detect(&uri, None), DocumentType::CatartBasic);
     }
 }

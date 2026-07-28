@@ -3023,6 +3023,7 @@ dependencies = [
  "cpclib-asmfmt",
  "cpclib-basic",
  "cpclib-bndbuild",
+ "cpclib-catart",
  "cpclib-common",
  "cpclib-runner",
  "cpclib-tokens",

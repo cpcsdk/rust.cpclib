@@ -32,6 +32,12 @@
         "aliases": ["Locomotive BASIC", "CPC BASIC"],
         "extensions": [".bas", ".BAS"],
         "configuration": "./language-configuration-bas.json"
+      },
+      {
+        "id": "catart-basic",
+        "aliases": ["CatArt BASIC", "CatArt"],
+        "extensions": [".CAT", ".cat", ".ASC", ".asc"],
+        "configuration": "./language-configuration-bas.json"
       }
     ],
     "grammars": [
@@ -82,7 +88,7 @@
       "editor/context": [
         {
           "command": "cpclib.pickInkColor",
-          "when": "(editorLangId == basm || editorLangId == locomotive-basic) && cpclib.cursorOnInkColor",
+          "when": "(editorLangId == basm || editorLangId == locomotive-basic || editorLangId == catart-basic) && cpclib.cursorOnInkColor",
           "group": "9_cutcopypaste"
         }
       ]
@@ -126,6 +132,9 @@
     },
     "configurationDefaults": {
       "[locomotive-basic]": {
+        "editor.formatOnType": true
+      },
+      "[catart-basic]": {
         "editor.formatOnType": true
       },
       "[basm]": {

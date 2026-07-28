@@ -1412,3 +1412,49 @@ async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_c
     assert_eq!(bnd_lenses.len(), 1);
     assert_eq!(bnd_lenses[0].command.as_ref().unwrap().title, "▶ Run: real");
 }
+
+/// Regression test for `.CAT`/`.ASC` CatArt support: opening a document
+/// containing a statement outside the CatArt whitelist (`GOTO`) must publish
+/// an ERROR-severity diagnostic, and one using `CURSOR` (structurally valid
+/// but a documented no-op in the real CatArt renderer) must publish a
+/// WARNING-severity diagnostic instead.
+#[tokio::test]
+async fn test_catart_document_gets_error_and_warning_diagnostics() {
+    let (service, mut notifications) = initialized_backend_with_drained_notifications().await;
+    let backend = service.inner();
+
+    let uri = Url::parse("file:///t.asc").unwrap();
+    let text = "10 GOTO 20\n20 CURSOR 1\n30 PRINT \"X\"\n";
+    backend
+        .did_open(DidOpenTextDocumentParams {
+            text_document: TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "catart-basic".to_string(),
+                version: 1,
+                text: text.to_string()
+            }
+        })
+        .await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+    let mut severities: Vec<i64> = Vec::new();
+    while let Ok(request) = notifications.try_recv() {
+        if request.method() == "textDocument/publishDiagnostics"
+            && let Some(params) = request.params()
+            && params.get("uri").and_then(|u| u.as_str()) == Some(uri.as_str())
+            && let Some(diags) = params.get("diagnostics").and_then(|d| d.as_array())
+        {
+            severities.extend(diags.iter().filter_map(|d| d.get("severity")?.as_i64()));
+        }
+    }
+
+    // DiagnosticSeverity::ERROR = 1, WARNING = 2 in the LSP wire format.
+    assert!(
+        severities.contains(&1),
+        "expected an ERROR diagnostic for GOTO: {severities:?}"
+    );
+    assert!(
+        severities.contains(&2),
+        "expected a WARNING diagnostic for CURSOR: {severities:?}"
+    );
+}

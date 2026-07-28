@@ -20,6 +20,7 @@ cpclib-asmfmt.workspace = true
 cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon"] }
 cpclib-runner = { workspace = true, default-features = false }
 cpclib-basic.workspace = true
+cpclib-catart.workspace = true
 cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-tokens.workspace = true
 cpclib-z80emu.workspace = true

@@ -140,6 +140,30 @@ fn consume_window_arguments<'b>(
     Ok((left, right, top, bottom))
 }
 
+/// Consume SYMBOL arguments: character code followed by 8 row bytes
+fn consume_symbol_arguments<'b>(
+    iter: &mut Vec<(u16, &'b BasicToken)>
+) -> Result<(u8, u8, u8, u8, u8, u8, u8, u8, u8), CatArtError> {
+    let char_code = consume_integer_argument(iter)?;
+    consume_comma(iter)?;
+    let r1 = consume_integer_argument(iter)?;
+    consume_comma(iter)?;
+    let r2 = consume_integer_argument(iter)?;
+    consume_comma(iter)?;
+    let r3 = consume_integer_argument(iter)?;
+    consume_comma(iter)?;
+    let r4 = consume_integer_argument(iter)?;
+    consume_comma(iter)?;
+    let r5 = consume_integer_argument(iter)?;
+    consume_comma(iter)?;
+    let r6 = consume_integer_argument(iter)?;
+    consume_comma(iter)?;
+    let r7 = consume_integer_argument(iter)?;
+    consume_comma(iter)?;
+    let r8 = consume_integer_argument(iter)?;
+    Ok((char_code, r1, r2, r3, r4, r5, r6, r7, r8))
+}
+
 /// Consume optional spaces
 fn consume_spaces<'b>(iter: &mut Vec<(u16, &'b BasicToken)>) {
     while let Some((_, token)) = iter.last() {
@@ -337,6 +361,39 @@ pub fn basic_to_commands<'b>(basic: &'b BasicProgram) -> Result<BasicCommandList
             BasicToken::SimpleToken(BasicTokenNoPrefix::Cls) => {
                 commands.push(BasicCommand::cls());
             },
+            // CURSOR n[,n] - real CPC firmware's system/user cursor flags.
+            // Structurally valid, but a no-op in CatArt's own renderer (it
+            // corresponds to printed CHR$(2)/CHR$(3) control codes, which
+            // CatArt ignores) - the caller decides whether to warn about it.
+            BasicToken::SimpleToken(BasicTokenNoPrefix::Cursor) => {
+                let first = consume_integer_argument(&mut line_token_pairs)?;
+                // Optional second argument (CURSOR n,n form) - only the
+                // first arg determines on/off; consume and discard the rest.
+                consume_spaces(&mut line_token_pairs);
+                if let Some((_, BasicToken::SimpleToken(BasicTokenNoPrefix::CharComma))) =
+                    line_token_pairs.last()
+                {
+                    line_token_pairs.pop();
+                    consume_integer_argument(&mut line_token_pairs)?;
+                }
+                commands.push(if first == 0 {
+                    BasicCommand::cursor_off()
+                }
+                else {
+                    BasicCommand::cursor_on()
+                });
+            },
+            // SYMBOL char,row1..row8 - structurally valid, but a no-op in
+            // CatArt's own renderer (corresponds to printed CHR$(25) + 9
+            // bytes, which CatArt ignores) - the caller decides whether to
+            // warn about it.
+            BasicToken::SimpleToken(BasicTokenNoPrefix::Symbol) => {
+                let (char_code, r1, r2, r3, r4, r5, r6, r7, r8) =
+                    consume_symbol_arguments(&mut line_token_pairs)?;
+                commands.push(BasicCommand::symbol(
+                    char_code, r1, r2, r3, r4, r5, r6, r7, r8
+                ));
+            },
             // Skip statement separators, end-of-line markers, spaces, and colon (:) separators
             BasicToken::SimpleToken(BasicTokenNoPrefix::EndOfTokenisedLine)
             | BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator)
@@ -419,6 +476,41 @@ mod test {
         assert_eq!(
             result,
             vec![BasicCommand::print_string_crlf(br#"HELLO"#.to_vec())].into()
+        );
+    }
+
+    #[test]
+    fn test_cursor_off() {
+        let code = r###"10 CURSOR 0"###;
+        let basic = BasicProgram::parse(code).expect("Tokenization failed");
+        let result = basic_to_commands(&basic).expect("Conversion failed");
+        assert_eq!(result, vec![BasicCommand::cursor_off()].into());
+    }
+
+    #[test]
+    fn test_cursor_on() {
+        let code = r###"10 CURSOR 1"###;
+        let basic = BasicProgram::parse(code).expect("Tokenization failed");
+        let result = basic_to_commands(&basic).expect("Conversion failed");
+        assert_eq!(result, vec![BasicCommand::cursor_on()].into());
+    }
+
+    #[test]
+    fn test_cursor_on_with_second_argument() {
+        let code = r###"10 CURSOR 1,1"###;
+        let basic = BasicProgram::parse(code).expect("Tokenization failed");
+        let result = basic_to_commands(&basic).expect("Conversion failed");
+        assert_eq!(result, vec![BasicCommand::cursor_on()].into());
+    }
+
+    #[test]
+    fn test_symbol() {
+        let code = r###"10 SYMBOL 65,1,2,3,4,5,6,7,8"###;
+        let basic = BasicProgram::parse(code).expect("Tokenization failed");
+        let result = basic_to_commands(&basic).expect("Conversion failed");
+        assert_eq!(
+            result,
+            vec![BasicCommand::symbol(65, 1, 2, 3, 4, 5, 6, 7, 8)].into()
         );
     }
 }

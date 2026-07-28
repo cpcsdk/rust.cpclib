@@ -56,10 +56,11 @@ export function activate(context: ExtensionContext) {
         documentSelector: [
             { scheme: 'file', language: 'basm' },
             { scheme: 'file', language: 'bndbuild' },
-            { scheme: 'file', language: 'locomotive-basic' }
+            { scheme: 'file', language: 'locomotive-basic' },
+            { scheme: 'file', language: 'catart-basic' }
         ],
         synchronize: {
-            fileEvents: workspace.createFileSystemWatcher('{**/*.{asm,z80,build,bnd,bas,BAS},**/bndbuild.yml}')
+            fileEvents: workspace.createFileSystemWatcher('{**/*.{asm,z80,build,bnd,bas,BAS,CAT,cat,ASC,asc},**/bndbuild.yml}')
         },
         middleware: {
             // The server streams build output (stdout/stderr as the rule
@@ -229,7 +230,11 @@ let cachedColors: vscode.ColorInformation[] = [];
 let cachedColorsKey: string | undefined;
 
 async function colorsFor(document: vscode.TextDocument): Promise<vscode.ColorInformation[]> {
-    if (document.languageId !== 'basm' && document.languageId !== 'locomotive-basic') {
+    if (
+        document.languageId !== 'basm'
+        && document.languageId !== 'locomotive-basic'
+        && document.languageId !== 'catart-basic'
+    ) {
         return [];
     }
     const key = `${document.uri.toString()}@${document.version}`;

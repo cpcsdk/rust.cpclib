@@ -639,6 +639,11 @@ fn compute_diagnostics(
         DocumentType::Assembly => asm_analyzer.analyze(document),
         DocumentType::BuildFile => build_analyzer.analyze(document),
         DocumentType::Basic => basic_analyzer.analyze(document),
+        DocumentType::CatartBasic => {
+            let mut d = basic_analyzer.analyze(document);
+            d.extend(basic_analyzer.catart_diagnostics(document));
+            d
+        },
         DocumentType::Unknown => Vec::new()
     };
     relativize_diagnostic_messages(&mut diagnostics, workspace_roots);
@@ -700,7 +705,7 @@ fn dispatch_by_doc_type<T>(
     match document.doc_type {
         DocumentType::Assembly => on_assembly(document),
         DocumentType::BuildFile => on_build_file(document),
-        DocumentType::Basic => on_basic(document),
+        DocumentType::Basic | DocumentType::CatartBasic => on_basic(document),
         DocumentType::Unknown => unknown_default
     }
 }
@@ -1066,7 +1071,9 @@ impl LanguageServer for CpcLspBackend {
                         .completion_with_documents(document, position, &others)
                 },
                 DocumentType::BuildFile => self.build_analyzer.completion(document, position),
-                DocumentType::Basic => self.basic_analyzer.completion(document, position),
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    self.basic_analyzer.completion(document, position)
+                },
                 DocumentType::Unknown => Vec::new()
             };
 
@@ -1097,7 +1104,9 @@ impl LanguageServer for CpcLspBackend {
         let location = match doc_type {
             DocumentType::Assembly => self.asm_analyzer.goto_definition(entry.value(), position),
             DocumentType::BuildFile => self.build_analyzer.goto_definition(entry.value(), position),
-            DocumentType::Basic => self.basic_analyzer.goto_definition(entry.value(), position),
+            DocumentType::Basic | DocumentType::CatartBasic => {
+                self.basic_analyzer.goto_definition(entry.value(), position)
+            },
             DocumentType::Unknown => None
         };
         if let Some(loc) = location {
@@ -1167,7 +1176,9 @@ impl LanguageServer for CpcLspBackend {
                 DocumentType::BuildFile => {
                     self.build_analyzer.find_references(entry.value(), position)
                 },
-                DocumentType::Basic => self.basic_analyzer.find_references(entry.value(), position),
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    self.basic_analyzer.find_references(entry.value(), position)
+                },
                 _ => Vec::new()
             };
             return if references.is_empty() {
@@ -1245,7 +1256,7 @@ impl LanguageServer for CpcLspBackend {
         };
 
         match entry.value().doc_type {
-            DocumentType::Basic => {
+            DocumentType::Basic | DocumentType::CatartBasic => {
                 Ok(self
                     .basic_analyzer
                     .rename(entry.value(), position, &new_name))
@@ -1333,7 +1344,7 @@ impl LanguageServer for CpcLspBackend {
                 self.asm_analyzer
                     .prepare_call_hierarchy(entry.value(), position)
             },
-            DocumentType::Basic => {
+            DocumentType::Basic | DocumentType::CatartBasic => {
                 self.basic_analyzer
                     .prepare_call_hierarchy(entry.value(), position)
             },
@@ -1391,7 +1402,7 @@ impl LanguageServer for CpcLspBackend {
                 )
             },
             (
-                DocumentType::Basic,
+                DocumentType::Basic | DocumentType::CatartBasic,
                 CallHierarchyData::BasicLine {
                     line_number,
                     block_start_line: None
@@ -1523,7 +1534,7 @@ impl LanguageServer for CpcLspBackend {
                 )
             },
             (
-                DocumentType::Basic,
+                DocumentType::Basic | DocumentType::CatartBasic,
                 CallHierarchyData::BasicLine {
                     line_number,
                     block_start_line: None
@@ -2008,7 +2019,9 @@ impl LanguageServer for CpcLspBackend {
 
         let actions: Vec<CodeAction> = match doc_type {
             DocumentType::Assembly => self.asm_analyzer.code_actions(entry.value(), range),
-            DocumentType::Basic => self.basic_analyzer.code_actions(entry.value(), range),
+            DocumentType::Basic | DocumentType::CatartBasic => {
+                self.basic_analyzer.code_actions(entry.value(), range)
+            },
             _ => vec![]
         };
 
@@ -2082,7 +2095,10 @@ impl LanguageServer for CpcLspBackend {
                 };
                 return Ok(self.asm_analyzer.format(document, &opt));
             }
-            if document.doc_type == DocumentType::Basic {
+            if matches!(
+                document.doc_type,
+                DocumentType::Basic | DocumentType::CatartBasic
+            ) {
                 return Ok(self.basic_analyzer.format(document));
             }
         }
@@ -2095,7 +2111,9 @@ impl LanguageServer for CpcLspBackend {
             let document = entry.value();
             return Ok(match document.doc_type {
                 DocumentType::Assembly => self.asm_analyzer.document_colors(document),
-                DocumentType::Basic => self.basic_analyzer.document_colors(document),
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    self.basic_analyzer.document_colors(document)
+                },
                 _ => Vec::new()
             });
         }
@@ -2114,7 +2132,7 @@ impl LanguageServer for CpcLspBackend {
                     self.asm_analyzer
                         .color_presentations(document, params.color, params.range)
                 },
-                DocumentType::Basic => {
+                DocumentType::Basic | DocumentType::CatartBasic => {
                     self.basic_analyzer
                         .color_presentations(params.color, params.range)
                 },
@@ -2136,7 +2154,10 @@ impl LanguageServer for CpcLspBackend {
         }
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
-            if document.doc_type == DocumentType::Basic {
+            if matches!(
+                document.doc_type,
+                DocumentType::Basic | DocumentType::CatartBasic
+            ) {
                 // Continue BASIC line numbering on the new line.
                 return Ok(self.basic_analyzer.on_type_newline(document, position));
             }
@@ -2660,6 +2681,19 @@ mod dispatch_by_doc_type_tests {
             .await;
     }
 
+    async fn open_catart_doc(backend: &CpcLspBackend, uri: &Url) {
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "catart-basic".to_string(),
+                    version: 1,
+                    text: "10 INK 1,26\n20 PAPER 1\n30 PRINT \"HI\"\n".to_string()
+                }
+            })
+            .await;
+    }
+
     #[tokio::test]
     async fn hover_still_dispatches_to_the_assembly_analyzer() {
         let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
@@ -2746,6 +2780,54 @@ mod dispatch_by_doc_type_tests {
         let backend = service.inner();
         let uri = Url::parse("file:///t.asm").unwrap();
         open_asm_doc(backend, &uri).await;
+
+        let response = backend
+            .semantic_tokens_full(SemanticTokensParams {
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default(),
+                text_document: TextDocumentIdentifier { uri }
+            })
+            .await
+            .unwrap();
+
+        match response {
+            Some(SemanticTokensResult::Tokens(tokens)) => {
+                assert!(!tokens.data.is_empty(), "{tokens:?}");
+            },
+            other => panic!("expected semantic tokens, got {other:?}")
+        }
+    }
+
+    #[tokio::test]
+    async fn hover_still_dispatches_to_the_basic_analyzer_for_catart_documents() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asc").unwrap();
+        open_catart_doc(backend, &uri).await;
+
+        let hover = backend
+            .hover(HoverParams {
+                text_document_position_params: TextDocumentPositionParams {
+                    text_document: TextDocumentIdentifier { uri },
+                    position: Position {
+                        line: 0,
+                        character: 4
+                    }
+                },
+                work_done_progress_params: Default::default()
+            })
+            .await
+            .unwrap();
+
+        assert!(hover.is_some(), "{hover:?}");
+    }
+
+    #[tokio::test]
+    async fn semantic_tokens_full_still_dispatches_to_the_basic_analyzer_for_catart_documents() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asc").unwrap();
+        open_catart_doc(backend, &uri).await;
 
         let response = backend
             .semantic_tokens_full(SemanticTokensParams {
