@@ -1071,8 +1071,9 @@ impl LanguageServer for CpcLspBackend {
                         .completion_with_documents(document, position, &others)
                 },
                 DocumentType::BuildFile => self.build_analyzer.completion(document, position),
-                DocumentType::Basic | DocumentType::CatartBasic => {
-                    self.basic_analyzer.completion(document, position)
+                DocumentType::Basic => self.basic_analyzer.completion(document, position),
+                DocumentType::CatartBasic => {
+                    self.basic_analyzer.catart_completion(document, position)
                 },
                 DocumentType::Unknown => Vec::new()
             };

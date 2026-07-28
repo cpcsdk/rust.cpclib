@@ -230,6 +230,20 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
 
                 break;
             },
+            Err(e @ ErrMode::Cut(_)) => {
+                // `parse_instruction` recognized a specific instruction
+                // keyword (one of its `alt` branches committed via
+                // `cut_err`, e.g. `parse_symbol`'s fixed 8-row-argument
+                // check) and then failed to parse its arguments - a real
+                // syntax error, not "no instruction here, try something
+                // else". Propagate it rather than silently discarding the
+                // malformed statement and whatever input it partially
+                // consumed, which previously left the line looking like an
+                // empty/valid no-op with no diagnostic at all (found via a
+                // `SYMBOL` statement missing one of its 9 required
+                // arguments).
+                return Err(e);
+            },
             Err(_) => {
                 // Even if instruction parsing failed, check for inline comment
                 if let Some(_) = opt::<_, _, ContextError, _>('\'')

@@ -10,6 +10,17 @@ use super::token::{KEYWORD_DOCS, collect_variable_occurrences};
 use crate::common::document::Document;
 use crate::common::render::first_doc_line;
 
+/// Keywords `cpclib_catart::convert::basic_to_commands` actually accepts -
+/// the same whitelist a CatArt document's diagnostics enforce (see
+/// `locomotive::catart`). Kept as an explicit list here (rather than derived
+/// from `cpclib_catart` at runtime, which exposes no such list itself, only
+/// match-arm behavior) because completion filters by keyword *label text*;
+/// `locomotive::catart`'s own test module cross-validates every entry here
+/// against real `basic_to_commands` behavior so the two can't silently drift.
+pub(super) const CATART_ALLOWED_KEYWORDS: &[&str] = &[
+    "INK", "PAPER", "PEN", "PRINT", "CURSOR", "MODE", "LOCATE", "WINDOW", "BORDER", "CLS", "SYMBOL"
+];
+
 impl BasicAnalyzer {
     pub fn completion(&self, document: &Document, position: Position) -> Vec<CompletionItem> {
         // Respect the case of what the user already typed.
@@ -56,6 +67,29 @@ impl BasicAnalyzer {
         completions.extend(self.variable_completions(document));
 
         completions
+    }
+
+    /// As [`Self::completion`], but for a `.CAT`/`.ASC` CatArt document:
+    /// keeps only keyword completions CatArt actually accepts (variable
+    /// completions pass through unfiltered - they're user-defined names, not
+    /// instructions). Must be kept in sync with the keywords
+    /// `cpclib_catart::convert::basic_to_commands` accepts (see
+    /// `catart_diagnostics`'s own cross-validation test in
+    /// `locomotive::catart`, which fails if this list drifts out of step).
+    pub fn catart_completion(
+        &self,
+        document: &Document,
+        position: Position
+    ) -> Vec<CompletionItem> {
+        self.completion(document, position)
+            .into_iter()
+            .filter(|item| {
+                item.kind != Some(CompletionItemKind::KEYWORD)
+                    || CATART_ALLOWED_KEYWORDS
+                        .iter()
+                        .any(|kw| item.label.eq_ignore_ascii_case(kw))
+            })
+            .collect()
     }
 
     /// Variables already assigned somewhere in the document (`LET`/`FOR`
@@ -161,6 +195,53 @@ mod tests {
         let text = "10 LET SCORE = 0\n20 PRINT SCORE\n";
         let document = Document::new(uri, text.to_string(), 1);
         let items = BasicAnalyzer::new().completion(
+            &document,
+            Position {
+                line: 1,
+                character: 12
+            }
+        );
+        let score = items
+            .iter()
+            .find(|i| i.label == "SCORE" && i.kind == Some(CompletionItemKind::VARIABLE));
+        assert!(
+            score.is_some(),
+            "expected a SCORE variable completion, got {items:?}"
+        );
+    }
+
+    #[test]
+    fn catart_completion_only_offers_whitelisted_keywords() {
+        let uri = Url::parse("file:///t.asc").unwrap();
+        let document = Document::new(uri, String::new(), 1);
+        let items = BasicAnalyzer::new().catart_completion(
+            &document,
+            Position {
+                line: 0,
+                character: 0
+            }
+        );
+
+        let goto = items.iter().find(|i| {
+            i.label.eq_ignore_ascii_case("goto") && i.kind == Some(CompletionItemKind::KEYWORD)
+        });
+        assert!(
+            goto.is_none(),
+            "GOTO must not be offered in a CatArt document: {items:?}"
+        );
+
+        let ink = items.iter().find(|i| {
+            i.label.eq_ignore_ascii_case("ink") && i.kind == Some(CompletionItemKind::KEYWORD)
+        });
+        assert!(ink.is_some(), "INK should still be offered: {items:?}");
+    }
+
+    #[test]
+    fn catart_completion_still_offers_variable_completions_unfiltered() {
+        let uri = Url::parse("file:///t.asc").unwrap();
+        let text = "10 LET SCORE = 0\n20 PRINT SCORE\n";
+        let document = Document::new(uri, text.to_string(), 1);
+        let items = BasicAnalyzer::new().catart_completion(
             &document,
             Position {
                 line: 1,
