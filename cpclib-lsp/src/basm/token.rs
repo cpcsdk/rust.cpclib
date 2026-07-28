@@ -25,6 +25,18 @@ pub(super) const TT_PARAMETER: u32 = 11; // macro parameters {param}
 pub(super) const MOD_DECLARATION: u32 = 1 << 0;
 pub(super) const MOD_READONLY: u32 = 1 << 1;
 
+/// One semantic token in absolute (not delta-encoded) document coordinates
+/// - the shared accumulation shape every source (the ASM tokenizer itself,
+/// LOCOMOTIVE-embedded BASIC, bndbuild-embedded rules) pushes into before
+/// the final sort + delta-encode pass in `semantic_tokens.rs`.
+pub(super) struct RawSemanticToken {
+    pub(super) line: u32,
+    pub(super) col: u32,
+    pub(super) len: u32,
+    pub(super) token_type: u32,
+    pub(super) modifiers: u32
+}
+
 // Full Z80 register set + condition codes used as operands
 pub(super) const REGISTER_LIST: &[&str] = &[
     "AF'", "AF", "BC", "DE", "HL", "IX", "IY", "SP", "PC", "IXH", "IXL", "IYH", "IYL", "A", "B",

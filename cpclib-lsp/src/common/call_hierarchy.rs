@@ -27,7 +27,17 @@ pub enum CallHierarchyData {
     },
     /// One specific bndbuild target filename/token. Identity is per-output
     /// file, not per-rule, since one rule's `tgt:` field can list several.
-    BndbuildTarget { target: String },
+    /// `block_start_line` is `Some(doc_line)` (the document line of the
+    /// `#!bndbuild` embedded block's first YAML-content line, 0-based -
+    /// `EmbeddedBndbuildBlock::yaml_start_line`) when this target is
+    /// declared inside a `.asm` file's embedded block, or `None` for a real
+    /// standalone `.bnd`/`.build` file - same shape as `BasicLine`'s own
+    /// embedded marker.
+    BndbuildTarget {
+        target: String,
+        #[serde(default)]
+        block_start_line: Option<u32>
+    },
     /// A Jinja `{% macro NAME(...) %}` defined somewhere reachable from the
     /// current document's `{% include %}` graph.
     JinjaMacro { name: String }

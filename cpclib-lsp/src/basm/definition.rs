@@ -37,6 +37,12 @@ impl AssemblyAnalyzer {
             });
         }
 
+        // Delegate to bndbuild goto-definition for `#!bndbuild` embedded
+        // block content.
+        if let Some(loc) = self.embedded_bndbuild_goto_definition(document, position) {
+            return Some(loc);
+        }
+
         // Delegate to BASIC goto-definition for LOCOMOTIVE block content.
         {
             let text = document.text();
@@ -66,6 +72,11 @@ impl AssemblyAnalyzer {
     /// `textDocument/prepareRename`: the range to offer renaming for, or
     /// `None` to reject (cursor not on a real label/BASIC variable).
     pub fn prepare_rename(&self, document: &Document, position: Position) -> Option<Range> {
+        // Delegate to bndbuild for `#!bndbuild` embedded block content.
+        if let Some(range) = self.embedded_bndbuild_prepare_rename(document, position) {
+            return Some(range);
+        }
+
         // Delegate to BASIC for LOCOMOTIVE block content (same
         // block-extraction dance as `goto_definition`/`hover`).
         let text = document.text();
@@ -89,6 +100,10 @@ impl AssemblyAnalyzer {
         position: Position,
         new_name: &str
     ) -> Option<WorkspaceEdit> {
+        if let Some(edit) = self.embedded_bndbuild_rename(document, position, new_name) {
+            return Some(edit);
+        }
+
         let text = document.text();
         let line_idx = position.line as usize;
         if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
@@ -102,6 +117,87 @@ impl AssemblyAnalyzer {
         }
 
         self.rename_label(document, position, new_name)
+    }
+
+    /// Delegates goto-definition to `BuildFileAnalyzer::goto_definition`
+    /// when `position` is inside a `#!bndbuild` embedded block, against a
+    /// synthetic `Document` wrapping just the block's own text. The
+    /// returned `Location`'s range is only shifted back into outer-document
+    /// coordinates when it still points at the synthetic doc's own uri
+    /// (== the host `.asm` file) - a `Location` pointing at a genuinely
+    /// different file (e.g. a `cmd:`-referenced on-disk path,
+    /// `bndbuild::definition`'s own `goto_definition_on_a_cmd_argument_
+    /// opens_the_file` test) already carries real, absolute coordinates and
+    /// must pass through untouched.
+    fn embedded_bndbuild_goto_definition(
+        &self,
+        document: &Document,
+        position: Position
+    ) -> Option<Location> {
+        let blocks = self.embedded_bndbuild_blocks(document);
+        let block = super::embedded_bndbuild::block_at(&blocks, position.line as usize)?;
+        let local_pos = super::embedded_bndbuild::position_into_block(block, position)?;
+        let block_doc = Document::new(document.uri.clone(), block.yaml_text.clone(), 0);
+        let loc =
+            crate::bndbuild::BuildFileAnalyzer::new().goto_definition(&block_doc, local_pos)?;
+        Some(super::embedded_bndbuild::location_out_of_block(
+            block,
+            &document.uri,
+            loc
+        ))
+    }
+
+    /// As `embedded_bndbuild_goto_definition`, for `prepare_rename`.
+    fn embedded_bndbuild_prepare_rename(
+        &self,
+        document: &Document,
+        position: Position
+    ) -> Option<Range> {
+        let blocks = self.embedded_bndbuild_blocks(document);
+        let block = super::embedded_bndbuild::block_at(&blocks, position.line as usize)?;
+        let local_pos = super::embedded_bndbuild::position_into_block(block, position)?;
+        let block_doc = Document::new(document.uri.clone(), block.yaml_text.clone(), 0);
+        let range =
+            crate::bndbuild::BuildFileAnalyzer::new().prepare_rename(&block_doc, local_pos)?;
+        Some(super::embedded_bndbuild::range_out_of_block(block, range))
+    }
+
+    /// As `embedded_bndbuild_goto_definition`, for `rename`. Walks
+    /// `WorkspaceEdit.changes` generically (not simply "grab the one
+    /// entry") - `BuildFileAnalyzer::rename` only ever touches its own
+    /// passed-in document today, but this doesn't assume that stays true -
+    /// and shifts only the entry keyed by the synthetic doc's own uri
+    /// (== `document.uri`).
+    fn embedded_bndbuild_rename(
+        &self,
+        document: &Document,
+        position: Position,
+        new_name: &str
+    ) -> Option<WorkspaceEdit> {
+        let blocks = self.embedded_bndbuild_blocks(document);
+        let block = super::embedded_bndbuild::block_at(&blocks, position.line as usize)?;
+        let local_pos = super::embedded_bndbuild::position_into_block(block, position)?;
+        let block_doc = Document::new(document.uri.clone(), block.yaml_text.clone(), 0);
+        let edit =
+            crate::bndbuild::BuildFileAnalyzer::new().rename(&block_doc, local_pos, new_name)?;
+
+        let mut changes = edit.changes.unwrap_or_default();
+        if let Some(edits) = changes.remove(&document.uri) {
+            let shifted = edits
+                .into_iter()
+                .map(|e| {
+                    TextEdit {
+                        range: super::embedded_bndbuild::range_out_of_block(block, e.range),
+                        new_text: e.new_text
+                    }
+                })
+                .collect();
+            changes.insert(document.uri.clone(), shifted);
+        }
+        Some(WorkspaceEdit {
+            changes: Some(changes),
+            ..Default::default()
+        })
     }
 
     /// Search `document` for a definition of `word`.
@@ -386,16 +482,22 @@ impl AssemblyAnalyzer {
         document: &Document,
         position: Position
     ) -> Option<RenameTarget> {
-        // Never treat BASIC content inside a LOCOMOTIVE block as a basm
-        // label — `rename`/`prepare_rename` already delegate that case to
-        // the BASIC analyzer (single-file), and callers use this method
+        // Never treat BASIC content inside a LOCOMOTIVE block, or YAML
+        // content inside a `#!bndbuild` embedded block, as a basm label —
+        // `rename`/`prepare_rename` already delegate both cases to their
+        // own analyzer (single-file), and callers use this method
         // specifically to decide whether a rename needs to expand beyond
-        // the current document, which never applies to BASIC content.
+        // the current document, which never applies to either.
         let text = document.text();
         let line_idx = position.line as usize;
         if extract_locomotive_blocks(&text)
             .iter()
             .any(|b| b.basic_range.contains(&line_idx))
+            || super::embedded_bndbuild::block_at(
+                &self.embedded_bndbuild_blocks(document),
+                line_idx
+            )
+            .is_some()
         {
             return None;
         }
@@ -1322,6 +1424,76 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         assert_eq!(loc.range.start.line, 0, "{loc:?}");
         assert_eq!(loc.range.start.character, 22, "{loc:?}");
     }
+
+    /// Goto-definition on a `dep:` reference inside a `#!bndbuild` embedded
+    /// block must delegate to bndbuild's own goto-definition and shift the
+    /// resulting line back into the host `.asm` file's coordinates.
+    #[test]
+    fn goto_definition_on_a_dep_inside_an_embedded_block_resolves_with_a_shifted_line() {
+        let text = "; #!bndbuild\n\
+                     ; - tgt: helper.o\n\
+                     ;   cmd: basm helper.asm -o helper.o\n\
+                     ; - tgt: out.bin\n\
+                     ;   dep:\n\
+                     ;     - helper.o\n\
+                     ;   cmd: link helper.o\n";
+        let uri = tower_lsp::lsp_types::Url::parse("file:///embedded.asm").unwrap();
+        let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "helper.o" within the dep list item (outer-doc line 5,
+        // block-local line 4 "    - helper.o", block-local character 8;
+        // "; " (2) + 8 = 10).
+        let loc = analyzer
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 5,
+                    character: 10
+                }
+            )
+            .expect("goto-definition on a dep inside an embedded block");
+        assert_eq!(
+            loc.range.start.line, 1,
+            "should jump to the rule declaring helper.o, shifted to outer-doc line 1: {loc:?}"
+        );
+    }
+
+    /// Goto-definition on a `cmd:` argument referencing a real on-disk file,
+    /// inside an embedded block, must resolve to that file directly - and,
+    /// since the `Location` now points at a genuinely *different* file, its
+    /// range must NOT be shifted (regression-proofing
+    /// `location_out_of_block`'s uri-equality gate).
+    #[test]
+    fn goto_definition_on_a_cmd_argument_inside_an_embedded_block_opens_the_file_unshifted() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("main.asm"), "").unwrap();
+        let host_uri =
+            tower_lsp::lsp_types::Url::from_file_path(tmp.path().join("host.asm")).unwrap();
+        let text = "; #!bndbuild\n; - tgt: out.bin\n;   cmd: basm main.asm -o out.bin\n";
+        let doc = crate::common::document::Document::new(host_uri.clone(), text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "main.asm" within the cmd argument list (outer-doc line
+        // 2, block-local line 1 "  cmd: basm main.asm -o out.bin",
+        // block-local character 12; "; " (2) + 12 = 14).
+        let loc = analyzer
+            .goto_definition(
+                &doc,
+                Position {
+                    line: 2,
+                    character: 14
+                }
+            )
+            .expect("goto-definition on a cmd argument inside an embedded block");
+        assert_eq!(
+            loc.uri,
+            tower_lsp::lsp_types::Url::from_file_path(tmp.path().join("main.asm")).unwrap()
+        );
+        assert_ne!(loc.uri, host_uri);
+        assert_eq!(
+            loc.range.start.line, 0,
+            "a different-file location must not be shifted: {loc:?}"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1955,6 +2127,61 @@ mod rename_tests {
         assert_eq!(edits.len(), 2, "{edits:?}");
         assert_eq!(edits[0].range.start.line, 1);
         assert_eq!(edits[1].range.start.line, 2);
+    }
+
+    /// A Jinja variable rename inside a `#!bndbuild` embedded block must
+    /// produce absolute document coordinates for every occurrence, not ones
+    /// relative to the extracted block.
+    #[test]
+    fn rename_delegates_to_bndbuild_inside_an_embedded_block() {
+        let text = "; #!bndbuild\n\
+                     ; {% set NAME = \"test\" %}\n\
+                     ; - tgt: {{ NAME }}\n\
+                     ;   cmd: echo hi\n";
+        let d = doc("file:///embedded.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "NAME" in "{% set NAME = ... %}" (outer-doc line 1,
+        // block-local line 0 "{% set NAME = \"test\" %}", block-local
+        // character 9 lands inside "NAME"; "; " (2) + 9 = 11).
+        let edit = analyzer
+            .rename(
+                &d,
+                Position {
+                    line: 1,
+                    character: 11
+                },
+                "OTHER"
+            )
+            .expect("expected a workspace edit");
+        let edits = edit.changes.unwrap().remove(&d.uri).unwrap();
+        // Both the `{% set NAME %}` definition (outer line 1) and the
+        // `{{ NAME }}` reference (outer line 2) must be renamed.
+        assert_eq!(edits.len(), 2, "{edits:?}");
+        assert!(edits.iter().any(|e| e.range.start.line == 1), "{edits:?}");
+        assert!(edits.iter().any(|e| e.range.start.line == 2), "{edits:?}");
+    }
+
+    /// Regression test for the `backend.rs`-direct-caller gotcha:
+    /// `resolve_rename_target` is called directly by the top-level `rename`
+    /// handler *before* it ever reaches `AssemblyAnalyzer::rename` (where
+    /// the embedded-block delegation lives) - without its own guard,
+    /// ordinary-identifier-shaped text inside a `#!bndbuild` block (e.g.
+    /// "tgt") would be misidentified as a workspace-wide basm label rename
+    /// target instead of correctly deferring to the block-scoped rename.
+    #[test]
+    fn resolve_rename_target_returns_none_inside_an_embedded_bndbuild_block() {
+        let text = "; #!bndbuild\n; - tgt: test\n;   cmd: echo hi\n";
+        let d = doc("file:///embedded.asm", text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "tgt" (outer-doc line 1, character 4).
+        let target = analyzer.resolve_rename_target(
+            &d,
+            Position {
+                line: 1,
+                character: 4
+            }
+        );
+        assert!(target.is_none(), "{target:?}");
     }
 }
 

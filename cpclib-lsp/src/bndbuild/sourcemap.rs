@@ -24,6 +24,32 @@ impl SourceMap {
             .flatten()
     }
 
+    /// As [`Self::to_original`], but when `expanded_line` has no direct
+    /// mapping of its own (content spliced in by `{% include %}`, which
+    /// carries no line marker of its own - see `annotate`'s doc comment)
+    /// falls forward to the *next* expanded line that does map to
+    /// something real. By construction (verified directly:
+    /// `expand_with_source_map` keeps each template's own trailing newline,
+    /// see `build_environment`'s doc comment on `set_keep_trailing_newline`)
+    /// that next real line is always the still-annotated line the
+    /// `{% include %}` directive itself was written on - its own marker
+    /// survives immediately *after* all of the spliced content, since the
+    /// included file's own raw text is never annotated and so never carries
+    /// a marker of its own. This makes every line of the spliced content
+    /// resolve to the *include statement's* own original line, so a
+    /// symbol/code-lens built from it lands "on top of" the directive that
+    /// spliced it in, rather than at a meaningless raw expanded-line index.
+    /// Falls back to `expanded_line` itself only when there's no following
+    /// mapped line at all (an `{% include %}` with nothing after it).
+    pub fn to_original_or_nearest_following(&self, expanded_line: u32) -> u32 {
+        if let Some(orig) = self.to_original(expanded_line) {
+            return orig;
+        }
+        ((expanded_line as usize + 1)..self.expanded_to_original.len())
+            .find_map(|i| self.expanded_to_original[i])
+            .unwrap_or(expanded_line)
+    }
+
     /// Identity map for when we're working directly on the raw file.
     pub fn identity(line_count: usize) -> Self {
         Self {

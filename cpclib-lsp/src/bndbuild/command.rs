@@ -605,8 +605,33 @@ fn resolve_referenced_path(path_str: &str, doc_uri: &Url) -> Option<Url> {
     if direct.exists() {
         return Url::from_file_path(direct).ok();
     }
-    let resolved = crate::basm::definition::resolve_include_path(path_str, doc_uri)?;
-    Url::from_file_path(resolved).ok()
+    if let Some(resolved) = crate::basm::definition::resolve_include_path(path_str, doc_uri) {
+        return Url::from_file_path(resolved).ok();
+    }
+    // Last resort: `resolve_include_path` only walks *up* the ancestor
+    // chain (one `dir.join(filename)` check per level) - it never looks
+    // inside a sibling or child directory. A referenced file living
+    // elsewhere in the same project (a common real layout, e.g.
+    // `src/palettes.asm` referenced from a rule embedded in
+    // `src/effects/sna.asm`) needs an actual recursive search, scoped to
+    // the nearest project root (or the document's own directory if no
+    // marker is found) so this doesn't walk arbitrarily far up the
+    // filesystem. Matches by basename only, since `path_str` is usually a
+    // bare filename with no directory component of its own.
+    let search_root = crate::basm::definition::project_root_for(doc_uri).or_else(|| {
+        doc_uri
+            .to_file_path()
+            .ok()?
+            .parent()
+            .map(|p| p.to_path_buf())
+    })?;
+    let basename = direct.file_name()?;
+    walkdir::WalkDir::new(&search_root)
+        .into_iter()
+        .filter_entry(|e| !crate::server::backend::is_ignored_dir(e))
+        .filter_map(|e| e.ok())
+        .find(|e| e.file_type().is_file() && e.file_name() == basename)
+        .and_then(|e| Url::from_file_path(e.path()).ok())
 }
 
 /// Enumerate the task lines declared under the rule starting at `rule_line`,
@@ -1092,6 +1117,38 @@ mod tests {
         assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
         assert_eq!(diag.range.start.line, 0);
         assert!(diag.message.contains("Unknown symbol"), "{}", diag.message);
+    }
+
+    #[test]
+    fn resolve_referenced_path_finds_a_file_in_a_different_subdirectory() {
+        // Regression test for a real report: `resolve_include_path` only
+        // walks *up* the ancestor chain (one `dir.join(filename)` check per
+        // level) - a referenced file living in a *different* subdirectory
+        // of the same project (e.g. the build file at the project root,
+        // the referenced source under `src/`) was never found, so no
+        // cross-file diagnostic - and no clickable/highlighted error - was
+        // ever produced for it.
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("bndbuild.yml"), "marker").unwrap();
+        let bnd_document = doc(
+            tmp.path().as_std_path(),
+            "- tgt: test\n  phony: true\n  cmd: basm palettes.asm\n"
+        );
+        let src_dir = tmp.path().join("src");
+        std::fs::create_dir(&src_dir).unwrap();
+        let palettes_path = src_dir.join("palettes.asm");
+        std::fs::write(&palettes_path, "    jp demo_run\n").unwrap();
+
+        let msg = format!(
+            "error: Unknown symbol: demo_run\n   --> {}:1:8\n",
+            "palettes.asm"
+        );
+        let outcome = failure_outcome(&bnd_document, "test", "test", msg, None, "");
+
+        let (target_uri, _diag) = outcome
+            .build_error
+            .expect("expected the recursive subdirectory search to find palettes.asm");
+        assert_eq!(target_uri, Url::from_file_path(&palettes_path).unwrap());
     }
 
     #[test]

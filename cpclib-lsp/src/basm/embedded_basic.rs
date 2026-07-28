@@ -103,12 +103,12 @@ pub(super) fn block_and_text_at(text: &str, line_idx: usize) -> Option<(Locomoti
     Some((block, basic_text))
 }
 
-/// Emit semantic tokens for a LOCOMOTIVE block's BASIC content.
-/// Appends raw `(line, col, len, token_type, modifiers)` tuples into `raw`.
+/// Emit semantic tokens for a LOCOMOTIVE block's BASIC content. Appends
+/// absolute-coordinate `RawSemanticToken`s into `raw`.
 pub(super) fn push_locomotive_basic_tokens(
     block: &LocomotiveBlock,
     lines: &[&str],
-    raw: &mut Vec<(u32, u32, u32, u32, u32)>
+    raw: &mut Vec<super::token::RawSemanticToken>
 ) {
     // Highlight the LOCOMOTIVE directive line itself (keyword + label).
     {
@@ -117,14 +117,26 @@ pub(super) fn push_locomotive_basic_tokens(
         let bytes = line.as_bytes();
         // Find "LOCOMOTIVE" in the line (case-insensitive).
         if let Some(pos) = line.to_uppercase().find("LOCOMOTIVE") {
-            raw.push((src_line, pos as u32, 10, TT_MACRO, 0));
+            raw.push(super::token::RawSemanticToken {
+                line: src_line,
+                col: pos as u32,
+                len: 10,
+                token_type: TT_MACRO,
+                modifiers: 0
+            });
             // Everything after the keyword (trimmed) is the label.
             let after = line[pos + 10..].trim_start();
             if !after.is_empty() {
                 let label_col = bytes.len() - after.len();
                 let label_len = after.split_whitespace().next().unwrap_or("").len();
                 if label_len > 0 {
-                    raw.push((src_line, label_col as u32, label_len as u32, TT_FUNCTION, 0));
+                    raw.push(super::token::RawSemanticToken {
+                        line: src_line,
+                        col: label_col as u32,
+                        len: label_len as u32,
+                        token_type: TT_FUNCTION,
+                        modifiers: 0
+                    });
                 }
             }
         }
@@ -135,13 +147,25 @@ pub(super) fn push_locomotive_basic_tokens(
         let src_line = hl_line_idx as u32;
         let line = lines[hl_line_idx];
         if let Some(pos) = line.to_uppercase().find("HIDE_LINES") {
-            raw.push((src_line, pos as u32, 10, TT_MACRO, 0));
+            raw.push(super::token::RawSemanticToken {
+                line: src_line,
+                col: pos as u32,
+                len: 10,
+                token_type: TT_MACRO,
+                modifiers: 0
+            });
             let after = line[pos + 10..].trim_start();
             if !after.is_empty() {
                 let num_col = line.len() - after.len();
                 let num_len = after.split_whitespace().next().unwrap_or("").len();
                 if num_len > 0 {
-                    raw.push((src_line, num_col as u32, num_len as u32, TT_NUMBER, 0));
+                    raw.push(super::token::RawSemanticToken {
+                        line: src_line,
+                        col: num_col as u32,
+                        len: num_len as u32,
+                        token_type: TT_NUMBER,
+                        modifiers: 0
+                    });
                 }
             }
         }
@@ -171,7 +195,13 @@ pub(super) fn push_locomotive_basic_tokens(
                     _ => continue
                 };
                 if tok.span.len > 0 {
-                    raw.push((src_line, tok.span.col, tok.span.len, tt, 0));
+                    raw.push(super::token::RawSemanticToken {
+                        line: src_line,
+                        col: tok.span.col,
+                        len: tok.span.len,
+                        token_type: tt,
+                        modifiers: 0
+                    });
                 }
             }
         }
@@ -182,7 +212,13 @@ pub(super) fn push_locomotive_basic_tokens(
         let src_line = block.end_line as u32;
         let line = lines[block.end_line];
         if let Some(pos) = line.to_uppercase().find("ENDLOCOMOTIVE") {
-            raw.push((src_line, pos as u32, 13, TT_MACRO, 0));
+            raw.push(super::token::RawSemanticToken {
+                line: src_line,
+                col: pos as u32,
+                len: 13,
+                token_type: TT_MACRO,
+                modifiers: 0
+            });
         }
     }
 }

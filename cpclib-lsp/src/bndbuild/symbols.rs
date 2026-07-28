@@ -154,9 +154,12 @@ impl BuildFileAnalyzer {
         }
 
         for (exp_idx, line_str) in text.lines().enumerate() {
-            let orig = source_map
-                .to_original(exp_idx as u32)
-                .unwrap_or(exp_idx as u32);
+            // A line spliced in by `{% include %}` has no original line of
+            // its own - falls forward to the line the `{% include %}`
+            // directive itself was written on, so an included rule's own
+            // code-lens/symbol lands on top of the directive that pulled it
+            // in, not at a meaningless raw expanded-line index.
+            let orig = source_map.to_original_or_nearest_following(exp_idx as u32);
 
             let indent = line_str.len() - line_str.trim_start().len();
             let trimmed = line_str.trim_start();
@@ -333,5 +336,42 @@ mod tests {
         let flat = BuildFileAnalyzer::new().target_symbols(&document);
         let names: Vec<&str> = flat.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, vec!["out.bin"], "{flat:?}");
+    }
+
+    /// Regression test for a real report: a rule pulled in via
+    /// `{% include %}` got a symbol/code-lens position at a meaningless raw
+    /// expanded-line index (since spliced content has no source-map
+    /// counterpart of its own - see `SourceMap::
+    /// to_original_or_nearest_following`'s own doc comment) instead of
+    /// landing on the `{% include %}` line itself. Shared fix in
+    /// `scan_symbols_from_text`'s use of the source map - benefits a real
+    /// standalone `.bnd` file's own `target_symbols`/`code_lens`, not just
+    /// the `#!bndbuild`-embedded case this was first reported against.
+    #[test]
+    fn an_included_rule_s_symbol_lands_on_the_include_line() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("build.bnd"),
+            "- tgt: imported\n  cmd: echo hi\n"
+        )
+        .unwrap();
+        let uri = Url::from_file_path(tmp.path().join("host.bnd")).unwrap();
+        let text = "{% include \"build.bnd\" %}\n- tgt: local\n  cmd: echo local\n";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let flat = BuildFileAnalyzer::new().target_symbols(&document);
+        let imported = flat
+            .iter()
+            .find(|s| s.name == "imported")
+            .expect("expected a symbol for the included rule");
+        let local = flat
+            .iter()
+            .find(|s| s.name == "local")
+            .expect("expected a symbol for the local rule");
+        assert_eq!(
+            imported.selection_range.start.line, 0,
+            "should land on the include line: {imported:?}"
+        );
+        assert_eq!(local.selection_range.start.line, 1, "{local:?}");
     }
 }

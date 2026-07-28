@@ -41,8 +41,8 @@ impl AssemblyAnalyzer {
             }
         }
 
-        // Raw tokens collected in document order: (line, col, len, type, modifiers)
-        let mut raw: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
+        // Raw tokens collected in absolute (not delta-encoded) coordinates.
+        let mut raw: Vec<RawSemanticToken> = Vec::new();
         let text = document.text();
 
         // Carries an unterminated `/* ...` across the per-line loop below,
@@ -64,9 +64,22 @@ impl AssemblyAnalyzer {
             loco_lines.insert(block.end_line);
         }
 
+        // Same idea for `#!bndbuild`-embedded rule blocks — their content
+        // lines receive bndbuild tokens, not ASM tokens. The marker line
+        // itself is deliberately *not* included: it stays visible to the
+        // ordinary full-line-comment handling below and renders as plain
+        // grey comment, which is correct (unlike LOCOMOTIVE's own directive
+        // lines, a `#!bndbuild` marker isn't a basm-meaningful keyword).
+        let bndbuild_blocks = self.embedded_bndbuild_blocks(document);
+        let mut bndbuild_lines: HashSet<usize> = HashSet::new();
+        for block in &bndbuild_blocks {
+            let end = block.yaml_start_line + block.yaml_text.lines().count();
+            bndbuild_lines.extend(block.yaml_start_line..end);
+        }
+
         'line: for (line_idx, line) in text.lines().enumerate() {
-            // LOCOMOTIVE block lines are tokenised as BASIC below.
-            if loco_lines.contains(&line_idx) {
+            // LOCOMOTIVE/bndbuild block lines are tokenised separately below.
+            if loco_lines.contains(&line_idx) || bndbuild_lines.contains(&line_idx) {
                 continue;
             }
             let line_u = line_idx as u32;
@@ -77,13 +90,25 @@ impl AssemblyAnalyzer {
                 match line.find("*/") {
                     Some(rel_end) => {
                         col = rel_end + 2;
-                        raw.push((line_u, 0, col as u32, TT_COMMENT, 0));
+                        raw.push(RawSemanticToken {
+                            line: line_u,
+                            col: 0,
+                            len: col as u32,
+                            token_type: TT_COMMENT,
+                            modifiers: 0
+                        });
                         in_block_comment = false;
                         // Falls through — code can follow `*/` on this line.
                     },
                     None => {
                         if !bytes.is_empty() {
-                            raw.push((line_u, 0, bytes.len() as u32, TT_COMMENT, 0));
+                            raw.push(RawSemanticToken {
+                                line: line_u,
+                                col: 0,
+                                len: bytes.len() as u32,
+                                token_type: TT_COMMENT,
+                                modifiers: 0
+                            });
                         }
                         continue 'line;
                     }
@@ -101,25 +126,25 @@ impl AssemblyAnalyzer {
 
                 // Comment: `;` through end of line
                 if c == b';' {
-                    raw.push((
-                        line_u,
-                        col as u32,
-                        (bytes.len() - col) as u32,
-                        TT_COMMENT,
-                        0
-                    ));
+                    raw.push(RawSemanticToken {
+                        line: line_u,
+                        col: col as u32,
+                        len: (bytes.len() - col) as u32,
+                        token_type: TT_COMMENT,
+                        modifiers: 0
+                    });
                     continue 'line;
                 }
 
                 // Comment: `//` through end of line
                 if c == b'/' && col + 1 < bytes.len() && bytes[col + 1] == b'/' {
-                    raw.push((
-                        line_u,
-                        col as u32,
-                        (bytes.len() - col) as u32,
-                        TT_COMMENT,
-                        0
-                    ));
+                    raw.push(RawSemanticToken {
+                        line: line_u,
+                        col: col as u32,
+                        len: (bytes.len() - col) as u32,
+                        token_type: TT_COMMENT,
+                        modifiers: 0
+                    });
                     continue 'line;
                 }
 
@@ -131,16 +156,22 @@ impl AssemblyAnalyzer {
                     match line[col..].find("*/") {
                         Some(rel_end) => {
                             col += rel_end + 2;
-                            raw.push((line_u, start as u32, (col - start) as u32, TT_COMMENT, 0));
+                            raw.push(RawSemanticToken {
+                                line: line_u,
+                                col: start as u32,
+                                len: (col - start) as u32,
+                                token_type: TT_COMMENT,
+                                modifiers: 0
+                            });
                         },
                         None => {
-                            raw.push((
-                                line_u,
-                                start as u32,
-                                (bytes.len() - start) as u32,
-                                TT_COMMENT,
-                                0
-                            ));
+                            raw.push(RawSemanticToken {
+                                line: line_u,
+                                col: start as u32,
+                                len: (bytes.len() - start) as u32,
+                                token_type: TT_COMMENT,
+                                modifiers: 0
+                            });
                             in_block_comment = true;
                             continue 'line;
                         }
@@ -163,7 +194,13 @@ impl AssemblyAnalyzer {
                         }
                         col += 1;
                     }
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_STRING, 0));
+                    raw.push(RawSemanticToken {
+                        line: line_u,
+                        col: start as u32,
+                        len: (col - start) as u32,
+                        token_type: TT_STRING,
+                        modifiers: 0
+                    });
                     continue;
                 }
 
@@ -187,7 +224,13 @@ impl AssemblyAnalyzer {
                             }
                             col += 1;
                         }
-                        raw.push((line_u, start as u32, (col - start) as u32, TT_STRING, 0));
+                        raw.push(RawSemanticToken {
+                            line: line_u,
+                            col: start as u32,
+                            len: (col - start) as u32,
+                            token_type: TT_STRING,
+                            modifiers: 0
+                        });
                     }
                     else {
                         col += 1; // stray ' (e.g. AF' already consumed by register scan)
@@ -202,7 +245,13 @@ impl AssemblyAnalyzer {
                     while col < bytes.len() && bytes[col].is_ascii_hexdigit() {
                         col += 1;
                     }
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_NUMBER, 0));
+                    raw.push(RawSemanticToken {
+                        line: line_u,
+                        col: start as u32,
+                        len: (col - start) as u32,
+                        token_type: TT_NUMBER,
+                        modifiers: 0
+                    });
                     continue;
                 }
 
@@ -222,7 +271,13 @@ impl AssemblyAnalyzer {
                     while col < bytes.len() && bytes[col].is_ascii_hexdigit() {
                         col += 1;
                     }
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_NUMBER, 0));
+                    raw.push(RawSemanticToken {
+                        line: line_u,
+                        col: start as u32,
+                        len: (col - start) as u32,
+                        token_type: TT_NUMBER,
+                        modifiers: 0
+                    });
                     continue;
                 }
 
@@ -234,10 +289,22 @@ impl AssemblyAnalyzer {
                         while col < bytes.len() && (bytes[col] == b'0' || bytes[col] == b'1') {
                             col += 1;
                         }
-                        raw.push((line_u, start as u32, (col - start) as u32, TT_NUMBER, 0));
+                        raw.push(RawSemanticToken {
+                            line: line_u,
+                            col: start as u32,
+                            len: (col - start) as u32,
+                            token_type: TT_NUMBER,
+                            modifiers: 0
+                        });
                     }
                     else {
-                        raw.push((line_u, start as u32, 1, TT_OPERATOR, 0));
+                        raw.push(RawSemanticToken {
+                            line: line_u,
+                            col: start as u32,
+                            len: 1,
+                            token_type: TT_OPERATOR,
+                            modifiers: 0
+                        });
                     }
                     continue;
                 }
@@ -271,7 +338,13 @@ impl AssemblyAnalyzer {
                             col += 1;
                         }
                     }
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_NUMBER, 0));
+                    raw.push(RawSemanticToken {
+                        line: line_u,
+                        col: start as u32,
+                        len: (col - start) as u32,
+                        token_type: TT_NUMBER,
+                        modifiers: 0
+                    });
                     continue;
                 }
 
@@ -285,7 +358,13 @@ impl AssemblyAnalyzer {
                     if col < bytes.len() {
                         col += 1;
                     } // consume '}'
-                    raw.push((line_u, start as u32, (col - start) as u32, TT_PARAMETER, 0));
+                    raw.push(RawSemanticToken {
+                        line: line_u,
+                        col: start as u32,
+                        len: (col - start) as u32,
+                        token_type: TT_PARAMETER,
+                        modifiers: 0
+                    });
                     continue;
                 }
 
@@ -357,11 +436,23 @@ impl AssemblyAnalyzer {
                         (TT_LABEL, 0) // label reference
                     };
 
-                    raw.push((line_u, start as u32, word_len as u32, tok_type, modifiers));
+                    raw.push(RawSemanticToken {
+                        line: line_u,
+                        col: start as u32,
+                        len: word_len as u32,
+                        token_type: tok_type,
+                        modifiers
+                    });
 
                     // Emit the ':' as an operator token
                     if followed_by_colon {
-                        raw.push((line_u, col as u32, 1, TT_OPERATOR, 0));
+                        raw.push(RawSemanticToken {
+                            line: line_u,
+                            col: col as u32,
+                            len: 1,
+                            token_type: TT_OPERATOR,
+                            modifiers: 0
+                        });
                         col += 1;
                     }
                     continue;
@@ -371,7 +462,13 @@ impl AssemblyAnalyzer {
                 match c {
                     b'+' | b'-' | b'*' | b'/' | b'<' | b'>' | b'=' | b'!' | b'&' | b'|' | b'^'
                     | b'~' | b'#' | b'(' | b')' | b'[' | b']' | b',' | b':' => {
-                        raw.push((line_u, col as u32, 1, TT_OPERATOR, 0));
+                        raw.push(RawSemanticToken {
+                            line: line_u,
+                            col: col as u32,
+                            len: 1,
+                            token_type: TT_OPERATOR,
+                            modifiers: 0
+                        });
                     },
                     _ => {}
                 }
@@ -389,30 +486,38 @@ impl AssemblyAnalyzer {
             }
         }
 
-        // Sort by (line, col) — LOCOMOTIVE tokens were appended out of document order.
-        raw.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        // Same idea for `#!bndbuild`-embedded rule blocks: their own lines
+        // were skipped above (`bndbuild_lines`) and get bndbuild-style
+        // tokens instead, appended here at absolute document coordinates.
+        for block in &bndbuild_blocks {
+            super::embedded_bndbuild::push_embedded_bndbuild_tokens(document, block, &mut raw);
+        }
 
-        // Convert raw (line, col, len, type, mods) to LSP delta-encoded SemanticToken
+        // Sort by (line, col) — LOCOMOTIVE/bndbuild tokens were appended out
+        // of document order.
+        raw.sort_unstable_by(|a, b| a.line.cmp(&b.line).then(a.col.cmp(&b.col)));
+
+        // Convert raw absolute tokens to LSP delta-encoded SemanticToken
         let mut result = Vec::with_capacity(raw.len());
         let mut prev_line = 0u32;
         let mut prev_start = 0u32;
-        for (line, start, len, tok_type, modifiers) in raw {
-            let delta_line = line - prev_line;
+        for t in raw {
+            let delta_line = t.line - prev_line;
             let delta_start = if delta_line == 0 {
-                start - prev_start
+                t.col - prev_start
             }
             else {
-                start
+                t.col
             };
             result.push(SemanticToken {
                 delta_line,
                 delta_start,
-                length: len,
-                token_type: tok_type,
-                token_modifiers_bitset: modifiers
+                length: t.len,
+                token_type: t.token_type,
+                token_modifiers_bitset: t.modifiers
             });
-            prev_line = line;
-            prev_start = start;
+            prev_line = t.line;
+            prev_start = t.col;
         }
         result
     }
@@ -625,5 +730,51 @@ mod tests {
         let d = doc("start:\n  ld a, 1\n  ret\n");
         let tokens = AssemblyAnalyzer::new().semantic_tokens(&d);
         assert!(!tokens.is_empty());
+    }
+
+    #[test]
+    fn embedded_bndbuild_block_gets_bndbuild_tokens_not_asm_tokens() {
+        let text = "; #!bndbuild\n; - tgt: test\n;   cmd: echo hi\nld a, 1\n";
+        let d = doc(text);
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+
+        // Line 1 ("- tgt: test", content starting at column 2) must NOT get
+        // a single whole-line TT_COMMENT the way an ordinary `;` comment
+        // would - it should have real, separate bndbuild-scanner tokens.
+        assert!(
+            !decoded.iter().any(|&(l, c, len, ty)| {
+                l == 1 && c == 0 && len == "; - tgt: test".len() as u32 && ty == TT_COMMENT
+            }),
+            "expected no whole-line asm comment token on the block's content line, got {decoded:?}"
+        );
+        assert!(!decoded.is_empty());
+
+        // The marker line itself (line 0) still renders as a plain comment.
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, c, _, ty)| l == 0 && c == 0 && ty == TT_COMMENT),
+            "{decoded:?}"
+        );
+
+        // An asm instruction outside the block still tokenizes normally.
+        let ld_col = text.lines().nth(3).unwrap().find("ld").unwrap() as u32;
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, c, _, ty)| l == 3 && c == ld_col && ty == TT_KEYWORD),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_comment_line_outside_any_embedded_block_still_gets_one_token() {
+        let text = "; just a comment\nld a, 1\n";
+        let d = doc(text);
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        assert!(
+            decoded.contains(&(0, 0, "; just a comment".len() as u32, TT_COMMENT)),
+            "{decoded:?}"
+        );
     }
 }

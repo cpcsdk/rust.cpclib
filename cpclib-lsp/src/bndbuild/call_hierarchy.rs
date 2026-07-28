@@ -533,7 +533,8 @@ impl BuildFileAnalyzer {
             selection_range,
             data: Some(
                 CallHierarchyData::BndbuildTarget {
-                    target: target.to_string()
+                    target: target.to_string(),
+                    block_start_line: None
                 }
                 .to_json()
             )

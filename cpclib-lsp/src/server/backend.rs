@@ -770,7 +770,7 @@ fn non_empty_workspace_edit(
 /// Directories never worth descending into while scanning the workspace for
 /// `.asm` files: VCS metadata and build output can be huge and are never
 /// where hand-written assembly sources live.
-fn is_ignored_dir(entry: &walkdir::DirEntry) -> bool {
+pub(crate) fn is_ignored_dir(entry: &walkdir::DirEntry) -> bool {
     entry.file_type().is_dir()
         && matches!(
             entry.file_name().to_str(),
@@ -1397,7 +1397,23 @@ impl LanguageServer for CpcLspBackend {
                     block_start_line: None
                 }
             ) => self.basic_analyzer.incoming_calls(&document, line_number),
-            (DocumentType::BuildFile, CallHierarchyData::BndbuildTarget { target }) => {
+            (
+                DocumentType::Assembly,
+                CallHierarchyData::BndbuildTarget {
+                    target,
+                    block_start_line: Some(start)
+                }
+            ) => {
+                self.asm_analyzer
+                    .incoming_calls_for_embedded_bndbuild_target(&document, &target, start)
+            },
+            (
+                DocumentType::BuildFile,
+                CallHierarchyData::BndbuildTarget {
+                    target,
+                    block_start_line: None
+                }
+            ) => {
                 let docs = self.bndbuild_incoming_candidate_docs(&document, &item.uri);
 
                 let mut calls = Vec::new();
@@ -1513,7 +1529,23 @@ impl LanguageServer for CpcLspBackend {
                     block_start_line: None
                 }
             ) => self.basic_analyzer.outgoing_calls(&document, line_number),
-            (DocumentType::BuildFile, CallHierarchyData::BndbuildTarget { target }) => {
+            (
+                DocumentType::Assembly,
+                CallHierarchyData::BndbuildTarget {
+                    target,
+                    block_start_line: Some(start)
+                }
+            ) => {
+                self.asm_analyzer
+                    .outgoing_calls_for_embedded_bndbuild_target(&document, &target, start)
+            },
+            (
+                DocumentType::BuildFile,
+                CallHierarchyData::BndbuildTarget {
+                    target,
+                    block_start_line: None
+                }
+            ) => {
                 let targets = self
                     .build_analyzer
                     .outgoing_call_targets_in(&document, &target);
@@ -1668,7 +1700,16 @@ impl LanguageServer for CpcLspBackend {
                 tokio::task::spawn_blocking(move || {
                     if document.doc_type == DocumentType::Assembly {
                         let blocks = asm_analyzer.embedded_bndbuild_blocks(&document);
-                        match crate::basm::embedded_bndbuild::find_block_for_rule(&blocks, &rule) {
+                        let file_dir = document
+                            .uri
+                            .to_file_path()
+                            .ok()
+                            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+                        match crate::basm::embedded_bndbuild::find_block_for_rule(
+                            &blocks,
+                            &rule,
+                            file_dir.as_deref()
+                        ) {
                             Some(block) => {
                                 crate::bndbuild::BuildFileAnalyzer::new().run_embedded_rule(
                                     &document,

@@ -72,6 +72,10 @@ impl AssemblyAnalyzer {
         document: &Document,
         position: Position
     ) -> Option<CallHierarchyItem> {
+        if let Some(item) = self.embedded_bndbuild_prepare_call_hierarchy(document, position) {
+            return Some(item);
+        }
+
         let text = document.text();
         let line_idx = position.line as usize;
         if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
@@ -232,6 +236,161 @@ impl AssemblyAnalyzer {
             &document.uri
         )
     }
+
+    /// Delegates to `BuildFileAnalyzer::prepare_call_hierarchy` when
+    /// `position` is inside a `#!bndbuild` embedded block, against a
+    /// synthetic `Document` wrapping just the block's own text - the
+    /// `run_embedded_rule` pattern. Shifts the returned item's
+    /// `range`/`selection_range` back into outer-document coordinates, and
+    /// stamps its `data` with `block_start_line: Some(_)` so a later
+    /// `incoming_calls`/`outgoing_calls` round-trip (which only ever
+    /// receives the stashed `data`, never a live position) knows to
+    /// re-derive the block instead of treating this as a real `.bnd` file.
+    fn embedded_bndbuild_prepare_call_hierarchy(
+        &self,
+        document: &Document,
+        position: Position
+    ) -> Option<CallHierarchyItem> {
+        let blocks = self.embedded_bndbuild_blocks(document);
+        let block = super::embedded_bndbuild::block_at(&blocks, position.line as usize)?;
+        let local_pos = super::embedded_bndbuild::position_into_block(block, position)?;
+        let block_doc = Document::new(document.uri.clone(), block.yaml_text.clone(), 0);
+        let mut item = crate::bndbuild::BuildFileAnalyzer::new()
+            .prepare_call_hierarchy(&block_doc, local_pos)?;
+        item.range = super::embedded_bndbuild::range_out_of_block(block, item.range);
+        item.selection_range =
+            super::embedded_bndbuild::range_out_of_block(block, item.selection_range);
+        if let Some(CallHierarchyData::BndbuildTarget { target, .. }) =
+            item.data.as_ref().and_then(CallHierarchyData::from_json)
+        {
+            item.data = Some(
+                CallHierarchyData::BndbuildTarget {
+                    target,
+                    block_start_line: Some(block.yaml_start_line as u32)
+                }
+                .to_json()
+            );
+        }
+        Some(item)
+    }
+
+    /// Re-finds the `#!bndbuild` embedded block whose own
+    /// `yaml_start_line` matches `block_start_line` - the bndbuild
+    /// counterpart of `embedded_basic_text_at` below, needed because
+    /// `incoming_calls`/`outgoing_calls` only ever receive a
+    /// `CallHierarchyItem`'s stashed `data`, not a live cursor position.
+    /// `None` if no such block exists any more (the document changed since
+    /// the item was prepared).
+    fn embedded_bndbuild_block_at_start(
+        &self,
+        document: &Document,
+        block_start_line: u32
+    ) -> Option<super::embedded_bndbuild::EmbeddedBndbuildBlock> {
+        self.embedded_bndbuild_blocks(document)
+            .into_iter()
+            .find(|b| b.yaml_start_line as u32 == block_start_line)
+    }
+
+    /// As [`Self::incoming_calls_for_embedded_basic_line`], for a bndbuild
+    /// target declared inside a `#!bndbuild` embedded block. Single-document
+    /// only - no cross-file `{% include %}`-graph expansion, matching the
+    /// LOCOMOTIVE precedent's own scope (and consistent with
+    /// `call_hierarchy_item_for_target`/`outgoing_call_targets_in`'s own
+    /// existing refusal to resolve a `tgt:` line spliced in from an
+    /// `{% include %}`d file - they already return nothing for those,
+    /// rather than crash or misattribute).
+    pub fn incoming_calls_for_embedded_bndbuild_target(
+        &self,
+        document: &Document,
+        target: &str,
+        block_start_line: u32
+    ) -> Vec<CallHierarchyIncomingCall> {
+        let Some(block) = self.embedded_bndbuild_block_at_start(document, block_start_line)
+        else {
+            return Vec::new();
+        };
+        let block_doc = Document::new(document.uri.clone(), block.yaml_text.clone(), 0);
+        let build_analyzer = crate::bndbuild::BuildFileAnalyzer::new();
+
+        let mut calls = Vec::new();
+        for (caller, ranges) in build_analyzer.incoming_calls_in(&block_doc, target) {
+            let Some(mut from) = build_analyzer.call_hierarchy_item_for_target(&block_doc, &caller)
+            else {
+                continue;
+            };
+            from.range = super::embedded_bndbuild::range_out_of_block(&block, from.range);
+            from.selection_range =
+                super::embedded_bndbuild::range_out_of_block(&block, from.selection_range);
+            if let Some(CallHierarchyData::BndbuildTarget { target: t, .. }) =
+                from.data.as_ref().and_then(CallHierarchyData::from_json)
+            {
+                from.data = Some(
+                    CallHierarchyData::BndbuildTarget {
+                        target: t,
+                        block_start_line: Some(block_start_line)
+                    }
+                    .to_json()
+                );
+            }
+            let ranges = ranges
+                .into_iter()
+                .map(|r| super::embedded_bndbuild::range_out_of_block(&block, r))
+                .collect();
+            calls.push(CallHierarchyIncomingCall {
+                from,
+                from_ranges: ranges
+            });
+        }
+        calls
+    }
+
+    /// As [`Self::incoming_calls_for_embedded_bndbuild_target`], for
+    /// outgoing calls.
+    pub fn outgoing_calls_for_embedded_bndbuild_target(
+        &self,
+        document: &Document,
+        target: &str,
+        block_start_line: u32
+    ) -> Vec<CallHierarchyOutgoingCall> {
+        let Some(block) = self.embedded_bndbuild_block_at_start(document, block_start_line)
+        else {
+            return Vec::new();
+        };
+        let block_doc = Document::new(document.uri.clone(), block.yaml_text.clone(), 0);
+        let build_analyzer = crate::bndbuild::BuildFileAnalyzer::new();
+
+        let mut calls = Vec::new();
+        for (target_name, ranges) in build_analyzer.outgoing_call_targets_in(&block_doc, target) {
+            let Some(mut to) =
+                build_analyzer.call_hierarchy_item_for_target(&block_doc, &target_name)
+            else {
+                continue;
+            };
+            to.range = super::embedded_bndbuild::range_out_of_block(&block, to.range);
+            to.selection_range =
+                super::embedded_bndbuild::range_out_of_block(&block, to.selection_range);
+            if let Some(CallHierarchyData::BndbuildTarget { target: t, .. }) =
+                to.data.as_ref().and_then(CallHierarchyData::from_json)
+            {
+                to.data = Some(
+                    CallHierarchyData::BndbuildTarget {
+                        target: t,
+                        block_start_line: Some(block_start_line)
+                    }
+                    .to_json()
+                );
+            }
+            let ranges = ranges
+                .into_iter()
+                .map(|r| super::embedded_bndbuild::range_out_of_block(&block, r))
+                .collect();
+            calls.push(CallHierarchyOutgoingCall {
+                to,
+                from_ranges: ranges
+            });
+        }
+        calls
+    }
 }
 
 /// Re-join the source text of the `LOCOMOTIVE` block starting at
@@ -335,6 +494,76 @@ mod tests {
             )
             .expect("expected a BASIC call hierarchy item inside the LOCOMOTIVE block");
         assert_eq!(item.name, "Line 10");
+    }
+
+    /// Preparing call hierarchy inside a `#!bndbuild` embedded block must
+    /// delegate to bndbuild call hierarchy, with the resulting item's
+    /// ranges shifted into outer-document coordinates and its `data`
+    /// stamped with `block_start_line: Some(_)` (so a later
+    /// `incoming_calls`/`outgoing_calls` round-trip knows to re-derive the
+    /// block).
+    #[test]
+    fn prepare_call_hierarchy_inside_an_embedded_bndbuild_block_delegates_to_bndbuild() {
+        let text = "; #!bndbuild\n; - tgt: helper.o\n;   cmd: basm helper.asm -o helper.o\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        // Cursor on "helper.o" in "- tgt: helper.o" (outer-doc line 1,
+        // block-local line 0, block-local character 7; "; " (2) + 7 = 9).
+        let item = analyzer
+            .prepare_call_hierarchy(
+                &d,
+                Position {
+                    line: 1,
+                    character: 9
+                }
+            )
+            .expect("expected a bndbuild call hierarchy item inside the embedded block");
+        assert_eq!(item.name, "helper.o");
+        assert_eq!(item.range.start.line, 1, "{item:?}");
+        let data = item
+            .data
+            .as_ref()
+            .and_then(CallHierarchyData::from_json)
+            .expect("expected data");
+        match data {
+            CallHierarchyData::BndbuildTarget {
+                target,
+                block_start_line
+            } => {
+                assert_eq!(target, "helper.o");
+                assert_eq!(block_start_line, Some(1));
+            },
+            other => panic!("unexpected data: {other:?}")
+        }
+    }
+
+    #[test]
+    fn incoming_and_outgoing_calls_for_an_embedded_bndbuild_target_are_shifted() {
+        let text = "; #!bndbuild\n\
+                     ; - tgt: helper.o\n\
+                     ;   cmd: basm helper.asm -o helper.o\n\
+                     ; - tgt: out.bin\n\
+                     ;   dep:\n\
+                     ;    - helper.o\n\
+                     ;   cmd: link helper.o\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        // yaml_start_line == 1 (marker on outer-doc line 0).
+        let incoming = analyzer.incoming_calls_for_embedded_bndbuild_target(&d, "helper.o", 1);
+        assert_eq!(incoming.len(), 1, "{incoming:?}");
+        assert_eq!(incoming[0].from.name, "out.bin");
+        assert!(
+            incoming[0].from.range.start.line >= 1,
+            "shifted into outer-doc coordinates: {incoming:?}"
+        );
+
+        let outgoing = analyzer.outgoing_calls_for_embedded_bndbuild_target(&d, "out.bin", 1);
+        assert_eq!(outgoing.len(), 1, "{outgoing:?}");
+        assert_eq!(outgoing[0].to.name, "helper.o");
+        assert!(
+            outgoing[0].to.range.start.line >= 1,
+            "shifted into outer-doc coordinates: {outgoing:?}"
+        );
     }
 
     #[test]

@@ -23,6 +23,12 @@ impl AssemblyAnalyzer {
         let col = position.character as usize;
         let text = document.text();
 
+        // Delegate to bndbuild hover when the cursor is inside a
+        // `#!bndbuild` embedded block.
+        if let Some(hover) = self.embedded_bndbuild_hover(document, position) {
+            return Some(hover);
+        }
+
         // Delegate to BASIC hover when the cursor is inside a LOCOMOTIVE block.
         if let Some((block, basic_text)) = block_and_text_at(&text, line_idx) {
             let basic_line = position.line - block.basic_range.start as u32;
@@ -245,6 +251,20 @@ impl AssemblyAnalyzer {
         }
 
         None
+    }
+
+    /// Delegates hover to `BuildFileAnalyzer::hover` when `position` is
+    /// inside a `#!bndbuild` embedded block, against a synthetic `Document`
+    /// wrapping just the block's own text (the `run_embedded_rule` pattern).
+    /// No out-translation needed: every `Hover` `bndbuild::hover` returns is
+    /// built via `common::render::make_hover`, which always sets
+    /// `range: None`.
+    fn embedded_bndbuild_hover(&self, document: &Document, position: Position) -> Option<Hover> {
+        let blocks = self.embedded_bndbuild_blocks(document);
+        let block = super::embedded_bndbuild::block_at(&blocks, position.line as usize)?;
+        let local_pos = super::embedded_bndbuild::position_into_block(block, position)?;
+        let block_doc = Document::new(document.uri.clone(), block.yaml_text.clone(), 0);
+        crate::bndbuild::BuildFileAnalyzer::new().hover(&block_doc, local_pos)
     }
 
     /// Hover for an `INCBIN` directive: a hex/ASCII dump of the actual bytes
@@ -624,6 +644,65 @@ mod locomotive_block_tests {
             .expect("expected BASIC hover inside the LOCOMOTIVE block");
         match hover.contents {
             HoverContents::Markup(m) => assert!(m.value.contains("CLS"), "{}", m.value),
+            _ => panic!("expected markdown hover contents")
+        }
+    }
+}
+
+#[cfg(test)]
+mod embedded_bndbuild_hover_tests {
+    use super::*;
+
+    #[test]
+    fn hovering_outside_an_embedded_bndbuild_block_still_gets_normal_asm_hover() {
+        // Proves the block-scoped delegation (tested in the next test)
+        // doesn't swallow the whole document - a real asm construct on a
+        // *different* line still gets real asm hover.
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "; #!bndbuild\n; - tgt: test\n;   cmd: echo hi\nORG 0x8000\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+
+        let on_a_different_line = AssemblyAnalyzer::new()
+            .hover(
+                &doc,
+                Position {
+                    line: 3,
+                    character: 1
+                }
+            )
+            .expect("expected normal asm hover outside the block");
+        match on_a_different_line.contents {
+            HoverContents::Markup(m) => assert!(m.value.contains("ORG"), "{}", m.value),
+            _ => panic!("expected markdown hover contents")
+        }
+    }
+
+    #[test]
+    fn hovering_a_bndbuild_keyword_inside_an_embedded_block_shows_bndbuild_style_hover() {
+        // "tgt" is a real bndbuild keyword (`BuildFileAnalyzer::hover`'s
+        // `get_keyword_help` path) - if suppression is scoped correctly, a
+        // cursor on it inside an embedded block should get *that*
+        // documentation, not `None` (asm hover doesn't recognize "tgt" as
+        // anything) and not a crash.
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "; #!bndbuild\n; - tgt: test\n;   cmd: echo hi\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+
+        // Cursor on "tgt" (block-local line 0, "- tgt: test" content starts
+        // at outer-doc column 2, "tgt" itself two further in).
+        let hover = AssemblyAnalyzer::new()
+            .hover(
+                &doc,
+                Position {
+                    line: 1,
+                    character: 6
+                }
+            )
+            .expect("expected bndbuild keyword hover inside the embedded block");
+        match hover.contents {
+            HoverContents::Markup(m) => {
+                assert!(m.value.to_lowercase().contains("target"), "{}", m.value)
+            },
             _ => panic!("expected markdown hover contents")
         }
     }

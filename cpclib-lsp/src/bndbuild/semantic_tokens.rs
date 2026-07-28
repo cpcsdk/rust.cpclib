@@ -3,8 +3,28 @@
 use tower_lsp::lsp_types::*;
 
 use super::BuildFileAnalyzer;
+use super::sourcemap::SourceMap;
 use super::token::*;
 use crate::common::document::Document;
+
+/// Jinja-expand an embedded block's own text (so a `{% include %}` inside
+/// it - e.g. pulling in another bndbuild file's rules - is resolved before
+/// scanning for targets), falling back to the raw text + an identity source
+/// map on any expansion failure. Mirrors `expand_or_identity`'s own
+/// best-effort fallback shape, but for a block's standalone text rather
+/// than a whole `Document` (there's no on-disk file for just the block, so
+/// this isn't cached the way a real document's expansion is).
+fn expand_embedded_block_or_identity(
+    yaml_text: &str,
+    file_dir: Option<&std::path::Path>
+) -> (String, SourceMap) {
+    super::sourcemap::expand_with_source_map(yaml_text, file_dir).unwrap_or_else(|_| {
+        (
+            yaml_text.to_string(),
+            SourceMap::identity(yaml_text.lines().count())
+        )
+    })
+}
 
 impl BuildFileAnalyzer {
     /// Semantic tokens for bndbuild (YAML + Jinja2) files.
@@ -290,9 +310,13 @@ impl BuildFileAnalyzer {
     /// Shared by `code_lens_for_embedded_block` and
     /// `basm::embedded_bndbuild::find_block_for_rule` (execution-time block
     /// disambiguation, when a file has more than one `#!bndbuild` block).
-    pub(crate) fn target_names_for_embedded_block(&self, yaml_text: &str) -> Vec<String> {
-        let identity = super::sourcemap::SourceMap::identity(yaml_text.lines().count());
-        self.scan_symbols_from_text(yaml_text, &identity, &super::token::TGT_KEY_NAMES)
+    pub(crate) fn target_names_for_embedded_block(
+        &self,
+        yaml_text: &str,
+        file_dir: Option<&std::path::Path>
+    ) -> Vec<String> {
+        let (expanded, source_map) = expand_embedded_block_or_identity(yaml_text, file_dir);
+        self.scan_symbols_from_text(&expanded, &source_map, &super::token::TGT_KEY_NAMES)
             .into_iter()
             .map(|s| s.name)
             .collect()
@@ -305,13 +329,15 @@ impl BuildFileAnalyzer {
     /// coordinates back into the hosting `.asm` file's own coordinates.
     /// `host_file_path` becomes arg[1] of `"cpclib.runRule"` — the *.asm*
     /// file's own absolute path, since (unlike a real build file) there is
-    /// no separate on-disk YAML file to reference.
-    ///
-    /// Unlike `code_lens`, this does not run Jinja expansion on the block
-    /// (uses `SourceMap::identity` instead of `expand_or_identity`) —
-    /// embedded blocks are expected to be static rule definitions in
-    /// practice, and skipping expansion keeps the line mapping a plain
-    /// constant offset instead of composing two source maps.
+    /// no separate on-disk YAML file to reference. `file_dir` (the `.asm`
+    /// file's own parent directory) is the base path used to resolve a
+    /// `{% include %}` inside the block, so rules brought in from another
+    /// bndbuild file (e.g. `{% include "build.bnd" %}`) get their own code
+    /// lens too — matches how a real `.bnd` file's own `code_lens` already
+    /// expands before scanning (`target_symbols`/`expand_or_identity`);
+    /// `scan_symbols_from_text` already translates expanded-text positions
+    /// back to block-relative original-text ones via the source map, so
+    /// `line_offset` composes with that translation unchanged.
     ///
     /// Character-column offsets are deliberately not corrected for the
     /// stripped comment prefix — only line numbers are remapped. A client
@@ -322,10 +348,11 @@ impl BuildFileAnalyzer {
         &self,
         yaml_text: &str,
         line_offset: u32,
-        host_file_path: &str
+        host_file_path: &str,
+        file_dir: Option<&std::path::Path>
     ) -> Vec<CodeLens> {
-        let identity = super::sourcemap::SourceMap::identity(yaml_text.lines().count());
-        self.scan_symbols_from_text(yaml_text, &identity, &super::token::TGT_KEY_NAMES)
+        let (expanded, source_map) = expand_embedded_block_or_identity(yaml_text, file_dir);
+        self.scan_symbols_from_text(&expanded, &source_map, &super::token::TGT_KEY_NAMES)
             .into_iter()
             .map(|sym| {
                 let mut sel = sym.selection_range;
@@ -392,8 +419,12 @@ mod tests {
     #[test]
     fn code_lens_for_embedded_block_shifts_lines_by_the_given_offset() {
         let yaml_text = "- tgt: test\n  cmd: echo hi\n";
-        let lenses =
-            BuildFileAnalyzer::new().code_lens_for_embedded_block(yaml_text, 5, "/tmp/foo.asm");
+        let lenses = BuildFileAnalyzer::new().code_lens_for_embedded_block(
+            yaml_text,
+            5,
+            "/tmp/foo.asm",
+            None
+        );
         assert_eq!(lenses.len(), 1);
         let lens = &lenses[0];
         assert_eq!(lens.range.start.line, 5);
@@ -409,12 +440,47 @@ mod tests {
     #[test]
     fn code_lens_for_embedded_block_handles_multiple_targets_in_one_block() {
         let yaml_text = "- tgt: one\n  cmd: echo one\n- tgt: two\n  cmd: echo two\n";
-        let lenses =
-            BuildFileAnalyzer::new().code_lens_for_embedded_block(yaml_text, 0, "/tmp/foo.asm");
+        let lenses = BuildFileAnalyzer::new().code_lens_for_embedded_block(
+            yaml_text,
+            0,
+            "/tmp/foo.asm",
+            None
+        );
         let titles: Vec<&str> = lenses
             .iter()
             .map(|l| l.command.as_ref().unwrap().title.as_str())
             .collect();
         assert_eq!(titles, vec!["▶ Run: one", "▶ Run: two"]);
+    }
+
+    #[test]
+    fn code_lens_for_embedded_block_expands_an_included_file_s_rules() {
+        // `{% import %}` (standard Jinja: pulls in macro/variable
+        // *definitions* only, never a template's rendered output) is not
+        // the right directive for pulling in another bndbuild file's rule
+        // list - `{% include %}` is, since it splices the target's
+        // rendered content in place. This proves the embedded-block path
+        // now expands Jinja (with a working `{% include %}` loader) before
+        // scanning, the same way a real `.bnd` file's own `code_lens`
+        // already does via `target_symbols`/`expand_or_identity`.
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("build.bnd"),
+            "- tgt: imported\n  cmd: echo hi\n"
+        )
+        .unwrap();
+        let yaml_text = "{% include \"build.bnd\" %}\n- tgt: local\n  cmd: echo local\n";
+
+        let lenses = BuildFileAnalyzer::new().code_lens_for_embedded_block(
+            yaml_text,
+            0,
+            "/tmp/foo.asm",
+            Some(tmp.path().as_std_path())
+        );
+        let titles: Vec<&str> = lenses
+            .iter()
+            .map(|l| l.command.as_ref().unwrap().title.as_str())
+            .collect();
+        assert_eq!(titles, vec!["▶ Run: imported", "▶ Run: local"]);
     }
 }
