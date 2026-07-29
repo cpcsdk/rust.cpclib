@@ -35,6 +35,7 @@ impl BasicAnalyzer {
         };
 
         let mut diagnostics = Vec::new();
+        let warn_catart_no_op = self.config().warnings.catart_no_op;
         for bline in &prog.lines {
             let Some(source_text) = document.line(bline.source_line as usize)
             else {
@@ -95,7 +96,7 @@ impl BasicAnalyzer {
                             BasicCommand::Symbol(..) => Some("SYMBOL"),
                             _ => None
                         };
-                        if let Some(name) = noop_name {
+                        if warn_catart_no_op && let Some(name) = noop_name {
                             diagnostics.push(Diagnostic {
                                 range,
                                 severity: Some(DiagnosticSeverity::WARNING),
@@ -150,6 +151,18 @@ mod tests {
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].severity, Some(DiagnosticSeverity::ERROR));
         assert_eq!(diags[0].range.start.line, 0);
+    }
+
+    #[test]
+    fn disabling_catart_no_op_warnings_suppresses_them() {
+        let analyzer = BasicAnalyzer::new();
+        let d = doc("10 CURSOR 1\n20 SYMBOL 65,1,2,3,4,5,6,7,8\n");
+        assert_eq!(analyzer.catart_diagnostics(&d).len(), 2);
+
+        let mut config = crate::common::config::BasicConfig::default();
+        config.warnings.catart_no_op = false;
+        analyzer.set_config(config);
+        assert!(analyzer.catart_diagnostics(&d).is_empty());
     }
 
     #[test]

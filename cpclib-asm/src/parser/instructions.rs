@@ -24,6 +24,7 @@ use super::registers::{
     parse_register_hl, parse_register_i, parse_register_r, parse_register_sp, parse_register8,
     parse_register16
 };
+use crate::error::WarningCategory;
 use crate::{
     InnerZ80Span, LocatedExpr, LocatedToken, LocatedTokenInner, Z80ParserError, hashed_choice,
     my_space0, my_space1, parse_comma, parse_flag_test_located, parse_register_a,
@@ -59,15 +60,27 @@ pub const REDUNDANT_ACCUMULATOR_WARNING: &str =
 /// index register, never plain `A`), so at most one ever fires. Shared by
 /// every `ADD`/`ADC`/`SBC`/`CP`/`SUB`/`AND`/`OR`/`XOR` parser, all of which
 /// share this exact optional-accumulator-prefix shape.
+///
+/// Checks `input`'s own `ParserOptions::disabled_warning_categories` before
+/// constructing a `WarningWrapper` at all - disabling a warning class must
+/// avoid *generating* it, not just filter it out downstream: several LSP
+/// features key real behavior off `is_warning()`/`is_fake_instruction()`,
+/// so a token that's still wrapped (even if nothing renders the warning
+/// later) would be wrong, not just noisy. This never affects the real
+/// fake-instruction *expansion* - that keys off the raw operand shape
+/// (`arg1.is_register_de()`/`is_register_hl()`), entirely independent of
+/// whether the token was ever wrapped.
 fn wrap_optional_accumulator_warning(
     token: LocatedTokenInner,
     is_redundant_a: bool,
-    is_fake: bool
+    is_fake: bool,
+    input: &InnerZ80Span
 ) -> LocatedTokenInner {
-    if is_fake {
+    let disabled = input.state.options().disabled_warning_categories;
+    if is_fake && !disabled.contains(WarningCategory::FakeInstruction) {
         LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into())
     }
-    else if is_redundant_a {
+    else if is_redundant_a && !disabled.contains(WarningCategory::RedundantAccumulatorPrefix) {
         LocatedTokenInner::WarningWrapper(Box::new(token), REDUNDANT_ACCUMULATOR_WARNING.into())
     }
     else {
@@ -536,7 +549,8 @@ pub fn parse_cp(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80P
     Ok(wrap_optional_accumulator_warning(
         token,
         is_redundant_a,
-        false
+        false,
+        &*input
     ))
 }
 
@@ -578,7 +592,8 @@ pub fn parse_logical_operator(
         Ok(wrap_optional_accumulator_warning(
             token,
             is_redundant_a,
-            false
+            false,
+            &*input
         ))
     }
 }
@@ -626,7 +641,8 @@ pub fn parse_sub(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
     Ok(wrap_optional_accumulator_warning(
         token,
         is_redundant_a,
-        is_fake
+        is_fake,
+        &*input
     ))
 }
 
@@ -666,7 +682,8 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
     Ok(wrap_optional_accumulator_warning(
         token,
         is_redundant_a,
-        is_fake
+        is_fake,
+        &*input
     ))
 }
 
@@ -725,7 +742,8 @@ pub fn parse_add_or_adc(
         Ok(wrap_optional_accumulator_warning(
             token,
             is_redundant_a,
-            is_fake
+            is_fake,
+            &*input
         ))
     }
 }

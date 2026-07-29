@@ -1314,3 +1314,47 @@ fn test_output_directive_with_command_line() {
     fs_err::remove_file(directive_path).unwrap();
     fs_err::remove_file(cmdline_path).unwrap();
 }
+
+/// `--disable-warning <category>` suppresses only that one category of
+/// warning, leaving every other real warning in the same file untouched -
+/// and the fake instruction it's disabled for still assembles to the same
+/// bytes as when the warning is enabled.
+#[test]
+fn disable_warning_category_suppresses_only_that_category() {
+    let code = "org 0x4000\nadd de, bc\ncp a, c\nret\n";
+
+    let args_parser = build_args_parser();
+    let enabled_args = args_parser.get_matches_from(["basm", "--inline", code, "--dry-run"]);
+    let (enabled_env, _) = process(&enabled_args, Arc::new(())).expect("should assemble cleanly");
+    let enabled_categories: std::collections::HashSet<_> = enabled_env
+        .warnings()
+        .iter()
+        .map(|w| w.warning_category())
+        .collect();
+    assert!(enabled_categories.contains(&cpclib_asm::WarningCategory::FakeInstruction));
+    assert!(enabled_categories.contains(&cpclib_asm::WarningCategory::RedundantAccumulatorPrefix));
+
+    let args_parser = build_args_parser();
+    let disabled_args = args_parser.get_matches_from([
+        "basm",
+        "--inline",
+        code,
+        "--dry-run",
+        "--disable-warning",
+        "fake-instruction"
+    ]);
+    let (disabled_env, _) = process(&disabled_args, Arc::new(())).expect("should assemble cleanly");
+    let disabled_categories: std::collections::HashSet<_> = disabled_env
+        .warnings()
+        .iter()
+        .map(|w| w.warning_category())
+        .collect();
+    assert!(!disabled_categories.contains(&cpclib_asm::WarningCategory::FakeInstruction));
+    assert!(disabled_categories.contains(&cpclib_asm::WarningCategory::RedundantAccumulatorPrefix));
+
+    assert_eq!(
+        enabled_env.produced_bytes(),
+        disabled_env.produced_bytes(),
+        "disabling the warning must not disable the fake-instruction expansion itself"
+    );
+}

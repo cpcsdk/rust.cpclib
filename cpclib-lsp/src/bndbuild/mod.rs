@@ -4,10 +4,12 @@
 //! Each feature lives in its own file; they all extend the same
 //! `BuildFileAnalyzer` type through separate `impl` blocks.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use dashmap::DashMap;
 use tower_lsp::lsp_types::Url;
+
+use crate::common::config::BndbuildConfig;
 
 pub mod autocomplete;
 pub mod call_hierarchy;
@@ -37,13 +39,17 @@ pub mod token;
 /// the expanded text redid this from scratch, even multiple times within
 /// the same request (see `diagnostics::analyze`).
 pub struct BuildFileAnalyzer {
-    expand_cache: DashMap<Url, (i32, Arc<(String, sourcemap::SourceMap)>)>
+    expand_cache: DashMap<Url, (i32, Arc<(String, sourcemap::SourceMap)>)>,
+    /// Loaded once at `initialize()` - see `basm::AssemblyAnalyzer::config`'s
+    /// own doc comment for the reasoning behind this shape.
+    config: RwLock<Arc<BndbuildConfig>>
 }
 
 impl BuildFileAnalyzer {
     pub fn new() -> Self {
         Self {
-            expand_cache: DashMap::new()
+            expand_cache: DashMap::new(),
+            config: RwLock::new(Arc::new(BndbuildConfig::default()))
         }
     }
 
@@ -52,6 +58,17 @@ impl BuildFileAnalyzer {
     /// linger indefinitely.
     pub fn evict(&self, uri: &Url) {
         self.expand_cache.remove(uri);
+    }
+
+    pub fn set_config(&self, config: BndbuildConfig) {
+        *self.config.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(config);
+    }
+
+    pub fn config(&self) -> Arc<BndbuildConfig> {
+        self.config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 

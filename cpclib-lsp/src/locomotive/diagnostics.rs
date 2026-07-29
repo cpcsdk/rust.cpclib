@@ -40,6 +40,7 @@ impl BasicAnalyzer {
             prog.lines.iter().map(|l| l.line_number).collect();
 
         let mut diagnostics = Vec::new();
+        let warn_undefined_line = self.config().warnings.undefined_line;
 
         for bline in &prog.lines {
             let mut after_jump = false;
@@ -59,7 +60,7 @@ impl BasicAnalyzer {
                     },
                     LocatedTokenKind::Number(n) if after_jump => {
                         if let Ok(target) = n.parse::<u16>() {
-                            if !defined.contains(&target) {
+                            if warn_undefined_line && !defined.contains(&target) {
                                 diagnostics.push(Diagnostic {
                                     range: Range {
                                         start: Position {
@@ -93,6 +94,40 @@ impl BasicAnalyzer {
         }
 
         diagnostics
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tower_lsp::lsp_types::{DiagnosticSeverity, Url};
+
+    use super::*;
+    use crate::locomotive::BasicAnalyzer;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.bas").unwrap(), text.to_string(), 1)
+    }
+
+    #[test]
+    fn undefined_goto_target_is_a_warning() {
+        let analyzer = BasicAnalyzer::new();
+        let d = doc("10 GOTO 20\n");
+        let diags = analyzer.analyze(&d);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].severity, Some(DiagnosticSeverity::WARNING));
+        assert!(diags[0].message.contains("Undefined BASIC line 20"));
+    }
+
+    #[test]
+    fn disabling_undefined_line_warnings_suppresses_them() {
+        let analyzer = BasicAnalyzer::new();
+        let d = doc("10 GOTO 20\n");
+        assert_eq!(analyzer.analyze(&d).len(), 1);
+
+        let mut config = crate::common::config::BasicConfig::default();
+        config.warnings.undefined_line = false;
+        analyzer.set_config(config);
+        assert!(analyzer.analyze(&d).is_empty());
     }
 }
 

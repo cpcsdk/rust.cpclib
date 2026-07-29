@@ -1,0 +1,95 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "BndBuild",
+  "scopeName": "source.bndbuild",
+  "patterns": [
+    { "include": "#jinja-comment" },
+    { "include": "#jinja-block" },
+    { "include": "#jinja-variable" },
+    { "include": "source.yaml" }
+  ],
+  "repository": {
+    "jinja-comment": {
+      "name": "comment.block.jinja",
+      "begin": "\\{#-?",
+      "end": "-?#\\}",
+      "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.jinja" } },
+      "endCaptures":   { "0": { "name": "punctuation.definition.comment.end.jinja" } }
+    },
+
+    "jinja-block": {
+      "begin": "\\{%-?",
+      "end": "-?%\\}",
+      "beginCaptures": { "0": { "name": "punctuation.definition.tag.begin.jinja" } },
+      "endCaptures":   { "0": { "name": "punctuation.definition.tag.end.jinja" } },
+      "contentName": "meta.embedded.block.jinja",
+      "patterns": [
+        { "include": "#jinja-keywords" },
+        { "include": "#jinja-filter" },
+        { "include": "#jinja-string-double" },
+        { "include": "#jinja-string-single" },
+        { "include": "#jinja-operator" },
+        { "include": "#jinja-number" },
+        { "include": "#jinja-identifier" }
+      ]
+    },
+
+    "jinja-variable": {
+      "begin": "\\{\\{-?",
+      "end": "-?\\}\\}",
+      "beginCaptures": { "0": { "name": "punctuation.definition.tag.begin.jinja" } },
+      "endCaptures":   { "0": { "name": "punctuation.definition.tag.end.jinja" } },
+      "contentName": "meta.embedded.inline.jinja",
+      "patterns": [
+        { "include": "#jinja-filter" },
+        { "include": "#jinja-string-double" },
+        { "include": "#jinja-string-single" },
+        { "include": "#jinja-operator" },
+        { "include": "#jinja-number" },
+        { "include": "#jinja-identifier" }
+      ]
+    },
+
+    "jinja-keywords": {
+      "match": "\\b(for|endfor|in|if|elif|else|endif|block|endblock|extends|include|import|from|macro|endmacro|call|endcall|filter|endfilter|set|endset|raw|endraw|not|and|or|is|recursive|as|with|endwith|without|context|scoped)\\b",
+      "name": "keyword.control.jinja"
+    },
+
+    "jinja-filter": {
+      "match": "\\|\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+      "captures": {
+        "0": { "name": "keyword.operator.jinja" },
+        "1": { "name": "support.function.jinja" }
+      }
+    },
+
+    "jinja-operator": {
+      "match": "[.\\[\\]()+\\-*/%,=!<>~]",
+      "name": "keyword.operator.jinja"
+    },
+
+    "jinja-number": {
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b",
+      "name": "constant.numeric.jinja"
+    },
+
+    "jinja-identifier": {
+      "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b",
+      "name": "variable.other.jinja"
+    },
+
+    "jinja-string-double": {
+      "name": "string.quoted.double.jinja",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [{ "name": "constant.character.escape.jinja", "match": "\\\\." }]
+    },
+
+    "jinja-string-single": {
+      "name": "string.quoted.single.jinja",
+      "begin": "'",
+      "end": "'",
+      "patterns": [{ "name": "constant.character.escape.jinja", "match": "\\\\." }]
+    }
+  }
+}

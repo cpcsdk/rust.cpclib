@@ -24,6 +24,8 @@ impl AssemblyAnalyzer {
     /// parses cleanly, no error location can be determined (nothing to
     /// safely resume from), or the recovery cap is hit.
     pub fn analyze(&self, document: &Document) -> Vec<Diagnostic> {
+        let disabled_parser_categories =
+            super::parse::disabled_parser_warning_categories(&self.config().warnings);
         let full_text = document.text();
         let total_lines = full_text.lines().count();
         // Byte offset of the start of each line, indexed by 0-based line
@@ -51,7 +53,11 @@ impl AssemblyAnalyzer {
                 break;
             }
 
-            let listing_with_errors = match Self::parse_source(remaining, Some(&document.uri)) {
+            let listing_with_errors = match Self::parse_source(
+                remaining,
+                Some(&document.uri),
+                disabled_parser_categories
+            ) {
                 Ok(_) => break, // the rest of the file parses cleanly
                 Err(e) => e
             };
@@ -110,13 +116,16 @@ impl AssemblyAnalyzer {
         // the real cost once per edit even though `analyze` and hover can
         // both request it for the same version.
         if diagnostics.is_empty()
-            && let Ok(listing) = Self::parse_source(&full_text, Some(&document.uri))
+            && let Ok(listing) =
+                Self::parse_source(&full_text, Some(&document.uri), disabled_parser_categories)
         {
             let mut env = self.dry_run_env_cached(document, &listing);
             collect_assembler_warnings(&env, document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
             Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
-            collect_unused_binding_warnings(&listing, document, &mut diagnostics);
+            if self.config().warnings.unused_bindings {
+                collect_unused_binding_warnings(&listing, document, &mut diagnostics);
+            }
         }
 
         diagnostics
@@ -544,6 +553,8 @@ pub(super) fn strip_ansi(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use cpclib_tokens::ListingElement;
+
     use super::*;
     use crate::basm::AssemblyAnalyzer;
 
@@ -551,6 +562,17 @@ mod tests {
         let uri = Url::parse("file:///t.asm").unwrap();
         let document = Document::new(uri, text.to_string(), 1);
         AssemblyAnalyzer::new().analyze(&document)
+    }
+
+    fn diagnostics_for_with_config(
+        text: &str,
+        config: crate::common::config::AsmConfig
+    ) -> Vec<Diagnostic> {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        analyzer.set_config(config);
+        analyzer.analyze(&document)
     }
 
     #[test]
@@ -571,7 +593,8 @@ mod tests {
     fn asm_diag_range_is_utf16_aware_with_a_multibyte_char_before_the_span() {
         use cpclib_asm::MayHaveSpan;
         let text = "org 0x4000\n xcaf\u{e9}xx: nop\n ret\n";
-        let listing = AssemblyAnalyzer::parse_source(text, None).expect("should parse cleanly");
+        let listing = AssemblyAnalyzer::parse_source(text, None, Default::default())
+            .expect("should parse cleanly");
         let tokens: Vec<_> = super::super::token::flatten_listing(listing.iter()).collect();
         let nop_span = tokens
             .iter()
@@ -815,6 +838,74 @@ mod tests {
     fn the_bare_implicit_accumulator_form_is_not_reported() {
         let text = "org 0x4000\n cp c\n ret\n";
         assert!(diagnostics_for(text).is_empty());
+    }
+
+    /// Regression test for the parser-level fix (see
+    /// `cpclib_asm::parser::instructions::wrap_optional_accumulator_warning`):
+    /// disabling `redundant_accumulator_prefix` must suppress *only* that
+    /// diagnostic, while a `fake_instructions` warning elsewhere in the same
+    /// file still fires normally.
+    #[test]
+    fn disabling_redundant_accumulator_prefix_suppresses_only_that_diagnostic() {
+        let text = "org 0x4000\n add de, bc\n cp a, c\n ret\n";
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.redundant_accumulator_prefix = false;
+        let diags = diagnostics_for_with_config(text, config);
+        assert!(
+            diags.iter().any(|d| d.message.contains("fake instruction")),
+            "{diags:?}"
+        );
+        assert!(
+            !diags.iter().any(|d| d.message.contains("not mandatory")),
+            "{diags:?}"
+        );
+    }
+
+    /// Same fix, `fake_instructions` disabled instead - and the underlying
+    /// token itself must no longer be `is_warning()` (proves the fix landed
+    /// in the parser, not just a post-hoc diagnostic filter).
+    #[test]
+    fn disabling_fake_instructions_suppresses_only_that_diagnostic_and_unwraps_the_token() {
+        let text = "org 0x4000\n add de, bc\n cp a, c\n ret\n";
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.fake_instructions = false;
+        let diags = diagnostics_for_with_config(text, config.clone());
+        assert!(
+            !diags.iter().any(|d| d.message.contains("fake instruction")),
+            "{diags:?}"
+        );
+        assert!(
+            diags.iter().any(|d| d.message.contains("not mandatory")),
+            "{diags:?}"
+        );
+
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        analyzer.set_config(config);
+        let listing = analyzer.parse_document(&document).ok().unwrap();
+        let fake_token = super::super::token::flatten_listing(listing.iter())
+            .find(|t| t.mnemonic() == Some(&cpclib_tokens::Mnemonic::Add))
+            .expect("expected the add de,bc token");
+        assert!(!fake_token.is_warning(), "{fake_token:?}");
+    }
+
+    #[test]
+    fn disabling_unused_bindings_suppresses_that_diagnostic() {
+        let text = "FUNCTION f, a, b\n    IF {a} > 0\n        RETURN 1\n    ENDIF\n    RETURN 0\nENDFUNCTION\nval equ f(1, 2)\n";
+        let enabled = diagnostics_for(text);
+        assert!(
+            enabled.iter().any(|d| d.message.contains("is never used")),
+            "{enabled:?}"
+        );
+
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.unused_bindings = false;
+        let disabled = diagnostics_for_with_config(text, config);
+        assert!(
+            !disabled.iter().any(|d| d.message.contains("is never used")),
+            "{disabled:?}"
+        );
     }
 
     #[test]

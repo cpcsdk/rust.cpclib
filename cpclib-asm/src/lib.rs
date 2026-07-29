@@ -15,7 +15,7 @@ pub mod disass;
 pub mod preamble;
 
 pub mod error;
-pub use error::{AssemblerError, ExpressionError};
+pub use error::{AssemblerError, ExpressionError, WarningCategory};
 
 mod crunchers;
 
@@ -83,6 +83,10 @@ pub struct AssemblingOptions {
     snapshot_model: Option<Snapshot>,
     amsdos_behavior: AmsdosAddBehavior,
     enable_warnings: bool,
+    /// Individually-disabled warning classes, on top of the blanket
+    /// `enable_warnings` switch - see `WarningCategory`. Empty by default
+    /// (nothing individually disabled, matching today's exact behavior).
+    disabled_warning_categories: BitFlags<WarningCategory>,
     force_void: bool,
     debug: bool,
     forbid_memory_override: bool,
@@ -111,6 +115,7 @@ impl Default for AssemblingOptions {
             snapshot_model: None,
             amsdos_behavior: AmsdosAddBehavior::FailIfPresent,
             enable_warnings: true,
+            disabled_warning_categories: BitFlags::empty(),
             force_void: true,
             debug: false,
             forbid_memory_override: false,
@@ -150,6 +155,24 @@ impl AssemblingOptions {
     pub fn disable_warnings(&mut self) -> &mut Self {
         self.enable_warnings = false;
         self
+    }
+
+    pub fn enable_warnings_flag(&self) -> bool {
+        self.enable_warnings
+    }
+
+    pub fn disable_warning_category(&mut self, category: WarningCategory) -> &mut Self {
+        self.disabled_warning_categories.insert(category);
+        self
+    }
+
+    pub fn enable_warning_category(&mut self, category: WarningCategory) -> &mut Self {
+        self.disabled_warning_categories.remove(category);
+        self
+    }
+
+    pub fn is_warning_category_enabled(&self, category: WarningCategory) -> bool {
+        !self.disabled_warning_categories.contains(category)
     }
 
     /// Specify if the assembler must be case sensitive or not
@@ -520,6 +543,141 @@ mod test_super {
                 panic!("expected an AlreadyRenderedWarningWithLocation, got: {other:?}")
             }
         }
+    }
+
+    /// `AssemblerError::warning_category` must classify each of the four
+    /// individually-toggleable kinds correctly - the shared basis for
+    /// `AssemblingOptions`/`ParserOptions`'s `disabled_warning_categories`
+    /// and `basm --disable-warning`.
+    #[test]
+    fn warning_category_classifies_each_real_kind() {
+        let code = "\
+            org 0x4000\n\
+            add de, bc\n\
+            cp a, c\n\
+            ld b, 300\n\
+            db 1\n\
+            org 0x4000\n\
+            db 2\n\
+            ret\n";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+
+        let categories: std::collections::HashSet<_> = env
+            .warnings()
+            .iter()
+            .map(|w| w.warning_category())
+            .collect();
+        assert!(
+            categories.contains(&WarningCategory::FakeInstruction),
+            "{:?}",
+            env.warnings()
+        );
+        assert!(
+            categories.contains(&WarningCategory::RedundantAccumulatorPrefix),
+            "{:?}",
+            env.warnings()
+        );
+        assert!(
+            categories.contains(&WarningCategory::Overflow),
+            "{:?}",
+            env.warnings()
+        );
+        assert!(
+            categories.contains(&WarningCategory::OverrideMemory),
+            "{:?}",
+            env.warnings()
+        );
+    }
+
+    /// Regression test for the parser-level fix: disabling
+    /// `RedundantAccumulatorPrefix`/`FakeInstruction` in `ParserOptions`
+    /// must prevent `WarningWrapper` from being constructed at all - not
+    /// just filter the resulting diagnostic out later. A token that's still
+    /// wrapped (even if nothing ever renders the warning) is a real
+    /// correctness gap for other consumers that key behavior off
+    /// `is_warning()`/`is_fake_instruction()`.
+    #[test]
+    fn disabling_a_warning_category_in_parser_options_prevents_the_wrapper_from_ever_being_built() {
+        let builder = crate::parser::context::ParserContextBuilder::default()
+            .set_disabled_warning_categories(WarningCategory::RedundantAccumulatorPrefix.into());
+        let tokens = crate::parser::parse_z80_with_context_builder("cp a, c\n", builder).unwrap();
+        let token = tokens.iter().next().unwrap();
+        assert!(!token.is_warning(), "{token:?}");
+
+        // The bare form is never affected either way.
+        let bare = parser::parse_z80_str("cp c\n").unwrap();
+        assert!(!bare.iter().next().unwrap().is_warning());
+    }
+
+    /// Same fix, for `FakeInstruction` - and confirms disabling the warning
+    /// never disables the accepted *syntax*: the fake-instruction expansion
+    /// keys off the raw operand shape, not `is_warning()`, so the token
+    /// must still assemble to the identical bytes either way.
+    #[test]
+    fn disabling_fake_instruction_warnings_does_not_disable_the_expansion() {
+        let disabled_builder = crate::parser::context::ParserContextBuilder::default()
+            .set_disabled_warning_categories(WarningCategory::FakeInstruction.into());
+        let disabled_tokens =
+            crate::parser::parse_z80_with_context_builder("add de, bc\n", disabled_builder)
+                .unwrap();
+        let disabled_token = disabled_tokens.iter().next().unwrap();
+        assert!(!disabled_token.is_warning(), "{disabled_token:?}");
+
+        let enabled_bytes = assemble("add de, bc\n").unwrap();
+        let disabled_bytes = {
+            let options = EnvOptions::default();
+            match assembler::visit_tokens_all_passes_with_options(&disabled_tokens, options) {
+                Ok((_tok, env)) => env.produced_bytes(),
+                Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+            }
+        };
+        assert_eq!(enabled_bytes, disabled_bytes);
+    }
+
+    /// Regression test for the assembler-level gate (`override_memory`/
+    /// `overflow`, only known at real assemble time): disabling one
+    /// category via `AssemblingOptions` removes it from `env.warnings()`
+    /// while the other real warnings present in the same file still fire -
+    /// guards against a too-broad filter.
+    #[test]
+    fn disabling_a_warning_category_in_assembling_options_removes_only_that_category() {
+        let code = "\
+            org 0x4000\n\
+            ld b, 300\n\
+            db 1\n\
+            org 0x4000\n\
+            db 2\n\
+            ret\n";
+        let tokens = parser::parse_z80_str(code).unwrap();
+
+        let mut assemble_opts = AssemblingOptions::default();
+        assemble_opts.disable_warning_category(WarningCategory::OverrideMemory);
+        let options = EnvOptions::new(Default::default(), assemble_opts, std::sync::Arc::new(()));
+        let env = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok((_tok, env)) => env,
+            Err((_tok, _env, e)) => panic!("assembling should not fail: {e}")
+        };
+
+        let categories: std::collections::HashSet<_> = env
+            .warnings()
+            .iter()
+            .map(|w| w.warning_category())
+            .collect();
+        assert!(
+            !categories.contains(&WarningCategory::OverrideMemory),
+            "{:?}",
+            env.warnings()
+        );
+        assert!(
+            categories.contains(&WarningCategory::Overflow),
+            "{:?}",
+            env.warnings()
+        );
     }
 
     #[test]

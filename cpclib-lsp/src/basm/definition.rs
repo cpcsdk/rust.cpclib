@@ -60,7 +60,7 @@ impl AssemblyAnalyzer {
         let word = self.extract_word_at_position(&line, document.char_column(position))?;
 
         // The backend will try other open documents if this returns None.
-        self.find_definition_in(document, &word, true)
+        self.find_definition_in(document, &word, self.config().case_sensitive)
     }
 
     /// Extract the word (ASM identifier) under the cursor, or `None`.

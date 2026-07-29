@@ -3,6 +3,7 @@
 
 pub mod call_hierarchy;
 pub mod colors;
+pub mod config;
 pub mod document;
 pub mod render;
 pub mod symbols;

@@ -119,7 +119,7 @@ impl BuildFileAnalyzer {
         let has_targets = raw_text.contains("targets:");
         let has_tasks = raw_text.contains("tasks:");
 
-        if !has_targets && !has_tasks {
+        if !has_targets && !has_tasks && self.config().warnings.missing_build_structure {
             diagnostics.push(Diagnostic {
                 range: Range {
                     start: Position {
@@ -184,6 +184,7 @@ impl BuildFileAnalyzer {
         // Avoid emitting the same diagnostic once per loop iteration when a
         // `{% for %}`-generated dependency line repeats an undefined token.
         let mut seen: std::collections::HashSet<(u32, String)> = std::collections::HashSet::new();
+        let warn_missing_dependency = self.config().warnings.missing_dependency;
 
         // ── Check each dependency value (on the expanded text) ──────────────
         for (exp_line_idx, line) in expanded_text.lines().enumerate() {
@@ -243,7 +244,7 @@ impl BuildFileAnalyzer {
                                 .map(|d| d.join(tok).exists())
                                 .unwrap_or(false);
 
-                            if !file_exists {
+                            if !file_exists && warn_missing_dependency {
                                 let message = format!(
                                     "Dependency '{tok}' does not exist on disk, and no rule in this build file produces it as a target — it cannot be built."
                                 );
@@ -366,6 +367,35 @@ mod tests {
             d.message
         );
         assert_eq!(d.range.start.line, 1);
+    }
+
+    #[test]
+    fn disabling_missing_dependency_warnings_suppresses_them() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let text = "- targets: out.bin\n  dep: missing.asm\n  cmd: basm missing.asm\n";
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+        let analyzer = BuildFileAnalyzer::new();
+        assert_eq!(analyzer.analyze(&document).len(), 1);
+
+        let mut config = crate::common::config::BndbuildConfig::default();
+        config.warnings.missing_dependency = false;
+        analyzer.set_config(config);
+        assert!(analyzer.analyze(&document).is_empty());
+    }
+
+    #[test]
+    fn disabling_missing_build_structure_warnings_suppresses_them() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        let text = "foo: bar\n";
+        let document = Document::new(uri, text.to_string(), 1);
+        let analyzer = BuildFileAnalyzer::new();
+        assert_eq!(analyzer.analyze(&document).len(), 1);
+
+        let mut config = crate::common::config::BndbuildConfig::default();
+        config.warnings.missing_build_structure = false;
+        analyzer.set_config(config);
+        assert!(analyzer.analyze(&document).is_empty());
     }
 
     #[test]

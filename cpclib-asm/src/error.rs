@@ -36,6 +36,7 @@ use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
 use cpclib_tokens::symbols::{PhysicalAddress, SourceLocation, Symbol, SymbolError};
 use cpclib_tokens::{BinaryOperation, ExpressionTypeError, tokens};
+use enumflags2::{BitFlags, bitflags};
 
 use crate::Z80Span;
 use crate::assembler::AssemblingPass;
@@ -86,6 +87,22 @@ pub enum ExpressionError {
     LeftAndRightError(BinaryOperation, Box<AssemblerError>, Box<AssemblerError>),
     OwnError(Box<AssemblerError>),
     InvalidSize(usize, usize) // expected index
+}
+
+/// An individually-toggleable warning class - see
+/// `AssemblerError::warning_category`, `AssemblingOptions::disabled_warning_categories`
+/// and `ParserOptions::disabled_warning_categories`. `Other` covers every
+/// warning kind that doesn't (yet) have a stable identifier - it is never
+/// individually toggleable, only the four named categories are.
+#[bitflags]
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum WarningCategory {
+    FakeInstruction,
+    RedundantAccumulatorPrefix,
+    OverrideMemory,
+    Overflow,
+    Other
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -446,6 +463,47 @@ impl AssemblerError {
             AssemblerError::RelocatedError { error, .. }
             | AssemblerError::RelocatedWarning { warning: error, .. } => error.is_override_memory(),
             _ => false
+        }
+    }
+
+    /// Which individually-toggleable class this warning belongs to (see
+    /// `AssemblingOptions::disabled_warning_categories`/
+    /// `ParserOptions::disabled_warning_categories`) - used to let a caller
+    /// (the LSP, or `basm --disable-warning`) suppress one specific kind of
+    /// warning without touching the others. `AssemblerError::OverrideMemory(..)`
+    /// is matched directly for a value still carrying it unflattened (e.g.
+    /// checked in the parser or before `Env::add_warning`'s own rendering
+    /// step), but by the time a warning actually reaches `env.warnings()` it
+    /// has *already* been flattened into a rendered message
+    /// (`AlreadyRenderedError`/`AlreadyRenderedWarningWithLocation`/
+    /// `AssemblingError { msg }`) - including `OverrideMemory` itself, whose
+    /// own `Display` impl renders `"Override {n} bytes at {addr}"` - so
+    /// every kind also needs a message-text fallback, not just the two
+    /// warnings that never had a structured variant to begin with.
+    pub fn warning_category(&self) -> WarningCategory {
+        match self {
+            AssemblerError::OverrideMemory(..) => WarningCategory::OverrideMemory,
+            AssemblerError::RelocatedError { error, .. }
+            | AssemblerError::RelocatedWarning { warning: error, .. } => error.warning_category(),
+            _ => {
+                let text = self.to_string();
+                if text.contains(crate::parser::instructions::FAKE_INSTRUCTION_WARNING) {
+                    WarningCategory::FakeInstruction
+                }
+                else if text.contains(crate::parser::instructions::REDUNDANT_ACCUMULATOR_WARNING)
+                {
+                    WarningCategory::RedundantAccumulatorPrefix
+                }
+                else if text.contains("does not fit in") {
+                    WarningCategory::Overflow
+                }
+                else if text.contains(" bytes at ") {
+                    WarningCategory::OverrideMemory
+                }
+                else {
+                    WarningCategory::Other
+                }
+            }
         }
     }
 

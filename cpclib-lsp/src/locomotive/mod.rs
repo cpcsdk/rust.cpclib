@@ -4,13 +4,14 @@
 //! Each feature lives in its own file; they all extend the same
 //! `BasicAnalyzer` type through separate `impl` blocks.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use cpclib_basic::BasicError;
 use cpclib_basic::located::LocatedBasicProgram;
 use dashmap::DashMap;
 use tower_lsp::lsp_types::Url;
 
+use crate::common::config::BasicConfig;
 use crate::common::document::Document;
 
 pub mod autocomplete;
@@ -40,14 +41,29 @@ pub mod token;
 /// independently re-lexing/parsing the same document text on every single
 /// request.
 pub struct BasicAnalyzer {
-    parse_cache: DashMap<Url, (i32, Arc<LocatedBasicProgram>)>
+    parse_cache: DashMap<Url, (i32, Arc<LocatedBasicProgram>)>,
+    /// Loaded once at `initialize()` - see `AssemblyAnalyzer::config`'s own
+    /// doc comment for the reasoning behind this shape.
+    config: RwLock<Arc<BasicConfig>>
 }
 
 impl BasicAnalyzer {
     pub fn new() -> Self {
         Self {
-            parse_cache: DashMap::new()
+            parse_cache: DashMap::new(),
+            config: RwLock::new(Arc::new(BasicConfig::default()))
         }
+    }
+
+    pub fn set_config(&self, config: BasicConfig) {
+        *self.config.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(config);
+    }
+
+    pub fn config(&self) -> Arc<BasicConfig> {
+        self.config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Parse `document`'s BASIC source, reusing the cached result if it was

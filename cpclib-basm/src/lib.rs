@@ -28,6 +28,7 @@ use cpclib_disc::edsk::Head;
 use cpclib_disc::open_disc;
 #[cfg(feature = "xferlib")]
 use cpclib_xfer::CpcXfer;
+use enumflags2::BitFlags;
 use file::AnyFileNameOwned;
 use fs_err::File;
 
@@ -137,6 +138,28 @@ impl From<AmsdosError> for BasmError {
     }
 }
 
+/// Collect every `--disable-warning <category>` value into a `BitFlags` -
+/// shared by `parse` (needs it for `ParserOptions`, since `FakeInstruction`/
+/// `RedundantAccumulatorPrefix` are detected in the parser itself) and
+/// `assemble` (needs it for `AssemblingOptions`, for `OverrideMemory`/
+/// `Overflow` - only known at real assemble time).
+fn disabled_warning_categories_from_matches(matches: &ArgMatches) -> BitFlags<WarningCategory> {
+    let mut disabled = BitFlags::empty();
+    if let Some(categories) = matches.get_many::<String>("DISABLE_WARNING_CATEGORY") {
+        for category in categories {
+            let category = match category.as_str() {
+                "fake-instruction" => WarningCategory::FakeInstruction,
+                "redundant-accumulator-prefix" => WarningCategory::RedundantAccumulatorPrefix,
+                "override-memory" => WarningCategory::OverrideMemory,
+                "overflow" => WarningCategory::Overflow,
+                _ => unreachable!("value_parser restricts this to the four known categories")
+            };
+            disabled.insert(category);
+        }
+    }
+    disabled
+}
+
 /// Parse the given code.
 /// TODO read options to configure the search path
 pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), BasmError> {
@@ -152,6 +175,7 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
     let mut options = ParserOptions::default();
     options.set_dotted_directives(matches.get_flag("DOTTED_DIRECTIVES"));
     options.show_progress = show_progress;
+    options.set_disabled_warning_categories(disabled_warning_categories_from_matches(matches));
 
     if matches.get_flag("ORGAMS") {
         options.set_flavor(AssemblerFlavor::Orgams);
@@ -229,6 +253,9 @@ pub fn assemble(
     assemble_options.set_case_sensitive(!matches.get_flag("CASE_INSENSITIVE"));
     if matches.get_flag("DISABLE_WARNINGS") {
         assemble_options.disable_warnings();
+    }
+    for category in disabled_warning_categories_from_matches(matches).iter() {
+        assemble_options.disable_warning_category(category);
     }
 
     assemble_options.set_force_void(!matches.get_flag("NO_FORCED_VOID"));
@@ -974,6 +1001,19 @@ If a placeholder appears multiple times in the template, only the first occurren
                             .long("disable-warnings")
                             .alias("no-warnings")
                             .action(ArgAction::SetTrue)
+                    )
+                    .arg(
+                        Arg::new("DISABLE_WARNING_CATEGORY")
+                            .help("Disable one specific class of warning, without disabling the others (repeatable)")
+                            .long("disable-warning")
+                            .action(ArgAction::Append)
+                            .number_of_values(1)
+                            .value_parser([
+                                "fake-instruction",
+                                "redundant-accumulator-prefix",
+                                "override-memory",
+                                "overflow"
+                            ])
                     )
                     .arg(
                         Arg::new("DOTTED_DIRECTIVES")

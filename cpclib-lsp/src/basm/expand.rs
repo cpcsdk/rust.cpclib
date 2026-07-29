@@ -29,6 +29,7 @@ use cpclib_tokens::{ListingElement, MacroParamElement};
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
+use super::parse::disabled_assembling_warning_categories;
 use crate::common::document::Document;
 
 /// Depth cap for iterative macro/struct expansion — mirrors the `MAX_DEPTH`
@@ -123,14 +124,31 @@ fn seed_repeat_style_argument_placeholders<P: MacroParamElement>(args: &[P], env
 /// (`super::definition::ancestor_search_directories`, the same walk that
 /// already powers the working "hover an include filename" / goto-definition
 /// features) — not just the file's own directory.
-pub(super) fn dry_run_env(listing: &LocatedListing, doc_uri: &Url) -> Env {
+///
+/// `case_sensitive`/`disabled_categories` forward this document's config
+/// (see `common::config::AsmConfig`) into the real assembling pipeline -
+/// `disabled_categories` is the real gate for `override_memory`/`overflow`
+/// (only known at real assemble time), and a belt-and-suspenders backstop
+/// for `fake_instructions`/`redundant_accumulator_prefix` (whose real gate
+/// is in the parser itself, see `parse_source`).
+pub(super) fn dry_run_env(
+    listing: &LocatedListing,
+    doc_uri: &Url,
+    case_sensitive: bool,
+    disabled_categories: enumflags2::BitFlags<cpclib_asm::WarningCategory>
+) -> Env {
     let mut assemble = AssemblingOptions::default();
     assemble.set_dry_run(true);
+    assemble.set_case_sensitive(case_sensitive);
+    for category in disabled_categories.iter() {
+        assemble.disable_warning_category(category);
+    }
     // `quiet`: re-parsing an `include`d file during assembling goes through
     // this `ParserOptions` too — without it, a `PRINT_PARSE` inside an
     // included file would still hit the real stdout despite `dry_run`.
     let mut parse = cpclib_asm::parser::context::ParserOptions::default();
     parse.set_quiet(true);
+    parse.set_disabled_warning_categories(disabled_categories);
     for dir in super::definition::ancestor_search_directories(doc_uri) {
         let _ = parse.add_search_path(dir);
     }
@@ -210,7 +228,9 @@ impl AssemblyAnalyzer {
         {
             return (*entry.1).clone();
         }
-        let env = dry_run_env(listing, &document.uri);
+        let config = self.config();
+        let disabled = disabled_assembling_warning_categories(&config.warnings);
+        let env = dry_run_env(listing, &document.uri, config.case_sensitive, disabled);
         self.env_cache.insert(
             document.uri.clone(),
             (document.version, Arc::new(env.clone()))

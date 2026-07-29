@@ -9,6 +9,7 @@ use cpclib_common::winnow::BStr;
 use cpclib_tokens::symbols::{SymbolFor, SymbolsTableTrait, Value};
 use cpclib_tokens::{AssemblerFlavor, ListingElement, Token};
 use either::Either;
+use enumflags2::BitFlags;
 use regex::Regex;
 
 use super::line_col::LineColLookup;
@@ -16,7 +17,7 @@ use super::obtained::LocatedTokenInner;
 use super::source::Z80Span;
 use crate::LocatedToken;
 use crate::assembler::Env;
-use crate::error::AssemblerError;
+use crate::error::{AssemblerError, WarningCategory};
 
 /// State to limit the parsing abilities depending on the parsing context
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +114,17 @@ pub struct ParserOptions {
     /// is created, so it can't be gated at that level; a caller such as an
     /// LSP server (whose real stdout carries JSON-RPC protocol traffic, not
     /// build output) must suppress it here instead.
-    pub quiet: bool
+    pub quiet: bool,
+    /// Same reasoning as `quiet`: `FakeInstruction`/`RedundantAccumulatorPrefix`
+    /// warnings are detected *in the parser* (`wrap_optional_accumulator_warning`
+    /// in `parser/instructions.rs`), which constructs a real `WarningWrapper`
+    /// AST node before any `Env`/`AssemblingOptions` exists - gating them only
+    /// at `Env::add_warning` would leave the token permanently `is_warning()
+    /// == true` even when "disabled". `OverrideMemory`/`Overflow` bits are
+    /// never checked from the parser side (harmless if set) - those two are
+    /// only ever known at real assemble time, gated via
+    /// `AssemblingOptions::disabled_warning_categories` instead.
+    pub disabled_warning_categories: BitFlags<WarningCategory>
 }
 
 impl Default for ParserOptions {
@@ -124,7 +135,8 @@ impl Default for ParserOptions {
             dotted_directive: false,
             show_progress: false,
             assembler_flavor: AssemblerFlavor::Basm,
-            quiet: false
+            quiet: false,
+            disabled_warning_categories: BitFlags::empty()
         }
     }
 }
@@ -199,6 +211,15 @@ impl ParserContextBuilder {
         self
     }
 
+    /// See [`ParserOptions::disabled_warning_categories`].
+    pub fn set_disabled_warning_categories(
+        mut self,
+        categories: BitFlags<WarningCategory>
+    ) -> Self {
+        self.options.set_disabled_warning_categories(categories);
+        self
+    }
+
     pub fn set_options(mut self, options: ParserOptions) -> Self {
         self.options = options;
         self
@@ -232,6 +253,11 @@ impl ParserOptions {
     /// See [`ParserOptions::quiet`].
     pub fn set_quiet(&mut self, tag: bool) {
         self.quiet = tag;
+    }
+
+    /// See [`ParserOptions::disabled_warning_categories`].
+    pub fn set_disabled_warning_categories(&mut self, categories: BitFlags<WarningCategory>) {
+        self.disabled_warning_categories = categories;
     }
 
     /// Add a search path and ensure it is ABSOLUTE

@@ -3,13 +3,51 @@
 
 use std::sync::Arc;
 
+use cpclib_asm::WarningCategory;
 use cpclib_asm::parser::context::ParserContextBuilder;
 use cpclib_asm::parser::obtained::LocatedListing;
 use cpclib_common::camino::Utf8PathBuf;
+use enumflags2::BitFlags;
 use tower_lsp::lsp_types::Url;
 
 use super::AssemblyAnalyzer;
 use crate::common::document::Document;
+
+/// This document's own config, translated into the subset of
+/// `WarningCategory` the parser itself can act on
+/// (`FakeInstruction`/`RedundantAccumulatorPrefix` - see
+/// `ParserOptions::disabled_warning_categories`'s own doc comment for why
+/// `OverrideMemory`/`Overflow` never apply here).
+pub(super) fn disabled_parser_warning_categories(
+    warnings: &crate::common::config::AsmWarningClasses
+) -> BitFlags<WarningCategory> {
+    let mut disabled = BitFlags::empty();
+    if !warnings.fake_instructions {
+        disabled.insert(WarningCategory::FakeInstruction);
+    }
+    if !warnings.redundant_accumulator_prefix {
+        disabled.insert(WarningCategory::RedundantAccumulatorPrefix);
+    }
+    disabled
+}
+
+/// Same idea as `disabled_parser_warning_categories`, for real assembling
+/// (`AssemblingOptions`, via `expand::dry_run_env`) - covers all four
+/// assembler-known categories, since `fake_instructions`/
+/// `redundant_accumulator_prefix` are also passed here as a
+/// belt-and-suspenders backstop (their real gate is the parser one above).
+pub(super) fn disabled_assembling_warning_categories(
+    warnings: &crate::common::config::AsmWarningClasses
+) -> BitFlags<WarningCategory> {
+    let mut disabled = disabled_parser_warning_categories(warnings);
+    if !warnings.override_memory {
+        disabled.insert(WarningCategory::OverrideMemory);
+    }
+    if !warnings.overflow {
+        disabled.insert(WarningCategory::Overflow);
+    }
+    disabled
+}
 
 impl AssemblyAnalyzer {
     /// Parse the assembly document and return the listing, reusing the
@@ -28,7 +66,8 @@ impl AssemblyAnalyzer {
         {
             return entry.1.clone();
         }
-        let result = match Self::parse_source(&document.text(), Some(&document.uri)) {
+        let disabled = disabled_parser_warning_categories(&self.config().warnings);
+        let result = match Self::parse_source(&document.text(), Some(&document.uri), disabled) {
             Ok(l) => Ok(Arc::new(l)),
             Err(l) => Err(Arc::new(l))
         };
@@ -47,14 +86,24 @@ impl AssemblyAnalyzer {
     /// LSP never set it before, so every basm error/diagnostic message
     /// showed the placeholder `"no file"`/`"no file specified"` instead of
     /// the real document path.
+    ///
+    /// `disabled_categories`: forwarded to `ParserOptions` so a disabled
+    /// `fake_instructions`/`redundant_accumulator_prefix` warning class
+    /// never even constructs a `WarningWrapper` AST node - see
+    /// `cpclib_asm::parser::instructions::wrap_optional_accumulator_warning`'s
+    /// own doc comment for why this must happen in the parser itself, not
+    /// as a downstream diagnostic filter.
     pub(super) fn parse_source(
         text: &str,
-        doc_uri: Option<&Url>
+        doc_uri: Option<&Url>,
+        disabled_categories: BitFlags<WarningCategory>
     ) -> Result<LocatedListing, LocatedListing> {
         // `quiet`: a `PRINT_PARSE` directive prints at *parse* time, before
         // any `Env`/`dry_run` exists to gate it — must be suppressed here
         // instead, since the LSP's real stdout carries JSON-RPC traffic.
-        let mut builder = ParserContextBuilder::default().set_quiet(true);
+        let mut builder = ParserContextBuilder::default()
+            .set_quiet(true)
+            .set_disabled_warning_categories(disabled_categories);
         if let Some(path) = doc_uri
             .and_then(|uri| uri.to_file_path().ok())
             .and_then(|path| Utf8PathBuf::try_from(path).ok())

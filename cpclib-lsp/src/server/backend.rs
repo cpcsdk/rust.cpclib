@@ -220,7 +220,8 @@ impl CpcLspBackend {
     fn find_definition_at_path(&self, path: &std::path::Path, word: &str) -> Option<Location> {
         let target_uri = Url::from_file_path(path).ok()?;
         let doc = self.load_document(&target_uri)?;
-        self.asm_analyzer.find_definition_in(&doc, word, true)
+        self.asm_analyzer
+            .find_definition_in(&doc, word, self.asm_analyzer.config().case_sensitive)
     }
 
     /// Workspace-wide rename of a `Global` basm label: unlike
@@ -646,6 +647,29 @@ fn compute_diagnostics(
         },
         DocumentType::Unknown => Vec::new()
     };
+
+    // Escalate every WARNING to ERROR, per this document's own language
+    // config (`common::config::*Config::warnings_as_errors`) - deliberately
+    // centralized here rather than duplicated inside each `analyze()`, so
+    // every language's own diagnostics code stays unaware of the escalation
+    // policy. Not the same mechanism as `basm --Werror` (a hard build
+    // failure) - this only changes how the editor displays the diagnostic.
+    let warnings_as_errors = match document.doc_type {
+        DocumentType::Assembly => asm_analyzer.config().warnings_as_errors,
+        DocumentType::BuildFile => build_analyzer.config().warnings_as_errors,
+        DocumentType::Basic | DocumentType::CatartBasic => {
+            basic_analyzer.config().warnings_as_errors
+        },
+        DocumentType::Unknown => false
+    };
+    if warnings_as_errors {
+        for d in &mut diagnostics {
+            if d.severity == Some(DiagnosticSeverity::WARNING) {
+                d.severity = Some(DiagnosticSeverity::ERROR);
+            }
+        }
+    }
+
     relativize_diagnostic_messages(&mut diagnostics, workspace_roots);
     if let Some(build_error) = build_error_diagnostics.get(&document.uri) {
         diagnostics.push(build_error.clone());
@@ -824,6 +848,28 @@ impl LanguageServer for CpcLspBackend {
                 roots.push(path);
             }
         }
+        // Load `cpclib-lsp.toml` (see `common::config`) now that the
+        // workspace root is known - once for the server's whole lifetime,
+        // no live-reload (matches every other cpclib-vscode setting, which
+        // already requires a window reload/restart to take effect).
+        // `Client::show_message` uses the *unchecked* notification path
+        // (fires regardless of `State::Initialized`, already relied on
+        // elsewhere in this codebase for `log_message`/`show_message`), so
+        // it's safe to call this early, before the handshake completes.
+        let loaded_config = crate::common::config::load_config(roots.first().map(|p| p.as_path()));
+        if let Some(err) = &loaded_config.error {
+            self.client
+                .show_message(
+                    MessageType::ERROR,
+                    format!("cpclib-lsp: {err} — using default configuration")
+                )
+                .await;
+        }
+        self.asm_analyzer.set_config(loaded_config.config.asm);
+        self.basic_analyzer.set_config(loaded_config.config.basic);
+        self.build_analyzer
+            .set_config(loaded_config.config.bndbuild);
+
         *self
             .workspace_roots
             .write()
@@ -1134,10 +1180,11 @@ impl LanguageServer for CpcLspBackend {
                 if other.value().doc_type != DocumentType::Assembly {
                     continue;
                 }
-                if let Some(loc) = self
-                    .asm_analyzer
-                    .find_definition_in(other.value(), &word, true)
-                {
+                if let Some(loc) = self.asm_analyzer.find_definition_in(
+                    other.value(),
+                    &word,
+                    self.asm_analyzer.config().case_sensitive
+                ) {
                     return Ok(Some(GotoDefinitionResponse::Scalar(loc)));
                 }
             }
@@ -2371,6 +2418,168 @@ mod workspace_roots_tests {
             .write()
             .unwrap_or_else(|e| e.into_inner()) = vec![PathBuf::from("/tmp")];
         assert_eq!(backend.workspace_roots(), vec![PathBuf::from("/tmp")]);
+    }
+}
+
+#[cfg(test)]
+mod warnings_as_errors_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    fn assembly_doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    /// A WARNING-severity diagnostic (the redundant-accumulator-prefix
+    /// warning shipped earlier this session) becomes an ERROR when
+    /// `asm.warnings_as_errors` is set, and stays a WARNING otherwise -
+    /// proving `compute_diagnostics`'s centralized escalation is wired to
+    /// the real per-language config, not a no-op.
+    #[test]
+    fn escalates_asm_warnings_to_errors_only_when_configured() {
+        let doc = assembly_doc("org 0x4000\n cp a, c\n ret\n");
+        let asm_analyzer = AssemblyAnalyzer::new();
+        let build_analyzer = BuildFileAnalyzer::new();
+        let basic_analyzer = BasicAnalyzer::new();
+        let build_error_diagnostics = DashMap::new();
+
+        let diags = compute_diagnostics(
+            &asm_analyzer,
+            &build_analyzer,
+            &basic_analyzer,
+            &doc,
+            &[],
+            &build_error_diagnostics
+        );
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "{diags:?}"
+        );
+
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings_as_errors = true;
+        asm_analyzer.set_config(config);
+        let diags = compute_diagnostics(
+            &asm_analyzer,
+            &build_analyzer,
+            &basic_analyzer,
+            &doc,
+            &[],
+            &build_error_diagnostics
+        );
+        assert!(!diags.is_empty(), "{diags:?}");
+        assert!(
+            diags
+                .iter()
+                .all(|d| d.severity == Some(DiagnosticSeverity::ERROR)),
+            "{diags:?}"
+        );
+    }
+
+    /// Escalation is per-document-type: turning it on for `asm` must not
+    /// affect a bndbuild document in the same backend.
+    #[test]
+    fn escalation_is_independent_per_language() {
+        let asm_analyzer = AssemblyAnalyzer::new();
+        let mut asm_config = crate::common::config::AsmConfig::default();
+        asm_config.warnings_as_errors = true;
+        asm_analyzer.set_config(asm_config);
+
+        let build_analyzer = BuildFileAnalyzer::new();
+        let basic_analyzer = BasicAnalyzer::new();
+        let build_error_diagnostics = DashMap::new();
+
+        let mut bnd_doc = Document::new(
+            Url::parse("file:///t.bnd").unwrap(),
+            "- dep: missing.asm\n  cmd: basm missing.asm\n".to_string(),
+            1
+        );
+        bnd_doc.doc_type = DocumentType::BuildFile;
+
+        let diags = compute_diagnostics(
+            &asm_analyzer,
+            &build_analyzer,
+            &basic_analyzer,
+            &bnd_doc,
+            &[],
+            &build_error_diagnostics
+        );
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "asm's warnings_as_errors must not leak into a bndbuild document: {diags:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod initialize_config_tests {
+    use futures_util::StreamExt;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// End-to-end: a malformed `cpclib-lsp.toml` in the workspace root must
+    /// be reported to the editor via a real `window/showMessage`
+    /// notification (not silently swallowed - see `common::config::LoadedConfig`'s
+    /// own doc comment for why), and the server must still finish
+    /// initializing and use its usual defaults rather than getting stuck or
+    /// crashing.
+    #[tokio::test]
+    async fn malformed_config_file_is_reported_via_show_message_and_defaults_still_apply() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path()
+                .join(crate::common::config::CONFIG_FILE_NAME)
+                .as_std_path(),
+            "this is not valid toml [[["
+        )
+        .unwrap();
+
+        let (mut service, socket) = LspService::build(CpcLspBackend::new).finish();
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let (mut requests, _responses) = socket.split();
+            while let Some(request) = requests.next().await {
+                if request.method() == "window/showMessage"
+                    && let Some(params) = request.params()
+                    && let Ok(p) = serde_json::from_value::<ShowMessageParams>(params.clone())
+                {
+                    let _ = tx.send(p);
+                }
+            }
+        });
+
+        let root_uri = Url::from_file_path(tmp.path().as_std_path()).unwrap();
+        let request = tower_lsp::jsonrpc::Request::build("initialize")
+            .params(serde_json::json!({
+                "capabilities": {},
+                "workspaceFolders": [{ "uri": root_uri.to_string(), "name": "root" }]
+            }))
+            .id(1)
+            .finish();
+        let _ = service.ready().await.unwrap().call(request).await;
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("timed out waiting for a showMessage notification")
+            .expect("expected a showMessage notification");
+        assert_eq!(msg.typ, MessageType::ERROR);
+        assert!(
+            msg.message
+                .contains(crate::common::config::CONFIG_FILE_NAME),
+            "{}",
+            msg.message
+        );
+
+        // Still usable, defaults applied - not a hard failure.
+        let backend = service.inner();
+        assert!(backend.asm_analyzer.config().case_sensitive);
     }
 }
 

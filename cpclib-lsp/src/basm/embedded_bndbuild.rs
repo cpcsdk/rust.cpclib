@@ -447,7 +447,8 @@ ORG 0x8000\n";
         let blocks = extract_embedded_blocks(
             &AssemblyAnalyzer::parse_source(
                 "; #!bndbuild\n; - tgt: a\n;   cmd: echo a\nORG 1\n; #!bndbuild\n; - tgt: b\n;   cmd: echo b\n",
-                None
+                None,
+                Default::default()
             )
             .expect("should parse")
         );

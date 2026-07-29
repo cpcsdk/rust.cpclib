@@ -10,12 +10,14 @@
 //! rule; that's detected here (`embedded_bndbuild`) but executed by the
 //! `bndbuild` module — a one-directional `basm -> bndbuild` dependency.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use cpclib_asm::assembler::Env;
 use cpclib_asm::parser::obtained::LocatedListing;
 use dashmap::DashMap;
 use tower_lsp::lsp_types::Url;
+
+use crate::common::config::AsmConfig;
 
 pub mod autocomplete;
 pub mod call_hierarchy;
@@ -93,7 +95,13 @@ pub struct AssemblyAnalyzer {
     /// while typing elsewhere - so this turns their full-listing walk from
     /// "redone on every completion keystroke" into "redone only when that
     /// other document itself actually changes".
-    symbols_cache: DashMap<Url, (i32, Arc<Vec<(String, String)>>)>
+    symbols_cache: DashMap<Url, (i32, Arc<Vec<(String, String)>>)>,
+    /// Loaded once at `initialize()` (see `common::config`) - defaults to
+    /// today's exact behavior until/unless a real `cpclib-lsp.toml` is
+    /// found. `RwLock<Arc<_>>` rather than a plain field so callers can grab
+    /// a cheap, self-contained snapshot (`config()`) without holding a lock
+    /// across a whole request.
+    config: RwLock<Arc<AsmConfig>>
 }
 
 impl AssemblyAnalyzer {
@@ -102,7 +110,8 @@ impl AssemblyAnalyzer {
             parse_cache: DashMap::new(),
             env_cache: DashMap::new(),
             local_env_cache: DashMap::new(),
-            symbols_cache: DashMap::new()
+            symbols_cache: DashMap::new(),
+            config: RwLock::new(Arc::new(AsmConfig::default()))
         }
     }
 
@@ -114,6 +123,17 @@ impl AssemblyAnalyzer {
         self.env_cache.remove(uri);
         self.local_env_cache.remove(uri);
         self.symbols_cache.remove(uri);
+    }
+
+    pub fn set_config(&self, config: AsmConfig) {
+        *self.config.write().unwrap_or_else(|e| e.into_inner()) = Arc::new(config);
+    }
+
+    pub fn config(&self) -> Arc<AsmConfig> {
+        self.config
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 

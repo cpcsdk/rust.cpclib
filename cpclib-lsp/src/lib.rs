@@ -4,4 +4,5 @@ mod common;
 mod locomotive;
 mod server;
 
+pub use common::config;
 pub use server::CpcLspBackend;

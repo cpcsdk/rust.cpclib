@@ -2139,7 +2139,8 @@ impl Env {
 impl Env {
     #[inline(always)]
     pub fn add_warning(&mut self, warning: Box<AssemblerWarning>) {
-        if self.options().assemble_options().enable_warnings {
+        let opts = self.options().assemble_options();
+        if opts.enable_warnings && opts.is_warning_category_enabled(warning.warning_category()) {
             self.warnings.push(warning);
         }
     }
