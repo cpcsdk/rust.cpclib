@@ -3292,7 +3292,7 @@ pub fn parse_write_direct_memory(
 
     Ok(LocatedTokenInner::WarningWrapper(
         Box::new(token),
-        "Prefer BANK or PAGE directives to write direct -1, -1, XX".to_owned()
+        beef::lean::Cow::borrowed("Prefer BANK or PAGE directives to write direct -1, -1, XX")
     ))
 }
 

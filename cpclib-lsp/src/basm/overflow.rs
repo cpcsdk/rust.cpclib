@@ -133,13 +133,14 @@ fn overflow_candidates(token: &LocatedToken) -> Vec<(&LocatedExpr, SlotWidth)> {
     let mut candidates = Vec::new();
 
     // A "fake instruction" token (e.g. `ld hl, de`) is wrapped for the
-    // warning pipeline (`LocatedTokenInner::WarningWrapper`); most
-    // `ListingElement` accessors - including `mnemonic()`/`mnemonic_arg1()`/
-    // `mnemonic_arg2()`/`data_exprs()` - unconditionally unwrap the *un*-
-    // wrapped inner token and panic on one of these, rather than returning
-    // `None`. `is_warning()`/`is_db()`/`is_dw()` are the safe ones (they
-    // fall back to `false`), so check this first.
-    if token.is_warning() {
+    // warning pipeline (`LocatedTokenInner::WarningWrapper`) and doesn't
+    // have a single well-defined real-instruction shape, so it's skipped
+    // entirely. Every *other* warning-wrapped token (e.g. the redundant
+    // explicit `A,` accumulator prefix on `ADD`/`ADC`/`SBC`/`CP`/`SUB`/
+    // `AND`/`OR`/`XOR`) is a real, normally-shaped opcode underneath -
+    // `mnemonic()`/`mnemonic_arg1()`/`mnemonic_arg2()` already look through
+    // the wrapper transparently, so it's fine to keep processing it as-is.
+    if token.is_fake_instruction() {
         return candidates;
     }
 
@@ -154,9 +155,10 @@ fn overflow_candidates(token: &LocatedToken) -> Vec<(&LocatedExpr, SlotWidth)> {
                 }
             },
             // Accumulator-implicit 8-bit-immediate forms: `ADD A,n`,
-            // `ADC A,n`, `SBC A,n` (immediate is arg2), and the
-            // single-operand `SUB n`/`AND n`/`OR n`/`XOR n`/`CP n`
-            // (immediate is arg1). Whichever operand is a plain
+            // `ADC A,n`, `SBC A,n`, `CP A,n`, and now also `SUB A,n`/
+            // `AND A,n`/`OR A,n`/`XOR A,n` (immediate is arg2, arg1 is the
+            // optional explicit `A,` prefix - all eight mnemonics share the
+            // same two-slot shape). Whichever operand is a plain
             // `Expression` (as opposed to a register) is the one to check;
             // register-register forms like `ADD HL,DE` never have one, so
             // they're naturally left alone.

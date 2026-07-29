@@ -306,10 +306,10 @@ pub fn apply(state: &mut TrackedState, token: &LocatedToken, env: &mut Env) {
         Mnemonic::Inc | Mnemonic::Dec => apply_inc_dec(state, *mnemonic, arg1),
 
         Mnemonic::Sub | Mnemonic::And | Mnemonic::Or | Mnemonic::Xor => {
-            apply_accumulator_single_op(state, *mnemonic, arg1, env)
+            apply_accumulator_single_op(state, *mnemonic, arg1, arg2, env)
         },
 
-        Mnemonic::Cp => apply_cp(state, arg1, env),
+        Mnemonic::Cp => apply_cp(state, arg1, arg2, env),
 
         Mnemonic::Add | Mnemonic::Adc | Mnemonic::Sbc => {
             apply_accumulator_two_op(state, *mnemonic, arg1, arg2, env)
@@ -474,20 +474,27 @@ fn apply_inc_dec(state: &mut TrackedState, mnemonic: Mnemonic, arg1: Option<&Loc
     }
 }
 
-/// `SUB`/`AND`/`OR`/`XOR` - single operand, `A` implied as both destination
-/// and the other operand.
+/// `SUB`/`AND`/`OR`/`XOR` - `A` implied as both destination and the other
+/// operand. `arg1` is the parser's optional explicit `A,` prefix (`SUB A,r`/
+/// `AND A,r`/etc. vs bare `SUB r`/`AND r` - see `parse_sub`/
+/// `parse_logical_operator` in cpclib-asm); `arg2` is the actual operand.
+/// `SUB`'s real 16-bit fake form (`SUB DE,rr`/`SUB HL,rr`) never reaches
+/// here - it's already intercepted by `apply`'s own `is_fake_instruction()`
+/// early return above, so this function only ever sees the plain 8-bit
+/// case, same as `AND`/`OR`/`XOR` (which have no 16-bit form at all).
 fn apply_accumulator_single_op(
     state: &mut TrackedState,
     mnemonic: Mnemonic,
     arg1: Option<&LocatedDataAccess>,
+    arg2: Option<&LocatedDataAccess>,
     env: &mut Env
 ) {
-    let Some(arg1) = arg1
+    let Some(operand) = arg2.or(arg1)
     else {
         return;
     };
     let a = state.get8(Register8::A);
-    let b = resolve8(state, arg1, env);
+    let b = resolve8(state, operand, env);
     match mnemonic {
         Mnemonic::And | Mnemonic::Or | Mnemonic::Xor => {
             // C is always forced false by these, independent of the values.
@@ -527,14 +534,26 @@ fn apply_accumulator_single_op(
     }
 }
 
-/// `CP` - like `SUB` but never writes `A`, only `Z`/`C`.
-fn apply_cp(state: &mut TrackedState, arg1: Option<&LocatedDataAccess>, env: &mut Env) {
-    let Some(arg1) = arg1
+/// `CP` - like `SUB` but never writes `A`, only `Z`/`C`. `arg1` is the
+/// parser's optional explicit `A,` prefix (`CP A,r` vs bare `CP r` - see
+/// `parse_cp` in cpclib-asm); unlike `ADD`/`ADC`/`SBC`, `CP` has no
+/// non-accumulator form at all, so `arg1` (when present) is always
+/// `Register8::A` and carries no information `arg2` alone doesn't already
+/// give. `parse_cp` always populates `arg2` with the actual compared value,
+/// but fall back to `arg1` defensively if some other construction path ever
+/// produces the pre-fix shape (compared value in `arg1`, `arg2` empty).
+fn apply_cp(
+    state: &mut TrackedState,
+    arg1: Option<&LocatedDataAccess>,
+    arg2: Option<&LocatedDataAccess>,
+    env: &mut Env
+) {
+    let Some(compared) = arg2.or(arg1)
     else {
         return;
     };
     let a = state.get8(Register8::A);
-    let b = resolve8(state, arg1, env);
+    let b = resolve8(state, compared, env);
     match (a, b) {
         (Some(a), Some(b)) => {
             state.flag_z = Some(a == b);
@@ -867,6 +886,59 @@ mod tests {
         let s = apply_all("ld a,3\nld b,5\ncp b\n");
         assert_eq!(s.flag_z(), Some(false));
         assert_eq!(s.flag_c(), Some(true));
+    }
+
+    /// Regression test: `CP`'s parser representation was rewritten to match
+    /// `ADD`/`ADC`'s own two-slot shape (`arg1` = optional explicit `A,`
+    /// prefix, `arg2` = the mandatory compared value - see `parse_cp` in
+    /// cpclib-asm) instead of silently discarding the `A,` prefix. `CP b`
+    /// and `CP A,b` must track identically, mirroring
+    /// `implicit_accumulator_shorthand_is_not_a_no_op`'s own coverage of the
+    /// same bug class for `ADD`/`SBC`.
+    #[test]
+    fn cp_with_explicit_accumulator_prefix_tracks_identically_to_the_bare_form() {
+        let bare = apply_all("ld a,5\nld b,5\ncp b\n");
+        let explicit = apply_all("ld a,5\nld b,5\ncp a,b\n");
+        assert_eq!(bare.get8(Register8::A), explicit.get8(Register8::A));
+        assert_eq!(bare.flag_z(), explicit.flag_z());
+        assert_eq!(bare.flag_c(), explicit.flag_c());
+        assert_eq!(explicit.flag_z(), Some(true));
+        assert_eq!(explicit.flag_c(), Some(false));
+    }
+
+    /// Same regression as `cp_with_explicit_accumulator_prefix_tracks_identically_to_the_bare_form`,
+    /// for `SUB`/`AND`/`OR`/`XOR` - all four shared the identical bug (see
+    /// `parse_sub`/`parse_logical_operator` in cpclib-asm), fixed as a
+    /// follow-up once `CP` was fixed. `SUB`'s real 16-bit fake form (`SUB
+    /// DE,rr`) is unaffected - it's intercepted earlier by `apply`'s own
+    /// `is_fake_instruction()` check, never reaching
+    /// `apply_accumulator_single_op` at all.
+    #[test]
+    fn sub_and_or_xor_with_explicit_accumulator_prefix_track_identically_to_the_bare_form() {
+        for (bare, explicit) in [
+            ("sub b", "sub a,b"),
+            ("and b", "and a,b"),
+            ("or b", "or a,b"),
+            ("xor b", "xor a,b")
+        ] {
+            let bare_state = apply_all(&format!("ld a,5\nld b,3\n{bare}\n"));
+            let explicit_state = apply_all(&format!("ld a,5\nld b,3\n{explicit}\n"));
+            assert_eq!(
+                bare_state.get8(Register8::A),
+                explicit_state.get8(Register8::A),
+                "{bare:?} vs {explicit:?}"
+            );
+            assert_eq!(
+                bare_state.flag_z(),
+                explicit_state.flag_z(),
+                "{bare:?} vs {explicit:?}"
+            );
+            assert_eq!(
+                bare_state.flag_c(),
+                explicit_state.flag_c(),
+                "{bare:?} vs {explicit:?}"
+            );
+        }
     }
 
     #[test]

@@ -69,6 +69,11 @@ where Self: Debug + Sized + Sync
     fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess>;
     fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess>;
 
+    /// Accessor for instruction where A can be written optionally as a first argument
+    fn mnemonic_unique_arg(&self) -> Option<&Self::DataAccess> {
+        self.mnemonic_arg2().or_else(|| self.mnemonic_arg1())
+    }
+
     fn is_directive(&self) -> bool;
 
     fn is_module(&self) -> bool;

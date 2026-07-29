@@ -1136,12 +1136,36 @@ pub enum LocatedTokenInner {
     Undef(Z80Span),
 
     WaitNops(LocatedExpr),
+    /// The directive warning
     Warning(Option<Vec<FormattedExpr>>),
-    WarningWrapper(Box<Self>, String),
+    /// An instruction or directive that raises a warning
+    WarningWrapper(Box<Self>, beef::lean::Cow<'static, str>),
     While(LocatedExpr, LocatedListing)
 }
 
 impl LocatedTokenInner {
+    /// Look through any `WarningWrapper` layer(s) down to the real underlying token -
+    /// e.g. a fake instruction (`ADD DE,BC`) or a redundant explicit accumulator prefix
+    /// (`CP A,r`). Every accessor that inspects a token's own shape (`mnemonic`,
+    /// `mnemonic_arg1`/`_2`, `is_directive`, ...) should match against `self.unwrapped()`
+    /// rather than `self` directly, or it will never see through the wrapper.
+    #[inline]
+    pub fn unwrapped(&self) -> &Self {
+        match self {
+            Self::WarningWrapper(inner, _) => inner.unwrapped(),
+            other => other
+        }
+    }
+
+    /// Mutable counterpart of [`Self::unwrapped`].
+    #[inline]
+    pub fn unwrapped_mut(&mut self) -> &mut Self {
+        match self {
+            Self::WarningWrapper(inner, _) => inner.unwrapped_mut(),
+            other => other
+        }
+    }
+
     pub fn new_opcode(
         mne: Mnemonic,
         arg1: Option<LocatedDataAccess>,
@@ -1205,8 +1229,9 @@ impl LocatedTokenInner {
 /// Add span information for a Token.
 #[derive(Debug, PartialEq, Eq)]
 pub struct LocatedToken {
-    // The token of interest of a warning with the token of interest
-    pub(crate) inner: either::Either<LocatedTokenInner, (Box<LocatedToken>, String)>,
+    // The token of interest or a warning with the token of interest
+    pub(crate) inner:
+        either::Either<LocatedTokenInner, (Box<LocatedToken>, beef::lean::Cow<'static, str>)>,
     pub(crate) span: Z80Span
 }
 
@@ -1228,7 +1253,14 @@ macro_rules! any_delegate {
         $(
         #[inline(always)]
         fn $name(&self) -> $return {
-            self.inner.as_ref().left().unwrap().$name()
+            // Look through a warning wrapper (fake instruction, redundant
+            // explicit accumulator prefix, ...) rather than unwrapping the
+            // `Left` variant unconditionally - the wrapped token is still a
+            // real, well-shaped token for every one of these accessors.
+            match &self.inner {
+                either::Left(inner) => inner.$name(),
+                either::Right((token, _)) => token.$name()
+            }
         }
     )*
     };
@@ -1308,8 +1340,12 @@ impl ListingElement for LocatedToken {
     fn to_token(&self) -> Cow<'_, cpclib_tokens::Token> {
         match &self.inner {
             either::Either::Left(inner) => inner.to_token(),
-            either::Either::Right((_inner, _msg)) => {
-                unimplemented!("is it necessary to implement it ?")
+            either::Either::Right((inner, msg)) => {
+                let inner_token = inner.to_token().into_owned();
+                Cow::Owned(cpclib_tokens::Token::WarningWrapper(
+                    Box::new(inner_token),
+                    msg.as_ref().into()
+                ))
             }
         }
     }
@@ -1340,17 +1376,15 @@ impl ListingElement for LocatedToken {
     }
 
     fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess> {
-        match &mut self.inner {
-            either::Left(LocatedTokenInner::OpCode(_, arg1, ..)) => arg1.as_mut(),
-
+        match self.inner_mut() {
+            LocatedTokenInner::OpCode(_, arg1, ..) => arg1.as_mut(),
             _ => None
         }
     }
 
     fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess> {
-        match &mut self.inner {
-            either::Left(LocatedTokenInner::OpCode(_, _, arg2, _)) => arg2.as_mut(),
-
+        match self.inner_mut() {
+            LocatedTokenInner::OpCode(_, _, arg2, _) => arg2.as_mut(),
             _ => None
         }
     }
@@ -1666,6 +1700,9 @@ impl ListingElement for LocatedTokenInner {
                     symbols.extend(step.symbols());
                 }
             },
+            Self::WarningWrapper(t, _) => {
+                symbols.extend(t.symbols());
+            },
             // For other tokens, skip - they don't contain symbol references
             _ => {}
         }
@@ -1819,7 +1856,12 @@ impl ListingElement for LocatedTokenInner {
                 })
             },
             Self::Confined(..) => todo!(),
-            Self::WarningWrapper(..) => todo!(),
+            Self::WarningWrapper(inner, msg) => {
+                Cow::Owned(Token::WarningWrapper(
+                    Box::new(inner.to_token().into_owned()),
+                    msg.as_ref().into()
+                ))
+            },
             Self::Assign {
                 label: _,
                 expr: _,
@@ -1919,11 +1961,17 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn is_warning(&self) -> bool {
-        todo!()
+        match self {
+            LocatedTokenInner::WarningWrapper(..) => true,
+            _ => false
+        }
     }
 
     fn warning_token(&self) -> &Self {
-        todo!()
+        match self {
+            LocatedTokenInner::WarningWrapper(token, _msg) => token,
+            _ => unreachable!()
+        }
     }
 
     fn warning_message(&self) -> &str {
@@ -1942,7 +1990,7 @@ impl ListingElement for LocatedTokenInner {
     }
 
     fn mnemonic_arg1(&self) -> Option<&Self::DataAccess> {
-        match &self {
+        match self.unwrapped() {
             LocatedTokenInner::OpCode(_, arg1, ..) => arg1.as_ref(),
             _ => None
         }
@@ -2279,6 +2327,41 @@ impl LocatedToken {
     /// caller having to guess from `is_warning()`/`warning_message()`.
     pub fn is_fake_instruction(&self) -> bool {
         self.is_warning() && self.warning_message() == super::instructions::FAKE_INSTRUCTION_WARNING
+    }
+
+    /// Whether this token is specifically a redundant, explicit `A,`
+    /// accumulator prefix (`CP A,r`/`SUB A,r`/`AND A,r`/`OR A,r`/`XOR A,r`/
+    /// `ADD A,r`/`ADC A,r`, all equivalent to the shorter, implicit-`A` form)
+    /// - see `is_fake_instruction`'s own doc comment for why a dedicated
+    /// query beats guessing from `is_warning()`/`warning_message()` alone.
+    pub fn is_redundant_accumulator_prefix(&self) -> bool {
+        self.is_warning()
+            && self.warning_message() == super::instructions::REDUNDANT_ACCUMULATOR_WARNING
+    }
+
+    /// The token to treat as if it weren't warning-wrapped, for any consumer
+    /// that only cares about a token's own shape/operands (hover, overflow-
+    /// checking, register tracking, ...) and not about the warning itself.
+    /// Fake instructions are deliberately excluded - they don't have a
+    /// single well-defined real-instruction shape, so a caller that needs to
+    /// special-case them should check `is_fake_instruction()` itself first.
+    pub fn effective_token(&self) -> &Self {
+        if self.is_warning() && !self.is_fake_instruction() {
+            self.warning_token()
+        }
+        else {
+            self
+        }
+    }
+
+    /// Mutable counterpart of the `Left`/`Right`-unwrap every `ListingElement`
+    /// accessor above needs - looks through any warning wrapper(s) down to
+    /// the real underlying `LocatedTokenInner`.
+    pub(crate) fn inner_mut(&mut self) -> &mut LocatedTokenInner {
+        match &mut self.inner {
+            either::Left(inner) => inner,
+            either::Right((token, _)) => token.inner_mut()
+        }
     }
 }
 

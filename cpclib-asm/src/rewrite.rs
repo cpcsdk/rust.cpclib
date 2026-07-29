@@ -47,10 +47,14 @@ impl SingleInstructionModifier for ResetA {
 impl SingleInstructionModifier for CompareA {
     fn match(&self, token: &Token) -> bool {
         match token {
+            // `CP`'s first slot is the optional explicit `A,` prefix (`CP
+            // A,0` vs bare `CP 0` - see `parse_cp` in cpclib-asm's parser)
+            // and doesn't affect whether this optimization applies; the
+            // compared value is always in the second slot.
             Token::OpCode(
-                Mnemonic::Cp, 
-                Some(DataAccess::Expression(Expression::Value(0))), // TODO allow to compute on the fly if it is 0
-                None
+                Mnemonic::Cp,
+                _,
+                Some(DataAccess::Expression(Expression::Value(0))) // TODO allow to compute on the fly if it is 0
             ) => true,
             _ => false
         }

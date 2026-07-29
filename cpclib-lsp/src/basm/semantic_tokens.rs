@@ -19,13 +19,31 @@ impl AssemblyAnalyzer {
         let directives = &*DIRECTIVE_SET;
         let registers = &*REGISTER_SET;
 
-        // Best-effort AST parse to identify EQU / assign / macro / module definition names
+        // Best-effort AST parse to identify EQU / assign / macro / module
+        // definition names. Still needed even though the AST walker below
+        // also claims these names' own *definition* sites directly: the old
+        // scanner (still the fallback for everything the walker doesn't
+        // claim - e.g. a label/EQU/MACRO/MODULE name *referenced* inside a
+        // DB/DW/ORG/DEFS-style data expression, which the walker
+        // deliberately doesn't walk) still needs these sets to classify
+        // such a reference correctly instead of falling through to a plain
+        // TT_LABEL guess.
         let mut equ_names: HashSet<String> = HashSet::new();
         let mut assign_names: HashSet<String> = HashSet::new();
         let mut macro_names: HashSet<String> = HashSet::new();
         let mut module_names: HashSet<String> = HashSet::new();
+        // AST-derived tokens (mnemonics, registers, labels, EQU/ASSIGN/
+        // MACRO/MODULE names, numeric literals, ...) - real spans from the
+        // parsed listing, wherever the AST has reliable span data. `Err`
+        // here means the parse degraded enough not to trust (matches this
+        // function's own pre-existing `if let Ok(...)` convention) -
+        // `LocatedListing`'s `Deref`/`.iter()` genuinely panics ("No
+        // listing available.") for the failure `ParseResult` variants, so
+        // this gate is required, not just conservative. A broken document
+        // falls back to 100% raw-text scanning below, exactly as before.
+        let mut raw: Vec<RawSemanticToken> = Vec::new();
         if let Ok(listing) = self.parse_document(document) {
-            for token in listing.iter() {
+            for token in super::token::flatten_listing(listing.iter()) {
                 if token.is_equ() {
                     equ_names.insert(token.equ_symbol().to_uppercase());
                 }
@@ -39,10 +57,10 @@ impl AssemblyAnalyzer {
                     module_names.insert(token.module_name().to_uppercase());
                 }
             }
+            raw = super::semantic_tokens_ast::ast_semantic_tokens(&listing);
         }
+        let claimed_by_line = super::semantic_tokens_ast::claimed_ranges_by_line(&raw);
 
-        // Raw tokens collected in absolute (not delta-encoded) coordinates.
-        let mut raw: Vec<RawSemanticToken> = Vec::new();
         let text = document.text();
 
         // Carries an unterminated `/* ...` across the per-line loop below,
@@ -85,6 +103,7 @@ impl AssemblyAnalyzer {
             let line_u = line_idx as u32;
             let bytes = line.as_bytes();
             let mut col: usize = 0;
+            let line_claims = claimed_by_line.get(&line_u);
 
             if in_block_comment {
                 match line.find("*/") {
@@ -116,6 +135,18 @@ impl AssemblyAnalyzer {
             }
 
             while col < bytes.len() {
+                // A claimed range means the AST walker already pushed a
+                // token covering these columns - skip straight past it
+                // rather than re-classifying from raw bytes.
+                if let Some(ranges) = line_claims
+                    && let Some(&(_, end)) = ranges
+                        .iter()
+                        .find(|&&(s, e)| s <= col as u32 && (col as u32) < e)
+                {
+                    col = end as usize;
+                    continue;
+                }
+
                 let c = bytes[col];
 
                 // Whitespace — skip
@@ -699,6 +730,101 @@ mod tests {
         );
     }
 
+    /// Regression test for a real bug caught by the corpus differential
+    /// pass (not by any hand-written test): `CP A, C`'s optional `A,`
+    /// prefix is silently discarded by the parser before
+    /// `mnemonic_arg1()`'s span even starts (`preceded(opt((parse_register_a,
+    /// parse_comma)), ...)` in `cpclib-asm`), so bounding the mnemonic's
+    /// claimed width by "distance to the first operand's span" swallowed
+    /// "CP A, " into one bogus keyword token. `opcode_tokens` no longer
+    /// does that at all - the mnemonic is always just its own leading word.
+    #[test]
+    fn cp_with_the_two_operand_implicit_accumulator_form_does_not_swallow_the_prefix() {
+        let d = doc("\tcp a, c\n");
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        assert!(
+            decoded.contains(&(0, 1, 2, TT_KEYWORD)),
+            "expected a 2-char \"cp\" keyword token, not one swallowing the operands: {decoded:?}"
+        );
+        assert!(
+            decoded
+                .iter()
+                .any(|&(_, c, l, ty)| ty == TT_VARIABLE && c == 4 && l == 1),
+            "expected the implicit \"a\" to still be tokenized as its own register: {decoded:?}"
+        );
+        assert!(
+            decoded
+                .iter()
+                .any(|&(_, c, l, ty)| ty == TT_VARIABLE && c == 7 && l == 1),
+            "expected \"c\" (the real compare target) as its own register: {decoded:?}"
+        );
+    }
+
+    /// Regression test: `RET Z`'s `FlagTest` span must cover only the flag
+    /// letter, not trailing whitespace after it - `parse_word` (used inside
+    /// `parse_flag_test`) deliberately consumes trailing whitespace as part
+    /// of its own contract, so an outer `.with_taken()` around it (the
+    /// original implementation) produced a span like `"Z\t\t"` instead of
+    /// `"Z"`. Fixed at the source in `cpclib-asm` (`parse_flag_test_located`
+    /// captures `parse_word`'s own already-correctly-scoped span directly,
+    /// rather than re-deriving a wider one) - caught by the corpus
+    /// differential pass against a real cruncher asset, not a hand-written
+    /// test.
+    #[test]
+    fn ret_z_flag_test_does_not_include_trailing_whitespace() {
+        let d = doc("\tret\tz\t\t\n");
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        assert!(
+            decoded
+                .iter()
+                .any(|&(_, _, l, ty)| ty == TT_VARIABLE && l == 1),
+            "expected a single-character \"z\" flag-test token, not padded with trailing \
+             whitespace: {decoded:?}"
+        );
+    }
+
+    /// Regression test: `(C)`/`(HL)`-shaped memory/port addressing modes
+    /// (`LocatedDataAccess::PortC`/`MemoryRegister16`) deliberately have a
+    /// span covering the *whole* parenthesized form in the real AST (unlike
+    /// a plain register reference) - this is intentional parser design, not
+    /// a bug, so the walker must NOT claim them as a single token (that
+    /// would incorrectly recolor the parens themselves), leaving them
+    /// entirely to the old scanner instead. Caught by the corpus
+    /// differential pass (`OUT (C),C`), not a hand-written test.
+    #[test]
+    fn out_c_c_does_not_swallow_the_parens_into_the_register_token() {
+        let d = doc("\tout (c), c\n");
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        assert!(
+            !decoded
+                .iter()
+                .any(|&(_, _, l, ty)| ty == TT_VARIABLE && l == 3),
+            "no register token should span 3 chars here (that would mean the parens got \
+             swallowed into it): {decoded:?}"
+        );
+    }
+
+    /// Regression test: a symbol reference (`LocatedExpr::Label`) inside an
+    /// EQU/ASSIGN value expression must stay unclaimed by the AST walker,
+    /// not blanket-colored as TT_LABEL - it could just as easily be a
+    /// reference to *another* EQU/ASSIGN/MACRO/MODULE name, which only the
+    /// old scanner's still-alive `equ_names`/`assign_names`/etc. lookup
+    /// sets can currently disambiguate correctly. Caught by the corpus
+    /// differential pass (`CPT=CPT-1`, where the right-hand `CPT` reference
+    /// was wrongly reclassified from the correct TT_ENUM_MEMBER down to a
+    /// blanket TT_LABEL), not a hand-written test.
+    #[test]
+    fn a_label_expression_referencing_an_assign_name_is_still_classified_by_the_old_scanner() {
+        let d = doc("CPT=3\nCPT=CPT-1\n");
+        let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        // The right-hand "CPT" on line 1 (0-indexed) starts at column 4.
+        assert!(
+            decoded.contains(&(1, 4, 3, TT_ENUM_MEMBER)),
+            "expected the CPT reference to be classified as an ENUM_MEMBER (an ASSIGN name), \
+             not a blanket LABEL: {decoded:?}"
+        );
+    }
+
     #[test]
     fn locomotive_block_still_gets_basic_tokens_when_all_lines_is_lazily_built() {
         let text = "ORG 0x8000\nLOCOMOTIVE\n10 PRINT \"A\"\nENDLOCOMOTIVE\n";
@@ -775,6 +901,78 @@ mod tests {
         assert!(
             decoded.contains(&(0, 0, "; just a comment".len() as u32, TT_COMMENT)),
             "{decoded:?}"
+        );
+    }
+
+    /// Corpus sanity guard for the AST walker (`semantic_tokens_ast.rs`):
+    /// runs `semantic_tokens()` over every real `.asm`/`.rasm` file findable
+    /// in this workspace and asserts no token is absurd - specifically, no
+    /// token's `length` exceeds the line it starts on (which would mean a
+    /// span leaked across a newline, violating the LSP semantic-tokens
+    /// protocol's inherently single-line encoding). This is exactly the
+    /// shape of bug a hand-written unit test is unlikely to ever stumble
+    /// into by chance: a real firmware asset (`deshrink.asm`) has a `$`
+    /// (current-address) expression nested inside an `IFNDEF` block whose
+    /// `LocatedExpr::Value` span - for reasons not chased down in
+    /// `cpclib-asm` itself, since `$` is inherently unresolvable at parse
+    /// time - covered almost the entire rest of the file; only running
+    /// against real, large, varied source caught it (`span_token`'s
+    /// newline/empty-span guard is what actually prevents it from being
+    /// emitted). Originally written as a differential test against a frozen
+    /// copy of the pre-rewrite scanner while migrating; kept on in this
+    /// lighter form rather than maintaining a second, permanently-frozen
+    /// implementation of the same feature indefinitely.
+    #[test]
+    fn semantic_tokens_never_produces_a_token_wider_than_its_own_line_across_the_real_corpus() {
+        let roots = [
+            "../cpclib-asm/assets",
+            "../cpclib-rasm-basm-tests/tests/asm"
+        ];
+        let mut total_files = 0usize;
+
+        for root in roots {
+            let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(root);
+            if !root.exists() {
+                continue;
+            }
+            for entry in walkdir::WalkDir::new(&root)
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.path()
+                        .extension()
+                        .is_some_and(|ext| ext == "asm" || ext == "rasm")
+                })
+            {
+                let Ok(text) = std::fs::read_to_string(entry.path())
+                else {
+                    continue;
+                };
+                total_files += 1;
+                let d = doc(&text);
+                let lines: Vec<&str> = text.lines().collect();
+                // A fresh analyzer per file - `parse_document` caches by
+                // (uri, version) only, and `doc()` always uses the same
+                // synthetic URI/version, so reusing one analyzer across
+                // files would silently keep serving a stale cached parse.
+                let decoded = decode(&AssemblyAnalyzer::new().semantic_tokens(&d));
+                for (line, col, len, token_type) in decoded {
+                    let line_len = lines
+                        .get(line as usize)
+                        .map(|l| l.len() as u32)
+                        .unwrap_or(0);
+                    assert!(
+                        col + len <= line_len,
+                        "{}: token type {token_type} at line {line} col {col} len {len} \
+                         extends past the line's own length {line_len}",
+                        entry.path().display()
+                    );
+                }
+            }
+        }
+        assert!(
+            total_files > 50,
+            "expected a real corpus, only found {total_files} files"
         );
     }
 }

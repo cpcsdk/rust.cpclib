@@ -350,6 +350,127 @@ mod test_super {
         assert_eq!(bytes.len(), 4);
         assert_eq!(bytes, vec![1, 2, 3, 4]);
     }
+
+    /// Regression test: `CP`'s parser representation was rewritten to match
+    /// `ADD`/`ADC`'s own established two-slot shape (`arg1` = optional
+    /// explicit `A,` prefix, `arg2` = the mandatory compared value) instead
+    /// of silently discarding the `A,` prefix - `CP r` and `CP A,r` are the
+    /// same real Z80 instruction and must assemble to byte-identical output
+    /// regardless of which form was written. Also covers the non-register
+    /// (`CP n`) and `(HL)` operand forms, since the byte-size table
+    /// (`cpclib-asm/src/implementation/tokens.rs`) and codegen
+    /// (`assembler/mod.rs::assemble_cp`) both had to be updated to read the
+    /// compared value from its new slot.
+    #[test]
+    fn cp_with_and_without_the_explicit_accumulator_prefix_assemble_identically() {
+        for (bare, explicit) in [
+            ("cp c", "cp a, c"),
+            ("cp 1", "cp a, 1"),
+            ("cp (hl)", "cp a, (hl)")
+        ] {
+            let bare_bytes =
+                assemble(bare).unwrap_or_else(|e| panic!("Unable to assemble {bare:?}: {e}"));
+            let explicit_bytes = assemble(explicit)
+                .unwrap_or_else(|e| panic!("Unable to assemble {explicit:?}: {e}"));
+            assert_eq!(
+                bare_bytes, explicit_bytes,
+                "{bare:?} and {explicit:?} must assemble identically"
+            );
+            assert!(!bare_bytes.is_empty());
+        }
+    }
+
+    /// Same regression as `cp_with_and_without_the_explicit_accumulator_prefix_assemble_identically`,
+    /// for `SUB`/`AND`/`OR`/`XOR` - all four had the identical bug (`parse_sub`/
+    /// `parse_logical_operator` in cpclib-asm silently discarded the optional
+    /// `A,` prefix), found and fixed as a follow-up once `CP` was fixed.
+    #[test]
+    fn sub_and_or_xor_with_and_without_the_explicit_accumulator_prefix_assemble_identically() {
+        for (bare, explicit) in [
+            ("sub c", "sub a, c"),
+            ("sub 1", "sub a, 1"),
+            ("sub (hl)", "sub a, (hl)"),
+            ("and c", "and a, c"),
+            ("and 1", "and a, 1"),
+            ("or c", "or a, c"),
+            ("or 1", "or a, 1"),
+            ("xor c", "xor a, c"),
+            ("xor 1", "xor a, 1")
+        ] {
+            let bare_bytes =
+                assemble(bare).unwrap_or_else(|e| panic!("Unable to assemble {bare:?}: {e}"));
+            let explicit_bytes = assemble(explicit)
+                .unwrap_or_else(|e| panic!("Unable to assemble {explicit:?}: {e}"));
+            assert_eq!(
+                bare_bytes, explicit_bytes,
+                "{bare:?} and {explicit:?} must assemble identically"
+            );
+            assert!(!bare_bytes.is_empty());
+        }
+    }
+
+    /// Regression test: `SUB`'s real (fake-instruction) 16-bit form
+    /// (`SUB DE,rr`/`SUB HL,rr`) must keep working after `parse_sub` was
+    /// restructured to also carry the optional 8-bit `A,` prefix in the same
+    /// `arg1` slot - `assemble_sub` now has to distinguish "arg1 is DE/HL
+    /// itself" (the fake 16-bit form) from "arg1 is the optional A prefix"
+    /// (the normal 8-bit form) before deciding which path to take.
+    #[test]
+    fn sub_16bit_fake_instruction_still_assembles() {
+        let bytes = assemble("sub hl, bc\n")
+            .unwrap_or_else(|e| panic!("Unable to assemble the fake SUB HL,BC form: {e}"));
+        assert!(!bytes.is_empty());
+
+        let bytes = assemble("sub de, bc\n")
+            .unwrap_or_else(|e| panic!("Unable to assemble the fake SUB DE,BC form: {e}"));
+        assert!(!bytes.is_empty());
+    }
+
+    /// The explicit `A,` accumulator prefix on `ADD`/`ADC`/`SBC`/`CP`/`SUB`/
+    /// `AND`/`OR`/`XOR` is redundant, real, valid Z80 syntax - the parser
+    /// should warn about it (`LocatedToken::is_redundant_accumulator_prefix`)
+    /// without treating it as a fake instruction, and the bare (implicit-`A`)
+    /// form must never be flagged.
+    #[test]
+    fn explicit_accumulator_prefix_is_flagged_as_redundant_not_fake() {
+        let code = "org 0x4000\ncp a, c\ncp c\nsub a, c\nadd a, c\nadd hl, de\nret\n";
+        let listing = parser::parse_z80_str(code).unwrap();
+
+        let mut warned = listing.iter().filter(|t| t.is_warning());
+
+        let cp_explicit = warned.next().expect("cp a, c should be warning-wrapped");
+        assert!(
+            cp_explicit.is_redundant_accumulator_prefix(),
+            "{cp_explicit:?}"
+        );
+        assert!(!cp_explicit.is_fake_instruction(), "{cp_explicit:?}");
+
+        let sub_explicit = warned.next().expect("sub a, c should be warning-wrapped");
+        assert!(
+            sub_explicit.is_redundant_accumulator_prefix(),
+            "{sub_explicit:?}"
+        );
+
+        let add_explicit = warned.next().expect("add a, c should be warning-wrapped");
+        assert!(
+            add_explicit.is_redundant_accumulator_prefix(),
+            "{add_explicit:?}"
+        );
+
+        // `add hl, de` is a real, non-redundant, non-fake register-pair form -
+        // never warning-wrapped at all.
+        assert!(
+            warned.next().is_none(),
+            "no further warning-wrapped tokens expected"
+        );
+
+        let cp_bare = listing
+            .iter()
+            .find(|t| !t.is_warning() && t.mnemonic() == Some(&Mnemonic::Cp))
+            .expect("cp c should be a plain, non-warning token");
+        assert!(!cp_bare.is_redundant_accumulator_prefix(), "{cp_bare:?}");
+    }
+
     #[test]
     fn fake_ld_instruction_warning_keeps_a_structured_location() {
         // Regression test: `ld hl, de` is a "fake" instruction (accepted by

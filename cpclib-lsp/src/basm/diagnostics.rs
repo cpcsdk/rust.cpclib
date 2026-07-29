@@ -791,6 +791,32 @@ mod tests {
         assert!(diagnostics_for(text).is_empty());
     }
 
+    /// The redundant explicit `A,` accumulator prefix (`CP A,r`, and
+    /// likewise for `ADD`/`ADC`/`SBC`/`SUB`/`AND`/`OR`/`XOR`) is real, valid
+    /// Z80 syntax - unlike a fake instruction, it needs no special
+    /// `enrich_*_diagnostics` pass at all: it already surfaces automatically
+    /// through `collect_assembler_warnings`'s generic walk over
+    /// `env.warnings()`, exactly like any other real assembler warning.
+    #[test]
+    fn redundant_accumulator_prefix_is_reported_as_a_warning_not_an_error() {
+        let text = "org 0x4000\n cp a, c\n ret\n";
+        let diags = diagnostics_for(text);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].severity, Some(DiagnosticSeverity::WARNING));
+        assert!(
+            diags[0].message.contains("not mandatory"),
+            "{:?}",
+            diags[0].message
+        );
+        assert_eq!(diags[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn the_bare_implicit_accumulator_form_is_not_reported() {
+        let text = "org 0x4000\n cp c\n ret\n";
+        assert!(diagnostics_for(text).is_empty());
+    }
+
     #[test]
     fn immediate_overflow_into_an_8bit_register_is_a_warning() {
         let text = "org 0x4000\n ld b, 300\n ret\n";

@@ -195,6 +195,12 @@ impl TokenExt for Token {
     #[allow(clippy::match_same_arms)]
     fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
         let duration = match self {
+            // A warning-wrapped token (fake instruction, redundant explicit
+            // accumulator prefix, ...) has the same duration as the real
+            // instruction it wraps - the warning itself has no effect on
+            // timing.
+            Token::WarningWrapper(inner, _) => return inner.estimated_duration(),
+
             Token::Assert(..)
             | Token::Breakpoint { .. }
             | Token::Comment(_)
@@ -245,8 +251,10 @@ impl TokenExt for Token {
                         }
                     },
 
+                    // `arg1` is the optional explicit `A,` prefix and never
+                    // affects the encoded size; `arg2` is the real operand.
                     &Mnemonic::And | &Mnemonic::Or | &Mnemonic::Xor => {
-                        match arg1 {
+                        match arg2.as_ref().or(arg1.as_ref()) {
                             Some(DataAccess::Register8(_)) => 1,
                             Some(DataAccess::IndexRegister8(_)) => 2,
                             Some(DataAccess::Expression(_)) => 2,
@@ -264,8 +272,16 @@ impl TokenExt for Token {
                         }
                     },
 
+                    // `arg1` is the optional explicit `A,` prefix (`CP A,r`
+                    // vs bare `CP r` - see `parse_cp` in cpclib-asm's
+                    // parser) and never affects the encoded size; `arg2` is
+                    // the compared value that does. `parse_cp` always
+                    // populates `arg2`, but fall back to `arg1` defensively
+                    // rather than panicking if some other construction path
+                    // ever produces the pre-fix shape (compared value in
+                    // `arg1`, `arg2` empty).
                     &Mnemonic::Cp => {
-                        match arg1 {
+                        match arg2.as_ref().or(arg1.as_ref()) {
                             Some(DataAccess::Register8(_)) => 1,
                             Some(DataAccess::IndexRegister8(_)) => 2,
                             Some(DataAccess::Expression(_)) => 2,
@@ -591,8 +607,14 @@ impl TokenExt for Token {
                         }
                     },
 
+                    // `arg1` is the optional explicit `A,` prefix for the
+                    // normal 8-bit form (never affects encoding) - `arg2`
+                    // is the real operand. The fake 16-bit form (`SUB
+                    // DE,rr`/`SUB HL,rr`) isn't handled by this table at
+                    // all (pre-existing gap, unchanged by this fix - it
+                    // would already panic here via the `_` arm).
                     &Mnemonic::Sub => {
-                        match arg1 {
+                        match arg2.as_ref().or(arg1.as_ref()) {
                             Some(DataAccess::Register8(_)) => 1,
                             Some(DataAccess::IndexRegister8(_)) => 2,
                             Some(DataAccess::Expression(_)) => 2,
@@ -676,6 +698,10 @@ impl TokenExt for Token {
 
     fn fallback_number_of_bytes(&self) -> Result<usize, String> {
         match self {
+            // A warning-wrapped token (fake instruction, redundant explicit
+            // accumulator prefix, ...) has the same byte size as the real
+            // instruction it wraps.
+            Self::WarningWrapper(inner, _) => inner.fallback_number_of_bytes(),
             Self::OpCode(mne, arg1, arg2, arg3) => {
                 let arg1 = arg1.as_ref().map(|arg| arg.replace_expressions_by_0());
                 let arg2 = arg2.as_ref().map(|arg| arg.replace_expressions_by_0());

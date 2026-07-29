@@ -113,16 +113,16 @@ impl AssemblyAnalyzer {
                     format_fake_instruction_hover(&full)
                         .unwrap_or_else(|| format!("**{}** — fake instruction", word_upper))
                 },
-                // A real, non-warning-wrapped token: resolve its operands
-                // (when they're plain expressions, e.g. a literal or an
-                // `EQU`-defined symbol) so the pseudocode can show the
-                // actual value instead of a generic placeholder. Guard on
-                // `!is_warning()` specifically (not just "didn't match the
-                // fake-instruction arm above") - any other warning-wrapped
-                // token (e.g. `WRITE DIRECT` in `directives.rs`) hits the
-                // exact same `mnemonic()`/`mnemonic_arg1()` panic landmine
-                // `overflow.rs` already had to guard against.
-                Some(token) if !token.is_warning() => {
+                // Any other token, warning-wrapped or not: resolve its
+                // operands (when they're plain expressions, e.g. a literal
+                // or an `EQU`-defined symbol) so the pseudocode can show the
+                // actual value instead of a generic placeholder.
+                // `mnemonic()`/`mnemonic_arg1()`/`mnemonic_arg2()` already
+                // look through any non-fake-instruction wrapper (e.g. the
+                // redundant explicit `A,` accumulator prefix, or `WRITE
+                // DIRECT` in `directives.rs`) transparently, so this covers
+                // both real, non-warned tokens and those uniformly.
+                Some(token) if !token.is_fake_instruction() => {
                     let (_, ops_text) = super::timing::split_head(&full);
                     let src_ops = super::timing::parse_ops(ops_text);
                     let mut resolved: Vec<Option<i32>> = vec![None; src_ops.len()];

@@ -866,7 +866,30 @@ pub enum Token {
     WaitNops(Expr),
     /// Emit a warning message (like PRINT but not fatal)
     Warning(Option<Vec<FormattedExpr>>),
+    WarningWrapper(Box<Self>, SmolStr),
     While(Expr, Listing)
+}
+
+impl Token {
+    /// Look through any `WarningWrapper` layer(s) down to the real underlying token -
+    /// e.g. a fake instruction (`ADD DE,BC`) or a redundant explicit accumulator prefix
+    /// (`CP A,r`). Every accessor that inspects a token's own shape (`mnemonic`,
+    /// `mnemonic_arg1`/`_2`, `is_directive`, ...) should match against `self.unwrapped()`
+    /// rather than `self` directly, or it will never see through the wrapper.
+    pub fn unwrapped(&self) -> &Self {
+        match self {
+            Self::WarningWrapper(inner, _) => inner.unwrapped(),
+            other => other
+        }
+    }
+
+    /// Mutable counterpart of [`Self::unwrapped`].
+    pub fn unwrapped_mut(&mut self) -> &mut Self {
+        match self {
+            Self::WarningWrapper(inner, _) => inner.unwrapped_mut(),
+            other => other
+        }
+    }
 }
 // impl Clone for Token {
 // fn clone(&self) -> Self {

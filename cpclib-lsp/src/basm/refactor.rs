@@ -2,6 +2,7 @@
 //! join statements onto one line, split multi-statement lines.
 
 use cpclib_asm::unused_bindings::UnusedBindingKind;
+use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
@@ -78,6 +79,68 @@ impl AssemblyAnalyzer {
             });
         }
         None
+    }
+
+    /// Offer to strip a redundant, explicit `A,` accumulator prefix
+    /// (`CP A,r` → `CP r`, and likewise for `ADD`/`ADC`/`SBC`/`SUB`/`AND`/
+    /// `OR`/`XOR`) when the cursor/selection sits on the instruction's own
+    /// line. Same cheap, synchronous, same-file, re-derive-fresh-from-
+    /// `(document, range)` shape as `unused_repeat_counter_removal_action`
+    /// above - there's no cross-file impact here at all, since the prefix
+    /// is purely local to the one instruction that carries it.
+    pub(super) fn redundant_accumulator_prefix_removal_action(
+        &self,
+        document: &Document,
+        range: Range
+    ) -> Option<CodeAction> {
+        let listing = self.parse_document(document).ok()?;
+        let cursor_line = range.start.line;
+
+        let token = super::token::flatten_listing(listing.iter()).find(|t| {
+            super::token::span_line(*t) == cursor_line && t.is_redundant_accumulator_prefix()
+        })?;
+
+        // Delete from the start of the redundant `A` operand through to the
+        // start of the real operand - this removes "A" + the comma + the
+        // whitespace between them in one go, leaving the whitespace that
+        // was already between the mnemonic and `A` in place (`CP A, C` →
+        // `CP C`, not `CPC` or `CP  C`).
+        let arg1_span = token.mnemonic_arg1()?.span();
+        let arg2_span = token.mnemonic_arg2()?.span();
+        let (arg1_line_1based, arg1_col_1based) = arg1_span.relative_line_and_column();
+        let (arg2_line_1based, arg2_col_1based) = arg2_span.relative_line_and_column();
+        if arg1_line_1based != arg2_line_1based {
+            // Not a realistic shape for this instruction family, but guard
+            // against it defensively rather than build a cross-line edit.
+            return None;
+        }
+        let line0 = arg1_line_1based.saturating_sub(1) as u32;
+        let line_text = document.line(line0 as usize).unwrap_or_default();
+        let start_char =
+            byte_offset_to_utf16_col(&line_text, arg1_col_1based.saturating_sub(1)) as u32;
+        let end_char =
+            byte_offset_to_utf16_col(&line_text, arg2_col_1based.saturating_sub(1)) as u32;
+        let edit_range = Range {
+            start: Position {
+                line: line0,
+                character: start_char
+            },
+            end: Position {
+                line: line0,
+                character: end_char
+            }
+        };
+
+        Some(CodeAction {
+            title: "Remove redundant explicit 'A,' accumulator prefix".to_string(),
+            kind: Some(CodeActionKind::QUICKFIX),
+            edit: Some(single_file_edit(
+                document.uri.clone(),
+                edit_range,
+                String::new()
+            )),
+            ..Default::default()
+        })
     }
 
     /// Offer to remove an unused MACRO/FUNCTION parameter when the
@@ -564,5 +627,121 @@ mod unused_macro_or_function_parameter_removal_tests {
             a.title == "Remove unused parameter 'c' and update all call sites"
                 && a.kind == Some(CodeActionKind::QUICKFIX)
         }));
+    }
+}
+
+#[cfg(test)]
+mod redundant_accumulator_prefix_removal_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn cursor(line: u32, character: u32) -> Range {
+        Range {
+            start: Position { line, character },
+            end: Position { line, character }
+        }
+    }
+
+    #[test]
+    fn offers_the_quickfix_with_a_correct_removal_edit_for_cp() {
+        let d = doc("org 0x4000\ncp a, c\nret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let action = analyzer
+            .redundant_accumulator_prefix_removal_action(&d, cursor(1, 3))
+            .expect("expected the quickfix");
+        assert_eq!(
+            action.title,
+            "Remove redundant explicit 'A,' accumulator prefix"
+        );
+        assert_eq!(action.kind, Some(CodeActionKind::QUICKFIX));
+        let edit = action.edit.expect("expected an edit");
+        let text_edits = &edit.changes.expect("expected changes")[&d.uri];
+        assert_eq!(text_edits.len(), 1);
+        assert_eq!(text_edits[0].new_text, "");
+        assert_eq!(
+            text_edits[0].range,
+            Range {
+                start: Position {
+                    line: 1,
+                    character: 3
+                },
+                end: Position {
+                    line: 1,
+                    character: 6
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn works_for_sub_and_add_too() {
+        let analyzer = AssemblyAnalyzer::new();
+        for src in ["org 0x4000\nsub a, c\nret\n", "org 0x4000\nadd a, c\nret\n"] {
+            let d = doc(src);
+            assert!(
+                analyzer
+                    .redundant_accumulator_prefix_removal_action(&d, cursor(1, 3))
+                    .is_some(),
+                "{src:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn no_quickfix_for_the_bare_implicit_accumulator_form() {
+        let d = doc("org 0x4000\ncp c\nret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(
+            analyzer
+                .redundant_accumulator_prefix_removal_action(&d, cursor(1, 3))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn no_quickfix_for_a_genuine_fake_instruction() {
+        // `sub hl, bc` is the real fake-16-bit-form warning, not a redundant
+        // accumulator prefix - must not be offered this quickfix.
+        let d = doc("org 0x4000\nsub hl, bc\nret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(
+            analyzer
+                .redundant_accumulator_prefix_removal_action(&d, cursor(1, 3))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn is_wired_into_code_actions() {
+        let d = doc("org 0x4000\ncp a, c\nret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, cursor(1, 3));
+        assert!(actions.iter().any(|a| {
+            a.title == "Remove redundant explicit 'A,' accumulator prefix"
+                && a.kind == Some(CodeActionKind::QUICKFIX)
+        }));
+    }
+
+    #[test]
+    fn applying_the_edit_produces_the_bare_form() {
+        let d = doc("org 0x4000\ncp a, c\nret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let action = analyzer
+            .redundant_accumulator_prefix_removal_action(&d, cursor(1, 3))
+            .expect("expected the quickfix");
+        let edit = action.edit.expect("expected an edit");
+        let text_edits = &edit.changes.expect("expected changes")[&d.uri];
+        let line = "cp a, c";
+        let r = &text_edits[0].range;
+        let new_line = format!(
+            "{}{}{}",
+            &line[..r.start.character as usize],
+            text_edits[0].new_text,
+            &line[r.end.character as usize..]
+        );
+        assert_eq!(new_line, "cp c");
     }
 }

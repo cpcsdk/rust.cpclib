@@ -26,9 +26,10 @@ use super::registers::{
 };
 use crate::{
     InnerZ80Span, LocatedExpr, LocatedToken, LocatedTokenInner, Z80ParserError, hashed_choice,
-    my_space0, my_space1, parse_comma, parse_flag_test, parse_register_a, parse_register_af,
-    parse_register_bc, parse_register_c, parse_register_ix, parse_register_ixh, parse_register_ixl,
-    parse_register_iy, parse_register_iyh, parse_register_iyl, parse_value, parse_word
+    my_space0, my_space1, parse_comma, parse_flag_test_located, parse_register_a,
+    parse_register_af, parse_register_bc, parse_register_c, parse_register_ix, parse_register_ixh,
+    parse_register_ixl, parse_register_iy, parse_register_iyh, parse_register_iyl, parse_value,
+    parse_word
 };
 
 include!(concat!(env!("OUT_DIR"), "/instructions_names_generated.rs"));
@@ -43,6 +44,36 @@ include!(concat!(env!("OUT_DIR"), "/instructions_names_generated.rs"));
 /// signal.
 pub const FAKE_INSTRUCTION_WARNING: &str =
     "This is a fake instruction assembled using several opcodes";
+
+/// See `FAKE_INSTRUCTION_WARNING`'s own doc comment for why this is a
+/// constant rather than a repeated string literal -
+/// `LocatedToken::is_redundant_accumulator_prefix` checks against it
+/// directly.
+pub const REDUNDANT_ACCUMULATOR_WARNING: &str =
+    "The explicit 'A,' accumulator prefix is not mandatory here";
+
+/// Wrap `token` in whichever of the fake-instruction / redundant-explicit-
+/// accumulator-prefix warnings applies, given the parsed optional `first`
+/// slot (the register - if any - written before the comma) - the two are
+/// mutually exclusive (a fake instruction's `first` is always `DE`/`HL`/an
+/// index register, never plain `A`), so at most one ever fires. Shared by
+/// every `ADD`/`ADC`/`SBC`/`CP`/`SUB`/`AND`/`OR`/`XOR` parser, all of which
+/// share this exact optional-accumulator-prefix shape.
+fn wrap_optional_accumulator_warning(
+    token: LocatedTokenInner,
+    is_redundant_a: bool,
+    is_fake: bool
+) -> LocatedTokenInner {
+    if is_fake {
+        LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into())
+    }
+    else if is_redundant_a {
+        LocatedTokenInner::WarningWrapper(Box::new(token), REDUNDANT_ACCUMULATOR_WARNING.into())
+    }
+    else {
+        token
+    }
+}
 
 /// Parse any opcode having no argument
 pub fn parse_opcode_no_arg(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80ParserError> {
@@ -478,31 +509,35 @@ pub fn parse_res_set_bit(
     }
 }
 
-/// Parse CP tokens
+/// Parse CP tokens. Consistent with `parse_add_or_adc`'s shape: `arg1` is
+/// the optional explicit `A,` prefix (`Some` when written, `None` when
+/// implicit - `CP A,r` and `CP r` are the same instruction), `arg2` is the
+/// mandatory compared value. Unlike `ADD`/`ADC`, `CP` has no non-accumulator
+/// form at all, so there's no branching on `arg1`'s own kind here.
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_cp(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    //   preceded(
-    //    parse_word(b"CP"),
+    let first = opt(terminated(parse_register_a, parse_comma)).parse_next(input)?;
 
-    preceded(
-        opt((parse_register_a, parse_comma)),
-        cut_err(
-            alt((
-                parse_register8,
-                parse_indexregister8,
-                parse_hl_address,
-                parse_indexregister_with_index,
-                parse_expr
-            ))
-            .context(StrContext::Label("CP: wrong argument"))
-        )
-        .map(
-            //   )
-            |operand| LocatedTokenInner::new_opcode(Mnemonic::Cp, Some(operand), None)
-        )
+    let second = cut_err(
+        alt((
+            parse_register8,
+            parse_indexregister8,
+            parse_hl_address,
+            parse_indexregister_with_index,
+            parse_expr
+        ))
+        .context(StrContext::Label("CP: wrong argument"))
     )
-    .parse_next(input)
+    .parse_next(input)?;
+
+    let is_redundant_a = first.as_ref().is_some_and(|f| f.is_register_a());
+    let token = LocatedTokenInner::new_opcode(Mnemonic::Cp, first, Some(second));
+    Ok(wrap_optional_accumulator_warning(
+        token,
+        is_redundant_a,
+        false
+    ))
 }
 
 /// ...
@@ -516,72 +551,83 @@ pub fn parse_djnz(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z8
 
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
-/// ...
+/// Parses `AND`/`OR`/`XOR`. Consistent with `parse_add_or_adc`/`parse_cp`'s
+/// shape: `arg1` is the optional explicit `A,` prefix (`Some` when written,
+/// `None` when implicit - `AND A,r` and `AND r` are the same instruction),
+/// `arg2` is the mandatory real operand. None of these three has a
+/// non-accumulator (16-bit) form at all, so there's no branching on `arg1`'s
+/// own kind, unlike `SUB`/`ADD`/`ADC`.
 pub fn parse_logical_operator(
     operator: Mnemonic
 ) -> impl Fn(&mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
-        // we optionaly allow a, as a first register
-        let operand = preceded(
-            opt((parse_register_a, my_space0, parse_comma, my_space0)),
-            alt((
-                parse_register8,
-                parse_indexregister8,
-                parse_hl_address,
-                parse_indexregister_with_index,
-                parse_expr
-            ))
-        )
-        .context(StrContext::Label("Wrong logical operand"))
-        .parse_next(input)?;
+        let first = opt(terminated(parse_register_a, parse_comma)).parse_next(input)?;
 
-        Ok(LocatedTokenInner::new_opcode(operator, Some(operand), None))
-    }
-}
-
-/// Substraction with A register
-#[cfg_attr(not(target_arch = "wasm32"), inline)]
-#[cfg_attr(target_arch = "wasm32", inline(never))]
-pub fn parse_sub(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    //  let _ =Caseless("SUB").parse_next(input)?;
-    //  let _ =space1(input)?;
-
-    let first = opt(terminated(
-        alt((parse_register_de, parse_register_hl)),
-        parse_comma
-    ))
-    .parse_next(input)?;
-
-    if first.is_some() {
-        // Fake instruction: sub de,rr or sub hl,rr
-        let operand = alt((parse_register16, parse_register_sp)).parse_next(input)?;
-
-        let token = LocatedTokenInner::new_opcode(Mnemonic::Sub, first, Some(operand));
-
-        let result =
-            LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into());
-
-        Ok(result)
-    }
-    else {
-        // Normal SUB: sub A,operand or sub operand
-        let _a_opt = opt(terminated(parse_register_a, parse_comma)).parse_next(input)?;
-
-        let operand = alt((
+        let second = alt((
             parse_register8,
             parse_indexregister8,
             parse_hl_address,
             parse_indexregister_with_index,
             parse_expr
         ))
+        .context(StrContext::Label("Wrong logical operand"))
         .parse_next(input)?;
 
-        Ok(LocatedTokenInner::new_opcode(
-            Mnemonic::Sub,
-            Some(operand),
-            None
+        let is_redundant_a = first.as_ref().is_some_and(|f| f.is_register_a());
+        let token = LocatedTokenInner::new_opcode(operator, first, Some(second));
+        Ok(wrap_optional_accumulator_warning(
+            token,
+            is_redundant_a,
+            false
         ))
     }
+}
+
+/// Substraction with A register. Consistent with `parse_add_or_adc`'s shape:
+/// `arg1` is the optional explicit register prefix - `A` (or implicit, for
+/// the real 8-bit `SUB`), or `DE`/`HL` (for the fake 16-bit `SUB DE,rr`/
+/// `SUB HL,rr` shorthand, same as before) - `arg2` is always the mandatory
+/// real second operand. Previously the normal 8-bit case silently discarded
+/// an explicit `A,` prefix entirely (`let _a_opt = ...`), putting the
+/// compared value in `arg1` with `arg2` always `None` - inconsistent with
+/// the fake 16-bit case, which already used both slots.
+#[cfg_attr(not(target_arch = "wasm32"), inline)]
+#[cfg_attr(target_arch = "wasm32", inline(never))]
+pub fn parse_sub(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
+    let first = opt(terminated(
+        alt((parse_register_a, parse_register_de, parse_register_hl)),
+        parse_comma
+    ))
+    .parse_next(input)?;
+
+    let is_fake = first
+        .as_ref()
+        .map(|f| f.is_register_de() || f.is_register_hl())
+        .unwrap_or(false);
+
+    let second = if is_fake {
+        // Fake instruction: sub de,rr or sub hl,rr
+        alt((parse_register16, parse_register_sp)).parse_next(input)?
+    }
+    else {
+        // Normal SUB: sub A,operand or sub operand (A implicit or explicit)
+        alt((
+            parse_register8,
+            parse_indexregister8,
+            parse_hl_address,
+            parse_indexregister_with_index,
+            parse_expr
+        ))
+        .parse_next(input)?
+    };
+
+    let is_redundant_a = !is_fake && first.as_ref().is_some_and(|f| f.is_register_a());
+    let token = LocatedTokenInner::new_opcode(Mnemonic::Sub, first, Some(second));
+    Ok(wrap_optional_accumulator_warning(
+        token,
+        is_redundant_a,
+        is_fake
+    ))
 }
 
 /// Par se the SBC instruction
@@ -614,17 +660,14 @@ pub fn parse_sbc(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
     // Check if this is a fake instruction (sbc de,rr)
     let is_fake =
         opera.as_ref().map(|o| o.is_register_de()).unwrap_or(false) && operb.is_register16();
+    let is_redundant_a = !is_fake && opera.as_ref().is_some_and(|o| o.is_register_a());
 
     let token = LocatedTokenInner::new_opcode(Mnemonic::Sbc, opera, Some(operb));
-
-    let result = if is_fake {
-        LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into())
-    }
-    else {
-        token
-    };
-
-    Ok(result)
+    Ok(wrap_optional_accumulator_warning(
+        token,
+        is_redundant_a,
+        is_fake
+    ))
 }
 
 /// Parse ADC and ADD instructions
@@ -676,17 +719,14 @@ pub fn parse_add_or_adc(
         // Check if this is a fake instruction (adc de,rr or add de,rr)
         let is_fake =
             first.as_ref().map(|f| f.is_register_de()).unwrap_or(false) && second.is_register16();
+        let is_redundant_a = !is_fake && first.as_ref().is_some_and(|f| f.is_register_a());
 
         let token = LocatedTokenInner::new_opcode(add_or_adc, first, Some(second));
-
-        let result = if is_fake {
-            LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into())
-        }
-        else {
-            token
-        };
-
-        Ok(result)
+        Ok(wrap_optional_accumulator_warning(
+            token,
+            is_redundant_a,
+            is_fake
+        ))
     }
 }
 
@@ -729,13 +769,11 @@ pub fn parse_push_n_pop(
 #[cfg_attr(not(target_arch = "wasm32"), inline)]
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_ret(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
-    let (cond, cond_bytes) = opt(parse_flag_test).with_taken().parse_next(input)?;
+    let cond = opt(parse_flag_test_located).parse_next(input)?;
 
     let token = LocatedTokenInner::new_opcode(
         Mnemonic::Ret,
-        cond.map(|cond| {
-            LocatedDataAccess::FlagTest(cond, (*input).update_slice(cond_bytes).into())
-        }),
+        cond.map(|(cond, span)| LocatedDataAccess::FlagTest(cond, span.into())),
         None
     );
 
@@ -885,20 +923,15 @@ pub fn parse_rst(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80
 #[cfg_attr(target_arch = "wasm32", inline(never))]
 pub fn parse_rst_fake(input: &mut InnerZ80Span) -> ModalResult<LocatedTokenInner, Z80ParserError> {
     let (flag, _, val) = (
-        parse_flag_test
-            .verify(|t| {
-                t == &FlagTest::Z || t == &FlagTest::NZ || t == &FlagTest::C || t == &FlagTest::NC
-            })
-            .with_taken(),
+        parse_flag_test_located.verify(|(t, _)| {
+            t == &FlagTest::Z || t == &FlagTest::NZ || t == &FlagTest::C || t == &FlagTest::NC
+        }),
         parse_comma,
         parse_expr
     )
         .parse_next(input)?;
 
-    let flag = {
-        let span = (*input).update_slice(flag.1);
-        LocatedDataAccess::FlagTest(flag.0, span.into())
-    };
+    let flag = LocatedDataAccess::FlagTest(flag.0, flag.1.into());
 
     let token = LocatedTokenInner::new_opcode(Mnemonic::Rst, Some(flag), Some(val));
     let warning =
@@ -987,7 +1020,7 @@ pub fn parse_call_jp_or_jr(
     move |input: &mut InnerZ80Span| -> ModalResult<LocatedTokenInner, Z80ParserError> {
         let _start = *input;
 
-        let flag_test = opt(parse_flag_test.with_taken()).parse_next(input)?;
+        let flag_test = opt(parse_flag_test_located).parse_next(input)?;
 
         if flag_test.is_some() {
             let _ = cut_err(
@@ -1028,10 +1061,7 @@ pub fn parse_call_jp_or_jr(
             other => other
         };
 
-        let flag_test = flag_test.map(|(f, s)| {
-            let span = (*input).update_slice(s);
-            LocatedDataAccess::FlagTest(f, span.into())
-        });
+        let flag_test = flag_test.map(|(f, span)| LocatedDataAccess::FlagTest(f, span.into()));
 
         Ok(LocatedTokenInner::new_opcode(
             call_jp_or_jr,

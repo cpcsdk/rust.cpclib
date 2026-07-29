@@ -829,15 +829,37 @@ pub fn parse_flag_value_inner(input: &mut InnerZ80Span) -> ModalResult<FlagValue
 }
 
 pub fn parse_flag_test(input: &mut InnerZ80Span) -> ModalResult<FlagTest, Z80ParserError> {
+    let (flag, _) = parse_flag_test_located(input)?;
+    Ok(flag)
+}
+
+/// As [`parse_flag_test`], but also returns the exact span `parse_word`
+/// matched for the flag keyword itself - callers needing an accurate
+/// on-screen span (e.g. for a `RET`/`JP`/`CALL`/`RST` condition's own
+/// `LocatedDataAccess::FlagTest`) MUST use this directly rather than
+/// wrapping `opt(parse_flag_test)`/`parse_flag_test.verify(...)` in an outer
+/// `.with_taken()`: `parse_word` deliberately consumes any trailing
+/// whitespace after the keyword as part of its own contract (so callers
+/// chaining off it don't need to skip leading space themselves), and an
+/// outer `.with_taken()` measures *all* input consumed - including that
+/// trailing whitespace - producing a span wider than the actual flag text
+/// (e.g. `"Z\t\t"` instead of `"Z"` for `RET Z` followed by tab-padding).
+/// `parse_word`'s own return value is already exactly the matched keyword
+/// text with no such padding, so capturing it directly here (instead of
+/// discarding it via `.value(...)`) sidesteps the problem entirely rather
+/// than trimming the padding back off downstream.
+pub fn parse_flag_test_located(
+    input: &mut InnerZ80Span
+) -> ModalResult<(FlagTest, InnerZ80Span), Z80ParserError> {
     alt((
-        parse_word(b"NZ").value(FlagTest::NZ),
-        parse_word(b"Z").value(FlagTest::Z),
-        parse_word(b"NC").value(FlagTest::NC),
-        parse_word(b"C").value(FlagTest::C),
-        parse_word(b"PO").value(FlagTest::PO),
-        parse_word(b"PE").value(FlagTest::PE),
-        parse_word(b"P").value(FlagTest::P),
-        parse_word(b"M").value(FlagTest::M)
+        parse_word(b"NZ").map(|w| (FlagTest::NZ, w)),
+        parse_word(b"Z").map(|w| (FlagTest::Z, w)),
+        parse_word(b"NC").map(|w| (FlagTest::NC, w)),
+        parse_word(b"C").map(|w| (FlagTest::C, w)),
+        parse_word(b"PO").map(|w| (FlagTest::PO, w)),
+        parse_word(b"PE").map(|w| (FlagTest::PE, w)),
+        parse_word(b"P").map(|w| (FlagTest::P, w)),
+        parse_word(b"M").map(|w| (FlagTest::M, w))
     ))
     .parse_next(input)
 }

@@ -5730,8 +5730,13 @@ impl Env {
         <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
     {
         match mnemonic {
+            // `parse_logical_operator` always populates `arg2` (the real
+            // operand) - `arg1` is only ever the optional explicit `A,`
+            // prefix, which never affects encoding. Fall back to `arg1`
+            // defensively rather than panicking if some other construction
+            // path ever produces the pre-fix shape.
             Mnemonic::And | Mnemonic::Or | Mnemonic::Xor => {
-                self.assemble_logical_operator(mnemonic, arg1.as_ref().unwrap())
+                self.assemble_logical_operator(mnemonic, arg2.as_ref().or(arg1.as_ref()).unwrap())
             },
             Mnemonic::Add | Mnemonic::Adc => {
                 self.assemble_add_or_adc::<_, Token>(
@@ -5740,7 +5745,13 @@ impl Env {
                     arg2.as_ref().unwrap()
                 )
             },
-            Mnemonic::Cp => self.assemble_cp(arg1.as_ref().unwrap()),
+            // `parse_cp` always populates `arg2` (the compared value) -
+            // `arg1` is only ever the optional explicit `A,` prefix, which
+            // never affects encoding. Fall back to `arg1` defensively
+            // rather than panicking if some other construction path ever
+            // produces the pre-fix shape (compared value in `arg1`, `arg2`
+            // empty).
+            Mnemonic::Cp => self.assemble_cp(arg2.as_ref().or(arg1.as_ref()).unwrap()),
             Mnemonic::ExMemSp => self.assemble_ex_memsp(arg1.as_ref().unwrap()),
             Mnemonic::Dec | Mnemonic::Inc => {
                 self.assemble_inc_dec(mnemonic, arg1.as_ref().unwrap())
@@ -5990,8 +6001,26 @@ impl Env {
     {
         let mut bytes = Bytes::new();
 
-        // Handle normal SUB instruction (8-bit operand only)
-        let arg = arg1.ok_or_else(|| {
+        // Fake 16-bit form (`SUB DE,rr`/`SUB HL,rr`): here `arg1` really is
+        // `DE`/`HL` itself (see `parse_sub` in cpclib-asm) - dispatch to the
+        // fake-instruction expansion before treating `arg1`/`arg2` as the
+        // normal 8-bit case's optional-`A,`-prefix/real-operand pair below.
+        if arg1.is_some_and(|a| a.is_register_de() || a.is_register_hl()) {
+            if let Some(listing) =
+                <T as ListingElement>::fake_to_listing_from_access(Mnemonic::Sub, arg1, arg2, None)
+            {
+                return self.assemble_fake_listing(&listing);
+            }
+            unreachable!();
+        }
+
+        // Normal SUB: `arg1` is the optional explicit `A,` prefix (never
+        // affects encoding), `arg2` is the real 8-bit operand. `parse_sub`
+        // always populates `arg2` for this case, but fall back to `arg1`
+        // defensively rather than erroring if some other construction path
+        // ever produces the pre-fix shape (compared value in `arg1`, `arg2`
+        // empty).
+        let arg = arg2.or(arg1).ok_or_else(|| {
             Box::new(AssemblerError::BugInAssembler {
                 file: file!(),
                 line: line!(),
