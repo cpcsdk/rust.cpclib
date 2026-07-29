@@ -99,12 +99,18 @@ impl BasicAnalyzer {
                 return Some(make_hover(md));
             },
 
-            // Any other number → show base conversions.
+            // Any other number → show base conversions, plus firmware docs
+            // if the value resolves to a known firmware routine/constant
+            // address (e.g. `CALL &BB18`).
             LocatedTokenKind::Number(num_text) => {
                 if let Some(value) = parse_basic_integer(num_text) {
-                    return Some(make_hover(crate::common::render::format_number_hover(
-                        num_text, value
-                    )));
+                    let mut md = crate::common::render::format_number_hover(num_text, value);
+                    if self.config().firmware_docs
+                        && let Some(doc) = crate::common::firmware_docs::lookup_by_value(value)
+                    {
+                        md.push_str(&format!("\n\n---\n\n**{}**\n\n{}", doc.symbol, doc.doc));
+                    }
+                    return Some(make_hover(md));
                 }
             },
 
@@ -133,7 +139,8 @@ pub(crate) fn locomotive_basic_hover(
     line_text: &str,
     basic_text: &str,
     basic_line: u32,
-    col: u32
+    col: u32,
+    firmware_docs_enabled: bool
 ) -> Option<Hover> {
     let col_usize = col as usize;
     let position = Position {
@@ -166,9 +173,13 @@ pub(crate) fn locomotive_basic_hover(
     if let Some(tok) = tok {
         if let LocatedTokenKind::Number(num_text) = &tok.kind {
             if let Some(value) = parse_basic_integer(num_text) {
-                return Some(make_hover(crate::common::render::format_number_hover(
-                    num_text, value
-                )));
+                let mut md = crate::common::render::format_number_hover(num_text, value);
+                if firmware_docs_enabled
+                    && let Some(doc) = crate::common::firmware_docs::lookup_by_value(value)
+                {
+                    md.push_str(&format!("\n\n---\n\n**{}**\n\n{}", doc.symbol, doc.doc));
+                }
+                return Some(make_hover(md));
             }
         }
 
@@ -305,5 +316,83 @@ mod byte_hover_tests {
         assert!(md.contains('-'), "{md}");
         let minus_value = BasicTokenNoPrefix::SubstractionOrUnaryMinus.value();
         assert!(md.contains(&format!("{minus_value:02X}")), "{md}");
+    }
+}
+
+#[cfg(test)]
+mod firmware_hover_tests {
+    use super::*;
+    use crate::common::config::BasicConfig;
+    use crate::common::document::Document;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.bas").unwrap(), text.to_string(), 1)
+    }
+
+    /// `CALL &BB5A` - a common BASIC way of invoking a firmware routine
+    /// (here, TXT_OUTPUT) directly by address, no symbolic name involved.
+    #[test]
+    fn hovering_a_firmware_address_in_a_call_statement_shows_its_doc() {
+        let text = "10 CALL &BB5A\n";
+        // Column 8 lands on the '5' of &BB5A.
+        let hover = BasicAnalyzer::new()
+            .hover(
+                &doc(text),
+                Position {
+                    line: 0,
+                    character: 8
+                }
+            )
+            .expect("hover on &BB5A");
+        let md = match hover.contents {
+            HoverContents::Markup(MarkupContent { value, .. }) => value,
+            _ => panic!("expected markdown hover contents")
+        };
+        assert!(md.contains("TXT_OUTPUT"), "{md}");
+    }
+
+    /// Not restricted to CALL specifically - any numeric literal that
+    /// resolves to a known firmware address shows the doc.
+    #[test]
+    fn firmware_doc_is_not_restricted_to_call_statements() {
+        let text = "10 PRINT &BB5A\n";
+        let hover = BasicAnalyzer::new()
+            .hover(
+                &doc(text),
+                Position {
+                    line: 0,
+                    character: 9
+                }
+            )
+            .expect("hover on &BB5A");
+        let md = match hover.contents {
+            HoverContents::Markup(MarkupContent { value, .. }) => value,
+            _ => panic!("expected markdown hover contents")
+        };
+        assert!(md.contains("TXT_OUTPUT"), "{md}");
+    }
+
+    #[test]
+    fn firmware_docs_disabled_via_config_suppresses_it() {
+        let analyzer = BasicAnalyzer::new();
+        analyzer.set_config(BasicConfig {
+            firmware_docs: false,
+            ..BasicConfig::default()
+        });
+        let text = "10 CALL &BB5A\n";
+        let hover = analyzer
+            .hover(
+                &doc(text),
+                Position {
+                    line: 0,
+                    character: 8
+                }
+            )
+            .expect("still shows base conversions");
+        let md = match hover.contents {
+            HoverContents::Markup(MarkupContent { value, .. }) => value,
+            _ => panic!("expected markdown hover contents")
+        };
+        assert!(!md.contains("TXT_OUTPUT"), "{md}");
     }
 }

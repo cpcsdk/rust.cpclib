@@ -9,9 +9,33 @@ homepage.workspace = true
 description.workspace = true
 
 [features]
-default = ["rayon", "minify"]
+default = ["rayon", "minify", "generator"]
 rayon = ["dep:rayon"]
 minify = ["dep:minify-html"]
+# The HTML/Markdown rendering + cross-referencing + CLI/asset-fetch shell
+# (`assets`/`cmdline`/`cross_refs`/`generator`/`syntax` modules, `to_html`/
+# `to_markdown`/`for_file`/`merge`/`populate_*_cross_references`). The core
+# doc-extraction API (`aggregate_documentation_on_tokens`/
+# `build_documentation_page_from_aggregates`/`DocumentationPage`'s query
+# methods/`for_file_without_refs`) needs none of this - a consumer that only
+# wants that can depend with `default-features = false` and skip pandoc/
+# ureq (network)/flate2/dirs/minijinja/indicatif/dashmap/pulldown-cmark/
+# rust-embed/regex entirely.
+generator = [
+    "dep:minijinja",
+    "dep:dashmap",
+    "dep:indicatif",
+    "dep:pulldown-cmark",
+    "dep:pandoc",
+    "dep:ureq",
+    "dep:flate2",
+    "dep:dirs",
+    "dep:rust-embed",
+    "dep:regex",
+    "dep:glob",
+    "dep:lazy_static",
+    "dep:serde_json"
+]
 
 [dependencies]
 cpclib-asm.workspace = true
@@ -20,26 +44,26 @@ cpclib-common.workspace = true
 fs-err.workspace = true
 
 delegate.workspace = true
-glob.workspace = true
-minijinja = { workspace = true, features = ["loader"] }
-regex = "1.12"
+glob = { workspace = true, optional = true }
+minijinja = { workspace = true, features = ["loader"], optional = true }
+regex = { version = "1.12", optional = true }
 rayon = { workspace = true, optional = true }
 minify-html = { version = "0.18", optional = true }
-rust-embed = {workspace = true, features = ["include-exclude", "compression"]}
+rust-embed = { workspace = true, features = ["include-exclude", "compression"], optional = true }
 serde.workspace = true
-lazy_static = "1.5"
-dashmap = "6.2"
-indicatif = "0.18"
+lazy_static = { version = "1.5", optional = true }
+dashmap = { version = "6.2", optional = true }
+indicatif = { version = "0.18", optional = true }
 
-serde_json = "1.0"
+serde_json = { version = "1.0", optional = true }
 
-dirs = "6.0"
-ureq = "3.3"
-flate2 = "1.1"
+dirs = { version = "6.0", optional = true }
+ureq = { version = "3.3", optional = true }
+flate2 = { version = "1.1", optional = true }
 
 
-pandoc = {version="0.8"}
-pulldown-cmark = "0.13"
+pandoc = { version = "0.8", optional = true }
+pulldown-cmark = { version = "0.13", optional = true }
 
 [dev-dependencies]
 tempfile = "3.27"
@@ -55,3 +79,4 @@ workspace = true
 [[bin]]
 name = "basmdoc"
 path = "src/bin/basmdoc.rs"
+required-features = ["generator"]

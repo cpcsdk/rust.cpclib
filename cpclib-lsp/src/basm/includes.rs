@@ -13,14 +13,17 @@ pub(super) fn is_inner_uri(filename: &str) -> bool {
 }
 
 /// Every embedded `inner://...` key basm knows about (crunchers, firmware
-/// routines, ...) — the same list `basm --list-embedded` prints.
-pub(super) fn inner_file_names() -> impl Iterator<Item = String> {
+/// routines, ...) — the same list `basm --list-embedded` prints. `pub(crate)`
+/// so `common::firmware_docs` (shared by both asm and BASIC hover) can reuse
+/// it too, not just this module's own `basm/` siblings.
+pub(crate) fn inner_file_names() -> impl Iterator<Item = String> {
     EmbeddedFiles::iter().map(|s| s.into_owned())
 }
 
 /// The UTF-8 text content of an embedded `inner://...` resource, or `None`
-/// if `filename` isn't a known embedded key or isn't valid UTF-8.
-pub(super) fn read_inner_file(filename: &str) -> Option<String> {
+/// if `filename` isn't a known embedded key or isn't valid UTF-8. `pub(crate)`
+/// - see [`inner_file_names`].
+pub(crate) fn read_inner_file(filename: &str) -> Option<String> {
     let file = EmbeddedFiles::get(filename)?;
     std::str::from_utf8(file.data.as_ref())
         .ok()

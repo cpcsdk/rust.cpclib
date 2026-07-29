@@ -8,11 +8,40 @@ use cpclib_asm::{ListingElement, MayHaveSpan};
 use crate::DocumentationPage;
 use crate::models::{DocumentedItem, ItemDocumentation, UndocumentedConfig};
 
-/// Marker for global documentation comments (file-level or section-level)
-const GLOBAL_DOCUMENTATION_START: &str = ";;;";
+/// The comment-prefix markers used to recognize a documentation comment.
+/// `global` is a separate, optional, wider marker for file-level/section-level
+/// documentation (never attached to a following item - see
+/// `aggregate_documentation_on_tokens`'s own handling of `CommentKind::Global`).
+/// When `global` is `None`, every comment matching `local` is treated as
+/// item-level (`Local`), pairing with whatever documentable item follows it.
+#[derive(Clone, Copy)]
+pub struct DocMarkers {
+    pub local: &'static str,
+    pub global: Option<&'static str>
+}
 
-/// Marker for local documentation comments (item-level)
-const LOCAL_DOCUMENTATION_START: &str = ";;";
+impl Default for DocMarkers {
+    /// This crate's own hand-authored doc-comment convention.
+    fn default() -> Self {
+        Self {
+            local: ";;",
+            global: Some(";;;")
+        }
+    }
+}
+
+impl DocMarkers {
+    /// Plain `;`-prefixed comments, no separate file-level tier - the
+    /// convention used by `cpclib-asm`'s embedded firmware source files
+    /// (`inner://firmware/*.asm`), which were never authored with this
+    /// crate's own `;;`/`;;;` markers in mind.
+    pub fn single_semicolon() -> Self {
+        Self {
+            local: ";",
+            global: None
+        }
+    }
+}
 
 /// Recursively collect all tokens including those inside conditional branches
 ///
@@ -74,18 +103,21 @@ fn collect_all_tokens_including_conditionals<'a, T: ListingElement>(
         }
     }
 }
-fn is_any_documentation<T: ListingElement>(token: &T) -> bool {
-    token.is_comment() && token.comment().starts_with(LOCAL_DOCUMENTATION_START)
+fn is_any_documentation<T: ListingElement>(token: &T, markers: &DocMarkers) -> bool {
+    token.is_comment() && token.comment().starts_with(markers.local)
 }
 
-/// Check if a token is a global documentation comment (;;;)
-fn is_global_documentation<T: ListingElement>(token: &T) -> bool {
-    is_any_documentation(token) && token.comment().starts_with(GLOBAL_DOCUMENTATION_START)
+/// Check if a token is a global documentation comment (;;; by default)
+fn is_global_documentation<T: ListingElement>(token: &T, markers: &DocMarkers) -> bool {
+    match markers.global {
+        Some(global) => is_any_documentation(token, markers) && token.comment().starts_with(global),
+        None => false
+    }
 }
 
-/// Check if a token is a local documentation comment (;; but not ;;;)
-fn is_local_documentation<T: ListingElement>(token: &T) -> bool {
-    is_any_documentation(token) && !is_global_documentation(token)
+/// Check if a token is a local documentation comment (;; but not ;;; by default)
+fn is_local_documentation<T: ListingElement>(token: &T, markers: &DocMarkers) -> bool {
+    is_any_documentation(token, markers) && !is_global_documentation(token, markers)
 }
 
 /// Check if a token can be documented (is it a label, equ, function, or macro?)
@@ -219,7 +251,8 @@ pub fn build_documentation_page_from_aggregates<T: ListingElement + ToString>(
 /// A vector of tuples: (doc_string, token_ref, parent_label, line_number)
 pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveSpan>(
     tokens: &[T],
-    include_undocumented: UndocumentedConfig
+    include_undocumented: UndocumentedConfig,
+    markers: DocMarkers
 ) -> Vec<(String, Option<&T>, Option<String>, usize)> {
     // First, expand all tokens including those in conditional branches
     let mut expanded_tokens = Vec::new();
@@ -271,18 +304,21 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
             self.kind() == CommentKind::Unspecified
         }
 
-        fn add_comment(&mut self, comment: &str) {
+        fn add_comment(&mut self, comment: &str, markers: &DocMarkers) {
             if !self.content.is_empty() {
                 self.content += "\n";
             }
 
-            // remove the ; that encode the documentation
+            // remove the marker prefix that encodes the documentation
             let comment = if self.is_global() {
-                &comment[3..]
+                &comment[markers
+                    .global
+                    .expect("global comment without a global marker")
+                    .len()..]
             }
             else {
                 debug_assert!(self.is_local());
-                &comment[2..]
+                &comment[markers.local.len()..]
             };
 
             // remove very first space if any
@@ -303,7 +339,8 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
 
     // Process the expanded token list (includes all conditional branches)
     for token in expanded_tokens {
-        let (current_is_doc, current_is_documentable) = if is_global_documentation(token) {
+        let (current_is_doc, current_is_documentable) = if is_global_documentation(token, &markers)
+        {
             if in_process_comment.is_local() {
                 // here, this is an error, there was a local comment and it is replaced by a global one
                 // so, we lost it
@@ -312,7 +349,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
             in_process_comment.set_kind(CommentKind::Global);
             (true, false)
         }
-        else if is_local_documentation(token) {
+        else if is_local_documentation(token, &markers) {
             if in_process_comment.is_global() {
                 // here we can release the global comment
                 doc.push((in_process_comment.consume(), None, None, 0));
@@ -334,7 +371,7 @@ pub fn aggregate_documentation_on_tokens<T: ListingElement + ToString + MayHaveS
 
         if current_is_doc {
             // we update the documentation
-            in_process_comment.add_comment(token.comment());
+            in_process_comment.add_comment(token.comment(), &markers);
         }
         else if current_is_documentable {
             // Skip local labels without a parent

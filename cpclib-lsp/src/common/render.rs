@@ -27,6 +27,48 @@ pub fn format_number_hover(label: &str, value: i64) -> String {
     )
 }
 
+/// Parses a bare numeric-literal string (already isolated, e.g. by
+/// `basm::hover::extract_number_at_position`, or a firmware EQU's own
+/// `#BB5A`-shaped value text) into its `i64` value. Handles `$`/`&`/`#`
+/// (hex), `%` (binary), `0x`/`0b`/`0o`, and plain decimal — the same CPC/
+/// basm numeric-literal conventions `format_number_hover` displays.
+pub fn parse_numeric_literal_str(num_str: &str) -> Option<i64> {
+    if let Some(h) = num_str
+        .strip_prefix('$')
+        .or_else(|| num_str.strip_prefix('&'))
+        .or_else(|| num_str.strip_prefix('#'))
+    {
+        i64::from_str_radix(h, 16).ok()
+    }
+    else if let Some(b) = num_str.strip_prefix('%') {
+        i64::from_str_radix(b, 2).ok()
+    }
+    else if let Some(h) = num_str
+        .strip_prefix("0x")
+        .or_else(|| num_str.strip_prefix("0X"))
+    {
+        i64::from_str_radix(h, 16).ok()
+    }
+    else if let Some(b) = num_str
+        .strip_prefix("0b")
+        .or_else(|| num_str.strip_prefix("0B"))
+    {
+        i64::from_str_radix(b, 2).ok()
+    }
+    else if let Some(o) = num_str
+        .strip_prefix("0o")
+        .or_else(|| num_str.strip_prefix("0O"))
+    {
+        i64::from_str_radix(o, 8).ok()
+    }
+    else if num_str.bytes().all(|b| b.is_ascii_digit()) {
+        num_str.parse().ok()
+    }
+    else {
+        None
+    }
+}
+
 /// Extract a short one-line summary from a keyword/directive's full markdown
 /// documentation, for use as a `CompletionItem.detail` (the compact
 /// completion-menu line, as opposed to `.documentation`'s full popup).

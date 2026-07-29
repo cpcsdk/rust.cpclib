@@ -1,10 +1,22 @@
 pub const BASMDOC_CMD: &str = "basmdoc";
 
+#[cfg(feature = "basmdoc-generator")]
 use cpclib_common::event::EventObserver;
+#[cfg(feature = "basmdoc-generator")]
 #[allow(unused_imports)]
 use cpclib_runner::runner::{Runner, RunnerWithClap};
 
-// Using the macro to generate all the boilerplate
+// Using the macro to generate all the boilerplate. Gated behind
+// `basmdoc-generator` since it needs `cpclib_basmdoc::cmdline`, which only
+// exists when `cpclib-basmdoc` itself is built with its own `generator`
+// feature - kept optional so a consumer of `cpclib-bndbuild` that doesn't
+// want basmdoc's heavy rendering/CLI dependency graph (pandoc/ureq/
+// minijinja/...) transitively pulled in isn't forced to (Cargo unifies
+// features per-crate across a build, so an unconditional dependency here
+// would leak into every other consumer of `cpclib-basmdoc` in the same
+// build graph - see `cpclib-lsp`, which depends on both `cpclib-bndbuild`
+// and `cpclib-basmdoc` directly and wants the latter to stay lightweight).
+#[cfg(feature = "basmdoc-generator")]
 crate::define_custom_builder_runner! {
     BasmDocRunner,
     cpclib_basmdoc::cmdline::build_args_parser(),
@@ -15,7 +27,7 @@ crate::define_custom_builder_runner! {
         .map_err(|e| e.to_string())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "basmdoc-generator"))]
 mod test {
     use cpclib_common::event::CapturingObserver;
     use cpclib_runner::runner::Runner;

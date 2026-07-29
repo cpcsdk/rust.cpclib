@@ -1,7 +1,7 @@
 use cpclib_common::clap;
 use cpclib_common::clap::Parser;
 use cpclib_lsp::CpcLspBackend;
-use cpclib_lsp::config::{CONFIG_FILE_NAME, EXAMPLE_CONFIG_TOML};
+use cpclib_lsp::config::{CONFIG_FILE_NAME, EXAMPLE_CONFIG_TOML, merge_missing_config_fields};
 use tower_lsp::{LspService, Server};
 
 #[derive(Parser, Debug)]
@@ -12,6 +12,13 @@ struct Cli {
     /// overwrite an existing file.
     #[arg(long, value_name = "DIR", num_args = 0..=1, default_missing_value = ".")]
     init_config: Option<std::path::PathBuf>,
+
+    /// Add any config field missing from the cpclib-lsp.toml in DIR (current
+    /// directory if omitted) - already-present fields (values and comments)
+    /// are left untouched. Exits without starting the language server.
+    /// Fails if no config file exists yet - use --init-config for that.
+    #[arg(long, value_name = "DIR", num_args = 0..=1, default_missing_value = ".")]
+    update_config: Option<std::path::PathBuf>,
 
     /// Accepted for compatibility with LSP clients that always pass it
     /// (`vscode-languageclient` unconditionally appends `--stdio` whenever
@@ -39,6 +46,41 @@ async fn main() {
             std::process::exit(1);
         }
         println!("Wrote {}", path.display());
+        return;
+    }
+    if let Some(dir) = cli.update_config {
+        let path = dir.join(CONFIG_FILE_NAME);
+        let existing = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!(
+                    "cannot read {}: {e} - use --init-config to create one",
+                    path.display()
+                );
+                std::process::exit(1);
+            }
+        };
+        let (merged, added) = match merge_missing_config_fields(&existing) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("cannot parse {}: {e}", path.display());
+                std::process::exit(1);
+            }
+        };
+        if added.is_empty() {
+            println!("{} is already up to date, no fields added", path.display());
+            return;
+        }
+        if let Err(e) = std::fs::write(&path, merged) {
+            eprintln!("failed to write {}: {e}", path.display());
+            std::process::exit(1);
+        }
+        println!(
+            "Added {} field(s) to {}: {}",
+            added.len(),
+            path.display(),
+            added.join(", ")
+        );
         return;
     }
 
@@ -79,5 +121,46 @@ mod tests {
     fn still_works_with_no_arguments_at_all() {
         let cli = Cli::try_parse_from(["cpclib-lsp"]);
         assert!(cli.is_ok(), "{cli:?}");
+    }
+
+    #[test]
+    fn accepts_update_config_with_an_explicit_dir() {
+        let cli = Cli::try_parse_from(["cpclib-lsp", "--update-config", "/tmp/somewhere"]);
+        assert!(cli.is_ok(), "{cli:?}");
+        assert_eq!(
+            cli.unwrap().update_config,
+            Some(std::path::PathBuf::from("/tmp/somewhere"))
+        );
+    }
+
+    #[test]
+    fn accepts_update_config_with_no_dir_defaulting_to_cwd() {
+        let cli = Cli::try_parse_from(["cpclib-lsp", "--update-config"]);
+        assert!(cli.is_ok(), "{cli:?}");
+        assert_eq!(
+            cli.unwrap().update_config,
+            Some(std::path::PathBuf::from("."))
+        );
+    }
+
+    /// End-to-end (not just CLI-arg parsing): `--update-config` against a
+    /// real partial config file on disk adds the missing fields, in place.
+    #[test]
+    fn update_config_adds_missing_fields_to_a_real_file_on_disk() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let path = tmp.path().join(CONFIG_FILE_NAME);
+        std::fs::write(path.as_std_path(), "[asm]\ncase_sensitive = false\n").unwrap();
+
+        let existing = std::fs::read_to_string(path.as_std_path()).unwrap();
+        let (merged, added) = merge_missing_config_fields(&existing).unwrap();
+        assert!(!added.is_empty(), "{added:?}");
+        std::fs::write(path.as_std_path(), &merged).unwrap();
+
+        let on_disk = std::fs::read_to_string(path.as_std_path()).unwrap();
+        assert!(on_disk.contains("case_sensitive = false"), "{on_disk}");
+        let loaded = cpclib_lsp::config::load_config(Some(tmp.path().as_std_path()));
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        assert!(!loaded.config.asm.case_sensitive);
+        assert!(loaded.config.asm.firmware_docs);
     }
 }

@@ -23,6 +23,7 @@ use crate::runners::archive::ArchiveRunner;
 use crate::runners::asmfmt::AsmFmtRunner;
 use crate::runners::assembler::{Assembler, BasmRunner, OrgamsRunner};
 use crate::runners::ay::YmCruncher;
+#[cfg(feature = "basmdoc-generator")]
 use crate::runners::basmdoc::BasmDocRunner;
 use crate::runners::bndbuild::BndBuildRunner;
 use crate::runners::cpc2img::CpcToImgRunner;
@@ -200,7 +201,16 @@ pub fn execute<E: BndBuilderObserver + 'static>(
                 .run(task.args(), observer)
         },
         InnerTask::BndBuild(_) => BndBuildRunner::default().run(task.args(), observer),
+        #[cfg(feature = "basmdoc-generator")]
         InnerTask::BasmDoc(_) => BasmDocRunner::<E>::default().run(task.args(), observer),
+        #[cfg(not(feature = "basmdoc-generator"))]
+        InnerTask::BasmDoc(_) => {
+            Err(
+                "basmdoc support was not compiled into this build (missing the \
+                 `basmdoc-generator` feature)"
+                    .to_string()
+            )
+        },
         InnerTask::Cp(_) => CpRunner::default().run(task.args(), observer),
         InnerTask::Mv(_) => MvRunner::default().run(task.args(), observer),
         InnerTask::Disc(_) => DiscManagerRunner::default().run(task.args(), observer),

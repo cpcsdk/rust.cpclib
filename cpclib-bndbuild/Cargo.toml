@@ -27,7 +27,7 @@ cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-basm = { workspace = true, default-features = false, features = [
     "xferlib",
 ] }
-cpclib-basmdoc = { workspace = true}
+cpclib-basmdoc = { workspace = true }
 cpclib-asm.workspace = true
 cpclib-crunch.workspace = true
 cpclib-sna = { workspace = true, features = ["cmdline"] }
@@ -92,7 +92,17 @@ path = "src/main.rs"
 [features]
 
 default = ["sna-interactive","colored_errors", "self-update", "fap", "rayon", "hfe", "screenshot", "archive-7z",
-"apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0", "tape"]
+"apultra", "bzpack", "exomizer", "lz4", "lz48", "lz49", "lzsa", "pucrunch", "shrinkler", "zx7", "upkr", "zx0", "tape",
+"basmdoc-generator"]
+# Kept as its own feature (not folded into cpclib-basmdoc's dependency line
+# directly) so a consumer of cpclib-bndbuild that opts out of *this* feature
+# doesn't force cpclib-basmdoc's heavy generator/CLI shell (pandoc/ureq/
+# minijinja/...) on every other crate in the build via Cargo's feature
+# unification - cpclib-lsp depends on both cpclib-bndbuild (default
+# features off) and cpclib-basmdoc (default features off, for its own
+# lightweight firmware-doc lookup) directly, and must not get basmdoc's
+# generator feature turned back on just because bndbuild is also present.
+basmdoc-generator = ["cpclib-basmdoc/generator"]
 colored_errors = ["cpclib-basm/colored_errors"]
 tape = ["dep:rtzx"]
 archive-7z = ["cpclib-runner/archive-7z"]

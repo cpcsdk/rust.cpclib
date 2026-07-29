@@ -37,7 +37,8 @@ impl AssemblyAnalyzer {
                 line_trimmed,
                 &basic_text,
                 basic_line,
-                position.character
+                position.character,
+                self.config().firmware_docs
             );
         }
 
@@ -71,11 +72,16 @@ impl AssemblyAnalyzer {
             return Some(make_hover(md));
         }
 
-        // Numeric literal — show all bases
+        // Numeric literal — show all bases, plus firmware docs if the value
+        // resolves to a known firmware routine/constant address.
         if let Some((num_str, value)) = extract_number_at_position(&line, col) {
-            return Some(make_hover(crate::common::render::format_number_hover(
-                &num_str, value
-            )));
+            let mut md = crate::common::render::format_number_hover(&num_str, value);
+            if self.config().firmware_docs
+                && let Some(doc) = crate::common::firmware_docs::lookup_by_value(value)
+            {
+                md.push_str(&format!("\n\n---\n\n**{}**\n\n{}", doc.symbol, doc.doc));
+            }
+            return Some(make_hover(md));
         }
 
         let word = self.extract_word_at_position(&line, col)?;
@@ -235,6 +241,18 @@ impl AssemblyAnalyzer {
                     }
                 }
             }
+        }
+
+        // Firmware routine/constant referenced by its symbolic name (e.g.
+        // `call TXT_OUTPUT`) — tried only after the local-symbol lookup
+        // above, so a locally-defined symbol of the same name always wins.
+        if self.config().firmware_docs
+            && let Some(doc) = crate::common::firmware_docs::lookup_by_symbol(&word_upper)
+        {
+            return Some(make_hover(format!(
+                "**{}** = `{}`  \n*({})*\n\n{}",
+                doc.symbol, doc.value, doc.source_file, doc.doc
+            )));
         }
 
         // Fallback: if the document has an assembly error on this line, show it
@@ -485,41 +503,7 @@ fn extract_number_at_position(line: &str, col: usize) -> Option<(String, i64)> {
         return None;
     }
     let num_str = &line[start..end];
-
-    let value: i64 = if let Some(h) = num_str
-        .strip_prefix('$')
-        .or_else(|| num_str.strip_prefix('&'))
-        .or_else(|| num_str.strip_prefix('#'))
-    {
-        i64::from_str_radix(h, 16).ok()?
-    }
-    else if let Some(b) = num_str.strip_prefix('%') {
-        i64::from_str_radix(b, 2).ok()?
-    }
-    else if let Some(h) = num_str
-        .strip_prefix("0x")
-        .or_else(|| num_str.strip_prefix("0X"))
-    {
-        i64::from_str_radix(h, 16).ok()?
-    }
-    else if let Some(b) = num_str
-        .strip_prefix("0b")
-        .or_else(|| num_str.strip_prefix("0B"))
-    {
-        i64::from_str_radix(b, 2).ok()?
-    }
-    else if let Some(o) = num_str
-        .strip_prefix("0o")
-        .or_else(|| num_str.strip_prefix("0O"))
-    {
-        i64::from_str_radix(o, 8).ok()?
-    }
-    else if num_str.bytes().all(|b| b.is_ascii_digit()) {
-        num_str.parse().ok()?
-    }
-    else {
-        return None;
-    };
+    let value = crate::common::render::parse_numeric_literal_str(num_str)?;
 
     Some((num_str.to_string(), value))
 }
@@ -825,6 +809,103 @@ mod symbol_hover_tests {
             _ => panic!("expected markdown hover contents")
         };
         assert!(md.contains("GUARDED_LABEL"), "{md}");
+    }
+}
+
+#[cfg(test)]
+mod firmware_hover_tests {
+    use super::*;
+    use crate::common::config::AsmConfig;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn md_of(hover: Hover) -> String {
+        match hover.contents {
+            HoverContents::Markup(m) => m.value,
+            _ => panic!("expected markdown hover contents")
+        }
+    }
+
+    #[test]
+    fn hovering_a_firmware_address_shows_its_doc() {
+        let text = "    call &BB5A\n";
+        // Cursor on the "B" of "BB5A".
+        let hover = AssemblyAnalyzer::new()
+            .hover(
+                &doc(text),
+                Position {
+                    line: 0,
+                    character: 11
+                }
+            )
+            .expect("hover on &BB5A");
+        let md = md_of(hover);
+        assert!(md.contains("TXT_OUTPUT"), "{md}");
+    }
+
+    #[test]
+    fn hovering_a_firmware_symbol_name_shows_its_doc() {
+        let text = "    call TXT_OUTPUT\n";
+        let hover = AssemblyAnalyzer::new()
+            .hover(
+                &doc(text),
+                Position {
+                    line: 0,
+                    character: 11
+                }
+            )
+            .expect("hover on TXT_OUTPUT");
+        let md = md_of(hover);
+        assert!(md.contains("TXT_OUTPUT"), "{md}");
+    }
+
+    #[test]
+    fn firmware_docs_disabled_via_config_suppresses_both() {
+        let analyzer = AssemblyAnalyzer::new();
+        analyzer.set_config(AsmConfig {
+            firmware_docs: false,
+            ..AsmConfig::default()
+        });
+
+        let by_value = analyzer.hover(
+            &doc("    call &BB5A\n"),
+            Position {
+                line: 0,
+                character: 11
+            }
+        );
+        // The numeric-literal branch itself still fires (base conversions),
+        // just without the firmware doc appended.
+        let md = md_of(by_value.expect("still shows base conversions"));
+        assert!(!md.contains("TXT_OUTPUT"), "{md}");
+
+        let by_symbol = analyzer.hover(
+            &doc("    call TXT_OUTPUT\n"),
+            Position {
+                line: 0,
+                character: 11
+            }
+        );
+        assert!(by_symbol.is_none(), "{by_symbol:?}");
+    }
+
+    #[test]
+    fn a_locally_defined_symbol_of_the_same_name_wins_over_firmware_docs() {
+        let text = "TXT_OUTPUT equ 42\n    call TXT_OUTPUT\n";
+        let hover = AssemblyAnalyzer::new()
+            .hover(
+                &doc(text),
+                Position {
+                    line: 1,
+                    character: 11
+                }
+            )
+            .expect("hover on TXT_OUTPUT");
+        let md = md_of(hover);
+        assert!(md.contains("EQU constant"), "{md}");
+        assert!(!md.contains("Action:"), "{md}");
     }
 }
 

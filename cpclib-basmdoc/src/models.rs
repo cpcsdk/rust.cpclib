@@ -207,6 +207,12 @@ impl ItemDocumentation {
         &self.item
     }
 
+    /// The raw extracted documentation text (comment body, marker prefixes
+    /// already stripped) - empty when the item has no attached comment.
+    pub fn doc(&self) -> &str {
+        &self.doc
+    }
+
     pub fn macro_source(&self) -> String {
         match &self.item {
             DocumentedItem::Macro { content, .. } => content.clone(),
