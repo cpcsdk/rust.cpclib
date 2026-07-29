@@ -2673,6 +2673,7 @@ dependencies = [
  "codespan-reporting 0.13.1",
  "cpclib-asm",
  "cpclib-asmfmt",
+ "cpclib-basic",
  "cpclib-basm",
  "cpclib-basmdoc",
  "cpclib-bdasm",

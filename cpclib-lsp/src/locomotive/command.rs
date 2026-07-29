@@ -1,4 +1,5 @@
-//! Code actions for Locomotive BASIC (renumbering) and the code-lens stub.
+//! Code actions for Locomotive BASIC (renumbering) and the "▶ Run in
+//! emulator" code lens.
 
 use tower_lsp::lsp_types::*;
 
@@ -6,8 +7,32 @@ use super::BasicAnalyzer;
 use crate::common::document::Document;
 
 impl BasicAnalyzer {
-    pub fn code_lens(&self, _document: &Document) -> Vec<CodeLens> {
-        vec![]
+    /// A single "▶ Run in emulator" lens at the top of the file, wired to
+    /// `cpclib.runBasic` (`server/backend.rs`). Mirrors
+    /// `BuildFileAnalyzer::code_lens`'s shape (`bndbuild/semantic_tokens.rs`)
+    /// but with one fixed lens instead of one per target.
+    pub fn code_lens(&self, document: &Document) -> Vec<CodeLens> {
+        if document.text().trim().is_empty() {
+            return vec![];
+        }
+        let file_path = document
+            .uri
+            .to_file_path()
+            .ok()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        vec![CodeLens {
+            range: Range {
+                start: Position::new(0, 0),
+                end: Position::new(0, 0)
+            },
+            command: Some(Command {
+                title: "▶ Run in emulator".to_string(),
+                command: "cpclib.runBasic".to_string(),
+                arguments: Some(vec![serde_json::json!(file_path)])
+            }),
+            data: None
+        }]
     }
 
     pub fn code_actions(&self, document: &Document, _range: Range) -> Vec<CodeAction> {
@@ -56,5 +81,31 @@ impl BasicAnalyzer {
             ..Default::default()
         });
         actions
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.bas").unwrap(), text.to_string(), 1)
+    }
+
+    #[test]
+    fn a_non_empty_document_gets_one_run_lens() {
+        let analyzer = BasicAnalyzer::default();
+        let lenses = analyzer.code_lens(&doc("10 PRINT \"HI\"\n"));
+        assert_eq!(lenses.len(), 1);
+        let command = lenses[0].command.as_ref().unwrap();
+        assert_eq!(command.command, "cpclib.runBasic");
+        assert_eq!(command.arguments.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn an_empty_document_gets_no_lens() {
+        let analyzer = BasicAnalyzer::default();
+        let lenses = analyzer.code_lens(&doc("   \n"));
+        assert!(lenses.is_empty());
     }
 }

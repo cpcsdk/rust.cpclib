@@ -79,11 +79,29 @@ impl Default for AsmWarningClasses {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct BasicConfig {
     pub warnings_as_errors: bool,
-    pub warnings: BasicWarningClasses
+    pub warnings: BasicWarningClasses,
+    /// Which emulator `cpclib.runBasic` (the "▶ Run in emulator" CodeLens on
+    /// `.bas` files) launches. Must be one of
+    /// `cpclib_bndbuild::pipeline::basic_run::SUPPORTED_AUTO_RUN_EMULATORS` (kept in
+    /// sync manually: `ace`, `winape`, `cpcemupower`, `caprice`,
+    /// `emulator1984`, `amspirit`) - every other backend either silently
+    /// ignores auto-run or (SugarBoxV2) panics, so an unsupported value is
+    /// rejected with a clear error at run time rather than attempted.
+    pub run_emulator: String
+}
+
+impl Default for BasicConfig {
+    fn default() -> Self {
+        Self {
+            warnings_as_errors: false,
+            warnings: BasicWarningClasses::default(),
+            run_emulator: "ace".to_string()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -225,6 +243,10 @@ unused_bindings = true
 
 [basic]
 warnings_as_errors = false
+# Emulator launched by the "▶ Run in emulator" CodeLens on .bas files.
+# Supported (the only backends that honor auto-RUN): ace, winape,
+# cpcemupower, caprice, emulator1984, amspirit.
+run_emulator = "ace"
 
 [basic.warnings]
 # A GOTO/GOSUB/etc. target line that doesn't exist in the program.
@@ -294,6 +316,24 @@ mod tests {
         assert!(loaded.config.asm.warnings.fake_instructions);
         assert!(loaded.config.asm.warnings.redundant_accumulator_prefix);
         assert!(loaded.config.asm.warnings.unused_bindings);
+    }
+
+    #[test]
+    fn basic_config_defaults_run_emulator_to_ace() {
+        assert_eq!(BasicConfig::default().run_emulator, "ace");
+    }
+
+    #[test]
+    fn a_configured_run_emulator_round_trips_through_load_config() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(CONFIG_FILE_NAME),
+            "[basic]\nrun_emulator = \"winape\"\n"
+        )
+        .unwrap();
+        let loaded = load_config(Some(tmp.path().as_std_path()));
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        assert_eq!(loaded.config.basic.run_emulator, "winape");
     }
 
     #[test]

@@ -18,6 +18,7 @@ exclude = ["examples", "tests/dummy", "*.gif"]
 [dependencies]
 
 cpclib-asmfmt = { workspace = true, features = ["cmdline"] }
+cpclib-basic.workspace = true
 cpclib-bdasm.workspace = true
 cpclib-runner.workspace = true
 cpclib-catalog.workspace = true

@@ -24,6 +24,7 @@ pub mod diagnostics;
 pub mod format;
 pub mod hover;
 pub mod on_type_formatting;
+pub mod run;
 pub mod semantic_tokens;
 pub mod symbols;
 pub mod token;

@@ -40,6 +40,7 @@ pub mod env;
 pub mod event;
 pub mod executor;
 pub mod lsp;
+pub mod pipeline;
 pub mod rules;
 pub mod runners;
 pub mod task;

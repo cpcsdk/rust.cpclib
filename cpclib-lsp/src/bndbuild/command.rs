@@ -38,10 +38,18 @@ pub type OutputLine = (bool, String);
 
 /// Forwards build progress and task stdout/stderr to a channel in real time,
 /// so the editor can show it as the build runs (mirrors what a terminal used
-/// to show before rules were run in-process).
+/// to show before rules were run in-process). `pub(crate)` so other LSP
+/// features that stream task output (e.g. `locomotive::run`'s "run BASIC in
+/// emulator") can reuse it instead of writing a second observer type.
 #[derive(Clone)]
-struct StreamingObserver {
+pub(crate) struct StreamingObserver {
     tx: UnboundedSender<OutputLine>
+}
+
+impl StreamingObserver {
+    pub(crate) fn new(tx: UnboundedSender<OutputLine>) -> Self {
+        Self { tx }
+    }
 }
 
 impl std::fmt::Debug for StreamingObserver {

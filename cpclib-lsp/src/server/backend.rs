@@ -911,6 +911,7 @@ impl LanguageServer for CpcLspBackend {
                         "cpclib.getTargets".to_string(),
                         "cpclib.selectRange".to_string(),
                         "cpclib.runRule".to_string(),
+                        "cpclib.runBasic".to_string(),
                         "cpclib.cycleCountForSelection".to_string(),
                         "cpclib.removeUnusedParameter".to_string(),
                     ],
@@ -1691,6 +1692,9 @@ impl LanguageServer for CpcLspBackend {
             let lenses = match document.doc_type {
                 DocumentType::BuildFile => self.build_analyzer.code_lens(document),
                 DocumentType::Assembly => self.asm_analyzer.code_lens(document),
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    self.basic_analyzer.code_lens(document)
+                },
                 _ => Vec::new()
             };
             if !lenses.is_empty() {
@@ -1856,6 +1860,78 @@ impl LanguageServer for CpcLspBackend {
                     }
                     else {
                         MessageType::INFO
+                    },
+                    &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
+        if params.command == "cpclib.runBasic" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let Ok(uri) = Url::from_file_path(&fname)
+            else {
+                return Ok(None);
+            };
+
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            self.client
+                .log_message(MessageType::INFO, "Launching BASIC program...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let outcome = {
+                let document = document.clone();
+                let config = self.basic_analyzer.config();
+                tokio::task::spawn_blocking(move || {
+                    crate::locomotive::run::run_document_in_emulator(&document, &config, tx)
+                })
+                .await
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("run task panicked: {e}").into(),
+                        data: None
+                    }
+                })?
+            };
+            let _ = log_task.await;
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
                     },
                     &outcome.message
                 )
@@ -2584,6 +2660,86 @@ mod initialize_config_tests {
 }
 
 #[cfg(test)]
+mod run_basic_tests {
+    use futures_util::StreamExt;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    /// End-to-end `cpclib.runBasic`: an unsupported `basic.run_emulator`
+    /// value must be rejected with a `window/showMessage` ERROR naming the
+    /// allowlist, *without* ever reaching the real emulator-launch code
+    /// (which would otherwise try to download/install a real emulator in
+    /// CI) - exercises the full handler shape (channel, spawn_blocking,
+    /// show_message), mirroring `initialize_config_tests`'s harness.
+    #[tokio::test]
+    async fn unsupported_emulator_is_reported_via_show_message() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path()
+                .join(crate::common::config::CONFIG_FILE_NAME)
+                .as_std_path(),
+            "[basic]\nrun_emulator = \"sugarbox\"\n"
+        )
+        .unwrap();
+        let bas_path = tmp.path().join("prog.bas");
+        std::fs::write(bas_path.as_std_path(), "10 PRINT \"HELLO\"\n").unwrap();
+
+        let (mut service, socket) = LspService::build(CpcLspBackend::new).finish();
+
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            let (mut requests, _responses) = socket.split();
+            while let Some(request) = requests.next().await {
+                if request.method() == "window/showMessage"
+                    && let Some(params) = request.params()
+                    && let Ok(p) = serde_json::from_value::<ShowMessageParams>(params.clone())
+                {
+                    let _ = tx.send(p);
+                }
+            }
+        });
+
+        let root_uri = Url::from_file_path(tmp.path().as_std_path()).unwrap();
+        let init_request = tower_lsp::jsonrpc::Request::build("initialize")
+            .params(serde_json::json!({
+                "capabilities": {},
+                "workspaceFolders": [{ "uri": root_uri.to_string(), "name": "root" }]
+            }))
+            .id(1)
+            .finish();
+        let _ = service.ready().await.unwrap().call(init_request).await;
+
+        let bas_uri = Url::from_file_path(bas_path.as_std_path()).unwrap();
+        let run_request = tower_lsp::jsonrpc::Request::build("workspace/executeCommand")
+            .params(serde_json::json!({
+                "command": "cpclib.runBasic",
+                "arguments": [bas_uri.to_file_path().unwrap().to_string_lossy()]
+            }))
+            .id(2)
+            .finish();
+        let _ = service.ready().await.unwrap().call(run_request).await;
+
+        let msg = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let msg = rx
+                    .recv()
+                    .await
+                    .expect("expected a showMessage notification");
+                if msg.message.contains("sugarbox") {
+                    return msg;
+                }
+            }
+        })
+        .await
+        .expect("timed out waiting for the runBasic showMessage notification");
+        assert_eq!(msg.typ, MessageType::ERROR);
+        assert!(msg.message.contains("ace"), "{}", msg.message);
+    }
+}
+
+#[cfg(test)]
 mod relativize_diagnostic_messages_tests {
     use super::*;
 
@@ -3054,6 +3210,39 @@ mod dispatch_by_doc_type_tests {
             },
             other => panic!("expected semantic tokens, got {other:?}")
         }
+    }
+
+    /// CatArt files use the same Locomotive BASIC grammar as plain `.bas`
+    /// files (restricted by convention to a whitelist of drawing commands),
+    /// so they should get the "▶ Run in emulator" lens too - regression
+    /// guard for the `code_lens` dispatch match only originally handling
+    /// `DocumentType::Basic`, leaving CatArt (`.CAT`/`.ASC`) documents with
+    /// no lens at all.
+    #[tokio::test]
+    async fn code_lens_still_dispatches_to_the_basic_analyzer_for_catart_documents() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        let uri = Url::parse("file:///t.asc").unwrap();
+        open_catart_doc(backend, &uri).await;
+
+        let lenses = backend
+            .code_lens(CodeLensParams {
+                text_document: TextDocumentIdentifier { uri },
+                work_done_progress_params: Default::default(),
+                partial_result_params: Default::default()
+            })
+            .await
+            .unwrap();
+
+        let lenses = lenses.expect("expected at least one code lens");
+        assert!(
+            lenses.iter().any(|l| {
+                l.command
+                    .as_ref()
+                    .is_some_and(|c| c.command == "cpclib.runBasic")
+            }),
+            "{lenses:?}"
+        );
     }
 }
 
