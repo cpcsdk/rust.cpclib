@@ -242,6 +242,88 @@ pub(super) fn span_line<T: cpclib_asm::parser::obtained::MayHaveSpan>(token: &T)
     line_1based.saturating_sub(1) as u32
 }
 
+/// `token`'s own span as a precise LSP `Range` (start and end line +
+/// character) - generalizes `span_line` to the full span, not just its
+/// start line. Assumes a single-line span (true for any one instruction
+/// token) - end column is the start column plus the rendered text's own
+/// byte length, since `LocatedToken`'s `Display` (and any other
+/// `MayHaveSpan` token's) renders exactly its own span text, not "rest of
+/// file from this point" (confirmed via `Z80Span::as_str` returning a
+/// bounded fragment).
+pub(super) fn token_lsp_range<T>(token: &T) -> Range
+where T: cpclib_asm::parser::obtained::MayHaveSpan + std::fmt::Display {
+    let (line_1based, col_1based) = token.span().relative_line_and_column();
+    let line = line_1based.saturating_sub(1) as u32;
+    let start_char = col_1based.saturating_sub(1) as u32;
+    let end_char = start_char + token.to_string().len() as u32;
+    Range {
+        start: Position {
+            line,
+            character: start_char
+        },
+        end: Position {
+            line,
+            character: end_char
+        }
+    }
+}
+
+/// Every token in `listing` whose own [`token_lsp_range`] is *fully
+/// contained* within `range` - character-accurate: a token only partially
+/// covered (e.g. sitting right before the selection actually starts, on
+/// the same line) is excluded entirely, not partially included. Descends
+/// into every nested block via [`flatten_listing`], so a selection
+/// entirely inside a `MODULE`/`IF`/`REPEAT`/etc. body is still found
+/// correctly.
+pub(super) fn tokens_in_range<'a, T>(
+    listing: impl IntoIterator<Item = &'a T> + 'a,
+    range: Range
+) -> Vec<&'a T>
+where
+    T: cpclib_tokens::ListingElement
+        + cpclib_asm::parser::obtained::MayHaveSpan
+        + std::fmt::Display
+        + 'a
+{
+    flatten_listing(listing)
+        .filter(|t| {
+            let r = token_lsp_range(*t);
+            r.start >= range.start && r.end <= range.end
+        })
+        .collect()
+}
+
+/// Every token in `listing` whose own span line falls within
+/// `[start_line, end_line]` (inclusive, 0-based) - whole-line granularity,
+/// ignoring any character/column position within those lines. A thin
+/// wrapper over [`tokens_in_range`] covering the entirety of both boundary
+/// lines.
+pub(super) fn tokens_in_lines<'a, T>(
+    listing: impl IntoIterator<Item = &'a T> + 'a,
+    start_line: u32,
+    end_line: u32
+) -> Vec<&'a T>
+where
+    T: cpclib_tokens::ListingElement
+        + cpclib_asm::parser::obtained::MayHaveSpan
+        + std::fmt::Display
+        + 'a
+{
+    tokens_in_range(
+        listing,
+        Range {
+            start: Position {
+                line: start_line,
+                character: 0
+            },
+            end: Position {
+                line: end_line + 1,
+                character: 0
+            }
+        }
+    )
+}
+
 /// For a `.local`-shaped label at `line` (0-based) — its own definition, or
 /// any reference within its scope — the name of the owning (non-dotted)
 /// global label and that scope's line range (`start..end`, exclusive):
@@ -942,5 +1024,79 @@ mod global_label_scope_tests {
         let listing = analyzer.parse_document(&d).unwrap();
         let scopes = global_label_scopes(listing.iter());
         assert_eq!(scope_containing(&scopes, 0), None);
+    }
+}
+
+#[cfg(test)]
+mod token_selection_tests {
+    use cpclib_asm::parser::obtained::LocatedToken;
+    use cpclib_tokens::ListingElement;
+
+    use super::*;
+    use crate::common::document::Document;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    /// `tokens_in_lines` includes everything on a boundary line regardless
+    /// of column - `tokens_in_range`, given the exact same lines expressed
+    /// as a precise `Range`, must behave identically when that `Range`
+    /// covers the boundary lines in full.
+    #[test]
+    fn tokens_in_lines_and_a_matching_full_range_agree() {
+        let text = "start:\n  ld a,b\n  nop\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).unwrap();
+
+        let by_lines = tokens_in_lines(listing.iter(), 0, 2);
+        let by_range: Vec<&LocatedToken> = tokens_in_range(
+            listing.iter(),
+            Range {
+                start: Position {
+                    line: 0,
+                    character: 0
+                },
+                end: Position {
+                    line: 3,
+                    character: 0
+                }
+            }
+        );
+        assert_eq!(by_lines.len(), by_range.len());
+        assert_eq!(by_lines.len(), 3, "{by_lines:?}"); // start:, ld a,b, nop
+    }
+
+    /// The real behavior difference from `tokens_in_lines`: a token that
+    /// only partially overlaps the selection's start (on the same line) is
+    /// excluded entirely, not partially included.
+    #[test]
+    fn tokens_in_range_excludes_a_token_only_partially_covered_at_the_boundary() {
+        let text = "junk: ld a,b\n  nop\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).unwrap();
+
+        // Start right at "ld a,b" (column 6), excluding "junk:" even
+        // though it's on the very first (included) line.
+        let tokens: Vec<&LocatedToken> = tokens_in_range(
+            listing.iter(),
+            Range {
+                start: Position {
+                    line: 0,
+                    character: 6
+                },
+                end: Position {
+                    line: 2,
+                    character: 0
+                }
+            }
+        );
+        assert!(
+            tokens.iter().all(|t| !t.is_label()),
+            "the partially-covered \"junk:\" label leaked in: {tokens:?}"
+        );
+        assert_eq!(tokens.len(), 2, "{tokens:?}"); // ld a,b, nop
     }
 }

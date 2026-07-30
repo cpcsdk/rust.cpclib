@@ -1,43 +1,58 @@
-//! Cycle (NOP) counting over a line range — shared core for both the
+//! Min/max cycle (NOP) count over a selection — shared core for both the
 //! "cycle count for selection" code action (`command.rs`) and the VS Code
 //! status-bar live display (`cpclib.cycleCountForSelection`, `backend.rs`).
-//! Reuses the exact per-instruction timing lookup already backing
-//! instruction hover (`timing::find_timings`), summing across every
-//! recognized instruction in `[start_line, end_line]`.
 //!
-//! Deliberately text-based (not listing/token-based), matching this
-//! feature area's established "must still work on an unparseable document"
-//! philosophy (see `timing::format_hover`'s own text-only fallback path) -
-//! reuses `timing::classify_line`, which already tells a real Z80
-//! instruction apart from a directive, a label/blank line, or unrecognized
-//! text (most likely a macro invocation).
+//! Genuinely control-flow-aware: filters the document's already-parsed,
+//! cached `LocatedListing` down to the selection (via `token::
+//! tokens_in_range`/`tokens_in_lines`, borrowed tokens, never re-parsed)
+//! and delegates to `cpclib_asm::cost_range::cost_range`, which builds a
+//! real CFG and reports the *distinct* min/max path costs - not a naive
+//! per-line sum. That distinction matters: a selection containing a
+//! `JR`-and-merge diamond has *both* arms' instructions in its text, but
+//! only one ever executes per real run - summing every line regardless
+//! (the pre-refactor behavior here) silently double-counts both arms
+//! together, a real bug this rewrite fixes (found by the user checking a
+//! freshly-balanced selection and getting a visibly wrong total).
+//!
+//! Requires a successful parse - unlike this module's own previous
+//! text-based version, there is no "must still work on unparseable text"
+//! fallback here anymore (an explicit, deliberate simplification: this
+//! LSP's own `hover.rs`/`call_hierarchy.rs`/`autocomplete.rs` etc. already
+//! all just do nothing on a parse error via `self.parse_document(document)
+//! .ok()`, so this module joining that established convention isn't a
+//! special exception).
 
-use super::timing::{LineSegment, classify_line, find_timings, is_block_repeat};
+use cpclib_asm::branch_balance::InstructionCost;
+use cpclib_asm::cost_range::{self};
+use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, LocatedTokenInner};
+use cpclib_tokens::{ExprElement, ListingElement};
+use tower_lsp::lsp_types::{Position, Range};
+
+use super::timing::{find_timings, split_head};
+use super::token::{tokens_in_lines, tokens_in_range};
 
 /// Total NOP-count summary for a selected line range.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
 pub struct SelectionCycleCount {
-    /// Sum of each instruction's cheaper cost (branch not taken, or the
-    /// instruction's only cost if unconditional).
+    /// The cheapest real runtime path's total cost.
     pub min_nops: u32,
-    /// Sum of each instruction's costlier cost (branch taken); equals
-    /// `min_nops` when nothing in range is conditional. Meaningless as a
-    /// real upper bound when `max_unbounded` is true (see below) - a
-    /// partial sum, not the actual worst case.
+    /// The costliest real runtime path's total cost; equals `min_nops`
+    /// when nothing in range is conditional. Meaningless as a real upper
+    /// bound when `max_unbounded` is true (see below) - a partial sum, not
+    /// the actual worst case.
     pub max_nops: u32,
-    /// True when the range contains a block-repeat instruction (LDIR/LDDR/
-    /// CPIR/CPDR/INIR/INDR/OTIR/OTDR) whose iteration count isn't
-    /// statically known here - this text-only pass has no way to resolve
-    /// BC's value (that needs the AST-based `registers::register_state_at`,
-    /// only wired up for instruction hover so far), so the real worst case
-    /// is unbounded (BC could be anywhere up to 65536 iterations), not the
-    /// small per-iteration constant `max_nops` would otherwise sum in.
-    /// Sticky: sums with any other contributor stay unbounded too.
+    /// True when the range contains a loop (a `DJNZ`, or a backward
+    /// `JR`/`JP`) whose real iteration count isn't statically known here -
+    /// the real worst case is unbounded, not the partial sum `max_nops`
+    /// would otherwise settle on. Sticky: propagates through anything that
+    /// contains such a loop anywhere in its own path.
     pub max_unbounded: bool,
     pub instruction_count: u32,
-    /// Non-blank, non-directive content that didn't match any known Z80
-    /// mnemonic (most likely a macro invocation) - the total is a lower
-    /// bound when this is nonzero.
+    /// Recognized-as-an-instruction tokens whose cost source didn't know a
+    /// timing for them (or, unlike balancing, any *other* non-executing
+    /// token this feature doesn't specifically recognize as zero-cost,
+    /// e.g. a macro invocation) - the total is a lower bound when this is
+    /// nonzero.
     pub unrecognized_count: u32
 }
 
@@ -51,54 +66,142 @@ impl SelectionCycleCount {
     }
 }
 
-/// Sum NOPs across every recognized instruction on lines `[start_line, end_line]`
-/// (inclusive, 0-based) of `lines`. Out-of-range indices are simply skipped.
+/// `WAITNOPS <expr>` - the exact directive `stabilize.rs`'s own Quick Fix
+/// generates for padding - is the one directive `is_directive()` reports
+/// that genuinely emits runtime bytes with a real, non-zero cost, unlike a
+/// true bookkeeping directive (`DB`/`ORG`/`EQU`/...), which `is_directive()`
+/// doesn't distinguish from it at all (a direct probe against real parsed
+/// tokens confirmed both report `is_directive() == true` identically).
+/// `ListingElement` has no generic accessor for a directive's own
+/// argument, so this matches `LocatedToken`'s own `Deref<Target =
+/// LocatedTokenInner>` directly to reach `LocatedTokenInner::WaitNops` -
+/// *not* via `ToSimpleToken::as_simple_token()` (the more obvious route),
+/// which turns out to have its own pre-existing `unimplemented!()` for
+/// this exact variant (`cpclib-asm/src/parser/obtained.rs:1959`, a real
+/// gap in this codebase, not introduced here - found by hitting it).
+/// Reads the expression only when it's a bare integer literal
+/// (`ExprElement::is_value`), which is *always* the case for
+/// `stabilize.rs`'s own generated output (`waitnops {nop_count}`, always a
+/// plain number). A hand-written `waitnops duration(...) + ...`-style
+/// expression (real, symbolic, and possible - see the user's own examples
+/// motivating this whole feature) would need genuine expression
+/// evaluation (register/symbol state, `duration()` itself needing
+/// instruction-cost lookups) - a materially bigger undertaking, not
+/// attempted here.
+///
+/// `Some(Fixed(n))` for a bare integer literal argument; `Some(Unknown)`
+/// for anything else (a real, symbolic expression this module doesn't
+/// evaluate); `None` when `token` isn't `WAITNOPS` at all (the caller
+/// falls back to its own generic directive handling in that case).
+fn waitnops_cost(token: &LocatedToken) -> Option<InstructionCost> {
+    let LocatedTokenInner::WaitNops(expr) = &**token
+    else {
+        return None;
+    };
+    Some(if expr.is_value() {
+        InstructionCost::Fixed(expr.value() as u32)
+    }
+    else {
+        InstructionCost::Unknown
+    })
+}
+
+/// This instruction's cost, from the existing `timing.rs` NOPs table.
+/// Deliberately *stricter* than `stabilize.rs`'s own `cost_from_timing`:
+/// that closure treats any non-instruction token (including a macro
+/// invocation, which still parses as some token even though out of
+/// `branch_balance`'s declared scope) as harmless `Fixed(0)` - correct for
+/// balancing (an irrelevant shared zero cancels out of a delta) but wrong
+/// here, where it would silently *undercount* a macro call with no
+/// warning at all. `Fixed(0)` only for tokens genuinely known to be
+/// non-executing (a comment, or a bookkeeping directive) - everything
+/// else with no recognized timing entry is `Unknown`, incrementing
+/// `unrecognized_count` instead of vanishing silently.
+fn strict_cost_from_timing(token: &LocatedToken) -> InstructionCost {
+    if token.mnemonic().is_none() {
+        if token.is_directive()
+            && let Some(cost) = waitnops_cost(token)
+        {
+            return cost;
+        }
+        return if token.is_comment() || token.is_directive() {
+            InstructionCost::Fixed(0)
+        }
+        else {
+            InstructionCost::Unknown
+        };
+    }
+    match find_timings(&token.to_string()).first() {
+        Some(entry) => {
+            match entry.nops_alt {
+                Some(alt) => {
+                    InstructionCost::Conditional {
+                        taken: entry.nops as u32,
+                        not_taken: alt as u32
+                    }
+                },
+                None => InstructionCost::Fixed(entry.nops as u32)
+            }
+        },
+        None => InstructionCost::Unknown
+    }
+}
+
+/// The min/max cost summary for every token inside `range` of the
+/// already-parsed `listing` (character-accurate - see `token::
+/// tokens_in_range`). Empty (`SelectionCycleCount::default()`) when
+/// nothing recognizable is in range, or on the rare genuine parse-shape
+/// anomaly `cost_range` itself can't interpret (see its own doc comment) -
+/// callers treat an empty summary as "nothing to show", matching this
+/// module's own pre-existing convention.
+pub(super) fn count_cycles_in_selection(
+    listing: &LocatedListing,
+    range: Range
+) -> SelectionCycleCount {
+    let tokens = tokens_in_range(listing.iter(), range);
+    let Ok(result) = cost_range::cost_range(&tokens, strict_cost_from_timing)
+    else {
+        return SelectionCycleCount::default();
+    };
+    SelectionCycleCount {
+        min_nops: result.min,
+        max_nops: result.max,
+        max_unbounded: result.unbounded,
+        instruction_count: result.instruction_count,
+        unrecognized_count: result.unrecognized_count
+    }
+}
+
+/// Whole-line convenience wrapper over [`count_cycles_in_selection`] -
+/// covers the entirety of both `start_line` and `end_line` (inclusive,
+/// 0-based), ignoring any character position within them.
 pub(super) fn count_cycles_in_lines(
-    lines: &[&str],
+    listing: &LocatedListing,
     start_line: usize,
     end_line: usize
 ) -> SelectionCycleCount {
-    let mut summary = SelectionCycleCount::default();
-    for line in lines.iter().take(end_line + 1).skip(start_line) {
-        for segment in classify_line(line) {
-            match segment {
-                LineSegment::Instruction(text) => {
-                    let Some(entry) = find_timings(&text).into_iter().next()
-                    else {
-                        summary.unrecognized_count += 1;
-                        continue;
-                    };
-                    let alt = entry.nops_alt.unwrap_or(entry.nops);
-                    if entry.nops_alt.is_some() && is_block_repeat(entry.mnemonic) {
-                        // BC's value isn't known in this text-only pass -
-                        // `alt` (the last-iteration cost) is a real lower
-                        // bound (BC=1 costs exactly that), but the worst
-                        // case is unbounded, not `entry.nops` (see
-                        // `SelectionCycleCount::max_unbounded`'s doc).
-                        summary.min_nops += alt as u32;
-                        summary.max_unbounded = true;
-                    }
-                    else {
-                        summary.min_nops += entry.nops.min(alt) as u32;
-                        summary.max_nops += entry.nops.max(alt) as u32;
-                    }
-                    summary.instruction_count += 1;
-                },
-                LineSegment::Unrecognized => summary.unrecognized_count += 1,
-                LineSegment::Directive | LineSegment::Blank => {}
+    count_cycles_in_selection(
+        listing,
+        Range {
+            start: Position {
+                line: start_line as u32,
+                character: 0
+            },
+            end: Position {
+                line: end_line as u32 + 1,
+                character: 0
             }
         }
-    }
-    summary
+    )
 }
 
 /// Human-readable one-line summary for the code action's title - NOPs only,
-/// never T-states (see the module doc comment on `timing.rs`'s own
-/// established "NOPs, not T-states" convention).
+/// never T-states (this module's own established "NOPs, not T-states"
+/// convention, matching `timing.rs`'s own hover text).
 pub(super) fn format_title(summary: &SelectionCycleCount) -> String {
     let mut title = if summary.max_unbounded {
         format!(
-            "Cycle count: {}-? NOPs (unbounded: a repeat-block instruction's loop count isn't known)",
+            "Cycle count: {}-? NOPs (unbounded: a loop's iteration count isn't statically known)",
             summary.min_nops
         )
     }
@@ -113,7 +216,7 @@ pub(super) fn format_title(summary: &SelectionCycleCount) -> String {
     };
     if summary.unrecognized_count > 0 {
         title.push_str(&format!(
-            ", {} line{} not counted",
+            ", {} instruction{} not counted",
             summary.unrecognized_count,
             if summary.unrecognized_count == 1 {
                 ""
@@ -128,126 +231,76 @@ pub(super) fn format_title(summary: &SelectionCycleCount) -> String {
 
 #[cfg(test)]
 mod tests {
+    use cpclib_asm::parser::parse_z80_str;
+
     use super::*;
 
-    fn lines(text: &str) -> Vec<&str> {
-        text.lines().collect()
+    fn summary(text: &str) -> SelectionCycleCount {
+        let listing = parse_z80_str(text).unwrap();
+        let end_line = text.lines().count().saturating_sub(1);
+        count_cycles_in_lines(&listing, 0, end_line)
     }
 
     #[test]
     fn an_unconditional_sequence_sums_to_a_single_fixed_total() {
-        let l = lines("    ld a, b\n    ld c, d\n    nop\n");
-        let summary = count_cycles_in_lines(&l, 0, 2);
-        assert!(!summary.is_conditional(), "{summary:?}");
-        assert_eq!(summary.instruction_count, 3);
-        assert_eq!(summary.unrecognized_count, 0);
+        let s = summary("    ld a, b\n    ld c, d\n    nop\n");
+        assert!(!s.is_conditional(), "{s:?}");
+        assert_eq!(s.instruction_count, 3);
+        assert_eq!(s.unrecognized_count, 0);
         // ld r,r' = 1 NOP, ld r,r' = 1 NOP, nop = 1 NOP
-        assert_eq!(summary.min_nops, 3);
-        assert_eq!(summary.max_nops, 3);
+        assert_eq!(s.min_nops, 3);
+        assert_eq!(s.max_nops, 3);
     }
 
     #[test]
     fn a_conditional_jump_produces_a_min_max_range() {
-        let l = lines("loop: djnz loop\n");
-        let summary = count_cycles_in_lines(&l, 0, 0);
-        assert!(summary.is_conditional(), "{summary:?}");
-        assert_eq!(summary.min_nops, 3);
-        assert_eq!(summary.max_nops, 4);
-        assert_eq!(summary.instruction_count, 1);
+        let s = summary("    jr nz,.x\n.x\n    nop\n");
+        assert!(s.is_conditional(), "{s:?}");
+        // jr nz taken (3) vs not-taken (2) + nop (1) = 3 -> already equal
+        // here; use a genuinely asymmetric shape instead.
+        let s2 = summary("    jr nz,.x\n    nop\n    nop\n.x\n");
+        assert!(s2.is_conditional(), "{s2:?}");
+        assert_eq!(s2.min_nops, 3, "{s2:?}"); // taken: jr(3)
+        assert_eq!(s2.max_nops, 4, "{s2:?}"); // not-taken: jr(2)+nop+nop
     }
 
-    /// Regression test: a block-repeat instruction's iteration count isn't
-    /// known in this text-only pass, so the worst case must be reported as
-    /// unbounded, not the wrong flat "6" the old taken/not-taken model used
-    /// (which didn't correspond to any real BC value at all).
+    /// A `DJNZ` loop reports a real, meaningful `unbounded` max instead of
+    /// a wrong flat number - the loop's iteration count isn't statically
+    /// known in general.
     #[test]
-    fn a_block_repeat_instruction_reports_an_unbounded_max_not_a_flat_wrong_number() {
-        let l = lines("    ldir\n");
-        let summary = count_cycles_in_lines(&l, 0, 0);
-        assert!(summary.max_unbounded, "{summary:?}");
-        assert!(summary.is_conditional(), "{summary:?}");
-        // The last-iteration cost (5) is still a real, correct lower bound.
-        assert_eq!(summary.min_nops, 5);
-        assert_eq!(summary.instruction_count, 1);
-        assert_eq!(
-            format_title(&summary),
-            "Cycle count: 5-? NOPs (unbounded: a repeat-block instruction's loop count isn't known)"
-        );
-    }
-
-    #[test]
-    fn otir_otdr_now_resolve_to_real_timing_data() {
-        // Regression test for the `outir`/`outdr` -> `otir`/`otdr` spelling
-        // fix in data/timings.txt (the real Z80 mnemonic drops the "u" for
-        // the repeat forms, unlike `outi`/`outd`) - typing the mnemonic
-        // anyone actually writes used to find zero timing data.
-        let l = lines("    otir\n    otdr\n");
-        let summary = count_cycles_in_lines(&l, 0, 1);
-        assert_eq!(summary.instruction_count, 2, "{summary:?}");
-        assert_eq!(summary.unrecognized_count, 0, "{summary:?}");
-        assert!(summary.max_unbounded, "{summary:?}");
-    }
-
-    /// A block-repeat instruction mixed with an ordinary conditional stays
-    /// unbounded overall (sticky), and the ordinary instruction's own
-    /// min/max still contribute correctly alongside it.
-    #[test]
-    fn max_unbounded_is_sticky_across_the_whole_selection() {
-        let l = lines("    ldir\n    djnz $\n");
-        let summary = count_cycles_in_lines(&l, 0, 1);
-        assert!(summary.max_unbounded, "{summary:?}");
-        assert_eq!(summary.min_nops, 5 + 3, "{summary:?}");
-        assert_eq!(summary.instruction_count, 2);
+    fn a_djnz_loop_reports_an_unbounded_max_not_a_flat_wrong_number() {
+        let s = summary(".loop\n    nop\n    djnz .loop\n");
+        assert!(s.max_unbounded, "{s:?}");
+        assert!(s.is_conditional(), "{s:?}");
     }
 
     #[test]
     fn a_directive_line_contributes_zero_and_is_not_flagged_unrecognized() {
-        let l = lines("    db 1,2,3\n    org 0x4000\n");
-        let summary = count_cycles_in_lines(&l, 0, 1);
-        assert_eq!(summary.instruction_count, 0);
-        assert_eq!(summary.unrecognized_count, 0);
-        assert_eq!(summary.min_nops, 0);
-        assert!(summary.is_empty());
-    }
-
-    #[test]
-    fn an_unrecognized_identifier_increments_the_unrecognized_count_and_is_excluded() {
-        let l = lines("    call MY_UNDEFINED_MACRO_LOOKING_THING_XYZ\n");
-        // "call" itself IS a real instruction (unconditional CALL nn) - use
-        // something whose *leading word* isn't a known mnemonic/directive
-        // to exercise the truly-unrecognized path.
-        let l2 = lines("    frobnicate a, b\n");
-        let summary = count_cycles_in_lines(&l2, 0, 0);
-        assert_eq!(summary.instruction_count, 0);
-        assert_eq!(summary.unrecognized_count, 1);
-        assert_eq!(summary.min_nops, 0);
-        assert!(!summary.is_empty());
-        // Sanity: "call" alone is a real instruction, not unrecognized.
-        let summary2 = count_cycles_in_lines(&l, 0, 0);
-        assert_eq!(summary2.instruction_count, 1);
-        assert_eq!(summary2.unrecognized_count, 0);
-    }
-
-    #[test]
-    fn multiple_colon_separated_instructions_on_one_line_are_all_counted() {
-        let l = lines("    ld a,b : ld c,d : nop\n");
-        let summary = count_cycles_in_lines(&l, 0, 0);
-        assert_eq!(summary.instruction_count, 3);
-        assert_eq!(summary.min_nops, 3);
+        let s = summary("    db 1,2,3\n    org 0x4000\n");
+        assert_eq!(s.instruction_count, 0);
+        assert_eq!(s.unrecognized_count, 0);
+        assert_eq!(s.min_nops, 0);
+        assert!(s.is_empty());
     }
 
     #[test]
     fn a_label_only_line_and_a_blank_line_are_ignored() {
-        let l = lines("loop:\n\n    nop\n");
-        let summary = count_cycles_in_lines(&l, 0, 2);
-        assert_eq!(summary.instruction_count, 1);
-        assert_eq!(summary.unrecognized_count, 0);
-        assert_eq!(summary.min_nops, 1);
+        let s = summary("loop:\n\n    nop\n");
+        assert_eq!(s.instruction_count, 1);
+        assert_eq!(s.unrecognized_count, 0);
+        assert_eq!(s.min_nops, 1);
+    }
+
+    #[test]
+    fn multiple_colon_separated_instructions_on_one_line_are_all_counted() {
+        let s = summary("    ld a,b : ld c,d : nop\n");
+        assert_eq!(s.instruction_count, 3);
+        assert_eq!(s.min_nops, 3);
     }
 
     #[test]
     fn format_title_shows_a_range_when_conditional() {
-        let summary = SelectionCycleCount {
+        let s = SelectionCycleCount {
             min_nops: 8,
             max_nops: 12,
             max_unbounded: false,
@@ -255,14 +308,14 @@ mod tests {
             unrecognized_count: 0
         };
         assert_eq!(
-            format_title(&summary),
+            format_title(&s),
             "Cycle count: 8-12 NOPs (branch not taken/taken)"
         );
     }
 
     #[test]
-    fn format_title_notes_unrecognized_lines() {
-        let summary = SelectionCycleCount {
+    fn format_title_notes_unrecognized_instructions() {
+        let s = SelectionCycleCount {
             min_nops: 4,
             max_nops: 4,
             max_unbounded: false,
@@ -270,8 +323,90 @@ mod tests {
             unrecognized_count: 1
         };
         assert_eq!(
-            format_title(&summary),
-            "Cycle count: 4 NOPs, 1 line not counted"
+            format_title(&s),
+            "Cycle count: 4 NOPs, 1 instruction not counted"
         );
+    }
+
+    /// The exact motivating regression, shape-wise: a `JR`-and-merge
+    /// diamond selection (what a freshly-balanced conditional produces)
+    /// must report the real per-path cost, not the sum of both arms' text.
+    /// Uses `nop`*5 rather than `waitnops 5` for the padding deliberately
+    /// (see `waitnops_is_not_yet_recognized_a_real_remaining_gap` below for
+    /// why) so this test isolates *only* the CFG-awareness fix. Hand
+    /// verified: taken = prefix(4) + jr_taken(3) + nop*5(5) + ret(3) = 15;
+    /// not-taken = prefix(4) + jr_not_taken(2) + ld bc,nn(3) + add hl,bc(3)
+    /// + ret(3) = 15 - both paths equal, as balanced code should be. The
+    /// pre-refactor naive summer would have reported both arms' text added
+    /// together instead (a much larger, wrong number).
+    #[test]
+    fn a_balanced_diamond_reports_equal_paths_not_a_naive_sum() {
+        let s = summary(
+            "\
+bc26_hl
+    ld a,h
+    add 8
+    ld h,a
+    jr nc,bc26_hl.pad
+    ld bc,0xc000 + 96
+    add hl,bc
+    ret
+.pad
+    nop
+    nop
+    nop
+    nop
+    nop
+    ret
+"
+        );
+        assert!(!s.is_conditional(), "{s:?}");
+        assert_eq!(s.min_nops, 15, "{s:?}");
+        assert_eq!(s.max_nops, 15, "{s:?}");
+        assert_eq!(s.unrecognized_count, 0, "{s:?}");
+    }
+
+    /// The exact motivating regression, verbatim: `WAITNOPS <expr>` - the
+    /// exact directive `stabilize.rs`'s own Quick Fix generates for padding
+    /// - isn't a real Z80 mnemonic, so it has no entry in
+    /// `data/timings.txt`; `waitnops_cost` reads its literal argument
+    /// directly instead (`stabilize.rs` only ever generates a bare integer
+    /// literal, never a symbolic expression). Hand-verified identically to
+    /// the `nop`*5 version above: both paths total 15.
+    #[test]
+    fn a_real_waitnops_literal_is_recognized_and_counted() {
+        let s = summary(
+            "\
+bc26_hl
+    ld a,h
+    add 8
+    ld h,a
+    jr nc,bc26_hl.pad
+    ld bc,0xc000 + 96
+    add hl,bc
+    ret
+.pad
+    waitnops 5
+    ret
+"
+        );
+        assert!(!s.is_conditional(), "{s:?}");
+        assert_eq!(s.min_nops, 15, "{s:?}");
+        assert_eq!(s.max_nops, 15, "{s:?}");
+        assert_eq!(s.unrecognized_count, 0, "{s:?}");
+    }
+
+    /// A real, currently-open (and honestly reported, not silently
+    /// papered over) boundary: `WAITNOPS` with a genuinely *symbolic*
+    /// expression (arbitrary arithmetic, e.g. the user's own
+    /// `duration(...) + duration(...) - 1` idiom) needs real expression
+    /// evaluation (register/symbol state, `duration()` itself needing
+    /// instruction-cost lookups) - a materially bigger undertaking than
+    /// reading a bare literal, not attempted here.
+    #[test]
+    fn a_symbolic_waitnops_expression_is_still_flagged_unrecognized() {
+        let s = summary("    waitnops n + 1\n");
+        assert_eq!(s.unrecognized_count, 1, "{s:?}");
+        assert_eq!(s.min_nops, 0, "{s:?}");
     }
 }

@@ -136,11 +136,12 @@ impl AssemblyAnalyzer {
         // same. Offered only on success: a selection that doesn't fit this
         // v1's supported shape (a loop, DJNZ/CALL, an escaping jump target,
         // a conditional RET needing a rewrite with no qualifying global
-        // label in view, ...) isn't a mistake the user made, so it gets no
-        // action at all rather than an error popup - same "nothing
-        // recognizable -> no entry" precedent as the cycle-count action
-        // above.
-        if let Ok(edits) = super::stabilize::stabilize_lines(&all_lines, start_line, end_line)
+        // label in view, an unparseable document, ...) isn't a mistake the
+        // user made, so it gets no action at all rather than an error
+        // popup - same "nothing recognizable -> no entry" precedent as the
+        // cycle-count action above.
+        if let Some(listing) = self.parse_document(document).ok()
+            && let Ok(edits) = super::stabilize::stabilize_lines(&listing, start_line, end_line)
             && !edits.is_empty()
         {
             let text_edits: Vec<TextEdit> = edits
@@ -165,37 +166,35 @@ impl AssemblyAnalyzer {
                             new_text
                         } => TextEdit { range, new_text },
                         super::stabilize::StabilizeTextEdit::AppendTailBlocks {
-                            after_line,
+                            at,
                             text: append_text
                         } => {
-                            // If `after_line` is the document's own last
-                            // line and it has no trailing newline, there is
-                            // no real line break for `(after_line + 1, 0)`
+                            // If `at` doesn't correspond to any real
+                            // existing line (past the document's own last
+                            // line) and the document has no trailing
+                            // newline, there is no real line break for `at`
                             // to anchor to - inserting there would glue
-                            // straight onto the end of that line's own text
-                            // instead of starting a fresh line. Anchor to
-                            // the end of that line's own content instead
-                            // and supply the leading newline ourselves.
-                            let is_last_line = after_line + 1 >= all_lines.len();
-                            let needs_own_newline = is_last_line && !text.ends_with('\n');
+                            // straight onto the end of the last line's own
+                            // text instead of starting a fresh line. Anchor
+                            // to the end of that last line's own content
+                            // instead and supply the leading newline
+                            // ourselves.
+                            let past_last_line = at.line as usize >= all_lines.len();
+                            let needs_own_newline = past_last_line && !text.ends_with('\n');
                             let (pos, new_text) = if needs_own_newline {
-                                let end_char = all_lines[after_line].len() as u32;
+                                let last_line = all_lines.len().saturating_sub(1);
+                                let end_char =
+                                    all_lines.get(last_line).map_or(0, |l| l.len()) as u32;
                                 (
                                     Position {
-                                        line: after_line as u32,
+                                        line: last_line as u32,
                                         character: end_char
                                     },
                                     format!("\n{append_text}")
                                 )
                             }
                             else {
-                                (
-                                    Position {
-                                        line: (after_line + 1) as u32,
-                                        character: 0
-                                    },
-                                    append_text
-                                )
+                                (at, append_text)
                             };
                             TextEdit {
                                 range: Range {
@@ -232,7 +231,8 @@ impl AssemblyAnalyzer {
         let text = document.text();
         let all_lines: Vec<&str> = text.lines().collect();
         let (start_line, end_line) = line_range_from_selection(range, all_lines.len())?;
-        let summary = cycles::count_cycles_in_lines(&all_lines, start_line, end_line);
+        let listing = self.parse_document(document).ok()?;
+        let summary = cycles::count_cycles_in_lines(&listing, start_line, end_line);
         if summary.is_empty() {
             None
         }

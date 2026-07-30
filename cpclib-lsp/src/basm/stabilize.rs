@@ -1,10 +1,13 @@
-//! LSP adapter for `cpclib_asm::branch_balance`: converts a selection to a
-//! `LocatedListing` and back. The actual CFG/post-dominator/balancing
-//! algorithm lives in `cpclib-asm` (generic over `ListingElement`, so it
-//! isn't tied to the LSP) - this module only does three things:
-//! - re-parses the selected lines into a real `LocatedListing` (per the
-//!   user's own direction: work on `LocatedListing`s, converting the
-//!   selected block into one rather than scanning its raw text);
+//! LSP adapter for `cpclib_asm::branch_balance`: filters the document's
+//! already-parsed, cached `LocatedListing` down to the selection and back.
+//! The actual CFG/post-dominator/balancing algorithm lives in `cpclib-asm`
+//! (generic over `ListingElement`, so it isn't tied to the LSP) - this
+//! module only does three things:
+//! - filters the cached listing to the selection via `token::
+//!   tokens_in_range`/`tokens_in_lines` (borrowed tokens, never
+//!   re-parsed and never cloned - `LocatedToken::Clone` is an
+//!   `unimplemented!()` stub in this codebase, so cloning was never an
+//!   option anyway);
 //! - supplies a cost function wrapping the already-vetted `timing.rs` NOPs
 //!   table (`find_timings`) - `cpclib-asm` carries no Z80 timing data of its
 //!   own, so this table stays the single source of truth for the LSP;
@@ -12,12 +15,6 @@
 //!   `waitnops N` insertion, or - for a conditional `RET`'s early-exit arm,
 //!   which has no in-selection code to pad into - a `JR cc,<label>`
 //!   rewrite plus an appended padded tail block.
-//!
-//! Re-parsing the selection in isolation (rather than filtering the
-//! whole-document listing) sidesteps `LocatedToken::Clone` being an
-//! `unimplemented!()` stub in this codebase: the freshly-parsed
-//! `LocatedListing` is its own owned value, derefable straight to
-//! `&[LocatedToken]`, so nothing needs cloning.
 //!
 //! Working on real tokens rather than raw text also means a branch sharing
 //! its source line with other `:`-chained instructions (e.g.
@@ -51,13 +48,12 @@
 //! resolve.
 
 use cpclib_asm::branch_balance::{self, InstructionCost, StabilizeEdit};
-use cpclib_asm::parser::obtained::{LocatedToken, MayHaveSpan};
-use cpclib_asm::parser::parse_z80_str;
+use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken};
 use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::{Position, Range};
 
 use super::timing::{find_timings, split_head};
-use super::token::span_line;
+use super::token::{token_lsp_range, tokens_in_lines, tokens_in_range};
 
 /// One point of text change needed to balance the selection.
 pub(super) enum StabilizeTextEdit {
@@ -68,12 +64,14 @@ pub(super) enum StabilizeTextEdit {
     /// (`"JR cc,<qualified label>"`).
     ReplaceRetWithJump { range: Range, new_text: String },
     /// Append `text` (one or more padded tail blocks, already newline
-    /// terminated) right after `after_line` (0-based) - every rewritten
-    /// `RET` in one Quick Fix invocation shares a single append edit
-    /// (rather than each getting its own zero-width insert at the same
-    /// position), since several edits touching the identical position is
-    /// ambiguous to apply.
-    AppendTailBlocks { after_line: usize, text: String }
+    /// terminated) as a zero-width insert right at `at` - always the start
+    /// of a real line (never mid-line, even for a precise/partial
+    /// selection - see `stabilize_selection`'s own computation of this
+    /// position). Every rewritten `RET` in one Quick Fix invocation shares
+    /// a single append edit (rather than each getting its own zero-width
+    /// insert at the same position), since several edits touching the
+    /// identical position is ambiguous to apply.
+    AppendTailBlocks { at: Position, text: String }
 }
 
 /// This instruction's cost, from the existing `timing.rs` NOPs table -
@@ -165,12 +163,12 @@ fn corrected_rewrite_nop_count(
     Ok(corrected as u32)
 }
 
-/// The nearest label at or before `before_index` whose name doesn't start
-/// with `.` - the same rule basm's own `set_current_global_label` uses to
-/// decide whether a label updates the current global (see this module's
-/// own doc comment for why a plain per-selection scan is a faithful
-/// mirror of basm's real behavior here).
-fn owning_global_label(tokens: &[LocatedToken], before_index: usize) -> Option<&str> {
+/// The nearest label at or before `before_index` (an index into `tokens`)
+/// whose name doesn't start with `.` - the same rule basm's own
+/// `set_current_global_label` uses to decide whether a label updates the
+/// current global (see this module's own doc comment for why a plain
+/// per-selection scan is a faithful mirror of basm's real behavior here).
+fn owning_global_label<'a>(tokens: &[&'a LocatedToken], before_index: usize) -> Option<&'a str> {
     tokens[..before_index]
         .iter()
         .rev()
@@ -178,56 +176,23 @@ fn owning_global_label(tokens: &[LocatedToken], before_index: usize) -> Option<&
         .map(|t| t.label_symbol())
 }
 
-/// `token`'s own span as an LSP `Range`, offset by `line_offset` (the real
-/// document line the reparsed selection's own line 0 corresponds to).
-/// Assumes a single-line span (true for any one instruction token) - end
-/// column is simply the start column plus the rendered text's own byte
-/// length, since `LocatedToken`'s `Display` renders exactly its own
-/// span text (confirmed via `MayHaveSpan`/`Z80Span::as_str` returning a
-/// bounded fragment, not "rest of file from this point").
-fn token_range(token: &LocatedToken, line_offset: usize) -> Range {
-    let (line_1based, col_1based) = token.span().relative_line_and_column();
-    let line = (line_offset + line_1based.saturating_sub(1)) as u32;
-    let start_char = col_1based.saturating_sub(1) as u32;
-    let end_char = start_char + token.to_string().len() as u32;
-    Range {
-        start: Position {
-            line,
-            character: start_char
-        },
-        end: Position {
-            line,
-            character: end_char
-        }
-    }
-}
-
-/// Detects and balances every hand-written `JR`/`JP`/`RET` branch in
-/// `lines[start_line..=end_line]`. Empty when the selection is already
+/// Detects and balances every hand-written `JR`/`JP`/`RET` branch inside
+/// `range` of the already-parsed `listing` (character-accurate - see
+/// `token::tokens_in_range`). Empty when the selection is already
 /// balanced. `Err` with a human-readable reason when the selection
 /// contains something this v1 doesn't support (a loop, `DJNZ`/`CALL`, an
 /// escaping jump target, a conditional `RET` needing a rewrite with no
-/// qualifying global label in view, unparseable text, ...) - the caller is
-/// expected to offer no action at all in that case, not surface the
-/// message as an error popup (this isn't necessarily a mistake the user
-/// made, just a selection shape this feature doesn't cover yet).
-pub(super) fn stabilize_lines(
-    lines: &[&str],
-    start_line: usize,
-    end_line: usize
+/// qualifying global label in view, ...) - the caller is expected to offer
+/// no action at all in that case, not surface the message as an error
+/// popup (this isn't necessarily a mistake the user made, just a
+/// selection shape this feature doesn't cover yet).
+pub(super) fn stabilize_selection(
+    listing: &LocatedListing,
+    range: Range
 ) -> Result<Vec<StabilizeTextEdit>, String> {
-    let selected_text = format!("{}\n", lines[start_line..=end_line].join("\n"));
-    let listing =
-        parse_z80_str(selected_text).map_err(|e| format!("could not parse selection: {e}"))?;
-    let tokens: &[LocatedToken] = &listing;
+    let tokens = tokens_in_range(listing.iter(), range);
 
-    let raw_edits = branch_balance::balance_branches(tokens, cost_from_timing)?;
-
-    // An index at (or past) `tokens.len()` means "insert after everything
-    // in the selection" (see `arm_padding_index`'s own fallback) - there is
-    // no token there to read a span from, so it maps to one past the
-    // selection's own last line instead.
-    let past_selection = end_line - start_line + 1;
+    let raw_edits = branch_balance::balance_branches(&tokens, cost_from_timing)?;
 
     let mut edits = Vec::with_capacity(raw_edits.len());
     let mut tail_blocks = String::new();
@@ -239,23 +204,24 @@ pub(super) fn stabilize_lines(
                 insert_before_index,
                 nop_count
             } => {
-                let local_line = if insert_before_index < tokens.len() {
-                    span_line(&tokens[insert_before_index]) as usize
+                // An index at (or past) `tokens.len()` means "insert after
+                // everything in the selection" (see `arm_padding_index`'s
+                // own fallback) - there is no token there to read a span
+                // from, so it maps to the selection's own end position.
+                let line = if insert_before_index < tokens.len() {
+                    token_lsp_range(tokens[insert_before_index]).start.line as usize
                 }
                 else {
-                    past_selection
+                    range.end.line as usize
                 };
-                edits.push(StabilizeTextEdit::InsertPadding {
-                    line: start_line + local_line,
-                    nop_count
-                });
+                edits.push(StabilizeTextEdit::InsertPadding { line, nop_count });
             },
             StabilizeEdit::RewriteConditionalRetAndPad {
                 ret_token_index,
                 nop_count
             } => {
                 let owning_global =
-                    owning_global_label(tokens, ret_token_index).ok_or_else(|| {
+                    owning_global_label(&tokens, ret_token_index).ok_or_else(|| {
                         "a conditional RET's early-exit arm needs padding, but no enclosing \
                          global label was found in the selection to qualify the new local \
                          label - include the routine's own label in the selection"
@@ -265,13 +231,13 @@ pub(super) fn stabilize_lines(
                 let bare_label = format!(".__BASM__stabilize_pad_{label_counter}");
                 let qualified_label = format!("{owning_global}{bare_label}");
 
-                let ret_token = &tokens[ret_token_index];
+                let ret_token = tokens[ret_token_index];
                 let ret_text = ret_token.to_string();
                 let condition_text = split_head(&ret_text).1.to_string();
                 let nop_count = corrected_rewrite_nop_count(&condition_text, &ret_text, nop_count)?;
 
                 edits.push(StabilizeTextEdit::ReplaceRetWithJump {
-                    range: token_range(ret_token, start_line),
+                    range: token_lsp_range(ret_token),
                     new_text: format!("jr {condition_text},{qualified_label}")
                 });
 
@@ -283,8 +249,23 @@ pub(super) fn stabilize_lines(
     }
 
     if !tail_blocks.is_empty() {
+        // `range.end` already sits at the start of a real line (character
+        // 0) whenever the selection ends exactly on a line boundary (the
+        // common case, including every whole-line selection via
+        // `stabilize_lines`) - use it directly. A genuine mid-line end (a
+        // precise, partial selection) needs to skip to the *next* line
+        // instead, so the new block always starts fresh, never mid-line.
+        let at = if range.end.character == 0 {
+            range.end
+        }
+        else {
+            Position {
+                line: range.end.line + 1,
+                character: 0
+            }
+        };
         edits.push(StabilizeTextEdit::AppendTailBlocks {
-            after_line: end_line,
+            at,
             text: tail_blocks
         });
     }
@@ -292,17 +273,39 @@ pub(super) fn stabilize_lines(
     Ok(edits)
 }
 
+/// Whole-line convenience wrapper over [`stabilize_selection`] - covers
+/// the entirety of both `start_line` and `end_line` (inclusive, 0-based),
+/// ignoring any character position within them.
+pub(super) fn stabilize_lines(
+    listing: &LocatedListing,
+    start_line: usize,
+    end_line: usize
+) -> Result<Vec<StabilizeTextEdit>, String> {
+    stabilize_selection(
+        listing,
+        Range {
+            start: Position {
+                line: start_line as u32,
+                character: 0
+            },
+            end: Position {
+                line: end_line as u32 + 1,
+                character: 0
+            }
+        }
+    )
+}
+
 #[cfg(test)]
 mod tests {
+    use cpclib_asm::parser::parse_z80_str;
+
     use super::*;
 
-    fn lines(text: &str) -> Vec<&str> {
-        text.lines().collect()
-    }
-
     fn stabilize(text: &str) -> Result<Vec<StabilizeTextEdit>, String> {
-        let l = lines(text);
-        stabilize_lines(&l, 0, l.len() - 1)
+        let listing = parse_z80_str(text).unwrap();
+        let end_line = text.lines().count().saturating_sub(1);
+        stabilize_lines(&listing, 0, end_line)
     }
 
     /// Only `InsertPadding` edits expected - collapses them to `(line,
@@ -425,10 +428,10 @@ mod tests {
     }
 
     /// A branch sharing its line with another `:`-chained instruction - the
-    /// old text-based version had to specially reject this shape
-    /// (`hidden_relevant_mnemonic`); AST-based tokens make it structurally
-    /// impossible to miss, since each `:`-segment already parses into its
-    /// own separate token, so this now balances normally instead of erroring.
+    /// old text-based version had to specially reject this shape; AST-based
+    /// tokens make it structurally impossible to miss, since each
+    /// `:`-segment already parses into its own separate token, so this now
+    /// balances normally instead of erroring.
     #[test]
     fn a_jump_sharing_its_line_with_other_instructions_still_balances() {
         let text = "    ld a,b : jr nz,.b\n    jr .over\n.b:\n    nop\n.over:\n";
@@ -487,23 +490,17 @@ bc26_hl
             .iter()
             .find_map(|e| {
                 match e {
-                    StabilizeTextEdit::AppendTailBlocks { after_line, text } => {
-                        Some((after_line, text))
-                    },
+                    StabilizeTextEdit::AppendTailBlocks { at, text } => Some((at, text)),
                     _ => None
                 }
             })
             .expect("expected an AppendTailBlocks edit");
-        assert_eq!(*append.0, 7);
+        assert_eq!(*append.0, Position::new(8, 0));
         // Hand-verified against real timing data (`ret nc`: taken=4,
         // not-taken=2; `jr nc,x`: taken=3, not-taken=2; unconditional
         // `ret`=3): not-taken path = 2 + 3 (ld bc,nn) + 3 (add hl,bc) + 3
         // (ret) = 11; taken path once rewritten = 3 (jr taken) + N +
-        // 3 (the newly appended ret) - solving 3+N+3=11 gives N=5. The
-        // *uncorrected* number `cpclib-asm` reports on its own (using the
-        // original `ret nc`'s own taken cost of 4 with zero further
-        // content) would be 11-4=7 - wrong once the rewrite actually
-        // substitutes a cheaper `jr` and adds a new trailing `ret`.
+        // 3 (the newly appended ret) - solving 3+N+3=11 gives N=5.
         assert_eq!(
             append.1,
             ".__BASM__stabilize_pad_1\n    waitnops 5\n    ret\n"
@@ -518,5 +515,30 @@ bc26_hl
     fn conditional_ret_rewrite_without_an_enclosing_global_label_is_refused() {
         let text = "    ret nc\n    ld bc,10\n    add hl,bc\n    ret\n";
         assert!(stabilize(text).is_err());
+    }
+
+    /// `stabilize_selection` at precise-character granularity: a mid-line
+    /// range should behave identically to the whole-line wrapper when it
+    /// happens to span exactly the same content, but must *exclude* a
+    /// token sitting outside the given character bounds even on an
+    /// otherwise-included line.
+    #[test]
+    fn stabilize_selection_respects_precise_character_bounds() {
+        let text =
+            "junk: jr nz,.b\n    ld a,b\n    jr .over\n.b:\n    ld a,b\n    ld c,d\n.over:\n";
+        let listing = parse_z80_str(text).unwrap();
+        // Start the selection right at "jr nz,.b" (column 6), excluding
+        // the leading "junk:" label - which must not confuse the balancer
+        // or the owning-global-label scan.
+        let edits = stabilize_selection(
+            &listing,
+            Range {
+                start: Position::new(0, 6),
+                end: Position::new(7, 0)
+            }
+        )
+        .unwrap();
+        let insertions = insertions_only(edits);
+        assert_eq!(insertions, vec![(6, 1)], "{insertions:?}");
     }
 }

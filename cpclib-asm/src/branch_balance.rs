@@ -1,9 +1,10 @@
 //! Automatic branch-timing stabilization: detects hand-written runtime
 //! conditional branches (`JR`/`JP` with a flag condition, and `RET` with a
-//! flag condition) in a token sequence, builds their control-flow graph,
-//! and computes the padding needed so every path from a branch to its
-//! merge point costs the same - working bottom-up, innermost branch first,
-//! so nested/sequential branches all end up correctly balanced.
+//! flag condition) in a token sequence, builds their control-flow graph
+//! (via `crate::cfg`), and computes the padding needed so every path from a
+//! branch to its merge point costs the same - working bottom-up, innermost
+//! branch first, so nested/sequential branches all end up correctly
+//! balanced.
 //!
 //! Generic over `T: ListingElement` (so it works identically on plain
 //! `Token` and the parser's own `LocatedToken`) and over the cost source
@@ -19,23 +20,21 @@
 //! their original document order.
 //!
 //! `RET cc` is modeled as a branch whose *taken* side goes straight to the
-//! selection's own virtual exit (a real routine's early-return really does
-//! leave to an unrelated call site, but for balancing purposes every path
-//! through the routine converges there regardless of which `RET` fires, so
-//! treating "taken" as reaching that shared exit directly - rather than a
-//! real label - gives the correct answer without needing to know anything
-//! about the caller). An unconditional trailing `RET` is likewise just a
-//! plain jump to the virtual exit. When the *cheaper* arm turns out to be
-//! that direct-to-exit taken side, there is no in-selection code left to
-//! pad into - `balance_branches` reports `StabilizeEdit::
-//! RewriteConditionalRetAndPad` instead of `InsertPadding` for that case;
-//! the caller is expected to rewrite the `RET cc` into `JR cc,<fresh
-//! label>` and append a new padded tail block (this module has no opinion
-//! on label text or the exact padding instruction used - purely
-//! structural, see `StabilizeEdit`'s own doc comment).
+//! selection's own virtual exit - see `crate::cfg`'s own module doc comment
+//! for why. When the *cheaper* arm turns out to be that direct-to-exit
+//! taken side, there is no in-selection code left to pad into -
+//! `balance_branches` reports `StabilizeEdit::RewriteConditionalRetAndPad`
+//! instead of `InsertPadding` for that case; the caller is expected to
+//! rewrite the `RET cc` into `JR cc,<fresh label>` and append a new padded
+//! tail block (this module has no opinion on label text or the exact
+//! padding instruction used - purely structural, see `StabilizeEdit`'s own
+//! doc comment).
 //!
 //! **Out of scope for v1** (each rejected with a specific reason, never
-//! silently mishandled):
+//! silently mishandled) - `crate::cfg::build_cfg` itself is permissive
+//! (shared with `cost_range`, which needs to degrade gracefully instead of
+//! rejecting); the rejections below are this module's own validation,
+//! applied right after building the CFG:
 //! - Loops (any jump target at or before its own index - a back-edge). A
 //!   loop's whole point is a variable iteration count; there is no single
 //!   "path cost" to equalize in the same sense a straight branch-and-merge
@@ -53,16 +52,9 @@
 
 use std::collections::HashMap;
 
-use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
+use cpclib_tokens::{ListingElement, Mnemonic};
 
-/// The only mnemonics this module treats as a two-target branch (`RET` is
-/// handled separately, see `build_cfg`, since its conditional form has no
-/// label operand at all).
-const JUMP_MNEMONICS: &[Mnemonic] = &[Mnemonic::Jr, Mnemonic::Jp];
-/// Mnemonics that make a selection unsupported wherever they appear, in
-/// every form - their "taken" arm isn't expressible even via `RET`'s
-/// direct-to-exit cheat.
-const UNSUPPORTED_MNEMONICS: &[Mnemonic] = &[Mnemonic::Djnz, Mnemonic::Call];
+use crate::cfg::{Cfg, Terminator, build_cfg, compute_postdominators, expect_block, mnemonic_of};
 
 /// A cost source the algorithm queries once per token - kept fully
 /// decoupled from any specific timing-data representation (see the module
@@ -122,251 +114,23 @@ impl StabilizeEdit {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct BasicBlock {
-    start: usize,
-    end: usize // inclusive
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Terminator {
-    Fallthrough(usize),
-    Jump(usize),
-    Branch {
-        taken: usize,
-        not_taken: usize,
-        cost_taken: u32,
-        cost_not_taken: u32
-    }
-}
-
-struct Cfg {
-    blocks: Vec<BasicBlock>,
-    /// One terminator per real block; index `blocks.len()` is a virtual
-    /// exit node every terminator target that falls off the end of
-    /// `tokens` resolves to, giving the whole selection a single
-    /// well-defined exit for post-dominance to be computed against.
-    terms: Vec<Terminator>
-}
-
-impl Cfg {
-    fn exit(&self) -> usize {
-        self.blocks.len()
-    }
-
-    fn successors(&self, block: usize) -> Vec<usize> {
-        match self.terms[block] {
-            Terminator::Fallthrough(t) | Terminator::Jump(t) => vec![t],
-            Terminator::Branch {
-                taken, not_taken, ..
-            } => vec![taken, not_taken]
-        }
-    }
-}
-
-fn mnemonic_of<T: ListingElement>(token: &T) -> Option<Mnemonic> {
-    token.mnemonic().copied()
-}
-
-/// The target label name and, for a conditional jump, confirmation that a
-/// flag condition is present - `Some(condition_present, label)`. For a
-/// conditional jump (`JR cc,label`), `arg1` carries the flag test and
-/// `arg2` the target; for an unconditional one (`JR label`), the parser
-/// still places the sole argument in `arg2`, leaving `arg1` empty (verified
-/// against the real parser output, not assumed). Fully generic via
-/// `DataAccessElem`/`ExprElement`'s trait-level accessors - no matching on
-/// concrete `DataAccess`/`Expr` variants, so this works identically for
-/// `Token` and `LocatedToken`.
-fn jump_condition_and_target<T: ListingElement>(token: &T) -> Option<(bool, &str)> {
-    let arg1 = token.mnemonic_arg1();
-    let arg2 = token.mnemonic_arg2();
-    let (conditional, target_arg) = match (arg1, arg2) {
-        (Some(a1), Some(_)) if a1.is_flag_test() => (true, arg2),
-        (None, Some(_)) => (false, arg2),
-        (Some(_), None) => (false, arg1),
-        _ => return None
-    };
-    let label = target_arg?
-        .get_expression()
-        .filter(|e| e.is_label())
-        .map(|e| e.label())?;
-    Some((conditional, label))
-}
-
-/// Builds the control-flow graph for `tokens`, or a human-readable reason
-/// it can't (loop, escaping target, or an unsupported mnemonic anywhere).
-fn build_cfg<T: ListingElement>(tokens: &[T]) -> Result<Cfg, String> {
-    // Pass 1: every label defined in `tokens` -> its index.
-    let mut label_indices: HashMap<&str, usize> = HashMap::new();
+/// `Err` the first time `tokens` contains a `CALL` or `DJNZ` anywhere, in
+/// any form - unlike `JR`/`JP`/`RET`, neither has a self-contained,
+/// in-selection "taken arm" this module can express (`DJNZ`'s taken arm is
+/// a loop; a taken `CALL` runs an entire subroutine of unknowable cost).
+/// Checked directly against `tokens`, not the `Cfg` - `crate::cfg::build_cfg`
+/// itself no longer treats either mnemonic specially (it's permissive,
+/// shared with `cost_range`, which *does* want to model them), so this
+/// module's own blanket rejection has to be an explicit, separate scan.
+fn reject_call_or_djnz<T: ListingElement>(tokens: &[&T]) -> Result<(), String> {
     for (i, token) in tokens.iter().enumerate() {
-        if token.is_label() {
-            label_indices.insert(token.label_symbol(), i);
-        }
-    }
-
-    // Pass 2: block boundaries - a new block starts at 0, at every label,
-    // and right after every JR/JP/DJNZ/CALL/RET token (RET is a terminator
-    // in every form even though it's no longer in UNSUPPORTED_MNEMONICS -
-    // see the dedicated handling below).
-    let mut block_starts = vec![0usize];
-    for (i, token) in tokens.iter().enumerate() {
-        if token.is_label() {
-            block_starts.push(i);
-        }
-        if let Some(m) = mnemonic_of(token)
-            && (JUMP_MNEMONICS.contains(&m)
-                || UNSUPPORTED_MNEMONICS.contains(&m)
-                || m == Mnemonic::Ret)
-            && i + 1 < tokens.len()
-        {
-            block_starts.push(i + 1);
-        }
-    }
-    block_starts.sort_unstable();
-    block_starts.dedup();
-
-    let blocks: Vec<BasicBlock> = block_starts
-        .iter()
-        .enumerate()
-        .map(|(idx, &start)| {
-            let end = block_starts
-                .get(idx + 1)
-                .map(|&n| n - 1)
-                .unwrap_or(tokens.len() - 1);
-            BasicBlock { start, end }
-        })
-        .collect();
-    let index_to_block: HashMap<usize, usize> = blocks
-        .iter()
-        .enumerate()
-        .map(|(idx, b)| (b.start, idx))
-        .collect();
-    let exit = blocks.len();
-
-    let resolve_target = |label: &str, from_index: usize| -> Result<usize, String> {
-        let target_index = *label_indices
-            .get(label)
-            .ok_or_else(|| format!("jump target \"{label}\" is not defined in the selection"))?;
-        if target_index <= from_index {
+        if let Some(m @ (Mnemonic::Call | Mnemonic::Djnz)) = mnemonic_of(*token) {
             return Err(format!(
-                "backward jump to \"{label}\" (a loop) isn't supported"
+                "{m:?} at token index {i} isn't supported (only JR/JP/RET are balanced)"
             ));
         }
-        blocks
-            .iter()
-            .enumerate()
-            .find(|(_, b)| (b.start..=b.end).contains(&target_index))
-            .map(|(idx, _)| idx)
-            .ok_or_else(|| format!("could not resolve jump target \"{label}\""))
-    };
-
-    let mut terms = Vec::with_capacity(blocks.len());
-    for block in &blocks {
-        let next_block = index_to_block
-            .get(&(block.end + 1))
-            .copied()
-            .unwrap_or(exit);
-
-        let last = &tokens[block.end];
-        let Some(mnemonic) = mnemonic_of(last)
-        else {
-            terms.push(Terminator::Fallthrough(next_block));
-            continue;
-        };
-
-        // RET is handled before the UNSUPPORTED_MNEMONICS check (it's no
-        // longer in that list): its taken side - conditional or not -
-        // leaves straight to the selection's own virtual exit, never to a
-        // real label, so it needs no `resolve_target` call at all. See the
-        // module doc comment for why this "cheat" gives the right answer.
-        if mnemonic == Mnemonic::Ret {
-            let conditional = last.mnemonic_arg1().is_some_and(|a| a.is_flag_test());
-            if conditional {
-                terms.push(Terminator::Branch {
-                    taken: exit,
-                    not_taken: next_block,
-                    cost_taken: 0,
-                    cost_not_taken: 0
-                });
-            }
-            else {
-                terms.push(Terminator::Jump(exit));
-            }
-            continue;
-        }
-
-        if UNSUPPORTED_MNEMONICS.contains(&mnemonic) {
-            return Err(format!(
-                "{mnemonic:?} at token index {} isn't supported (only JR/JP/RET are balanced)",
-                block.end
-            ));
-        }
-        if !JUMP_MNEMONICS.contains(&mnemonic) {
-            terms.push(Terminator::Fallthrough(next_block));
-            continue;
-        }
-
-        let Some((conditional, label)) = jump_condition_and_target(last)
-        else {
-            return Err(format!(
-                "could not parse the {mnemonic:?} target at token index {}",
-                block.end
-            ));
-        };
-        let target = resolve_target(label, block.end)?;
-
-        if !conditional {
-            terms.push(Terminator::Jump(target));
-            continue;
-        }
-
-        // Callers supply real taken/not-taken costs via `cost` in
-        // `balance_branches` - here we only need to know *that* this is a
-        // conditional jump to shape the CFG; the actual numbers are filled
-        // in during `balance`, where the cost function is in scope.
-        terms.push(Terminator::Branch {
-            taken: target,
-            not_taken: next_block,
-            cost_taken: 0,
-            cost_not_taken: 0
-        });
     }
-
-    Ok(Cfg { blocks, terms })
-}
-
-/// Immediate post-dominator of every block (index `cfg.exit()` for the
-/// virtual exit itself). Exploits that every edge in this CFG goes
-/// strictly forward in index order (loops were already rejected in
-/// `build_cfg`) - blocks are therefore already in a valid reverse
-/// postorder, so a single backward pass suffices; no fixpoint iteration is
-/// needed the way a general CFG's dominance computation would require.
-fn compute_postdominators(cfg: &Cfg) -> Vec<usize> {
-    let exit = cfg.exit();
-    let mut postdom = vec![exit; exit + 1];
-    postdom[exit] = exit;
-
-    fn intersect(postdom: &[usize], mut a: usize, mut b: usize) -> usize {
-        while a != b {
-            while a < b {
-                a = postdom[a];
-            }
-            while b < a {
-                b = postdom[b];
-            }
-        }
-        a
-    }
-
-    for i in (0..cfg.blocks.len()).rev() {
-        let succs = cfg.successors(i);
-        let mut acc = succs[0];
-        for &s in &succs[1..] {
-            acc = intersect(&postdom, acc, s);
-        }
-        postdom[i] = acc;
-    }
-    postdom
+    Ok(())
 }
 
 /// Sums costs for `tokens[start..=end]` using each instruction's single
@@ -377,7 +141,7 @@ fn compute_postdominators(cfg: &Cfg) -> Vec<usize> {
 /// this is a defensive fallback, not expected to matter in practice.
 /// Label tokens contribute nothing (a real, zero-cost marker).
 fn straight_line_cost<T: ListingElement>(
-    tokens: &[T],
+    tokens: &[&T],
     start: usize,
     end: usize,
     cost: &impl Fn(&T) -> InstructionCost
@@ -386,7 +150,7 @@ fn straight_line_cost<T: ListingElement>(
         return Ok(0);
     }
     let mut total = 0u32;
-    for token in &tokens[start..=end] {
+    for token in tokens[start..=end].iter().copied() {
         if token.is_label() {
             continue;
         }
@@ -410,7 +174,7 @@ fn straight_line_cost<T: ListingElement>(
 fn balance<T: ListingElement>(
     cfg: &Cfg,
     postdom: &[usize],
-    tokens: &[T],
+    tokens: &[&T],
     cost: &impl Fn(&T) -> InstructionCost
 ) -> Result<Vec<StabilizeEdit>, String> {
     let mut edits = Vec::new();
@@ -426,14 +190,18 @@ fn balance<T: ListingElement>(
     for &b in &branch_indices {
         let Terminator::Branch {
             taken, not_taken, ..
-        } = cfg.terms[b]
+        } = &cfg.terms[b]
         else {
             unreachable!()
         };
+        // Already validated forward-only by the caller - safe to unwrap.
+        let taken = expect_block(taken);
+        let not_taken = *not_taken;
+
         // Real taken/not-taken cost of the branch instruction itself,
         // supplied by the caller's cost function (see `build_cfg`'s own
         // note on why this is deferred to here).
-        let branch_token = &tokens[cfg.blocks[b].end];
+        let branch_token = tokens[cfg.blocks[b].end];
         let (cost_taken, cost_not_taken) = match cost(branch_token) {
             InstructionCost::Conditional { taken, not_taken } => (taken, not_taken),
             InstructionCost::Fixed(n) => (n, n),
@@ -460,7 +228,7 @@ fn balance<T: ListingElement>(
             // `taken` only ever equals `cfg.exit()` directly for a
             // conditional RET's own early-exit side (a JR/JP branch's
             // taken side always resolves to a real block via
-            // `resolve_target`) - that's the one shape with no
+            // `resolve_successor`) - that's the one shape with no
             // in-selection code to insert padding into. `not_taken` can
             // *also* equal `cfg.exit()` (e.g. a RET cc as the very last
             // token, nothing follows it in the selection), but that case
@@ -504,7 +272,7 @@ fn arm_cost<T: ListingElement>(
     cfg: &Cfg,
     resolved: &HashMap<usize, u32>,
     postdom: &[usize],
-    tokens: &[T],
+    tokens: &[&T],
     cost: &impl Fn(&T) -> InstructionCost,
     start: usize,
     end: usize
@@ -522,8 +290,9 @@ fn arm_cost<T: ListingElement>(
         else {
             let block = cfg.blocks[cur];
             total += straight_line_cost(tokens, block.start, block.end, cost)?;
-            cur = match cfg.terms[cur] {
-                Terminator::Fallthrough(t) | Terminator::Jump(t) => t,
+            cur = match &cfg.terms[cur] {
+                Terminator::Fallthrough(t) => *t,
+                Terminator::Jump(s) => expect_block(s),
                 Terminator::Branch { .. } => {
                     unreachable!(
                         "branch blocks are always inserted into `resolved` before being walked past"
@@ -588,13 +357,15 @@ fn arm_padding_index(
 /// all in that case, not surface the message as an error (this isn't
 /// necessarily a mistake, just a shape this feature doesn't cover yet).
 pub fn balance_branches<T: ListingElement>(
-    tokens: &[T],
+    tokens: &[&T],
     cost: impl Fn(&T) -> InstructionCost
 ) -> Result<Vec<StabilizeEdit>, String> {
     if tokens.is_empty() {
         return Ok(Vec::new());
     }
+    reject_call_or_djnz(tokens)?;
     let cfg = build_cfg(tokens)?;
+    cfg.validate_forward_only()?;
     if !cfg
         .terms
         .iter()
@@ -610,7 +381,7 @@ pub fn balance_branches<T: ListingElement>(
 
 #[cfg(test)]
 mod tests {
-    use cpclib_tokens::ListingElement;
+    use cpclib_tokens::{DataAccessElem, ListingElement};
 
     use super::*;
     use crate::parser::obtained::LocatedToken;
@@ -644,11 +415,10 @@ mod tests {
     fn balance(code: &str) -> Result<Vec<StabilizeEdit>, String> {
         // `LocatedToken::clone()` is an `unimplemented!()` stub in this
         // codebase today, so tests borrow straight from the parsed
-        // `LocatedListing` (which derefs down to `&[LocatedToken]`) rather
-        // than collecting an owned `Vec`.
+        // `LocatedListing` rather than collecting an owned `Vec`.
         let listing = parse_z80_str(code).unwrap();
-        let tokens: &[LocatedToken] = &listing;
-        balance_branches(tokens, test_cost)
+        let tokens: Vec<&LocatedToken> = listing.iter().collect();
+        balance_branches(&tokens, test_cost)
     }
 
     /// The classic shape: `jr nz,.b` / cheap not-taken arm (ends with its
