@@ -4,6 +4,8 @@
 /// Implementation of various behavior for the tokens of cpclib_tokens
 pub mod implementation;
 
+pub mod branch_balance;
+
 /// All the stuff to parse z80 code.
 pub mod parser;
 

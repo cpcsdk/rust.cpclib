@@ -131,6 +131,91 @@ impl AssemblyAnalyzer {
             });
         }
 
+        // Balance branch timings in the selection - pads every runtime path
+        // through a hand-written JR/JP/RET branch so they all cost the
+        // same. Offered only on success: a selection that doesn't fit this
+        // v1's supported shape (a loop, DJNZ/CALL, an escaping jump target,
+        // a conditional RET needing a rewrite with no qualifying global
+        // label in view, ...) isn't a mistake the user made, so it gets no
+        // action at all rather than an error popup - same "nothing
+        // recognizable -> no entry" precedent as the cycle-count action
+        // above.
+        if let Ok(edits) = super::stabilize::stabilize_lines(&all_lines, start_line, end_line)
+            && !edits.is_empty()
+        {
+            let text_edits: Vec<TextEdit> = edits
+                .into_iter()
+                .map(|edit| {
+                    match edit {
+                        super::stabilize::StabilizeTextEdit::InsertPadding { line, nop_count } => {
+                            let pos = Position {
+                                line: line as u32,
+                                character: 0
+                            };
+                            TextEdit {
+                                range: Range {
+                                    start: pos,
+                                    end: pos
+                                },
+                                new_text: format!("    waitnops {nop_count}\n")
+                            }
+                        },
+                        super::stabilize::StabilizeTextEdit::ReplaceRetWithJump {
+                            range,
+                            new_text
+                        } => TextEdit { range, new_text },
+                        super::stabilize::StabilizeTextEdit::AppendTailBlocks {
+                            after_line,
+                            text: append_text
+                        } => {
+                            // If `after_line` is the document's own last
+                            // line and it has no trailing newline, there is
+                            // no real line break for `(after_line + 1, 0)`
+                            // to anchor to - inserting there would glue
+                            // straight onto the end of that line's own text
+                            // instead of starting a fresh line. Anchor to
+                            // the end of that line's own content instead
+                            // and supply the leading newline ourselves.
+                            let is_last_line = after_line + 1 >= all_lines.len();
+                            let needs_own_newline = is_last_line && !text.ends_with('\n');
+                            let (pos, new_text) = if needs_own_newline {
+                                let end_char = all_lines[after_line].len() as u32;
+                                (
+                                    Position {
+                                        line: after_line as u32,
+                                        character: end_char
+                                    },
+                                    format!("\n{append_text}")
+                                )
+                            }
+                            else {
+                                (
+                                    Position {
+                                        line: (after_line + 1) as u32,
+                                        character: 0
+                                    },
+                                    append_text
+                                )
+                            };
+                            TextEdit {
+                                range: Range {
+                                    start: pos,
+                                    end: pos
+                                },
+                                new_text
+                            }
+                        }
+                    }
+                })
+                .collect();
+            actions.push(CodeAction {
+                title: "Balance branch timings in selection".to_string(),
+                kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                edit: Some(single_file_multi_edit(document.uri.clone(), text_edits)),
+                ..Default::default()
+            });
+        }
+
         actions
     }
 
@@ -186,11 +271,17 @@ pub(super) fn line_range_from_selection(range: Range, line_count: usize) -> Opti
 
 /// Build a `WorkspaceEdit` that replaces one range in one file.
 pub(super) fn single_file_edit(uri: Url, range: Range, new_text: String) -> WorkspaceEdit {
+    single_file_multi_edit(uri, vec![TextEdit { range, new_text }])
+}
+
+/// As [`single_file_edit`], but for several non-overlapping edits in one
+/// document (e.g. NOP padding inserted at more than one point by the
+/// branch-timing-stabilization action) - `TextEdit`s are resolved against
+/// the *original* document, so the caller doesn't need to worry about
+/// later edits shifting earlier ones' positions.
+pub(super) fn single_file_multi_edit(uri: Url, edits: Vec<TextEdit>) -> WorkspaceEdit {
     WorkspaceEdit {
-        changes: Some(std::collections::HashMap::from([(
-            uri,
-            vec![TextEdit { range, new_text }]
-        )])),
+        changes: Some(std::collections::HashMap::from([(uri, edits)])),
         ..Default::default()
     }
 }
@@ -317,5 +408,167 @@ mod cycle_count_action_tests {
             }
         };
         assert!(analyzer.cycle_count_for_selection(&d, collapsed).is_none());
+    }
+}
+
+#[cfg(test)]
+mod stabilize_branch_timings_action_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn full_line_range(start: u32, end: u32) -> Range {
+        Range {
+            start: Position {
+                line: start,
+                character: 0
+            },
+            end: Position {
+                line: end,
+                character: 0
+            }
+        }
+    }
+
+    fn stabilize_action(actions: &[CodeAction]) -> Option<&CodeAction> {
+        actions
+            .iter()
+            .find(|a| a.title.starts_with("Balance branch timings"))
+    }
+
+    #[test]
+    fn the_action_appears_and_inserts_nops_for_an_unbalanced_branch() {
+        let text = "    jr nz,.b\n    ld a,b\n    jr .over\n.b:\n    ld a,b\n    ld c,d\n.over:\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 7));
+        let action = stabilize_action(&actions).expect("expected the stabilize action");
+        assert_eq!(action.title, "Balance branch timings in selection");
+        let edit = action.edit.as_ref().expect("expected an edit");
+        let text_edits = edit.changes.as_ref().unwrap().get(&d.uri).unwrap();
+        assert_eq!(text_edits.len(), 1);
+        assert_eq!(text_edits[0].new_text, "    waitnops 1\n");
+        assert_eq!(text_edits[0].range.start.line, 6);
+    }
+
+    #[test]
+    fn no_action_for_an_already_balanced_branch() {
+        let text = "    jr nz,.b\n    nop\n    nop\n    jr .over\n.b:\n    nop\n    nop\n    nop\n    nop\n.over:\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 10));
+        assert!(stabilize_action(&actions).is_none());
+    }
+
+    #[test]
+    fn no_action_when_the_selection_contains_no_branch() {
+        let d = doc("    ld a,b\n    nop\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 2));
+        assert!(stabilize_action(&actions).is_none());
+    }
+
+    #[test]
+    fn no_action_when_the_selection_contains_an_unsupported_construct() {
+        // A DJNZ loop - unsupported (see `stabilize.rs`), must not crash or
+        // offer an action, just silently decline like the loop-rejection
+        // and mnemonic-rejection cases it wraps.
+        let d = doc(".loop:\n    nop\n    djnz .loop\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 3));
+        assert!(stabilize_action(&actions).is_none());
+    }
+
+    #[test]
+    fn no_action_without_a_real_selection() {
+        let d = doc("    jr nz,.b\n    nop\n.b:\n    nop\n    nop\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let collapsed = Range {
+            start: Position {
+                line: 0,
+                character: 0
+            },
+            end: Position {
+                line: 0,
+                character: 0
+            }
+        };
+        let actions = analyzer.code_actions(&d, collapsed);
+        assert!(stabilize_action(&actions).is_none());
+    }
+
+    /// A conditional RET's early-exit arm needing padding produces two
+    /// edits (a range replace for the rewritten jump, plus one appended
+    /// tail block), not the single zero-width insert the plain-padding
+    /// path produces - exercises that richer shape end to end through
+    /// `code_actions`, not just `stabilize_lines` directly.
+    #[test]
+    fn the_action_replaces_and_appends_for_a_conditional_ret_early_exit_arm() {
+        let text = "bc26_hl\n    ld a,h\n    add 8\n    ld h,a\n    ret nc\n    ld bc,0xc000 + 96\n    add hl,bc\n    ret\n";
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 8));
+        let action = stabilize_action(&actions).expect("expected the stabilize action");
+        let edit = action.edit.as_ref().expect("expected an edit");
+        let text_edits = edit.changes.as_ref().unwrap().get(&d.uri).unwrap();
+        assert_eq!(text_edits.len(), 2, "{text_edits:?}");
+
+        let replace = text_edits
+            .iter()
+            .find(|e| e.new_text.starts_with("jr "))
+            .expect("expected the jump-rewrite edit");
+        assert_eq!(replace.new_text, "jr nc,bc26_hl.__BASM__stabilize_pad_1");
+        assert_eq!(replace.range.start, Position::new(4, 4));
+        assert_eq!(replace.range.end, Position::new(4, 10));
+
+        let append = text_edits
+            .iter()
+            .find(|e| e.new_text.starts_with(".__BASM__"))
+            .expect("expected the appended tail block edit");
+        assert_eq!(append.range.start, Position::new(8, 0));
+        assert_eq!(append.range.start, append.range.end);
+        // See `stabilize.rs`'s own hand-verified derivation of this count
+        // (5, not the naive 7 - correcting for the RET-cc-vs-JR-cc timing
+        // difference and the newly appended `ret`'s own cost).
+        assert_eq!(
+            append.new_text,
+            ".__BASM__stabilize_pad_1\n    waitnops 5\n    ret\n"
+        );
+    }
+
+    /// Same shape as above, but the document has no trailing newline after
+    /// the selection's own last line (a real, common case - many editors
+    /// don't force one). `str::lines()` produces the identical line list
+    /// either way, so the selection/analysis side doesn't notice the
+    /// difference - but appending at `(after_line + 1, character: 0)`
+    /// blindly assumes a real newline already separates that position from
+    /// the selection's last line, which isn't true here: the fix must
+    /// anchor to the end of that last line's own content and supply its
+    /// own leading newline instead, or the appended block glues onto the
+    /// end of the last `ret` (`ret.__BASM__stabilize_pad_1`) instead of
+    /// starting on its own line.
+    #[test]
+    fn the_appended_tail_block_gets_its_own_line_even_without_a_trailing_newline() {
+        let text = "bc26_hl\n    ld a,h\n    add 8\n    ld h,a\n    ret nc\n    ld bc,0xc000 + 96\n    add hl,bc\n    ret";
+        assert!(!text.ends_with('\n'));
+        let d = doc(text);
+        let analyzer = AssemblyAnalyzer::new();
+        let actions = analyzer.code_actions(&d, full_line_range(0, 8));
+        let action = stabilize_action(&actions).expect("expected the stabilize action");
+        let edit = action.edit.as_ref().expect("expected an edit");
+        let text_edits = edit.changes.as_ref().unwrap().get(&d.uri).unwrap();
+
+        let append = text_edits
+            .iter()
+            .find(|e| e.new_text.contains("waitnops"))
+            .expect("expected the appended tail block edit");
+        assert_eq!(append.range.start, Position::new(7, 7));
+        assert_eq!(append.range.start, append.range.end);
+        assert_eq!(
+            append.new_text,
+            "\n.__BASM__stabilize_pad_1\n    waitnops 5\n    ret\n"
+        );
     }
 }
