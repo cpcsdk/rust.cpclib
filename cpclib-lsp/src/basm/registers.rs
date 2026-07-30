@@ -278,6 +278,60 @@ fn contract_input_for<'a>(
         .find(|(name, _)| name.trim_end_matches('\'') == word_upper)
 }
 
+// ─── all-registers status bar ───────────────────────────────────────────────
+
+/// Every tracked register's hex value at a position - `None` per field when
+/// that register's value isn't statically known there. The same 13
+/// registers `tracked_value_hex` recognizes (`AF`/`PC`/`I`/`R`/flags aren't
+/// tracked, same as the single-register hover).
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct AllRegisters {
+    pub a: Option<String>,
+    pub b: Option<String>,
+    pub c: Option<String>,
+    pub d: Option<String>,
+    pub e: Option<String>,
+    pub h: Option<String>,
+    pub l: Option<String>,
+    pub bc: Option<String>,
+    pub de: Option<String>,
+    pub hl: Option<String>,
+    pub ix: Option<String>,
+    pub iy: Option<String>,
+    pub sp: Option<String>
+}
+
+/// All 13 tracked registers' values at `position` in one pass - same
+/// underlying `register_state_at` walk the single-register hover already
+/// uses, called once with an empty `hovered_register_upper` (never matches
+/// a real register name, so the "LD destination" after-this-instruction
+/// exception never triggers - every register uniformly reads "value before
+/// this instruction", the same reading `register_state_at`'s own tests use
+/// for anything other than the one register actually being asked about).
+pub(super) fn all_tracked_registers_at(
+    listing: &LocatedListing,
+    env: &mut Env,
+    position: Position
+) -> AllRegisters {
+    let state = register_state_at(listing, env, position, "");
+    let get = |name: &str| tracked_value_hex(name, &state).flatten();
+    AllRegisters {
+        a: get("A"),
+        b: get("B"),
+        c: get("C"),
+        d: get("D"),
+        e: get("E"),
+        h: get("H"),
+        l: get("L"),
+        bc: get("BC"),
+        de: get("DE"),
+        hl: get("HL"),
+        ix: get("IX"),
+        iy: get("IY"),
+        sp: get("SP")
+    }
+}
+
 // ─── hover formatting ───────────────────────────────────────────────────────
 
 fn tracked_value_hex(word_upper: &str, state: &TrackedState) -> Option<Option<String>> {
@@ -560,5 +614,45 @@ mod tests {
         let state = TrackedState::default();
         assert!(format_known_value("AF", &state, None).is_none());
         assert!(format_known_value("NZ", &state, None).is_none());
+    }
+
+    // ─── all-registers status bar ───────────────────────────────────────────
+
+    fn all_registers_at(text: &str, line: u32, character: u32) -> AllRegisters {
+        let builder = ParserContextBuilder::default().set_quiet(true);
+        let listing = LocatedListing::new_complete_source(text, builder)
+            .unwrap_or_else(|_| panic!("expected {text:?} to parse cleanly"));
+        let mut env = Env::default();
+        all_tracked_registers_at(&listing, &mut env, Position { line, character })
+    }
+
+    #[test]
+    fn all_tracked_registers_at_reports_every_known_value_at_once() {
+        let regs = all_registers_at("    ld a,5\n    ld bc,0x1234\n    nop\n", 2, 4);
+        assert_eq!(regs.a.as_deref(), Some("0x05"));
+        assert_eq!(regs.bc.as_deref(), Some("0x1234"));
+        // B/C individually reflect the same BC load.
+        assert_eq!(regs.b.as_deref(), Some("0x12"));
+        assert_eq!(regs.c.as_deref(), Some("0x34"));
+        // Never touched - unknown, not silently zero.
+        assert_eq!(regs.hl, None);
+        assert_eq!(regs.sp, None);
+    }
+
+    #[test]
+    fn all_tracked_registers_at_resets_after_a_boundary_like_the_single_register_walk() {
+        let regs = all_registers_at("    ld a,5\nfoo:\n    nop\n", 2, 4);
+        assert_eq!(regs.a, None);
+    }
+
+    /// Unlike the single-register hover, this never applies the
+    /// "LD destination" after-this-instruction exception to any register -
+    /// every field consistently reads "value before this instruction".
+    #[test]
+    fn all_tracked_registers_at_never_applies_the_ld_destination_exception() {
+        let regs = all_registers_at("    ld bc, 6*256 + 7\n", 0, 4);
+        assert_eq!(regs.bc, None);
+        assert_eq!(regs.b, None);
+        assert_eq!(regs.c, None);
     }
 }

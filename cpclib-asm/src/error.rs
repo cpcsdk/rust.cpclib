@@ -36,7 +36,7 @@ use cpclib_disc::amsdos::AmsdosError;
 use cpclib_sna::SnapshotError;
 use cpclib_tokens::symbols::{PhysicalAddress, SourceLocation, Symbol, SymbolError};
 use cpclib_tokens::{BinaryOperation, ExpressionTypeError, tokens};
-use enumflags2::{BitFlags, bitflags};
+use enumflags2::bitflags;
 
 use crate::Z80Span;
 use crate::assembler::AssemblingPass;

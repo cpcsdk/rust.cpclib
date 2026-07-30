@@ -913,6 +913,7 @@ impl LanguageServer for CpcLspBackend {
                         "cpclib.runRule".to_string(),
                         "cpclib.runBasic".to_string(),
                         "cpclib.cycleCountForSelection".to_string(),
+                        "cpclib.registersAtPosition".to_string(),
                         "cpclib.removeUnusedParameter".to_string(),
                     ],
                     work_done_progress_options: WorkDoneProgressOptions::default()
@@ -1991,6 +1992,34 @@ impl LanguageServer for CpcLspBackend {
                 .asm_analyzer
                 .cycle_count_for_selection(&document, range);
             return Ok(summary.map(|s| serde_json::to_value(s).unwrap_or(serde_json::Value::Null)));
+        }
+
+        if params.command == "cpclib.registersAtPosition" {
+            let Some(arg) = params.arguments.into_iter().next()
+            else {
+                return Ok(None);
+            };
+            let uri = arg
+                .get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<Url>().ok());
+            let position = arg
+                .get("position")
+                .and_then(|v| serde_json::from_value::<Position>(v.clone()).ok());
+            let (Some(uri), Some(position)) = (uri, position)
+            else {
+                return Ok(None);
+            };
+
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            let registers = self.asm_analyzer.all_registers_at(&document, position);
+            return Ok(
+                registers.map(|r| serde_json::to_value(r).unwrap_or(serde_json::Value::Null))
+            );
         }
 
         if params.command == "cpclib.removeUnusedParameter" {

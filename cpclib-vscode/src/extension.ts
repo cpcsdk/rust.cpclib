@@ -17,6 +17,10 @@ let client: LanguageClient;
 // below).
 let cycleCountStatusBarItem: vscode.StatusBarItem;
 
+// "Registers at cursor" status bar item - created in `activate()`, updated
+// by `updateRegistersStatusBar` (see "Registers at cursor" section below).
+let registersStatusBarItem: vscode.StatusBarItem;
+
 /// Resolves the `cpclib-lsp` binary when `cpclib-lsp.serverPath` is left at
 /// its default. GUI-launched editors on macOS/Linux commonly don't inherit
 /// the PATH a login shell would have (`cargo install`'s `~/.cargo/bin` is
@@ -157,6 +161,25 @@ export function activate(context: ExtensionContext) {
         }),
     );
     void updateCycleCountStatusBar(window.activeTextEditor);
+
+    // Live "registers at cursor" status bar item - see "Registers at
+    // cursor" section below. Same debounced-selection-listener shape as
+    // the cycle-count item just above, kept as its own status bar item and
+    // its own debounce timer so dragging a selection doesn't cause the two
+    // to interfere with each other's timing.
+    registersStatusBarItem = window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+    context.subscriptions.push(registersStatusBarItem);
+    let registersTimer: ReturnType<typeof setTimeout> | undefined;
+    context.subscriptions.push(
+        window.onDidChangeActiveTextEditor(editor => { void updateRegistersStatusBar(editor); }),
+        window.onDidChangeTextEditorSelection(e => {
+            if (registersTimer) {
+                clearTimeout(registersTimer);
+            }
+            registersTimer = setTimeout(() => { void updateRegistersStatusBar(e.textEditor); }, 250);
+        }),
+    );
+    void updateRegistersStatusBar(window.activeTextEditor);
 }
 
 export function deactivate(): Thenable<void> | undefined {
@@ -494,4 +517,67 @@ async function updateCycleCountStatusBar(editor: vscode.TextEditor | undefined):
     }
     cycleCountStatusBarItem.tooltip = tooltip;
     cycleCountStatusBarItem.show();
+}
+
+// ── Registers at cursor ─────────────────────────────────────────────────────
+//
+// The server-side `cpclib.registersAtPosition` command (backed by
+// `cpclib-lsp/src/basm/registers.rs`'s `all_tracked_registers_at`, the
+// all-at-once counterpart to the per-register value already shown in
+// instruction hover) drives a compact status bar item: just an icon plus
+// "Registers" text, with every tracked register's value (or "?" when not
+// statically known at this point) listed in the tooltip - 13 registers is
+// too much to usefully cram into the status bar text itself.
+
+interface RegistersResult {
+    a: string | null;
+    b: string | null;
+    c: string | null;
+    d: string | null;
+    e: string | null;
+    h: string | null;
+    l: string | null;
+    bc: string | null;
+    de: string | null;
+    hl: string | null;
+    ix: string | null;
+    iy: string | null;
+    sp: string | null;
+}
+
+async function updateRegistersStatusBar(editor: vscode.TextEditor | undefined): Promise<void> {
+    if (!editor || editor.document.languageId !== 'basm') {
+        registersStatusBarItem.hide();
+        return;
+    }
+
+    let result: RegistersResult | null | undefined;
+    try {
+        result = await client.sendRequest<RegistersResult | null>('workspace/executeCommand', {
+            command: 'cpclib.registersAtPosition',
+            arguments: [{
+                uri: editor.document.uri.toString(),
+                position: client.code2ProtocolConverter.asPosition(editor.selection.active),
+            }],
+        });
+    } catch {
+        registersStatusBarItem.hide();
+        return;
+    }
+    if (!result) {
+        registersStatusBarItem.hide();
+        return;
+    }
+
+    registersStatusBarItem.text = '$(list-unordered) Registers';
+
+    const rows: [string, string | null][] = [
+        ['A', result.a], ['B', result.b], ['C', result.c],
+        ['D', result.d], ['E', result.e], ['H', result.h], ['L', result.l],
+        ['BC', result.bc], ['DE', result.de], ['HL', result.hl],
+        ['IX', result.ix], ['IY', result.iy], ['SP', result.sp],
+    ];
+    const lines = rows.map(([name, value]) => `${name.padEnd(2)} = ${value ?? '?'}`);
+    registersStatusBarItem.tooltip = `Registers at cursor:\n${lines.join('\n')}`;
+    registersStatusBarItem.show();
 }

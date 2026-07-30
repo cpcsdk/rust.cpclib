@@ -6,6 +6,7 @@ use tower_lsp::lsp_types::*;
 use super::AssemblyAnalyzer;
 use super::cycles::{self, SelectionCycleCount};
 use super::embedded_basic::extract_locomotive_blocks;
+use super::registers::AllRegisters;
 use crate::common::document::Document;
 
 impl AssemblyAnalyzer {
@@ -262,6 +263,24 @@ impl AssemblyAnalyzer {
             Some(summary)
         }
     }
+
+    /// Every tracked register's statically-known value at `position` (the
+    /// same 13 registers the single-register hover already tracks) - `None`
+    /// only when the document doesn't parse at all. Backs the VS Code
+    /// "all registers" status bar item (`cpclib.registersAtPosition`,
+    /// `backend.rs`), the all-at-once counterpart to hover's own
+    /// per-register `registers::register_state_at` lookup.
+    pub fn all_registers_at(
+        &self,
+        document: &Document,
+        position: Position
+    ) -> Option<AllRegisters> {
+        let listing = self.parse_document(document).ok()?;
+        let mut env = self.local_symbols_env_cached(document, &listing);
+        Some(super::registers::all_tracked_registers_at(
+            &listing, &mut env, position
+        ))
+    }
 }
 
 /// `range` (an LSP selection) to an inclusive `(start_line, end_line)` pair,
@@ -455,6 +474,23 @@ mod cycle_count_action_tests {
             }
         };
         assert!(analyzer.cycle_count_for_selection(&d, collapsed).is_none());
+    }
+
+    #[test]
+    fn all_registers_at_reports_the_known_value_at_the_cursor() {
+        let d = doc("    ld a,5\n    nop\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let regs = analyzer
+            .all_registers_at(
+                &d,
+                Position {
+                    line: 1,
+                    character: 4
+                }
+            )
+            .expect("expected a document that parses");
+        assert_eq!(regs.a.as_deref(), Some("0x05"));
+        assert_eq!(regs.hl, None);
     }
 }
 
