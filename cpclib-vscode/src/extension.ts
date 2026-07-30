@@ -443,7 +443,12 @@ interface CycleCountResult {
 }
 
 async function updateCycleCountStatusBar(editor: vscode.TextEditor | undefined): Promise<void> {
-    if (!editor || editor.document.languageId !== 'basm' || editor.selection.isEmpty) {
+    // A bare cursor position (no selection) is sent too, not just a real
+    // drag-selection - the server now shows the cost of the single
+    // instruction/line the cursor is on in that case (see
+    // `cycle_count_for_selection`'s own doc comment in `command.rs`),
+    // rather than nothing at all.
+    if (!editor || editor.document.languageId !== 'basm') {
         cycleCountStatusBarItem.hide();
         return;
     }
@@ -475,11 +480,15 @@ async function updateCycleCountStatusBar(editor: vscode.TextEditor | undefined):
     const warning = unrecognized_count > 0 ? ' ⚠' : '';
     cycleCountStatusBarItem.text = `$(watch) ${range} NOPs${warning}`;
 
+    // Wording only - a bare cursor position (no drag-selection) still
+    // shows a real count (the cursor's own line), just not literally a
+    // "selection" the user made.
+    const label = editor.selection.isEmpty ? 'Cycle count' : 'Selection cycle count';
     let tooltip = max_unbounded
-        ? `Selection cycle count: ${min_nops} NOPs (best case) - unbounded (a repeat-block instruction's loop count isn't statically known)`
+        ? `${label}: ${min_nops} NOPs (best case) - unbounded (a repeat-block instruction's loop count isn't statically known)`
         : min_nops === max_nops
-            ? `Selection cycle count: ${min_nops} NOPs`
-            : `Selection cycle count: ${min_nops} NOPs (best case) - ${max_nops} NOPs (worst case, branch taken)`;
+            ? `${label}: ${min_nops} NOPs`
+            : `${label}: ${min_nops} NOPs (best case) - ${max_nops} NOPs (worst case, branch taken)`;
     if (unrecognized_count > 0) {
         tooltip += `\n${unrecognized_count} line(s) not counted (macro call or unrecognized instruction) - actual total may be higher.`;
     }

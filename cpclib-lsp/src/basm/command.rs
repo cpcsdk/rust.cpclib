@@ -219,10 +219,23 @@ impl AssemblyAnalyzer {
     }
 
     /// Total NOP count for the instructions in `range`, or `None` when
-    /// there's no real selection or nothing recognizable in it. Shared by
-    /// the `code_actions` Quick Fix entry above and the
-    /// `cpclib.cycleCountForSelection` command (`backend.rs`) that drives
-    /// the VS Code status-bar live display.
+    /// there's nothing recognizable in range. Shared by the `code_actions`
+    /// Quick Fix entry above (which only ever calls this for a real
+    /// selection - its own, separate `line_range_from_selection` check
+    /// happens first and returns early otherwise, so this function's own
+    /// bare-cursor handling below never affects the Quick Fix menu) and
+    /// the `cpclib.cycleCountForSelection` command (`backend.rs`) that
+    /// drives the VS Code status-bar live display, which calls this for
+    /// *every* cursor move, selected or not.
+    ///
+    /// A bare cursor position (`range.start == range.end`, no real
+    /// selection) shows the cost of just the single line it's on, rather
+    /// than nothing at all - the common case is one instruction per line,
+    /// so this reads as "the cost of the instruction under the cursor"; a
+    /// `:`-chained multi-instruction line shows their combined cost
+    /// instead of isolating just the one nearest the cursor, a deliberate
+    /// simplification (matches how a real selection spanning that same
+    /// line would already behave).
     pub fn cycle_count_for_selection(
         &self,
         document: &Document,
@@ -230,7 +243,16 @@ impl AssemblyAnalyzer {
     ) -> Option<SelectionCycleCount> {
         let text = document.text();
         let all_lines: Vec<&str> = text.lines().collect();
-        let (start_line, end_line) = line_range_from_selection(range, all_lines.len())?;
+        let (start_line, end_line) = if range.start == range.end {
+            if all_lines.is_empty() {
+                return None;
+            }
+            let line = (range.start.line as usize).min(all_lines.len() - 1);
+            (line, line)
+        }
+        else {
+            line_range_from_selection(range, all_lines.len())?
+        };
         let listing = self.parse_document(document).ok()?;
         let summary = cycles::count_cycles_in_lines(&listing, start_line, end_line);
         if summary.is_empty() {
@@ -394,17 +416,42 @@ mod cycle_count_action_tests {
     }
 
     #[test]
-    fn cycle_count_for_selection_returns_none_for_a_collapsed_range() {
+    fn cycle_count_for_selection_shows_the_cursor_lines_own_cost_with_no_real_selection() {
+        // A bare cursor position (no selection) now shows the cost of the
+        // single line it's on, rather than nothing at all - the status
+        // bar should stay live as the cursor moves, not just while
+        // dragging out an actual selection.
         let d = doc("    nop\n");
         let analyzer = AssemblyAnalyzer::new();
         let collapsed = Range {
             start: Position {
                 line: 0,
-                character: 0
+                character: 2
             },
             end: Position {
                 line: 0,
-                character: 0
+                character: 2
+            }
+        };
+        let summary = analyzer
+            .cycle_count_for_selection(&d, collapsed)
+            .expect("expected a summary for the cursor's own line");
+        assert_eq!(summary.min_nops, 1, "{summary:?}");
+        assert_eq!(summary.max_nops, 1, "{summary:?}");
+    }
+
+    #[test]
+    fn cycle_count_for_selection_returns_none_when_the_cursor_line_has_nothing_recognizable() {
+        let d = doc("    ; just a comment\n    nop\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let collapsed = Range {
+            start: Position {
+                line: 0,
+                character: 5
+            },
+            end: Position {
+                line: 0,
+                character: 5
             }
         };
         assert!(analyzer.cycle_count_for_selection(&d, collapsed).is_none());
