@@ -131,9 +131,9 @@ Full language support for Z80 assembly with basm syntax:
 Full integration with the **bndbuild** project automation tool:
 
 - **Syntax highlighting** for `.bnd`, `.build`, and `bndbuild.yml` files
-- **CodeLens buttons**: One-click "▶ Run" buttons above each rule definition
+- **Runnable targets**: ▶ Run triangles next to build target definitions (requires one-time setup)
 - **Real-time diagnostics** for build configuration errors
-- **Jinja2 template support** for variable substitution and logic
+- **Jinja2 template support** for variable substitution and logic (full support via grammar injection)
 - **Snippets** for common build patterns
 
 **Supported file names:** `bndbuild.yml`, `build.bnd`, `bnd.build`
@@ -151,7 +151,26 @@ Full integration with the **bndbuild** project automation tool:
   cmd: -rm *.sna *.lst *.sym
 ```
 
-Click the "▶ Run" CodeLens button above any rule to execute it.
+#### Running Build Targets
+
+**One-time setup required:**
+
+Create `~/.config/zed/tasks.json` with:
+
+```json
+[{
+  "label": "bndbuild: run target",
+  "command": "bndbuild",
+  "args": ["-f", "$ZED_FILE", "$ZED_CUSTOM_target"],
+  "tags": ["bndbuild-target"],
+  "cwd": "$ZED_WORKTREE_ROOT",
+  "reveal": "always"
+}]
+```
+
+Then restart Zed and click the ▶ triangle next to target names.
+
+📖 **See [RUNNABLES_SETUP.md](RUNNABLES_SETUP.md) for detailed setup instructions and customization.**
 
 ---
 
@@ -192,8 +211,10 @@ The extension activates automatically when you open supported file types:
 
 ### Running Builds
 
+**After [one-time setup](RUNNABLES_SETUP.md):**
+
 1. Open a `bndbuild.yml` file
-2. Click the "▶ Run" CodeLens button above any rule
+2. Click the ▶ triangle next to any target name
 3. Build output appears in the terminal panel
 
 Or use the command palette:
@@ -257,6 +278,19 @@ No additional configuration is required for most users.
 
 ---
 
+## Implementation Status & Limitations
+
+📋 **For detailed implementation status, testing checklist, and known issues, see [`../ZED_IMPLEMENTATION_STATUS.md`](../ZED_IMPLEMENTATION_STATUS.md).**
+
+**Recent Updates (2026-07-31):**
+- ✅ Fixed validation false warnings - now uses RULE_KEYS constants for all synonym keys
+- ✅ Added runnable code detection (runnables.scm) for build targets with tasks.json setup
+- ✅ Implemented Jinja2 template support via grammar injection (bndbuild language now handles both YAML and Jinja)
+- ✅ Documented architecture differences between VS Code and Zed approaches
+- ❓ Document outline status - LSP provides symbols, Zed display behavior unclear
+
+---
+
 ## Limitations & Differences from VSCode Extension
 
 Due to Zed's extension architecture limitations, some features available in the VSCode extension are **not available** in this Zed extension:
@@ -269,13 +303,16 @@ Due to Zed's extension architecture limitations, some features available in the 
 - **Alternative:** The LSP already provides this data via the `cpclib.cycleCountForSelection` command, but there's no way for extensions to display it in Zed's UI
 - **Workaround:** Use code actions (right-click → "Cycle count for selection") or the code lens "Show cycle count" action
 
-**Code Lens Execution**
-- The LSP provides "▶ Run" code lens buttons above build targets
-- **Zed limitation:** Extensions cannot intercept or execute code lens actions
-- **Alternative:** Use the command palette (`Cmd+Shift+P` → "Run Task") or terminal commands manually:
-  ```bash
-  bndbuild -f bndbuild.yml <target-name>
-  ```
+**Runnable Targets (Build Execution)**
+- ✅ **Implemented:** Run triangles (▶) appear next to build target names
+- ⚠️ **One-time setup required:** Must create `~/.config/zed/tasks.json` (see [RUNNABLES_SETUP.md](RUNNABLES_SETUP.md))
+- **Why not automatic?** Zed doesn't support code lens, and its WASM extension API can't provide default task bindings
+- **Architecture difference:** VS Code forwards to LSP; Zed invokes `bndbuild` CLI directly (see [ARCHITECTURE_COMPARISON.md](ARCHITECTURE_COMPARISON.md))
+- **Jinja2 template support:** ✅ Fully implemented via grammar injection
+  - The bndbuild language now uses tree-sitter-jinja2 as base grammar with YAML injection
+  - Both Jinja templates (`{{ }}`, `{% %}`) and YAML structure are fully supported
+  - Runnables, syntax highlighting, and outline work in templated files
+  - See [JINJA_TEMPLATE_SOLUTION.md](JINJA_TEMPLATE_SOLUTION.md) for technical details
 
 **Register Values Display**
 - The VSCode extension shows tracked register values in a status bar item
@@ -284,14 +321,15 @@ Due to Zed's extension architecture limitations, some features available in the 
 
 ### ✅ Fully Supported
 
-Everything else works identically:
+Everything else works identically (or should work with proper testing):
 - Syntax highlighting (via LSP semantic tokens)
 - Diagnostics (errors/warnings)
 - Go to definition
 - Hover documentation
 - Completions
 - Snippets
-- Document symbols
+- Document symbols (LSP provides them - Zed display behavior TBD)
+- ⚠️ Runnable detection (runnables.scm added, needs testing - see [ZED_IMPLEMENTATION_STATUS.md](../ZED_IMPLEMENTATION_STATUS.md))
 
 ---
 

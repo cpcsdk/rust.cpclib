@@ -130,9 +130,11 @@ impl BuildFileAnalyzer {
         let mut diagnostics = Vec::new();
         let raw_text = document.text();
 
-        // Check for common build file keys (including synonyms)
-        let has_targets = raw_text.contains("targets:") || raw_text.contains("tgt:");
-        let has_tasks = raw_text.contains("tasks:") || raw_text.contains("cmd:");
+        // Check for any valid target or task key (using RULE_KEYS from cpclib_bndbuild)
+        let has_targets = super::token::TGT_KEY_NAMES.iter()
+            .any(|key| raw_text.contains(&format!("{}:", key)));
+        let has_tasks = super::token::TASK_KEY_NAMES.iter()
+            .any(|key| raw_text.contains(&format!("{}:", key)));
 
         if !has_targets && !has_tasks && self.config().warnings.missing_build_structure {
             diagnostics.push(Diagnostic {

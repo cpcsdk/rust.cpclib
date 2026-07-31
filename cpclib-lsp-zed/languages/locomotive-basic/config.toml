@@ -1,0 +1,6 @@
+name = "Locomotive BASIC"
+path_suffixes = ["bas", "BAS"]
+line_comments = ["REM "]
+tab_size = 2
+hard_tabs = false
+auto_indent = true
