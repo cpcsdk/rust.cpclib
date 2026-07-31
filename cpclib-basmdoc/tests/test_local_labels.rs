@@ -1,13 +1,13 @@
 use cpclib_asm::parse_z80_str;
 use cpclib_basmdoc::{
-    UndocumentedConfig, aggregate_documentation_on_tokens, build_documentation_page_from_aggregates
+    DocMarkers, UndocumentedConfig, aggregate_documentation_on_tokens, build_documentation_page_from_aggregates
 };
 
 #[test]
 fn test_local_labels() {
     let code = fs_err::read_to_string("tests/local_labels.asm").unwrap();
     let tokens = parse_z80_str(&code).unwrap();
-    let doc = aggregate_documentation_on_tokens(&tokens, UndocumentedConfig::none());
+    let doc = aggregate_documentation_on_tokens(&tokens, UndocumentedConfig::none(), DocMarkers::default());
 
     let page = build_documentation_page_from_aggregates("tests/local_labels.asm", doc);
 

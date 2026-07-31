@@ -6,7 +6,7 @@ use cpclib_catalog::cli::CatalogApp;
 fn test_catalog_rename_should_fail() {
     // This should fail because "rename" is not a valid subcommand
     let result =
-        CatalogApp::try_parse_from(&["catalog", "rename", "game.dsk", "TEMP.BIN", "FINAL.BIN"]);
+        CatalogApp::try_parse_from(&["catalog", "game.dsk", "rename", "TEMP.BIN", "FINAL.BIN"]);
 
     println!("Parse result: {:?}", result);
 
