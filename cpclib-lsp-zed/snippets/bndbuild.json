@@ -1,0 +1,105 @@
+{
+  "Basic Rule": {
+    "prefix": "rule",
+    "description": "Create a basic build rule with target, dependencies, and command",
+    "body": [
+      "- tgt: ${1:target}",
+      "  dep: ${2:dependency}",
+      "  cmd: ${3:command}",
+      "$0"
+    ]
+  },
+  "Basm Assembly Rule": {
+    "prefix": "basm",
+    "description": "Assemble Z80 source with basm",
+    "body": [
+      "- tgt: ${1:output.o}",
+      "  dep: ${2:source.asm}",
+      "  cmd: basm ${2:source.asm} -o ${1:output.o}",
+      "$0"
+    ]
+  },
+  "Rasm Assembly Rule": {
+    "prefix": "rasm",
+    "description": "Assemble with Rasm assembler",
+    "body": [
+      "- tgt: ${1:output.sna}",
+      "  dep: ${2:source.asm}",
+      "  cmd: rasm ${2:source.asm} -oi ${1:output.sna}",
+      "$0"
+    ]
+  },
+  "DSK Management Rule": {
+    "prefix": "dsk",
+    "description": "Create/manage a DSK image",
+    "body": [
+      "- tgt: ${1:output.dsk}",
+      "  dep: ${2:files}",
+      "  cmd: dsk ${1:output.dsk} -c ${2:files}",
+      "$0"
+    ]
+  },
+  "Clean Target": {
+    "prefix": "clean",
+    "description": "Create a clean target to remove build artifacts",
+    "body": [
+      "- tgt: clean",
+      "  phony: true",
+      "  cmd: -rm ${1:*.o *.lst *.sym}",
+      "$0"
+    ]
+  },
+  "Phony Target": {
+    "prefix": "phony",
+    "description": "Create a phony target (always executes)",
+    "body": [
+      "- tgt: ${1:target}",
+      "  phony: true",
+      "  cmd: ${2:command}",
+      "$0"
+    ]
+  },
+  "Rule with Help": {
+    "prefix": "rulehelp",
+    "description": "Create a rule with help documentation",
+    "body": [
+      "- tgt: ${1:target}",
+      "  dep: ${2:dependency}",
+      "  cmd: ${3:command}",
+      "  help: ${4:Description of this target}",
+      "$0"
+    ]
+  },
+  "Image Converter Rule": {
+    "prefix": "img2cpc",
+    "description": "Convert image to CPC format",
+    "body": [
+      "- tgt: ${1:output.scr}",
+      "  dep: ${2:image.png}",
+      "  cmd: img2cpc ${2:image.png} --mode ${3:0} -o ${1:output.scr}",
+      "$0"
+    ]
+  },
+  "Multiple Commands Rule": {
+    "prefix": "multicmd",
+    "description": "Rule with multiple commands",
+    "body": [
+      "- tgt: ${1:target}",
+      "  dep: ${2:dependency}",
+      "  cmd:",
+      "    - ${3:command1}",
+      "    - ${4:command2}",
+      "$0"
+    ]
+  },
+  "External Command": {
+    "prefix": "extern",
+    "description": "Execute external system command",
+    "body": [
+      "- tgt: ${1:target}",
+      "  dep: ${2:dependency}",
+      "  cmd: extern ${3:command}",
+      "$0"
+    ]
+  }
+}

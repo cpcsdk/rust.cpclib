@@ -1,7 +1,14 @@
 name = "Basm"
-#grammar = "rgbasm" # TODO replace by BASM one ASAP BTW rgbasam does not work
+# No tree-sitter grammar yet - relying on LSP semantic tokens for syntax highlighting
 path_suffixes = ["asm", "z80"]
 line_comments = ["; "]
 tab_size = 4
 hard_tabs = false
 auto_indent = true
+
+# Enable bracket matching
+brackets = [
+    { start = "(", end = ")", close = true, newline = false },
+    { start = "[", end = "]", close = true, newline = false },
+    { start = "{", end = "}", close = true, newline = false },
+]

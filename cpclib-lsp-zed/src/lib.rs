@@ -3,18 +3,6 @@ use zed_extension_api as zed;
 
 struct CpcLibExtension {}
 
-fn get_path_to_language_server_executable() -> Result<String> {
-    Ok("/home/romain/.cargo/bin/cpclib-lsp".to_string())
-}
-
-fn get_args_for_language_server() -> Result<Vec<String>> {
-    Ok(Vec::with_capacity(0))
-}
-
-fn get_env_for_language_server() -> Result<Vec<(String, String)>> {
-    Ok(Vec::with_capacity(0))
-}
-
 impl zed::Extension for CpcLibExtension {
     fn new() -> Self {
         Self {}
@@ -22,17 +10,35 @@ impl zed::Extension for CpcLibExtension {
 
     fn language_server_command(
         &mut self,
-        language_server_id: &LanguageServerId,
+        _language_server_id: &LanguageServerId,
         worktree: &zed::Worktree
     ) -> Result<zed::Command> {
-        dbg!(language_server_id);
-        dbg!(worktree);
+        // Use Zed's which() to find the binary in PATH
+        // This properly handles PATH lookup from the WASM environment
+        let command = worktree
+            .which("cpclib-lsp")
+            .ok_or_else(|| {
+                "cpclib-lsp not found in PATH. Please install it with: cargo install --path cpclib-lsp".to_string()
+            })?;
 
         Ok(zed::Command {
-            command: get_path_to_language_server_executable()?,
-            args: get_args_for_language_server()?,
-            env: get_env_for_language_server()?
+            command,
+            args: vec![],
+            env: Default::default(),
         })
+    }
+
+    fn language_server_initialization_options(
+        &mut self,
+        _language_server_id: &LanguageServerId,
+        _worktree: &zed::Worktree,
+    ) -> Result<Option<serde_json::Value>> {
+        // Enable all LSP features including semantic tokens
+        Ok(Some(serde_json::json!({
+            "semanticTokens": {
+                "enable": true
+            }
+        })))
     }
 }
 
