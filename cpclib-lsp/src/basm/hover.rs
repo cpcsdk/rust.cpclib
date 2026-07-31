@@ -74,7 +74,7 @@ impl AssemblyAnalyzer {
 
         // Numeric literal — show all bases, plus firmware docs if the value
         // resolves to a known firmware routine/constant address.
-        if let Some((num_str, value)) = extract_number_at_position(&line, col) {
+        if let Some((num_str, value, _start)) = extract_number_at_position(&line, col) {
             let mut md = crate::common::render::format_number_hover(&num_str, value);
             if self.config().firmware_docs
                 && let Some(doc) = crate::common::firmware_docs::lookup_by_value(value)
@@ -456,7 +456,12 @@ fn format_hex_dump(bytes: &[u8], max_rows: usize) -> String {
 
 /// Detect a numeric literal under `col` and return its text + i64 value.
 /// Handles `$`, `&`, `#` (hex), `%` (binary), `0x`/`0b`/`0o`, and plain decimal.
-fn extract_number_at_position(line: &str, col: usize) -> Option<(String, i64)> {
+/// The numeric literal at `col` (a digit, hex letter, or numeric prefix
+/// `$`/`%`/`&`/`#`), if any: its own source text, resolved value, and
+/// 0-based byte start column - `pub(super)` so `refactor.rs`'s firmware-
+/// symbol quickfix can reuse the exact same detection hover already uses,
+/// rather than re-implementing the scan.
+pub(super) fn extract_number_at_position(line: &str, col: usize) -> Option<(String, i64, usize)> {
     let bytes = line.as_bytes();
     if col >= bytes.len() {
         return None;
@@ -505,7 +510,7 @@ fn extract_number_at_position(line: &str, col: usize) -> Option<(String, i64)> {
     let num_str = &line[start..end];
     let value = crate::common::render::parse_numeric_literal_str(num_str)?;
 
-    Some((num_str.to_string(), value))
+    Some((num_str.to_string(), value, start))
 }
 
 fn register_description(upper: &str) -> Option<String> {

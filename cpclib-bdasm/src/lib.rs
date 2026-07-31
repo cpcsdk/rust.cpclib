@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use cpclib_asm::{Listing, ListingExt, defb_elements, org};
 use cpclib_common::camino::Utf8PathBuf;
 use cpclib_common::event::EventObserver;
@@ -479,6 +479,10 @@ fn load_input_bytes<O: EventObserver>(
 
         Ok((bytes, amsdos_load))
     }
+}
+
+pub fn build_args_parser() -> clap::Command {
+    <BdAsmCli as clap::CommandFactory>::command()
 }
 
 pub fn process<O: EventObserver>(cli: &BdAsmCli, o: &O) -> Result<()> {

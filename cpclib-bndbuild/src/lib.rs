@@ -442,10 +442,20 @@ pub fn init_project(path: Option<&Utf8Path>) -> Result<(), BndBuilderError> {
     Ok(())
 }
 
-/// Expand glob patterns
+/// Expand glob patterns, resolving `*`/`?`/`[` matches relative to the
+/// process's current directory.
 /// {a,b} expension is always done even if file does not exists
 /// *.a is done only when file exists
 fn expand_glob(p: &str) -> Vec<String> {
+    expand_glob_in(p, Utf8Path::new("."))
+}
+
+/// Same as [`expand_glob`], but resolves `*`/`?`/`[` matches relative to an
+/// explicit `base_dir` instead of the process's current directory. Lets a
+/// caller that can't safely mutate the global CWD (e.g. a long-running,
+/// concurrently-serving LSP) glob-expand a pattern against an arbitrary
+/// directory without a `std::env::set_current_dir` race.
+pub fn expand_glob_in(p: &str, base_dir: &Utf8Path) -> Vec<String> {
     // Try to expand {a,b} patterns without allocating intermediate Vecs
     let mut patterns = Vec::new();
     if let Some((_, start, middle, end)) = regex_captures!(r"^(.*)\{(.*)\}(.*)$", p) {
@@ -461,7 +471,7 @@ fn expand_glob(p: &str) -> Vec<String> {
     for pat in patterns {
         if pat.contains('*') || pat.contains('?') || pat.contains('[') {
             // do this costly stuff only when needed
-            match globmatch::Builder::new(&pat).build(".") {
+            match globmatch::Builder::new(&pat).build(base_dir) {
                 Ok(builder) => {
                     let mut found = false;
                     for entry in builder {

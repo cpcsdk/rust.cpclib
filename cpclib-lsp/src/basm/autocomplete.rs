@@ -934,6 +934,7 @@ impl AssemblyAnalyzer {
         // fully-qualified-or-global reference, valid from anywhere, so only
         // *this* case should ever restrict candidates to the current scope.
         let completing_a_dotted_reference = word_before_cursor_is_dotted(&line, col);
+        let symbol_range = current_ident_range(&line, position);
 
         // Symbols (labels, EQU constants, macros) from this document, every
         // other open assembly document, and every file this document
@@ -1007,7 +1008,7 @@ impl AssemblyAnalyzer {
                 }
                 // Labels / macros — macros can be invoked like mnemonics.
                 for (sym, detail) in &collect_doc_symbols() {
-                    completions.push(symbol_item(sym, detail));
+                    completions.push(symbol_item(sym, detail, symbol_range));
                 }
                 // Snippets (shared with the Zed extension).
                 for (prefix, description, body) in SNIPPETS {
@@ -1035,7 +1036,7 @@ impl AssemblyAnalyzer {
                         }
                         if accepts_expr {
                             for (sym, detail) in &collect_doc_symbols() {
-                                completions.push(symbol_item(sym, detail));
+                                completions.push(symbol_item(sym, detail, symbol_range));
                             }
                         }
                     },
@@ -1050,7 +1051,7 @@ impl AssemblyAnalyzer {
                         }
                         if mask_accepts_expression(mask) {
                             for (sym, detail) in &collect_doc_symbols() {
-                                completions.push(symbol_item(sym, detail));
+                                completions.push(symbol_item(sym, detail, symbol_range));
                             }
                         }
                     }
@@ -1076,7 +1077,7 @@ impl AssemblyAnalyzer {
                 else {
                     // Directives accept any expression — offer symbols.
                     for (sym, detail) in &collect_doc_symbols() {
-                        completions.push(symbol_item(sym, detail));
+                        completions.push(symbol_item(sym, detail, symbol_range));
                     }
                 }
             }
@@ -1200,34 +1201,31 @@ impl AssemblyAnalyzer {
     fn scope_filtered_symbols(&self, document: &Document, line: u32) -> Vec<(String, String)> {
         let all = self.collect_symbols_cached(document);
 
+        // When the document doesn't parse (e.g. a line like `jr nc, .` is
+        // still mid-typed - a bare trailing `.` isn't a complete operand),
+        // `collect_symbols_cached` itself already fell back to
+        // `collect_symbols_by_text`, which qualifies dot-locals against the
+        // last seen global label exactly like the AST path does - so the
+        // same scoping filter below still applies, just driven by a
+        // text-scanned "current owner" and a text-scanned recognized-owner
+        // set (bare `"label"` entries in `all`) instead of
+        // `global_label_scopes`. Mirrors the AST path's own restriction to
+        // *labels* only (not MACRO/MODULE) — see the "known gap" note above.
         let Ok(listing) = self.parse_document(document)
         else {
-            return all;
+            let current_owner = current_global_label_by_text(document, line);
+            let is_recognized_owner =
+                |prefix: &str| all.iter().any(|(n, d)| n == prefix && d == "label");
+            return filter_locals_to_owner(
+                all.clone(),
+                is_recognized_owner,
+                current_owner.as_deref()
+            );
         };
         let scopes = super::token::global_label_scopes(listing.iter());
         let current_owner = super::token::scope_containing(&scopes, line).map(|(o, _)| o);
-
-        let mut out = Vec::with_capacity(all.len());
-        for (name, detail) in all {
-            let Some((prefix, _)) = name.split_once('.')
-            else {
-                out.push((name, detail));
-                continue;
-            };
-            if !scopes.iter().any(|(o, _)| o == prefix) {
-                // Not a recognized local-label qualification — see the "known
-                // gap" note above.
-                out.push((name, detail));
-                continue;
-            }
-            if current_owner.as_deref() != Some(prefix) {
-                continue; // a different global label's local — out of scope
-            }
-            let bare = name[prefix.len()..].to_string(); // leading `.` included
-            out.push((bare, detail.clone()));
-            out.push((name, detail));
-        }
-        out
+        let is_recognized_owner = |prefix: &str| scopes.iter().any(|(o, _)| o == prefix);
+        filter_locals_to_owner(all, is_recognized_owner, current_owner.as_deref())
     }
 
     /// Collect `(source_name, symbol, detail)` for every file this document
@@ -1288,9 +1286,15 @@ fn synthetic_include_uri(filename: &str, doc_uri: &Url) -> Url {
 
 /// Text-based symbol scan used when the document does not parse: labels at
 /// line start (with or without `:`), and `name EQU ...` / `name = ...`.
+/// Dot-locals are qualified against the last seen global label
+/// (`.foo` → `parent.foo`), mirroring `collect_symbols`'s own AST-path
+/// convention exactly - `scope_filtered_symbols` relies on this to still be
+/// able to scope local-label completion while the document is mid-edit and
+/// doesn't parse.
 fn collect_symbols_by_text(document: &Document) -> Vec<(String, String)> {
     let text = document.text();
     let mut syms: Vec<(String, String)> = Vec::new();
+    let mut current_global: Option<String> = None;
     for line in text.lines() {
         let trimmed = line.trim_start();
 
@@ -1373,11 +1377,89 @@ fn collect_symbols_by_text(document: &Document) -> Vec<(String, String)> {
         else {
             continue;
         };
-        if !syms.iter().any(|(s, _)| s == name) {
-            syms.push((name.to_string(), detail.to_string()));
+        let display = if is_label && name.starts_with('.') {
+            match &current_global {
+                Some(g) => format!("{g}{name}"),
+                None => name.to_string()
+            }
+        }
+        else {
+            if is_label {
+                current_global = Some(name.to_string());
+            }
+            name.to_string()
+        };
+        if !syms.iter().any(|(s, _)| s == &display) {
+            syms.push((display, detail.to_string()));
         }
     }
     syms
+}
+
+/// Text-scan equivalent of the AST path's `scope_containing`: the nearest
+/// non-local label at or before `line`, using the same label-detection
+/// heuristic as `collect_symbols_by_text`. Used only when the document
+/// doesn't parse, so `global_label_scopes` can't run.
+fn current_global_label_by_text(document: &Document, line: u32) -> Option<String> {
+    let text = document.text();
+    let mut current: Option<String> = None;
+    for (idx, raw_line) in text.lines().enumerate() {
+        if idx as u32 > line {
+            break;
+        }
+        let trimmed = raw_line.trim_start();
+        let indent = raw_line.len() - trimmed.len();
+        let bytes = trimmed.as_bytes();
+        let mut i = 0;
+        while i < bytes.len()
+            && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'@')
+        {
+            i += 1;
+        }
+        if i == 0 {
+            continue; // no bare identifier at line start (or it's a dot-local)
+        }
+        let name = &trimmed[..i];
+        let rest = trimmed[i..].trim_start();
+        let is_label = trimmed[i..].starts_with(':') && !trimmed[i..].starts_with("::")
+            || (indent == 0 && (rest.is_empty() || rest.starts_with(';')));
+        if is_label {
+            current = Some(name.to_string());
+        }
+    }
+    current
+}
+
+/// Shared by `scope_filtered_symbols`'s AST and text-fallback paths: keeps
+/// every non-local entry as-is; for a dot-qualified local (`owner.name`),
+/// passes it through unfiltered when `owner` isn't recognized at all (see
+/// the "known gap" note on `scope_filtered_symbols`), otherwise keeps it
+/// (in both bare `.name` and qualified `owner.name` form) only when `owner`
+/// matches `current_owner`.
+fn filter_locals_to_owner(
+    all: Vec<(String, String)>,
+    is_recognized_owner: impl Fn(&str) -> bool,
+    current_owner: Option<&str>
+) -> Vec<(String, String)> {
+    let mut out = Vec::with_capacity(all.len());
+    for (name, detail) in all {
+        let Some((prefix, _)) = name.split_once('.')
+        else {
+            out.push((name, detail));
+            continue;
+        };
+        if !is_recognized_owner(prefix) {
+            out.push((name, detail));
+            continue;
+        }
+        if current_owner != Some(prefix) {
+            continue; // a different global label's local — out of scope
+        }
+        let bare = name[prefix.len()..].to_string(); // leading `.` included
+        out.push((bare, detail.clone()));
+        out.push((name, detail));
+    }
+    out
 }
 
 /// First word of the statement on `line` (label definitions skipped), uppercased.
@@ -1445,12 +1527,48 @@ fn operand_item(token: &str, detail: &str, case: CasePref) -> CompletionItem {
 
 /// A user-symbol completion — case is preserved verbatim (identifiers are
 /// case-sensitive from the user's point of view).
-fn symbol_item(sym: &str, detail: &str) -> CompletionItem {
+///
+/// Carries an explicit `text_edit` replacing `range` (the identifier run
+/// already typed before the cursor, from `current_ident_range`) rather than
+/// relying on the client's own word-pattern-based replacement range: a bare
+/// `.` with nothing typed after it doesn't match
+/// `language-configuration-asm.json`'s word pattern
+/// (`[.@]?[A-Za-z_][A-Za-z0-9_@.]*` requires a letter/underscore after an
+/// optional leading `.`/`@`), so VS Code would otherwise find no replacement
+/// range at all and insert without consuming the already-typed `.` —
+/// producing `..vsync_loop` when accepting a `.vsync_loop` candidate.
+fn symbol_item(sym: &str, detail: &str, range: Range) -> CompletionItem {
     CompletionItem {
         label: sym.to_string(),
         kind: Some(CompletionItemKind::REFERENCE),
         detail: Some(detail.to_string()),
+        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+            range,
+            new_text: sym.to_string()
+        })),
         ..Default::default()
+    }
+}
+
+/// The already-typed identifier run ending at `position` (byte/UTF-16-column
+/// treated as equivalent throughout this module, same convention `col`
+/// itself already uses) — start of the run `symbol_item`'s `text_edit`
+/// should replace. Uses `is_ident_byte` (includes `.`/`@`), so a bare
+/// trailing `.` or a partially-typed `owner.local` reference are both
+/// covered, not just a plain identifier.
+fn current_ident_range(line: &str, position: Position) -> Range {
+    let bytes = line.as_bytes();
+    let col = (position.character as usize).min(bytes.len());
+    let mut start = col;
+    while start > 0 && super::token::is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    Range {
+        start: Position {
+            line: position.line,
+            character: start as u32
+        },
+        end: position
     }
 }
 
@@ -1711,6 +1829,17 @@ mod form_completion_tests {
             snippet.unwrap().insert_text_format,
             Some(InsertTextFormat::SNIPPET)
         );
+    }
+
+    #[test]
+    fn if_endif_snippet_is_offered_in_mnemonic_position() {
+        let items = complete("    ");
+        let snippet = items
+            .iter()
+            .find(|i| i.kind == Some(CompletionItemKind::SNIPPET) && i.label == "if");
+        assert!(snippet.is_some(), "if snippet should be offered");
+        let body = snippet.unwrap().insert_text.as_deref().unwrap_or("");
+        assert!(body.contains("endif"), "{body}");
     }
 
     #[test]
@@ -2133,6 +2262,54 @@ mod directive_detail_and_symbol_parity_tests {
                 "did not expect {unexpected:?} in {labels:?}"
             );
         }
+    }
+
+    /// Regression test for a user report: `jr nc, .` (a bare trailing `.`
+    /// with nothing after it) doesn't parse as a complete operand, so the
+    /// whole document fails to parse while it's being typed - this used to
+    /// make `scope_filtered_symbols` fall back to *every* symbol in the
+    /// document, unfiltered, offering locals from unrelated scopes. The
+    /// text-based fallback (`collect_symbols_by_text` +
+    /// `current_global_label_by_text`) must still scope correctly.
+    #[test]
+    fn local_label_completion_is_scoped_even_when_the_current_line_fails_to_parse() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "demo_run\n    ld b, 0xf5\n.vsync_loop\n    in a, (c)\n    rra\n    jr nc, .\n\
+                     other_routine\n.other_loop\n    ret\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let last_line = "    jr nc, .";
+        let items = AssemblyAnalyzer::new().completion_with_documents(
+            &doc,
+            Position {
+                line: 5,
+                character: last_line.len() as u32
+            },
+            &[]
+        );
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+
+        assert!(labels.contains(&".vsync_loop"), "{labels:?}");
+        assert!(labels.contains(&"demo_run.vsync_loop"), "{labels:?}");
+        assert!(
+            !labels.contains(&".other_loop"),
+            "a different global's local must not be offered: {labels:?}"
+        );
+        assert!(!labels.contains(&"other_routine.other_loop"), "{labels:?}");
+
+        // The duplicated-dot bug: accepting `.vsync_loop` must replace the
+        // already-typed `.`, not insert alongside it.
+        let item = items
+            .iter()
+            .find(|i| i.label == ".vsync_loop")
+            .expect("expected .vsync_loop to be offered");
+        let Some(CompletionTextEdit::Edit(edit)) = &item.text_edit
+        else {
+            panic!("expected a text_edit, got {:?}", item.text_edit);
+        };
+        assert_eq!(edit.new_text, ".vsync_loop");
+        let dot_col = last_line.rfind('.').unwrap() as u32;
+        assert_eq!(edit.range.start.character, dot_col, "{edit:?}");
+        assert_eq!(edit.range.end.character, last_line.len() as u32, "{edit:?}");
     }
 
     #[test]

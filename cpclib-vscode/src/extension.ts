@@ -61,7 +61,15 @@ export function activate(context: ExtensionContext) {
             { scheme: 'file', language: 'basm' },
             { scheme: 'file', language: 'bndbuild' },
             { scheme: 'file', language: 'locomotive-basic' },
-            { scheme: 'file', language: 'catart-basic' }
+            { scheme: 'file', language: 'catart-basic' },
+            // Unsaved buffers (language mode set manually, not yet written to
+            // disk) get no `file:` URI - without these, the client silently
+            // drops didOpen/didChange for them and the server never sees the
+            // document at all.
+            { scheme: 'untitled', language: 'basm' },
+            { scheme: 'untitled', language: 'bndbuild' },
+            { scheme: 'untitled', language: 'locomotive-basic' },
+            { scheme: 'untitled', language: 'catart-basic' }
         ],
         synchronize: {
             fileEvents: workspace.createFileSystemWatcher('{**/*.{asm,z80,build,bnd,bas,BAS,CAT,cat,ASC,asc},**/bndbuild.yml}')

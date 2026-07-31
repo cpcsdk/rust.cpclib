@@ -150,11 +150,17 @@ impl BuildFileAnalyzer {
             .iter()
             .flat_map(|key| {
                 key.names.iter().map(move |name| {
+                    let insert_text = if *name == "phony" {
+                        format!("{}: true", name)
+                    }
+                    else {
+                        format!("{}: ", name)
+                    };
                     CompletionItem {
                         label: name.to_string(),
                         kind: Some(CompletionItemKind::KEYWORD),
                         detail: Some(key.description.to_string()),
-                        insert_text: Some(format!("{}: ", name)),
+                        insert_text: Some(insert_text),
                         insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
                         ..Default::default()
                     }
@@ -938,6 +944,29 @@ mod schema_context_tests {
         let labels = complete(text, 1, 9);
         assert!(labels.contains(&"true".to_string()), "{labels:?}");
         assert!(labels.contains(&"false".to_string()));
+    }
+
+    #[test]
+    fn phony_key_completion_inserts_true_directly() {
+        let text = "- tgt: out.bin\n  ";
+        let uri = Url::parse("file:///t.bnd").unwrap();
+        let doc = Document::new(uri, text.to_string(), 1);
+        let items = BuildFileAnalyzer::new().completion(
+            &doc,
+            Position {
+                line: 1,
+                character: 2
+            }
+        );
+        let phony_item = items
+            .iter()
+            .find(|i| i.label == "phony")
+            .expect("phony completion offered");
+        assert_eq!(phony_item.insert_text, Some("phony: true".to_string()));
+
+        // Other keys are unaffected - still bare "name: ".
+        let dep_item = items.iter().find(|i| i.label == "dep").unwrap();
+        assert_eq!(dep_item.insert_text, Some("dep: ".to_string()));
     }
 
     #[test]

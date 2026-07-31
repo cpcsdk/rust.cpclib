@@ -73,6 +73,15 @@ impl AssemblyAnalyzer {
         if let Some(a) = self.redundant_accumulator_prefix_removal_action(document, range) {
             actions.push(a);
         }
+        if let Some(a) = self.no_op_or_improvable_instruction_action(document, range) {
+            actions.push(a);
+        }
+        if let Some(a) = self.fake_instruction_to_real_action(document, range) {
+            actions.push(a);
+        }
+        if let Some(a) = self.firmware_symbol_replacement_action(document, range) {
+            actions.push(a);
+        }
 
         let Some((start_line, end_line)) = line_range_from_selection(range, all_lines.len())
         else {

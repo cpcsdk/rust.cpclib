@@ -67,5 +67,5 @@ panic = "abort" # Higher performance by disabling panic handlers.
 strip = true # Ensures debug symbols are removed.
 
 [features]
-default = []
+default = ["rayon"]
 rayon = ["cpclib-bndbuild/rayon"] # in fact i don't wont to accept it, it is jsut a workaround to avoid linter to force rayon specific arguments...

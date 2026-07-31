@@ -60,11 +60,19 @@ impl std::fmt::Debug for StreamingObserver {
 
 impl EventObserver for StreamingObserver {
     fn emit_stdout(&self, s: &str) {
-        let _ = self.tx.send((false, s.to_string()));
+        // ANSI-stripped before ever reaching the channel: every consumer
+        // (the CodeLens run path's `log_message` forwarding in
+        // `backend.rs`, and `locomotive::run`'s BASIC-emulator-launch
+        // streaming, which reuses this same observer) would otherwise
+        // forward raw escape sequences into VS Code's Output channel, which
+        // doesn't render them as color - they'd just show up as garbled
+        // control characters, actively hurting readability rather than
+        // helping it.
+        let _ = self.tx.send((false, strip_ansi(s)));
     }
 
     fn emit_stderr(&self, s: &str) {
-        let _ = self.tx.send((true, s.to_string()));
+        let _ = self.tx.send((true, strip_ansi(s)));
     }
 }
 
@@ -762,7 +770,7 @@ fn best_failing_line(text: &str, rule_line: usize, msg: &str) -> Option<usize> {
 }
 
 /// Remove ANSI escape sequences from tool output.
-fn strip_ansi(s: &str) -> String {
+pub(crate) fn strip_ansi(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
@@ -794,6 +802,27 @@ mod tests {
         std::fs::write(&path, content).unwrap();
         let uri = Url::from_file_path(&path).unwrap();
         Document::new(uri, content.to_string(), 1)
+    }
+
+    /// Regression test: `StreamingObserver` feeds VS Code's Output channel
+    /// (via `window/logMessage`, which doesn't render ANSI) - raw escape
+    /// codes must never reach the channel, or they show up as garbled
+    /// control characters instead of the color they'd have had in a real
+    /// terminal.
+    #[test]
+    fn streaming_observer_strips_ansi_from_stdout_and_stderr() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let observer = StreamingObserver::new(tx);
+        observer.emit_stdout("\u{1b}[32mok\u{1b}[0m");
+        observer.emit_stderr("\u{1b}[31merror\u{1b}[0m");
+        drop(observer);
+
+        let (is_err1, line1) = rx.try_recv().unwrap();
+        assert!(!is_err1);
+        assert_eq!(line1, "ok");
+        let (is_err2, line2) = rx.try_recv().unwrap();
+        assert!(is_err2);
+        assert_eq!(line2, "error");
     }
 
     /// Writes `content` to `filename` (typically a `.asm` name) and returns

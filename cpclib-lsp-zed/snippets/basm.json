@@ -7,6 +7,26 @@
       "$0"
     ]
   },
+  "Create an if": {
+    "prefix": "if",
+    "description": "Create a new if/endif block",
+    "body": [
+      "if ${1:CONDITION}",
+      "    $0",
+      "endif"
+    ]
+  },
+  "Create an if/else": {
+    "prefix": "ifelse",
+    "description": "Create a new if/else/endif block",
+    "body": [
+      "if ${1:CONDITION}",
+      "    $2",
+      "else",
+      "    $0",
+      "endif"
+    ]
+  },
   "Create macro": {
     "prefix": "macro",
     "description": "Create a new macro",

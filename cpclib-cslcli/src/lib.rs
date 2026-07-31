@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use cpclib_common::event::EventObserver;
 use cpclib_csl::parse_csl_with_rich_errors;
 
@@ -40,4 +40,8 @@ pub fn run<O: EventObserver>(args: &CslCliArgs, o: &O) -> Result<()> {
     o.emit_stdout(&script.to_string());
 
     Ok(())
+}
+
+pub fn build_command() -> clap::Command {
+    <CslCliArgs as clap::CommandFactory>::command()
 }

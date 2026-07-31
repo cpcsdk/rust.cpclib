@@ -1,10 +1,25 @@
 //! Diagnostics for bndbuild files: YAML validity, build-file structure,
 //! dependency existence checks.
 
+use camino::{Utf8Path, Utf8PathBuf};
 use tower_lsp::lsp_types::*;
 
 use super::BuildFileAnalyzer;
 use crate::common::document::Document;
+
+/// Expand a raw `targets:`/`dependencies:` token the same way the real
+/// executor does (brace `{a,b}` + glob `*`/`?`/`[` expansion, reusing
+/// `cpclib_bndbuild::expand_glob_in`), so a dependency like
+/// `src/{common.asm,public.asm}` is checked as the two real files it
+/// actually refers to, not as one literal, never-existing path. Falls back
+/// to the token unexpanded when there's no real directory to glob against
+/// (e.g. an unsaved buffer with no `file:` URI).
+fn expand_dep_token(tok: &str, base_dir: Option<&Utf8Path>) -> Vec<String> {
+    match base_dir {
+        Some(dir) => cpclib_bndbuild::expand_glob_in(tok, dir),
+        None => vec![tok.to_string()]
+    }
+}
 
 impl BuildFileAnalyzer {
     /// Analyze the build file and return diagnostics
@@ -147,7 +162,16 @@ impl BuildFileAnalyzer {
         let (expanded_text, source_map) = (&expand_result.0, &expand_result.1);
         let raw_lines: Vec<&str> = raw_text.lines().collect();
 
+        // ── Resolve base directory for file-existence checks and glob expansion ──
+        let base_dir: Option<Utf8PathBuf> = document
+            .uri
+            .to_file_path()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .and_then(|d| Utf8PathBuf::from_path_buf(d).ok());
+
         // ── Collect declared target names (from the expanded text) ─────────
+        // Glob-expanded: `targets: {a,b}.o` declares both `a.o` and `b.o`.
         let mut declared: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         for line in expanded_text.lines() {
@@ -166,20 +190,15 @@ impl BuildFileAnalyzer {
                     if !value.starts_with('>') && !value.starts_with('|') {
                         for tok in value.split_whitespace() {
                             if !tok.contains("{{") && !tok.contains("{%") {
-                                declared.insert(tok.to_string());
+                                for expanded in expand_dep_token(tok, base_dir.as_deref()) {
+                                    declared.insert(expanded);
+                                }
                             }
                         }
                     }
                 }
             }
         }
-
-        // ── Resolve base directory for file-existence checks ───────────────
-        let base_dir = document
-            .uri
-            .to_file_path()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()));
 
         // Avoid emitting the same diagnostic once per loop iteration when a
         // `{% for %}`-generated dependency line repeats an undefined token.
@@ -239,15 +258,41 @@ impl BuildFileAnalyzer {
                         let tok_end = tok_start + tok.len();
 
                         if !declared.contains(tok) {
-                            let file_exists = base_dir
-                                .as_ref()
-                                .map(|d| d.join(tok).exists())
-                                .unwrap_or(false);
+                            // `tok` may itself be a glob/brace pattern (e.g.
+                            // `{common.asm,public.asm}` or `*.o`) — expand it
+                            // the same way the real executor does before
+                            // checking existence, so each real file it
+                            // refers to is checked individually rather than
+                            // treating the pattern text itself as a literal
+                            // (always-missing) filename.
+                            let expanded = expand_dep_token(tok, base_dir.as_deref());
+                            let missing: Vec<&String> = expanded
+                                .iter()
+                                .filter(|e| {
+                                    !declared.contains(*e)
+                                        && !base_dir
+                                            .as_ref()
+                                            .map(|d| d.join(e).exists())
+                                            .unwrap_or(false)
+                                })
+                                .collect();
 
-                            if !file_exists && warn_missing_dependency {
-                                let message = format!(
-                                    "Dependency '{tok}' does not exist on disk, and no rule in this build file produces it as a target — it cannot be built."
-                                );
+                            if !missing.is_empty() && warn_missing_dependency {
+                                let message = if missing.len() == 1 && missing[0] == tok {
+                                    format!(
+                                        "Dependency '{tok}' does not exist on disk, and no rule in this build file produces it as a target — it cannot be built."
+                                    )
+                                }
+                                else {
+                                    let missing_list = missing
+                                        .iter()
+                                        .map(|s| s.as_str())
+                                        .collect::<Vec<_>>()
+                                        .join(", ");
+                                    format!(
+                                        "Dependency '{tok}' expands to one or more files that don't exist on disk and aren't produced as a target: {missing_list}"
+                                    )
+                                };
 
                                 if seen.insert((orig_line_num, message.clone())) {
                                     let range = if was_templated {
@@ -335,6 +380,57 @@ mod tests {
         let tmp = camino_tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join("main.asm"), "").unwrap();
         let text = "- targets: out.bin\n  dep: main.asm\n  cmd: basm main.asm\n";
+        let diags = diagnostics_for(&tmp, text);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn brace_expanded_dependency_with_all_files_present_is_not_flagged() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src").join("common.asm"), "").unwrap();
+        std::fs::write(tmp.path().join("src").join("public.asm"), "").unwrap();
+        // Note: the brace can't be the *first* character of an unquoted YAML
+        // scalar (that would parse as a flow mapping) - mirrors the user's
+        // own real example, `../linking/src/demosystem/{common.asm,public.asm}`.
+        let text = "- targets: out.bin\n  dep: src/{common.asm,public.asm}\n  cmd: basm out.bin\n";
+        let diags = diagnostics_for(&tmp, text);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn brace_expanded_dependency_missing_one_file_is_flagged_with_the_missing_name() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::create_dir(tmp.path().join("src")).unwrap();
+        std::fs::write(tmp.path().join("src").join("common.asm"), "").unwrap();
+        // public.asm intentionally not created
+        let text = "- targets: out.bin\n  dep: src/{common.asm,public.asm}\n  cmd: basm out.bin\n";
+        let diags = diagnostics_for(&tmp, text);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        // The original brace pattern is echoed in the message for context
+        // (so it necessarily mentions both names), but only the actually
+        // missing expansion, `src/public.asm`, should appear as a standalone
+        // missing entry - `src/common.asm` (which exists) must not.
+        assert!(
+            diags[0].message.contains("src/public.asm"),
+            "{}",
+            diags[0].message
+        );
+        assert!(
+            !diags[0].message.contains("src/common.asm"),
+            "{}",
+            diags[0].message
+        );
+    }
+
+    #[test]
+    fn glob_dependency_matching_an_existing_file_is_not_flagged() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("data.bin"), "").unwrap();
+        // A leading `*` would be a YAML alias reference in an unquoted plain
+        // scalar - keep the glob character mid-token, same constraint as the
+        // brace case above.
+        let text = "- targets: out.bin\n  dep: d*.bin\n  cmd: basm out.bin\n";
         let diags = diagnostics_for(&tmp, text);
         assert!(diags.is_empty(), "{diags:?}");
     }

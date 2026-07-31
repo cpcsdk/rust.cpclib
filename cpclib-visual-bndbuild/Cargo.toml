@@ -34,7 +34,7 @@ built = { version = "0.8.1", features = ["chrono"] }
 static_vcruntime = "3.0"
 
 [features]
-default = []
+default = ["rayon"]
 rayon = ["cpclib-bndbuild/rayon"]
 hfe = ["cpclib-bndbuild/hfe"]
 
