@@ -1,3 +1,4 @@
+use crate::disass::disassemble;
 use crate::error::AssemblerError;
 pub mod control;
 pub mod delayed_command;
@@ -5490,17 +5491,42 @@ impl Env {
         // Update stable ticker counters when active
         if !env.stable_counters.is_empty() {
             let num_bytes = env.logical_output_address().wrapping_sub(backup_address) as usize;
-            for i in 0..num_bytes {
+
+            // TODO add that in a function to reuse it with DEFS
+            // collect the bytes
+            let mut bytes = (0..num_bytes).into_iter().map(|i| {
                 let addr = backup_address.wrapping_add(i as u16);
                 let phy = env.logical_to_physical_address(addr);
-                if env.peek(&phy) != 0 {
-                    return Err(Box::new(AssemblerError::AssemblingError {
-                        msg: "TICKER cannot compute timing for DB/DW directive with non-zero bytes"
-                            .to_string()
-                    }));
+                env.peek(&phy)
+            }).collect_vec();
+
+            // disassemble the bytes
+            let obtained_listing = disassemble(&bytes);
+
+            // check there is only compatible mnemonics
+            obtained_listing.iter().try_for_each(|token| {
+                    match token.mnemonic() {
+                        Some(Mnemonic::Cpir | Mnemonic::Cpdr | Mnemonic::Ldir | Mnemonic::Lddr | Mnemonic::Otdr | Mnemonic::Otir) => {
+                            Err(Box::new(AssemblerError::AssemblingError {
+                                msg: format!("TICKER cannot compute timing for looping instruction. 
+                                Here we have {}", token
+                                )
+                            }))
+                        }
+                        Some(_) => Ok(()),
+                        None => {
+                    Err(Box::new(AssemblerError::AssemblingError {
+                        msg: format!("TICKER cannot compute timing for DB/DW directive when not generating valid mnemmonics. 
+                        Here we have {}", token
+                        )
+                    }))
                 }
             }
-            env.stable_counters.update_counters(num_bytes);
+        })?;
+
+            let listing_duration = obtained_listing.estimated_duration().unwrap();
+            env.stable_counters.update_counters(listing_duration);
+
         }
 
         Ok(())
