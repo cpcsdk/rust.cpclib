@@ -1,0 +1,208 @@
+name: Build VSCode Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - master
+  pull_request:
+    paths:
+      - 'cpclib-vscode/**'
+      - 'cpclib-lsp/**'
+      - '.github/workflows/build_vscode_extension.yml'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Build the LSP server binary for all platforms
+  build-lsp-binaries:
+    name: Build cpclib-lsp (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: cpclib-lsp
+            artifact_name: cpclib-lsp-linux
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_name: cpclib-lsp.exe
+            artifact_name: cpclib-lsp-windows
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary_name: cpclib-lsp
+            artifact_name: cpclib-lsp-macos
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build cpclib-lsp
+        run: cargo build --release -p cpclib-lsp --target ${{ matrix.target }}
+
+      - name: Create artifacts directory
+        run: mkdir -p artifacts
+
+      - name: Copy binary to artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} artifacts/
+          chmod +x artifacts/${{ matrix.binary_name }}
+
+      - name: Copy binary to artifacts (Windows)
+        if: runner.os == 'Windows'
+        run: copy target\${{ matrix.target }}\release\${{ matrix.binary_name }} artifacts\
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: artifacts/${{ matrix.binary_name }}
+          if-no-files-found: error
+
+  # Package the VSCode extension with all platform binaries
+  package-extension:
+    name: Package VSCode Extension
+    needs: build-lsp-binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: cpclib-vscode/package-lock.json
+
+      - name: Install dependencies
+        working-directory: cpclib-vscode
+        run: npm ci
+
+      - name: Install vsce (VSCode Extension Manager)
+        run: npm install -g @vscode/vsce
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cpclib-lsp-linux
+          path: cpclib-vscode/bin/linux
+
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cpclib-lsp-windows
+          path: cpclib-vscode/bin/windows
+
+      - name: Download macOS binary
+        uses: actions/download-artifact@v4
+        with:
+          name: cpclib-lsp-macos
+          path: cpclib-vscode/bin/macos
+
+      - name: Make binaries executable
+        working-directory: cpclib-vscode
+        run: |
+          chmod +x bin/linux/cpclib-lsp
+          chmod +x bin/macos/cpclib-lsp
+
+      - name: Compile TypeScript
+        working-directory: cpclib-vscode
+        run: npm run compile
+
+      - name: Package extension
+        working-directory: cpclib-vscode
+        run: vsce package --out ../cpclib-vscode.vsix
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpclib-vscode-extension
+          path: cpclib-vscode.vsix
+          if-no-files-found: error
+
+  # Publish to VSCode Marketplace and Open VSX (only on tag push)
+  publish-extension:
+    name: Publish Extension
+    needs: package-extension
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download extension artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cpclib-vscode-extension
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Publish to VSCode Marketplace (Azure AD)
+        if: env.AZURE_CLIENT_ID != '' && env.AZURE_TENANT_ID != '' && env.AZURE_CLIENT_SECRET != ''
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: |
+          # Modern Azure AD service principal authentication
+          vsce publish --packagePath cpclib-vscode.vsix \
+            --azure-credential \
+            --azureTenantId $AZURE_TENANT_ID
+
+      - name: Publish to VSCode Marketplace (Legacy PAT)
+        if: env.VSCE_PAT != '' && (env.AZURE_CLIENT_ID == '' || env.AZURE_TENANT_ID == '' || env.AZURE_CLIENT_SECRET == '')
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: vsce publish --packagePath cpclib-vscode.vsix -p $VSCE_PAT
+
+      - name: Publish to Open VSX Registry
+        if: env.OVSX_PAT != ''
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          npm install -g ovsx
+          ovsx publish cpclib-vscode.vsix -p $OVSX_PAT
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: cpclib-vscode.vsix
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
