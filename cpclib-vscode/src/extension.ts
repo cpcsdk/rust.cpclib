@@ -22,18 +22,46 @@ let cycleCountStatusBarItem: vscode.StatusBarItem;
 let registersStatusBarItem: vscode.StatusBarItem;
 
 /// Resolves the `cpclib-lsp` binary when `cpclib-lsp.serverPath` is left at
-/// its default. GUI-launched editors on macOS/Linux commonly don't inherit
-/// the PATH a login shell would have (`cargo install`'s `~/.cargo/bin` is
-/// added there, not system-wide), so a bare PATH lookup alone silently
-/// fails with no indication of *why*. Scans PATH first, then falls back to
-/// `~/.cargo/bin` - `cargo install --path cpclib-lsp`'s own install
-/// location - before giving up and returning the bare name so the normal
-/// ENOENT error still surfaces if truly not found anywhere.
-function resolveServerPath(configured: string): string {
+/// its default. Search order:
+/// 1. Bundled platform-specific binary (bin/<platform>/cpclib-lsp[.exe])
+/// 2. User's PATH (multiple directories)
+/// 3. ~/.cargo/bin (cargo install location)
+/// 4. Return the bare name so a normal ENOENT error surfaces if not found
+///
+/// GUI-launched editors on macOS/Linux commonly don't inherit the PATH a
+/// login shell would have (`cargo install`'s `~/.cargo/bin` is added there,
+/// not system-wide), so a bare PATH lookup alone silently fails with no
+/// indication of *why*.
+function resolveServerPath(configured: string, extensionPath: string): string {
     if (configured !== 'cpclib-lsp') {
         return configured; // explicit user override - respect as-is
     }
+
     const exeName = process.platform === 'win32' ? 'cpclib-lsp.exe' : 'cpclib-lsp';
+    
+    // Determine platform-specific subdirectory
+    let platformDir: string;
+    switch (process.platform) {
+        case 'win32':
+            platformDir = 'windows';
+            break;
+        case 'darwin':
+            platformDir = 'macos';
+            break;
+        case 'linux':
+            platformDir = 'linux';
+            break;
+        default:
+            platformDir = 'linux'; // fallback
+    }
+
+    // 1. Check for bundled binary first (highest priority)
+    const bundledBinary = path.join(extensionPath, 'bin', platformDir, exeName);
+    if (fs.existsSync(bundledBinary)) {
+        return bundledBinary;
+    }
+
+    // 2. Check PATH and ~/.cargo/bin
     const candidateDirs = [
         ...(process.env.PATH ?? '').split(path.delimiter),
         path.join(os.homedir(), '.cargo', 'bin')
@@ -44,12 +72,17 @@ function resolveServerPath(configured: string): string {
             return candidate;
         }
     }
+
+    // 3. Return bare name so ENOENT error surfaces
     return configured;
 }
 
 export function activate(context: ExtensionContext) {
     const config = workspace.getConfiguration('cpclib-lsp');
-    const serverPath = resolveServerPath(config.get<string>('serverPath', 'cpclib-lsp'));
+    const serverPath = resolveServerPath(
+        config.get<string>('serverPath', 'cpclib-lsp'),
+        context.extensionPath
+    );
 
     const serverOptions: ServerOptions = {
         run: { command: serverPath, transport: TransportKind.stdio },

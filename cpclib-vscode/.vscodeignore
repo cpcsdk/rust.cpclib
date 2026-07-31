@@ -4,3 +4,8 @@ src/**
 tsconfig.json
 **/*.ts
 **/*.map
+
+# Include bin/ directory with platform-specific LSP binaries
+# (explicitly listed here to document that it MUST be packaged)
+# Do NOT add "bin/**" to this ignore file!
+

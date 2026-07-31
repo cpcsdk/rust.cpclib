@@ -117,11 +117,6 @@
           "default": "cpclib-lsp",
           "description": "Path to the cpclib-lsp binary. Defaults to 'cpclib-lsp' (must be in PATH, e.g. after cargo install)."
         },
-        "cpclib-lsp.bndbuildPath": {
-          "type": "string",
-          "default": "bndbuild",
-          "description": "Path to the bndbuild binary used when running rules from CodeLens buttons."
-        },
         "cpclib-lsp.trace.server": {
           "type": "string",
           "enum": ["off", "messages", "verbose"],
