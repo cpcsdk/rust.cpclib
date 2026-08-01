@@ -1816,8 +1816,20 @@ impl LanguageServer for CpcLspBackend {
 
             // Static analysis diagnostics + the failure highlight (if any):
             // publishing replaces the previous set, so a successful build
-            // clears an earlier failure marker.
-            let mut diagnostics = self.build_analyzer.analyze(&document);
+            // clears an earlier failure marker. Dispatched by `document`'s
+            // own `doc_type` (via the shared `compute_diagnostics`) rather
+            // than always using `build_analyzer` - `document` is the host
+            // `.asm` file, not YAML, for an embedded-bndbuild-in-basm rule
+            // (`DocumentType::Assembly` branch above), and running the YAML
+            // analyzer against `.asm` source produced misleading diagnostics.
+            let mut diagnostics = compute_diagnostics(
+                &self.asm_analyzer,
+                &self.build_analyzer,
+                &self.basic_analyzer,
+                &document,
+                &self.workspace_roots(),
+                &self.build_error_diagnostics
+            );
             let failed = !outcome.success;
             diagnostics.extend(outcome.diagnostics);
             self.publish_diagnostics(uri, diagnostics).await;

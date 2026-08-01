@@ -224,7 +224,7 @@ impl TokenExt for Token {
                 match mnemonic {
                     &Mnemonic::Add => {
                         match arg1 {
-                            Some(DataAccess::Register8(_)) => {
+                            None | Some(DataAccess::Register8(_)) => {
                                 match arg2 {
                                     Some(DataAccess::Register8(_)) => 1,
                                     Some(DataAccess::IndexRegister16WithIndex(..)) => 5,

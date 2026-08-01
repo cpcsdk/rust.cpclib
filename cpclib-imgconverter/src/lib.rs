@@ -51,9 +51,20 @@ macro_rules! specify_palette {
         let cmd = $e.arg(
             Arg::new("OCP_PAL")
             .long("pal")
+            .alias("ocp-pal"    )
             .required(false)
             .help("OCP PAL file. The first palette among 12 is used") // TODO specify a way to select any palette
             .value_parser(|p: &str| cpclib::common::utf8pathbuf_value_parser(true)(p))
+        )
+        .arg(
+            Arg::new("GA_PAL")
+                .long("ga-pal")
+                .required(false)
+                .help("GA PAL file. A binary file that contains the palette in Gate Array format")
+                .value_parser(|p: &str| cpclib::common::utf8pathbuf_value_parser(true)(p)
+            )
+            .conflicts_with("OCP_PAL")
+
         )
         .arg(
             Arg::new("PENS")
@@ -61,6 +72,7 @@ macro_rules! specify_palette {
                 .required(false)
                 .help("Separated list of ink number. Use ',' as a separater")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
         )
         .arg(
             Arg::new("PEN0")
@@ -69,6 +81,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 0")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -78,6 +91,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 1")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -87,6 +101,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 2")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -96,6 +111,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 3")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -105,6 +121,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 4")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -114,6 +131,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 5")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -123,6 +141,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 6")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -132,6 +151,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 7")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -141,6 +161,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 8")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -150,6 +171,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 9")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -159,6 +181,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 10")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -168,6 +191,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 11")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -177,6 +201,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 12")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -186,6 +211,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 13")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -195,6 +221,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 14")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -204,6 +231,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 15")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         .arg(
@@ -213,6 +241,7 @@ macro_rules! specify_palette {
                 .help("Ink number of the pen 16 (border)")
                 .conflicts_with("PENS")
                 .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
                 .value_parser(value_parser!(u8))
         )
         ;
@@ -225,7 +254,8 @@ macro_rules! specify_palette {
                     .long("unlock-pens")
                     .required(false)
                     .conflicts_with("OCP_PAL")
-                    .conflicts_with("PENS") // TODO make it work with PENS too
+                    .conflicts_with("PENS")
+                    .conflicts_with("GA_PAL")
                     .help("When some pens are manually provided, allows to also use the other ones by automatically assign them missing inks. By default, this is forbidden.")
                     .action(ArgAction::SetTrue)
             )
@@ -256,6 +286,15 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
         let pal = OcpPalette::from_buffer(data);
         Ok(LockablePalette::unlocked(pal.palette(0).clone()))
     }
+    else if let Some(fname) = matches.get_one::<Utf8PathBuf>("GA_PAL") {
+        use std::io::Read;
+        let mut file = File::open(fname).expect("Unable to open the gate array palette file");
+        let mut buffer: Vec<u8> = Vec::new();
+        file.read_to_end(&mut buffer)
+            .expect("Unable to read the gate array palette file");
+        let pal = Palette::from_iter(buffer);
+        Ok(LockablePalette::unlocked(pal))
+    }
     else {
         let mut one_pen_set = false;
         let mut palette = Palette::empty();
@@ -278,7 +317,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
 macro_rules! export_palette {
     ($e: expr) => {
         $e.arg(
-            Arg::new("EXPORT_PALETTE")
+            Arg::new("EXPORT_PALETTE") // TODO really save a OCP palette and create an additional Gate array export in order to be constant with loading
                 .long("palette")
                 .short('p')
                 .required(false)

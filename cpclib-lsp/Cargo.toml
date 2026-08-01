@@ -34,7 +34,7 @@ tower-lsp = "0.19"
 tokio = { version = "1", features = ["full"] }
 
 # Dynamic clap-based completion for internal bndbuild commands
-clap_complete = { version = "4.6.7", features = ["unstable-dynamic"] }
+clap_complete = { version = "4.6.8", features = ["unstable-dynamic"] }
 shlex.workspace = true
 
 # Serialization

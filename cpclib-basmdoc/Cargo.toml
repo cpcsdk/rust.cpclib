@@ -46,7 +46,7 @@ fs-err.workspace = true
 delegate.workspace = true
 glob = { workspace = true, optional = true }
 minijinja = { workspace = true, features = ["loader"], optional = true }
-regex = { version = "1.12", optional = true }
+regex = { version = "1.13", optional = true }
 rayon = { workspace = true, optional = true }
 minify-html = { version = "0.18", optional = true }
 rust-embed = { workspace = true, features = ["include-exclude", "compression"], optional = true }
