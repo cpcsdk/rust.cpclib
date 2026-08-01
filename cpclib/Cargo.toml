@@ -34,7 +34,6 @@ anyhow.workspace = true
 arrayref.workspace = true
 cfg-if.workspace = true
 custom_error.workspace = true
-dbg.workspace = true
 delegate.workspace = true
 either.workspace = true
 getset.workspace = true
