@@ -1,4 +1,5 @@
 name = "Bndbuild"
+grammar = "yaml"
 path_suffixes = ["bnd", "build"]
 line_comments = ["# "]
 tab_size = 2
