@@ -42,6 +42,17 @@ impl AssemblyAnalyzer {
         // this gate is required, not just conservative. A broken document
         // falls back to 100% raw-text scanning below, exactly as before.
         let mut raw: Vec<RawSemanticToken> = Vec::new();
+        // Lines inside a statically-known-inactive IF/ELSEIF/ELSE branch -
+        // computed here (only a real AST gives us `Token::If` structure at
+        // all), but applied to *every* token on those lines only at the very
+        // end (see the final `dim_inactive_lines` call below), since plenty
+        // of token kinds (e.g. `PRINT` statements - not walked by
+        // `ast_semantic_tokens`, see its own doc comment) are only ever
+        // claimed later, by the byte-level scanner further down this
+        // function or the LOCOMOTIVE/bndbuild embedded-block pushes after
+        // it - applying the dim modifier here would silently miss all of
+        // those.
+        let mut inactive_lines: HashSet<u32> = HashSet::new();
         if let Ok(listing) = self.parse_document(document) {
             for token in super::token::flatten_listing(listing.iter()) {
                 if token.is_equ() {
@@ -58,6 +69,18 @@ impl AssemblyAnalyzer {
                 }
             }
             raw = super::semantic_tokens_ast::ast_semantic_tokens(&listing);
+
+            // Reuses the same dry-run `Env` hover already uses for value
+            // substitution. Skipped entirely when the document has no `IF`
+            // at all (the overwhelmingly common case) - a full dry-run
+            // assembly pass is real work, not worth paying on every
+            // semantic-tokens request (which fires on nearly every
+            // keystroke) for a file that could never need it.
+            if super::token::flatten_listing(listing.iter()).any(|t| t.is_if()) {
+                let mut env = self.dry_run_env_cached(document, &listing);
+                inactive_lines =
+                    super::semantic_tokens_ast::inactive_if_branch_lines(&listing, &mut env);
+            }
         }
         let claimed_by_line = super::semantic_tokens_ast::claimed_ranges_by_line(&raw);
 
@@ -524,6 +547,10 @@ impl AssemblyAnalyzer {
             super::embedded_bndbuild::push_embedded_bndbuild_tokens(document, block, &mut raw);
         }
 
+        if !inactive_lines.is_empty() {
+            super::semantic_tokens_ast::dim_inactive_lines(&mut raw, &inactive_lines);
+        }
+
         // Sort by (line, col) — LOCOMOTIVE/bndbuild tokens were appended out
         // of document order.
         raw.sort_unstable_by(|a, b| a.line.cmp(&b.line).then(a.col.cmp(&b.col)));
@@ -973,6 +1000,129 @@ mod tests {
         assert!(
             total_files > 50,
             "expected a real corpus, only found {total_files} files"
+        );
+    }
+}
+
+#[cfg(test)]
+mod inactive_if_branch_dimming_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    /// `(line, modifiers_bitset)` for every emitted token, decoded from
+    /// delta-encoding.
+    fn decode_lines_with_modifiers(tokens: &[SemanticToken]) -> Vec<(u32, u32)> {
+        let mut line = 0u32;
+        let mut out = Vec::with_capacity(tokens.len());
+        for t in tokens {
+            if t.delta_line != 0 {
+                line += t.delta_line;
+            }
+            out.push((line, t.token_modifiers_bitset));
+        }
+        out
+    }
+
+    #[test]
+    fn false_if_branch_is_dimmed_true_branch_is_not() {
+        let text = "if 0\n    ld a, 1\nelse\n    ld a, 2\nendif\n";
+        let d = doc(text);
+        let decoded = decode_lines_with_modifiers(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        // Line 1 ("ld a, 1") is inside the untaken `if 0` branch - dimmed.
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 1 && m & MOD_INACTIVE != 0),
+            "{decoded:?}"
+        );
+        // Line 3 ("ld a, 2") is the taken `else` branch - not dimmed.
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 3 && m & MOD_INACTIVE == 0),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn true_if_branch_is_not_dimmed_else_branch_is() {
+        let text = "if 1\n    ld a, 1\nelse\n    ld a, 2\nendif\n";
+        let d = doc(text);
+        let decoded = decode_lines_with_modifiers(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 1 && m & MOD_INACTIVE == 0),
+            "{decoded:?}"
+        );
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 3 && m & MOD_INACTIVE != 0),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn nested_if_is_evaluated_independently_inside_the_taken_outer_branch() {
+        let text = "if 1\n    if 0\n        ld a, 1\n    endif\nendif\n";
+        let d = doc(text);
+        let decoded = decode_lines_with_modifiers(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        // Line 2 is inside the outer (taken) IF but the inner (untaken) IF.
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 2 && m & MOD_INACTIVE != 0),
+            "{decoded:?}"
+        );
+    }
+
+    #[test]
+    fn unresolvable_condition_dims_nothing() {
+        // A symbol that's never defined anywhere - genuinely unresolvable
+        // even after every dry-run pass converges, so neither branch is
+        // dimmed rather than guessing.
+        let text = "if truly_undefined_symbol\n    ld a, 1\nelse\n    ld a, 2\nendif\n";
+        let d = doc(text);
+        let decoded = decode_lines_with_modifiers(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        assert!(
+            decoded
+                .iter()
+                .all(|&(l, m)| !(l == 1 || l == 3) || m & MOD_INACTIVE == 0),
+            "{decoded:?}"
+        );
+    }
+
+    /// Regression test for a real user report: `PRINT` isn't walked by the
+    /// AST-driven scanner (`ast_semantic_tokens`), so it's entirely claimed
+    /// by the byte-level fallback scanner further down `semantic_tokens` -
+    /// the dimming pass used to run *before* that scanner added its own
+    /// tokens, so a `PRINT` line inside an inactive branch never actually
+    /// got dimmed. `dim_inactive_lines` must run only after every token
+    /// source (AST walker, byte-level scanner, embedded LOCOMOTIVE/bndbuild
+    /// blocks) has contributed to `raw`.
+    #[test]
+    fn print_statement_in_the_inactive_branch_is_dimmed() {
+        let text = "if true\n\tprint \"true\"\nelse\n\tprint \"false\"\nendif\n";
+        let d = doc(text);
+        let decoded = decode_lines_with_modifiers(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        assert!(!decoded.is_empty(), "expected some tokens for {text:?}");
+        // Line 1 ("true" branch) is taken - not dimmed.
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 1 && m & MOD_INACTIVE == 0),
+            "{decoded:?}"
+        );
+        // Line 3 (the "false"/else branch) is not taken - must be dimmed.
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 3 && m & MOD_INACTIVE != 0),
+            "{decoded:?}"
         );
     }
 }

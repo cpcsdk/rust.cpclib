@@ -75,12 +75,22 @@
     "commands": [
       {
         "command": "cpclib.runRule",
-        "title": "Run bndbuild Rule",
+        "title": "Run bndbuild Rule (embedded block)",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runRuleInTerminal",
+        "title": "Run bndbuild Rule in Terminal",
         "category": "CPClib"
       },
       {
         "command": "cpclib.pickInkColor",
         "title": "Pick CPC Ink Color",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.buildActiveFile",
+        "title": "Build Active File's bndbuild Target",
         "category": "CPClib"
       }
     ],
@@ -109,6 +119,26 @@
         }
       }
     ],
+    "problemMatchers": [
+      {
+        "name": "basm",
+        "owner": "basm",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^(error|warning):\\s+(.*)$",
+            "severity": 1,
+            "message": 2
+          },
+          {
+            "regexp": "^\\s*(?:┌─|-->)\\s+(.*):(\\d+):(\\d+)$",
+            "file": 1,
+            "line": 2,
+            "column": 3
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "CPClib LSP",
       "properties": {
@@ -116,6 +146,11 @@
           "type": "string",
           "default": "cpclib-lsp",
           "description": "Path to the cpclib-lsp binary. Defaults to 'cpclib-lsp' (must be in PATH, e.g. after cargo install)."
+        },
+        "cpclib-lsp.bndbuildPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a standalone bndbuild binary to use instead of the LSP binary's own 'cpclib-lsp --bndbuild' mode. Leave empty (the default) unless you specifically need a different bndbuild build/version than the one bundled with cpclib-lsp - no separate bndbuild install is required otherwise."
         },
         "cpclib-lsp.trace.server": {
           "type": "string",

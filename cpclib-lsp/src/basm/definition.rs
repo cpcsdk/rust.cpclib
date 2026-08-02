@@ -57,6 +57,31 @@ impl AssemblyAnalyzer {
             }
         }
 
+        // CTRL+CLICK anywhere on a closing directive's own line
+        // (ENDIF/ENDM/ENDMACRO/MEND/ENDFUNCTION/ENDREPEAT/.../ENDITERATE/
+        // ...) navigates to the opening directive it closes. basm's AST has
+        // no discrete closing token for these constructs (`Token::If`/
+        // `MACRO`/etc. are each one nested node for the whole block), so
+        // this is resolved from raw text - same established approach
+        // `block_end_line` already uses for the forward direction.
+        if let Some(opening_line) =
+            super::token::matching_opening_line(&document.text(), position.line)
+        {
+            return Some(Location {
+                uri: document.uri.clone(),
+                range: Range {
+                    start: Position {
+                        line: opening_line,
+                        character: 0
+                    },
+                    end: Position {
+                        line: opening_line,
+                        character: 0
+                    }
+                }
+            });
+        }
+
         let word = self.extract_word_at_position(&line, document.char_column(position))?;
 
         // The backend will try other open documents if this returns None.
@@ -2215,5 +2240,105 @@ mod word_scanner_tests {
     fn word_matches_on_line_accepts_a_standalone_word() {
         let hits = word_matches_on_line("call OLD", "OLD");
         assert_eq!(hits, vec![(5, 8)]);
+    }
+}
+
+#[cfg(test)]
+mod closing_directive_navigation_tests {
+    use super::*;
+    use crate::common::document::Document;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    #[test]
+    fn ctrl_click_on_endif_jumps_to_the_if() {
+        let text = "if 1\n    nop\nendif\n";
+        let d = doc(text);
+        let loc = AssemblyAnalyzer::new()
+            .goto_definition(
+                &d,
+                Position {
+                    line: 2,
+                    character: 0
+                }
+            )
+            .expect("expected a location");
+        assert_eq!(loc.range.start.line, 0);
+    }
+
+    #[test]
+    fn ctrl_click_on_endm_jumps_to_the_macro() {
+        let text = "macro foo\n    nop\nendm\n";
+        let d = doc(text);
+        let loc = AssemblyAnalyzer::new()
+            .goto_definition(
+                &d,
+                Position {
+                    line: 2,
+                    character: 0
+                }
+            )
+            .expect("expected a location");
+        assert_eq!(loc.range.start.line, 0);
+    }
+
+    #[test]
+    fn nested_if_resolves_to_the_correct_matching_if() {
+        let text = "if 1\n    if 2\n        nop\n    endif\nendif\n";
+        let d = doc(text);
+        let inner = AssemblyAnalyzer::new()
+            .goto_definition(
+                &d,
+                Position {
+                    line: 3,
+                    character: 4
+                }
+            )
+            .expect("expected a location");
+        assert_eq!(inner.range.start.line, 1);
+        let outer = AssemblyAnalyzer::new()
+            .goto_definition(
+                &d,
+                Position {
+                    line: 4,
+                    character: 0
+                }
+            )
+            .expect("expected a location");
+        assert_eq!(outer.range.start.line, 0);
+    }
+
+    #[test]
+    fn does_not_trigger_on_an_ordinary_line() {
+        let text = "if 1\n    nop\nendif\n";
+        let d = doc(text);
+        // Cursor on "nop" - not a closing directive, falls through to the
+        // normal word-based lookup (which finds nothing here).
+        let loc = AssemblyAnalyzer::new().goto_definition(
+            &d,
+            Position {
+                line: 1,
+                character: 4
+            }
+        );
+        assert!(loc.is_none(), "{loc:?}");
+    }
+
+    #[test]
+    fn ctrl_click_on_else_jumps_to_the_if() {
+        let text = "if 1\n    nop\nelse\n    nop\nendif\n";
+        let d = doc(text);
+        let loc = AssemblyAnalyzer::new()
+            .goto_definition(
+                &d,
+                Position {
+                    line: 2,
+                    character: 0
+                }
+            )
+            .expect("expected a location");
+        assert_eq!(loc.range.start.line, 0);
     }
 }

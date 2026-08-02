@@ -1,28 +1,36 @@
-//! Document symbols (outline) for bndbuild files: one symbol per rule/target,
-//! Jinja-aware via the source map.
-
+//! Document symbols (outline) for bndbuild files: a flat, document-order
+//! top-level list mixing `{% set %}` variables and rule/target symbols -
+//! *not* grouped under synthetic "Variables"/"Artifacts" category headers
+//! the way this module used to. A synthetic header's own `range` has no
+//! value that's both safe and useful: spanning from its first child to its
+//! last (the old behavior) makes VS Code treat the header itself as a real,
+//! wide container to pin while scrolled anywhere between two unrelated,
+//! far-apart rules; collapsing it to a narrow/zero-width point instead (a
+//! later attempt) stops Sticky Scroll from ever recursing into the real
+//! children at all, since it only descends into a symbol's `children` when
+//! the *parent's* range already contains the scroll position - see
+//! `common::symbols::container_symbol`'s own history and
+//! `basm::symbols`'s matching fix for the full story. Each symbol keeps its
+//! own `kind` (Variable vs. File), so the Outline panel still shows a
+//! distinct icon per entry, just not bucketed under a header.
 use tower_lsp::lsp_types::*;
 
 use super::BuildFileAnalyzer;
 use super::token::Collecting;
 use crate::common::document::Document;
-use crate::common::symbols::container_symbol;
 
 impl BuildFileAnalyzer {
-    /// Outline for the editor: two top-level groups, "Variables" (the
-    /// `{% set %}` definitions, each showing its value) and "Artifacts" (the
-    /// rules/targets, as before). Either group is omitted when empty.
+    /// Outline for the editor: every `{% set %}` variable and every
+    /// rule/target, flat, in document order.
     pub fn document_symbols(&self, document: &Document) -> Vec<DocumentSymbol> {
-        let variables = self.variable_symbols(document);
-        let targets = self.target_symbols(document);
-
-        let mut root = Vec::new();
-        if !variables.is_empty() {
-            root.push(container_symbol("Variables", variables));
-        }
-        if !targets.is_empty() {
-            root.push(container_symbol("Artifacts", targets));
-        }
+        let mut root = self.variable_symbols(document);
+        root.extend(self.target_symbols(document));
+        root.sort_by_key(|s| {
+            (
+                s.selection_range.start.line,
+                s.selection_range.start.character
+            )
+        });
         root
     }
 
@@ -67,7 +75,8 @@ impl BuildFileAnalyzer {
         target_names: &[&'static str]
     ) -> Vec<DocumentSymbol> {
         let mut symbols = Vec::new();
-        let mut rule_tgt: Option<(String, u32)> = None;
+        // (value text, line, column where the value text starts on that line)
+        let mut rule_tgt: Option<(String, u32, u32)> = None;
         let mut rule_help: Option<String> = None;
         let mut rule_start: u32 = 0;
         let mut rule_end: u32 = 0;
@@ -83,7 +92,12 @@ impl BuildFileAnalyzer {
                     let val = std::mem::take(&mut block_buf);
                     match collecting {
                         Collecting::Target(tgt_line) if rule_tgt.is_none() && !val.is_empty() => {
-                            rule_tgt = Some((val, tgt_line));
+                            // Block-scalar continuation lines don't map
+                            // cleanly to a single source column (the value
+                            // spans several lines) - column 0 preserves the
+                            // pre-existing (imperfect but harmless) behavior
+                            // for this rarer case.
+                            rule_tgt = Some((val, tgt_line, 0));
                         },
                         Collecting::Help if rule_help.is_none() && !val.is_empty() => {
                             rule_help = Some(val);
@@ -99,9 +113,24 @@ impl BuildFileAnalyzer {
         // Emit DocumentSymbol entries for a completed rule.
         macro_rules! flush_rule {
             () => {
-                if let Some((tgt_str, tgt_line)) = rule_tgt.take() {
+                if let Some((tgt_str, tgt_line, base_col)) = rule_tgt.take() {
+                    // Track each target's own position within `tgt_str` -
+                    // several names can share one `tgt:`/`targets:` line
+                    // (e.g. `- tgt: a.asm b.asm`) and each must get its own,
+                    // distinct column range rather than all collapsing onto
+                    // column 0 (which made every extra target invisible/
+                    // indistinguishable in the outline).
+                    let mut search_from = 0usize;
                     for target in tgt_str.split_whitespace() {
-                        let sel_end_char = target.len() as u32;
+                        let rel_start = tgt_str[search_from..]
+                            .find(target)
+                            .map(|i| i + search_from)
+                            .unwrap_or(search_from);
+                        let rel_end = rel_start + target.len();
+                        search_from = rel_end;
+
+                        let sel_start_char = base_col + rel_start as u32;
+                        let sel_end_char = base_col + rel_end as u32;
 
                         // VS Code requires selectionRange ⊆ fullRange.
                         // Source-map translation can produce out-of-order line
@@ -129,7 +158,7 @@ impl BuildFileAnalyzer {
                         let sel = Range {
                             start: Position {
                                 line: tgt_line,
-                                character: 0
+                                character: sel_start_char
                             },
                             end: Position {
                                 line: tgt_line,
@@ -199,9 +228,12 @@ impl BuildFileAnalyzer {
                 rule_start = orig;
                 rule_end = orig;
 
-                let rest = trimmed[2..].trim_start();
+                let after_dash = &trimmed[2..];
+                let rest = after_dash.trim_start();
+                let rest_col = indent + 2 + (after_dash.len() - rest.len());
                 self.process_key_value(
                     rest,
+                    rest_col as u32,
                     orig,
                     target_names,
                     &mut rule_tgt,
@@ -215,6 +247,7 @@ impl BuildFileAnalyzer {
                 rule_end = orig;
                 self.process_key_value(
                     trimmed,
+                    indent as u32,
                     orig,
                     target_names,
                     &mut rule_tgt,
@@ -240,9 +273,10 @@ impl BuildFileAnalyzer {
     fn process_key_value(
         &self,
         line: &str,
+        line_col: u32,
         orig: u32,
         target_names: &[&'static str],
-        rule_tgt: &mut Option<(String, u32)>,
+        rule_tgt: &mut Option<(String, u32, u32)>,
         rule_help: &mut Option<String>,
         collecting: &mut Collecting,
         block_base: &mut Option<usize>,
@@ -253,7 +287,12 @@ impl BuildFileAnalyzer {
             None => return
         };
         let key = line[..colon].trim();
-        let value = line[colon + 1..].split('#').next().unwrap_or("").trim();
+        let after_colon = line[colon + 1..].split('#').next().unwrap_or("");
+        let value = after_colon.trim();
+        let value_col = line_col
+            + colon as u32
+            + 1
+            + (after_colon.len() - after_colon.trim_start().len()) as u32;
 
         if rule_tgt.is_none() && target_names.contains(&key) {
             match value {
@@ -264,7 +303,7 @@ impl BuildFileAnalyzer {
                 },
                 "" => {},
                 v => {
-                    *rule_tgt = Some((v.to_string(), orig));
+                    *rule_tgt = Some((v.to_string(), orig, value_col));
                 }
             }
         }
@@ -298,31 +337,48 @@ mod tests {
     }
 
     #[test]
-    fn groups_variables_and_artifacts_separately() {
+    fn variables_and_artifacts_appear_flat_in_document_order() {
         let text = "{% set root = \"src\" %}\n- tgt: out.bin\n  cmd: basm {{root}}/main.asm\n";
         let symbols = symbols_for(text);
         let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, vec!["Variables", "Artifacts"], "{symbols:?}");
+        assert_eq!(names, vec!["root", "out.bin"], "{symbols:?}");
 
-        let variables = &symbols[0];
-        let children = variables.children.as_ref().expect("Variables has children");
-        assert_eq!(children.len(), 1);
-        assert_eq!(children[0].name, "root");
-        assert_eq!(children[0].detail.as_deref(), Some("\"src\""));
-        assert_eq!(children[0].kind, SymbolKind::VARIABLE);
-
-        let artifacts = &symbols[1];
-        let children = artifacts.children.as_ref().expect("Artifacts has children");
-        assert_eq!(children.len(), 1);
-        assert_eq!(children[0].name, "out.bin");
+        assert_eq!(symbols[0].detail.as_deref(), Some("\"src\""));
+        assert_eq!(symbols[0].kind, SymbolKind::VARIABLE);
+        assert_eq!(symbols[1].kind, SymbolKind::FILE);
+        // No synthetic grouping node wraps them - each is a real, direct
+        // top-level entry (a grouping node's own `range` broke Sticky
+        // Scroll no matter how it was computed - see the module doc
+        // comment).
+        assert!(symbols[0].children.is_none());
+        assert!(symbols[1].children.is_none());
     }
 
     #[test]
-    fn variables_group_omitted_when_there_are_no_set_statements() {
+    fn no_variables_means_just_the_targets() {
         let text = "- tgt: out.bin\n  cmd: basm main.asm\n";
         let symbols = symbols_for(text);
         let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, vec!["Artifacts"], "{symbols:?}");
+        assert_eq!(names, vec!["out.bin"], "{symbols:?}");
+    }
+
+    /// Regression test for a real report: `- tgt: a.asm b.asm` used to give
+    /// *every* target name the same `selection_range` (always starting at
+    /// column 0), so the outline only ever showed the first one distinctly.
+    /// Each name must get its own, correctly-positioned column range.
+    #[test]
+    fn multi_target_rule_gives_each_name_its_own_column_range() {
+        let text = "- tgt: a.asm b.asm\n  cmd: echo one\n";
+        let symbols = symbols_for(text);
+        assert_eq!(symbols.len(), 2, "{symbols:?}");
+
+        assert_eq!(symbols[0].name, "a.asm");
+        assert_eq!(symbols[0].selection_range.start.character, 7);
+        assert_eq!(symbols[0].selection_range.end.character, 12);
+
+        assert_eq!(symbols[1].name, "b.asm");
+        assert_eq!(symbols[1].selection_range.start.character, 13);
+        assert_eq!(symbols[1].selection_range.end.character, 18);
     }
 
     #[test]

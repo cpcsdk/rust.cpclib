@@ -12,6 +12,16 @@ import {
 
 let client: LanguageClient;
 
+// The resolved `cpclib-lsp` binary path, set once in `activate()` - reused
+// by `bndbuildCommandPrefix` so bndbuild execution (Tasks, the "▶ Run"
+// CodeLens) invokes the *same* binary as the language server itself,
+// running it as `cpclib-lsp bndbuild ...` instead of requiring a second
+// `bndbuild` binary on PATH (`cpclib-lsp` already links `cpclib-bndbuild`
+// in full for its own `cpclib.runRule`/`cpclib.runTask` LSP commands - this
+// reuses that same code as a CLI entry point too, see
+// `cpclib-lsp/src/main.rs`'s `run_as_bndbuild`).
+let resolvedServerPath: string;
+
 // Selection cycle-count status bar item - created in `activate()`, updated
 // by `updateCycleCountStatusBar` (see "Cycle count for selection" section
 // below).
@@ -83,6 +93,7 @@ export function activate(context: ExtensionContext) {
         config.get<string>('serverPath', 'cpclib-lsp'),
         context.extensionPath
     );
+    resolvedServerPath = serverPath;
 
     const serverOptions: ServerOptions = {
         run: { command: serverPath, transport: TransportKind.stdio },
@@ -109,13 +120,27 @@ export function activate(context: ExtensionContext) {
         },
         middleware: {
             // The server streams build output (stdout/stderr as the rule
-            // runs) via `window/logMessage`, which vscode-languageclient
-            // always writes to its own "CPClib LSP" output channel - but
-            // never *shows* that channel on its own. Reveal it right when a
-            // build starts, the same way the old terminal-based runner used
-            // to pop into view; `true` preserves editor focus.
+            // or task runs) via `window/logMessage`, which
+            // vscode-languageclient always writes to its own "CPClib LSP"
+            // output channel - but never *shows* that channel on its own.
+            // Reveal it right when a build starts, the same way the old
+            // terminal-based runner used to pop into view; `true` preserves
+            // editor focus.
+            //
+            // `cpclib.runRuleInTerminal` (the rule-level "▶ Run" CodeLens on
+            // a real on-disk .bnd file) deliberately isn't listed here - it
+            // runs as a real VS Code Task/terminal instead, which shows
+            // itself. This middleware only covers the two commands that
+            // still stream through the LSP's own output channel:
+            // `cpclib.runRule` (embedded-bndbuild-in-.asm blocks, which have
+            // no on-disk file for a terminal Task to invoke) and
+            // `cpclib.runTask` (the per-command "▶ Run this command"
+            // CodeLens, which has no CLI equivalent for "run just task N of
+            // rule R"). Missing `cpclib.runTask` here was a real bug: its
+            // output *was* being logged, just never shown, so it looked
+            // like nothing happened at all.
             executeCommand: (command, args, next) => {
-                if (command === 'cpclib.runRule') {
+                if (command === 'cpclib.runRule' || command === 'cpclib.runTask') {
                     client.outputChannel.show(true);
                 }
                 return next(command, args);
@@ -141,21 +166,39 @@ export function activate(context: ExtensionContext) {
     // bridge (registered by vscode-languageclient itself) forwards the
     // request to the server unchanged.
 
+    // Registered immediately, synchronously - not nested inside
+    // `client.start().then(...)`. `Ctrl+Shift+B` ("Run Build Task") asks
+    // every *registered* task provider for its tasks the moment it's
+    // invoked, with no retry if none are registered yet; registering only
+    // after the LSP finishes starting meant any `Ctrl+Shift+B` pressed
+    // before that point (a real, easy-to-hit race - e.g. right after
+    // opening the workspace) saw no bndbuild tasks at all, permanently for
+    // that invocation. `BndbuildTaskProvider.provideTasks` is already
+    // async and already tolerates the LSP not being ready yet (a
+    // `try`/`catch` around each `sendRequest`, falling back to no targets
+    // for that file) - safe to register before `client.start()` resolves.
+    const taskProvider = vscode.tasks.registerTaskProvider(
+        BndbuildTaskProvider.taskType,
+        new BndbuildTaskProvider(client, config),
+    );
+    context.subscriptions.push(taskProvider);
+
     client.start().then(() => {
         window.showInformationMessage('CPClib LSP server started.');
-
-        // Register the task provider once the LSP is ready so it can query targets.
-        const taskProvider = vscode.tasks.registerTaskProvider(
-            BndbuildTaskProvider.taskType,
-            new BndbuildTaskProvider(client, config),
-        );
-        context.subscriptions.push(taskProvider);
     }).catch((err: Error) => {
         window.showErrorMessage(`CPClib LSP failed to start: ${err.message}. Check cpclib-lsp.serverPath setting.`);
     });
 
     context.subscriptions.push(
         vscode.commands.registerCommand('cpclib.pickInkColor', pickInkColor),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cpclib.buildActiveFile', buildActiveFile),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cpclib.runRuleInTerminal', runRuleInTerminal),
     );
 
     // Keep the `cpclib.cursorOnInkColor` context key (used by the
@@ -404,6 +447,61 @@ async function pickInkColor(): Promise<void> {
 
 // ── Task provider ─────────────────────────────────────────────────────────────
 
+/// The shell command prefix used to actually run bndbuild (everything
+/// before ` -f "file" target`). Defaults to the *already-resolved*
+/// `cpclib-lsp` binary itself, run as its `bndbuild` subcommand -
+/// `cpclib-lsp` links `cpclib-bndbuild` in full already (for its own
+/// `cpclib.runRule`/`cpclib.runTask` LSP commands), so this needs no second
+/// binary installed or found on PATH. `cpclib-lsp.bndbuildPath`, if a user
+/// explicitly sets it, is an escape hatch to use a real standalone
+/// `bndbuild` binary instead (e.g. a different/newer version than the one
+/// bundled with this extension's LSP server) - left unset (the default),
+/// it's ignored.
+function bndbuildCommandPrefix(config: vscode.WorkspaceConfiguration): string {
+    const explicit = config.get<string>('bndbuildPath', '');
+    if (explicit) {
+        return explicit;
+    }
+    return `"${resolvedServerPath}" bndbuild`;
+}
+
+/// Shared by `BndbuildTaskProvider` (Ctrl+Shift+B / `tasks.json`) and the
+/// "▶ Run" CodeLens's `cpclib.runRuleInTerminal` command: builds the one
+/// `vscode.Task` shape that actually invokes `bndbuild`, with the `$basm`
+/// problemMatcher wired in so a build failure lands as a clickable
+/// Problems-panel entry "for free" via VS Code's own terminal+task
+/// machinery, instead of the LSP's custom `log_message`-streaming path.
+function buildBndbuildTask(
+    target: string,
+    filePath: string,
+    bndbuildCommand: string,
+    taskName: string,
+): vscode.Task {
+    const workDir  = path.dirname(filePath);
+    const fileName = path.basename(filePath);
+    const def: vscode.TaskDefinition = {
+        type: BndbuildTaskProvider.taskType,
+        target,
+        file: filePath,
+    };
+    const task = new vscode.Task(
+        def,
+        vscode.TaskScope.Workspace,
+        taskName,
+        'bndbuild',
+        new vscode.ShellExecution(
+            `${bndbuildCommand} -f "${fileName}" ${target}`,
+            { cwd: workDir },
+        ),
+        // Parses basm's own codespan-reporting locus format (`error: ...`
+        // followed by `┌─ file:line:col`) so a build failure surfaces as a
+        // clickable Problems-panel entry.
+        '$basm',
+    );
+    task.group = vscode.TaskGroup.Build;
+    return task;
+}
+
 class BndbuildTaskProvider implements vscode.TaskProvider {
     static readonly taskType = 'bndbuild';
 
@@ -418,7 +516,7 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
             '{**/node_modules/**,**/.git/**,**/target/**}',
         );
 
-        const bndbuildPath = this.config.get<string>('bndbuildPath', 'bndbuild');
+        const bndbuildCommand = bndbuildCommandPrefix(this.config);
         const tasks: vscode.Task[] = [];
 
         for (const fileUri of buildFiles) {
@@ -428,32 +526,22 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
                     'workspace/executeCommand',
                     { command: 'cpclib.getTargets', arguments: [fileUri.toString()] },
                 ) ?? [];
-            } catch {
-                // LSP not ready or file unreadable — skip
+            } catch (err) {
+                // LSP not ready or file unreadable — skip, but surface it:
+                // this used to fail silently, which made "Ctrl+Shift+B finds
+                // no tasks" indistinguishable from "this file legitimately
+                // has none".
+                this.lspClient.outputChannel.appendLine(
+                    `[bndbuild task provider] cpclib.getTargets failed for ${fileUri.fsPath}: ${err}`,
+                );
             }
 
-            const filePath  = fileUri.fsPath;
-            const workDir   = path.dirname(filePath);
-            const fileName  = path.basename(filePath);
+            const filePath = fileUri.fsPath;
+            const fileName = path.basename(filePath);
 
             for (const target of targets) {
-                const def: vscode.TaskDefinition = {
-                    type: BndbuildTaskProvider.taskType,
-                    target,
-                    file: filePath,
-                };
-                const task = new vscode.Task(
-                    def,
-                    vscode.TaskScope.Workspace,
-                    buildFiles.length > 1 ? `${target} (${fileName})` : target,
-                    'bndbuild',
-                    new vscode.ShellExecution(
-                        `${bndbuildPath} -f "${fileName}" ${target}`,
-                        { cwd: workDir },
-                    ),
-                );
-                task.group = vscode.TaskGroup.Build;
-                tasks.push(task);
+                const taskName = buildFiles.length > 1 ? `${target} (${fileName})` : target;
+                tasks.push(buildBndbuildTask(target, filePath, bndbuildCommand, taskName));
             }
         }
 
@@ -465,21 +553,103 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
         if (def.type !== BndbuildTaskProvider.taskType || !def.target) {
             return undefined;
         }
-        const bndbuildPath = this.config.get<string>('bndbuildPath', 'bndbuild');
-        const filePath  = def.file as string | undefined;
+        const bndbuildCommand = bndbuildCommandPrefix(this.config);
+        const filePath = def.file as string | undefined;
         if (!filePath) {
             return undefined;
         }
-        return new vscode.Task(
-            def,
-            task.scope ?? vscode.TaskScope.Workspace,
-            task.name,
-            'bndbuild',
-            new vscode.ShellExecution(
-                `${bndbuildPath} -f "${path.basename(filePath)}" ${def.target}`,
-                { cwd: path.dirname(filePath) },
-            ),
-        );
+        return buildBndbuildTask(def.target as string, filePath, bndbuildCommand, task.name);
+    }
+}
+
+// ── "▶ Run" CodeLens execution for a real on-disk .bnd file's rule ─────────
+//
+// `cpclib.runRuleInTerminal(target, filePath)`: a client-only command (never
+// sent to the server, deliberately absent from the server's
+// `executeCommandProvider.commands`) invoked by the bndbuild file's
+// rule-level "▶ Run" CodeLens. Runs the same `bndbuild` CLI invocation as
+// `BndbuildTaskProvider`, via a real VS Code Task/terminal, so build errors
+// get clickable Problems-panel entries through the already-working `$basm`
+// problemMatcher - the LSP's own `cpclib.runRule` streaming path proved
+// unreliable at making its own diagnostics clickable. The per-command
+// "▶ Run this command" CodeLens keeps using `cpclib.runRule`/`cpclib.runTask`
+// (the LSP path), since there is no CLI equivalent for "run just task N of
+// rule R" - only a real rule name maps to a real `bndbuild` invocation.
+async function runRuleInTerminal(target: string, filePath: string): Promise<void> {
+    const config = workspace.getConfiguration('cpclib-lsp');
+    const bndbuildCommand = bndbuildCommandPrefix(config);
+    const task = buildBndbuildTask(target, filePath, bndbuildCommand, target);
+    await vscode.tasks.executeTask(task);
+}
+
+// ── Build the active .asm file's own bndbuild target(s) ────────────────────
+//
+// "cpclib.buildActiveFile": finds every bndbuild file in the workspace that
+// references the currently active .asm file (as a dependency or as one of
+// its own targets, via the server-side `cpclib.getTargetsForFile`
+// reverse-lookup) and runs the one match directly, or offers a QuickPick
+// when several build files/targets reference the same source file.
+
+async function buildActiveFile(): Promise<void> {
+    const editor = window.activeTextEditor;
+    if (!editor) {
+        return;
+    }
+    const sourcePath = editor.document.uri.fsPath;
+    if (!/\.(asm|z80)$/i.test(sourcePath)) {
+        window.showInformationMessage('The active file is not an assembly file.');
+        return;
+    }
+
+    const buildFiles = await vscode.workspace.findFiles(
+        '{**/*.{bnd,build},**/bndbuild.yml}',
+        '{**/node_modules/**,**/.git/**,**/target/**}',
+    );
+
+    type Match = { buildFileUri: vscode.Uri; target: string };
+    const matches: Match[] = [];
+    for (const buildFileUri of buildFiles) {
+        try {
+            const targets = await client.sendRequest<string[]>(
+                'workspace/executeCommand',
+                { command: 'cpclib.getTargetsForFile', arguments: [buildFileUri.toString(), sourcePath] },
+            ) ?? [];
+            for (const target of targets) {
+                matches.push({ buildFileUri, target });
+            }
+        } catch {
+            // LSP not ready or file unreadable — skip this build file.
+        }
+    }
+
+    if (matches.length === 0) {
+        window.showInformationMessage('No bndbuild file in this workspace references the active file.');
+        return;
+    }
+
+    let chosen = matches[0];
+    if (matches.length > 1) {
+        const items = matches.map(m => ({
+            label: m.target,
+            description: path.basename(m.buildFileUri.fsPath),
+            match: m,
+        }));
+        const picked = await window.showQuickPick(items, { placeHolder: 'Select a build target' });
+        if (!picked) {
+            return;
+        }
+        chosen = picked.match;
+    }
+
+    const allTasks = await vscode.tasks.fetchTasks({ type: BndbuildTaskProvider.taskType });
+    const task = allTasks.find(t =>
+        t.definition.target === chosen.target
+        && t.definition.file === chosen.buildFileUri.fsPath,
+    );
+    if (task) {
+        await vscode.tasks.executeTask(task);
+    } else {
+        window.showErrorMessage(`Could not find the '${chosen.target}' build task.`);
     }
 }
 

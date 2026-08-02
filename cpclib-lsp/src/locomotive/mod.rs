@@ -23,6 +23,7 @@ pub mod definition;
 pub mod diagnostics;
 pub mod format;
 pub mod hover;
+pub mod inlay_hints;
 pub mod on_type_formatting;
 pub mod run;
 pub mod semantic_tokens;

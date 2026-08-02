@@ -304,6 +304,104 @@ impl BuildFileAnalyzer {
         outcome
     }
 
+    /// Run a single command (`task_index`, 0-based, in source order) from
+    /// `rule`, bypassing the normal target-run path entirely: no dependency
+    /// resolution, no up-to-date check, and no other task in the rule is
+    /// touched. Directly calls the one `Task`'s own public `Task::execute`
+    /// - the exact function a full dependency-aware run
+    /// (`run_rule`/`BndBuilder::execute`) eventually calls per task anyway,
+    /// so `ignore_errors()` ("-command") semantics are honored identically.
+    pub fn run_single_task(
+        &self,
+        document: &Document,
+        rule: &str,
+        task_index: usize,
+        output: Option<UnboundedSender<OutputLine>>
+    ) -> RuleRunOutcome {
+        let Ok(path) = document.uri.to_file_path()
+        else {
+            return failure_outcome(
+                document,
+                rule,
+                rule,
+                "invalid build file path".to_string(),
+                None,
+                ""
+            );
+        };
+        let Some(utf8_path) = path.to_str().map(camino::Utf8PathBuf::from)
+        else {
+            return failure_outcome(
+                document,
+                rule,
+                rule,
+                "non-UTF8 build file path".to_string(),
+                None,
+                ""
+            );
+        };
+
+        let builder = match cpclib_bndbuild::BndBuilder::from_path(&utf8_path, false) {
+            Ok((_, b)) => b,
+            Err(e) => {
+                return failure_outcome(document, rule, rule, strip_ansi(&e.to_string()), None, "");
+            }
+        };
+
+        let Some(rule_obj) = builder.get_rule(rule)
+        else {
+            return failure_outcome(
+                document,
+                rule,
+                rule,
+                format!("no rule named '{rule}'"),
+                None,
+                ""
+            );
+        };
+        let Some(task) = rule_obj.commands().get(task_index)
+        else {
+            return failure_outcome(
+                document,
+                rule,
+                rule,
+                format!("rule '{rule}' has no task #{}", task_index + 1),
+                None,
+                ""
+            );
+        };
+
+        let tx = output.unwrap_or_else(|| {
+            let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+            tx
+        });
+        let observer = Arc::new(StreamingObserver::new(tx));
+
+        match task.execute(&observer) {
+            Ok(()) => {
+                RuleRunOutcome {
+                    message: format!(
+                        "Task #{} of rule '{rule}' executed successfully",
+                        task_index + 1
+                    ),
+                    diagnostics: Vec::new(),
+                    build_error: None,
+                    success: true
+                }
+            },
+            Err(msg) => {
+                failure_outcome(
+                    document,
+                    rule,
+                    rule,
+                    strip_ansi(&msg),
+                    Some(task_index),
+                    &strip_ansi(&msg)
+                )
+            },
+        }
+    }
+
     /// Like `run_rule`, but for a rule embedded in a `.asm` file's own
     /// comments (`basm::embedded_bndbuild`) rather than a real standalone
     /// build file — `yaml_text`/`yaml_start_line` come from
@@ -617,9 +715,19 @@ fn extract_referenced_location(text: &str) -> Option<(String, u32, u32)> {
 /// marker) via the same `resolve_include_path` basm's own include
 /// navigation already uses. `None` when neither resolves to a real file.
 fn resolve_referenced_path(path_str: &str, doc_uri: &Url) -> Option<Url> {
-    let direct = std::path::Path::new(path_str);
-    if direct.exists() {
-        return Url::from_file_path(direct).ok();
+    // `canonicalize` (not a bare `.exists()` check) so a *relative*
+    // `path_str` (the common case for an in-process/embedded task, which
+    // reports paths relative to wherever `BndBuilder` last `set_current_dir`ed
+    // to) resolves to a real absolute path before being handed to
+    // `Url::from_file_path`, which silently rejects anything not already
+    // absolute. The previous version's early `return` on a bare
+    // `.exists()` check meant a relative path always failed to become a
+    // URL and returned `None` for the whole function immediately - never
+    // even trying the fallback strategies below.
+    if let Ok(canonical) = std::fs::canonicalize(path_str)
+        && let Ok(url) = Url::from_file_path(&canonical)
+    {
+        return Some(url);
     }
     if let Some(resolved) = crate::basm::definition::resolve_include_path(path_str, doc_uri) {
         return Url::from_file_path(resolved).ok();
@@ -641,7 +749,7 @@ fn resolve_referenced_path(path_str: &str, doc_uri: &Url) -> Option<Url> {
             .parent()
             .map(|p| p.to_path_buf())
     })?;
-    let basename = direct.file_name()?;
+    let basename = std::path::Path::new(path_str).file_name()?;
     walkdir::WalkDir::new(&search_root)
         .into_iter()
         .filter_entry(|e| !crate::server::backend::is_ignored_dir(e))
@@ -654,16 +762,19 @@ fn resolve_referenced_path(path_str: &str, doc_uri: &Url) -> Option<Url> {
 /// in source order, as `(line_index, task_content)`. A task line is either a
 /// `- item` in a task list, or the value of a scalar `cmd:`/`tasks:`/... key
 /// (the whole rule then has exactly that one task).
-fn task_lines_in_rule(text: &str, rule_line: usize) -> Vec<(usize, &str)> {
+pub(super) fn task_lines_in_rule(text: &str, rule_line: usize) -> Vec<(usize, &str)> {
     let lines: Vec<&str> = text.lines().collect();
     let rule_indent = lines
         .get(rule_line)
         .map(|l| l.len() - l.trim_start().len())
         .unwrap_or(0);
     let mut out = Vec::new();
-    for (idx, line) in lines.iter().enumerate().skip(rule_line + 1) {
+    let mut idx = rule_line + 1;
+    while idx < lines.len() {
+        let line = lines[idx];
         let trimmed = line.trim_start();
         if trimmed.is_empty() {
+            idx += 1;
             continue;
         }
         let indent = line.len() - trimmed.len();
@@ -676,24 +787,61 @@ fn task_lines_in_rule(text: &str, rule_line: usize) -> Vec<(usize, &str)> {
         }
         else if let Some((key, value)) = trimmed.split_once(':') {
             let value = value.trim_start();
-            if super::token::TASK_KEY_NAMES.contains(&key.trim())
-                && !value.is_empty()
-                && !value.starts_with('>')
-                && !value.starts_with('|')
-            {
+            if super::token::TASK_KEY_NAMES.contains(&key.trim()) && !value.is_empty() {
                 value
             }
             else {
+                idx += 1;
                 continue;
             }
         }
         else {
+            idx += 1;
             continue;
         };
 
         out.push((idx, content));
+
+        if is_block_scalar_header(content) {
+            // `content` (`|`/`>`, optionally with a chomping/indentation
+            // indicator) is one task whose real text is every following
+            // line indented more than *this* line - not further tasks of
+            // their own. Skip past all of them so they aren't mistaken for
+            // separate `- item`/`key: value` tasks (which would otherwise
+            // desync this function's task count from the real YAML
+            // deserializer's `Rule::commands().len()`, which treats the
+            // whole block as a single `Task`).
+            idx += 1;
+            while idx < lines.len() {
+                let cont = lines[idx];
+                let cont_trimmed = cont.trim_start();
+                if cont_trimmed.is_empty() {
+                    idx += 1;
+                    continue;
+                }
+                let cont_indent = cont.len() - cont_trimmed.len();
+                if cont_indent <= indent {
+                    break;
+                }
+                idx += 1;
+            }
+        }
+        else {
+            idx += 1;
+        }
     }
     out
+}
+
+/// Whether `content` (a `- `/`key:`-stripped value) is a YAML block-scalar
+/// header (`|`, `>`, optionally followed by chomping (`+`/`-`) and/or an
+/// explicit indentation-indicator digit) rather than a real one-line value.
+fn is_block_scalar_header(content: &str) -> bool {
+    let c = content.trim();
+    matches!(c.as_bytes().first(), Some(b'|') | Some(b'>'))
+        && c[1..]
+            .bytes()
+            .all(|b| b == b'+' || b == b'-' || b.is_ascii_digit())
 }
 
 /// Line of the `task_index`-th task (0-based, in source order) declared
@@ -866,6 +1014,71 @@ mod tests {
         let outcome = BuildFileAnalyzer::new().run_rule(&document, "fine", None);
         assert!(outcome.success, "{}", outcome.message);
         assert!(outcome.diagnostics.is_empty());
+    }
+
+    #[serial]
+    #[test]
+    fn run_single_task_executes_only_the_requested_command() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        // Two tasks - only the first must run.
+        let content = "- tgt: multi\n  phony: true\n  cmd:\n   - echo first\n   - cp does_not_exist_anywhere.src dst.bin\n";
+        let document = doc(tmp.path().as_std_path(), content);
+
+        let outcome = BuildFileAnalyzer::new().run_single_task(&document, "multi", 0, None);
+        assert!(outcome.success, "{}", outcome.message);
+    }
+
+    #[serial]
+    #[test]
+    fn run_single_task_handles_a_multiline_block_scalar_command() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        // A single task whose command spans several lines via `|` (the
+        // real shape used by birthtro/src/build.bnd) - must still resolve
+        // as task index 0, not fail to be found or run the wrong task.
+        let content = "- tgt: out.txt\n  phony: true\n  cmd: |\n    echo hello \\\n    world\n";
+        let document = doc(tmp.path().as_std_path(), content);
+
+        let outcome = BuildFileAnalyzer::new().run_single_task(&document, "out.txt", 0, None);
+        assert!(outcome.success, "{}", outcome.message);
+    }
+
+    #[test]
+    fn task_lines_in_rule_treats_a_block_scalar_as_one_task() {
+        let text = "- tgt: out.sna\n  cmd: |\n    basm --snapshot sna.asm -o out.sna\n        -DFOO=1\n\nunrelated: true\n";
+        let tasks = task_lines_in_rule(text, 0);
+        assert_eq!(tasks.len(), 1, "{tasks:?}");
+        assert_eq!(tasks[0].0, 1);
+    }
+
+    #[test]
+    fn task_lines_in_rule_handles_a_block_scalar_list_item_among_others() {
+        let text = "- tgt: out\n  cmd:\n    - |\n      multi\n      line\n    - echo done\n";
+        let tasks = task_lines_in_rule(text, 0);
+        assert_eq!(tasks.len(), 2, "{tasks:?}");
+        assert_eq!(tasks[0].0, 2); // "- |" line
+        assert_eq!(tasks[1].0, 5); // "- echo done" line
+    }
+
+    #[serial]
+    #[test]
+    fn run_single_task_reports_failure_of_just_that_task() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let content = "- tgt: multi\n  phony: true\n  cmd:\n   - echo first\n   - cp does_not_exist_anywhere.src dst.bin\n";
+        let document = doc(tmp.path().as_std_path(), content);
+
+        let outcome = BuildFileAnalyzer::new().run_single_task(&document, "multi", 1, None);
+        assert!(!outcome.success);
+    }
+
+    #[serial]
+    #[test]
+    fn run_single_task_out_of_range_index_fails_cleanly() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let content = "- tgt: one\n  phony: true\n  cmd: echo only\n";
+        let document = doc(tmp.path().as_std_path(), content);
+
+        let outcome = BuildFileAnalyzer::new().run_single_task(&document, "one", 5, None);
+        assert!(!outcome.success);
     }
 
     #[serial]
@@ -1063,6 +1276,22 @@ mod tests {
         );
     }
 
+    /// Regression test for a real repro (`birthtro/src/build.bnd`'s `test`
+    /// rule, which depends on a rule whose own `basm` sub-assembly fails):
+    /// the failing tool's own error message, aggregated by
+    /// `BndBuilderError`'s generic `Display` for a nested
+    /// dependency-of-a-dependency failure (not the more specific
+    /// `ExecuteError`/`DefaultTargetError` variants `run_rule` special-cases),
+    /// still carries the real locus line and must still be found.
+    #[test]
+    fn extract_referenced_location_finds_it_inside_an_aggregated_nested_dependency_error() {
+        let text = "Error 1:\nUnable to build birthtro.sna: Error while assembling.\nAssembling error:\nerror: FAIL: \n  --> sna.asm:4:1\n  |\n4 | fail\n  | ^^^^\n\n.";
+        assert_eq!(
+            extract_referenced_location(text),
+            Some(("sna.asm".to_string(), 4, 1))
+        );
+    }
+
     #[test]
     fn extract_referenced_location_handles_a_path_containing_a_colon() {
         let text = "  ┌─ C:/weird/path.asm:10:3\n";
@@ -1186,6 +1415,45 @@ mod tests {
             .build_error
             .expect("expected the recursive subdirectory search to find palettes.asm");
         assert_eq!(target_uri, Url::from_file_path(&palettes_path).unwrap());
+    }
+
+    /// Regression test for a real repro (`birthtro/src/build.bnd`): when a
+    /// referenced path is relative *and happens to exist relative to the
+    /// process's current directory* (the real, common case for an
+    /// in-process/embedded task, since `BndBuilder::from_path` itself
+    /// `set_current_dir`s to the build file's own directory as a side
+    /// effect of loading it) - `resolve_referenced_path` used to convert
+    /// that relative path to a `Url` directly, which always fails
+    /// (`Url::from_file_path` requires an absolute path) and, because that
+    /// branch returned unconditionally, the whole function gave up right
+    /// there instead of falling through to a strategy that actually works.
+    #[serial]
+    #[test]
+    fn resolve_referenced_path_resolves_a_relative_path_that_exists_at_the_current_directory() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let asm_path = tmp.path().join("sna.asm");
+        std::fs::write(&asm_path, "fail\n").unwrap();
+        let bnd_document = doc(
+            tmp.path().as_std_path(),
+            "- tgt: test\n  cmd: basm sna.asm\n"
+        );
+
+        // Not saving/restoring the previous CWD: several other `#[serial]`
+        // tests in this file (via `BndBuilder::from_path`'s own
+        // `set_current_dir` side effect) already leave it pointing at their
+        // own now-dropped tempdir by the time a later test runs, so
+        // `std::env::current_dir()` itself isn't reliably callable here -
+        // matches this file's existing convention of just accepting CWD
+        // drift between serial tests.
+        std::env::set_current_dir(tmp.path()).unwrap();
+        let msg = "error: FAIL: \n  --> sna.asm:4:1\n  |\n4 | fail\n  | ^^^^\n".to_string();
+        let outcome = failure_outcome(&bnd_document, "test", "test", msg, None, "");
+
+        let (target_uri, diag) = outcome
+            .build_error
+            .expect("expected a cross-file diagnostic for the relative sna.asm reference");
+        assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
+        assert_eq!(diag.range.start.line, 3);
     }
 
     #[test]

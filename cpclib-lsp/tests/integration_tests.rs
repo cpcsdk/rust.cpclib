@@ -1409,8 +1409,19 @@ async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_c
         .await
         .unwrap()
         .expect("a real .bnd file should still get its own code lens");
-    assert_eq!(bnd_lenses.len(), 1);
-    assert_eq!(bnd_lenses[0].command.as_ref().unwrap().title, "▶ Run: real");
+    // One "▶ Run: real" rule lens, plus one "▶ Run this command" lens for
+    // its single task (`cmd: echo hi`).
+    assert_eq!(bnd_lenses.len(), 2, "{bnd_lenses:?}");
+    assert!(
+        bnd_lenses
+            .iter()
+            .any(|l| l.command.as_ref().unwrap().title == "▶ Run: real")
+    );
+    assert!(
+        bnd_lenses
+            .iter()
+            .any(|l| l.command.as_ref().unwrap().command == "cpclib.runTask")
+    );
 }
 
 /// Regression test for `.CAT`/`.ASC` CatArt support: opening a document

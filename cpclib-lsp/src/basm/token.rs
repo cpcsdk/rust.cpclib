@@ -24,6 +24,12 @@ pub(super) const TT_PARAMETER: u32 = 11; // macro parameters {param}
 
 pub(super) const MOD_DECLARATION: u32 = 1 << 0;
 pub(super) const MOD_READONLY: u32 = 1 << 1;
+/// A token inside an `IF`/`ELSEIF`/`ELSE` branch statically known (from a
+/// dry-run assembly pass) not to be the one that actually assembles - maps
+/// to the standard `deprecated` modifier (most themes render it with
+/// strikethrough) rather than a custom modifier name, which most themes
+/// silently ignore with no visible effect at all.
+pub(super) const MOD_INACTIVE: u32 = 1 << 2;
 
 /// One semantic token in absolute (not delta-encoded) document coordinates
 /// - the shared accumulation shape every source (the ASM tokenizer itself,
@@ -100,6 +106,7 @@ pub(crate) fn semantic_tokens_legend() -> SemanticTokensLegend {
         token_modifiers: vec![
             SemanticTokenModifier::DECLARATION,
             SemanticTokenModifier::READONLY,
+            SemanticTokenModifier::DEPRECATED,
         ]
     }
 }
@@ -419,17 +426,48 @@ fn block_end_line(text: &str, start_line: u32, open_words: &[&str], close_words:
         else if close_words.contains(&first_word) {
             depth -= 1;
             if depth == 0 {
-                return i as u32 + 1; // exclusive end — include the closing keyword's own line
+                // exclusive end — include the closing keyword's own line
+                return clamp_to_last_addressable_line(text, i as u32 + 1);
             }
         }
         i += 1;
     }
-    lines.len() as u32
+    clamp_to_last_addressable_line(text, lines.len() as u32)
 }
 
-/// As [`block_end_line`], specialized for `FUNCTION`/`ENDFUNCTION`.
-fn function_body_end_line(text: &str, start_line: u32) -> u32 {
-    block_end_line(text, start_line, &["FUNCTION"], &["ENDFUNCTION"])
+/// Clamps a computed "one past this line" position to the last line a real
+/// editor's own line model can actually address.
+///
+/// `text.lines()` and an editor's line count only agree when `text` ends
+/// with a trailing newline (both then treat everything up to and including
+/// that final, empty line as addressable). When it doesn't, `text.lines()`
+/// under-counts by one relative to the editor (there's no trailing empty
+/// line to land on), so a caller computing "one past the last real line"
+/// lands on a `Position` the editor considers out of bounds.
+///
+/// A real, user-reported bug: Sticky Scroll silently failed for the very
+/// last symbol (a `MACRO`) in a file that didn't end with a trailing
+/// newline, while the exact same symbol still showed up fine in the
+/// Outline panel — which only needs the much narrower `selection_range`,
+/// never this out-of-range end-of-body position.
+pub(super) fn clamp_to_last_addressable_line(text: &str, line: u32) -> u32 {
+    let editor_line_count = text.matches('\n').count() as u32 + 1;
+    line.min(editor_line_count - 1)
+}
+
+/// As [`block_end_line`], specialized for `FUNCTION`'s single opening
+/// keyword and its two closing aliases (`ENDFUNCTION`/`ENDF` - per the real
+/// parser, `cpclib-asm/src/parser/directives.rs`'s `parse_function`; `FEND`
+/// is a common mix-up but actually closes `FOR`, not `FUNCTION`).
+///
+/// `ENDF` is *also* one of `FOR`'s own closing aliases
+/// (`ENDFOR`/`FEND`/`ENDF`) - a `FUNCTION` body containing a nested `FOR`
+/// loop that itself closes with the bare `ENDF` spelling (rather than
+/// `ENDFOR`/`FEND`) will be mismatched as ending the function early. Not
+/// resolved here: doing so needs simultaneous depth-tracking of both
+/// keyword sets, not just a wider close-word list.
+pub(super) fn function_body_end_line(text: &str, start_line: u32) -> u32 {
+    block_end_line(text, start_line, &["FUNCTION"], &["ENDFUNCTION", "ENDF"])
 }
 
 /// As [`block_end_line`], specialized for `REPEAT`'s (`REPEAT`/`REPT`/`REP`
@@ -457,8 +495,116 @@ fn loop_body_end_line(text: &str, start_line: u32, is_repeat: bool) -> u32 {
 
 /// As [`block_end_line`], specialized for `MACRO`'s single opening keyword
 /// and its three closing aliases (`ENDM`/`ENDMACRO`/`MEND`).
-fn macro_body_end_line(text: &str, start_line: u32) -> u32 {
+pub(super) fn macro_body_end_line(text: &str, start_line: u32) -> u32 {
     block_end_line(text, start_line, &["MACRO"], &["ENDM", "ENDMACRO", "MEND"])
+}
+
+/// The reverse of [`block_end_line`]: the line (0-based) of the *opening*
+/// keyword matching a closing keyword's own line at `end_line` - scans
+/// backward, tracking nesting depth the same way (a nested instance of the
+/// same construct is handled correctly). `None` if no matching open is
+/// found (e.g. a stray closing keyword with no opener, or a document with a
+/// syntax error).
+fn block_start_line(
+    text: &str,
+    end_line: u32,
+    open_words: &[&str],
+    close_words: &[&str]
+) -> Option<u32> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut depth = 1i32;
+    let mut i = end_line as i64 - 1;
+    while i >= 0 {
+        let upper = lines[i as usize].trim().to_uppercase();
+        let first_word = upper.split_whitespace().next().unwrap_or("");
+        if close_words.contains(&first_word) {
+            depth += 1;
+        }
+        else if open_words.contains(&first_word) {
+            depth -= 1;
+            if depth == 0 {
+                return Some(i as u32);
+            }
+        }
+        i -= 1;
+    }
+    None
+}
+
+/// Open/close keyword pairs for every basm block directive this codebase
+/// recognizes, taken directly from `cpclib-asm/build.rs`'s
+/// `START_DIRECTIVE`/`END_DIRECTIVE` tables (the parser's own canonical
+/// list) - shared by [`matching_opening_line`] below.
+const BLOCK_KEYWORD_PAIRS: &[(&[&str], &[&str])] = &[
+    (
+        &[
+            "IF", "IFDEF", "IFEXIST", "IFNDEF", "IFNOT", "IFUSED", "IFNUSED"
+        ],
+        &["ENDIF"]
+    ),
+    (&["MACRO"], &["ENDM", "ENDMACRO", "MEND"]),
+    (&["FUNCTION"], &["ENDFUNCTION", "FEND"]),
+    (&["REPEAT", "REPT"], &["ENDR", "ENDREP", "ENDREPEAT"]),
+    (
+        &["ITER", "ITERATE"],
+        &["ENDI", "ENDITER", "ENDITERATE", "IEND"]
+    ),
+    (&["FOR"], &["ENDF", "ENDFOR"]),
+    (&["MODULE"], &["ENDMODULE"]),
+    (&["STRUCT"], &["ENDS"]),
+    (&["SWITCH"], &["ENDSWITCH"]),
+    (&["CONFINED"], &["ENDC", "ENDCONFINED"]),
+    (&["ENUM"], &["ENDENUM"]),
+    (&["WHILE"], &["ENDW", "WEND"]),
+    (&["ASMCONTROLENV"], &["ENDA", "ENDASMCONTROLENV"])
+];
+
+/// `ELSE`/`ELSEIF`-family keywords - not real closing tokens (an `IF` can
+/// have several, and the block continues after them), but ctrl+click should
+/// still jump to the `IF` they belong to, the same as `ENDIF` does. Handled
+/// as a special case in [`matching_opening_line`] rather than added to
+/// [`BLOCK_KEYWORD_PAIRS`]'s own `IF` close-word list, since adding them
+/// there would make `block_end_line`/`block_start_line`'s depth-tracking
+/// treat an `ELSE` as if it actually closed the block (ending nesting
+/// early) instead of just being a midpoint within it.
+const IF_ELSE_WORDS: &[&str] = &[
+    "ELSE",
+    "ELSEIF",
+    "ELSEIFDEF",
+    "ELSEIFEXIST",
+    "ELSEIFNDEF",
+    "ELSEIFNOT",
+    "ELSEIFUSED"
+];
+
+/// If `line` (0-based) starts with a known block-closing keyword
+/// (`ENDIF`/`ENDM`/`ENDMACRO`/`MEND`/`ENDFUNCTION`/`ENDREPEAT`/.../
+/// `ENDITERATE`/...) or an `ELSE`/`ELSEIF`-family keyword, the matching
+/// opening keyword's own line - for ctrl+click/hover navigation from a
+/// closing (or `ELSE`) directive back to what it belongs to. basm's AST has
+/// no discrete closing token for these constructs (`Token::If`/`MACRO`/etc.
+/// are each one nested node for the whole block, with `ENDIF`/`ENDM`/etc.
+/// only implied by where the body ends), so this works from raw text
+/// instead, mirroring `block_end_line`'s own already-established
+/// text-based approach (used for MACRO/REPEAT/FUNCTION parameter renaming)
+/// rather than inventing a second mechanism.
+pub(super) fn matching_opening_line(text: &str, line: u32) -> Option<u32> {
+    let lines: Vec<&str> = text.lines().collect();
+    let line_text = lines.get(line as usize)?;
+    let upper = line_text.trim().to_uppercase();
+    let first_word = upper.split_whitespace().next().unwrap_or("");
+
+    if IF_ELSE_WORDS.contains(&first_word) {
+        let (if_open_words, if_close_words) = BLOCK_KEYWORD_PAIRS[0];
+        return block_start_line(text, line, if_open_words, if_close_words);
+    }
+
+    for (open_words, close_words) in BLOCK_KEYWORD_PAIRS {
+        if close_words.contains(&first_word) {
+            return block_start_line(text, line, open_words, close_words);
+        }
+    }
+    None
 }
 
 /// If `word_upper` (already uppercased) is a declared parameter of the

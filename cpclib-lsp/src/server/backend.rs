@@ -909,8 +909,10 @@ impl LanguageServer for CpcLspBackend {
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec![
                         "cpclib.getTargets".to_string(),
+                        "cpclib.getTargetsForFile".to_string(),
                         "cpclib.selectRange".to_string(),
                         "cpclib.runRule".to_string(),
+                        "cpclib.runTask".to_string(),
                         "cpclib.runBasic".to_string(),
                         "cpclib.cycleCountForSelection".to_string(),
                         "cpclib.registersAtPosition".to_string(),
@@ -926,6 +928,7 @@ impl LanguageServer for CpcLspBackend {
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                inlay_hint_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Options(
                     CodeActionOptions {
@@ -1684,6 +1687,26 @@ impl LanguageServer for CpcLspBackend {
         Ok(None)
     }
 
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let uri = params.text_document.uri;
+
+        if let Some(entry) = self.documents.get(&uri) {
+            let document = entry.value();
+            match document.doc_type {
+                DocumentType::Assembly => {
+                    return Ok(Some(self.asm_analyzer.inlay_hints(document, params.range)));
+                },
+                DocumentType::Basic | DocumentType::CatartBasic => {
+                    return Ok(Some(
+                        self.basic_analyzer.inlay_hints(document, params.range)
+                    ));
+                },
+                _ => {}
+            }
+        }
+        Ok(None)
+    }
+
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
         let uri = params.text_document.uri;
         tracing::debug!("CodeLens request for {}", uri);
@@ -1873,6 +1896,97 @@ impl LanguageServer for CpcLspBackend {
                     }
                     else {
                         MessageType::INFO
+                    },
+                    &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
+        if params.command == "cpclib.runTask" {
+            let mut args = params.arguments.into_iter();
+            let rule = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let task_index = args.next().and_then(|v| v.as_u64()).map(|n| n as usize);
+            let (Some(rule), Some(fname), Some(task_index)) = (rule, fname, task_index)
+            else {
+                return Ok(None);
+            };
+            let Ok(uri) = Url::from_file_path(&fname)
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            self.client
+                .log_message(
+                    MessageType::INFO,
+                    format!("Running task #{} of rule '{rule}'...", task_index + 1)
+                )
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let outcome = {
+                let document = document.clone();
+                let rule = rule.clone();
+                tokio::task::spawn_blocking(move || {
+                    crate::bndbuild::BuildFileAnalyzer::new().run_single_task(
+                        &document,
+                        &rule,
+                        task_index,
+                        Some(tx)
+                    )
+                })
+                .await
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("task execution panicked: {e}").into(),
+                        data: None
+                    }
+                })?
+            };
+            let _ = log_task.await;
+
+            let diagnostics = compute_diagnostics(
+                &self.asm_analyzer,
+                &self.build_analyzer,
+                &self.basic_analyzer,
+                &document,
+                &self.workspace_roots(),
+                &self.build_error_diagnostics
+            );
+            self.publish_diagnostics(uri, diagnostics).await;
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
                     },
                     &outcome.message
                 )
@@ -2136,6 +2250,27 @@ impl LanguageServer for CpcLspBackend {
                 }
             }
             return Ok(None);
+        }
+
+        if params.command == "cpclib.getTargetsForFile" {
+            let mut args = params.arguments.into_iter();
+            let build_uri_str = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let source_path_str = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let (Some(build_uri_str), Some(source_path_str)) = (build_uri_str, source_path_str)
+            else {
+                return Ok(Some(serde_json::json!([])));
+            };
+            let Ok(build_uri) = build_uri_str.parse::<Url>()
+            else {
+                return Ok(Some(serde_json::json!([])));
+            };
+            let source_path = camino::Utf8PathBuf::from(source_path_str);
+
+            let targets: Vec<String> = match self.load_document(&build_uri) {
+                Some(doc) => self.build_analyzer.targets_referencing(&doc, &source_path),
+                None => vec![]
+            };
+            return Ok(Some(serde_json::json!(targets)));
         }
 
         if params.command != "cpclib.getTargets" {

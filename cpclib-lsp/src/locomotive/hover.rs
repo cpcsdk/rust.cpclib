@@ -37,6 +37,25 @@ impl BasicAnalyzer {
                         bytes.as_slice()
                     )]));
                 }
+                // `CHR$(n)` - show the real Amstrad CPC ROM glyph for
+                // character code `n`, if the argument is a plain numeric
+                // literal in range. Rasterized (not Unicode block art -
+                // there's no way to represent every one of the 256 CPC
+                // characters, including graphics-redefinable ones,
+                // accurately with block-drawing characters) into a tiny
+                // image embedded directly in the hover markdown.
+                if word_upper == "CHR$"
+                    && let Some(open) = line[col..].find('(')
+                    && let Some(close_rel) = line[col + open + 1..].find(')')
+                {
+                    let arg_text = line[col + open + 1..col + open + 1 + close_rel].trim();
+                    if let Some(value) = parse_basic_integer(arg_text)
+                        && (0..=255).contains(&value)
+                    {
+                        md.push_str("\n\n");
+                        md.push_str(&glyph_hover_markdown(value as u8));
+                    }
+                }
                 return Some(make_hover(md));
             }
         }
@@ -195,6 +214,65 @@ pub(crate) fn locomotive_basic_hover(
     None
 }
 
+/// Markdown for `CHR$(code)`'s hover: the real Amstrad CPC ROM glyph,
+/// rasterized from `cpclib_catart::interpret::Locale::glyph` (8x8 1bpp,
+/// straight from the ROM font data) into a small black-on-white PNG-free
+/// SVG image, scaled up so individual pixels are visible - embedded
+/// directly as a `data:image/svg+xml;base64,...` URI, which VS Code's
+/// Markdown-rendered hover popup supports natively.
+pub(super) fn glyph_hover_markdown(code: u8) -> String {
+    let bits = cpclib_catart::interpret::Locale::English.glyph(code);
+    const SCALE: u32 = 8; // 8x8 CPC pixels -> 64x64 image
+    let mut rects = String::new();
+    for (row, byte) in bits.iter().enumerate() {
+        for col in 0..8u32 {
+            if (byte >> (7 - col)) & 1 == 1 {
+                rects.push_str(&format!(
+                    "<rect x=\"{}\" y=\"{}\" width=\"{SCALE}\" height=\"{SCALE}\"/>",
+                    col * SCALE,
+                    row as u32 * SCALE
+                ));
+            }
+        }
+    }
+    let svg = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"64\" height=\"64\" \
+         viewBox=\"0 0 64 64\"><rect width=\"64\" height=\"64\" fill=\"white\"/>\
+         <g fill=\"black\">{rects}</g></svg>"
+    );
+    let data_uri = format!(
+        "data:image/svg+xml;base64,{}",
+        base64_encode(svg.as_bytes())
+    );
+    format!("**Character {code}:**\n\n![glyph]({data_uri})")
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0];
+        let b1 = *chunk.get(1).unwrap_or(&0);
+        let b2 = *chunk.get(2).unwrap_or(&0);
+        let n = ((b0 as u32) << 16) | ((b1 as u32) << 8) | (b2 as u32);
+        out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+        out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[((n >> 6) & 0x3F) as usize] as char
+        }
+        else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[(n & 0x3F) as usize] as char
+        }
+        else {
+            '='
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod byte_hover_tests {
     use super::*;
@@ -316,6 +394,68 @@ mod byte_hover_tests {
         assert!(md.contains('-'), "{md}");
         let minus_value = BasicTokenNoPrefix::SubstractionOrUnaryMinus.value();
         assert!(md.contains(&format!("{minus_value:02X}")), "{md}");
+    }
+}
+
+#[cfg(test)]
+mod chr_glyph_hover_tests {
+    use super::*;
+
+    #[test]
+    fn base64_encode_matches_known_vectors() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn chr_hover_embeds_a_glyph_image() {
+        let text = "10 PRINT CHR$(65)\n";
+        let uri = Url::parse("file:///t.bas").unwrap();
+        let d = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = BasicAnalyzer::new();
+        // Cursor on "CHR$".
+        let col = text.find("CHR$").unwrap() as u32 + 1;
+        let hover = analyzer
+            .hover(
+                &d,
+                Position {
+                    line: 0,
+                    character: col
+                }
+            )
+            .expect("expected a hover result");
+        let md = match hover.contents {
+            HoverContents::Markup(MarkupContent { value, .. }) => value,
+            _ => panic!("expected markdown hover contents")
+        };
+        assert!(md.contains("data:image/svg+xml;base64,"), "{md}");
+        assert!(md.contains("Character 65"), "{md}");
+    }
+
+    #[test]
+    fn chr_hover_out_of_range_argument_has_no_glyph() {
+        let text = "10 PRINT CHR$(999)\n";
+        let uri = Url::parse("file:///t.bas").unwrap();
+        let d = crate::common::document::Document::new(uri, text.to_string(), 1);
+        let analyzer = BasicAnalyzer::new();
+        let col = text.find("CHR$").unwrap() as u32 + 1;
+        let hover = analyzer
+            .hover(
+                &d,
+                Position {
+                    line: 0,
+                    character: col
+                }
+            )
+            .expect("expected a hover result");
+        let md = match hover.contents {
+            HoverContents::Markup(MarkupContent { value, .. }) => value,
+            _ => panic!("expected markdown hover contents")
+        };
+        assert!(!md.contains("data:image"), "{md}");
     }
 }
 

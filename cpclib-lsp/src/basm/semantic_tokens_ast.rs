@@ -24,19 +24,22 @@
 //! checking) is what would risk a real regression. See the doc comments on
 //! `expr_tokens`/`operand_tokens` for the specific cases this ruled out.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use cpclib_asm::assembler::Env;
+use cpclib_asm::implementation::expression::ExprEvaluationExt;
 use cpclib_asm::parser::obtained::{
-    LocatedDataAccess, LocatedExpr, LocatedListing, LocatedToken, MayHaveSpan
+    LocatedDataAccess, LocatedExpr, LocatedListing, LocatedTestKind, LocatedToken, MayHaveSpan
 };
 use cpclib_asm::parser::source::Z80Span;
 use cpclib_asm::preamble::SourceString;
 use cpclib_tokens::ListingElement;
+use cpclib_tokens::symbols::SymbolsTableTrait;
 
 use super::token::{
-    DIRECTIVE_SET, MOD_DECLARATION, MOD_READONLY, RawSemanticToken, TT_ENUM_MEMBER, TT_FUNCTION,
-    TT_KEYWORD, TT_LABEL, TT_MACRO, TT_NAMESPACE, TT_NUMBER, TT_VARIABLE, flatten_listing,
-    locate_name_in_statement
+    DIRECTIVE_SET, MOD_DECLARATION, MOD_INACTIVE, MOD_READONLY, RawSemanticToken, TT_ENUM_MEMBER,
+    TT_FUNCTION, TT_KEYWORD, TT_LABEL, TT_MACRO, TT_NAMESPACE, TT_NUMBER, TT_VARIABLE,
+    flatten_listing, locate_name_in_statement, span_line
 };
 
 type Tokens<'a> = Box<dyn Iterator<Item = RawSemanticToken> + 'a>;
@@ -61,6 +64,117 @@ pub(super) fn claimed_ranges_by_line(raw: &[RawSemanticToken]) -> HashMap<u32, V
             .push((t.col, t.col + t.len));
     }
     by_line
+}
+
+/// Applies [`MOD_INACTIVE`] to every token in `raw` whose line is in
+/// `inactive_lines` - a token that's already been claimed by
+/// `ast_semantic_tokens` still needs *some* token type to carry the
+/// modifier on (an LSP semantic token modifier can't exist without a base
+/// type), so this only dims tokens that were already going to be
+/// highlighted some other way, not blank/comment-only lines (which never
+/// get a token at all, so there's nothing to visually dim there anyway -
+/// harmless, since a comment already renders distinctly).
+pub(super) fn dim_inactive_lines(raw: &mut [RawSemanticToken], inactive_lines: &HashSet<u32>) {
+    for t in raw.iter_mut() {
+        if inactive_lines.contains(&t.line) {
+            t.modifiers |= MOD_INACTIVE;
+        }
+    }
+}
+
+/// Every line (0-based) inside an `IF`/`ELSEIF`/`ELSE` branch statically
+/// known, from a dry-run assembly pass (`expand::dry_run_env_cached` - the
+/// same one hover already uses for value substitution, e.g.
+/// `known_bc_for_hover`), not to be the branch that actually assembles.
+/// Only descends into the top-level listing, nested `IF`s, and `MODULE`
+/// bodies (the common real-world shapes: header guards, nested
+/// feature-flag conditionals) - a conditional inside a MACRO/REPEAT/
+/// FUNCTION body is left alone, out of scope for this pass.
+pub(super) fn inactive_if_branch_lines(listing: &LocatedListing, env: &mut Env) -> HashSet<u32> {
+    let mut out = HashSet::new();
+    collect_inactive_lines(listing.iter(), env, &mut out);
+    out
+}
+
+fn collect_inactive_lines<'a>(
+    tokens: impl Iterator<Item = &'a LocatedToken>,
+    env: &mut Env,
+    out: &mut HashSet<u32>
+) {
+    for token in tokens {
+        if token.is_if() {
+            let n = token.if_nb_tests();
+            let mut selected: Option<usize> = None;
+            let mut all_known = true;
+            for i in 0..n {
+                let (test, _) = token.if_test(i);
+                match evaluate_test_kind(test, env) {
+                    Some(true) => {
+                        selected = Some(i);
+                        break;
+                    },
+                    Some(false) => {},
+                    None => {
+                        all_known = false;
+                        break;
+                    }
+                }
+            }
+            for i in 0..n {
+                let (_, body) = token.if_test(i);
+                if all_known && Some(i) != selected {
+                    for t in flatten_listing(body.iter()) {
+                        out.insert(span_line(t));
+                    }
+                }
+                else {
+                    // Either this is the taken branch (may itself contain a
+                    // nested IF worth evaluating) or the outer condition
+                    // couldn't be resolved (in which case nothing here gets
+                    // dimmed, but a nested IF inside might still be
+                    // independently resolvable).
+                    collect_inactive_lines(body.iter(), env, out);
+                }
+            }
+            if let Some(else_body) = token.if_else() {
+                if all_known && selected.is_some() {
+                    for t in flatten_listing(else_body.iter()) {
+                        out.insert(span_line(t));
+                    }
+                }
+                else {
+                    collect_inactive_lines(else_body.iter(), env, out);
+                }
+            }
+        }
+        else if token.is_module() {
+            collect_inactive_lines(token.module_listing().iter(), env, out);
+        }
+    }
+}
+
+/// Evaluates one `IF`/`IFNOT`/`IFDEF`/`IFNDEF`/`IFUSED`/`IFNUSED` test
+/// against `env` (from a dry-run assembly pass) - `None` when the test
+/// can't be resolved yet (e.g. it depends on a forward-referenced symbol
+/// not yet known at this dry-run pass), mirroring how the real assembler
+/// itself treats an unresolvable condition as "can't decide yet" rather
+/// than defaulting to either branch.
+fn evaluate_test_kind(test: &LocatedTestKind, env: &mut Env) -> Option<bool> {
+    match test {
+        LocatedTestKind::True(e) => e.resolve(env).ok()?.bool().ok(),
+        LocatedTestKind::False(e) => e.resolve(env).ok()?.bool().ok().map(|b| !b),
+        LocatedTestKind::LabelExists(l) => {
+            env.symbols().symbol_exist_in_current_pass(l.as_str()).ok()
+        },
+        LocatedTestKind::LabelDoesNotExist(l) => {
+            env.symbols()
+                .symbol_exist_in_current_pass(l.as_str())
+                .ok()
+                .map(|b| !b)
+        },
+        LocatedTestKind::LabelUsed(l) => Some(env.symbols().is_used(l.as_str())),
+        LocatedTestKind::LabelNused(l) => Some(!env.symbols().is_used(l.as_str()))
+    }
 }
 
 fn statement_tokens(token: &LocatedToken) -> Tokens<'_> {

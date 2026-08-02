@@ -1,8 +1,29 @@
-//! Document symbols (outline) for assembly files: a real nested tree, one
-//! top-level container per symbol kind present (modules, sections, labels,
-//! macros, EQU constants, assign variables, in that order — empty kinds are
-//! omitted), preserving document order within each. Local labels nest under
-//! the global label whose scope contains them.
+//! Document symbols (outline) for assembly files: a flat, document-order
+//! top-level list (modules, sections, labels, macros, functions, EQU
+//! constants, assign variables all mixed together in the order they appear
+//! in the source) — *not* grouped under synthetic "Macros"/"Constants"/etc.
+//! category headers the way earlier versions of this module were. Local
+//! labels still nest under the global label whose scope contains them (a
+//! real containment relationship, unlike a category grouping).
+//!
+//! The category-header grouping was removed after a real, user-reported
+//! Sticky Scroll regression: a synthetic header's own `range` either had to
+//! (a) span from its first child to its last (wrong - VS Code then treats
+//! the *header itself* as a real, wide container to pin while scrolled
+//! anywhere between two unrelated, far-apart children - see
+//! `common::symbols::container_symbol`'s own history), or (b) collapse to a
+//! narrow/zero-width point (also wrong - VS Code's Sticky Scroll only
+//! recurses into a symbol's `children` when the *parent's* range already
+//! contains the scroll position, so a header whose range doesn't actually
+//! contain its real children makes Sticky Scroll stop dead at the header
+//! and never reach them at all - reported as "nothing shows anymore").
+//! There is no `range` a purely-organizational grouping node can have that
+//! satisfies both "don't falsely claim ownership of the gaps between
+//! children" and "let Sticky Scroll actually recurse into the children" -
+//! so this module stopped introducing that grouping node in the first
+//! place. Each symbol still keeps its own `kind` (Function/Constant/
+//! Variable/Namespace/...), so the Outline panel still shows a distinct
+//! icon per entry, just not bucketed under a header anymore.
 
 use std::collections::HashMap;
 
@@ -12,7 +33,6 @@ use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
 use crate::common::document::Document;
-use crate::common::symbols::container_symbol;
 
 /// Grouping key for the outline — see the module doc comment for the order.
 /// Not exposed over LSP; only used to decide which top-level container each
@@ -23,6 +43,7 @@ enum SymbolCategory {
     Section,
     Label,
     Macro,
+    Function,
     Constant,
     Variable
 }
@@ -42,16 +63,31 @@ impl AssemblyAnalyzer {
         else {
             return Vec::new();
         };
+        let text = document.text();
 
         let mut modules: Vec<DocumentSymbol> = Vec::new();
         let mut sections: Vec<DocumentSymbol> = Vec::new();
         let mut labels: Vec<LabelEntry> = Vec::new();
         let mut macros: Vec<DocumentSymbol> = Vec::new();
+        let mut functions: Vec<DocumentSymbol> = Vec::new();
         let mut constants: Vec<DocumentSymbol> = Vec::new();
         let mut variables: Vec<DocumentSymbol> = Vec::new();
 
         // Track the last seen global label to qualify local labels (`.foo` → `parent.foo`)
         let mut current_global: Option<String> = None;
+
+        // Each global label's own line range (through the next global label,
+        // or end of file) - reused to extend a global label symbol's `range`
+        // for Sticky Scroll, the same way `scope_containing` already backs
+        // local-label scope confinement elsewhere.
+        let global_scopes = super::token::global_label_scopes(listing.iter());
+        // The real last line the editor can address - not just
+        // `text.lines().count()`, which under-counts by one whenever the
+        // file has no trailing newline (see
+        // `token::clamp_to_last_addressable_line`'s own doc comment for the
+        // Sticky Scroll bug this caused for the very last symbol in such a
+        // file).
+        let total_lines = super::token::clamp_to_last_addressable_line(&text, u32::MAX);
 
         for token in super::token::flatten_listing(listing.iter()) {
             // source_len: byte length of the token as it appears in source
@@ -126,6 +162,19 @@ impl AssemblyAnalyzer {
                     false
                 )
             }
+            else if token.is_function_definition() {
+                let name = token.function_definition_name();
+                current_global = Some(name.to_string());
+                (
+                    name.len(),
+                    name.to_string(),
+                    SymbolCategory::Function,
+                    SymbolKind::FUNCTION,
+                    Some("FUNCTION".to_string()),
+                    None,
+                    false
+                )
+            }
             else if token.is_module() {
                 let name = token.module_name();
                 current_global = Some(name.to_string());
@@ -184,8 +233,9 @@ impl AssemblyAnalyzer {
                     col_1based.saturating_sub(1) as u32
                 )
             });
-            // Range covers the source token, not the (potentially longer) display name
-            let range = Range {
+            // `selection_range` covers just the source token (the name),
+            // not the (potentially longer) display name.
+            let selection_range = Range {
                 start: Position {
                     line: lsp_line,
                     character: lsp_char
@@ -194,6 +244,53 @@ impl AssemblyAnalyzer {
                     line: lsp_line,
                     character: lsp_char + source_len as u32
                 }
+            };
+            // `range` is the symbol's *full* extent - for a MACRO/FUNCTION,
+            // that's the whole body through its closing keyword, and for a
+            // global (non-dotted) label, its whole scope through the next
+            // global label. Editor features that key off a symbol's real
+            // scope (VS Code's Sticky Scroll pins whichever symbol's `range`
+            // contains the current scroll position) were badly broken by
+            // `range == selection_range` here: every multi-line symbol
+            // looked like a single-line one, so nothing ever correctly
+            // matched the cursor's real position within one. Local (dotted)
+            // labels and EQU/ASSIGN entries deliberately keep the narrow,
+            // single-line `range == selection_range` - they're not the kind
+            // of "container" Sticky Scroll should ever pin.
+            let range = match category {
+                SymbolCategory::Macro => {
+                    let end_line = super::token::macro_body_end_line(&text, lsp_line);
+                    Range {
+                        start: selection_range.start,
+                        end: Position {
+                            line: end_line,
+                            character: 0
+                        }
+                    }
+                },
+                SymbolCategory::Function => {
+                    let end_line = super::token::function_body_end_line(&text, lsp_line);
+                    Range {
+                        start: selection_range.start,
+                        end: Position {
+                            line: end_line,
+                            character: 0
+                        }
+                    }
+                },
+                SymbolCategory::Label if !is_local_label => {
+                    let end_line = super::token::scope_containing(&global_scopes, lsp_line)
+                        .map(|(_, scope)| scope.end.min(total_lines))
+                        .unwrap_or(lsp_line + 1);
+                    Range {
+                        start: selection_range.start,
+                        end: Position {
+                            line: end_line,
+                            character: 0
+                        }
+                    }
+                },
+                _ => selection_range
             };
 
             #[allow(deprecated)]
@@ -204,7 +301,7 @@ impl AssemblyAnalyzer {
                 tags: None,
                 deprecated: None,
                 range,
-                selection_range: range,
+                selection_range,
                 children: None
             };
 
@@ -220,6 +317,7 @@ impl AssemblyAnalyzer {
                     });
                 },
                 SymbolCategory::Macro => macros.push(symbol),
+                SymbolCategory::Function => functions.push(symbol),
                 SymbolCategory::Constant => constants.push(symbol),
                 SymbolCategory::Variable => variables.push(symbol)
             }
@@ -228,24 +326,22 @@ impl AssemblyAnalyzer {
         let labels = nest_local_labels(listing.iter(), labels);
 
         let mut root = Vec::new();
-        if !modules.is_empty() {
-            root.push(container_symbol("Modules", modules));
-        }
-        if !sections.is_empty() {
-            root.push(container_symbol("Sections", sections));
-        }
-        if !labels.is_empty() {
-            root.push(container_symbol("Labels", labels));
-        }
-        if !macros.is_empty() {
-            root.push(container_symbol("Macros", macros));
-        }
-        if !constants.is_empty() {
-            root.push(container_symbol("Constants", constants));
-        }
-        if !variables.is_empty() {
-            root.push(container_symbol("Variables", variables));
-        }
+        root.extend(modules);
+        root.extend(sections);
+        root.extend(labels);
+        root.extend(macros);
+        root.extend(functions);
+        root.extend(constants);
+        root.extend(variables);
+        // Document order, not insertion order (which was kind-by-kind) - a
+        // flat top-level list reads naturally in the Outline panel this way,
+        // and Sticky Scroll has no grouping node left to get confused by.
+        root.sort_by_key(|s| {
+            (
+                s.selection_range.start.line,
+                s.selection_range.start.character
+            )
+        });
         root
     }
 }
@@ -365,16 +461,46 @@ mod tests {
     }
 
     #[test]
-    fn outline_is_grouped_by_kind_not_document_order() {
-        // Deliberately out of "natural" order: variable, then module (with a
-        // top-level label — labels nest under their *global label* parent,
-        // never under an enclosing MODULE), so a plain document-order walk
-        // would list top-level containers VARIABLE, MODULE, LABEL —
-        // kind-grouping must reorder the containers themselves.
+    fn top_level_symbols_appear_flat_in_document_order() {
+        // A variable, then a module (with a top-level label inside it -
+        // labels nest under their *global label* parent, never under an
+        // enclosing MODULE, so `my_label` still lands as a top-level entry
+        // here, right after `mymod`).
         let text = "SOME_VAR = 1\nMODULE mymod\nmy_label:\n    ret\nENDMODULE\n";
         let symbols = symbols_for(text);
         let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, vec!["Modules", "Labels", "Variables"], "{symbols:?}");
+        assert_eq!(names, vec!["SOME_VAR", "mymod", "my_label"], "{symbols:?}");
+        // No synthetic grouping node wraps any of them (a grouping node's
+        // own `range` broke Sticky Scroll no matter how it was computed -
+        // see the module doc comment for the full story).
+        assert!(symbols.iter().all(|s| s.kind != SymbolKind::NAMESPACE));
+    }
+
+    /// Regression test for a real, user-reported Sticky Scroll bug: two EQU
+    /// constants far apart in the document used to be wrapped in a synthetic
+    /// "Constants" grouping node whose own `range` spanned the whole
+    /// distance between them, making VS Code treat *the grouping itself* as
+    /// a real, wide container to pin while scrolled anywhere in between -
+    /// showing the first constant's own line stuck long after it (and its
+    /// real enclosing symbol, if any) had scrolled off screen. Fixed by not
+    /// introducing that grouping node at all - each constant is a direct,
+    /// narrow-ranged top-level entry.
+    #[test]
+    fn far_apart_constants_never_share_a_wide_synthetic_container() {
+        let text = "FOO equ 1\nmain:\n    nop\n    nop\n    nop\nBAR equ 2\n";
+        let symbols = symbols_for(text);
+        assert!(
+            symbols.iter().all(|s| s.kind != SymbolKind::NAMESPACE),
+            "{symbols:?}"
+        );
+
+        let foo = find_symbol(&symbols, "FOO").expect("FOO");
+        assert_eq!(foo.range, foo.selection_range, "{foo:?}");
+        assert_eq!(foo.range.start.line, 0, "{foo:?}");
+
+        let bar = find_symbol(&symbols, "BAR").expect("BAR");
+        assert_eq!(bar.range, bar.selection_range, "{bar:?}");
+        assert_eq!(bar.range.start.line, 5, "{bar:?}");
     }
 
     /// Regression test: `document_symbols` used to call `to_token()` for
@@ -391,6 +517,128 @@ mod tests {
         assert!(find_symbol(&symbols, "main").is_some(), "{symbols:?}");
     }
 
+    /// Regression test for a real user report: VS Code's Sticky Scroll (and
+    /// any other editor feature that keys off `DocumentSymbol.range` to
+    /// know a symbol's real extent) was showing the wrong line, nothing at
+    /// all for the last macro in a file, or a line even when the cursor
+    /// wasn't inside any macro - all symptoms of `range` being collapsed to
+    /// just the declaration line (identical to `selection_range`) instead
+    /// of spanning the whole macro body through `ENDM`.
+
+    #[test]
+    fn macro_symbol_range_spans_the_whole_body_not_just_the_declaration_line() {
+        let text = "MACRO foo\n    nop\n    nop\nENDM\n\nMACRO bar\n    ret\nENDM\n";
+        let symbols = symbols_for(text);
+
+        let foo = find_symbol(&symbols, "foo").unwrap();
+        assert_eq!(foo.range.start.line, 0);
+        assert_eq!(foo.range.end.line, 4, "{foo:?}"); // just past the "ENDM" line (3)
+        // `selection_range` stays the narrow name-only span.
+        assert_eq!(foo.selection_range.start.line, 0);
+        assert_eq!(foo.selection_range.end.line, 0);
+
+        // The *last* macro in the file must also get a real range, not an
+        // empty/missing one.
+        let bar = find_symbol(&symbols, "bar").unwrap();
+        assert_eq!(bar.range.start.line, 5);
+        assert_eq!(bar.range.end.line, 8, "{bar:?}");
+    }
+
+    /// Regression test for a real, user-reported Sticky Scroll bug: the
+    /// *last* macro in a file that doesn't end with a trailing newline
+    /// (`macros.asm` from a real project - a common, unremarkable file
+    /// shape, not an edge case anyone deliberately created) used to get a
+    /// `range.end` one line *past* what the editor considers to exist -
+    /// VS Code's Sticky Scroll silently failed for it, while the Outline
+    /// panel (which only needs the much narrower `selection_range`) showed
+    /// it just fine, which was the confusing part of the report.
+    #[test]
+    fn last_macro_range_stays_in_bounds_when_the_file_has_no_trailing_newline() {
+        let text = "MACRO foo\n    nop\nENDM"; // deliberately no trailing "\n"
+        let symbols = symbols_for(text);
+        let foo = find_symbol(&symbols, "foo").unwrap();
+        // 3 lines total (0, 1, 2) - `range.end.line` must never reach 3,
+        // which the editor has no line at.
+        assert_eq!(foo.range.end.line, 2, "{foo:?}");
+    }
+
+    /// FUNCTION gets the same real-range treatment as MACRO (Sticky Scroll
+    /// needs to pin its declaration line the same way), including the
+    /// `ENDF` closing alias alongside `ENDFUNCTION`.
+    #[test]
+    fn function_symbol_range_spans_the_whole_body_not_just_the_declaration_line() {
+        let text = "FUNCTION sq(x)\n    RETURN x*x\nENDFUNCTION\n\nFUNCTION cube(x)\n    RETURN x*x*x\nENDF\n";
+        let symbols = symbols_for(text);
+
+        let sq = find_symbol(&symbols, "sq").unwrap();
+        assert_eq!(sq.range.start.line, 0);
+        assert_eq!(sq.range.end.line, 3, "{sq:?}"); // just past "ENDFUNCTION"
+        assert_eq!(sq.selection_range.start.line, 0);
+        assert_eq!(sq.selection_range.end.line, 0);
+
+        let cube = find_symbol(&symbols, "cube").unwrap();
+        assert_eq!(cube.range.start.line, 4);
+        assert_eq!(cube.range.end.line, 7, "{cube:?}"); // just past "FEND"
+    }
+
+    /// A global label's `range` extends through the next global label (or
+    /// end of file for the last one) so Sticky Scroll can pin "the latest
+    /// global label" while scrolled through its body - but local (dotted)
+    /// labels and EQU/ASSIGN entries must keep their own narrow,
+    /// single-line range: they aren't containers Sticky Scroll should pin.
+    #[test]
+    fn global_label_range_extends_to_the_next_global_label_or_eof_but_locals_and_equ_stay_narrow() {
+        let text = "start:\n  FOO equ 1\n  BAR = 2\n  nop\nfinish:\n  ret\n  .loop\n  jr .loop\n";
+        let symbols = symbols_for(text);
+
+        let start = find_symbol(&symbols, "start").unwrap();
+        assert_eq!(start.range.start.line, 0);
+        assert_eq!(start.range.end.line, 4, "{start:?}"); // up to "finish:"
+
+        // The *last* global label extends to end of file, not nothing/zero.
+        let finish = find_symbol(&symbols, "finish").unwrap();
+        assert_eq!(finish.range.start.line, 4);
+        assert_eq!(finish.range.end.line, 8, "{finish:?}"); // total line count
+
+        let loop_local = finish
+            .children
+            .as_ref()
+            .expect("finish has locals")
+            .iter()
+            .find(|s| s.name == "finish.loop")
+            .unwrap();
+        assert_eq!(
+            loop_local.range, loop_local.selection_range,
+            "a local label must keep a narrow, single-line range: {loop_local:?}"
+        );
+
+        let foo = find_symbol(&symbols, "FOO").unwrap();
+        assert_eq!(
+            foo.range, foo.selection_range,
+            "an EQU constant must keep a narrow, single-line range: {foo:?}"
+        );
+
+        let bar = find_symbol(&symbols, "BAR").unwrap();
+        assert_eq!(
+            bar.range, bar.selection_range,
+            "an ASSIGN variable must keep a narrow, single-line range: {bar:?}"
+        );
+    }
+
+    /// Same real-world bug as
+    /// `last_macro_range_stays_in_bounds_when_the_file_has_no_trailing_newline`,
+    /// for the *last global label* case instead of a macro: without a
+    /// trailing newline, its "extends to end of file" range must stay in
+    /// bounds rather than reaching a line the editor has no line at.
+    #[test]
+    fn last_global_label_range_stays_in_bounds_when_the_file_has_no_trailing_newline() {
+        let text = "start:\n  nop\n  ret"; // deliberately no trailing "\n"
+        let symbols = symbols_for(text);
+        let start = find_symbol(&symbols, "start").unwrap();
+        // 3 lines total (0, 1, 2) - `range.end.line` must never reach 3.
+        assert_eq!(start.range.end.line, 2, "{start:?}");
+    }
+
     #[test]
     fn range_directive_alongside_ordinary_directives_still_defines_a_section() {
         let text =
@@ -405,14 +653,12 @@ mod tests {
     fn local_labels_nest_under_their_owning_global_label_without_cross_contamination() {
         let text = "global1\n.g1l1\n.g1l2\nglobal2\n.g2l1\n";
         let symbols = symbols_for(text);
-        let labels = find_symbol(&symbols, "Labels").expect("Labels container");
-        let top_level = labels.children.as_ref().expect("Labels has children");
+        // Locals are nested under their own global, not flat top-level
+        // entries.
+        let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["global1", "global2"], "{symbols:?}");
 
-        // Locals are nested under their own global, not flat siblings of it.
-        let names: Vec<&str> = top_level.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, vec!["global1", "global2"], "{top_level:?}");
-
-        let global1 = &top_level[0];
+        let global1 = &symbols[0];
         let g1_children = global1.children.as_ref().expect("global1 has locals");
         let g1_names: Vec<&str> = g1_children.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(
@@ -420,7 +666,9 @@ mod tests {
             vec!["global1.g1l1", "global1.g1l2"],
             "{g1_children:?}"
         );
-        // The parent's range grew to cover both its own locals.
+        // A global label's range now extends through its whole scope (up
+        // to the next global label), not just far enough to cover its own
+        // locals.
         assert_eq!(
             global1.range.start,
             Position {
@@ -431,12 +679,12 @@ mod tests {
         assert_eq!(
             global1.range.end,
             Position {
-                line: 2,
-                character: 5
+                line: 3,
+                character: 0
             }
         );
 
-        let global2 = &top_level[1];
+        let global2 = &symbols[1];
         let g2_children = global2.children.as_ref().expect("global2 has locals");
         let g2_names: Vec<&str> = g2_children.iter().map(|s| s.name.as_str()).collect();
         // global1's locals never leak into global2's own children.
@@ -448,16 +696,15 @@ mod tests {
         // `.foo` appears before any global label at all - `scope_containing`
         // returns `None` here (matching `token.rs`'s own
         // `scope_containing_returns_none_before_the_first_label` test), so
-        // it must still show up, flat, in "Labels" - not silently dropped.
+        // it must still show up, flat, at the top level - not silently
+        // dropped.
         let text = ".foo\nglobal1\n";
         let symbols = symbols_for(text);
-        let labels = find_symbol(&symbols, "Labels").expect("Labels container");
-        let top_level = labels.children.as_ref().expect("Labels has children");
-        assert!(top_level.iter().any(|s| s.name == ".foo"), "{top_level:?}");
+        assert!(symbols.iter().any(|s| s.name == ".foo"), "{symbols:?}");
         // Not nested under global1 either, even though it's the only other
         // label in the file - global1 comes textually *after* it, so can't
         // be its owner.
-        let global1 = top_level.iter().find(|s| s.name == "global1").unwrap();
+        let global1 = symbols.iter().find(|s| s.name == "global1").unwrap();
         assert!(
             global1
                 .children
@@ -468,11 +715,11 @@ mod tests {
     }
 
     #[test]
-    fn a_category_with_no_symbols_is_omitted_from_the_tree() {
+    fn only_the_symbols_that_actually_exist_appear() {
         let text = "main:\n    ret\n";
         let symbols = symbols_for(text);
         let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, vec!["Labels"], "{symbols:?}");
+        assert_eq!(names, vec!["main"], "{symbols:?}");
     }
 }
 

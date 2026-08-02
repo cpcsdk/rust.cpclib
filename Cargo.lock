@@ -225,7 +225,7 @@ checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
 dependencies = [
  "getrandom 0.2.17",
  "once_cell",
- "version_check 0.9.5",
+ "version_check",
 ]
 
 [[package]]
@@ -238,7 +238,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "serde",
- "version_check 0.9.5",
+ "version_check",
  "zerocopy",
 ]
 
@@ -2319,7 +2319,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ddef33a339a91ea89fb53151bd0a4689cfce27055c291dfa69945475d22c747"
 dependencies = [
  "time",
- "version_check 0.9.5",
+ "version_check",
 ]
 
 [[package]]
@@ -2493,7 +2493,6 @@ dependencies = [
  "cpclib-xfer",
  "cpclib-z80emu",
  "custom_error",
- "dbg",
  "delegate",
  "either",
  "fs-err",
@@ -3792,15 +3791,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a30bfce702bcfa94e906ef82421f2c0e61c076ad76030c16ee5d2e9a32fe193"
 dependencies = [
  "matches",
-]
-
-[[package]]
-name = "dbg"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4677188513e0e9d7adced5997cf9a1e7a3c996c994f90093325c5332c1a8b221"
-dependencies = [
- "version_check 0.1.5",
 ]
 
 [[package]]
@@ -5315,7 +5305,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
- "version_check 0.9.5",
+ "version_check",
 ]
 
 [[package]]
@@ -10105,7 +10095,7 @@ dependencies = [
  "proc-macro2 1.0.107",
  "quote 1.0.47",
  "syn 1.0.109",
- "version_check 0.9.5",
+ "version_check",
 ]
 
 [[package]]
@@ -10116,7 +10106,7 @@ checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
 dependencies = [
  "proc-macro2 1.0.107",
  "quote 1.0.47",
- "version_check 0.9.5",
+ "version_check",
 ]
 
 [[package]]
@@ -10174,7 +10164,7 @@ dependencies = [
  "proc-macro2 1.0.107",
  "quote 1.0.47",
  "syn 2.0.119",
- "version_check 0.9.5",
+ "version_check",
  "yansi",
 ]
 
@@ -10262,7 +10252,7 @@ dependencies = [
  "pulp-wasm-simd-flag",
  "raw-cpuid",
  "reborrow",
- "version_check 0.9.5",
+ "version_check",
 ]
 
 [[package]]
@@ -12132,7 +12122,7 @@ version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bdd58c3c93c3d278ca835519292445cb4b0d4dc59ccfdf7ceadaab3f8aeb4038"
 dependencies = [
- "version_check 0.9.5",
+ "version_check",
 ]
 
 [[package]]
@@ -14191,12 +14181,6 @@ name = "version-compare"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c2856837ef78f57382f06b2b8563a2f512f7185d732608fd9176cb3b8edf0e"
-
-[[package]]
-name = "version_check"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "914b1a6776c4c929a602fafd8bc742e06365d4bcbe48c30f9cca5824f70dc9dd"
 
 [[package]]
 name = "version_check"

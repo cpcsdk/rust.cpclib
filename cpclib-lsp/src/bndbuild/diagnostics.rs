@@ -131,9 +131,11 @@ impl BuildFileAnalyzer {
         let raw_text = document.text();
 
         // Check for any valid target or task key (using RULE_KEYS from cpclib_bndbuild)
-        let has_targets = super::token::TGT_KEY_NAMES.iter()
+        let has_targets = super::token::TGT_KEY_NAMES
+            .iter()
             .any(|key| raw_text.contains(&format!("{}:", key)));
-        let has_tasks = super::token::TASK_KEY_NAMES.iter()
+        let has_tasks = super::token::TASK_KEY_NAMES
+            .iter()
             .any(|key| raw_text.contains(&format!("{}:", key)));
 
         if !has_targets && !has_tasks && self.config().warnings.missing_build_structure {
@@ -342,6 +344,136 @@ impl BuildFileAnalyzer {
 
         diagnostics
     }
+
+    /// Target/rule names in `document` referencing `source_path` (an
+    /// absolute, real filesystem path) - either structurally, via a
+    /// glob-expanded `dep:`/`targets:` value, or textually, via a whole-word
+    /// mention of `source_path`'s own basename inside a `cmd:`/task value
+    /// (e.g. `cmd: basm --snapshot sna.asm -o out.sna` references
+    /// `sna.asm` even though it's never declared as a formal `dep:` -  a
+    /// real, common authoring style, confirmed against a real build file).
+    /// Used to offer build tasks from a `.asm` file's own corresponding
+    /// bndbuild file.
+    ///
+    /// Works on the Jinja-*expanded* text (reusing `expand_or_identity`,
+    /// the same machinery `validate_build_structure` already uses) so a
+    /// target/dependency/command value written as `{{ SOME_VAR }}` is
+    /// resolved to its real value first - a naive raw-text scan would
+    /// otherwise never recognize a rule whose only target name is a Jinja
+    /// variable (a real, common shape) at all.
+    ///
+    /// A pragmatic text scan (rule boundary = a `- ` list item at indent 0,
+    /// its target name = the first `tgt:`/`targets:`/... value seen after
+    /// that) rather than a full YAML-structural walk - covers the common
+    /// single-target-per-rule authoring style used throughout this
+    /// codebase's own examples, not every possible YAML shape.
+    pub fn targets_referencing(&self, document: &Document, source_path: &Utf8Path) -> Vec<String> {
+        let Some(base_dir) = document
+            .uri
+            .to_file_path()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .and_then(|d| Utf8PathBuf::from_path_buf(d).ok())
+        else {
+            return Vec::new();
+        };
+        let canonical_source = std::fs::canonicalize(source_path)
+            .unwrap_or_else(|_| std::path::PathBuf::from(source_path.as_std_path()));
+        let source_basename = source_path.file_name().unwrap_or("");
+
+        let expand_result = self.expand_or_identity(document);
+        let text = &expand_result.0;
+        let mut out = Vec::new();
+        let mut current_rule: Option<String> = None;
+        let mut rule_indent = 0usize;
+
+        for raw_line in text.lines() {
+            let trimmed = raw_line.trim_start();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let indent = raw_line.len() - trimmed.len();
+            if indent == 0 && trimmed.starts_with("- ") {
+                current_rule = None;
+                rule_indent = 0;
+            }
+
+            // A whole-word mention of the source file's own basename
+            // anywhere inside the current rule's block (a `cmd:` value, or
+            // a block-scalar command's own continuation line, which has no
+            // `key:` of its own at all) counts as a reference - not every
+            // real build file declares its basm input as a formal `dep:`.
+            if let Some(rule_name) = &current_rule
+                && indent > rule_indent
+                && !source_basename.is_empty()
+                && contains_whole_word(raw_line, source_basename)
+            {
+                out.push(rule_name.clone());
+            }
+
+            let content = trimmed.strip_prefix("- ").unwrap_or(trimmed);
+            let Some((key, value)) = content.split_once(':')
+            else {
+                continue;
+            };
+            let key = key.trim();
+            let value = value.split('#').next().unwrap_or("").trim();
+            let is_tgt_key = super::token::TGT_KEY_NAMES.contains(&key);
+            let is_dep_key = super::token::DEP_KEY_NAMES.contains(&key);
+            if is_tgt_key
+                && current_rule.is_none()
+                && let Some(name) = value.split_whitespace().next()
+            {
+                current_rule = Some(name.to_string());
+                rule_indent = indent;
+            }
+            let Some(rule_name) = current_rule.clone()
+            else {
+                continue;
+            };
+            if is_tgt_key || is_dep_key {
+                for tok in value.split_whitespace() {
+                    for expanded in expand_dep_token(tok, Some(&base_dir)) {
+                        let resolved = base_dir.join(&expanded);
+                        let canonical_resolved = std::fs::canonicalize(&resolved)
+                            .unwrap_or_else(|_| std::path::PathBuf::from(resolved.as_std_path()));
+                        if canonical_resolved == canonical_source {
+                            out.push(rule_name.clone());
+                        }
+                    }
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+}
+
+/// Whether `word` occurs in `haystack` as a whole word - not merely as a
+/// substring of a longer identifier/filename (e.g. `sna.asm` inside
+/// `mysna.asmfile` must not match). Bounding characters are simple
+/// identifier bytes only (letters/digits/`_`); a path separator, quote, or
+/// whitespace on either side counts as a valid boundary, so `src/sna.asm`
+/// correctly matches `sna.asm`.
+fn contains_whole_word(haystack: &str, word: &str) -> bool {
+    if word.is_empty() {
+        return false;
+    }
+    let is_word_byte = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let bytes = haystack.as_bytes();
+    let mut start = 0;
+    while let Some(rel) = haystack[start..].find(word) {
+        let pos = start + rel;
+        let before_ok = pos == 0 || !is_word_byte(bytes[pos - 1]);
+        let after = pos + word.len();
+        let after_ok = after >= bytes.len() || !is_word_byte(bytes[after]);
+        if before_ok && after_ok {
+            return true;
+        }
+        start = pos + 1;
+    }
+    false
 }
 
 #[cfg(test)]
@@ -521,5 +653,93 @@ mod tests {
             .filter(|d| d.message.contains("missing_shared.h"))
             .collect();
         assert_eq!(on_missing_header.len(), 1, "{diags:?}");
+    }
+}
+
+#[cfg(test)]
+mod targets_referencing_tests {
+    use super::*;
+    use crate::bndbuild::BuildFileAnalyzer;
+
+    #[test]
+    fn finds_the_rule_declaring_the_file_as_a_dependency() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("main.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  dep: main.asm\n  cmd: basm main.asm\n";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let source_path =
+            camino::Utf8PathBuf::from_path_buf(tmp.path().join("main.asm").into_std_path_buf())
+                .unwrap();
+        let targets = BuildFileAnalyzer::new().targets_referencing(&document, &source_path);
+        assert_eq!(targets, vec!["out.bin".to_string()]);
+    }
+
+    #[test]
+    fn finds_the_rule_declaring_the_file_as_its_own_target() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("out.bin"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  cmd: basm main.asm\n";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let source_path =
+            camino::Utf8PathBuf::from_path_buf(tmp.path().join("out.bin").into_std_path_buf())
+                .unwrap();
+        let targets = BuildFileAnalyzer::new().targets_referencing(&document, &source_path);
+        assert_eq!(targets, vec!["out.bin".to_string()]);
+    }
+
+    #[test]
+    fn unrelated_file_matches_no_rule() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("other.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  dep: main.asm\n  cmd: basm main.asm\n";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let source_path =
+            camino::Utf8PathBuf::from_path_buf(tmp.path().join("other.asm").into_std_path_buf())
+                .unwrap();
+        let targets = BuildFileAnalyzer::new().targets_referencing(&document, &source_path);
+        assert!(targets.is_empty(), "{targets:?}");
+    }
+
+    /// Regression test for a real repro (`birthtro/src/build.bnd`): the
+    /// source file is used as a `basm` command-line argument inside a
+    /// multi-line `cmd: |` block scalar, never declared as a formal `dep:`,
+    /// and the rule's own target name is itself a Jinja variable
+    /// (`{{ SNA }}`) - both must resolve for the rule to be found at all.
+    #[test]
+    fn finds_a_rule_using_the_file_as_a_cmd_argument_with_a_jinja_target_name() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("sna.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "{% set SNA=\"out.sna\" %}\n\n\
+                     - tgt: test\n  dep: {{ SNA }}\n  cmd: -emu --snapshot {{SNA}} run\n\n\
+                     - tgt: {{SNA}}\n  cmd: |\n    basm --snapshot sna.asm -o {{SNA}}\n        -DFOO=1\n";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let source_path =
+            camino::Utf8PathBuf::from_path_buf(tmp.path().join("sna.asm").into_std_path_buf())
+                .unwrap();
+        let targets = BuildFileAnalyzer::new().targets_referencing(&document, &source_path);
+        assert_eq!(targets, vec!["out.sna".to_string()], "{targets:?}");
+    }
+
+    #[test]
+    fn does_not_match_a_file_whose_name_is_only_a_substring() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("sna.asm"), "").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("build.bnd")).unwrap();
+        let text = "- tgt: out.bin\n  cmd: basm mysna.asmfile -o out.bin\n";
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let source_path =
+            camino::Utf8PathBuf::from_path_buf(tmp.path().join("sna.asm").into_std_path_buf())
+                .unwrap();
+        let targets = BuildFileAnalyzer::new().targets_referencing(&document, &source_path);
+        assert!(targets.is_empty(), "{targets:?}");
     }
 }

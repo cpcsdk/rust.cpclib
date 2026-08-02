@@ -99,6 +99,19 @@ impl Locale {
             Locale::Danish => include_bytes!("fonts/font_danish.bin")
         }
     }
+
+    /// The 8x8 1bpp glyph bitmap (one byte per pixel row, MSB = leftmost
+    /// pixel) for character code `code`, straight from the real Amstrad
+    /// CPC ROM font data - `[0; 8]` (blank) for a code outside the table.
+    pub fn glyph(&self, code: u8) -> [u8; 8] {
+        let font_data = self.font_data();
+        let offset = (code as usize) * 8;
+        let mut out = [0u8; 8];
+        if offset + 8 <= font_data.len() {
+            out.copy_from_slice(&font_data[offset..offset + 8]);
+        }
+        out
+    }
 }
 
 // CPC screen memory layout constants

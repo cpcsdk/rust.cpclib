@@ -275,9 +275,31 @@ impl BuildFileAnalyzer {
         result
     }
 
-    /// Emit a CodeLens "▶ Run" button on each target declared in a bndbuild file.
-    /// Delegates target detection to `target_symbols` so that Jinja expansion,
-    /// block scalars, and all key aliases are handled consistently.
+    /// Emit a CodeLens "▶ Run" button on each rule declared in a bndbuild
+    /// file, plus one "▶ Run this command" button on each individual task
+    /// line within that rule (bypassing the normal target-run path -
+    /// dependency resolution, up-to-date checks, and every *other* task in
+    /// the rule are skipped, only that one command executes). Delegates
+    /// target detection to `target_symbols` so that Jinja expansion, block
+    /// scalars, and all key aliases are handled consistently.
+    ///
+    /// The rule-level lens runs via `cpclib.runRuleInTerminal` (a real VS
+    /// Code Task/terminal, client-side only); per-task lenses still use the
+    /// LSP's own `cpclib.runTask` streaming path, since there is no CLI
+    /// equivalent for "run just task N of rule R".
+    ///
+    /// Per-task lenses assume the common authoring style where a rule's
+    /// declaring key (`tgt:`/`targets:`/...) sits on the rule's own `- `
+    /// list-item line (true for every real-world example seen in this
+    /// codebase's own tests/docs) - a rule using a nested `targets:` list
+    /// form instead simply gets no per-task lenses, rather than a wrong one.
+    ///
+    /// A rule can declare *several* target names on one `tgt:`/`targets:`
+    /// line (e.g. `- tgt: a.asm b.asm`) - `target_symbols` returns one
+    /// `DocumentSymbol` per name, all sharing the same `rule_line`; those are
+    /// grouped into a single lens whose title joins every name, rather than
+    /// one indistinguishable, overlapping lens per name. Per-task lenses are
+    /// still only generated once per `rule_line`, not once per target name.
     pub fn code_lens(&self, document: &Document) -> Vec<CodeLens> {
         let file_path = document
             .uri
@@ -285,24 +307,92 @@ impl BuildFileAnalyzer {
             .ok()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
+        let text = document.text();
 
-        self.target_symbols(document)
-            .into_iter()
-            .map(|sym| {
-                CodeLens {
-                    range: sym.selection_range,
+        // Group target symbols sharing the same rule line: a rule can
+        // declare several names on one `tgt:`/`targets:` line (e.g.
+        // `- tgt: a.asm b.asm`) and `target_symbols` returns one
+        // `DocumentSymbol` per name - grouped here so the rule gets exactly
+        // one "▶ Run" button whose title lists every target name, rather
+        // than one indistinguishable, overlapping lens per name.
+        let mut groups: Vec<(usize, Vec<DocumentSymbol>)> = Vec::new();
+        for sym in self.target_symbols(document) {
+            let rule_line = sym.selection_range.start.line as usize;
+            match groups.iter_mut().find(|(line, _)| *line == rule_line) {
+                Some((_, syms)) => syms.push(sym),
+                None => groups.push((rule_line, vec![sym]))
+            }
+        }
+
+        let mut lenses = Vec::new();
+        for (rule_line, syms) in groups {
+            let names = syms
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            // Any one of the group's target names runs the whole rule (and
+            // therefore builds every target it declares) - execution keeps
+            // using the first name, only the button's title changes.
+            let first_name = syms[0].name.clone();
+            let range = Range {
+                start: syms[0].selection_range.start,
+                end: syms.last().unwrap().selection_range.end
+            };
+            lenses.push(CodeLens {
+                range,
+                command: Some(Command {
+                    title: format!("▶ Run: {names}"),
+                    // A real, on-disk `.bnd` file has a working CLI
+                    // invocation (`bndbuild -f file target`), so this lens
+                    // runs it as a real VS Code Task/terminal - reusing
+                    // `BndbuildTaskProvider`'s task construction client-side
+                    // - rather than the LSP's own `cpclib.runRule` streaming
+                    // path, which VS Code's terminal+problemMatcher handles
+                    // more reliably (clickable errors "for free"). This is a
+                    // client-only command, never sent to the server - unlike
+                    // `cpclib.runRule`/`cpclib.runTask`, it is deliberately
+                    // *not* in `executeCommandProvider.commands`.
+                    command: "cpclib.runRuleInTerminal".to_string(),
+                    arguments: Some(vec![
+                        serde_json::json!(first_name),
+                        serde_json::json!(file_path),
+                    ])
+                }),
+                data: None
+            });
+
+            for (task_idx, (line_idx, _content)) in
+                super::command::task_lines_in_rule(&text, rule_line)
+                    .into_iter()
+                    .enumerate()
+            {
+                let range = Range {
+                    start: Position {
+                        line: line_idx as u32,
+                        character: 0
+                    },
+                    end: Position {
+                        line: line_idx as u32,
+                        character: 0
+                    }
+                };
+                lenses.push(CodeLens {
+                    range,
                     command: Some(Command {
-                        title: format!("▶ Run: {}", sym.name),
-                        command: "cpclib.runRule".to_string(),
+                        title: "▶ Run this command".to_string(),
+                        command: "cpclib.runTask".to_string(),
                         arguments: Some(vec![
-                            serde_json::json!(sym.name),
+                            serde_json::json!(first_name),
                             serde_json::json!(file_path),
+                            serde_json::json!(task_idx),
                         ])
                     }),
                     data: None
-                }
-            })
-            .collect()
+                });
+            }
+        }
+        lenses
     }
 
     /// Target/rule names declared in an already-extracted embedded block's
@@ -413,6 +503,90 @@ mod tests {
         assert!(
             !positions.iter().any(|&(_, c)| c == 15),
             "no token should be reported at byte column 15; got {positions:?}"
+        );
+    }
+
+    #[test]
+    fn code_lens_emits_a_per_task_lens_alongside_the_rule_lens() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        let text = "- tgt: multi\n  phony: true\n  cmd:\n   - echo one\n   - echo two\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let lenses = BuildFileAnalyzer::new().code_lens(&doc);
+
+        assert!(
+            lenses
+                .iter()
+                .any(|l| l.command.as_ref().unwrap().command == "cpclib.runRuleInTerminal"),
+            "{lenses:?}"
+        );
+        let task_lenses: Vec<_> = lenses
+            .iter()
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTask")
+            .collect();
+        assert_eq!(task_lenses.len(), 2, "{lenses:?}");
+        for (i, lens) in task_lenses.iter().enumerate() {
+            let args = lens.command.as_ref().unwrap().arguments.as_ref().unwrap();
+            assert_eq!(args[0], serde_json::json!("multi"));
+            assert_eq!(args[2], serde_json::json!(i));
+        }
+        // Task 0 ("echo one") is on line 3, task 1 ("echo two") is on line 4.
+        assert_eq!(task_lenses[0].range.start.line, 3);
+        assert_eq!(task_lenses[1].range.start.line, 4);
+    }
+
+    /// Regression test for a real-world rule shape (`birthtro/src/build.bnd`):
+    /// a single scalar `cmd: |` block-scalar command spanning several
+    /// indented continuation lines must still get exactly one CodeLens,
+    /// anchored on the `cmd: |` line itself - not zero (the block-scalar
+    /// indicator used to be explicitly skipped), and not one lens per
+    /// continuation line (they aren't separate tasks).
+    #[test]
+    fn code_lens_covers_a_multiline_block_scalar_command_as_one_task() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        let text =
+            "- tgt: out.sna\n  cmd: |\n    basm --snapshot sna.asm -o out.sna\n        -DFOO=1\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let lenses = BuildFileAnalyzer::new().code_lens(&doc);
+
+        let task_lenses: Vec<_> = lenses
+            .iter()
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTask")
+            .collect();
+        assert_eq!(task_lenses.len(), 1, "{lenses:?}");
+        assert_eq!(task_lenses[0].range.start.line, 1);
+    }
+
+    /// Regression test for a real-world rule shape (`demo.bnd5/linking/build.bnd`):
+    /// `- tgt: a.asm b.asm` declares two target names on one rule - they
+    /// must collapse into a *single* "▶ Run" lens whose title lists both
+    /// names (not one lens per name, which rendered as an indistinguishable
+    /// duplicate button), and the rule's own task(s) must only get per-task
+    /// lenses generated *once*, not once per target name sharing the rule.
+    #[test]
+    fn code_lens_does_not_duplicate_task_lenses_for_a_multi_target_rule() {
+        let uri = Url::parse("file:///build.bnd").unwrap();
+        let text = "- tgt: a.asm b.asm\n  cmd: echo one\n";
+        let doc = Document::new(uri, text.to_string(), 1);
+        let lenses = BuildFileAnalyzer::new().code_lens(&doc);
+
+        let run_rule_lenses: Vec<_> = lenses
+            .iter()
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runRuleInTerminal")
+            .collect();
+        assert_eq!(run_rule_lenses.len(), 1, "{lenses:?}");
+        assert_eq!(
+            run_rule_lenses[0].command.as_ref().unwrap().title,
+            "▶ Run: a.asm, b.asm"
+        );
+
+        let task_lenses: Vec<_> = lenses
+            .iter()
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTask")
+            .collect();
+        assert_eq!(
+            task_lenses.len(),
+            1,
+            "the single task must only get one lens, not one per target name: {lenses:?}"
         );
     }
 
