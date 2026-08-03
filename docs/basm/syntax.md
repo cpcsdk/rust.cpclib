@@ -91,14 +91,14 @@ parameter list with a trailing `...` (either `MACRO foo(a, b, ...)` or the comma
   arity error, exactly as before.
 
 ```z80
-MACRO log(level, ...)
-    ; {level} is named; {1}, {2}, ... are whichever extra arguments this
-    ; particular call passed, and {#} is how many arguments there were in total
-    db {level}, {#}
+MACRO sum3(a, b, ...)
+    ; {a}/{b} are named; {2} is the first extra argument (if this call
+    ; passed one) and {#} is the total number of arguments passed
+    db {a}, {b}, {#}
 ENDM
 
-log 1, "a", "b"   ; {level}=1, {1}="a", {2}="b", {#}=3
-log 1             ; {level}=1, {#}=1 - no extra arguments needed
+sum3 1, 2        ; -> db 1, 2, 2   ({#}=2, no extra argument)
+sum3 1, 2, 3     ; -> db 1, 2, 3   ({#}=3, {2} would be 3 if referenced)
 ```
 
 Referencing an extra index a particular call doesn't actually provide (e.g. the body uses `{2}`

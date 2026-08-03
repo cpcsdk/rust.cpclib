@@ -22,7 +22,9 @@ The user base being quite small, lots of bugs can remain. Do note hesitate to fi
 - Possibility to assemble fake instructions (e.g. `ld hl, de`).
 - Possibility to use standard directives (e.g. `incbin 'file.asm`).
 - Rare directives and functions (e.g. `ld a, opcode(xor a)`).
-- Macros definition and usage (e.g. `MY_MACRO_WITH_TWO_ARGS 1, "string"`).
+- Macros definition and usage (e.g. `MY_MACRO_WITH_TWO_ARGS 1, "string"`), including
+  [variadic macros](syntax.md#variadic-macros) that accept extra arguments beyond their named
+  parameters.
 - Function definition and usage (e.g. `db 5, my_function(3)`).
 - Expressions able to handle numbers, strings, lists, matrices - see [expression types](expression-types.md).
 - Handling of Amstrad CPC snapshots.
