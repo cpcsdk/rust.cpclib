@@ -245,18 +245,25 @@ impl AssemblyAnalyzer {
                     character: lsp_char + source_len as u32
                 }
             };
-            // `range` is the symbol's *full* extent - for a MACRO/FUNCTION,
-            // that's the whole body through its closing keyword, and for a
-            // global (non-dotted) label, its whole scope through the next
-            // global label. Editor features that key off a symbol's real
-            // scope (VS Code's Sticky Scroll pins whichever symbol's `range`
-            // contains the current scroll position) were badly broken by
-            // `range == selection_range` here: every multi-line symbol
-            // looked like a single-line one, so nothing ever correctly
-            // matched the cursor's real position within one. Local (dotted)
-            // labels and EQU/ASSIGN entries deliberately keep the narrow,
-            // single-line `range == selection_range` - they're not the kind
-            // of "container" Sticky Scroll should ever pin.
+            // `range` is the symbol's *full* extent - for a MACRO/FUNCTION/
+            // MODULE, that's the whole body through its closing keyword, and
+            // for a global (non-dotted) label, its whole scope through the
+            // next global label. Editor features that key off a symbol's
+            // real scope (VS Code's Sticky Scroll pins whichever symbol's
+            // `range` contains the current scroll position) were badly
+            // broken by `range == selection_range` here: every multi-line
+            // symbol looked like a single-line one, so nothing ever
+            // correctly matched the cursor's real position within one.
+            // Local (dotted) labels and EQU/ASSIGN entries deliberately
+            // keep the narrow, single-line `range == selection_range` -
+            // they're not the kind of "container" Sticky Scroll should ever
+            // pin. REPEAT/ITERATE/FOR loop bodies aren't tracked as outline
+            // symbols at all (they have no user-given name the way MACRO/
+            // FUNCTION/MODULE/global labels do, only an optional loop
+            // counter variable) - so unlike those four, they were never
+            // stuck with a *wrong* range; there's simply nothing there yet
+            // to be wrong. Adding them would be new outline scope, not a
+            // bug fix - not done here.
             let range = match category {
                 SymbolCategory::Macro => {
                     let end_line = super::token::macro_body_end_line(&text, lsp_line);
@@ -270,6 +277,16 @@ impl AssemblyAnalyzer {
                 },
                 SymbolCategory::Function => {
                     let end_line = super::token::function_body_end_line(&text, lsp_line);
+                    Range {
+                        start: selection_range.start,
+                        end: Position {
+                            line: end_line,
+                            character: 0
+                        }
+                    }
+                },
+                SymbolCategory::Module => {
+                    let end_line = super::token::module_body_end_line(&text, lsp_line);
                     Range {
                         start: selection_range.start,
                         end: Position {
@@ -560,6 +577,31 @@ mod tests {
         // 3 lines total (0, 1, 2) - `range.end.line` must never reach 3,
         // which the editor has no line at.
         assert_eq!(foo.range.end.line, 2, "{foo:?}");
+    }
+
+    /// MODULE gets the same real-range treatment as MACRO/FUNCTION (Sticky
+    /// Scroll needs to pin its declaration line the same way) - a real bug
+    /// found while checking whether this same `range == selection_range`
+    /// pattern also affected MODULE/REPEAT/ITERATE: MODULE did (it's a
+    /// tracked outline symbol, same as MACRO/FUNCTION, just missing the
+    /// range-widening fix); REPEAT/ITERATE don't (they aren't tracked as
+    /// outline symbols at all - see the module doc comment above the
+    /// `range` match for why that's not a bug to fix here).
+    #[test]
+    fn module_symbol_range_spans_the_whole_body_not_just_the_declaration_line() {
+        let text = "MODULE foo\n    nop\n    nop\nENDMODULE\n\nMODULE bar\n    ret\nENDMODULE\n";
+        let symbols = symbols_for(text);
+
+        let foo = find_symbol(&symbols, "foo").unwrap();
+        assert_eq!(foo.range.start.line, 0);
+        assert_eq!(foo.range.end.line, 4, "{foo:?}"); // just past "ENDMODULE"
+        assert_eq!(foo.selection_range.start.line, 0);
+        assert_eq!(foo.selection_range.end.line, 0);
+
+        // The *last* module in the file must also get a real range.
+        let bar = find_symbol(&symbols, "bar").unwrap();
+        assert_eq!(bar.range.start.line, 5);
+        assert_eq!(bar.range.end.line, 8, "{bar:?}");
     }
 
     /// FUNCTION gets the same real-range treatment as MACRO (Sticky Scroll

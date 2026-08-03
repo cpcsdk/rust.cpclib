@@ -84,6 +84,11 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.runTaskInTerminal",
+        "title": "Run bndbuild Task in Terminal",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.pickInkColor",
         "title": "Pick CPC Ink Color",
         "category": "CPClib"

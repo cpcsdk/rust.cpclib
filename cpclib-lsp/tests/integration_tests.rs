@@ -1420,7 +1420,7 @@ async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_c
     assert!(
         bnd_lenses
             .iter()
-            .any(|l| l.command.as_ref().unwrap().command == "cpclib.runTask")
+            .any(|l| l.command.as_ref().unwrap().command == "cpclib.runTaskInTerminal")
     );
 }
 

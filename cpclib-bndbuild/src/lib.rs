@@ -237,6 +237,13 @@ pub fn build_args_parser() -> clap::Command {
             .conflicts_with_all(["list", "init", "add"])
         )
         .arg(
+            Arg::new("only_task")
+            .long("only-task")
+            .value_name("RULE:INDEX")
+            .help("Run only task #INDEX (0-based) of rule RULE, bypassing dependency resolution, up-to-date checks, and every other task the rule declares - unlike --direct, the rule's own Jinja/automatic-variable context still applies, since the whole file is loaded normally first.")
+            .conflicts_with_all(["list", "init", "add", "direct", "watch"])
+        )
+        .arg(
             Arg::new("with_expansion")
             .action(ArgAction::SetTrue)
             .long("with_expansion")

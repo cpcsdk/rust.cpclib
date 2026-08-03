@@ -658,6 +658,42 @@ impl BndBuilder {
             .map(|p| p.as_path())
             .collect_vec()
     }
+
+    /// Runs *only* task `index` of rule `tgt` - bypassing dependency
+    /// resolution, up-to-date checks, and every other task the rule
+    /// declares (unlike a normal target build, only that one command
+    /// executes).
+    ///
+    /// This is the one, shared place that implements "run a single task
+    /// with full rule context" - both the `--only-task RULE:INDEX` CLI
+    /// flag (`app.rs`) and `cpclib-lsp`'s own per-task "▶ Run this command"
+    /// CodeLens go through this, rather than each re-deriving the same
+    /// rule/task lookup. Automatic variables (`$@`/`$<`) and Jinja
+    /// templating are *not* re-resolved here - both already happened when
+    /// `self` (the whole file) was loaded/deserialized, so `self.get_rule`
+    /// already returns a `Rule` whose `Task`s have real, final argument
+    /// values, safe to execute standalone (unlike `--direct`, which runs a
+    /// raw, unexpanded command string with none of that context).
+    pub fn execute_task<P: AsRef<Utf8Path>, E: crate::event::BndBuilderObserver + 'static>(
+        &self,
+        tgt: P,
+        index: usize,
+        observer: &Arc<E>
+    ) -> Result<(), BndBuilderError> {
+        let tgt = tgt.as_ref();
+        let rule = self
+            .get_rule(tgt)
+            .ok_or_else(|| BndBuilderError::AnyError(format!("no rule named '{tgt}'")))?;
+        let task = rule.commands().get(index).ok_or_else(|| {
+            BndBuilderError::AnyError(format!("rule '{tgt}' has no task #{}", index + 1))
+        })?;
+        crate::executor::execute(task, observer).map_err(|msg| {
+            BndBuilderError::ExecuteError {
+                fname: tgt.to_string(),
+                msg
+            }
+        })
+    }
 }
 
 impl BndBuilder {

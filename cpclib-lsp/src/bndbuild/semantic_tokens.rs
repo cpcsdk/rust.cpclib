@@ -283,10 +283,12 @@ impl BuildFileAnalyzer {
     /// target detection to `target_symbols` so that Jinja expansion, block
     /// scalars, and all key aliases are handled consistently.
     ///
-    /// The rule-level lens runs via `cpclib.runRuleInTerminal` (a real VS
-    /// Code Task/terminal, client-side only); per-task lenses still use the
-    /// LSP's own `cpclib.runTask` streaming path, since there is no CLI
-    /// equivalent for "run just task N of rule R".
+    /// Both the rule-level lens (`cpclib.runRuleInTerminal`) and the
+    /// per-task lens (`cpclib.runTaskInTerminal`) run via a real VS Code
+    /// Task/terminal, client-side only - `bndbuild --only-task RULE:INDEX`
+    /// (`cpclib_bndbuild::BndBuilder::execute_task`) gives "run just task N
+    /// of rule R" a real CLI equivalent now, with the same Jinja/automatic-
+    /// variable context a normal build gets.
     ///
     /// Per-task lenses assume the common authoring style where a rule's
     /// declaring key (`tgt:`/`targets:`/...) sits on the rule's own `- `
@@ -351,8 +353,10 @@ impl BuildFileAnalyzer {
                     // path, which VS Code's terminal+problemMatcher handles
                     // more reliably (clickable errors "for free"). This is a
                     // client-only command, never sent to the server - unlike
-                    // `cpclib.runRule`/`cpclib.runTask`, it is deliberately
-                    // *not* in `executeCommandProvider.commands`.
+                    // `cpclib.runRule`/`cpclib.runTask` (still used by the
+                    // embedded-bndbuild-in-.asm-block lenses below, which
+                    // have no on-disk file for a CLI to target), it is
+                    // deliberately *not* in `executeCommandProvider.commands`.
                     command: "cpclib.runRuleInTerminal".to_string(),
                     arguments: Some(vec![
                         serde_json::json!(first_name),
@@ -381,7 +385,16 @@ impl BuildFileAnalyzer {
                     range,
                     command: Some(Command {
                         title: "▶ Run this command".to_string(),
-                        command: "cpclib.runTask".to_string(),
+                        // As with the rule-level lens above: a real on-disk
+                        // `.bnd` file has a working CLI equivalent for "run
+                        // just task N of rule R" too now
+                        // (`bndbuild --only-task rule:N`, backed by
+                        // `cpclib_bndbuild::BndBuilder::execute_task`), so
+                        // this also runs via a real terminal instead of the
+                        // LSP's own `cpclib.runTask` streaming path. Client-
+                        // only command, deliberately not in
+                        // `executeCommandProvider.commands`.
+                        command: "cpclib.runTaskInTerminal".to_string(),
                         arguments: Some(vec![
                             serde_json::json!(first_name),
                             serde_json::json!(file_path),
@@ -521,7 +534,7 @@ mod tests {
         );
         let task_lenses: Vec<_> = lenses
             .iter()
-            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTask")
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTaskInTerminal")
             .collect();
         assert_eq!(task_lenses.len(), 2, "{lenses:?}");
         for (i, lens) in task_lenses.iter().enumerate() {
@@ -550,7 +563,7 @@ mod tests {
 
         let task_lenses: Vec<_> = lenses
             .iter()
-            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTask")
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTaskInTerminal")
             .collect();
         assert_eq!(task_lenses.len(), 1, "{lenses:?}");
         assert_eq!(task_lenses[0].range.start.line, 1);
@@ -581,7 +594,7 @@ mod tests {
 
         let task_lenses: Vec<_> = lenses
             .iter()
-            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTask")
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runTaskInTerminal")
             .collect();
         assert_eq!(
             task_lenses.len(),

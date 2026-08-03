@@ -499,6 +499,14 @@ pub(super) fn macro_body_end_line(text: &str, start_line: u32) -> u32 {
     block_end_line(text, start_line, &["MACRO"], &["ENDM", "ENDMACRO", "MEND"])
 }
 
+/// As [`block_end_line`], specialized for `MODULE`'s single opening keyword
+/// and its single closing keyword (`ENDMODULE` - confirmed the only one the
+/// real parser accepts, `cpclib-asm/src/parser/directives.rs`'s
+/// `parse_module`, unlike `FUNCTION`'s `FEND`/`ENDF` mix-up).
+pub(super) fn module_body_end_line(text: &str, start_line: u32) -> u32 {
+    block_end_line(text, start_line, &["MODULE"], &["ENDMODULE"])
+}
+
 /// The reverse of [`block_end_line`]: the line (0-based) of the *opening*
 /// keyword matching a closing keyword's own line at `end_line` - scans
 /// backward, tracking nesting depth the same way (a nested instance of the
@@ -543,6 +551,22 @@ const BLOCK_KEYWORD_PAIRS: &[(&[&str], &[&str])] = &[
         &["ENDIF"]
     ),
     (&["MACRO"], &["ENDM", "ENDMACRO", "MEND"]),
+    // KNOWN BUG, deliberately not fixed: `FEND` doesn't actually close
+    // `FUNCTION` in the real parser (`cpclib-asm/src/parser/directives.rs`'s
+    // `parse_function` only accepts `ENDFUNCTION`/`ENDF`) - it closes `FOR`
+    // instead (see that pair below, which already correctly claims `ENDF`).
+    // `function_body_end_line` (a separate, standalone helper - not this
+    // table) was already fixed to use the correct `ENDFUNCTION`/`ENDF` pair
+    // for the Sticky Scroll range fix. This table backs a *different*
+    // feature (ctrl+click / inlay-hint navigation to a closing directive's
+    // opener, `matching_opening_line`) and is left wrong on purpose: fixing
+    // it naively (swapping `FEND` for `ENDF`) would create a *new*
+    // regression, since `ENDF` is genuinely ambiguous between `FUNCTION` and
+    // `FOR` - `FOR`'s own pair already correctly claims it, and this table's
+    // first-match-by-array-order lookup means FUNCTION coming first would
+    // steal it, breaking the currently-correct FOR/`ENDF` case. A real fix
+    // needs simultaneous depth-tracking of both keyword sets, not a wider
+    // close-word list here - not attempted.
     (&["FUNCTION"], &["ENDFUNCTION", "FEND"]),
     (&["REPEAT", "REPT"], &["ENDR", "ENDREP", "ENDREPEAT"]),
     (

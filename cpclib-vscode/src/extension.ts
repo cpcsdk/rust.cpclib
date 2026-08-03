@@ -201,6 +201,10 @@ export function activate(context: ExtensionContext) {
         vscode.commands.registerCommand('cpclib.runRuleInTerminal', runRuleInTerminal),
     );
 
+    context.subscriptions.push(
+        vscode.commands.registerCommand('cpclib.runTaskInTerminal', runTaskInTerminal),
+    );
+
     // Keep the `cpclib.cursorOnInkColor` context key (used by the
     // "Pick CPC Ink Color" context-menu entry's `when` clause) in sync with
     // the cursor, so the menu entry only shows up where it'd actually do
@@ -571,14 +575,63 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
 // `BndbuildTaskProvider`, via a real VS Code Task/terminal, so build errors
 // get clickable Problems-panel entries through the already-working `$basm`
 // problemMatcher - the LSP's own `cpclib.runRule` streaming path proved
-// unreliable at making its own diagnostics clickable. The per-command
-// "▶ Run this command" CodeLens keeps using `cpclib.runRule`/`cpclib.runTask`
-// (the LSP path), since there is no CLI equivalent for "run just task N of
-// rule R" - only a real rule name maps to a real `bndbuild` invocation.
+// unreliable at making its own diagnostics clickable.
 async function runRuleInTerminal(target: string, filePath: string): Promise<void> {
     const config = workspace.getConfiguration('cpclib-lsp');
     const bndbuildCommand = bndbuildCommandPrefix(config);
     const task = buildBndbuildTask(target, filePath, bndbuildCommand, target);
+    await vscode.tasks.executeTask(task);
+}
+
+/// Builds the `vscode.Task` for `cpclib.runTaskInTerminal` - `--only-task
+/// RULE:INDEX` (`cpclib-bndbuild`'s `BndBuilder::execute_task`) runs just
+/// that one task, with the *same* Jinja/automatic-variable context a normal
+/// rule build gets (unlike `--direct`, which runs a raw, unexpanded command
+/// string - see that method's own doc comment for why that distinction
+/// matters), and bypasses dependency resolution/up-to-date checks entirely,
+/// so it runs even when the rule's target already exists.
+function buildBndbuildOnlyTaskTask(
+    rule: string,
+    filePath: string,
+    taskIndex: number,
+    bndbuildCommand: string,
+    taskName: string,
+): vscode.Task {
+    const workDir  = path.dirname(filePath);
+    const fileName = path.basename(filePath);
+    const def: vscode.TaskDefinition = {
+        type: BndbuildTaskProvider.taskType,
+        target: rule,
+        file: filePath,
+    };
+    const task = new vscode.Task(
+        def,
+        vscode.TaskScope.Workspace,
+        taskName,
+        'bndbuild',
+        new vscode.ShellExecution(
+            `${bndbuildCommand} -f "${fileName}" --only-task "${rule}:${taskIndex}"`,
+            { cwd: workDir },
+        ),
+        '$basm',
+    );
+    task.group = vscode.TaskGroup.Build;
+    return task;
+}
+
+// `cpclib.runTaskInTerminal(rule, filePath, taskIndex)`: the per-command
+// "▶ Run this command" CodeLens's terminal-based counterpart to
+// `cpclib.runRuleInTerminal`, for a rule in a real on-disk .bnd file - uses
+// the very same mechanism (a real Task/terminal, `$basm` problemMatcher) as
+// the rule-level runner, per the same reasoning: the LSP's own
+// `cpclib.runTask` streaming path doesn't surface clickable errors as
+// reliably as a real terminal does. The embedded-bndbuild-in-.asm-block
+// CodeLens (no on-disk .bnd file for a CLI invocation to target) still uses
+// the LSP path - there's no terminal equivalent for that case.
+async function runTaskInTerminal(rule: string, filePath: string, taskIndex: number): Promise<void> {
+    const config = workspace.getConfiguration('cpclib-lsp');
+    const bndbuildCommand = bndbuildCommandPrefix(config);
+    const task = buildBndbuildOnlyTaskTask(rule, filePath, taskIndex, bndbuildCommand, `${rule} #${taskIndex + 1}`);
     await vscode.tasks.executeTask(task);
 }
 

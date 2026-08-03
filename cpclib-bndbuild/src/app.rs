@@ -107,6 +107,14 @@ pub enum BndBuilderCommandInner {
         current_step: usize,
         builder: BndBuilder
     },
+    /// Run only one task of one rule (`--only-task RULE:INDEX`) - see
+    /// `BndBuilder::execute_task`'s own doc comment for why this exists
+    /// alongside `Direct`, not instead of it.
+    OnlyTask {
+        rule: String,
+        index: usize,
+        builder: BndBuilder
+    },
     /// Generate the graphviz file on stdout
     /// Fields: builder, output_path, graph_details, include_dependencies, hide_tasks, source_file
     Dot(
@@ -246,6 +254,14 @@ impl BndBuilderCommand {
             },
             BndBuilderCommandInner::List(builder) => {
                 Self::execute_list(builder, observers);
+                Ok(None)
+            },
+            BndBuilderCommandInner::OnlyTask {
+                rule,
+                index,
+                builder
+            } => {
+                builder.execute_task(&rule, index, &observers)?;
                 Ok(None)
             },
             BndBuilderCommandInner::Build {
@@ -1144,6 +1160,23 @@ impl BndBuilderApp {
             // Print list if asked
             else if matches.get_flag("list") {
                 return Ok(BndBuilderCommandInner::List(builder));
+            }
+            else if let Some(only_task) = matches.get_one::<String>("only_task") {
+                let (rule, index_str) = only_task.rsplit_once(':').ok_or_else(|| {
+                    BndBuilderError::AnyError(format!(
+                        "--only-task expects RULE:INDEX (e.g. out.bin:0), got '{only_task}'"
+                    ))
+                })?;
+                let index: usize = index_str.parse().map_err(|_| {
+                    BndBuilderError::AnyError(format!(
+                        "--only-task's INDEX must be a non-negative integer, got '{index_str}'"
+                    ))
+                })?;
+                return Ok(BndBuilderCommandInner::OnlyTask {
+                    rule: rule.to_owned(),
+                    index,
+                    builder
+                });
             }
 
             if matches.contains_id("dot") {

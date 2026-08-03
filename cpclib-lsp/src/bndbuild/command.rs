@@ -348,36 +348,18 @@ impl BuildFileAnalyzer {
             }
         };
 
-        let Some(rule_obj) = builder.get_rule(rule)
-        else {
-            return failure_outcome(
-                document,
-                rule,
-                rule,
-                format!("no rule named '{rule}'"),
-                None,
-                ""
-            );
-        };
-        let Some(task) = rule_obj.commands().get(task_index)
-        else {
-            return failure_outcome(
-                document,
-                rule,
-                rule,
-                format!("rule '{rule}' has no task #{}", task_index + 1),
-                None,
-                ""
-            );
-        };
-
         let tx = output.unwrap_or_else(|| {
             let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
             tx
         });
         let observer = Arc::new(StreamingObserver::new(tx));
 
-        match task.execute(&observer) {
+        // Shared with the `bndbuild --only-task RULE:INDEX` CLI flag
+        // (`cpclib_bndbuild::builder::BndBuilder::execute_task`'s own doc
+        // comment) - one canonical "run a single task with full rule
+        // context" implementation, not two independently-maintained copies
+        // of the same rule/task lookup.
+        match builder.execute_task(rule, task_index, &observer) {
             Ok(()) => {
                 RuleRunOutcome {
                     message: format!(
@@ -389,16 +371,10 @@ impl BuildFileAnalyzer {
                     success: true
                 }
             },
-            Err(msg) => {
-                failure_outcome(
-                    document,
-                    rule,
-                    rule,
-                    strip_ansi(&msg),
-                    Some(task_index),
-                    &strip_ansi(&msg)
-                )
-            },
+            Err(e) => {
+                let msg = strip_ansi(&e.to_string());
+                failure_outcome(document, rule, rule, msg.clone(), Some(task_index), &msg)
+            }
         }
     }
 
