@@ -5827,6 +5827,7 @@ impl Env {
             Mnemonic::Jr | Mnemonic::Jp | Mnemonic::Call => {
                 self.assemble_call_jr_or_jp(mnemonic, arg1.as_ref(), arg2.as_ref().unwrap())
             },
+            Mnemonic::Jq => self.assemble_jq(arg1.as_ref(), arg2.as_ref().unwrap()),
             Mnemonic::Pop => self.assemble_pop(arg1.as_ref().unwrap()),
             Mnemonic::Push => self.assemble_push(arg1.as_ref().unwrap()),
             Mnemonic::Bit | Mnemonic::Res | Mnemonic::Set => {
@@ -7013,6 +7014,105 @@ impl Env {
                 line: line!(),
                 msg: format!("{mne}: parameter {arg2:?} not treated")
             }));
+        }
+
+        Ok(bytes)
+    }
+
+    /// Assemble the `JQ` fake instruction: try a `JR` encoding first, and
+    /// fall back to a `JP` encoding only once the target is confirmed too
+    /// far for a relative jump - no further reachability analysis. On the
+    /// first pass, an unresolved forward reference gets the same optimistic
+    /// 0-relative placeholder a real `JR` already gets; it's refined once
+    /// addresses are known on a later pass.
+    pub fn assemble_jq<D: DataAccessElem>(
+        &mut self,
+        arg1: Option<&D>,
+        arg2: &D
+    ) -> Result<Bytes, Box<AssemblerError>>
+    where
+        <D as cpclib_tokens::DataAccessElem>::Expr: ExprEvaluationExt + ExprElement
+    {
+        let mut bytes = Bytes::new();
+
+        let flag_code = if let Some(arg1) = arg1 {
+            match arg1.get_flag_test() {
+                Some(test) => Some(flag_test_to_code(test)),
+                _ => {
+                    return Err(Box::new(AssemblerError::InvalidArgument {
+                        msg: "JQ: wrong flag argument".to_owned()
+                    }));
+                }
+            }
+        }
+        else {
+            None
+        };
+
+        if !arg2.is_expression() {
+            return Err(Box::new(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: format!("JQ: parameter {arg2:?} not treated")
+            }));
+        }
+
+        let e = arg2.get_expression().unwrap();
+        let address = self.resolve_expr_may_fail_in_first_pass(e)?.int()?;
+
+        // A forward-referenced target's resolved value lags one pass behind
+        // this instruction's own size decision (the symbol table only holds
+        // the value computed the last time the target's definition site was
+        // actually visited) - and since JQ's own size depends on that value,
+        // a forward JQ can take an extra pass to settle. Keep asking for one
+        // more pass until the value we read stops changing from one pass to
+        // the next. Once stable, `repr` must still be re-recorded every pass
+        // (not just the first time it's seen) so a later pass - possibly
+        // triggered for a reason unrelated to this JQ - doesn't see an empty
+        // history and spuriously conclude the value is "new" again, asking
+        // for pointless extra passes forever.
+        if !self.pass.is_first_pass() {
+            let pc = self.symbols().current_address().unwrap_or(0);
+            let repr = format!("JQ@{pc:x}: target=0x{address:x}");
+            if !self.previous_pass_discarded_errors.contains(&repr) {
+                *self.request_additional_pass.write().unwrap() = true;
+            }
+            self.current_pass_discarded_errors.insert(repr);
+        }
+
+        let relative = if e.is_relative() {
+            Some(address as u8)
+        }
+        else {
+            match absolute_to_relative(address, 2, self.symbols()) {
+                Ok(relative) => Some(relative),
+                // Confirmed too far for a relative jump - true regardless of
+                // pass, including on the first pass for a backward
+                // reference (already fully resolved, no placeholder
+                // involved). Checked before the first-pass fallback below,
+                // which is only for a target that isn't resolvable *at all*
+                // yet.
+                Err(err) if matches!(*err, AssemblerError::InvalidArgument { .. }) => None,
+                Err(_) if self.pass.is_first_pass() => Some(0),
+                Err(err) => return Err(err)
+            }
+        };
+
+        match relative {
+            Some(relative) => {
+                add_byte(
+                    &mut bytes,
+                    flag_code.map_or(0b0001_1000, |flag| 0b0010_0000 | (flag << 3))
+                );
+                add_byte(&mut bytes, relative);
+            },
+            None => {
+                add_byte(
+                    &mut bytes,
+                    flag_code.map_or(0xC3, |flag| 0b1100_0010 | (flag << 3))
+                );
+                add_word(&mut bytes, address as u16);
+            }
         }
 
         Ok(bytes)

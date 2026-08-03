@@ -80,6 +80,20 @@ To ease coding, several fake instructions are allowed by `BASM`. It replaces the
 
 Here is a subset of the possibilities.
 
+### JQ
+
+`JQ` (optionally with a flag test, e.g. `JQ NZ, target`) is a fake jump: `BASM` first tries to
+assemble it as a `JR` (2 bytes); if the target turns out to be too far away for a relative jump
+(more than 127 bytes forward or 128 bytes backward), it falls back to a `JP` (3 bytes) instead.
+There is no reachability analysis beyond that simple try/fallback - use `JR`/`JP` directly if you
+need a guaranteed encoding.
+
+```z80
+    jq near_or_far_target
+near_or_far_target:
+    nop
+```
+
 !!! failure Inacurate documentation
 
     Most accepted fake instructions are missing from the listing

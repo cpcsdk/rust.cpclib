@@ -12,8 +12,8 @@ use cpclib_tokens::{
 use either::Either;
 
 use super::list::{
-    list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_from_list,
-    string_new, string_push
+    list_argsort, list_get, list_len, list_push, list_sort, list_sublist, string_format,
+    string_from_list, string_new, string_push
 };
 use super::matrix::{
     matrix_col, matrix_get, matrix_height, matrix_row, matrix_set_col, matrix_set_row, matrix_width
@@ -240,6 +240,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
         "string_concat": Function::HardCoded(HardCodedFunction::StringConcat),
         "string_from_list": Function::HardCoded(HardCodedFunction::StringFromList),
+        "string_format": Function::HardCoded(HardCodedFunction::StringFormat),
         "string_len": Function::HardCoded(HardCodedFunction::ListLen),
         "string_get": Function::HardCoded(HardCodedFunction::ListGet),
 
@@ -356,6 +357,7 @@ pub enum HardCodedFunction {
     StringPush,
     StringConcat,
     StringFromList,
+    StringFormat,
 
     Load,
     Assemble,
@@ -553,6 +555,8 @@ impl HardCodedFunction {
             HardCodedFunction::StringPush => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::StringConcat => ExpectedNbArgs::AtLeast(2),
             HardCodedFunction::StringFromList => ExpectedNbArgs::Fixed(1),
+            // The template alone (no placeholders) is a legitimate call.
+            HardCodedFunction::StringFormat => ExpectedNbArgs::AtLeast(1),
             HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::Assemble => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::BinaryTransform => ExpectedNbArgs::Fixed(2),
@@ -702,6 +706,7 @@ impl HardCodedFunction {
             },
             HardCodedFunction::StringPush => string_push(params[0].clone(), params[1].clone()),
             HardCodedFunction::StringFromList => string_from_list(params[0].clone()),
+            HardCodedFunction::StringFormat => string_format(params),
             HardCodedFunction::Assemble => assemble(params[0].clone(), env),
             HardCodedFunction::StringConcat => {
                 let mut base = params[0].clone();

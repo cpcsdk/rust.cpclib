@@ -78,11 +78,22 @@ pub fn disassemble_with_potential_argument<'stream>(
 
     // get the first argument if any
     let (representation, bytes) = if representation.contains("nnnn") {
+        if bytes.len() < 2 {
+            return Err(format!(
+                "Not enough bytes remaining to disassemble '{representation}' - needs 2 more bytes, {} available",
+                bytes.len()
+            ));
+        }
         let word = bytes[0] as u16 + 256 * (bytes[1] as u16);
         let representation = representation.replacen("nnnn", &format!("{word:#03x}"), 1);
         (representation, &bytes[2..])
     }
     else if representation.contains("nn") {
+        if bytes.is_empty() {
+            return Err(format!(
+                "Not enough bytes remaining to disassemble '{representation}' - needs 1 more byte, 0 available"
+            ));
+        }
         let byte = bytes[0] as i8;
         let representation =
             if representation.starts_with("DJNZ") || representation.starts_with("JR") {
@@ -109,6 +120,11 @@ pub fn disassemble_with_potential_argument<'stream>(
 
     // get the second argument if any
     let (representation, bytes) = if representation.contains("nn") {
+        if bytes.is_empty() {
+            return Err(format!(
+                "Not enough bytes remaining to disassemble '{representation}' - needs 1 more byte, 0 available"
+            ));
+        }
         let byte = bytes[0];
         let representation = representation.replacen("nn", &format!("{byte:#01x}"), 1);
         (representation, &bytes[1..])

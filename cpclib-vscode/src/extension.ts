@@ -160,6 +160,13 @@ export function activate(context: ExtensionContext) {
             // embedded-bndbuild-in-.asm blocks. Missing `cpclib.runTask`
             // here used to be a real bug: its output *was* being logged,
             // just never shown, so it looked like nothing happened at all.
+            // An embedded rule run via `Ctrl+Shift+B`/`EmbeddedRulePseudoterminal`
+            // also goes through `cpclib.runRule` under the hood, so this
+            // still fires then too (`show(true)` preserves focus, so it
+            // doesn't steal it away from the task terminal) - the same
+            // output is now visible in *both* places at once
+            // (`installLogMessageMirror` mirrors it into the terminal live),
+            // which is intentional redundancy, not a bug.
             executeCommand: (command, args, next) => {
                 if (command === 'cpclib.runRule' || command === 'cpclib.runTask') {
                     client.outputChannel.show(true);
@@ -206,6 +213,7 @@ export function activate(context: ExtensionContext) {
 
     client.start().then(() => {
         window.showInformationMessage('CPClib LSP server started.');
+        installLogMessageMirror(client);
     }).catch((err: Error) => {
         window.showErrorMessage(`CPClib LSP failed to start: ${err.message}. Check cpclib-lsp.serverPath setting.`);
     });
@@ -527,17 +535,69 @@ function buildBndbuildTask(
     return task;
 }
 
-/// A minimal `vscode.Pseudoterminal` wrapping the LSP's own `cpclib.runRule`
-/// command - the execution mechanism for a `#!bndbuild`-embedded rule in a
-/// `.asm` file, which (unlike a real `.bnd` file) has no on-disk YAML file a
+// Every currently-open `EmbeddedRulePseudoterminal`'s writer, so
+// `installLogMessageMirror`'s single `window/logMessage` handler can push
+// each line into whichever embedded-rule task terminal(s) are running right
+// now, live, as `cpclib.runRule` streams them - not just a "check the
+// output channel instead" pointer message. A `Set` rather than a single
+// slot: nothing stops two embedded-rule tasks from running concurrently
+// (each click starts its own), and a message arriving while more than one
+// is active has no server-side tag saying which task it belongs to, so it
+// goes to all of them - a rare, cosmetic-only interleaving, not a
+// correctness issue (the real, authoritative output is still also always in
+// the "CPClib LSP" output channel).
+const activeEmbeddedTaskWriters = new Set<(text: string) => void>();
+
+/// Registers the *one* `window/logMessage` handler this extension ever
+/// installs beyond vscode-languageclient's own built-in one - and
+/// necessarily *replaces* it: `LanguageClient.onNotification`/the
+/// underlying `vscode-jsonrpc` connection only support one handler per
+/// notification method (a plain `Map.set` keyed by method name in both
+/// layers - confirmed directly in `vscode-languageclient/lib/common/client.js`
+/// and `vscode-jsonrpc/lib/common/connection.js`), so registering a second,
+/// *additional* listener isn't possible - it would just silently steal the
+/// slot from whichever registers first.
+///
+/// This handler therefore reimplements vscode-languageclient's own default
+/// `window/logMessage` handling *exactly* (dispatching to `client.error`/
+/// `warn`/`info`/`debug` for those message types, `outputChannel.appendLine`
+/// directly for anything else - which is the path `MessageType.Log` (4)
+/// takes, what the server actually uses for streamed build stdout/stderr;
+/// see `vscode-languageclient/lib/common/client.js`'s own `doStart` for the
+/// original this must stay byte-for-byte in sync with) so nothing regresses
+/// for any other feature that relies on server log messages reaching the
+/// output channel - then additionally mirrors the same line into every
+/// currently-active embedded-rule task terminal.
+///
+/// Called from `client.start().then(...)`, not synchronously in `activate()`:
+/// vscode-languageclient installs its *own* built-in handler directly on the
+/// connection during `doStart()`, so registering ours only after `start()`
+/// resolves guarantees the connection already exists and our call is the
+/// one that ends up owning the method's single handler slot.
+function installLogMessageMirror(client: LanguageClient): void {
+    client.onNotification('window/logMessage', (message: { type: number; message: string }) => {
+        switch (message.type) {
+            case 1: client.error(message.message, undefined, false); break;   // MessageType.Error
+            case 2: client.warn(message.message, undefined, false); break;    // MessageType.Warning
+            case 3: client.info(message.message, undefined, false); break;    // MessageType.Info
+            case 5: client.debug(message.message, undefined, false); break;   // MessageType.Debug
+            default: client.outputChannel.appendLine(message.message);        // MessageType.Log (4), and anything else
+        }
+        for (const write of activeEmbeddedTaskWriters) {
+            write(message.message + '\r\n');
+        }
+    });
+}
+
+/// A `vscode.Pseudoterminal` wrapping the LSP's own `cpclib.runRule` command
+/// - the execution mechanism for a `#!bndbuild`-embedded rule in a `.asm`
+/// file, which (unlike a real `.bnd` file) has no on-disk YAML file a
 /// `ShellExecution` could target, so it can't become a real terminal Task
-/// the way `buildBndbuildTask`'s tasks are. This lets an embedded rule still
-/// show up as a normal-looking entry in the `Ctrl+Shift+B` picker; running
-/// it opens a near-empty task terminal (this class writes only a pointer
-/// message) while the *real* build output streams to the "CPClib LSP"
-/// output channel as usual (`cpclib.runRule`'s own existing behavior,
-/// unchanged - see the `executeCommand` middleware in `activate()`, which
-/// already reveals that channel for this exact command).
+/// the way `buildBndbuildTask`'s tasks are. While `cpclib.runRule` runs,
+/// this terminal receives a live mirror of the same build output the
+/// "CPClib LSP" output channel gets (via `installLogMessageMirror`), so an
+/// embedded rule's task terminal behaves like a real one rather than a bare
+/// "see elsewhere" pointer.
 class EmbeddedRulePseudoterminal implements vscode.Pseudoterminal {
     private readonly writeEmitter = new vscode.EventEmitter<string>();
     private readonly closeEmitter = new vscode.EventEmitter<number>();
@@ -550,16 +610,17 @@ class EmbeddedRulePseudoterminal implements vscode.Pseudoterminal {
     ) {}
 
     async open(): Promise<void> {
-        this.writeEmitter.fire(
-            `Running embedded bndbuild rule '${this.rule}' from ${this.hostFilePath}\r\n` +
-            'See the "CPClib LSP" output channel for build output.\r\n',
-        );
+        const write = (text: string) => this.writeEmitter.fire(text);
+        activeEmbeddedTaskWriters.add(write);
+        this.writeEmitter.fire(`Running embedded bndbuild rule '${this.rule}' from ${this.hostFilePath}\r\n`);
         try {
             await vscode.commands.executeCommand('cpclib.runRule', this.rule, this.hostFilePath);
             this.closeEmitter.fire(0);
         } catch (err) {
             this.writeEmitter.fire(`Failed to run: ${err}\r\n`);
             this.closeEmitter.fire(1);
+        } finally {
+            activeEmbeddedTaskWriters.delete(write);
         }
     }
 

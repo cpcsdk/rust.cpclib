@@ -60,6 +60,23 @@ This page documents all built-in functions available in basm expressions.
 - **`string_push(string, char_or_string)`** - Append character or string
 - **`string_concat(s1, s2, ...)`** - Concatenate strings (variadic)
 - **`string_from_list(list)`** - Convert list of integers to string
+- **`string_format(template, arg0, arg1, ...)`** - Rust/Python-`str.format`-style positional
+  substitution: `{0}`, `{1}`, ... in `template` are replaced by `arg0`, `arg1`, ... (0-based); use
+  `{{`/`}}` for a literal `{`/`}`. A placeholder can be reused, and an argument that's itself a
+  string is substituted verbatim (no added quotes). A placeholder index with no matching argument,
+  or malformed `{...}` content, is an assembling error.
+
+  A placeholder can also carry a width/base format spec after a `:`, e.g. `{0:hex4}`, reusing the
+  same `hex`/`hex2`/`hex4`/`hex8`/`bin`/`bin8`/`bin16`/`bin32`/`int` specs the `PRINT` statement's
+  `{hex4}`-style interpolation already supports. The argument must resolve to an integer, or it's an
+  assembling error.
+
+  ```asm
+  MSG equ string_format("Score: {0}/{1}", 10, 100)          ; "Score: 10/100"
+  ADDR equ string_format("Address: {0:hex4}", 0xAB)          ; "Address: 0x00ab"
+  BOTH equ string_format("{0:int} = {0:hex2}", 10)           ; "10 = 0x0a"
+  ```
+
 - **`string_len(string)`** - Length of string (same as `list_len`)
 
 ## Pixels

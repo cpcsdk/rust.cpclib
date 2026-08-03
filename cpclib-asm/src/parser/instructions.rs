@@ -1063,6 +1063,7 @@ pub fn parse_call_jp_or_jr(
                 Mnemonic::Jp => StrContext::Label("JP: wrong parameter"),
                 Mnemonic::Jr => StrContext::Label("JR: wrong parameter"),
                 Mnemonic::Call => StrContext::Label("CALL: wrong parameter"),
+                Mnemonic::Jq => StrContext::Label("JQ: wrong parameter"),
                 _ => unreachable!()
             })
         )
@@ -1081,11 +1082,31 @@ pub fn parse_call_jp_or_jr(
 
         let flag_test = flag_test.map(|(f, span)| LocatedDataAccess::FlagTest(f, span.into()));
 
-        Ok(LocatedTokenInner::new_opcode(
+        let token = LocatedTokenInner::new_opcode(
             call_jp_or_jr,
             flag_test,
             Some(dst)
-        ))
+        );
+
+        // JQ is a fake instruction (JR if the target is in range, JP
+        // otherwise) - flag it the same way every other fake instruction is
+        // flagged, so LSP features keyed off `is_fake_instruction()` see it
+        // too. JP/JR/CALL themselves are real instructions and stay
+        // unwrapped.
+        let token = if call_jp_or_jr.is_jq() {
+            let disabled = input.state.options().disabled_warning_categories;
+            if !disabled.contains(WarningCategory::FakeInstruction) {
+                LocatedTokenInner::WarningWrapper(Box::new(token), FAKE_INSTRUCTION_WARNING.into())
+            }
+            else {
+                token
+            }
+        }
+        else {
+            token
+        };
+
+        Ok(token)
     }
 }
 

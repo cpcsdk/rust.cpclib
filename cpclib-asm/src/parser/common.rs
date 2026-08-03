@@ -157,6 +157,7 @@ pub fn parse_token2(input: &mut InnerZ80Span) -> ModalResult<LocatedToken, Z80Pa
         h if hashed_choice!(h, word, b"IM") => parse_im.parse_next(input),
 
         h if hashed_choice!(h, word, b"JP") => parse_call_jp_or_jr(Mnemonic::Jp).parse_next(input),
+        h if hashed_choice!(h, word, b"JQ") => parse_call_jp_or_jr(Mnemonic::Jq).parse_next(input),
         h if hashed_choice!(h, word, b"JR") => parse_call_jp_or_jr(Mnemonic::Jr).parse_next(input),
 
         h if hashed_choice!(h, word, b"OR") => parse_logical_operator(Mnemonic::Or).parse_next(input),

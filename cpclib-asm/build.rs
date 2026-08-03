@@ -218,7 +218,7 @@ const REGISTERS: &[&[u8]] = &[b"AF", b"HL", b"DE", b"BC", b"IX", b"IY", b"IXL", 
 const INSTRUCTIONS: &[&[u8]] = &[
     b"ADC", b"ADD", b"AND", b"BIT", b"CALL", b"CCF", b"CP", b"CPD", b"CPDR", b"CPI", b"CPIR",
     b"CPL", b"DAA", b"DEC", b"DI", b"DJNZ", b"EI", b"EX", b"EXA", b"EXX", b"HALT", b"IM", b"IN",
-    b"INC", b"IND", b"INDR", b"INI", b"INIR", b"JP", b"JR", b"LD", b"LDD", b"LDDR", b"LDI",
+    b"INC", b"IND", b"INDR", b"INI", b"INIR", b"JP", b"JQ", b"JR", b"LD", b"LDD", b"LDDR", b"LDI",
     b"LDIR", b"NEG", b"NOP", b"OR", b"OTDR", b"OTIR", b"OUT", b"OUTD", b"OUTI", b"POP", b"PUSH",
     b"RES", b"RET", b"RETI", b"RETN", b"RL", b"RLA", b"RLC", b"RLCA", b"RLD", b"RR", b"RRA",
     b"RRC", b"RRCA", b"RRD", b"RST", b"SBC", b"SCF", b"SET", b"SLA", b"SLL", b"SRA", b"SRL",

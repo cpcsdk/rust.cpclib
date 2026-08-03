@@ -46,6 +46,11 @@
 	JR C,$+1
 	JR NC,$+1
 
+	JR near_target
+near_target:
+	NOP
+	JR C,near_target
+
 
 	
 

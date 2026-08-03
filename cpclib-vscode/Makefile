@@ -12,9 +12,11 @@
 # Variables
 # ============================================================================
 
-# Project root (one level up from cpclib-vscode)
-PROJECT_ROOT := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-WORKSPACE_ROOT := $(realpath $(PROJECT_ROOT)/..)
+# Project root (directory containing this Makefile)
+# Use Make's built-in functions instead of shell commands for cross-platform compatibility
+MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+PROJECT_ROOT := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
+WORKSPACE_ROOT := $(patsubst %/,%,$(dir $(PROJECT_ROOT)))
 
 # Extension directories
 BIN_DIR := $(PROJECT_ROOT)/bin
@@ -43,16 +45,31 @@ NPM_CI := $(NPM) ci
 NPM_COMPILE := $(NPM) run compile
 VSCE := npx @vscode/vsce
 
-# Detect current OS
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Linux)
-    DETECTED_OS := linux
-endif
-ifeq ($(UNAME_S),Darwin)
-    DETECTED_OS := macosx
-endif
+# Detect current OS and set platform-specific commands
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := windows
+    # Don't override SHELL - let Make use its default (usually sh from Git/MinGW)
+    PATHSEP := /
+    # Use Unix-style commands since GNU Make on Windows usually has them
+    MKDIR := mkdir -p
+    RM := rm -rf
+    RM_FILE := rm -f
+    COPY := cp
+    NULL_DEVICE := /dev/null
+else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+        DETECTED_OS := linux
+    endif
+    ifeq ($(UNAME_S),Darwin)
+        DETECTED_OS := macosx
+    endif
+    MKDIR := mkdir -p
+    RM := rm -rf
+    RM_FILE := rm -f
+    COPY := cp
+    PATHSEP := /
+    NULL_DEVICE := /dev/null
 endif
 
 # ============================================================================
@@ -62,25 +79,23 @@ endif
 # Function to build LSP for a specific platform
 # Args: $(1) = target triple, $(2) = binary name, $(3) = bin output dir
 define build_lsp
-	@echo "===> Building cpclib-lsp for target $(1)..."
+	@echo ===> Building cpclib-lsp for target $(1)...
 	cd $(WORKSPACE_ROOT) && $(CARGO_BUILD) --target $(1)
-	@echo "===> Creating directory $(3)..."
-	mkdir -p $(3)
-	@echo "===> Copying binary to $(3)/$(2)..."
-	cp $(WORKSPACE_ROOT)/target/$(1)/release/$(2) $(3)/$(2)
-	@if [ "$(2)" != "$(WINDOWS_BINARY)" ]; then \
-		chmod +x $(3)/$(2); \
-	fi
-	@echo "===> cpclib-lsp for $(1) built successfully"
+	@echo ===> Creating directory $(3)...
+	$(MKDIR) $(3)
+	@echo ===> Copying binary to $(3)/$(2)...
+	$(COPY) $(WORKSPACE_ROOT)/target/$(1)/release/$(2) $(3)/$(2)
+	@if [ "$(2)" != "$(WINDOWS_BINARY)" ]; then chmod +x $(3)/$(2); fi
+	@echo ===> cpclib-lsp for $(1) built successfully
 endef
 
 # Function to prepare extension (install deps + compile)
 define prepare_extension
-	@echo "===> Installing npm dependencies..."
+	@echo ===> Installing npm dependencies...
 	cd $(PROJECT_ROOT) && $(NPM_CI)
-	@echo "===> Compiling TypeScript..."
+	@echo ===> Compiling TypeScript...
 	cd $(PROJECT_ROOT) && $(NPM_COMPILE)
-	@echo "===> Extension prepared successfully"
+	@echo ===> Extension prepared successfully
 endef
 
 # ============================================================================
@@ -89,18 +104,16 @@ endef
 
 .PHONY: help
 help:
-	@echo "CPClib VSCode Extension Build System"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  make build           - Auto-detect OS and build for current platform"
-	@echo "  make build-linux     - Build extension with Linux LSP binary"
-	@echo "  make build-windows   - Build extension with Windows LSP binary"
-	@echo "  make build-macosx    - Build extension with macOS LSP binary"
-	@echo "  make package-all     - Build LSP for all platforms and package extension"
-	@echo "  make clean           - Remove build artifacts"
-	@echo "  make clean-bins      - Remove only platform binaries"
-	@echo ""
-	@echo "Detected OS: $(DETECTED_OS)"
+	@echo CPClib VSCode Extension Build System
+	@echo Available targets:
+	@echo   make build           - Auto-detect OS and build for current platform
+	@echo   make build-linux     - Build extension with Linux LSP binary
+	@echo   make build-windows   - Build extension with Windows LSP binary
+	@echo   make build-macosx    - Build extension with macOS LSP binary
+	@echo   make package-all     - Build LSP for all platforms and package extension
+	@echo   make clean           - Remove build artifacts
+	@echo   make clean-bins      - Remove only platform binaries
+	@echo Detected OS: $(DETECTED_OS)
 
 .PHONY: build
 build: build-$(DETECTED_OS)
@@ -113,28 +126,25 @@ build: build-$(DETECTED_OS)
 build-linux: clean-bins
 	$(call build_lsp,$(LINUX_TARGET),$(LINUX_BINARY),$(LINUX_BIN_DIR))
 	$(call prepare_extension)
-	@echo ""
-	@echo "✓ Linux extension build complete!"
-	@echo "  Binary location: $(LINUX_BIN_DIR)/$(LINUX_BINARY)"
-	@echo "  To package: cd $(PROJECT_ROOT) && $(VSCE) package"
+	@echo [OK] Linux extension build complete!
+	@echo   Binary location: $(LINUX_BIN_DIR)/$(LINUX_BINARY)
+	@echo   To package: cd $(PROJECT_ROOT) && $(VSCE) package
 
 .PHONY: build-windows
 build-windows: clean-bins
 	$(call build_lsp,$(WINDOWS_TARGET),$(WINDOWS_BINARY),$(WINDOWS_BIN_DIR))
 	$(call prepare_extension)
-	@echo ""
-	@echo "✓ Windows extension build complete!"
-	@echo "  Binary location: $(WINDOWS_BIN_DIR)/$(WINDOWS_BINARY)"
-	@echo "  To package: cd $(PROJECT_ROOT) && $(VSCE) package"
+	@echo [OK] Windows extension build complete!
+	@echo   Binary location: $(WINDOWS_BIN_DIR)/$(WINDOWS_BINARY)
+	@echo   To package: cd $(PROJECT_ROOT) && $(VSCE) package
 
 .PHONY: build-macosx
 build-macosx: clean-bins
 	$(call build_lsp,$(MACOSX_TARGET),$(MACOSX_BINARY),$(MACOSX_BIN_DIR))
 	$(call prepare_extension)
-	@echo ""
-	@echo "✓ macOS extension build complete!"
-	@echo "  Binary location: $(MACOSX_BIN_DIR)/$(MACOSX_BINARY)"
-	@echo "  To package: cd $(PROJECT_ROOT) && $(VSCE) package"
+	@echo [OK] macOS extension build complete!
+	@echo   Binary location: $(MACOSX_BIN_DIR)/$(MACOSX_BINARY)
+	@echo   To package: cd $(PROJECT_ROOT) && $(VSCE) package
 
 # ============================================================================
 # Multi-platform package target
@@ -142,17 +152,15 @@ build-macosx: clean-bins
 
 .PHONY: package-all
 package-all: clean-bins
-	@echo "===> Building cpclib-lsp for all platforms..."
+	@echo ===> Building cpclib-lsp for all platforms...
 	$(call build_lsp,$(LINUX_TARGET),$(LINUX_BINARY),$(LINUX_BIN_DIR))
 	$(call build_lsp,$(WINDOWS_TARGET),$(WINDOWS_BINARY),$(WINDOWS_BIN_DIR))
 	$(call build_lsp,$(MACOSX_TARGET),$(MACOSX_BINARY),$(MACOSX_BIN_DIR))
 	$(call prepare_extension)
-	@echo ""
-	@echo "===> Packaging extension with all platform binaries..."
+	@echo ===> Packaging extension with all platform binaries...
 	cd $(PROJECT_ROOT) && $(VSCE) package
-	@echo ""
-	@echo "✓ Multi-platform extension package complete!"
-	@echo "  Package: $(PROJECT_ROOT)/*.vsix"
+	@echo [OK] Multi-platform extension package complete!
+	@echo   Package: $(PROJECT_ROOT)/*.vsix
 
 # ============================================================================
 # Utility targets
@@ -160,31 +168,31 @@ package-all: clean-bins
 
 .PHONY: install-deps
 install-deps:
-	@echo "===> Installing npm dependencies..."
+	@echo ===> Installing npm dependencies...
 	cd $(PROJECT_ROOT) && $(NPM_CI)
 
 .PHONY: compile
 compile:
-	@echo "===> Compiling TypeScript..."
+	@echo ===> Compiling TypeScript...
 	cd $(PROJECT_ROOT) && $(NPM_COMPILE)
 
 .PHONY: watch
 watch:
-	@echo "===> Starting TypeScript watch mode..."
+	@echo ===> Starting TypeScript watch mode...
 	cd $(PROJECT_ROOT) && $(NPM) run watch
 
 .PHONY: clean-bins
 clean-bins:
-	@echo "===> Cleaning platform binaries..."
-	rm -rf $(BIN_DIR)
+	@echo ===> Cleaning platform binaries...
+	-@$(RM) $(BIN_DIR) 2>$(NULL_DEVICE)
 
 .PHONY: clean
 clean: clean-bins
-	@echo "===> Cleaning build artifacts..."
-	rm -rf $(OUT_DIR)
-	rm -rf $(PROJECT_ROOT)/node_modules
-	rm -f $(PROJECT_ROOT)/*.vsix
-	@echo "✓ Clean complete!"
+	@echo ===> Cleaning build artifacts...
+	-@$(RM) $(OUT_DIR) 2>$(NULL_DEVICE)
+	-@$(RM) $(PROJECT_ROOT)/node_modules 2>$(NULL_DEVICE)
+	-@$(RM_FILE) $(PROJECT_ROOT)/*.vsix 2>$(NULL_DEVICE)
+	@echo [OK] Clean complete!
 
 # ============================================================================
 # Development targets
@@ -192,13 +200,12 @@ clean: clean-bins
 
 .PHONY: dev
 dev: build
-	@echo ""
-	@echo "Development build complete. You can now:"
-	@echo "  1. Open VSCode"
-	@echo "  2. Press F5 to launch Extension Development Host"
+	@echo Development build complete. You can now:
+	@echo   1. Open VSCode
+	@echo   2. Press F5 to launch Extension Development Host
 
 .PHONY: package
 package:
-	@echo "===> Packaging extension..."
+	@echo ===> Packaging extension...
 	cd $(PROJECT_ROOT) && $(VSCE) package
-	@echo "✓ Package created: $(PROJECT_ROOT)/*.vsix"
+	@echo [OK] Package created: $(PROJECT_ROOT)/*.vsix

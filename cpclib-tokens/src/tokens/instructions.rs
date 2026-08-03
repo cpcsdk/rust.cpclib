@@ -144,6 +144,7 @@ pub enum Mnemonic {
     Ini,
     Inir,
     Jp,
+    Jq,
     Jr,
     Ld,
     Ldd,
@@ -223,6 +224,7 @@ impl fmt::Display for Mnemonic {
             Mnemonic::Ini => write!(f, "INI"),
             Mnemonic::Inir => write!(f, "INIR"),
             Mnemonic::Jp => write!(f, "JP"),
+            Mnemonic::Jq => write!(f, "JQ"),
             Mnemonic::Jr => write!(f, "JR"),
             Mnemonic::Ld => write!(f, "LD"),
             Mnemonic::Ldd => write!(f, "LDD"),
@@ -315,6 +317,7 @@ is_mnemonic!(
     Ini
     Inir
     Jp
+    Jq
     Jr
     Ld
     Ldd

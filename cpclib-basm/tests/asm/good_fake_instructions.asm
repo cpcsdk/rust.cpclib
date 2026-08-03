@@ -46,8 +46,15 @@
 	RST C,#38
 	RST NC,#38
 
+	; JQ: try a JR encoding, fall back to a JP encoding if the target is
+	; out of relative-jump range - no reachability analysis beyond that
+	jq near_target
+near_target:
+	nop
+	jq c, near_target
 
-	
+
+
 
 
 	

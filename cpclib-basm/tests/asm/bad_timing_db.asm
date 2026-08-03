@@ -3,4 +3,4 @@
         db 1
     TICKER STOP
 
-; non-zero byte in DB inside a TICKER should fail
+; byte 1 does not disassemble to a valid instruction

@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_tokens::ExprResult;
+use cpclib_tokens::{ExprFormat, ExprResult};
 use substring::Substring;
 
 use crate::error::{AssemblerError, ExpressionError};
@@ -302,6 +302,149 @@ pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError
     }
 }
 
+/// The text a single `string_format` argument contributes when substituted
+/// into a `{N}` placeholder - the raw string content for a string (no
+/// surrounding quotes, unlike `ExprResult`'s own `Display`, which is meant
+/// for diagnostic/debug output, not interpolation), the plain character for
+/// a `Char` (not `Display`'s quoted `'c'` form), and each other variant's
+/// natural textual form otherwise.
+fn string_format_arg(val: &ExprResult) -> String {
+    match val {
+        ExprResult::String(s) => s.to_string(),
+        ExprResult::Char(c) => (*c as char).to_string(),
+        ExprResult::Value(v) => v.to_string(),
+        ExprResult::Bool(b) => b.to_string(),
+        ExprResult::Float(f) => f.into_inner().to_string(),
+        // List/Matrix: no more meaningful a textual form than their own
+        // Display already provides.
+        other => format!("{other}")
+    }
+}
+
+fn string_format_error(msg: String) -> Box<AssemblerError> {
+    Box::new(AssemblerError::ExpressionError(ExpressionError::OwnError(
+        Box::new(AssemblerError::AssemblingError { msg })
+    )))
+}
+
+/// Parse a `{N:spec}` placeholder's `spec` part into the same `ExprFormat`
+/// the `PRINT` statement's `{hex4}`-style interpolation already uses
+/// (`cpclib-asm/src/parser/directives.rs`) - kept as a plain string match
+/// here rather than reusing that winnow parser directly, since by this
+/// point `spec` is already an isolated, resolved string slice, not raw
+/// source text to re-parse.
+fn parse_format_spec(spec: &str) -> Option<ExprFormat> {
+    match spec {
+        "hex" => Some(ExprFormat::Hex(None)),
+        "hex2" => Some(ExprFormat::Hex(Some(2))),
+        "hex4" => Some(ExprFormat::Hex(Some(4))),
+        "hex8" => Some(ExprFormat::Hex(Some(8))),
+        "bin" => Some(ExprFormat::Bin(None)),
+        "bin8" => Some(ExprFormat::Bin(Some(8))),
+        "bin16" => Some(ExprFormat::Bin(Some(16))),
+        "bin32" => Some(ExprFormat::Bin(Some(32))),
+        "int" => Some(ExprFormat::Int),
+        _ => None
+    }
+}
+
+/// `string_format(template, arg0, arg1, ...)` - Rust/Python-`str.format`-
+/// style positional placeholders: `{0}`, `{1}`, ... refer to `arg0`,
+/// `arg1`, ... (0-based), `{{`/`}}` are literal `{`/`}`. A placeholder
+/// index beyond the number of arguments given, or malformed `{...}`
+/// content, is a hard error rather than being silently left as-is or
+/// swallowed - a typo'd index is far more likely than a deliberate literal
+/// `{3}` in real code.
+///
+/// A placeholder may also carry a width/base format spec after a `:`, e.g.
+/// `{0:hex4}`, reusing `ExprFormat`'s own `PRINT`-statement rendering
+/// (`hex`/`hex2`/`hex4`/`hex8`/`bin`/`bin8`/`bin16`/`bin32`/`int`) - the
+/// argument must then resolve to an integer, or it's a hard error the same
+/// way an out-of-range index is.
+pub fn string_format(params: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+    let template = match &params[0] {
+        ExprResult::String(s) => s.to_string(),
+        other => {
+            return Err(string_format_error(format!(
+                "string_format's first argument must be a string, got {other}"
+            )));
+        }
+    };
+    let args = &params[1..];
+
+    let mut out = String::with_capacity(template.len());
+    let mut i = 0usize;
+    while i < template.len() {
+        let rest = &template[i..];
+        let c = rest.chars().next().expect("i < template.len()");
+
+        if c == '{' {
+            if rest.starts_with("{{") {
+                out.push('{');
+                i += 2;
+                continue;
+            }
+            let after_brace = &rest[1..];
+            let Some(close_rel) = after_brace.find('}') else {
+                return Err(string_format_error(format!(
+                    "string_format: unclosed '{{' in template {template:?}"
+                )));
+            };
+            let inner = &after_brace[..close_rel];
+            let (index_str, spec_str) = match inner.split_once(':') {
+                Some((idx, spec)) => (idx, Some(spec)),
+                None => (inner, None)
+            };
+            let Ok(index) = index_str.parse::<usize>() else {
+                return Err(string_format_error(format!(
+                    "string_format: invalid placeholder '{{{inner}}}' in template {template:?} - expected a plain 0-based index, optionally followed by ':spec'"
+                )));
+            };
+            let Some(arg) = args.get(index) else {
+                return Err(string_format_error(format!(
+                    "string_format: placeholder {{{inner}}} has no matching argument ({} argument(s) given) in template {template:?}",
+                    args.len()
+                )));
+            };
+            let rendered = match spec_str {
+                None => string_format_arg(arg),
+                Some(spec) => {
+                    let format = parse_format_spec(spec).ok_or_else(|| {
+                        string_format_error(format!(
+                            "string_format: unknown format spec '{spec}' in placeholder '{{{inner}}}' in template {template:?} - expected one of hex, hex2, hex4, hex8, bin, bin8, bin16, bin32, int"
+                        ))
+                    })?;
+                    let value = arg.int().map_err(|_| {
+                        string_format_error(format!(
+                            "string_format: placeholder {{{inner}}} needs a numeric argument for format '{spec}', got {arg}"
+                        ))
+                    })?;
+                    format.string_representation(value)
+                }
+            };
+            out.push_str(&rendered);
+            i += 1 + close_rel + 1;
+            continue;
+        }
+
+        if c == '}' {
+            if rest.starts_with("}}") {
+                out.push('}');
+                i += 2;
+                continue;
+            }
+            return Err(string_format_error(format!(
+                "string_format: unmatched '}}' in template {template:?}"
+            )));
+        }
+
+        out.push(c);
+        i += c.len_utf8();
+    }
+
+    Ok(ExprResult::String(fix_string(out)))
+}
+
 pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match (&s1, &s2) {
         (ExprResult::Char(s1), ExprResult::Char(s2)) => {
@@ -378,5 +521,108 @@ pub fn string_push(s1: ExprResult, s2: ExprResult) -> Result<ExprResult, Box<Ass
                 }))
             )))
         },
+    }
+}
+
+#[cfg(test)]
+mod string_format_tests {
+    use super::*;
+
+    fn s(text: &str) -> ExprResult {
+        ExprResult::String(text.into())
+    }
+
+    #[test]
+    fn substitutes_positional_placeholders_in_order() {
+        let result = string_format(&[s("Score: {0}/{1}"), ExprResult::Value(10), ExprResult::Value(100)])
+            .unwrap();
+        assert_eq!(result, s("Score: 10/100"));
+    }
+
+    #[test]
+    fn a_string_argument_is_substituted_without_quotes() {
+        // Distinguishes this from `ExprResult`'s own `Display`, which wraps
+        // strings in quotes for diagnostic output - interpolation must use
+        // the raw content.
+        let result = string_format(&[s("Hello, {0}!"), s("world")]).unwrap();
+        assert_eq!(result, s("Hello, world!"));
+    }
+
+    #[test]
+    fn a_placeholder_can_be_reused_several_times() {
+        let result = string_format(&[s("{0}-{0}-{0}"), ExprResult::Value(7)]).unwrap();
+        assert_eq!(result, s("7-7-7"));
+    }
+
+    #[test]
+    fn double_braces_are_literal_braces() {
+        let result = string_format(&[s("{{literal}} {0}"), ExprResult::Value(1)]).unwrap();
+        assert_eq!(result, s("{literal} 1"));
+    }
+
+    #[test]
+    fn a_template_with_no_placeholders_is_returned_unchanged() {
+        let result = string_format(&[s("no placeholders here")]).unwrap();
+        assert_eq!(result, s("no placeholders here"));
+    }
+
+    #[test]
+    fn out_of_range_index_is_a_clear_error() {
+        let result = string_format(&[s("{1}"), ExprResult::Value(1)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn a_non_numeric_placeholder_is_a_clear_error() {
+        let result = string_format(&[s("{abc}"), ExprResult::Value(1)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn an_unclosed_brace_is_a_clear_error() {
+        let result = string_format(&[s("{0")]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn a_non_string_template_is_a_clear_error() {
+        let result = string_format(&[ExprResult::Value(42)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn a_format_spec_renders_hex_with_the_requested_width() {
+        let result = string_format(&[s("{0:hex4}"), ExprResult::Value(0xAB)]).unwrap();
+        assert_eq!(result, s("0x00ab"));
+    }
+
+    #[test]
+    fn a_format_spec_renders_unpadded_hex_and_bin() {
+        let result = string_format(&[s("{0:hex} {0:bin}"), ExprResult::Value(5)]).unwrap();
+        assert_eq!(result, s("0x5 0b101"));
+    }
+
+    #[test]
+    fn a_format_spec_renders_padded_bin() {
+        let result = string_format(&[s("{0:bin8}"), ExprResult::Value(5)]).unwrap();
+        assert_eq!(result, s("0b00000101"));
+    }
+
+    #[test]
+    fn a_format_spec_can_be_reused_with_different_specs_on_the_same_argument() {
+        let result = string_format(&[s("{0:int} = {0:hex2}"), ExprResult::Value(10)]).unwrap();
+        assert_eq!(result, s("10 = 0x0a"));
+    }
+
+    #[test]
+    fn an_unknown_format_spec_is_a_clear_error() {
+        let result = string_format(&[s("{0:nope}"), ExprResult::Value(1)]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn a_format_spec_on_a_non_numeric_argument_is_a_clear_error() {
+        let result = string_format(&[s("{0:hex4}"), s("not a number")]);
+        assert!(result.is_err());
     }
 }

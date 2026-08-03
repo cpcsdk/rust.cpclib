@@ -393,7 +393,8 @@ pub fn apply(state: &mut TrackedState, token: &LocatedToken, env: &mut Env) {
             // but if one somehow does, the safe behavior is a full reset.
             state.invalidate_all();
         },
-        Mnemonic::Jp | Mnemonic::Jr | Mnemonic::Djnz | Mnemonic::Reti | Mnemonic::Retn => {
+        Mnemonic::Jp | Mnemonic::Jr | Mnemonic::Jq | Mnemonic::Djnz | Mnemonic::Reti
+        | Mnemonic::Retn => {
             state.invalidate_all();
         },
 
