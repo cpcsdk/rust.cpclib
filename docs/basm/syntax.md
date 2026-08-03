@@ -74,6 +74,37 @@ Here is the list of instructions used to validate `BASM`:
 --8<-- "cpclib-basm/tests/asm/good_all.asm"
 ```
 
+## Variadic macros
+
+A macro can accept extra, unnamed arguments beyond its declared parameters by ending its
+parameter list with a trailing `...` (either `MACRO foo(a, b, ...)` or the comma-separated
+`MACRO foo, a, b, ...` form):
+
+- Named parameters keep working exactly as before, referenced as `{a}`/`{b}`.
+- Extra arguments are referenced positionally, continuing the index past the named ones - the
+  first extra is `{2}`, the second `{3}`, and so on (0-based across *all* arguments, named or
+  not).
+- `{#}` expands to the total number of arguments actually passed at a given call - named plus
+  extra combined.
+- A variadic macro still requires at least its named arguments; only *more* than that is
+  accepted. A macro without a trailing `...` is unaffected: extra arguments are still a hard
+  arity error, exactly as before.
+
+```z80
+MACRO log(level, ...)
+    ; {level} is named; {1}, {2}, ... are whichever extra arguments this
+    ; particular call passed, and {#} is how many arguments there were in total
+    db {level}, {#}
+ENDM
+
+log 1, "a", "b"   ; {level}=1, {1}="a", {2}="b", {#}=3
+log 1             ; {level}=1, {#}=1 - no extra arguments needed
+```
+
+Referencing an extra index a particular call doesn't actually provide (e.g. the body uses `{2}`
+but that call only passed one argument) is an assembling error, not a fallback to `0`/empty -
+the same way an out-of-range `string_format` placeholder is.
+
 ## Fake instructions
 
 To ease coding, several fake instructions are allowed by `BASM`. It replaces them by the combination of true instructions.

@@ -2703,7 +2703,8 @@ impl Env {
         arguments: &[&str],
         code: &str,
         source: Option<&Z80Span>,
-        flavor: AssemblerFlavor
+        flavor: AssemblerFlavor,
+        has_variadic: bool
     ) -> Result<(), Box<AssemblerError>> {
         // ignore if it is the very same macro. That can happen with orgams
         if let Some(r#macro) = self.symbols().macro_value(name)? {
@@ -2749,7 +2750,8 @@ impl Env {
             ))));
         }
 
-        let tokenized_content = cpclib_tokens::macro_segment::tokenize_macro_body(code, arguments);
+        let tokenized_content =
+            cpclib_tokens::macro_segment::tokenize_macro_body(code, arguments, has_variadic);
         for index in
             crate::unused_bindings::unused_macro_parameter_indices(arguments, &tokenized_content)
         {
@@ -2785,7 +2787,8 @@ impl Env {
             code.to_owned(),
             tokenized_content,
             source,
-            flavor
+            flavor,
+            has_variadic
         );
         self.symbols_mut()
             .set_symbol_to_value(name, ValueAndSource::new(r#macro, location))?;

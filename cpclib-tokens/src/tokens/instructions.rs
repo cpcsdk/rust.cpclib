@@ -774,7 +774,8 @@ pub enum Token {
         params: Vec<SmolStr>,
         content: String,
         flavor: AssemblerFlavor,
-        tokenized_content: TokenizedMacroContent
+        tokenized_content: TokenizedMacroContent,
+        has_variadic: bool
     }, // Content of the macro is parsed on use
     // macro call can be used for struct too
     MacroCall(SmolStr, Vec<MacroParam>), /* String are used in order to not be limited to expression and allow opcode/registers use */
@@ -1289,9 +1290,11 @@ impl fmt::Display for Token {
                  => write!(f, "INCLUDE {}\"{}\"", fname, if *once {"ONCE "} else {""}),
             Token::Label( string) => write!(f, "{string}"),
 
-            Token::Macro { name, params, content, flavor: _, tokenized_content: _ } => {
-                let params = if params.is_empty() {
+            Token::Macro { name, params, content, flavor: _, tokenized_content: _, has_variadic } => {
+                let params = if params.is_empty() && !has_variadic {
                     "(void)".to_owned()
+                } else if *has_variadic {
+                    format!("{}...", params.iter().map(|p| format!("{p}, ")).collect::<String>())
                 } else {
                     params.join(", ")
                 };

@@ -1053,7 +1053,8 @@ pub enum LocatedTokenInner {
         params: Vec<Z80Span>,
         content: Z80Span,
         flavor: AssemblerFlavor,
-        tokenized_content: TokenizedMacroContent
+        tokenized_content: TokenizedMacroContent,
+        has_variadic: bool
     },
     /// Name, Parameters, FullSpan
     MacroCall(Z80Span, Vec<LocatedMacroParam>),
@@ -1313,6 +1314,7 @@ impl ListingElement for LocatedToken {
         fn macro_definition_name(&self) -> &str;
         fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]>;
         fn macro_definition_code(&self) -> &str;
+        fn macro_definition_is_variadic(&self) -> bool;
         fn macro_call_name(&self) -> &str;
         fn macro_call_arguments(&self) -> &[Self::MacroParam];
         fn if_nb_tests(&self) -> usize;
@@ -1845,14 +1847,16 @@ impl ListingElement for LocatedTokenInner {
                 params,
                 content,
                 flavor,
-                tokenized_content
+                tokenized_content,
+                has_variadic
             } => {
                 Cow::Owned(Token::Macro {
                     name: name.into(),
                     params: params.iter().map(|p| p.into()).collect_vec(),
                     content: content.as_str().to_owned(),
                     flavor: *flavor,
-                    tokenized_content: tokenized_content.clone()
+                    tokenized_content: tokenized_content.clone(),
+                    has_variadic: *has_variadic
                 })
             },
             Self::Confined(..) => todo!(),

@@ -93,16 +93,27 @@ pub struct MacroWithArgs<'a, P: MacroParamElement> {
 }
 
 impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
-    /// The construction fails if the number pf arguments is incorrect
+    /// The construction fails if the number of arguments is incorrect - a
+    /// variadic macro (`MACRO foo(a, b, ...)`) accepts `nb_args()` or more
+    /// (the extras are indexed positionally in the body via `{2}`, `{3}`,
+    /// ...); a non-variadic one still requires an exact match, unchanged.
     #[inline]
     pub fn build(r#macro: &ValueMacro, args: &'a [P]) -> Result<Self, Box<AssemblerError>> {
-        if r#macro.nb_args() != args.len() {
+        let arity_ok = if r#macro.has_variadic() {
+            args.len() >= r#macro.nb_args()
+        }
+        else {
+            args.len() == r#macro.nb_args()
+        };
+
+        if !arity_ok {
             Err(Box::new(AssemblerError::MacroError {
                 name: r#macro.name().into(),
                 root: Box::new(AssemblerError::AssemblingError {
                     msg: format!(
-                        "{} arguments provided, but {} expected. [{}]",
+                        "{} arguments provided, but {}{} expected. [{}]",
                         args.len(),
+                        if r#macro.has_variadic() { "at least " } else { "" },
                         r#macro.nb_args(),
                         r#macro.params().join(",")
                     )
@@ -132,6 +143,7 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
     fn expand_for_basm(&self, env: &mut Env) -> Result<String, Box<AssemblerError>> {
         let listing = self.r#macro.code();
         let mut expanded_args: Vec<Option<beef::lean::Cow<'_, str>>> = vec![None; self.args.len()];
+        let arg_count = self.args.len().to_string();
 
         // First pass: expand all arguments and calculate exact capacity.
         let capacity = self.r#macro.segments().iter().try_fold(
@@ -139,18 +151,30 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
             |acc, segment| -> Result<usize, Box<AssemblerError>> {
                 match *segment {
                     MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
+                    MacroSegment::ArgCount => Ok(acc + arg_count.len()),
                     MacroSegment::Arg { index } => {
-                        let slot = expanded_args.get_mut(index).expect("Invalid segment index");
+                        // `index` comes from the macro's own body, tokenized
+                        // once at declaration time - independent of any
+                        // particular call's argument count. A variadic
+                        // macro's body may reference `{N}` for an `N` this
+                        // specific call doesn't actually supply (e.g. only
+                        // one extra argument passed, but the body also uses
+                        // `{3}`) - a real, per-call condition, not a bug, so
+                        // it must be a clean error rather than a panic.
+                        let Some(slot) = expanded_args.get_mut(index)
+                        else {
+                            return Err(self.arg_index_out_of_range_error(index));
+                        };
 
                         if slot.is_none() {
-                            let argvalue = self.args.get(index).expect("Argument count mismatch");
+                            let argvalue = &self.args[index];
                             let mut expanded = expand_param(argvalue, env)?;
-                            let argname = self
-                                .r#macro
-                                .params()
-                                .get(index)
-                                .expect("Param count mismatch");
-                            expanded = strip_raw_string_quotes(argname, expanded);
+                            // Extra (variadic) positional args have no
+                            // declared name to check for the `r#`-raw-string
+                            // convention - only named params are eligible.
+                            if let Some(argname) = self.r#macro.params().get(index) {
+                                expanded = strip_raw_string_quotes(argname, expanded);
+                            }
                             let arg_len = expanded.len();
                             *slot = Some(expanded);
                             Ok(acc + arg_len)
@@ -170,8 +194,13 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 MacroSegment::Lit { start, end } => {
                     output.push_str(&listing[start..end]);
                 },
+                MacroSegment::ArgCount => {
+                    output.push_str(&arg_count);
+                },
                 MacroSegment::Arg { index } => {
-                    // All arguments were expanded in first pass, guaranteed Some
+                    // All in-range arguments were expanded in the first pass
+                    // (guaranteed Some) - an out-of-range index already
+                    // returned an error there, so this loop never reaches it.
                     output.push_str(expanded_args[index].as_ref().unwrap());
                 }
             }
@@ -181,8 +210,46 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
         Ok(output)
     }
 
+    /// A macro body referenced `{index}` (0-based) but this particular call
+    /// only provided `self.args.len()` argument(s) - real for a variadic
+    /// macro, since how many total arguments a call passes is caller-
+    /// dependent, unlike the fixed set of `{N}` indices the body itself may
+    /// reference.
+    #[inline]
+    fn arg_index_out_of_range_error(&self, index: usize) -> Box<AssemblerError> {
+        Box::new(AssemblerError::MacroError {
+            name: self.r#macro.name().into(),
+            root: Box::new(AssemblerError::AssemblingError {
+                msg: format!(
+                    "argument {{{index}}} is referenced in the body of macro `{}`, but only {} argument(s) were provided at this call",
+                    self.r#macro.name(),
+                    self.args.len()
+                )
+            }),
+            location: self.r#macro.source().cloned()
+        })
+    }
+
     #[inline]
     fn expand_for_orgams(&self, env: &mut Env) -> Result<String, Box<AssemblerError>> {
+        // Orgams-flavor expansion substitutes named params only (a literal
+        // pattern->replacement pass over `params()`, no segment/index model
+        // at all - see this function's own body below) - it has no way to
+        // place a variadic macro's extra positional args anywhere, so
+        // silently dropping them would be a real, confusing bug rather than
+        // an unsupported-but-honest error.
+        if self.r#macro.has_variadic() && self.args.len() > self.r#macro.nb_args() {
+            return Err(Box::new(AssemblerError::MacroError {
+                name: self.r#macro.name().into(),
+                root: Box::new(AssemblerError::AssemblingError {
+                    msg: "variadic macros (extra arguments beyond the named parameters) are not \
+                          yet supported for the orgams assembler flavor"
+                        .to_owned()
+                }),
+                location: self.r#macro.source().cloned()
+            }));
+        }
+
         let listing = self.r#macro.code();
         let all_expanded = self
             .args

@@ -128,6 +128,7 @@ where Self: Debug + Sized + Sync
     fn macro_definition_name(&self) -> &str;
     fn macro_definition_arguments(&self) -> SmallVec<[&str; 4]>;
     fn macro_definition_code(&self) -> &str;
+    fn macro_definition_is_variadic(&self) -> bool;
     fn macro_flavor(&self) -> AssemblerFlavor;
 
     fn is_call_macro_or_build_struct(&self) -> bool;

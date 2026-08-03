@@ -131,7 +131,11 @@ pub struct ValueMacro {
     segments: TokenizedMacroContent,
     // Origin of the macro (for error messages)
     source: Option<SourceLocation>,
-    flavor: AssemblerFlavor
+    flavor: AssemblerFlavor,
+    // Whether the declaration ended with a trailing `...`, opting the macro
+    // into accepting (and indexing, via `{N}`/`{#}` in the body) extra
+    // arguments beyond `params`.
+    has_variadic: bool
 }
 
 impl ValueMacro {
@@ -141,7 +145,8 @@ impl ValueMacro {
         code: String,
         tokenized_content: crate::macro_segment::TokenizedMacroContent,
         source: Option<SourceLocation>,
-        flavor: AssemblerFlavor
+        flavor: AssemblerFlavor,
+        has_variadic: bool
     ) -> Self {
         ValueMacro {
             name,
@@ -149,7 +154,8 @@ impl ValueMacro {
             code,
             segments: tokenized_content,
             source,
-            flavor
+            flavor,
+            has_variadic
         }
     }
 
@@ -181,6 +187,11 @@ impl ValueMacro {
     #[inline]
     pub fn nb_args(&self) -> usize {
         self.params.len()
+    }
+
+    #[inline]
+    pub fn has_variadic(&self) -> bool {
+        self.has_variadic
     }
 
     #[inline]

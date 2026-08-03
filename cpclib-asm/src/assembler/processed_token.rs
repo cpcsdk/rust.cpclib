@@ -1036,7 +1036,8 @@ where
                     &arguments,
                     code,
                     self.possible_span(),
-                    self.token.macro_flavor()
+                    self.token.macro_flavor(),
+                    self.token.macro_definition_is_variadic()
                 )
             }
             // Behavior based on the state (for ease of writting)

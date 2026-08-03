@@ -1715,7 +1715,8 @@ mod test {
                 params: Vec::new(),
                 content: "".into(),
                 tokenized_content: Default::default(),
-                flavor: cpclib_asm::AssemblerFlavor::Basm
+                flavor: cpclib_asm::AssemblerFlavor::Basm,
+                has_variadic: false
             }
         ];
         let doc = aggregate_documentation_on_tokens(

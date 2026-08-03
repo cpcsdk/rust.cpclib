@@ -2321,7 +2321,7 @@ pub fn parse_macro_inner(
         )))
         .parse_next(input)?;
 
-        let arguments = separated::<_, _, Vec<&[u8]>, _, _, _, _>(
+        let mut arguments = separated::<_, _, Vec<&[u8]>, _, _, _, _>(
             0..,
             delimited(
                 my_space0,
@@ -2339,6 +2339,15 @@ pub fn parse_macro_inner(
             parse_comma
         )
         .parse_next(input)?;
+
+        // A trailing `...` opts the macro into accepting extra, unnamed
+        // arguments beyond `arguments` (`MACRO foo(a, b, ...)`) - it isn't
+        // itself a parameter name, so strip it here before `arguments` is
+        // turned into the declared param list.
+        let has_variadic = arguments.last() == Some(&b"...".as_slice());
+        if has_variadic {
+            arguments.pop();
+        }
 
         if let Some(CommaOrParenthesis::Parenthesis) = comma_or_parenthesis {
             parse_block_error(
@@ -2389,13 +2398,15 @@ pub fn parse_macro_inner(
         let content = (*input).update_slice(content);
 
         let content: Z80Span = content.into();
-        let tokenized_content = tokenize_macro_body(content.as_str(), &arguments);
+        let tokenized_content =
+            tokenize_macro_body(content.as_str(), &arguments, has_variadic);
         Ok(LocatedTokenInner::Macro {
             name: name.into(),
             params: arguments,
             content,
             flavor: input.state.options().assembler_flavor,
-            tokenized_content
+            tokenized_content,
+            has_variadic
         }
         .into_located_token_between(&dir_start, *input))
     }

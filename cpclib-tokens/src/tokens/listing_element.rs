@@ -530,6 +530,14 @@ macro_rules! listing_element_impl_most_methods {
         }
 
         #[inline]
+        fn macro_definition_is_variadic(&self) -> bool {
+            match self.unwrapped() {
+                Self::Macro { has_variadic, .. } => *has_variadic,
+                _ => unreachable!()
+            }
+        }
+
+        #[inline]
         fn macro_call_name(&self) -> &str {
             match self.unwrapped() {
                 Self::MacroCall(name, _) => name.as_str(),

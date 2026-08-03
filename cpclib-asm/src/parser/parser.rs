@@ -1160,6 +1160,44 @@ add_to_a(3)\n\
         assert!(dbg!(parse_test(parse_line(&mut tokens), r#macro)).is_ok());
     }
 
+    #[test]
+    fn test_parse_macro_variadic() {
+        let mut tokens = Vec::with_capacity(16);
+        let r#macro = "macro foo(a, b, ...)
+                db {a}
+            endm;";
+        tokens.clear();
+        assert!(dbg!(parse_test(parse_line(&mut tokens), r#macro)).is_ok());
+        let token = tokens
+            .iter()
+            .find(|t| t.is_macro_definition())
+            .expect("a macro-definition token should have been parsed");
+        assert_eq!(
+            token.macro_definition_arguments().as_slice(),
+            ["a", "b"]
+        );
+        assert!(token.macro_definition_is_variadic());
+    }
+
+    #[test]
+    fn test_parse_macro_not_variadic_without_trailing_ellipsis() {
+        let mut tokens = Vec::with_capacity(16);
+        let r#macro = "macro foo(a, b)
+                db {a}
+            endm;";
+        tokens.clear();
+        assert!(dbg!(parse_test(parse_line(&mut tokens), r#macro)).is_ok());
+        let token = tokens
+            .iter()
+            .find(|t| t.is_macro_definition())
+            .expect("a macro-definition token should have been parsed");
+        assert_eq!(
+            token.macro_definition_arguments().as_slice(),
+            ["a", "b"]
+        );
+        assert!(!token.macro_definition_is_variadic());
+    }
+
     /// Demonstrates the "stolen ENDM" bug: the body scanner for m1 consumes bytes
     /// until it finds *any* ENDM, so it grabs m2's ENDM as its own terminator.
     /// m2 is never defined as a macro — it becomes part of m1's body.

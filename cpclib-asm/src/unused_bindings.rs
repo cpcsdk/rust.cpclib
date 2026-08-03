@@ -206,7 +206,12 @@ fn definition_location<T: MayHaveSpan>(token: &T) -> (usize, usize, usize) {
 /// this can never drift from what basm itself actually recognizes as a
 /// reference.
 fn references(text: &str, name: &str) -> bool {
-    tokenize_macro_body(text, &[name])
+    // `has_variadic: false` - this only ever checks a single, specific named
+    // reference (`{name}`), which is resolved before the variadic-only
+    // `{N}`/`{#}` forms would even come into play (see `tokenize_macro_body`'s
+    // own doc comment), so whether the owning macro is variadic is
+    // irrelevant here.
+    tokenize_macro_body(text, &[name], false)
         .iter()
         .any(|segment| matches!(segment, MacroSegment::Arg { .. }))
 }
@@ -243,7 +248,11 @@ fn check_macro<T: MayHaveSpan + ListingElement>(token: &T, out: &mut Vec<UnusedB
     if params.is_empty() {
         return;
     }
-    let tokenized = tokenize_macro_body(token.macro_definition_code(), &params);
+    let tokenized = tokenize_macro_body(
+        token.macro_definition_code(),
+        &params,
+        token.macro_definition_is_variadic()
+    );
     let (line, column, len) = definition_location(token);
     let owner_name = token.macro_definition_name().to_string();
     for index in unused_macro_parameter_indices(&params, &tokenized) {
@@ -445,6 +454,32 @@ mod tests {
             found[0].len,
             header.len()
         );
+    }
+
+    #[test]
+    fn variadic_macro_still_reports_an_unused_named_parameter() {
+        // A trailing `...` only relaxes arity - it must not make the
+        // existing named-parameter unused check go blind.
+        let found = unused_in("MACRO foo, a, b, ...\n    ld a, {a}\nENDM\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].name, "b");
+        assert_eq!(
+            found[0].owner,
+            Some(UnusedBindingOwner {
+                name: "foo".to_string(),
+                param_index: 1
+            })
+        );
+    }
+
+    #[test]
+    fn variadic_macro_with_every_named_parameter_used_reports_nothing() {
+        // The body only references the extra positional args (`{2}`,
+        // `{#}`) beyond the named ones - `a`/`b` are both still used, so
+        // there's nothing to report; the positional/count references
+        // themselves have no name to ever be flagged as unused.
+        let found = unused_in("MACRO foo, a, b, ...\n    db {a}, {b}, {2}, {#}\nENDM\n");
+        assert!(found.is_empty(), "{found:?}");
     }
 
     #[test]
