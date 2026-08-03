@@ -48,7 +48,7 @@ impl AssemblyAnalyzer {
         // previewing without leaving the current file. `INCBIN` is binary
         // data, so it gets a hex/ASCII dump instead of a text preview.
         if let Some((directive, filename)) =
-            super::definition::include_directive_and_filename_at(&line, col)
+            self.include_directive_and_filename_at(document, position)
         {
             if directive == "INCBIN" {
                 if let Some(hover) = self.incbin_hover(document, position, &filename) {
