@@ -48,7 +48,23 @@ pub struct CpcLspBackend {
     /// merges an entry in here into every analyze/publish cycle for that URI
     /// until `execute_command`'s `"cpclib.runRule"` handler clears it (on the
     /// next successful run) or overwrites it (on the next failing one).
-    build_error_diagnostics: Arc<DashMap<Url, Diagnostic>>
+    build_error_diagnostics: Arc<DashMap<Url, Diagnostic>>,
+    /// `.asm` files known (from having been opened/analyzed at least once
+    /// this session) to declare at least one `#!bndbuild`-embedded rule,
+    /// each mapped to its target names - backs `cpclib.getEmbeddedBndbuildFiles`
+    /// (`Ctrl+Shift+B` discovery for embedded rules, alongside real `.bnd`
+    /// files). Updated incrementally in `analyze_document`/`did_change`
+    /// (reusing `parse_document`'s own per-version cache, so this costs
+    /// nothing beyond what diagnostics already pay) rather than computed by
+    /// scanning the whole workspace on each `cpclib.getEmbeddedBndbuildFiles`
+    /// call - a full-workspace scan (opening and parsing every `.asm` file)
+    /// would make every `Ctrl+Shift+B` press noticeably slow on a real
+    /// project. The real, accepted tradeoff: a `.asm` file with an embedded
+    /// rule that has never been opened in this session is invisible here
+    /// until it is. An entry is removed if a later edit removes the file's
+    /// last embedded block, but never on `did_close` - closing a tab
+    /// shouldn't make its rules undiscoverable again.
+    embedded_bndbuild_index: Arc<DashMap<Url, Vec<String>>>
 }
 
 impl CpcLspBackend {
@@ -61,7 +77,8 @@ impl CpcLspBackend {
             basic_analyzer: Arc::new(BasicAnalyzer::new()),
             pending_versions: Arc::new(DashMap::new()),
             workspace_roots: RwLock::new(Vec::new()),
-            build_error_diagnostics: Arc::new(DashMap::new())
+            build_error_diagnostics: Arc::new(DashMap::new()),
+            embedded_bndbuild_index: Arc::new(DashMap::new())
         }
     }
 
@@ -79,6 +96,12 @@ impl CpcLspBackend {
             document,
             &self.workspace_roots(),
             &self.build_error_diagnostics
+        );
+        update_embedded_bndbuild_index(
+            &self.asm_analyzer,
+            &self.build_analyzer,
+            document,
+            &self.embedded_bndbuild_index
         );
         self.publish_diagnostics(document.uri.clone(), diagnostics)
             .await;
@@ -677,6 +700,41 @@ fn compute_diagnostics(
     diagnostics
 }
 
+/// Keeps `CpcLspBackend::embedded_bndbuild_index` in sync with `document`'s
+/// current content - see that field's own doc comment for why this is an
+/// incremental update (reusing `parse_document`'s per-version cache) rather
+/// than a fresh workspace-wide scan. A no-op for anything but
+/// `DocumentType::Assembly`. Removes the entry entirely once a document's
+/// last embedded block is edited away, rather than leaving a stale empty
+/// (or now-wrong) target list behind.
+fn update_embedded_bndbuild_index(
+    asm_analyzer: &AssemblyAnalyzer,
+    build_analyzer: &BuildFileAnalyzer,
+    document: &Document,
+    index: &DashMap<Url, Vec<String>>
+) {
+    if document.doc_type != DocumentType::Assembly {
+        return;
+    }
+    let blocks = asm_analyzer.embedded_bndbuild_blocks(document);
+    if blocks.is_empty() {
+        index.remove(&document.uri);
+        return;
+    }
+    let file_dir = document
+        .uri
+        .to_file_path()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let mut targets = Vec::new();
+    for block in &blocks {
+        targets.extend(
+            build_analyzer.target_names_for_embedded_block(&block.yaml_text, file_dir.as_deref())
+        );
+    }
+    index.insert(document.uri.clone(), targets);
+}
+
 /// Rewrites every absolute path under one of `workspace_roots` that appears
 /// in `diagnostics`' messages to be relative to that root - e.g.
 /// `/home/x/project/src/sna.asm:24:5` becomes `src/sna.asm:24:5` when
@@ -910,6 +968,7 @@ impl LanguageServer for CpcLspBackend {
                     commands: vec![
                         "cpclib.getTargets".to_string(),
                         "cpclib.getTargetsForFile".to_string(),
+                        "cpclib.getEmbeddedBndbuildFiles".to_string(),
                         "cpclib.selectRange".to_string(),
                         "cpclib.runRule".to_string(),
                         "cpclib.runTask".to_string(),
@@ -1025,6 +1084,7 @@ impl LanguageServer for CpcLspBackend {
         let basic_analyzer = Arc::clone(&self.basic_analyzer);
         let workspace_roots = self.workspace_roots();
         let build_error_diagnostics = Arc::clone(&self.build_error_diagnostics);
+        let embedded_bndbuild_index = Arc::clone(&self.embedded_bndbuild_index);
 
         tokio::spawn(async move {
             tokio::time::sleep(DID_CHANGE_DEBOUNCE).await;
@@ -1052,6 +1112,12 @@ impl LanguageServer for CpcLspBackend {
                 &document,
                 &workspace_roots,
                 &build_error_diagnostics
+            );
+            update_embedded_bndbuild_index(
+                &asm_analyzer,
+                &build_analyzer,
+                &document,
+                &embedded_bndbuild_index
             );
             client.publish_diagnostics(uri, diagnostics, None).await;
         });
@@ -2271,6 +2337,25 @@ impl LanguageServer for CpcLspBackend {
                 None => vec![]
             };
             return Ok(Some(serde_json::json!(targets)));
+        }
+
+        if params.command == "cpclib.getEmbeddedBndbuildFiles" {
+            // Instant: just reads `embedded_bndbuild_index`, already kept
+            // current by `analyze_document`/`did_change` - see that field's
+            // own doc comment for why this deliberately doesn't scan the
+            // workspace fresh on every call (`Ctrl+Shift+B` needs this back
+            // fast, every time it's pressed).
+            let files: Vec<serde_json::Value> = self
+                .embedded_bndbuild_index
+                .iter()
+                .map(|entry| {
+                    serde_json::json!({
+                        "uri": entry.key().to_string(),
+                        "targets": entry.value()
+                    })
+                })
+                .collect();
+            return Ok(Some(serde_json::json!(files)));
         }
 
         if params.command != "cpclib.getTargets" {
@@ -3741,5 +3826,122 @@ mod remove_unused_parameter_tests {
         tokio::time::timeout(std::time::Duration::from_millis(500), edits.recv())
             .await
             .expect_err("no edit should ever have been sent to apply_edit");
+    }
+}
+
+#[cfg(test)]
+mod embedded_bndbuild_index_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    const SHADEBOBS_EXAMPLE: &str = "; #!bndbuild\n\
+; - tgt: test\n\
+;   phony: true\n\
+;   cmd:\n\
+;    - basm --snapshot shadebobs.asm -o shadebobs.sna --lst shadebobs.lst\n\
+;    - -ace shadebobs.sna\n\
+ORG 0x8000\n";
+
+    #[test]
+    fn an_asm_document_with_an_embedded_block_is_indexed() {
+        let asm_analyzer = AssemblyAnalyzer::new();
+        let build_analyzer = BuildFileAnalyzer::new();
+        let index: DashMap<Url, Vec<String>> = DashMap::new();
+
+        let uri = Url::parse("file:///shadebobs.asm").unwrap();
+        let document = Document::new(uri.clone(), SHADEBOBS_EXAMPLE.to_string(), 1);
+        update_embedded_bndbuild_index(&asm_analyzer, &build_analyzer, &document, &index);
+
+        let entry = index.get(&uri).expect("expected an indexed entry");
+        assert_eq!(entry.value(), &vec!["test".to_string()]);
+    }
+
+    #[test]
+    fn a_plain_asm_document_with_no_embedded_block_is_not_indexed() {
+        let asm_analyzer = AssemblyAnalyzer::new();
+        let build_analyzer = BuildFileAnalyzer::new();
+        let index: DashMap<Url, Vec<String>> = DashMap::new();
+
+        let uri = Url::parse("file:///plain.asm").unwrap();
+        let document = Document::new(uri.clone(), "org 0x8000\n    ret\n".to_string(), 1);
+        update_embedded_bndbuild_index(&asm_analyzer, &build_analyzer, &document, &index);
+
+        assert!(index.get(&uri).is_none());
+    }
+
+    /// A previously-indexed file whose embedded block gets edited away must
+    /// have its entry removed, not left stale.
+    #[test]
+    fn removing_the_last_embedded_block_removes_the_index_entry() {
+        let asm_analyzer = AssemblyAnalyzer::new();
+        let build_analyzer = BuildFileAnalyzer::new();
+        let index: DashMap<Url, Vec<String>> = DashMap::new();
+        let uri = Url::parse("file:///shadebobs.asm").unwrap();
+
+        let with_block = Document::new(uri.clone(), SHADEBOBS_EXAMPLE.to_string(), 1);
+        update_embedded_bndbuild_index(&asm_analyzer, &build_analyzer, &with_block, &index);
+        assert!(index.get(&uri).is_some());
+
+        let without_block = Document::new(uri.clone(), "org 0x8000\n    ret\n".to_string(), 2);
+        update_embedded_bndbuild_index(&asm_analyzer, &build_analyzer, &without_block, &index);
+        assert!(index.get(&uri).is_none());
+    }
+
+    /// End-to-end: opening a real `.asm` file with an embedded block through
+    /// the actual `did_open` handler populates the index (proving the real
+    /// wiring, not just the standalone function), and
+    /// `cpclib.getEmbeddedBndbuildFiles` reports it back - the mechanism
+    /// `BndbuildTaskProvider` (client-side) relies on for `Ctrl+Shift+B`
+    /// discovery of embedded rules.
+    #[tokio::test]
+    async fn get_embedded_bndbuild_files_reports_a_file_opened_via_did_open() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        let uri = Url::parse("file:///shadebobs.asm").unwrap();
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "basm".to_string(),
+                    version: 1,
+                    text: SHADEBOBS_EXAMPLE.to_string()
+                }
+            })
+            .await;
+
+        let result = backend
+            .execute_command(ExecuteCommandParams {
+                command: "cpclib.getEmbeddedBndbuildFiles".to_string(),
+                arguments: vec![],
+                work_done_progress_params: Default::default()
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        let files = result.as_array().expect("expected a JSON array");
+        assert_eq!(files.len(), 1, "{files:?}");
+        assert_eq!(files[0]["uri"], serde_json::json!(uri.to_string()));
+        assert_eq!(files[0]["targets"], serde_json::json!(["test"]));
+    }
+
+    #[tokio::test]
+    async fn get_embedded_bndbuild_files_is_empty_when_nothing_was_ever_opened() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+
+        let result = backend
+            .execute_command(ExecuteCommandParams {
+                command: "cpclib.getEmbeddedBndbuildFiles".to_string(),
+                arguments: vec![],
+                work_done_progress_params: Default::default()
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(result, serde_json::json!([]));
     }
 }

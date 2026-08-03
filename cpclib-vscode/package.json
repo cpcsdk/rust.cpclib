@@ -121,7 +121,11 @@
           },
           "file": {
             "type": "string",
-            "description": "Absolute path to the .bnd/.build file (optional, inferred from workspace if omitted)"
+            "description": "Absolute path to the .bnd/.build file, or the host .asm file for an embedded rule (optional, inferred from workspace if omitted)"
+          },
+          "embedded": {
+            "type": "boolean",
+            "description": "True for a rule embedded in a .asm file's own #!bndbuild comment block, run via the LSP's cpclib.runRule command rather than a real bndbuild CLI invocation"
           }
         }
       }

@@ -527,6 +527,63 @@ function buildBndbuildTask(
     return task;
 }
 
+/// A minimal `vscode.Pseudoterminal` wrapping the LSP's own `cpclib.runRule`
+/// command - the execution mechanism for a `#!bndbuild`-embedded rule in a
+/// `.asm` file, which (unlike a real `.bnd` file) has no on-disk YAML file a
+/// `ShellExecution` could target, so it can't become a real terminal Task
+/// the way `buildBndbuildTask`'s tasks are. This lets an embedded rule still
+/// show up as a normal-looking entry in the `Ctrl+Shift+B` picker; running
+/// it opens a near-empty task terminal (this class writes only a pointer
+/// message) while the *real* build output streams to the "CPClib LSP"
+/// output channel as usual (`cpclib.runRule`'s own existing behavior,
+/// unchanged - see the `executeCommand` middleware in `activate()`, which
+/// already reveals that channel for this exact command).
+class EmbeddedRulePseudoterminal implements vscode.Pseudoterminal {
+    private readonly writeEmitter = new vscode.EventEmitter<string>();
+    private readonly closeEmitter = new vscode.EventEmitter<number>();
+    onDidWrite: vscode.Event<string> = this.writeEmitter.event;
+    onDidClose: vscode.Event<number> = this.closeEmitter.event;
+
+    constructor(
+        private readonly rule: string,
+        private readonly hostFilePath: string,
+    ) {}
+
+    async open(): Promise<void> {
+        this.writeEmitter.fire(
+            `Running embedded bndbuild rule '${this.rule}' from ${this.hostFilePath}\r\n` +
+            'See the "CPClib LSP" output channel for build output.\r\n',
+        );
+        try {
+            await vscode.commands.executeCommand('cpclib.runRule', this.rule, this.hostFilePath);
+            this.closeEmitter.fire(0);
+        } catch (err) {
+            this.writeEmitter.fire(`Failed to run: ${err}\r\n`);
+            this.closeEmitter.fire(1);
+        }
+    }
+
+    close(): void {}
+}
+
+/// Builds the `vscode.Task` for a `#!bndbuild`-embedded rule - see
+/// `EmbeddedRulePseudoterminal`'s own doc comment for why this needs a
+/// `CustomExecution` instead of `buildBndbuildTask`'s `ShellExecution`.
+function buildEmbeddedRuleTask(rule: string, hostFilePath: string, taskName: string): vscode.Task {
+    const def: vscode.TaskDefinition = {
+        type: BndbuildTaskProvider.taskType,
+        target: rule,
+        file: hostFilePath,
+        embedded: true,
+    };
+    const execution = new vscode.CustomExecution(
+        async () => new EmbeddedRulePseudoterminal(rule, hostFilePath),
+    );
+    const task = new vscode.Task(def, vscode.TaskScope.Workspace, taskName, 'bndbuild', execution);
+    task.group = vscode.TaskGroup.Build;
+    return task;
+}
+
 class BndbuildTaskProvider implements vscode.TaskProvider {
     static readonly taskType = 'bndbuild';
 
@@ -602,6 +659,39 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
             }
         }
 
+        // Rules embedded in `.asm` files (`#!bndbuild` comment blocks) -
+        // these have no on-disk YAML file to `findFiles`/`getTargets` scan
+        // for, so they're discovered separately: one fast, single request
+        // to the already-maintained server-side index
+        // (`cpclib.getEmbeddedBndbuildFiles`, see its own Rust-side doc
+        // comment for why this is instant rather than a fresh workspace
+        // scan - critical here, since scanning every `.asm` file's content
+        // client-side to look for the marker would make every
+        // `Ctrl+Shift+B` press noticeably slow on a real project).
+        try {
+            const embeddedFiles = await this.lspClient.sendRequest<{ uri: string; targets: string[] }[]>(
+                'workspace/executeCommand',
+                { command: 'cpclib.getEmbeddedBndbuildFiles', arguments: [] },
+            ) ?? [];
+            this.lspClient.outputChannel.appendLine(
+                `[bndbuild task provider] ${embeddedFiles.length} .asm file(s) known to have embedded rules`,
+            );
+            for (const { uri, targets } of embeddedFiles) {
+                const fileUri = vscode.Uri.parse(uri);
+                const filePath = fileUri.fsPath;
+                const relativePath = vscode.workspace.asRelativePath(fileUri);
+                for (const target of targets) {
+                    tasks.push(
+                        buildEmbeddedRuleTask(target, filePath, `${target} (${relativePath}, embedded)`),
+                    );
+                }
+            }
+        } catch (err) {
+            this.lspClient.outputChannel.appendLine(
+                `[bndbuild task provider] cpclib.getEmbeddedBndbuildFiles failed: ${err}`,
+            );
+        }
+
         this.lspClient.outputChannel.appendLine(
             `[bndbuild task provider] returning ${tasks.length} task(s)`,
         );
@@ -613,11 +703,14 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
         if (def.type !== BndbuildTaskProvider.taskType || !def.target) {
             return undefined;
         }
-        const bndbuildCommand = bndbuildCommandPrefix(this.config);
         const filePath = def.file as string | undefined;
         if (!filePath) {
             return undefined;
         }
+        if (def.embedded) {
+            return buildEmbeddedRuleTask(def.target as string, filePath, task.name);
+        }
+        const bndbuildCommand = bndbuildCommandPrefix(this.config);
         return buildBndbuildTask(def.target as string, filePath, bndbuildCommand, task.name);
     }
 }
