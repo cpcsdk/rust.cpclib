@@ -12,6 +12,20 @@ import {
 
 let client: LanguageClient;
 
+// Glob for discovering bndbuild files in the workspace - mirrors
+// `cpclib_bndbuild::builder::EXPECTED_FILENAMES` exactly (`bndbuild.yml`,
+// `build.bnd`, `bnd.build`, and their all-caps variants - the crate's own
+// comment calls the latter out as a real, known toolchain quirk: "ACE fuck
+// up by uppercasing files"), plus *any* other file simply ending in
+// `.bnd`/`.build` (regular or `.BND`/`.BUILD`), matching real project
+// layouts that don't use one of the 3 canonical stems (e.g. `linking.bnd`).
+// VS Code's `findFiles` glob matching is case-sensitive on a case-sensitive
+// filesystem and has no case-insensitive flag, so each case needs its own
+// explicit alternative - `**/*.{bnd,build}` alone silently misses every
+// all-caps file.
+const BUILD_FILE_GLOB =
+    '{**/*.bnd,**/*.BND,**/*.build,**/*.BUILD,**/bndbuild.yml,**/BNDBUILD.YML}';
+
 // The resolved `cpclib-lsp` binary path, set once in `activate()` - reused
 // by `bndbuildCommandPrefix` so bndbuild execution (Tasks, the "▶ Run"
 // CodeLens) invokes the *same* binary as the language server itself,
@@ -116,7 +130,15 @@ export function activate(context: ExtensionContext) {
             { scheme: 'untitled', language: 'catart-basic' }
         ],
         synchronize: {
-            fileEvents: workspace.createFileSystemWatcher('{**/*.{asm,z80,build,bnd,bas,BAS,CAT,cat,ASC,asc},**/bndbuild.yml}')
+            // The bndbuild half mirrors `BUILD_FILE_GLOB` (also covering the
+            // all-caps `.BND`/`.BUILD`/`BNDBUILD.YML` variants
+            // `cpclib_bndbuild::builder::EXPECTED_FILENAMES` explicitly
+            // handles), so the LSP re-syncs on a build file's changes
+            // regardless of which casing it was named with.
+            fileEvents: workspace.createFileSystemWatcher(
+                '{**/*.{asm,z80,bas,BAS,CAT,cat,ASC,asc},' +
+                '**/*.bnd,**/*.BND,**/*.build,**/*.BUILD,**/bndbuild.yml,**/BNDBUILD.YML}'
+            )
         },
         middleware: {
             // The server streams build output (stdout/stderr as the rule
@@ -127,18 +149,17 @@ export function activate(context: ExtensionContext) {
             // terminal-based runner used to pop into view; `true` preserves
             // editor focus.
             //
-            // `cpclib.runRuleInTerminal` (the rule-level "▶ Run" CodeLens on
-            // a real on-disk .bnd file) deliberately isn't listed here - it
-            // runs as a real VS Code Task/terminal instead, which shows
-            // itself. This middleware only covers the two commands that
-            // still stream through the LSP's own output channel:
-            // `cpclib.runRule` (embedded-bndbuild-in-.asm blocks, which have
-            // no on-disk file for a terminal Task to invoke) and
-            // `cpclib.runTask` (the per-command "▶ Run this command"
-            // CodeLens, which has no CLI equivalent for "run just task N of
-            // rule R"). Missing `cpclib.runTask` here was a real bug: its
-            // output *was* being logged, just never shown, so it looked
-            // like nothing happened at all.
+            // `cpclib.runRuleInTerminal`/`cpclib.runTaskInTerminal` (the
+            // rule-level and per-task CodeLenses on a real on-disk .bnd
+            // file) deliberately aren't listed here - they run as real VS
+            // Code Tasks/terminals instead, which show themselves. This
+            // middleware only covers the two commands that still stream
+            // through the LSP's own output channel because there's no
+            // on-disk file for a terminal Task to invoke:
+            // `cpclib.runRule`/`cpclib.runTask`, both scoped to
+            // embedded-bndbuild-in-.asm blocks. Missing `cpclib.runTask`
+            // here used to be a real bug: its output *was* being logged,
+            // just never shown, so it looked like nothing happened at all.
             executeCommand: (command, args, next) => {
                 if (command === 'cpclib.runRule' || command === 'cpclib.runTask') {
                     client.outputChannel.show(true);
@@ -515,9 +536,30 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
     ) {}
 
     async provideTasks(_token: vscode.CancellationToken): Promise<vscode.Task[]> {
+        // Logged unconditionally (not just on error) - "Ctrl+Shift+B finds
+        // no bndbuild tasks" has too many possible causes (provider never
+        // invoked at all, glob matched nothing, every getTargets call
+        // failed, every file legitimately has zero targets) to tell apart
+        // from silence alone. Check the "CPClib LSP" output channel after
+        // pressing Ctrl+Shift+B - if this line isn't even there, the
+        // provider itself was never asked (an activation problem, not this
+        // function); if it's there with 0 build files, the glob or workspace
+        // folder is the problem; if files but 0 targets each, `getTargets`
+        // or the LSP connection is the problem.
+        this.lspClient.outputChannel.appendLine(
+            `[bndbuild task provider] provideTasks() invoked, workspace folders: ${
+                vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath).join(', ') ?? '(none)'
+            }`,
+        );
+
         const buildFiles = await vscode.workspace.findFiles(
-            '{**/*.{bnd,build},**/bndbuild.yml}',
+            BUILD_FILE_GLOB,
             '{**/node_modules/**,**/.git/**,**/target/**}',
+        );
+        this.lspClient.outputChannel.appendLine(
+            `[bndbuild task provider] found ${buildFiles.length} build file(s): ${
+                buildFiles.map(f => f.fsPath).join(', ')
+            }`,
         );
 
         const bndbuildCommand = bndbuildCommandPrefix(this.config);
@@ -539,16 +581,30 @@ class BndbuildTaskProvider implements vscode.TaskProvider {
                     `[bndbuild task provider] cpclib.getTargets failed for ${fileUri.fsPath}: ${err}`,
                 );
             }
+            this.lspClient.outputChannel.appendLine(
+                `[bndbuild task provider] ${fileUri.fsPath}: ${targets.length} target(s): ${targets.join(', ')}`,
+            );
 
             const filePath = fileUri.fsPath;
-            const fileName = path.basename(filePath);
+            // Workspace-relative path, not just the bare filename - two
+            // build files in different directories can both declare a
+            // target of the same name (e.g. two `build.bnd`s each with a
+            // `test` rule), and the bare filename alone doesn't disambiguate
+            // them in the Ctrl+Shift+B picker. Default `includeWorkspaceFolder`
+            // (omitted, not forced false) also prefixes the root folder name
+            // in a multi-root workspace, where even the relative path alone
+            // could still collide across roots.
+            const relativePath = vscode.workspace.asRelativePath(fileUri);
 
             for (const target of targets) {
-                const taskName = buildFiles.length > 1 ? `${target} (${fileName})` : target;
+                const taskName = buildFiles.length > 1 ? `${target} (${relativePath})` : target;
                 tasks.push(buildBndbuildTask(target, filePath, bndbuildCommand, taskName));
             }
         }
 
+        this.lspClient.outputChannel.appendLine(
+            `[bndbuild task provider] returning ${tasks.length} task(s)`,
+        );
         return tasks;
     }
 
@@ -655,7 +711,7 @@ async function buildActiveFile(): Promise<void> {
     }
 
     const buildFiles = await vscode.workspace.findFiles(
-        '{**/*.{bnd,build},**/bndbuild.yml}',
+        BUILD_FILE_GLOB,
         '{**/node_modules/**,**/.git/**,**/target/**}',
     );
 
@@ -684,7 +740,10 @@ async function buildActiveFile(): Promise<void> {
     if (matches.length > 1) {
         const items = matches.map(m => ({
             label: m.target,
-            description: path.basename(m.buildFileUri.fsPath),
+            // Workspace-relative path, not just the bare filename - same
+            // ambiguity risk as `BndbuildTaskProvider.provideTasks`' own
+            // task naming when several build files share a target name.
+            description: vscode.workspace.asRelativePath(m.buildFileUri),
             match: m,
         }));
         const picked = await window.showQuickPick(items, { placeHolder: 'Select a build target' });
