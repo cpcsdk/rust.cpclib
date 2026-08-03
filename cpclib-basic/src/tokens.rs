@@ -408,7 +408,6 @@ impl TryInto<char> for BasicTokenNoPrefix {
 impl From<char> for BasicTokenNoPrefix {
     fn from(c: char) -> Self {
         match c {
-            // ':' => (BasicTokenNoPrefix::StatementSeparator),
             ' ' => BasicTokenNoPrefix::CharSpace,
             'A' => BasicTokenNoPrefix::CharUpperA,
             'B' => BasicTokenNoPrefix::CharUpperB,

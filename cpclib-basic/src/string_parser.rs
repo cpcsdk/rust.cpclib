@@ -198,7 +198,7 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
 
     // I have seen code starting by ":"
     if let Some(_) = opt(':').parse_next(input)? {
-        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
+        tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
     }
 
     loop {
@@ -218,7 +218,7 @@ pub fn parse_basic_line<'src>(input: &mut &'src str) -> BasicLineResult<'src> {
                 }
 
                 if opt(':').parse_next(input)?.is_some() {
-                    tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
+                    tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
                     continue;
                 }
 
@@ -1030,7 +1030,6 @@ pub fn parse_input<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
 // map(
 // alt((
 // alt((
-// map(char(':'), |_| BasicTokenNoPrefix::StatementSeparator),
 // map(char(' '), |_| BasicTokenNoPrefix::CharSpace),
 // map(char('A'), |_| BasicTokenNoPrefix::CharUpperA),
 // map(char('B'), |_| BasicTokenNoPrefix::CharUpperB),
@@ -1462,7 +1461,7 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
                     let mut space_before = parse_basic_space0.parse_next(input)?;
                     if opt(':').parse_next(input)?.is_some() {
                         res.append(&mut space_before);
-                        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
+                        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
                         let mut space_after = parse_basic_space0.parse_next(input)?;
                         res.append(&mut space_after);
                         // Continue to next statement
@@ -1516,7 +1515,7 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
                             let mut space_before = parse_basic_space0.parse_next(input)?;
                             if opt(':').parse_next(input)?.is_some() {
                                 res.append(&mut space_before);
-                                res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::CharColon));
+                                res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator));
                                 let mut space_after = parse_basic_space0.parse_next(input)?;
                                 res.append(&mut space_after);
                                 // Continue to next statement
