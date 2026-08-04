@@ -82,6 +82,9 @@ impl AssemblyAnalyzer {
         if let Some(a) = self.firmware_symbol_replacement_action(document, range) {
             actions.push(a);
         }
+        if let Some(a) = self.peephole_quickfix_action(document, range) {
+            actions.push(a);
+        }
 
         let Some((start_line, end_line)) = line_range_from_selection(range, all_lines.len())
         else {

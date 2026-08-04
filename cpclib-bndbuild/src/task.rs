@@ -100,6 +100,7 @@ pub enum InnerTask {
     Xfer(StandardTaskArguments),
     YmCruncher(YmCruncher, StandardTaskArguments),
     AsmFmt(StandardTaskArguments),
+    BasmOpt(StandardTaskArguments),
     Vlink(StandardTaskArguments)
 }
 
@@ -204,6 +205,7 @@ pub const EMULATOR_1984_CMDS: &[&str] = &[EMULATOR_1984_CMD];
 pub const RETROVM_CMDS: &[&str] = &[RETROVM_CMD, "rvm"];
 
 pub const ASMFMT_CMDS: &[&str] = &["asmfmt", "basm-fmt"];
+pub const BASMOPT_CMDS: &[&str] = &["basmopt"];
 pub const BASM_CMDS: &[&str] = &["basm", "assemble"];
 pub const ORGAMS_CMDS: &[&str] = &["orgams"];
 pub const RASM_CMDS: &[&str] = &[RASM_CMD];
@@ -310,6 +312,7 @@ impl Display for InnerTask {
             Self::Tracker(t, s) => (t.get_command(), s),
             Self::Vlink(s) => (VLINK_CMDS[0], s),
             Self::AsmFmt(s) => (ASMFMT_CMDS[0], s),
+            Self::BasmOpt(s) => (BASMOPT_CMDS[0], s),
             Self::Xfer(s) => (XFER_CMDS[0], s)
         };
 
@@ -341,6 +344,7 @@ macro_rules! is_some_cmd {
 is_some_cmd!(
     ace, amspirit, asmfmt, at, ayt, archive,
     basm, basmdoc, bdasm, bndbuild,
+    basmopt,
     catalog, capriceforever, chipnsfx, convgeneric, cpcemu, cpr, csl, crunch, cp, cpcec, cpcemupower, cpc2img,
     cadence, emulator_1984,
     disark, disc,
@@ -502,6 +506,10 @@ impl InnerTask {
 
     pub fn with_asmfmt(std: StandardTaskArguments) -> Self {
         Self::AsmFmt(std)
+    }
+
+    pub fn with_basmopt(std: StandardTaskArguments) -> Self {
+        Self::BasmOpt(std)
     }
 
     pub fn with_echo(std: StandardTaskArguments) -> Self {
@@ -801,6 +809,9 @@ impl InnerTask {
         else if is_asmfmt_cmd(code) {
             Ok(Self::with_asmfmt(std))
         }
+        else if is_basmopt_cmd(code) {
+            Ok(Self::with_basmopt(std))
+        }
         else if is_echo_cmd(code) {
             Ok(Self::with_echo(std))
         }
@@ -932,6 +943,7 @@ impl InnerTask {
             | InnerTask::Csl(t)
             | InnerTask::Emulator(_, t)
             | InnerTask::AsmFmt(t)
+            | InnerTask::BasmOpt(t)
             | InnerTask::Snapshot(t)
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
@@ -975,6 +987,7 @@ impl InnerTask {
             | InnerTask::SongConverter(_, t)
             | InnerTask::Tracker(_, t)
             | InnerTask::AsmFmt(t)
+            | InnerTask::BasmOpt(t)
             | InnerTask::Vlink(t)
             | InnerTask::Xfer(t)
             | InnerTask::Cpr(t)
@@ -1037,6 +1050,7 @@ impl InnerTask {
             InnerTask::Xfer(_) => true,
             InnerTask::Cpr(_) => false,
             InnerTask::AsmFmt(_) => false,
+            InnerTask::BasmOpt(_) => false,
             InnerTask::Csl(_) => false
         }
     }
@@ -1091,6 +1105,7 @@ impl InnerTask {
 
             // Utilities
             InnerTask::AsmFmt(_) => TaskKind::Embedded,
+            InnerTask::BasmOpt(_) => TaskKind::Embedded,
             InnerTask::Echo(_) => TaskKind::Embedded,
             InnerTask::Extern(_) => TaskKind::Delegated
         }
@@ -1166,6 +1181,7 @@ impl InnerTask {
             Self::Mv(empty_args.clone()),
             Self::Rm(empty_args.clone()),
             Self::AsmFmt(empty_args.clone()),
+            Self::BasmOpt(empty_args.clone()),
             Self::Snapshot(empty_args.clone()),
             Self::Vlink(empty_args.clone()),
             Self::Xfer(empty_args.clone()),

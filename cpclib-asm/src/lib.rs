@@ -18,6 +18,8 @@ pub mod assembler;
 
 pub mod disass;
 
+pub mod flatten;
+
 pub mod preamble;
 
 pub mod error;
@@ -105,7 +107,16 @@ pub struct AssemblingOptions {
     /// effects" one. See each gated call site (`SaveCommand::execute_on`,
     /// `Env::save_sna`/`save_cpr`, `PauseCommand::execute`) for exactly
     /// what's suppressed.
-    dry_run: bool
+    dry_run: bool,
+    /// When set, `Env` records the real assembled address of every token it
+    /// visits (`Env::visit_located_token`), overwritten pass over pass so it
+    /// converges to the final pass's addresses. Default off: a real `basm`
+    /// build should not pay for a `HashMap` insert per token it never reads
+    /// back. Consumed by `Env::address_of_token_offset` — tooling such as the
+    /// LSP's peephole-optimizer support (`cpclib-asmoptim`) turns this on to
+    /// evaluate address-aware rule constraints (e.g. "is this JP in range for
+    /// a JR").
+    record_token_addresses: bool
 }
 
 impl Default for AssemblingOptions {
@@ -125,7 +136,8 @@ impl Default for AssemblingOptions {
             force_void: true,
             debug: false,
             forbid_memory_override: false,
-            dry_run: false
+            dry_run: false,
+            record_token_addresses: false
         }
     }
 }
@@ -264,6 +276,15 @@ impl AssemblingOptions {
         if dry_run {
             self.output_builder = None;
         }
+        self
+    }
+
+    pub fn record_token_addresses(&self) -> bool {
+        self.record_token_addresses
+    }
+
+    pub fn set_record_token_addresses(&mut self, record: bool) -> &mut Self {
+        self.record_token_addresses = record;
         self
     }
 

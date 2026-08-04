@@ -2566,6 +2566,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-asmoptim"
+version = "0.11.0"
+dependencies = [
+ "cpclib-asm",
+ "cpclib-common",
+ "cpclib-tokens",
+ "cpclib-z80emu",
+]
+
+[[package]]
 name = "cpclib-basic"
 version = "0.11.0"
 dependencies = [
@@ -2639,6 +2649,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-basmopt"
+version = "0.11.0"
+dependencies = [
+ "camino",
+ "camino-tempfile",
+ "clap",
+ "cpclib-asm",
+ "cpclib-asmoptim",
+ "cpclib-common",
+ "cpclib-tokens",
+ "fs-err",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "cpclib-bdasm"
 version = "0.11.0"
 dependencies = [
@@ -2677,6 +2702,7 @@ dependencies = [
  "cpclib-basic",
  "cpclib-basm",
  "cpclib-basmdoc",
+ "cpclib-basmopt",
  "cpclib-bdasm",
  "cpclib-catalog",
  "cpclib-common",
@@ -3024,6 +3050,7 @@ dependencies = [
  "clap_complete",
  "cpclib-asm",
  "cpclib-asmfmt",
+ "cpclib-asmoptim",
  "cpclib-basic",
  "cpclib-basmdoc",
  "cpclib-bndbuild",
@@ -3053,7 +3080,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "walkdir",
- "winnow 0.6.26",
 ]
 
 [[package]]
@@ -15887,15 +15913,6 @@ name = "winnow"
 version = "0.5.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "winnow"
-version = "0.6.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e90edd2ac1aa278a5c4599b1d89cf03074b610800f866d4026dc199d7929a28"
 dependencies = [
  "memchr",
 ]

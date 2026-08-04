@@ -140,6 +140,11 @@ pub(super) fn dry_run_env(
     let mut assemble = AssemblingOptions::default();
     assemble.set_dry_run(true);
     assemble.set_case_sensitive(case_sensitive);
+    // One extra HashMap insert per token during an already-cached assemble is
+    // noise; this is what lets address-aware peephole-optimizer constraints
+    // (`cpclib-asmoptim`'s `reachableByJr`) work off the same dry run instead
+    // of needing a second cached `Env` variant.
+    assemble.set_record_token_addresses(true);
     for category in disabled_categories.iter() {
         assemble.disable_warning_category(category);
     }

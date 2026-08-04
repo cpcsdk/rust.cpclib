@@ -70,7 +70,14 @@ pub struct AsmWarningClasses {
     /// part of the `env.warnings()` pipeline at all today (`basm` itself
     /// never calls it), so this one has no assembler-level counterpart to
     /// forward to.
-    pub unused_bindings: bool
+    pub unused_bindings: bool,
+    /// LSP-only, same as `unused_bindings` above - `cpclib-asmoptim`'s
+    /// matching engine is a separate, advisory-only pass (see that crate's
+    /// own doc comment) that never runs as part of a real `basm` assemble
+    /// and never changes what gets assembled. Suggests improvable Z80
+    /// instruction sequences (e.g. `ld a,0` where `xor a` would do) using
+    /// real, community-vetted rules from `mdlz80optimizer`'s pattern format.
+    pub peephole_optimizer: bool
 }
 
 impl Default for AsmWarningClasses {
@@ -80,7 +87,8 @@ impl Default for AsmWarningClasses {
             redundant_accumulator_prefix: true,
             override_memory: true,
             overflow: true,
-            unused_bindings: true
+            unused_bindings: true,
+            peephole_optimizer: true
         }
     }
 }
@@ -304,6 +312,10 @@ overflow = true
 # A declared-but-never-referenced MACRO/FUNCTION parameter or REPEAT/
 # ITERATE/FOR loop counter (LSP-only diagnostic, no basm CLI equivalent).
 unused_bindings = true
+# An improvable Z80 instruction sequence (e.g. "ld a,0" where "xor a" would
+# do), using real community-vetted rules (LSP-only advisory, no basm CLI
+# equivalent - never changes what actually gets assembled).
+peephole_optimizer = true
 
 [basic]
 warnings_as_errors = false

@@ -169,79 +169,13 @@ pub(super) fn is_ident_byte(b: u8) -> bool {
 /// instead of a shallow `.iter()` so they see everything, not just what
 /// happens to sit outside every conditional/loop/module.
 ///
-/// Lazy - every caller so far only needs a single pass, so this never pays
-/// for an eager `Vec` allocation. Assumes each token belongs to at most one
-/// of the nested-block categories below (true in practice for real parser
-/// output - a token can't simultaneously be a `MODULE` and an `IF`, say);
-/// harmless unless that assumption is ever violated, in which case this
-/// would visit fewer nested tokens than checking each independently would.
-pub(super) fn flatten_listing<'a, T>(
-    tokens: impl IntoIterator<Item = &'a T> + 'a
-) -> Box<dyn Iterator<Item = &'a T> + 'a>
-where T: cpclib_tokens::ListingElement + 'a {
-    Box::new(tokens.into_iter().flat_map(flatten_one))
-}
-
-fn flatten_one<'a, T>(token: &'a T) -> Box<dyn Iterator<Item = &'a T> + 'a>
-where T: cpclib_tokens::ListingElement + 'a {
-    let nested: Box<dyn Iterator<Item = &'a T> + 'a> = if token.is_module() {
-        flatten_listing(token.module_listing())
-    }
-    else if token.is_if() {
-        let tests: Box<dyn Iterator<Item = &'a T> + 'a> = Box::new(
-            (0..token.if_nb_tests()).flat_map(move |i| flatten_listing(token.if_test(i).1))
-        );
-        let else_branch: Box<dyn Iterator<Item = &'a T> + 'a> = match token.if_else() {
-            Some(l) => flatten_listing(l),
-            None => Box::new(std::iter::empty())
-        };
-        Box::new(tests.chain(else_branch))
-    }
-    else if token.is_repeat() {
-        flatten_listing(token.repeat_listing())
-    }
-    else if token.is_repeat_until() {
-        flatten_listing(token.repeat_until_listing())
-    }
-    else if token.is_while() {
-        flatten_listing(token.while_listing())
-    }
-    else if token.is_rorg() {
-        flatten_listing(token.rorg_listing())
-    }
-    else if token.is_for() {
-        flatten_listing(token.for_listing())
-    }
-    else if token.is_function_definition() {
-        flatten_listing(token.function_definition_inner())
-    }
-    else if token.is_iterate() {
-        flatten_listing(token.iterate_listing())
-    }
-    else if token.is_switch() {
-        let cases: Vec<_> = token.switch_cases().collect();
-        let cases_iter: Box<dyn Iterator<Item = &'a T> + 'a> =
-            Box::new(cases.into_iter().flat_map(|(_, l, _)| flatten_listing(l)));
-        let default_iter: Box<dyn Iterator<Item = &'a T> + 'a> = match token.switch_default() {
-            Some(l) => flatten_listing(l),
-            None => Box::new(std::iter::empty())
-        };
-        Box::new(cases_iter.chain(default_iter))
-    }
-    else if token.is_confined() {
-        flatten_listing(token.confined_listing())
-    }
-    else if token.is_crunched_section() {
-        flatten_listing(token.crunched_section_listing())
-    }
-    else if token.is_assembler_control() {
-        flatten_listing(token.assembler_control_get_listing())
-    }
-    else {
-        Box::new(std::iter::empty())
-    };
-    Box::new(std::iter::once(token).chain(nested))
-}
+/// Thin re-export of `cpclib_asm::flatten::flatten_listing` under this
+/// module's own established name - kept so the many existing call sites in
+/// this crate don't all need their imports touched. The real implementation
+/// lives in `cpclib-asm` now (promoted there so `cpclib-asmoptim`/
+/// `cpclib-basmopt` can share it instead of each maintaining their own copy;
+/// see that crate's `flatten.rs` for the actual traversal logic).
+pub(super) use cpclib_asm::flatten::flatten_listing;
 
 /// 0-based line of `token`'s own span.
 pub(super) fn span_line<T: cpclib_asm::parser::obtained::MayHaveSpan>(token: &T) -> u32 {

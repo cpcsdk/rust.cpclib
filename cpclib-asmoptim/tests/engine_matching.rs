@@ -9,13 +9,41 @@
 use cpclib_asm::parser::parse_z80_str;
 use cpclib_asmoptim::dsl::RuleSet;
 use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
+use cpclib_tokens::{ToSimpleToken, Token};
 
-/// Parse `source` and match it against `rules`.
+/// Parse `source`, match it against `rules` twice - once as the real
+/// `LocatedToken`s the LSP works with, once as plain `Token`s (the same AST
+/// with all span/source-position information stripped) - and assert the two
+/// runs agree exactly.
+///
+/// The engine's whole contract is that it only depends on `ListingElement`,
+/// never on anything span-specific; running every case through both token
+/// types is what actually proves that rather than merely asserting it in a
+/// doc comment. `Token` is what the engine has to cope with when a caller
+/// hands it synthesized/reconstructed instructions with no source position at
+/// all (that's also, not coincidentally, exactly the case a `reachableByJr`-
+/// style constraint must degrade to "unknown" for - see
+/// `tests/reachable_by_jr.rs`).
 fn matches_for(source: &str, rules: &str) -> Vec<PeepholeMatch> {
     let listing = parse_z80_str(source).expect("test source must parse");
-    let tokens: Vec<_> = listing.iter().collect();
     let rules = RuleSet::parse(rules).expect("test rules must parse");
-    find_matches(&tokens, &rules)
+
+    let located_tokens: Vec<_> = listing.iter().collect();
+    let located_result = find_matches(&located_tokens, &rules);
+
+    let simple_tokens: Vec<Token> = listing
+        .iter()
+        .map(|t| t.as_simple_token().into_owned())
+        .collect();
+    let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
+    let simple_result = find_matches(&simple_refs, &rules);
+
+    assert_eq!(
+        located_result, simple_result,
+        "LocatedToken and Token matching must agree for {source:?}"
+    );
+
+    located_result
 }
 
 /// The real upstream `cp02ora` rule, minus its `flagsNotUsedAfter` constraint

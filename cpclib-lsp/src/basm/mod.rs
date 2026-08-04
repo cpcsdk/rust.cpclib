@@ -36,6 +36,7 @@ pub mod includes;
 pub mod inlay_hints;
 pub mod overflow;
 pub mod parse;
+pub mod peephole;
 pub mod refactor;
 pub mod registers;
 pub mod remove_parameter;

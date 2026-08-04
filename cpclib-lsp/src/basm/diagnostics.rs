@@ -115,9 +115,21 @@ impl AssemblyAnalyzer {
         // resolution) is cached per document version, so this only pays
         // the real cost once per edit even though `analyze` and hover can
         // both request it for the same version.
+        //
+        // Uses `self.parse_document(document)` (the cached listing), not a
+        // fresh `Self::parse_source` call the way the recovery loop above
+        // does: `Env::address_trace` (`cpclib-asm`) keys recorded addresses
+        // by the exact parse that produced them, not by source text alone,
+        // so an address-aware constraint (`reachableByJr`, i.e. `jp2jr`)
+        // silently resolves to nothing if the `Env` handed to
+        // `collect_peephole_warnings` was cached against a *different*
+        // parse than the `listing` passed alongside it - which a fresh
+        // re-parse here would be whenever some other request (e.g. the
+        // quickfix, or hover) already populated the env cache first via
+        // `self.parse_document`. Reusing the same cached listing everywhere
+        // guarantees they're always the same parse.
         if diagnostics.is_empty()
-            && let Ok(listing) =
-                Self::parse_source(&full_text, Some(&document.uri), disabled_parser_categories)
+            && let Ok(listing) = self.parse_document(document)
         {
             let mut env = self.dry_run_env_cached(document, &listing);
             collect_assembler_warnings(&env, document, &mut diagnostics);
@@ -125,6 +137,9 @@ impl AssemblyAnalyzer {
             Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
             if self.config().warnings.unused_bindings {
                 collect_unused_binding_warnings(&listing, document, &mut diagnostics);
+            }
+            if self.config().warnings.peephole_optimizer {
+                super::peephole::collect_peephole_warnings(&listing, &env, &mut diagnostics);
             }
         }
 
@@ -890,6 +905,39 @@ mod tests {
         assert!(!fake_token.is_warning(), "{fake_token:?}");
     }
 
+    /// Reproduces a real bug a user hit: `peephole_quickfix_action` (and any
+    /// other `self.parse_document`-based feature - hover, definitions, ...)
+    /// always populates the `dry_run_env_cached` cache using the *cached*
+    /// listing. If `analyze()` computed its diagnostics against a
+    /// *different* parse of the same text (as it used to, via a fresh
+    /// `Self::parse_source` call), `Env::address_trace`'s span-identity
+    /// keying (`cpclib-asm`) would silently miss every lookup for that
+    /// mismatched parse, and `jp2jr` would vanish from the diagnostics list
+    /// even though it's genuinely reachable - while the quickfix, always
+    /// self-consistent with its own cached listing, kept working. Exactly
+    /// the asymmetry (bulb but no squiggly) the user actually observed.
+    #[test]
+    fn analyze_finds_an_address_aware_match_even_when_something_else_primed_the_env_cache_first() {
+        let text = "start:\n    jp target\ntarget:\n    ret\n";
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        // Simulate a quickfix request (or hover, or anything else built on
+        // `self.parse_document`) running before diagnostics ever do.
+        let cursor = Range {
+            start: Position { line: 0, character: 0 },
+            end: Position { line: 0, character: 0 }
+        };
+        let _ = analyzer.peephole_quickfix_action(&document, cursor);
+
+        let diags = analyzer.analyze(&document);
+        assert!(
+            diags.iter().any(|d| d.message.contains("jr target")),
+            "{diags:?}"
+        );
+    }
+
     #[test]
     fn disabling_unused_bindings_suppresses_that_diagnostic() {
         let text = "FUNCTION f, a, b\n    IF {a} > 0\n        RETURN 1\n    ENDIF\n    RETURN 0\nENDFUNCTION\nval equ f(1, 2)\n";
@@ -904,6 +952,60 @@ mod tests {
         let disabled = diagnostics_for_with_config(text, config);
         assert!(
             !disabled.iter().any(|d| d.message.contains("is never used")),
+            "{disabled:?}"
+        );
+    }
+
+    /// `unnecessary-ld-to-itself` (a real, built-in `cpclib-asmoptim` rule)
+    /// firing through the real `analyze()` pipeline - proves the whole
+    /// chain (dry-run assemble, address recording, `flatten_listing`,
+    /// `find_matches_with_resolver`) is wired correctly, not just that the
+    /// engine works in isolation (already covered by `cpclib-asmoptim`'s own
+    /// tests).
+    #[test]
+    fn a_peephole_optimisation_is_reported_as_a_warning() {
+        let text = "org 0x4000\n ld b, b\n ret\n";
+        let diags = diagnostics_for(text);
+        let peephole: Vec<_> = diags
+            .iter()
+            .filter(|d| d.source.as_deref() == Some("basm-peephole"))
+            .collect();
+        assert_eq!(peephole.len(), 1, "{diags:?}");
+        assert!(peephole[0].message.contains("ld b,b"), "{peephole:?}");
+        assert_eq!(peephole[0].severity, Some(DiagnosticSeverity::WARNING));
+        // "ld b, b" is on line 1 (0-based), starting right after the leading
+        // space.
+        assert_eq!(peephole[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn already_optimal_source_reports_no_peephole_warning() {
+        let text = "org 0x4000\n xor a\n ld (hl), a\n ret\n";
+        let diags = diagnostics_for(text);
+        assert!(
+            !diags.iter().any(|d| d.source.as_deref() == Some("basm-peephole")),
+            "{diags:?}"
+        );
+    }
+
+    #[test]
+    fn disabling_peephole_optimizer_suppresses_that_diagnostic() {
+        let text = "org 0x4000\n ld b, b\n ret\n";
+        let enabled = diagnostics_for(text);
+        assert!(
+            enabled
+                .iter()
+                .any(|d| d.source.as_deref() == Some("basm-peephole")),
+            "{enabled:?}"
+        );
+
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.peephole_optimizer = false;
+        let disabled = diagnostics_for_with_config(text, config);
+        assert!(
+            !disabled
+                .iter()
+                .any(|d| d.source.as_deref() == Some("basm-peephole")),
             "{disabled:?}"
         );
     }

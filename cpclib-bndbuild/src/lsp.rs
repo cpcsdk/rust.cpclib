@@ -357,6 +357,18 @@ pub const TASK_TYPES: &[TaskType] = &[
         example: "echo watched.txt as been modified"
     },
     TaskType {
+        names: ASMFMT_CMDS,
+        description: "Format Z80 assembly source code (basm-fmt)",
+        synopsis: "basm-fmt [OPTIONS] [FILES]...",
+        example: "asmfmt -i main.asm"
+    },
+    TaskType {
+        names: BASMOPT_CMDS,
+        description: "Detect (and optionally fix) suboptimal Z80 instruction sequences",
+        synopsis: "basmopt [OPTIONS] <SOURCE>",
+        example: "basmopt -i main.asm"
+    },
+    TaskType {
         names: EXTERN_CMDS,
         description: "Run external command",
         synopsis: "extern command",

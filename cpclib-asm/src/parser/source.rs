@@ -291,6 +291,72 @@ impl Z80Span {
     pub fn context(&self) -> &ParserContext {
         self.state
     }
+
+    /// A value that uniquely identifies this span's position within the
+    /// listing it was parsed from - stable for as long as that listing is
+    /// alive, but meaningless across a *different* parse of the same text
+    /// (a re-parse gets its own, fresh contexts).
+    ///
+    /// Two coordinates, not just [`Self::offset_from_start`]: a real project
+    /// `include`s several source files, and each gets its own
+    /// [`ParserContext`] whose own source starts back at offset 0 - so the
+    /// offset alone collides between files. Each included file's context is
+    /// a separate, stably-addressed object for the listing's lifetime (see
+    /// [`Self::context`]), so pairing the context's own identity with the
+    /// offset disambiguates cheaply, with no filename comparison needed.
+    pub fn identity(&self) -> SpanIdentity {
+        SpanIdentity(
+            std::ptr::from_ref(self.context()) as usize,
+            self.offset_from_start()
+        )
+    }
+}
+
+/// See [`Z80Span::identity`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SpanIdentity(usize, usize);
+
+#[cfg(test)]
+mod identity_tests {
+    use super::super::context::ParserOptions;
+    use super::*;
+
+    /// Reproduces the real multi-file bug directly: two independently parsed
+    /// sources (standing in for two files a project `include`s) each start
+    /// their own span numbering at offset 0, so `offset_from_start()` alone
+    /// collides between them - `Env::address_trace` used to be keyed by
+    /// exactly that, silently mixing up two different files' addresses.
+    #[test]
+    fn two_spans_at_the_same_offset_in_different_parses_have_different_identities() {
+        let ctx_a = ParserOptions::default().context_builder().build("nop");
+        let ctx_b = ParserOptions::default().context_builder().build("nop");
+
+        let span_a = ctx_a.build_span(ctx_a.source);
+        let span_b = ctx_b.build_span(ctx_b.source);
+
+        assert_eq!(span_a.offset_from_start(), 0);
+        assert_eq!(span_b.offset_from_start(), 0);
+        assert_ne!(
+            span_a.identity(),
+            span_b.identity(),
+            "two different parses' spans at the same offset must not collide"
+        );
+    }
+
+    #[test]
+    fn the_same_span_has_a_stable_identity() {
+        let ctx = ParserOptions::default().context_builder().build("nop");
+        let span = ctx.build_span(ctx.source);
+        assert_eq!(span.identity(), span.clone().identity());
+    }
+
+    #[test]
+    fn two_different_offsets_in_the_same_parse_have_different_identities() {
+        let ctx = ParserOptions::default().context_builder().build("nop : nop");
+        let whole = ctx.build_span(ctx.source);
+        let tail = ctx.build_span(&ctx.source[7..]);
+        assert_ne!(whole.identity(), tail.identity());
+    }
 }
 
 impl Z80Span {

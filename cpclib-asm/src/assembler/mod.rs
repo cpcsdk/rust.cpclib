@@ -132,6 +132,8 @@ impl EnvOptions {
             pub fn save_behavior(&self) -> cpclib_disc::amsdos::AmsdosAddBehavior;
             pub fn dry_run(&self) -> bool;
             pub fn set_dry_run(&mut self, dry_run: bool) -> &mut AssemblingOptions;
+            pub fn record_token_addresses(&self) -> bool;
+            pub fn set_record_token_addresses(&mut self, record: bool) -> &mut AssemblingOptions;
 
             pub fn write_listing_output<W: 'static + Write + Send + Sync>(
                 &mut self,
@@ -488,6 +490,29 @@ pub struct Env {
     if_token_adr_to_used_decision: HashMap<usize, bool>,
     if_token_adr_to_unused_decision: HashMap<usize, bool>,
 
+    /// Real assembled address of every visited token that carries a real
+    /// span, keyed by `Z80Span::identity()` (context identity + offset, NOT
+    /// just `offset_from_start()` alone - a real project assembles several
+    /// source files via `include`, each with its own span whose offset
+    /// restarts at 0, so two tokens in different files can otherwise share an
+    /// offset; see `Z80Span::identity`'s own doc comment). A token with no
+    /// span at all (some `ListingElement` implementors this assembler can
+    /// visit, e.g. plain `Token`, are not guaranteed one) is simply never
+    /// recorded - there is no meaningful "position" to key it by.
+    ///
+    /// Only populated when `AssemblingOptions::record_token_addresses` is set
+    /// - see that field's doc comment. Overwritten (never reset) pass over
+    /// pass, since one `Env` is reused across the whole multi-pass assemble
+    /// (`visit_tokens_all_passes_with_options`), so it naturally converges to
+    /// the final pass's real addresses.
+    ///
+    /// Looking this up therefore only ever makes sense for a span that came
+    /// from *the same parse* the assemble itself visited - a listing that was
+    /// merely re-parsed (even from identical text) gets fresh contexts and
+    /// simply misses, which is the safe failure mode (`Option::None`, never a
+    /// wrong address).
+    address_trace: HashMap<SpanIdentity, u16>,
+
     included_paths: HashSet<Utf8PathBuf>,
 
     map_counter: i32,
@@ -544,6 +569,7 @@ impl Clone for Env {
 
             if_token_adr_to_used_decision: self.if_token_adr_to_used_decision.clone(),
             if_token_adr_to_unused_decision: self.if_token_adr_to_unused_decision.clone(),
+            address_trace: self.address_trace.clone(),
             requested_additional_pass: self.requested_additional_pass,
 
             functions: self.functions.clone(),
@@ -1718,6 +1744,16 @@ impl Env {
     /// Return the address where the next byte will be written
     pub fn logical_output_address(&self) -> u16 {
         self.active_page_info().logical_outputadr
+    }
+
+    /// The real assembled address of `span`, if `record_token_addresses` was
+    /// enabled for this assemble (see that option's doc comment) **and**
+    /// `span` came from the same parse this `Env` actually visited - a
+    /// same-text-but-re-parsed span gets a fresh context and simply misses
+    /// here, safely, rather than returning a wrong address (see
+    /// `address_trace`'s own doc comment).
+    pub fn address_of_span(&self, span: &Z80Span) -> Option<u16> {
+        self.address_trace.get(&span.identity()).copied()
     }
 
     pub fn physical_output_address(&self) -> PhysicalAddress {
@@ -3839,6 +3875,7 @@ impl Env {
 
             if_token_adr_to_used_decision: HashMap::default(),
             if_token_adr_to_unused_decision: HashMap::default(),
+            address_trace: HashMap::default(),
             requested_additional_pass: false,
 
             functions: Default::default(),
@@ -4223,6 +4260,11 @@ impl Env {
         // deferred/non-deferred token ordering.
 
         let span = Some(outer_token.span());
+
+        if self.options().assemble_options().record_token_addresses() {
+            self.address_trace
+                .insert(outer_token.span().identity(), self.logical_output_address());
+        }
 
         // handle warning if any - in practice, `build_processed_token`
         // (processed_token.rs) already intercepts every `is_warning()`

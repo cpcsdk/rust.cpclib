@@ -17,6 +17,7 @@ path = "src/main.rs"
 # Workspace dependencies
 cpclib-asm.workspace = true
 cpclib-asmfmt.workspace = true
+cpclib-asmoptim.workspace = true
 cpclib-basmdoc = { workspace = true, default-features = false }
 cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon", "basmdoc-generator", "tape"] }
 cpclib-runner = { workspace = true, default-features = false }
@@ -51,9 +52,6 @@ ropey = "1.6"
 # Error handling
 thiserror = "2"
 anyhow = "1"
-
-# Parsing
-winnow = "0.6"
 
 # Logging
 tracing = "0.1"

@@ -9,7 +9,7 @@
 
 use cpclib_tokens::{DataAccessElem, ExprElement, IndexRegister16, Register16};
 
-use crate::dsl::{BinOp, Constraint, OperandPattern, UnOp};
+use crate::dsl::{BinOp, Constraint, OperandPattern, Rule, RuleSet, UnOp};
 use crate::engine::Captures;
 
 /// Constraint names this crate evaluates today.
@@ -21,11 +21,40 @@ use crate::engine::Captures;
 /// instruction read/write semantics, and are the intended next increment.
 pub const SUPPORTED: &[&str] = &["equal", "notEqual", "in", "notIn", "regpair", "reachableByJr"];
 
+/// Constraint names that need a real assembled address to evaluate (i.e.
+/// need an `AddressResolver` backed by a real `Env`, not just the parsed
+/// token stream) - currently just `reachableByJr`. Lets a caller skip the
+/// (potentially expensive, `INCLUDE`-resolving) real assemble entirely when
+/// the active rule set doesn't contain anything that would need it - see
+/// [`rules_need_addresses`].
+pub const ADDRESS_AWARE: &[&str] = &["reachableByJr"];
+
 /// Whether every constraint of a rule can actually be evaluated.
 pub fn all_supported(constraints: &[Constraint]) -> bool {
     constraints
         .iter()
         .all(|c| SUPPORTED.contains(&c.name.as_str()))
+}
+
+/// Whether `rule` has a constraint that needs a real assembled address.
+pub fn rule_needs_addresses(rule: &Rule) -> bool {
+    rule.constraints
+        .iter()
+        .any(|c| ADDRESS_AWARE.contains(&c.name.as_str()))
+}
+
+/// Whether any rule in `rules` that could actually fire (i.e. passes
+/// [`all_supported`] - a rule the engine skips entirely regardless can't
+/// make this `true` on its own) needs a real assembled address. The
+/// question a caller deciding whether to pay for a real (`INCLUDE`-
+/// resolving) assemble at all should ask, rather than always assembling
+/// "just in case".
+pub fn rules_need_addresses(rules: &RuleSet) -> bool {
+    rules
+        .rules
+        .iter()
+        .filter(|r| all_supported(&r.constraints))
+        .any(rule_needs_addresses)
 }
 
 /// The outcome of evaluating one constraint.
@@ -377,6 +406,50 @@ fn render_operand_pattern(pattern: &OperandPattern) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rule_set_with_only_structural_constraints_needs_no_addresses() {
+        let rules = RuleSet::parse(
+            "pattern: Remove ld ?reg,?reg\n\
+             0: ld ?reg,?reg\n\
+             replacement:\n\
+             constraints:\n\
+             in(?reg,A,B,C,D,E,H,L)\n"
+        )
+        .unwrap();
+        assert!(!rules_need_addresses(&rules));
+    }
+
+    #[test]
+    fn a_rule_set_containing_reachable_by_jr_needs_addresses() {
+        let rules = RuleSet::parse(
+            "pattern: Replace jp ?const1 with jr ?const1\n\
+             0: jp ?const1\n\
+             replacement:\n\
+             0: jr ?const1\n\
+             constraints:\n\
+             reachableByJr(0,?const1)\n"
+        )
+        .unwrap();
+        assert!(rules_need_addresses(&rules));
+    }
+
+    #[test]
+    fn an_unsupported_rule_using_reachable_by_jr_does_not_count() {
+        // The rule can never fire anyway (an unsupported constraint skips it
+        // wholesale), so it must not force a real assemble just because one
+        // of its *other* constraints happens to be address-aware.
+        let rules = RuleSet::parse(
+            "pattern: something\n\
+             0: nop\n\
+             replacement:\n\
+             constraints:\n\
+             reachableByJr(0,?const1)\n\
+             flagsNotUsedAfter(0,N)\n"
+        )
+        .unwrap();
+        assert!(!rules_need_addresses(&rules));
+    }
 
     #[test]
     fn every_supported_name_is_actually_dispatched() {

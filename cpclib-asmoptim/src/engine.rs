@@ -10,11 +10,66 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement};
 
-use crate::constraints::{self, ConstraintContext, NoContext};
+use crate::constraints::{self, ConstraintContext};
 use crate::dsl::{
     Constraint, InstrPattern, MnemonicPattern, NumberedInstr, OperandPattern, RepeatCount, Rule,
     RuleSet
 };
+
+/// Resolves the information address-aware constraints (`reachableByJr`) need,
+/// for whatever token type the caller is matching.
+///
+/// The engine calls this once per matched instruction rather than once per
+/// constraint check, so a real implementation (backed by an assembled `Env`)
+/// pays for the lookup only when a rule actually needs it.
+pub trait AddressResolver<T> {
+    /// The real assembled address of `token`, if known.
+    fn address_of(&self, token: &T) -> Option<u16>;
+    /// The resolved value of a label, if known.
+    fn value_of_label(&self, name: &str) -> Option<i64>;
+}
+
+/// An [`AddressResolver`] that knows nothing - every address-aware constraint
+/// reports [`constraints::Verdict::Unknown`], so rules needing one never
+/// match. What [`find_matches`] uses.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoResolver;
+
+impl<T> AddressResolver<T> for NoResolver {
+    fn address_of(&self, _token: &T) -> Option<u16> {
+        None
+    }
+
+    fn value_of_label(&self, _name: &str) -> Option<i64> {
+        None
+    }
+}
+
+/// Adapts an [`AddressResolver`] plus one candidate match's line->token
+/// positions into the [`ConstraintContext`] `constraints::evaluate` needs.
+///
+/// Built fresh per candidate match (never shared across matches): "which real
+/// token did pattern line N match" is per-match information the resolver
+/// itself cannot know.
+struct MatchContext<'t, T, R> {
+    tokens: &'t [&'t T],
+    positions: HashMap<u32, usize>,
+    resolver: &'t R
+}
+
+impl<T, R> ConstraintContext for MatchContext<'_, T, R>
+where R: AddressResolver<T>
+{
+    fn address_of_line(&self, index: u32) -> Option<u16> {
+        let pos = *self.positions.get(&index)?;
+        let token = *self.tokens.get(pos)?;
+        self.resolver.address_of(token)
+    }
+
+    fn value_of_label(&self, name: &str) -> Option<i64> {
+        self.resolver.value_of_label(name)
+    }
+}
 
 /// The operands bound to each `?variable` of a rule, plus the mnemonics bound
 /// to any `?op` variable.
@@ -89,6 +144,27 @@ impl<'a, D: DataAccessElem> Captures<'a, D> {
         self.counts.get(name).copied()
     }
 
+    /// [`Self::text_of`], case-folded to canonical lower case for keyword
+    /// bindings (registers, flags, mnemonics), left untouched otherwise.
+    ///
+    /// The one text-producing entry point every user-visible rendering
+    /// (replacement lines, the substituted diagnostic message) must go
+    /// through: without it, the *same* captured register could render as
+    /// `A` or `a` depending only on which `ListingElement` implementation
+    /// happened to match (`Token` and `LocatedToken` render register operands
+    /// with different default case), which is a real, user-visible
+    /// inconsistency, not a cosmetic one - caught by running every engine
+    /// test against both token types and diffing the results.
+    fn rendered_text(&self, name: &str) -> Option<String> {
+        let text = self.text_of(name)?;
+        Some(if self.is_keyword_binding(name) {
+            text.to_ascii_lowercase()
+        }
+        else {
+            text
+        })
+    }
+
     /// Bind a name to plain text, requiring a case-insensitive match if it is
     /// already bound.
     ///
@@ -135,7 +211,7 @@ impl<'a, D: DataAccessElem> Captures<'a, D> {
 }
 
 /// One rule matching one run of instructions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PeepholeMatch {
     /// The matched rule's `name:`, when it had one.
     pub rule_name: Option<String>,
@@ -165,26 +241,28 @@ impl PeepholeMatch {
 ///
 /// Rules whose constraints this crate cannot evaluate are skipped entirely -
 /// suggesting an optimization whose safety condition was never checked would
-/// be worse than suggesting nothing.
+/// be worse than suggesting nothing. Address-aware constraints
+/// (`reachableByJr`) always report unknown - use [`find_matches_with_resolver`]
+/// to evaluate those too.
 pub fn find_matches<T>(tokens: &[&T], rules: &RuleSet) -> Vec<PeepholeMatch>
 where
     T: ListingElement,
     T::DataAccess: DataAccessElem
 {
-    find_matches_with_context(tokens, rules, &NoContext)
+    find_matches_with_resolver(tokens, rules, &NoResolver)
 }
 
-/// As [`find_matches`], with a context supplying real addresses so that
-/// address-aware constraints (`reachableByJr`) can be evaluated.
-pub fn find_matches_with_context<T, C>(
+/// As [`find_matches`], with a [`AddressResolver`] so address-aware
+/// constraints (`reachableByJr`) can be evaluated too.
+pub fn find_matches_with_resolver<T, R>(
     tokens: &[&T],
     rules: &RuleSet,
-    ctx: &C
+    resolver: &R
 ) -> Vec<PeepholeMatch>
 where
     T: ListingElement,
     T::DataAccess: DataAccessElem,
-    C: ConstraintContext
+    R: AddressResolver<T>
 {
     let mut matches = Vec::new();
     let usable: Vec<&Rule> = rules
@@ -197,7 +275,7 @@ where
     while start < tokens.len() {
         let mut advanced = false;
         for rule in &usable {
-            if let Some(m) = try_rule(rule, tokens, start, ctx) {
+            if let Some(m) = try_rule(rule, tokens, start, resolver) {
                 let next = m.end.max(start + 1);
                 matches.push(m);
                 start = next;
@@ -214,21 +292,21 @@ where
 }
 
 /// Attempt one rule at one starting position.
-fn try_rule<T, C>(rule: &Rule, tokens: &[&T], start: usize, ctx: &C) -> Option<PeepholeMatch>
+fn try_rule<T, R>(rule: &Rule, tokens: &[&T], start: usize, resolver: &R) -> Option<PeepholeMatch>
 where
     T: ListingElement,
     T::DataAccess: DataAccessElem,
-    C: ConstraintContext
+    R: AddressResolver<T>
 {
     let mut captures = Captures::default();
-    let mut anchor = None;
+    let mut positions = HashMap::new();
     let end = match_lines(
         &rule.match_lines,
         0,
         tokens,
         start,
         &mut captures,
-        &mut anchor
+        &mut positions
     )?;
 
     // A pattern must cover at least one real instruction; a rule made only of
@@ -237,10 +315,15 @@ where
         return None;
     }
 
-    let anchor = anchor?;
+    let anchor = *positions.get(&Rule::ANCHOR)?;
 
+    let ctx = MatchContext {
+        tokens,
+        positions,
+        resolver
+    };
     for constraint in &rule.constraints {
-        if !constraints::evaluate(constraint, &mut captures, ctx).is_satisfied() {
+        if !constraints::evaluate(constraint, &mut captures, &ctx).is_satisfied() {
             return None;
         }
     }
@@ -267,7 +350,7 @@ fn match_lines<'a, T>(
     tokens: &[&'a T],
     pos: usize,
     captures: &mut Captures<'a, T::DataAccess>,
-    anchor: &mut Option<usize>
+    positions: &mut HashMap<u32, usize>
 ) -> Option<usize>
 where
     T: ListingElement,
@@ -284,20 +367,18 @@ where
             // possible span; longer alternatives are explored on failure.
             for taken in 0..=(tokens.len() - pos) {
                 let mut trial = captures.clone();
-                let mut trial_anchor = *anchor;
-                if line.index == Rule::ANCHOR && trial_anchor.is_none() {
-                    trial_anchor = Some(pos);
-                }
+                let mut trial_positions = positions.clone();
+                trial_positions.entry(line.index).or_insert(pos);
                 if let Some(end) = match_lines(
                     lines,
                     line_idx + 1,
                     tokens,
                     pos + taken,
                     &mut trial,
-                    &mut trial_anchor
+                    &mut trial_positions
                 ) {
                     *captures = trial;
-                    *anchor = trial_anchor;
+                    *positions = trial_positions;
                     return Some(end);
                 }
             }
@@ -321,7 +402,7 @@ where
 
             for n in repetitions {
                 let mut trial = captures.clone();
-                let mut trial_anchor = *anchor;
+                let mut trial_positions = positions.clone();
                 if let RepeatCount::Variable(name) = count
                     && !trial.bind_count(name, n)
                 {
@@ -343,19 +424,17 @@ where
                     continue;
                 }
 
-                if line.index == Rule::ANCHOR && trial_anchor.is_none() {
-                    trial_anchor = Some(pos);
-                }
+                trial_positions.entry(line.index).or_insert(pos);
                 if let Some(end) = match_lines(
                     lines,
                     line_idx + 1,
                     tokens,
                     cursor,
                     &mut trial,
-                    &mut trial_anchor
+                    &mut trial_positions
                 ) {
                     *captures = trial;
-                    *anchor = trial_anchor;
+                    *positions = trial_positions;
                     return Some(end);
                 }
             }
@@ -368,20 +447,18 @@ where
             if !match_instr(&line.instr, *token, &mut trial) {
                 return None;
             }
-            let mut trial_anchor = *anchor;
-            if line.index == Rule::ANCHOR && trial_anchor.is_none() {
-                trial_anchor = Some(pos);
-            }
+            let mut trial_positions = positions.clone();
+            trial_positions.entry(line.index).or_insert(pos);
             let end = match_lines(
                 lines,
                 line_idx + 1,
                 tokens,
                 pos + 1,
                 &mut trial,
-                &mut trial_anchor
+                &mut trial_positions
             )?;
             *captures = trial;
-            *anchor = trial_anchor;
+            *positions = trial_positions;
             Some(end)
         }
     }
@@ -557,18 +634,10 @@ where D: DataAccessElem {
 fn render_operand<D>(pattern: &OperandPattern, captures: &Captures<'_, D>) -> Option<String>
 where D: DataAccessElem {
     match pattern {
-        OperandPattern::Variable(name) => {
-            let text = captures.text_of(name)?;
-            // Keywords render in the engine's own canonical lower case (a
-            // consumer that cares re-cases the whole suggestion to match the
-            // surrounding source); a symbolic operand is returned untouched.
-            Some(if captures.is_keyword_binding(name) {
-                text.to_ascii_lowercase()
-            }
-            else {
-                text
-            })
-        },
+        // Keywords render in the engine's own canonical lower case (a
+        // consumer that cares re-cases the whole suggestion to match the
+        // surrounding source); a symbolic operand is returned untouched.
+        OperandPattern::Variable(name) => captures.rendered_text(name),
         OperandPattern::Ident(name) => Some(name.clone()),
         OperandPattern::Number(value) => Some(value.to_string()),
         OperandPattern::Indirect(inner) => Some(format!("({})", render_operand(inner, captures)?)),
@@ -617,7 +686,7 @@ where D: DataAccessElem {
             .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
             .unwrap_or(after.len());
         let name = &after[..name_len];
-        match captures.text_of(name) {
+        match captures.rendered_text(name) {
             Some(text) => out.push_str(&text),
             None => {
                 out.push('?');

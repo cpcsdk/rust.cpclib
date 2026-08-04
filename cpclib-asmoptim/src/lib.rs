@@ -21,5 +21,9 @@ pub mod builtin_rules;
 pub mod constraints;
 pub mod dsl;
 pub mod engine;
+pub mod env_resolver;
 
 pub use builtin_rules::{OptimizationGoal, builtin_rules};
+pub use constraints::rules_need_addresses;
+pub use cpclib_asm::flatten::flatten_listing;
+pub use env_resolver::EnvAddressResolver;

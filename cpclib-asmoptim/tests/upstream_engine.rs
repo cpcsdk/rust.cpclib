@@ -8,9 +8,38 @@
 
 use cpclib_asm::parser::parse_z80_str;
 use cpclib_asmoptim::dsl::RuleSet;
-use cpclib_asmoptim::engine::find_matches;
+use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
+use cpclib_tokens::{ToSimpleToken, Token};
 
 const UPSTREAM: &str = include_str!("../src/vendor/pbo-patterns.txt");
+
+/// Matches `source` against the full upstream rule set as both `LocatedToken`
+/// and plain `Token`, asserting the two runs agree - see
+/// `engine_matching.rs`'s `matches_for` for why. At this file's scale (the
+/// whole 187-pattern corpus over real source) this is also where a genericity
+/// assumption that happens to hold for hand-picked single-rule cases but not
+/// in general would most likely surface.
+fn matches_both_token_kinds(source: &str) -> Vec<PeepholeMatch> {
+    let rules = RuleSet::parse(UPSTREAM).unwrap();
+    let listing = parse_z80_str(source).expect("source must parse");
+
+    let located_tokens: Vec<_> = listing.iter().collect();
+    let located_result = find_matches(&located_tokens, &rules);
+
+    let simple_tokens: Vec<Token> = listing
+        .iter()
+        .map(|t| t.as_simple_token().into_owned())
+        .collect();
+    let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
+    let simple_result = find_matches(&simple_refs, &rules);
+
+    assert_eq!(
+        located_result, simple_result,
+        "LocatedToken and Token matching must agree for {source:?}"
+    );
+
+    located_result
+}
 
 /// A chunk of ordinary Z80 that deliberately contains several known-optimisable
 /// sequences plus plenty of code that must be left alone.
@@ -36,17 +65,14 @@ somewhere:
 
 #[test]
 fn the_whole_upstream_library_runs_over_real_source_without_panicking() {
-    let rules = RuleSet::parse(UPSTREAM).unwrap();
-    let listing = parse_z80_str(SOURCE).expect("source must parse");
-    let tokens: Vec<_> = listing.iter().collect();
-
-    let found = find_matches(&tokens, &rules);
+    let found = matches_both_token_kinds(SOURCE);
+    let token_count = parse_z80_str(SOURCE).unwrap().iter().count();
 
     // Every reported match must be internally consistent - a bad span would
     // make a consumer highlight or replace the wrong region of the file.
     for m in &found {
         assert!(m.start < m.end, "empty span: {m:?}");
-        assert!(m.end <= tokens.len(), "span past end of input: {m:?}");
+        assert!(m.end <= token_count, "span past end of input: {m:?}");
         assert!(
             m.range().contains(&m.anchor),
             "anchor outside its own match: {m:?}"
@@ -70,11 +96,7 @@ fn the_whole_upstream_library_runs_over_real_source_without_panicking() {
 /// does not parse is worse than no suggestion at all.
 #[test]
 fn every_suggested_replacement_is_valid_assembly() {
-    let rules = RuleSet::parse(UPSTREAM).unwrap();
-    let listing = parse_z80_str(SOURCE).expect("source must parse");
-    let tokens: Vec<_> = listing.iter().collect();
-
-    for m in find_matches(&tokens, &rules) {
+    for m in matches_both_token_kinds(SOURCE) {
         for line in &m.replacement {
             assert!(
                 parse_z80_str(format!(" {line}\n")).is_ok(),

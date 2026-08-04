@@ -7,11 +7,32 @@
 use cpclib_asm::parser::parse_z80_str;
 use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
 use cpclib_asmoptim::{OptimizationGoal, builtin_rules};
+use cpclib_tokens::{ToSimpleToken, Token};
 
+/// Matches against the real built-in rules twice - once as `LocatedToken`,
+/// once as plain `Token` (same AST, no source position at all) - and asserts
+/// they agree. See `engine_matching.rs`'s `matches_for` for why this matters:
+/// the engine's whole contract is that it only depends on `ListingElement`.
 fn suggestions(source: &str, goal: OptimizationGoal) -> Vec<PeepholeMatch> {
     let listing = parse_z80_str(source).expect("source must parse");
-    let tokens: Vec<_> = listing.iter().collect();
-    find_matches(&tokens, builtin_rules(goal))
+    let rules = builtin_rules(goal);
+
+    let located_tokens: Vec<_> = listing.iter().collect();
+    let located_result = find_matches(&located_tokens, rules);
+
+    let simple_tokens: Vec<Token> = listing
+        .iter()
+        .map(|t| t.as_simple_token().into_owned())
+        .collect();
+    let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
+    let simple_result = find_matches(&simple_refs, rules);
+
+    assert_eq!(
+        located_result, simple_result,
+        "LocatedToken and Token matching must agree for {source:?} under {goal:?}"
+    );
+
+    located_result
 }
 
 #[test]

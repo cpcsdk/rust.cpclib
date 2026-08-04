@@ -3,8 +3,10 @@ members = [
   "cpclib",
   "cpclib-asm",
   "cpclib-asmfmt",
+  "cpclib-asmoptim",
   "cpclib-basic",
   "cpclib-basm", "cpclib-basmdoc",
+  "cpclib-basmopt",
   "cpclib-bdasm",
   "cpclib-bndbuild",
   "cpclib-catalog",
@@ -49,16 +51,18 @@ members = [
 default-members = [
   "cpclib",
   "cpclib-asm",
+  "cpclib-asmoptim",
   "cpclib-basic",
   "cpclib-basm",
   "cpclib-basmdoc",
+  "cpclib-basmopt",
   "cpclib-bdasm",
   "cpclib-bndbuild",
   "cpclib-catalog",
   "cpclib-catart",
   "cpclib-common",
   "cpclib-cpr",
-  "cpclib-cprcli", 
+  "cpclib-cprcli",
    "cpclib-crunch",
   "cpclib-crunchers",
   "cpclib-csl",
@@ -103,9 +107,11 @@ description = "Amstrad CPC crossdev toolchain"
 cpclib = { version = "0.11.0", path = "cpclib", default-features = false }
 cpclib-asm = { version = "0.11.0", path = "cpclib-asm", default-features = false }
 cpclib-asmfmt = { version = "0.11.0", path = "cpclib-asmfmt", default-features = false }
+cpclib-asmoptim = { version = "0.11.0", path = "cpclib-asmoptim", default-features = false }
 cpclib-basic = { version = "0.11.0", path = "cpclib-basic", default-features = false }
 cpclib-basm = { version = "0.11.0", path = "cpclib-basm", default-features = false }
 cpclib-basmdoc = { version = "0.11.0", path = "cpclib-basmdoc", default-features = false }
+cpclib-basmopt = { version = "0.11.0", path = "cpclib-basmopt", default-features = false }
 cpclib-bdasm = { version = "0.11.0", path = "cpclib-bdasm", default-features = false }
 cpclib-bndbuild = { version = "0.11.0", path = "cpclib-bndbuild", default-features = false }
 cpclib-borgams = { version = "0.11.0", path = "cpclib-borgams", default-features = false }
@@ -260,8 +266,10 @@ open = "5.4.0"
 #cpclib-xferfs = {path = "./cpclib-xferfs/"}
 cpclib = { path = "./cpclib/" }
 cpclib-asm = { path = "./cpclib-asm/" }
+cpclib-asmoptim = { path = "./cpclib-asmoptim/" }
 cpclib-basic = { path = "./cpclib-basic/" }
 cpclib-basm = { path = "./cpclib-basm/" }
+cpclib-basmopt = { path = "./cpclib-basmopt/" }
 cpclib-borgams = { path = "./cpclib-borgams/" }
 cpclib-basmdoc = { path = "./cpclib-basmdoc/" }
 cpclib-bdasm = { path = "./cpclib-bdasm/" }
