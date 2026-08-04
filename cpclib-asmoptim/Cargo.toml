@@ -1,0 +1,20 @@
+[package]
+
+name = "cpclib-asmoptim"
+version.workspace = true
+description = "Z80 peephole optimization pattern engine (mdlz80optimizer-compatible rule format)"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[package.metadata.workspaces]
+independent = true
+
+[dependencies]
+cpclib-asm.workspace = true
+cpclib-common.workspace = true
+cpclib-tokens.workspace = true
+cpclib-z80emu.workspace = true
