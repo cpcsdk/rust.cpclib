@@ -1,8 +1,10 @@
-//! Peephole-optimization diagnostics: walk `cpclib-asmoptim`'s matching
-//! engine over a parsed document and turn each match into a `WARNING`
-//! `Diagnostic`, the same "structured finding → LSP diagnostic" glue
-//! `diagnostics.rs`'s `collect_assembler_warnings`/`collect_unused_binding_warnings`
-//! provide for their own sources.
+//! Peephole-optimization diagnostics, quickfix, and "Fix All" CodeLens: walk
+//! `cpclib-asmoptim`'s matching engine over a parsed document and turn each
+//! match into a `WARNING` `Diagnostic` (the same "structured finding → LSP
+//! diagnostic" glue `diagnostics.rs`'s `collect_assembler_warnings`/
+//! `collect_unused_binding_warnings` provide for their own sources), a
+//! quickfix `CodeAction`, or one combined `WorkspaceEdit` applying every
+//! match at once.
 //!
 //! Advisory only, like `unused_bindings` - this never runs as part of a real
 //! `basm` assemble and never changes what gets assembled (see
@@ -14,17 +16,44 @@ use cpclib_asm::assembler::Env;
 use cpclib_asm::flatten::flatten_listing;
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, MayHaveSpan};
 use cpclib_asm::parser::source::{SourceString, Z80Span};
-use cpclib_asmoptim::engine::find_matches_with_resolver;
+use cpclib_asmoptim::engine::{PeepholeMatch, find_matches_with_resolver};
 use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal, builtin_rules};
 
 use super::AssemblyAnalyzer;
-use super::command::single_file_edit;
+use super::command::{single_file_edit, single_file_multi_edit};
 use crate::common::document::Document;
 
 /// Diagnostic `source` tag for every peephole warning, distinct from plain
 /// `"basm"` (used for real parser/assembler diagnostics) so a user can tell
 /// at a glance which findings are advisory-only.
 const SOURCE: &str = "basm-peephole";
+
+/// The command name a "Fix All" CodeLens (see [`AssemblyAnalyzer::peephole_code_lenses`])
+/// invokes - handled in `server/backend.rs`'s `execute_command`. `pub(crate)`,
+/// not `pub(super)`: `server/backend.rs` is a sibling of `basm`, not a
+/// descendant, so it needs crate-wide visibility to reference this same
+/// constant rather than duplicating the literal string.
+pub(crate) const FIX_ALL_COMMAND: &str = "cpclib.fixAllPeephole";
+
+/// Flatten `listing` and match it against `goal`'s built-in rules, using
+/// `env` (see [`AssemblyAnalyzer::peephole_quickfix_action`]'s own doc
+/// comment on why it must be the same parse `env` was assembled from) to
+/// evaluate address-aware rules like `jp2jr`. Shared by every entry point in
+/// this file so they can never disagree with each other about what matches.
+fn peephole_matches<'a>(
+    listing: &'a LocatedListing,
+    env: &Env,
+    goal: OptimizationGoal
+) -> (Vec<&'a LocatedToken>, Vec<PeepholeMatch>) {
+    let tokens: Vec<&LocatedToken> = flatten_listing(listing.iter()).collect();
+    if tokens.is_empty() {
+        return (tokens, Vec::new());
+    }
+    let rules = builtin_rules(goal);
+    let resolver = EnvAddressResolver::new(env);
+    let matches = find_matches_with_resolver(&tokens, rules, &resolver);
+    (tokens, matches)
+}
 
 /// Match `listing` against the built-in peephole rules and push one
 /// `WARNING` `Diagnostic` per finding into `out`.
@@ -34,23 +63,13 @@ const SOURCE: &str = "basm-peephole";
 /// `record_token_addresses` enabled unconditionally (see that function's own
 /// doc comment), which is what lets address-aware rules like `jp2jr`
 /// (`reachableByJr`) actually fire instead of silently reporting unknown.
-///
-/// Always matches against `OptimizationGoal::Neutral` - the base rule set
-/// only, with none of `Size`/`Speed`'s extra, occasionally-opposed rules
-/// (see `builtin_rules`'s own doc comment for why those two disagree with
-/// each other). A universally-agreeable set is the right default for an
-/// always-on editor diagnostic; goal selection could become configurable
-/// later if wanted, but isn't part of this pass.
-pub(super) fn collect_peephole_warnings(listing: &LocatedListing, env: &Env, out: &mut Vec<Diagnostic>) {
-    let tokens: Vec<&LocatedToken> = flatten_listing(listing.iter()).collect();
-    if tokens.is_empty() {
-        return;
-    }
-
-    let rules = builtin_rules(OptimizationGoal::Neutral);
-    let resolver = EnvAddressResolver::new(env);
-    let matches = find_matches_with_resolver(&tokens, rules, &resolver);
-
+pub(super) fn collect_peephole_warnings(
+    listing: &LocatedListing,
+    env: &Env,
+    goal: OptimizationGoal,
+    out: &mut Vec<Diagnostic>
+) {
+    let (tokens, matches) = peephole_matches(listing, env, goal);
     for m in &matches {
         let start_span = tokens[m.start].span();
         let end_span = tokens[m.end - 1].span();
@@ -93,14 +112,8 @@ impl AssemblyAnalyzer {
     ) -> Option<CodeAction> {
         let listing = self.parse_document(document).ok()?;
         let env = self.dry_run_env_cached(document, &listing);
-
-        let tokens: Vec<&LocatedToken> = flatten_listing(listing.iter()).collect();
-        if tokens.is_empty() {
-            return None;
-        }
-        let rules = builtin_rules(OptimizationGoal::Neutral);
-        let resolver = EnvAddressResolver::new(&env);
-        let matches = find_matches_with_resolver(&tokens, rules, &resolver);
+        let goal = self.config().peephole_goal.into();
+        let (tokens, matches) = peephole_matches(&listing, &env, goal);
 
         let cursor_line = range.start.line;
         let m = matches.iter().find(|m| {
@@ -109,16 +122,96 @@ impl AssemblyAnalyzer {
             (start_line..=end_line).contains(&cursor_line)
         })?;
 
-        let first_span = tokens[m.start].span();
-        let last_span = tokens[m.end - 1].span();
-        let first_line = super::token::span_line(tokens[m.start]);
-        let last_line = super::token::span_line(tokens[m.end - 1]);
+        let edit = edit_for_match(document, &tokens, m);
+        Some(CodeAction {
+            title: format!("Peephole: {}", m.message),
+            kind: Some(CodeActionKind::QUICKFIX),
+            edit: Some(single_file_edit(document.uri.clone(), edit.range, edit.new_text)),
+            ..Default::default()
+        })
+    }
 
-        let (edit_range, new_text) = if m.replacement.is_empty() {
-            // Delete the whole matched line(s), trailing newline included,
-            // so removing an instruction doesn't leave a blank line behind
-            // (same fix `cpclib-basmopt::apply_fixes` already applies).
-            let edit_range = Range {
+    /// A single "⚡ N optimization opportunities - Fix All" `CodeLens` at the
+    /// top of the document whenever at least one peephole match exists -
+    /// empty `Vec` otherwise, matching every other `code_lens` provider in
+    /// this crate's own convention (`embedded_bndbuild.rs`,
+    /// `bndbuild::BuildFileAnalyzer`). Clicking it invokes
+    /// [`FIX_ALL_COMMAND`], handled in `server/backend.rs`.
+    pub(super) fn peephole_code_lenses(&self, document: &Document) -> Vec<CodeLens> {
+        let Ok(listing) = self.parse_document(document)
+        else {
+            return Vec::new();
+        };
+        let env = self.dry_run_env_cached(document, &listing);
+        let goal = self.config().peephole_goal.into();
+        let (_tokens, matches) = peephole_matches(&listing, &env, goal);
+        if matches.is_empty() {
+            return Vec::new();
+        }
+
+        let count = matches.len();
+        vec![CodeLens {
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0
+                },
+                end: Position {
+                    line: 0,
+                    character: 0
+                }
+            },
+            command: Some(Command {
+                title: format!(
+                    "⚡ {count} optimization opportunit{} - Fix All",
+                    if count == 1 { "y" } else { "ies" }
+                ),
+                command: FIX_ALL_COMMAND.to_string(),
+                arguments: Some(vec![serde_json::json!(document.uri.to_string())])
+            }),
+            data: None
+        }]
+    }
+
+    /// Build one `WorkspaceEdit` applying every peephole match in
+    /// `document` at once (the [`FIX_ALL_COMMAND`] handler's job), alongside
+    /// how many matches it covers (for the confirmation message). `None`
+    /// when there is nothing to fix. `TextEdit`s within one document are
+    /// resolved against the *original* text by the client
+    /// (`single_file_multi_edit`'s own doc comment), so this doesn't need to
+    /// worry about one match's edit shifting another's offsets - matches
+    /// never overlap in the first place (`find_matches`'s own guarantee).
+    pub(crate) fn fix_all_peephole_edit(&self, document: &Document) -> Option<(WorkspaceEdit, usize)> {
+        let listing = self.parse_document(document).ok()?;
+        let env = self.dry_run_env_cached(document, &listing);
+        let goal = self.config().peephole_goal.into();
+        let (tokens, matches) = peephole_matches(&listing, &env, goal);
+        if matches.is_empty() {
+            return None;
+        }
+
+        let edits: Vec<TextEdit> = matches
+            .iter()
+            .map(|m| edit_for_match(document, &tokens, m))
+            .collect();
+        let count = edits.len();
+        Some((single_file_multi_edit(document.uri.clone(), edits), count))
+    }
+}
+
+/// The `TextEdit` that applies one match - shared by the quickfix and "Fix
+/// All", so they can never disagree about what a given match's edit looks
+/// like.
+fn edit_for_match(document: &Document, tokens: &[&LocatedToken], m: &PeepholeMatch) -> TextEdit {
+    let first_line = super::token::span_line(tokens[m.start]);
+    let last_line = super::token::span_line(tokens[m.end - 1]);
+
+    if m.replacement.is_empty() {
+        // Delete the whole matched line(s), trailing newline included, so
+        // removing an instruction doesn't leave a blank line behind (same
+        // fix `cpclib-basmopt::apply_fixes` already applies).
+        TextEdit {
+            range: Range {
                 start: Position {
                     line: first_line,
                     character: 0
@@ -127,21 +220,19 @@ impl AssemblyAnalyzer {
                     line: last_line + 1,
                     character: 0
                 }
-            };
-            (edit_range, String::new())
+            },
+            new_text: String::new()
         }
-        else {
-            let indent = leading_whitespace(&document.line(first_line as usize).unwrap_or_default());
-            let new_text = m.replacement.join(&format!("\n{indent}"));
-            (match_range(first_span, last_span), new_text)
-        };
-
-        Some(CodeAction {
-            title: format!("Peephole: {}", m.message),
-            kind: Some(CodeActionKind::QUICKFIX),
-            edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
-            ..Default::default()
-        })
+    }
+    else {
+        let first_span = tokens[m.start].span();
+        let last_span = tokens[m.end - 1].span();
+        let indent = leading_whitespace(&document.line(first_line as usize).unwrap_or_default());
+        let new_text = m.replacement.join(&format!("\n{indent}"));
+        TextEdit {
+            range: match_range(first_span, last_span),
+            new_text
+        }
     }
 }
 
@@ -275,5 +366,62 @@ mod quickfix_tests {
         let d = doc("start:\n    xor a\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
         assert!(analyzer.peephole_quickfix_action(&d, cursor(1, 4)).is_none());
+    }
+}
+
+#[cfg(test)]
+mod code_lens_and_fix_all_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    #[test]
+    fn offers_a_fix_all_lens_with_the_right_count_when_matches_exist() {
+        let d = doc("start:\n    ld b, b\n    push hl\n    pop de\n    ret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let lenses = analyzer.peephole_code_lenses(&d);
+        assert_eq!(lenses.len(), 1, "{lenses:?}");
+        let cmd = lenses[0].command.as_ref().unwrap();
+        assert_eq!(cmd.title, "⚡ 2 optimization opportunities - Fix All");
+        assert_eq!(cmd.command, FIX_ALL_COMMAND);
+        assert_eq!(
+            cmd.arguments.as_ref().unwrap()[0],
+            serde_json::json!(d.uri.to_string())
+        );
+    }
+
+    #[test]
+    fn no_fix_all_lens_for_already_optimal_source() {
+        let d = doc("start:\n    xor a\n    ret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(analyzer.peephole_code_lenses(&d).is_empty());
+    }
+
+    #[test]
+    fn fix_all_applies_every_match_in_one_combined_edit() {
+        let d = doc("start:\n    ld b, b\n    push hl\n    pop de\n    ret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let (edit, count) = analyzer
+            .fix_all_peephole_edit(&d)
+            .expect("expected a combined edit");
+        assert_eq!(count, 2);
+        let text_edits = &edit.changes.expect("expected changes")[&d.uri];
+        assert_eq!(text_edits.len(), 2);
+        assert!(text_edits.iter().any(|e| e.new_text.is_empty()), "{text_edits:?}");
+        assert!(
+            text_edits
+                .iter()
+                .any(|e| e.new_text.contains("ld d, h") && e.new_text.contains("ld e, l")),
+            "{text_edits:?}"
+        );
+    }
+
+    #[test]
+    fn fix_all_is_none_for_already_optimal_source() {
+        let d = doc("start:\n    xor a\n    ret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        assert!(analyzer.fix_all_peephole_edit(&d).is_none());
     }
 }

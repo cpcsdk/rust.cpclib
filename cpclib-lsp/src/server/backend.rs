@@ -976,6 +976,7 @@ impl LanguageServer for CpcLspBackend {
                         "cpclib.cycleCountForSelection".to_string(),
                         "cpclib.registersAtPosition".to_string(),
                         "cpclib.removeUnusedParameter".to_string(),
+                        crate::basm::peephole::FIX_ALL_COMMAND.to_string(),
                     ],
                     work_done_progress_options: WorkDoneProgressOptions::default()
                 }),
@@ -2313,6 +2314,62 @@ impl LanguageServer for CpcLspBackend {
                                 .await;
                         }
                     }
+                }
+            }
+            return Ok(None);
+        }
+
+        if params.command == crate::basm::peephole::FIX_ALL_COMMAND {
+            let Some(uri) = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| s.parse::<Url>().ok()))
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            let Some((edit, count)) = self.asm_analyzer.fix_all_peephole_edit(&document)
+            else {
+                return Ok(None);
+            };
+            match self.client.apply_edit(edit).await {
+                Ok(response) if response.applied => {
+                    self.client
+                        .show_message(
+                            MessageType::INFO,
+                            format!(
+                                "Applied {count} peephole-optimization fix{}.",
+                                if count == 1 { "" } else { "es" }
+                            )
+                        )
+                        .await;
+                },
+                Ok(response) => {
+                    self.client
+                        .show_message(
+                            MessageType::ERROR,
+                            format!(
+                                "The peephole-optimization fixes were not applied{}.",
+                                response
+                                    .failure_reason
+                                    .map(|r| format!(": {r}"))
+                                    .unwrap_or_default()
+                            )
+                        )
+                        .await;
+                },
+                Err(_) => {
+                    self.client
+                        .show_message(
+                            MessageType::ERROR,
+                            "Failed to apply the edit to the client."
+                        )
+                        .await;
                 }
             }
             return Ok(None);

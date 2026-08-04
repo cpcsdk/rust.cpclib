@@ -282,10 +282,12 @@ impl AssemblyAnalyzer {
         }
     }
 
-    /// "▶ Run" CodeLenses for every rule inside every `#!bndbuild` block in
-    /// this `.asm` file. Empty `Vec` (not `None`) when there's none - matches
-    /// `BuildFileAnalyzer::code_lens`'s own shape; `Backend::code_lens` turns
-    /// an empty result into `None`.
+    /// Every CodeLens this analyzer offers for `.asm` files: "▶ Run" for
+    /// each rule inside every `#!bndbuild` block, plus the peephole-
+    /// optimizer's own "⚡ Fix All" summary lens
+    /// (`peephole_code_lenses`, `peephole.rs`). Empty `Vec` (not `None`)
+    /// when there's none - matches `BuildFileAnalyzer::code_lens`'s own
+    /// shape; `Backend::code_lens` turns an empty result into `None`.
     pub fn code_lens(&self, document: &Document) -> Vec<CodeLens> {
         let file_path = document
             .uri
@@ -299,7 +301,8 @@ impl AssemblyAnalyzer {
             .ok()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()));
         let build_analyzer = crate::bndbuild::BuildFileAnalyzer::new();
-        self.embedded_bndbuild_blocks(document)
+        let mut lenses: Vec<CodeLens> = self
+            .embedded_bndbuild_blocks(document)
             .into_iter()
             .flat_map(|block| {
                 build_analyzer.code_lens_for_embedded_block(
@@ -309,7 +312,9 @@ impl AssemblyAnalyzer {
                     file_dir.as_deref()
                 )
             })
-            .collect()
+            .collect();
+        lenses.extend(self.peephole_code_lenses(document));
+        lenses
     }
 }
 

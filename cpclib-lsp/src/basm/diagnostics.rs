@@ -139,7 +139,12 @@ impl AssemblyAnalyzer {
                 collect_unused_binding_warnings(&listing, document, &mut diagnostics);
             }
             if self.config().warnings.peephole_optimizer {
-                super::peephole::collect_peephole_warnings(&listing, &env, &mut diagnostics);
+                super::peephole::collect_peephole_warnings(
+                    &listing,
+                    &env,
+                    self.config().peephole_goal.into(),
+                    &mut diagnostics
+                );
             }
         }
 

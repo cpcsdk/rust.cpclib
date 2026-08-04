@@ -40,7 +40,11 @@ pub struct AsmConfig {
     /// extracted from `cpclib-asm`'s embedded `inner://firmware/*.asm`
     /// assets) on hover - both for the symbolic name (`TXT_OUTPUT`) and its
     /// resolved numeric address (`&BB5A`). See `common::firmware_docs`.
-    pub firmware_docs: bool
+    pub firmware_docs: bool,
+    /// Which `cpclib-asmoptim` built-in rule set the peephole-optimizer
+    /// diagnostic, quickfix, and "Fix All" CodeLens all match against - see
+    /// `PeepholeGoal`'s own doc comment.
+    pub peephole_goal: PeepholeGoal
 }
 
 impl Default for AsmConfig {
@@ -49,7 +53,33 @@ impl Default for AsmConfig {
             case_sensitive: true,
             warnings_as_errors: false,
             warnings: AsmWarningClasses::default(),
-            firmware_docs: true
+            firmware_docs: true,
+            peephole_goal: PeepholeGoal::default()
+        }
+    }
+}
+
+/// Mirrors `cpclib_asmoptim::OptimizationGoal` (which has no `serde` support
+/// of its own - this crate is the only one so far that needs to deserialize
+/// one) - `Neutral` (the default) only matches rules every goal agrees are
+/// improvements; `Size`/`Speed` add extra rules that can actively disagree
+/// with each other (e.g. `jp` vs `jr`), see `builtin_rules`'s own doc
+/// comment in `cpclib-asmoptim`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum PeepholeGoal {
+    #[default]
+    Neutral,
+    Size,
+    Speed
+}
+
+impl From<PeepholeGoal> for cpclib_asmoptim::OptimizationGoal {
+    fn from(goal: PeepholeGoal) -> Self {
+        match goal {
+            PeepholeGoal::Neutral => Self::Neutral,
+            PeepholeGoal::Size => Self::Size,
+            PeepholeGoal::Speed => Self::Speed
         }
     }
 }
@@ -298,6 +328,11 @@ warnings_as_errors = false
 # Show firmware routine/constant documentation on hover, both for the
 # symbolic name (TXT_OUTPUT) and its resolved numeric address (&BB5A).
 firmware_docs = true
+# Which built-in peephole-optimization rule set to match against: "neutral"
+# (only rules every goal agrees are improvements), "size", or "speed" - the
+# latter two add extra rules that can actively disagree with each other
+# (e.g. turning jp into jr, or jr into jp), so only one is ever active.
+peephole_goal = "neutral"
 
 [asm.warnings]
 # ADD/ADC/SBC/CP/SUB/AND/OR/XOR with an explicit "A," prefix that isn't
@@ -413,6 +448,32 @@ mod tests {
         let loaded = load_config(Some(tmp.path().as_std_path()));
         assert!(loaded.error.is_none(), "{:?}", loaded.error);
         assert_eq!(loaded.config.basic.run_emulator, "winape");
+    }
+
+    #[test]
+    fn peephole_goal_defaults_to_neutral_and_is_configurable_via_toml() {
+        assert_eq!(AsmConfig::default().peephole_goal, PeepholeGoal::Neutral);
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(CONFIG_FILE_NAME),
+            "[asm]\npeephole_goal = \"size\"\n"
+        )
+        .unwrap();
+        let loaded = load_config(Some(tmp.path().as_std_path()));
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        assert_eq!(loaded.config.asm.peephole_goal, PeepholeGoal::Size);
+    }
+
+    #[test]
+    fn every_peephole_goal_maps_to_the_matching_optimization_goal() {
+        use cpclib_asmoptim::OptimizationGoal;
+        assert_eq!(
+            OptimizationGoal::from(PeepholeGoal::Neutral),
+            OptimizationGoal::Neutral
+        );
+        assert_eq!(OptimizationGoal::from(PeepholeGoal::Size), OptimizationGoal::Size);
+        assert_eq!(OptimizationGoal::from(PeepholeGoal::Speed), OptimizationGoal::Speed);
     }
 
     #[test]
