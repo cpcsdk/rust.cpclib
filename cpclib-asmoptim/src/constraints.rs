@@ -33,7 +33,11 @@ pub const SUPPORTED: &[&str] = &[
     "regpair",
     "reachableByJr",
     "regsNotUsedAfter",
-    "flagsNotUsedAfter"
+    "flagsNotUsedAfter",
+    "regsNotModified",
+    "regsNotUsed",
+    "flagsNotModified",
+    "flagsNotUsed"
 ];
 
 /// Constraint names that need a real assembled address to evaluate (i.e.
@@ -133,6 +137,32 @@ pub trait LivenessContext {
     /// stream is available at all - in which case the constraint reports
     /// [`Verdict::Unknown`] and therefore fails, never silently passes.
     fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Usage>;
+
+    /// What the instructions matched by pattern line `index` do to
+    /// `dependency` themselves.
+    ///
+    /// Block-local, and deliberately so: unlike [`Self::is_used_after`] this
+    /// needs no control-flow walk at all, only the effects of the instructions
+    /// the line actually covered. A line can cover a whole *region* - `*` and
+    /// `[?n]` match several instructions - which is the point: the rules using
+    /// these constraints ask "does anything in this gap disturb HL?".
+    ///
+    /// `None` when `index` wasn't part of this match, when no stream is
+    /// available, or when the region contains something whose effects cannot
+    /// be described - all of which report [`Verdict::Unknown`] and so fail.
+    fn region_use(&self, index: u32, dependency: Dependency) -> Option<RegionUse>;
+}
+
+/// What a matched region does to one register or flag.
+///
+/// Both false means "the region leaves it completely alone" - which is what
+/// `regsNotModified`/`regsNotUsed` are asking about, from opposite sides.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RegionUse {
+    /// Some instruction in the region reads it.
+    pub reads: bool,
+    /// Some instruction in the region writes it.
+    pub writes: bool
 }
 
 /// A context that knows nothing - every address-aware or liveness constraint
@@ -152,6 +182,10 @@ impl ConstraintContext for NoContext {
 
 impl LivenessContext for NoContext {
     fn is_used_after(&self, _index: u32, _dependency: Dependency) -> Option<Usage> {
+        None
+    }
+
+    fn region_use(&self, _index: u32, _dependency: Dependency) -> Option<RegionUse> {
         None
     }
 }
@@ -175,8 +209,85 @@ where
         "reachableByJr" => reachable_by_jr(constraint, captures, ctx),
         "regsNotUsedAfter" => regs_not_used_after(constraint, captures, ctx),
         "flagsNotUsedAfter" => flags_not_used_after(constraint, captures, ctx),
+        "regsNotModified" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Write),
+        "regsNotUsed" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Read),
+        "flagsNotModified" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Write),
+        "flagsNotUsed" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Read),
         _ => Verdict::Unknown
     }
+}
+
+/// Whether a block-local constraint is about registers or flags.
+#[derive(Debug, Clone, Copy)]
+enum Kind {
+    Reg,
+    Flag
+}
+
+/// Which half of [`RegionUse`] a block-local constraint forbids.
+#[derive(Debug, Clone, Copy)]
+enum Touch {
+    Read,
+    Write
+}
+
+/// The four block-local constraints, which differ only in what they parse and
+/// which half of [`RegionUse`] they forbid:
+///
+/// * `regsNotModified(#, ...)` / `flagsNotModified(#, ...)` - nothing in the
+///   region *writes* them.
+/// * `regsNotUsed(#, ...)` / `flagsNotUsed(#, ...)` - nothing *reads* them.
+///
+/// Almost every real use names a `*` line, i.e. asks whether the gap between
+/// two instructions disturbs something the rule wants to carry across it.
+fn block_local<D, C>(
+    constraint: &Constraint,
+    captures: &Captures<'_, D>,
+    ctx: &C,
+    kind: Kind,
+    touch: Touch
+) -> Verdict
+where
+    D: DataAccessElem,
+    C: LivenessContext
+{
+    let (line, dependencies): (u32, Vec<Dependency>) = match kind {
+        Kind::Reg => {
+            let Some(args) = parse_regs_args(constraint, captures)
+            else {
+                return Verdict::Unknown;
+            };
+            (
+                args.line,
+                args.items.into_iter().map(Dependency::Reg).collect()
+            )
+        },
+        Kind::Flag => {
+            let Some(args) = parse_flags_args(constraint, captures)
+            else {
+                return Verdict::Unknown;
+            };
+            (
+                args.line,
+                args.items.into_iter().map(Dependency::Flag).collect()
+            )
+        }
+    };
+
+    for dependency in dependencies {
+        let Some(used) = ctx.region_use(line, dependency)
+        else {
+            return Verdict::Unknown;
+        };
+        let touched = match touch {
+            Touch::Read => used.reads,
+            Touch::Write => used.writes
+        };
+        if touched {
+            return Verdict::Failed;
+        }
+    }
+    Verdict::Satisfied
 }
 
 /// `regsNotUsedAfter(#, reg1, ..., regn)` - satisfied only if *every* named
@@ -730,7 +841,7 @@ mod tests {
              replacement:\n\
              constraints:\n\
              reachableByJr(0,?const1)\n\
-             regsNotModified(0,A)\n"
+             memoryNotWritten(0,1)\n"
         )
         .unwrap();
         assert!(!rules_need_addresses(&rules));
@@ -766,9 +877,10 @@ mod tests {
                 args: Vec::new(),
                 check_after: None
             },
-            // Still genuinely unimplemented: block-local, 45 real uses.
+            // Still genuinely unimplemented (4 real uses); the block-local
+            // family this used to name is supported now.
             Constraint {
-                name: "regsNotModified".to_string(),
+                name: "memoryNotWritten".to_string(),
                 args: Vec::new(),
                 check_after: None
             },

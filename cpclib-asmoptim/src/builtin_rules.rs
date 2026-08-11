@@ -183,7 +183,7 @@ mod tests {
         let neutral = supported_names(OptimizationGoal::Neutral);
         assert_eq!(
             neutral.len(),
-            120,
+            173,
             "executable rule count changed; see upstream_engine.rs's own \
              assertion for the same number over the raw corpus"
         );
@@ -199,9 +199,16 @@ mod tests {
         ] {
             assert!(neutral.contains(&name), "{name} regressed");
         }
-        // ...and a few the forward-liveness constraints newly unlocked.
+        // ...a few the forward-liveness constraints unlocked...
         for name in ["cp02ora", "ld0-to-xor", "cp12deca"] {
             assert!(neutral.contains(&name), "{name} should now be executable");
+        }
+        // ...and a few more from the block-local family.
+        for name in ["unnecessary-intermediate-reg", "unnecessary-ld-after-pop"] {
+            assert!(
+                neutral.contains(&name),
+                "{name} should be unlocked by the block-local constraints"
+            );
         }
 
         // The size goal adds its own supported rules on top of the base ones.

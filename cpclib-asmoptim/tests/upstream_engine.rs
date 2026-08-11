@@ -119,14 +119,17 @@ fn the_supported_rule_count_is_what_we_think_it_is() {
         .map(|r| r.name.as_deref().unwrap_or("<unnamed>"))
         .collect();
 
-    // Implementing `regsNotUsedAfter`/`flagsNotUsedAfter` - the two most
-    // common constraints in the corpus, 86 and 78 uses - took this from 11 to
-    // 120. The remaining 65 need the block-local family
-    // (`regsNotModified`/`regsNotUsed`/`flagsNotModified`/`flagsNotUsed`) or
-    // one of the rarer constraints.
+    // 11 -> 120 came from the forward-liveness pair
+    // (`regsNotUsedAfter`/`flagsNotUsedAfter`, the two most common constraints
+    // in the corpus at 87 and 78 uses); 120 -> 173 from the block-local family
+    // (`regsNotModified`/`regsNotUsed`/`flagsNotModified`/`flagsNotUsed`,
+    // 45/13/11/1). The remaining 12 need one of the genuinely rare constraints
+    // - `regFlagEffectsNotUsedAfter`, `memoryNotWritten`,
+    // `evenPushPopsSPNotRead`, `atLeastOneCPUOp`, `memoryNotUsed`,
+    // `noStackArguments` - which between them account for 15 uses in total.
     assert_eq!(
         supported.len(),
-        120,
+        173,
         "the supported subset of the {} upstream rules changed - a constraint \
          was implemented or removed, or the corpus was re-vendored",
         rules.rules.len()
@@ -144,11 +147,20 @@ fn the_supported_rule_count_is_what_we_think_it_is() {
     ] {
         assert!(supported.contains(&name), "{name} is no longer supported");
     }
-    // ...and a few the liveness constraints newly unlocked.
+    // ...a few the forward-liveness constraints unlocked...
     for name in ["cp02ora", "ld0-to-xor", "cp12deca", "unused-ld-any"] {
         assert!(
             supported.contains(&name),
             "{name} should be unlocked by the liveness constraints"
+        );
+    }
+    // ...and a few from the block-local family, which is what takes a rule
+    // with a `*` gap line (`regsNotModified(1, HL, ?reg)`) from unevaluable
+    // to executable.
+    for name in ["unnecessary-intermediate-reg", "unnecessary-ld-after-pop"] {
+        assert!(
+            supported.contains(&name),
+            "{name} should be unlocked by the block-local constraints"
         );
     }
 }

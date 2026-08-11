@@ -10,8 +10,9 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
 
-use crate::constraints::{self, ConstraintContext, LivenessContext};
+use crate::constraints::{self, ConstraintContext, LivenessContext, RegionUse};
 use crate::dependency::Dependency;
+use crate::effects::effects_of;
 use crate::liveness::{self, Usage};
 use crate::stream::AnalysisStream;
 use crate::smc;
@@ -19,6 +20,21 @@ use crate::dsl::{
     Constraint, InstrPattern, MnemonicPattern, NumberedInstr, OperandPattern, RepeatCount, Rule,
     RuleSet
 };
+
+/// How many instructions a `*` wildcard may span.
+///
+/// A peephole rule's `*` means "and some instructions in between" - a gap the
+/// rule then constrains (`regsNotModified(1, HL, ?reg)` and friends). Those
+/// constraints make a long gap essentially never satisfiable anyway: the
+/// longer the gap, the more certain something in it disturbs the register the
+/// rule wants to carry across.
+///
+/// Bounding it keeps matching linear in file length. The cost is a real if
+/// narrow capability loss - a rule whose gap genuinely runs longer than this,
+/// and whose constraints somehow still hold, is no longer found. 32 is
+/// comfortably above any gap seen in the real corpus while keeping a
+/// 45k-token generated file analysable at all.
+const MAX_WILDCARD_SPAN: usize = 32;
 
 /// Resolves the information address-aware constraints (`reachableByJr`) need,
 /// for whatever token type the caller is matching.
@@ -57,7 +73,7 @@ impl<T> AddressResolver<T> for NoResolver {
 /// itself cannot know.
 struct MatchContext<'t, T, R> {
     tokens: &'t [&'t T],
-    positions: HashMap<u32, usize>,
+    positions: HashMap<u32, std::ops::Range<usize>>,
     resolver: &'t R,
     /// The normalized instruction stream and its label index, borrowed from
     /// the one built per [`find_matches_with_resolver`] call - never rebuilt
@@ -76,7 +92,7 @@ impl<T, R> ConstraintContext for MatchContext<'_, T, R>
 where R: AddressResolver<T>
 {
     fn address_of_line(&self, index: u32) -> Option<u16> {
-        let pos = *self.positions.get(&index)?;
+        let pos = self.positions.get(&index)?.start;
         let token = *self.tokens.get(pos)?;
         self.resolver.address_of(token)
     }
@@ -92,17 +108,73 @@ where
     T::DataAccess: DataAccessElem
 {
     fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Usage> {
-        let token_index = *self.positions.get(&index)?;
-        // Start *past* the whole instruction, expansion included: a fake
-        // instruction occupies several ops, and resuming inside one would
-        // analyze a fragment of something the user wrote as a unit.
-        let start = self.analysis.stream.after_token(token_index)?;
+        let range = self.positions.get(&index)?;
+        // "After" means after everything the line matched, not after its first
+        // token: a `*` or `[?n]` line covers a whole region, and starting the
+        // walk inside it would treat the line's own instructions as if they
+        // came afterwards.
+        let start = match range.end.checked_sub(1) {
+            // Start *past* the whole instruction, expansion included: a fake
+            // instruction occupies several ops, and resuming inside one would
+            // analyze a fragment of something the user wrote as a unit.
+            Some(last) if range.start <= last => self.analysis.stream.after_token(last)?,
+            // The line matched nothing at all (a wildcard taking zero
+            // instructions), so "after it" is simply where it began.
+            _ => self.analysis.stream.first_op_of_token(range.start)?
+        };
         Some(liveness::is_used_after(
             &self.analysis.stream,
             &self.analysis.labels,
             start,
             dependency
         ))
+    }
+
+    fn region_use(&self, index: u32, dependency: Dependency) -> Option<RegionUse> {
+        let range = self.positions.get(&index)?.clone();
+        // A line that matched nothing touches nothing - a `*` taking zero
+        // instructions trivially satisfies "these registers are not modified
+        // here", which is exactly what the rules using it rely on.
+        if range.is_empty() {
+            return Some(RegionUse::default());
+        }
+
+        let ops = self.analysis.stream.ops();
+        let first = self.analysis.stream.first_op_of_token(range.start)?;
+        let last = self.analysis.stream.after_token(range.end - 1)?;
+
+        let mut used = RegionUse::default();
+        for op in ops.get(first..last)? {
+            if op.is_label() {
+                continue;
+            }
+            // Same policy as the forward walk: data, or anything carrying no
+            // mnemonic that is not a label, is something whose effects cannot
+            // be described - and "cannot describe" must never read as
+            // "touches nothing".
+            if op.is_data() || op.mnemonic().is_none() {
+                return None;
+            }
+            let effects = effects_of(op)?;
+
+            used.reads |= effects
+                .reads
+                .iter()
+                .any(|r| dependency.matches(Dependency::Reg(*r)))
+                || effects
+                    .reads_flags
+                    .iter()
+                    .any(|f| dependency.matches(Dependency::Flag(*f)));
+            used.writes |= effects
+                .writes
+                .iter()
+                .any(|r| dependency.matches(Dependency::Reg(*r)))
+                || effects
+                    .writes_flags
+                    .iter()
+                    .any(|f| dependency.matches(Dependency::Flag(*f)));
+        }
+        Some(used)
     }
 }
 
@@ -405,7 +477,7 @@ where
         return None;
     }
 
-    let anchor = *positions.get(&Rule::ANCHOR)?;
+    let anchor = positions.get(&Rule::ANCHOR)?.start;
 
     let ctx = MatchContext {
         tokens,
@@ -423,7 +495,8 @@ where
     // `render_replacement`. Deliberately checked after the constraints, so an
     // unrenderable rule costs nothing on the overwhelming majority of
     // positions where it would not have applied anyway.
-    let replacement = render_replacement(&rule.replacement_lines, &captures)?;
+    let replacement =
+        render_replacement(&rule.replacement_lines, &captures, tokens, &ctx.positions)?;
 
     Some(PeepholeMatch {
         rule_name: rule.name.clone(),
@@ -447,7 +520,7 @@ fn match_lines<'a, T>(
     tokens: &[&'a T],
     pos: usize,
     captures: &mut Captures<'a, T::DataAccess>,
-    positions: &mut HashMap<u32, usize>
+    positions: &mut HashMap<u32, std::ops::Range<usize>>
 ) -> Option<usize>
 where
     T: ListingElement,
@@ -462,10 +535,19 @@ where
         InstrPattern::Wildcard => {
             // Try the shortest wildcard first so a match reports the tightest
             // possible span; longer alternatives are explored on failure.
-            for taken in 0..=(tokens.len() - pos) {
+            //
+            // Bounded by `MAX_WILDCARD_SPAN` rather than running to end of
+            // file. Unbounded, a `*` costs one full clone of the captures and
+            // positions maps for every remaining token, at every start
+            // position - quadratic, and on a real 45k-token generated source
+            // that was ~40s *per rule* (the whole 173-rule set took 436s and
+            // timed out). See the run-length measurement in the `Repeat` arm
+            // below, which is the same problem in the other looping construct.
+            let limit = (tokens.len() - pos).min(MAX_WILDCARD_SPAN);
+            for taken in 0..=limit {
                 let mut trial = captures.clone();
                 let mut trial_positions = positions.clone();
-                trial_positions.entry(line.index).or_insert(pos);
+                trial_positions.entry(line.index).or_insert(pos..pos + taken);
                 if let Some(end) = match_lines(
                     lines,
                     line_idx + 1,
@@ -551,7 +633,7 @@ where
                     continue;
                 }
 
-                trial_positions.entry(line.index).or_insert(pos);
+                trial_positions.entry(line.index).or_insert(pos..cursor);
                 if let Some(end) = match_lines(
                     lines,
                     line_idx + 1,
@@ -575,7 +657,7 @@ where
                 return None;
             }
             let mut trial_positions = positions.clone();
-            trial_positions.entry(line.index).or_insert(pos);
+            trial_positions.entry(line.index).or_insert(pos..pos + 1);
             let end = match_lines(
                 lines,
                 line_idx + 1,
@@ -720,20 +802,63 @@ fn render_pattern_text(pattern: &OperandPattern) -> Option<String> {
 /// partial success would emit a rewrite with instructions missing from the
 /// middle of it. Both are far worse than declining the match: a rule whose
 /// replacement we cannot write down is a rule we have no business suggesting.
-fn render_replacement<D>(
+fn render_replacement<T>(
     lines: &[NumberedInstr],
-    captures: &Captures<'_, D>
+    captures: &Captures<'_, T::DataAccess>,
+    tokens: &[&T],
+    positions: &HashMap<u32, std::ops::Range<usize>>
 ) -> Option<Vec<String>>
-where D: DataAccessElem {
-    lines
-        .iter()
-        .map(|line| render_instr(&line.instr, captures))
-        .collect()
+where
+    T: ListingElement,
+    T::DataAccess: DataAccessElem
+{
+    let mut rendered = Vec::with_capacity(lines.len());
+    for line in lines {
+        // A `*` in a *replacement* means "and these instructions stay as they
+        // are" - 118 of the upstream rules use one. It has to be written back
+        // out verbatim, because a consumer replaces the whole matched span
+        // with these lines: emitting nothing here would silently delete the
+        // very instructions the rule promised to preserve.
+        if matches!(line.instr, InstrPattern::Wildcard) {
+            // Rendered from the parsed token, i.e. canonically: mnemonics come
+            // back upper case and `1+2` as `0x1 + 0x2`. Symbols are *not*
+            // touched (`MyRoutine` and `.skip` survive verbatim), so this is
+            // safe - but applying such a fix does reformat instructions the
+            // rule never intended to change, and drops their comments, the
+            // same way `cpclib_basmopt::apply_fixes` already does for a
+            // matched line's trailing comment.
+            //
+            // A `LocatedToken` could render its own source span verbatim
+            // instead, which would be strictly nicer. Not done here because it
+            // would make the two `ListingElement` implementations produce
+            // *different* replacement text for the same source, and the engine
+            // deliberately asserts they agree (see `tests/common`).
+            let range = positions.get(&line.index)?.clone();
+            // A wildcard that matched nothing contributes no line at all,
+            // rather than a blank one.
+            if range.is_empty() {
+                continue;
+            }
+            let kept: Vec<String> = tokens
+                .get(range)?
+                .iter()
+                .map(|token| token.to_token().to_string().trim().to_string())
+                .collect();
+            rendered.push(kept.join(" : "));
+        }
+        else {
+            rendered.push(render_instr(&line.instr, captures)?);
+        }
+    }
+    Some(rendered)
 }
 
 fn render_instr<D>(pattern: &InstrPattern, captures: &Captures<'_, D>) -> Option<String>
 where D: DataAccessElem {
     match pattern {
+        // Handled by `render_replacement`, which has the matched tokens a
+        // wildcard needs; unreachable from a nested position because a
+        // wildcard is not meaningful inside a repeat body.
         InstrPattern::Wildcard => None,
         InstrPattern::Repeat { count, instr } => {
             let n = match count {

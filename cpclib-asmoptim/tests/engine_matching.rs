@@ -112,11 +112,12 @@ fn a_rule_whose_constraints_are_unsupported_is_skipped_entirely() {
     // evaluate. Skipping is the only safe behavior: matching anyway would
     // suggest an optimization whose safety condition was never checked.
     //
-    // `regsNotModified` is deliberately chosen as a constraint that is still
-    // genuinely unimplemented. This test used to use `flagsNotUsedAfter`,
-    // which has since been implemented - at which point it kept passing for
-    // an entirely different reason (the liveness walk failing closed), i.e.
-    // it would no longer have been testing what its name claims.
+    // `memoryNotWritten` is deliberately chosen as a constraint that is still
+    // genuinely unimplemented. This test has now had to be updated twice, as
+    // first `flagsNotUsedAfter` and then `regsNotModified` were implemented
+    // under it - each time it kept passing for an entirely different reason
+    // than its name claims, which is exactly why the counterpart test below
+    // exists.
     let with_unsupported = "\
 pattern: Replace cp 0 with or a
 name: cp02ora
@@ -124,7 +125,7 @@ name: cp02ora
 replacement:
 0: or a
 constraints:
-regsNotModified(0,A)
+memoryNotWritten(0,1)
 ";
     assert!(matches_for(" cp 0\n", with_unsupported).is_empty());
     // ... while the same source does match once that constraint is gone.

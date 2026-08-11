@@ -1962,6 +1962,26 @@ impl ListingElement for LocatedTokenInner {
             Self::Section(label) => Cow::Owned(Token::Section(label.as_str().into())),
             Self::SnaSet(flag, value) => Cow::Owned(Token::SnaSet(*flag, value.clone())),
 
+            // Multi-register `push bc, hl` / `pop hl, bc`. `Token` has the
+            // matching variants, so this is a plain operand conversion - it
+            // was simply never reached until a consumer started rendering
+            // arbitrary tokens back to text, at which point the `todo!()`
+            // below turned an ordinary basm statement into a panic.
+            Self::MultiPush(regs) => {
+                Cow::Owned(Token::MultiPush(
+                    regs.iter()
+                        .map(|r| r.to_data_access().into_owned())
+                        .collect()
+                ))
+            },
+            Self::MultiPop(regs) => {
+                Cow::Owned(Token::MultiPop(
+                    regs.iter()
+                        .map(|r| r.to_data_access().into_owned())
+                        .collect()
+                ))
+            },
+
             _ => todo!("Need to implement conversion  for {:?}", self)
         }
     }
