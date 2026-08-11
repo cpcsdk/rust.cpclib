@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
 
-use crate::constraints::{self, ConstraintContext, LivenessContext, RegionUse};
+use crate::constraints::{self, ConstraintContext, LivenessContext, RegionUse, Writes};
 use crate::dependency::Dependency;
 use crate::effects::effects_of;
 use crate::liveness::{self, Usage};
@@ -21,7 +21,11 @@ use crate::dsl::{
     RuleSet
 };
 
-/// How many instructions a `*` wildcard may span.
+/// How many *instructions* a `*` wildcard may span.
+///
+/// Counted in instructions, not source lines - basm puts several on a line
+/// (`ld a, 5 : inc hl : ret`), and the whole engine works on the flat
+/// instruction stream, so a "line" is not a meaningful unit here.
 ///
 /// A peephole rule's `*` means "and some instructions in between" - a gap the
 /// rule then constrains (`regsNotModified(1, HL, ?reg)` and friends). Those
@@ -29,11 +33,11 @@ use crate::dsl::{
 /// longer the gap, the more certain something in it disturbs the register the
 /// rule wants to carry across.
 ///
-/// Bounding it keeps matching linear in file length. The cost is a real if
+/// Bounding it keeps matching linear in the instruction count. The cost is a real if
 /// narrow capability loss - a rule whose gap genuinely runs longer than this,
 /// and whose constraints somehow still hold, is no longer found. 32 is
 /// comfortably above any gap seen in the real corpus while keeping a
-/// 45k-token generated file analysable at all.
+/// 45k-instruction generated file analysable at all.
 const MAX_WILDCARD_SPAN: usize = 32;
 
 /// Resolves the information address-aware constraints (`reachableByJr`) need,
@@ -128,6 +132,43 @@ where
             start,
             dependency
         ))
+    }
+
+    fn writes_of(&self, index: u32) -> Option<Writes> {
+        let range = self.positions.get(&index)?.clone();
+        if range.is_empty() {
+            return Some(Writes::default());
+        }
+
+        let ops = self.analysis.stream.ops();
+        let first = self.analysis.stream.first_op_of_token(range.start)?;
+        let last = self.analysis.stream.after_token(range.end - 1)?;
+
+        let mut writes = Writes::default();
+        for op in ops.get(first..last)? {
+            if op.is_label() {
+                continue;
+            }
+            if op.is_data() || op.mnemonic().is_none() {
+                return None;
+            }
+            let effects = effects_of(op)?;
+
+            // A port read counts too: `in a,(c)` drives real hardware, so an
+            // instruction carrying one is never removable however dead its
+            // registers look. A memory *read* is genuinely free of effects and
+            // deliberately not listed.
+            writes.has_side_effects |=
+                effects.writes_memory || effects.writes_port || effects.reads_port;
+
+            writes
+                .deps
+                .extend(effects.writes.iter().copied().map(Dependency::Reg));
+            writes
+                .deps
+                .extend(effects.writes_flags.iter().copied().map(Dependency::Flag));
+        }
+        Some(writes)
     }
 
     fn region_use(&self, index: u32, dependency: Dependency) -> Option<RegionUse> {

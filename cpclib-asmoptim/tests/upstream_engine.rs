@@ -119,17 +119,20 @@ fn the_supported_rule_count_is_what_we_think_it_is() {
         .map(|r| r.name.as_deref().unwrap_or("<unnamed>"))
         .collect();
 
+    // 173 -> 177 came from `regFlagEffectsNotUsedAfter`, which asks whether
+    // an instruction's *entire* output is dead.
     // 11 -> 120 came from the forward-liveness pair
     // (`regsNotUsedAfter`/`flagsNotUsedAfter`, the two most common constraints
     // in the corpus at 87 and 78 uses); 120 -> 173 from the block-local family
     // (`regsNotModified`/`regsNotUsed`/`flagsNotModified`/`flagsNotUsed`,
-    // 45/13/11/1). The remaining 12 need one of the genuinely rare constraints
-    // - `regFlagEffectsNotUsedAfter`, `memoryNotWritten`,
-    // `evenPushPopsSPNotRead`, `atLeastOneCPUOp`, `memoryNotUsed`,
-    // `noStackArguments` - which between them account for 15 uses in total.
+    // 45/13/11/1). The remaining 8 need `memoryNotWritten`/`memoryNotUsed`
+    // (the four `sdcc-*` rules, which would need real memory aliasing),
+    // `atLeastOneCPUOp` + `evenPushPopsSPNotRead` together (the three
+    // push/pop rules), or `noStackArguments` (SDCC calling-convention
+    // specific, and not meaningful for basm).
     assert_eq!(
         supported.len(),
-        173,
+        177,
         "the supported subset of the {} upstream rules changed - a constraint \
          was implemented or removed, or the corpus was re-vendored",
         rules.rules.len()
@@ -161,6 +164,13 @@ fn the_supported_rule_count_is_what_we_think_it_is() {
         assert!(
             supported.contains(&name),
             "{name} should be unlocked by the block-local constraints"
+        );
+    }
+    // ...and the whole-instruction-effects one.
+    for name in ["unnecessary-0args", "unnecessary-2args"] {
+        assert!(
+            supported.contains(&name),
+            "{name} should be unlocked by regFlagEffectsNotUsedAfter"
         );
     }
 }

@@ -183,7 +183,7 @@ mod tests {
         let neutral = supported_names(OptimizationGoal::Neutral);
         assert_eq!(
             neutral.len(),
-            173,
+            177,
             "executable rule count changed; see upstream_engine.rs's own \
              assertion for the same number over the raw corpus"
         );
@@ -203,8 +203,13 @@ mod tests {
         for name in ["cp02ora", "ld0-to-xor", "cp12deca"] {
             assert!(neutral.contains(&name), "{name} should now be executable");
         }
-        // ...and a few more from the block-local family.
-        for name in ["unnecessary-intermediate-reg", "unnecessary-ld-after-pop"] {
+        // ...and a few more from the block-local family and the
+        // whole-instruction-effects one.
+        for name in [
+            "unnecessary-intermediate-reg",
+            "unnecessary-ld-after-pop",
+            "unnecessary-2args"
+        ] {
             assert!(
                 neutral.contains(&name),
                 "{name} should be unlocked by the block-local constraints"

@@ -18,13 +18,19 @@ use crate::regflag::{Flag, Reg};
 /// Constraint names this crate evaluates today.
 ///
 /// Ordered roughly by how often they appear in the real upstream corpus
-/// (`in` alone accounts for 168 uses of ~500, then `regsNotUsedAfter` at 86
-/// and `flagsNotUsedAfter` at 78). The remaining unimplemented ones are all
-/// far rarer; the biggest group left is the *block-local* family
-/// (`regsNotModified`/`regsNotUsed`/`flagsNotModified`/`flagsNotUsed`, 45/13/
-/// 11/1 uses), which needs no control-flow walk at all now that
-/// [`crate::effects`] exists - just the classifier run over the already
-/// matched instructions.
+/// (`in` alone accounts for 178 uses of ~500, then `regsNotUsedAfter` at 87
+/// and `flagsNotUsedAfter` at 78). Together these cover 177 of the 185 base
+/// rules.
+///
+/// What is left, and why:
+///
+/// * `memoryNotWritten`/`memoryNotUsed` (4+2 uses) - would need real memory
+///   aliasing to decide whether two `(IX+d)` accesses overlap. All four rules
+///   needing them are `sdcc-*` patterns aimed at compiler output.
+/// * `atLeastOneCPUOp` + `evenPushPopsSPNotRead` (3+3) - always used together,
+///   by the three `unnecessary-push-pop` rules.
+/// * `noStackArguments` (1) - an SDCC calling-convention question that does
+///   not translate to basm.
 pub const SUPPORTED: &[&str] = &[
     "equal",
     "notEqual",
@@ -37,7 +43,8 @@ pub const SUPPORTED: &[&str] = &[
     "regsNotModified",
     "regsNotUsed",
     "flagsNotModified",
-    "flagsNotUsed"
+    "flagsNotUsed",
+    "regFlagEffectsNotUsedAfter"
 ];
 
 /// Constraint names that need a real assembled address to evaluate (i.e.
@@ -151,6 +158,28 @@ pub trait LivenessContext {
     /// available, or when the region contains something whose effects cannot
     /// be described - all of which report [`Verdict::Unknown`] and so fail.
     fn region_use(&self, index: u32, dependency: Dependency) -> Option<RegionUse>;
+
+    /// Everything the instructions matched by pattern line `index` write.
+    ///
+    /// Where [`Self::region_use`] answers "does this region touch X?", this
+    /// enumerates what it produces - which is what a rule asking "is this
+    /// instruction's entire output dead?" needs, since it cannot name the
+    /// registers in advance.
+    fn writes_of(&self, index: u32) -> Option<Writes>;
+}
+
+/// What a matched region produces.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Writes {
+    /// The registers and flags it writes.
+    pub deps: Vec<Dependency>,
+    /// It also writes memory, or touches a port.
+    ///
+    /// Tracked separately because these are effects on the world that no
+    /// amount of register liveness can prove dead: `ld (hl), a` leaves every
+    /// register unused afterwards and is still doing the only thing it was
+    /// written to do, and an `out`/`in` drives real CPC hardware.
+    pub has_side_effects: bool
 }
 
 /// What a matched region does to one register or flag.
@@ -188,6 +217,10 @@ impl LivenessContext for NoContext {
     fn region_use(&self, _index: u32, _dependency: Dependency) -> Option<RegionUse> {
         None
     }
+
+    fn writes_of(&self, _index: u32) -> Option<Writes> {
+        None
+    }
 }
 
 /// Evaluate one constraint against a candidate match.
@@ -213,8 +246,53 @@ where
         "regsNotUsed" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Read),
         "flagsNotModified" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Write),
         "flagsNotUsed" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Read),
+        "regFlagEffectsNotUsedAfter" => reg_flag_effects_not_used_after(constraint, ctx),
         _ => Verdict::Unknown
     }
+}
+
+/// A constraint argument naming a pattern line, as a plain number.
+fn line_index(pattern: &OperandPattern) -> Option<u32> {
+    match pattern {
+        OperandPattern::Number(n) => u32::try_from(*n).ok(),
+        _ => None
+    }
+}
+
+/// `regFlagEffectsNotUsedAfter(#1, #2)` - every register and flag that line
+/// `#1` writes is provably dead after line `#2`.
+///
+/// The rules using it (`unnecessary-0args`/`-1args`/`-2args`/`-2args-ex`) have
+/// an *empty* replacement: they delete the instruction outright, on the
+/// grounds that nothing it produced is ever read. That makes this the most
+/// destructive constraint in the set, and the reason for the side-effect check
+/// below - `?op` for `unnecessary-2args` includes `ld`, and `ld (hl), a`
+/// writes memory while leaving every register dead. Deleting it because "no
+/// register is used afterwards" would remove the entire point of the
+/// instruction. Register liveness simply cannot speak to memory or port
+/// effects, so their presence makes this undecidable rather than satisfied.
+fn reg_flag_effects_not_used_after<C>(constraint: &Constraint, ctx: &C) -> Verdict
+where C: LivenessContext {
+    let [effects_line, after_line] = constraint.args.as_slice()
+    else {
+        return Verdict::Unknown;
+    };
+    let (Some(effects_line), Some(after_line)) =
+        (line_index(effects_line), line_index(after_line))
+    else {
+        return Verdict::Unknown;
+    };
+
+    let Some(writes) = ctx.writes_of(effects_line)
+    else {
+        return Verdict::Unknown;
+    };
+    if writes.has_side_effects {
+        return Verdict::Unknown;
+    }
+    // An instruction that writes nothing at all is trivially one whose output
+    // is unused - which is correct: that is exactly what a `NOP` is.
+    not_used_after(after_line, writes.deps.into_iter(), ctx)
 }
 
 /// Whether a block-local constraint is about registers or flags.
