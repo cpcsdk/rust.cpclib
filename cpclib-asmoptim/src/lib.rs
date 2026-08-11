@@ -17,13 +17,20 @@
 //! diagnostics and quickfixes. A real `basm` build is never silently altered by
 //! anything here.
 
+pub mod analysis_op;
 pub mod builtin_rules;
 pub mod constraints;
+pub mod dependency;
 pub mod dsl;
+pub mod effects;
 pub mod engine;
 pub mod env_resolver;
+pub mod liveness;
+pub mod regflag;
+pub mod smc;
+pub mod stream;
 
 pub use builtin_rules::{OptimizationGoal, builtin_rules};
 pub use constraints::rules_need_addresses;
-pub use cpclib_asm::flatten::flatten_listing;
+pub use cpclib_asm::flatten::{flatten_for_analysis, flatten_listing};
 pub use env_resolver::EnvAddressResolver;

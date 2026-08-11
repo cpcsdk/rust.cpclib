@@ -9,6 +9,8 @@ use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
 use cpclib_asmoptim::{OptimizationGoal, builtin_rules};
 use cpclib_tokens::{ToSimpleToken, Token};
 
+mod common;
+
 /// Matches against the real built-in rules twice - once as `LocatedToken`,
 /// once as plain `Token` (same AST, no source position at all) - and asserts
 /// they agree. See `engine_matching.rs`'s `matches_for` for why this matters:
@@ -27,10 +29,7 @@ fn suggestions(source: &str, goal: OptimizationGoal) -> Vec<PeepholeMatch> {
     let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
     let simple_result = find_matches(&simple_refs, rules);
 
-    assert_eq!(
-        located_result, simple_result,
-        "LocatedToken and Token matching must agree for {source:?} under {goal:?}"
-    );
+    common::assert_token_kinds_agree(&located_result, &simple_result, source);
 
     located_result
 }

@@ -13,7 +13,7 @@
 use tower_lsp::lsp_types::*;
 
 use cpclib_asm::assembler::Env;
-use cpclib_asm::flatten::flatten_listing;
+use cpclib_asm::flatten::flatten_for_analysis;
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, MayHaveSpan};
 use cpclib_asm::parser::source::{SourceString, Z80Span};
 use cpclib_asmoptim::engine::{PeepholeMatch, find_matches_with_resolver};
@@ -45,7 +45,7 @@ fn peephole_matches<'a>(
     env: &Env,
     goal: OptimizationGoal
 ) -> (Vec<&'a LocatedToken>, Vec<PeepholeMatch>) {
-    let tokens: Vec<&LocatedToken> = flatten_listing(listing.iter()).collect();
+    let tokens: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
     if tokens.is_empty() {
         return (tokens, Vec::new());
     }

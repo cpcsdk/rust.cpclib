@@ -1299,6 +1299,8 @@ impl ListingElement for LocatedToken {
         fn mnemonic(&self) -> Option<&Mnemonic>;
         fn mnemonic_arg1(&self) -> Option<&Self::DataAccess>;
         fn mnemonic_arg2(&self) -> Option<&Self::DataAccess>;
+        fn mnemonic_arg3(&self) -> Option<Register8>;
+        fn multi_push_pop_to_listing(&self) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>>;
         fn rorg_expr(&self) -> &Self::Expr;
         fn iterate_counter_name(&self) -> &str;
         fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>;

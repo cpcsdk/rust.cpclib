@@ -8,9 +8,13 @@
 
 use std::collections::HashMap;
 
-use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement};
+use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
 
-use crate::constraints::{self, ConstraintContext};
+use crate::constraints::{self, ConstraintContext, LivenessContext};
+use crate::dependency::Dependency;
+use crate::liveness::{self, Usage};
+use crate::stream::AnalysisStream;
+use crate::smc;
 use crate::dsl::{
     Constraint, InstrPattern, MnemonicPattern, NumberedInstr, OperandPattern, RepeatCount, Rule,
     RuleSet
@@ -54,7 +58,18 @@ impl<T> AddressResolver<T> for NoResolver {
 struct MatchContext<'t, T, R> {
     tokens: &'t [&'t T],
     positions: HashMap<u32, usize>,
-    resolver: &'t R
+    resolver: &'t R,
+    /// The normalized instruction stream and its label index, borrowed from
+    /// the one built per [`find_matches_with_resolver`] call - never rebuilt
+    /// per candidate match, which with ~120 active rules would dominate the
+    /// cost of matching entirely.
+    analysis: &'t Analysis<'t, T>
+}
+
+/// The per-call analysis data every liveness question is answered from.
+struct Analysis<'t, T> {
+    stream: AnalysisStream<'t, T>,
+    labels: HashMap<String, usize>
 }
 
 impl<T, R> ConstraintContext for MatchContext<'_, T, R>
@@ -68,6 +83,26 @@ where R: AddressResolver<T>
 
     fn value_of_label(&self, name: &str) -> Option<i64> {
         self.resolver.value_of_label(name)
+    }
+}
+
+impl<T, R> LivenessContext for MatchContext<'_, T, R>
+where
+    T: ListingElement,
+    T::DataAccess: DataAccessElem
+{
+    fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Usage> {
+        let token_index = *self.positions.get(&index)?;
+        // Start *past* the whole instruction, expansion included: a fake
+        // instruction occupies several ops, and resuming inside one would
+        // analyze a fragment of something the user wrote as a unit.
+        let start = self.analysis.stream.after_token(token_index)?;
+        Some(liveness::is_used_after(
+            &self.analysis.stream,
+            &self.analysis.labels,
+            start,
+            dependency
+        ))
     }
 }
 
@@ -271,13 +306,29 @@ where
         .filter(|r| constraints::all_supported(&r.constraints))
         .collect();
 
+    // Built once for the whole call, then borrowed by every candidate match.
+    let stream = AnalysisStream::build(tokens, |token| resolve_jq(token, resolver));
+    let labels = liveness::label_index(&stream);
+    let analysis = Analysis { stream, labels };
+
+    // Instructions something points *into* - see `smc`. A whole-file property,
+    // so computed here rather than per candidate match.
+    let protected = smc::protected_tokens(tokens);
+
     let mut start = 0usize;
     while start < tokens.len() {
         let mut advanced = false;
         for rule in &usable {
-            if let Some(m) = try_rule(rule, tokens, start, resolver) {
+            if let Some(m) = try_rule(rule, tokens, start, resolver, &analysis) {
                 let next = m.end.max(start + 1);
-                matches.push(m);
+                // Every rewrite changes the byte layout, so a match covering a
+                // self-modifying-code target is dropped whatever the rule was
+                // going to do with it. Dropped *after* matching rather than by
+                // skipping the region, so `start` still advances past it and
+                // a later rule cannot re-propose the same span.
+                if !m.range().any(|i| protected.contains(&i)) {
+                    matches.push(m);
+                }
                 start = next;
                 advanced = true;
                 break;
@@ -291,8 +342,47 @@ where
     matches
 }
 
+/// Replay basm's own `JQ` decision: it assembles to `JR` when the target is
+/// within relative range and `JP` otherwise (`Env::assemble_jq`, which uses
+/// the same `target - here - 2` displacement `reachableByJr` does). Without
+/// real addresses there is nothing to replay, so the instruction stays opaque
+/// and any analysis crossing it fails closed.
+fn resolve_jq<T, R>(token: &T, resolver: &R) -> Option<Mnemonic>
+where
+    T: ListingElement,
+    T::DataAccess: DataAccessElem,
+    R: AddressResolver<T>
+{
+    if token.mnemonic() != Some(&Mnemonic::Jq) {
+        return None;
+    }
+    let here = resolver.address_of(token)?;
+    // The target is the last operand - `jq label` or `jq cc, label`.
+    let target = token
+        .mnemonic_arg2()
+        .or_else(|| token.mnemonic_arg1())?
+        .get_expression()
+        .filter(|e| e.is_label())
+        .map(|e| e.label())
+        .and_then(|name| resolver.value_of_label(name))?;
+
+    let delta = target - i64::from(here) - 2;
+    Some(if (-128..=127).contains(&delta) {
+        Mnemonic::Jr
+    }
+    else {
+        Mnemonic::Jp
+    })
+}
+
 /// Attempt one rule at one starting position.
-fn try_rule<T, R>(rule: &Rule, tokens: &[&T], start: usize, resolver: &R) -> Option<PeepholeMatch>
+fn try_rule<'t, T, R>(
+    rule: &Rule,
+    tokens: &'t [&'t T],
+    start: usize,
+    resolver: &'t R,
+    analysis: &'t Analysis<'t, T>
+) -> Option<PeepholeMatch>
 where
     T: ListingElement,
     T::DataAccess: DataAccessElem,
@@ -320,7 +410,8 @@ where
     let ctx = MatchContext {
         tokens,
         positions,
-        resolver
+        resolver,
+        analysis
     };
     for constraint in &rule.constraints {
         if !constraints::evaluate(constraint, &mut captures, &ctx).is_satisfied() {
@@ -328,13 +419,19 @@ where
         }
     }
 
+    // A rule we cannot render a replacement for is not reported at all - see
+    // `render_replacement`. Deliberately checked after the constraints, so an
+    // unrenderable rule costs nothing on the overwhelming majority of
+    // positions where it would not have applied anyway.
+    let replacement = render_replacement(&rule.replacement_lines, &captures)?;
+
     Some(PeepholeMatch {
         rule_name: rule.name.clone(),
         message: substitute_message(&rule.description, &captures),
         start,
         end,
         anchor,
-        replacement: render_replacement(&rule.replacement_lines, &captures)
+        replacement
     })
 }
 
@@ -395,7 +492,37 @@ where
                         Some(bound) => vec![bound],
                         // Otherwise prefer longer runs: a rule collapsing N
                         // repeats is more useful the more it collapses.
-                        None => (1..=(tokens.len() - pos) as u32).rev().collect()
+                        //
+                        // Only counts up to the run that actually matches here
+                        // are worth trying. Measuring it first costs one
+                        // forward scan; the obvious alternative - offering
+                        // every count from "all remaining tokens" downwards
+                        // and letting each trial discover it fails - is
+                        // quadratic in file length *per position*, and on a
+                        // real 11k-token source that alone took one such rule
+                        // from ~1ms to 3.2s. It matters most where the rule
+                        // does not apply at all, which is almost everywhere:
+                        // a non-matching first token now yields an empty range
+                        // and no trials whatsoever.
+                        //
+                        // Sound because a repeat is a prefix property: if n
+                        // consecutive instructions match, so does every
+                        // shorter count. The probe accumulates bindings across
+                        // the run exactly as a real trial would, so it finds
+                        // the same maximum a trial for that count would reach.
+                        None => {
+                            let mut probe = captures.clone();
+                            let mut run = 0u32;
+                            let mut cursor = pos;
+                            while let Some(token) = tokens.get(cursor) {
+                                if !match_instr(instr, *token, &mut probe) {
+                                    break;
+                                }
+                                cursor += 1;
+                                run += 1;
+                            }
+                            (1..=run).rev().collect()
+                        }
                     }
                 }
             };
@@ -583,12 +710,24 @@ fn render_pattern_text(pattern: &OperandPattern) -> Option<String> {
     })
 }
 
-/// Build the replacement text, one entry per replacement line.
-fn render_replacement<D>(lines: &[NumberedInstr], captures: &Captures<'_, D>) -> Vec<String>
+/// Build the replacement text, one entry per replacement line, or `None` if
+/// any single line cannot be rendered.
+///
+/// All-or-nothing on purpose. An empty `Vec` is a *meaningful* replacement -
+/// it is how rules like `unnecessary-ld-to-itself` say "delete the matched
+/// instructions" - so silently dropping the lines that failed to render would
+/// turn "I could not express this rewrite" into "delete this code", and a
+/// partial success would emit a rewrite with instructions missing from the
+/// middle of it. Both are far worse than declining the match: a rule whose
+/// replacement we cannot write down is a rule we have no business suggesting.
+fn render_replacement<D>(
+    lines: &[NumberedInstr],
+    captures: &Captures<'_, D>
+) -> Option<Vec<String>>
 where D: DataAccessElem {
     lines
         .iter()
-        .filter_map(|line| render_instr(&line.instr, captures))
+        .map(|line| render_instr(&line.instr, captures))
         .collect()
 }
 

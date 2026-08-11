@@ -66,6 +66,17 @@ where Self: Debug + Sized + Sync
     fn mnemonic(&self) -> Option<&Mnemonic>;
     fn mnemonic_arg1(&self) -> Option<&Self::DataAccess>;
     fn mnemonic_arg2(&self) -> Option<&Self::DataAccess>;
+    /// The third operand a handful of *undocumented* instructions carry - the
+    /// register they additionally save their result into (e.g. the
+    /// `SLA (IX+d), B` family). Unlike the first two it is always a plain
+    /// `Register8`, never a general `DataAccess`, which is why it is returned
+    /// by value rather than by reference (`Register8: Copy`).
+    ///
+    /// Exposed on the trait so a *generic* consumer can see it at all: any
+    /// analysis that reasons about which registers an instruction writes has
+    /// to know about this operand, and without a trait accessor it would
+    /// silently treat `SLA (IX+d), B` as if it never touched `B`.
+    fn mnemonic_arg3(&self) -> Option<Register8>;
     fn mnemonic_arg1_mut(&mut self) -> Option<&mut Self::DataAccess>;
     fn mnemonic_arg2_mut(&mut self) -> Option<&mut Self::DataAccess>;
 
@@ -185,6 +196,26 @@ where Self: Debug + Sized + Sync
     fn starts_with_label(&self) -> bool {
         self.is_label() || self.is_assign() || self.is_equ() || self.is_set()
     }
+
+    /// The individual `PUSH`/`POP` instructions a *multi-register* statement
+    /// stands for, or `None` when this is not one.
+    ///
+    /// basm lets several registers share one `push`/`pop`, so `push bc, hl`
+    /// assembles to `push bc : push hl` - the same "one statement, several
+    /// real instructions" relationship the mnemonic-keyed fake instructions
+    /// above have. It needs its own hook only because it cannot be expressed
+    /// through [`Self::fake_to_listing_from_access`]: that is keyed on
+    /// `(mnemonic, arg1, arg2)`, and a multi-register push has no mnemonic of
+    /// its own and an unbounded number of arguments.
+    ///
+    /// Worth stating explicitly rather than leaving implicit in the
+    /// assembler: any consumer that reasons about what a listing *does* -
+    /// register liveness, cycle counting - has to see the individual pushes.
+    /// One that treats this statement as opaque, or worse as inert because it
+    /// carries no mnemonic, will not notice it reads those registers at all.
+    fn multi_push_pop_to_listing(
+        &self
+    ) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>>;
 
     #[inline]
     fn fake_to_listing_from_access<DA: DataAccessElem>(

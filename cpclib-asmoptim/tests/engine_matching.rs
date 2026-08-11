@@ -11,6 +11,8 @@ use cpclib_asmoptim::dsl::RuleSet;
 use cpclib_asmoptim::engine::{PeepholeMatch, find_matches};
 use cpclib_tokens::{ToSimpleToken, Token};
 
+mod common;
+
 /// Parse `source`, match it against `rules` twice - once as the real
 /// `LocatedToken`s the LSP works with, once as plain `Token`s (the same AST
 /// with all span/source-position information stripped) - and assert the two
@@ -38,10 +40,7 @@ fn matches_for(source: &str, rules: &str) -> Vec<PeepholeMatch> {
     let simple_refs: Vec<&Token> = simple_tokens.iter().collect();
     let simple_result = find_matches(&simple_refs, &rules);
 
-    assert_eq!(
-        located_result, simple_result,
-        "LocatedToken and Token matching must agree for {source:?}"
-    );
+    common::assert_token_kinds_agree(&located_result, &simple_result, source);
 
     located_result
 }
@@ -112,7 +111,33 @@ fn a_rule_whose_constraints_are_unsupported_is_skipped_entirely() {
     // Same rule as CP_ZERO but carrying a constraint this crate cannot
     // evaluate. Skipping is the only safe behavior: matching anyway would
     // suggest an optimization whose safety condition was never checked.
+    //
+    // `regsNotModified` is deliberately chosen as a constraint that is still
+    // genuinely unimplemented. This test used to use `flagsNotUsedAfter`,
+    // which has since been implemented - at which point it kept passing for
+    // an entirely different reason (the liveness walk failing closed), i.e.
+    // it would no longer have been testing what its name claims.
     let with_unsupported = "\
+pattern: Replace cp 0 with or a
+name: cp02ora
+0: cp 0
+replacement:
+0: or a
+constraints:
+regsNotModified(0,A)
+";
+    assert!(matches_for(" cp 0\n", with_unsupported).is_empty());
+    // ... while the same source does match once that constraint is gone.
+    assert_eq!(matches_for(" cp 0\n", CP_ZERO).len(), 1);
+}
+
+/// The counterpart to the test above, and the thing that keeps it honest: a
+/// rule carrying `flagsNotUsedAfter` must now be *evaluated* rather than
+/// skipped, so the same rule can come out either way depending on what
+/// follows the match.
+#[test]
+fn a_liveness_constraint_is_really_evaluated_rather_than_skipped() {
+    let cp_zero_guarded = "\
 pattern: Replace cp 0 with or a
 name: cp02ora
 0: cp 0
@@ -121,9 +146,17 @@ replacement:
 constraints:
 flagsNotUsedAfter(0,N,P/V)
 ";
-    assert!(matches_for(" cp 0\n", with_unsupported).is_empty());
-    // ... while the same source does match once that constraint is gone.
-    assert_eq!(matches_for(" cp 0\n", CP_ZERO).len(), 1);
+    // `xor a` writes every flag, so N and P/V are dead right after the `cp`:
+    // the constraint is satisfied and the rule fires. Were the constraint
+    // merely being skipped, this would be empty.
+    let found = matches_for(" cp 0\n xor a\n ret\n", cp_zero_guarded);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].rule_name.as_deref(), Some("cp02ora"));
+
+    // `ret pe` reads P/V before anything overwrites it, so the flag is live
+    // and the rule must not fire - the same rule, opposite answer, decided by
+    // the code that follows it.
+    assert!(matches_for(" cp 0\n ret pe\n", cp_zero_guarded).is_empty());
 }
 
 #[test]
@@ -313,4 +346,75 @@ fn an_empty_token_stream_yields_no_matches() {
     let rules = RuleSet::parse(CP_ZERO).unwrap();
     let tokens: Vec<&cpclib_asm::parser::LocatedToken> = Vec::new();
     assert!(find_matches(&tokens, &rules).is_empty());
+}
+
+#[test]
+fn a_variable_repeat_binds_the_count_and_prefers_the_longest_run() {
+    // `[?const1]` is a *variable* repeat: the matcher has to work out how many
+    // consecutive instructions to consume and bind that number to `?const1`,
+    // which the replacement then renders. Distinct from the fixed-count case
+    // above, and the case the run-length optimisation in `match_lines` had to
+    // preserve exactly - it must still take the longest run, not the first
+    // one that happens to fit.
+    let rules = "\
+pattern: Collapse ?const1 shifts
+name: collapse-shifts
+0: [?const1] srl a
+replacement:
+0: [?const1] rrca
+";
+    let found = matches_for(" srl a\n srl a\n srl a\n ret\n", rules);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].range(), 0..3, "must consume all three, not fewer");
+    assert_eq!(found[0].replacement, vec!["rrca : rrca : rrca".to_string()]);
+
+    // A single occurrence is still a run of one.
+    let found = matches_for(" srl a\n ret\n", rules);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].range(), 0..1);
+
+    // The run stops at the first instruction that does not match, rather than
+    // skipping over it.
+    let found = matches_for(" srl a\n srl a\n nop\n srl a\n ret\n", rules);
+    assert_eq!(found.len(), 2, "{found:?}");
+    assert_eq!(found[0].range(), 0..2);
+    assert_eq!(found[1].range(), 3..4);
+
+    // Nothing to match at all.
+    assert!(matches_for(" nop\n ret\n", rules).is_empty());
+}
+
+#[test]
+fn a_replacement_that_cannot_be_rendered_declines_the_match() {
+    // An empty replacement is not a failure signal - it is how a rule says
+    // "delete these instructions" (see `LD_SELF` above, whose replacement is
+    // genuinely empty). So a rule whose replacement lines cannot be rendered
+    // must not fall back to producing an empty one: that would silently turn
+    // "this rewrite cannot be expressed" into "delete the user's code".
+    //
+    // `and #ff >> ?const1` is a real upstream replacement line involving
+    // arithmetic on a captured repeat count, which the renderer does not
+    // handle. The rule must therefore report nothing at all.
+    let unrenderable = "\
+pattern: Collapse shifts
+0: [?const1] srl a
+replacement:
+0: and #ff >> ?const1
+";
+    let found = matches_for(" srl a\n srl a\n srl a\n ret\n", unrenderable);
+    assert!(
+        found.is_empty(),
+        "an unrenderable replacement must decline, not propose a deletion: {found:?}"
+    );
+
+    // Same pattern, same source, a replacement that *can* be rendered - so
+    // the assertion above is about the rendering rather than about the
+    // pattern failing to match in the first place.
+    let renderable = "\
+pattern: Collapse shifts
+0: [?const1] srl a
+replacement:
+0: [?const1] rrca
+";
+    assert_eq!(matches_for(" srl a\n srl a\n srl a\n ret\n", renderable).len(), 1);
 }

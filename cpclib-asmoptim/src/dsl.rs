@@ -738,6 +738,23 @@ fn ident(input: &mut Stream<'_>) -> ModalResult<OperandPattern, ContextError> {
     let mut name = String::with_capacity(1 + rest.len());
     name.push(first);
     name.push_str(rest);
+
+    // `P/V` is the *name* of the Z80 parity/overflow flag, not a division of
+    // two identifiers `P` and `V`. Without this, the generic expression
+    // grammar below happily reads the `/` as `BinOp::Div` and every real
+    // `flagsNotUsedAfter(0, N, P/V)` in the vendored corpus silently stops
+    // referring to a flag at all. Upstream hits the identical problem from the
+    // other direction and patches it after the fact (`Pattern.java`
+    // re-joins the tokens with `.replace(" ", "")`, commented "this is because
+    // the P/V flag, otherwise it's generated as 'P / V' and there is no
+    // match") - handling it in the lexer instead keeps the AST honest rather
+    // than repairing a wrong parse downstream.
+    if name.eq_ignore_ascii_case("P")
+        && let Some(v) = opt(alt(("/V", "/v"))).parse_next(input)?
+    {
+        name.push_str(v);
+    }
+
     Ok(OperandPattern::Ident(name))
 }
 
@@ -834,6 +851,54 @@ flagsNotUsedAfter(0,N,P/V)
         assert_eq!(rule.constraints.len(), 1);
         assert_eq!(rule.constraints[0].name, "flagsNotUsedAfter");
         assert_eq!(rule.constraints[0].check_after, None);
+        // `P/V` is one flag, not `P` divided by `V` - see `ident`.
+        assert_eq!(rule.constraints[0].args, vec![
+            OperandPattern::Number(0),
+            id("N"),
+            id("P/V")
+        ]);
+    }
+
+    /// `P/V` (the parity/overflow flag) must survive the expression grammar
+    /// intact - the `/` is part of the name, not a division operator. A
+    /// regression here is silent: the constraint still parses, it just stops
+    /// referring to a flag, so every rule guarded by `P/V` quietly changes
+    /// meaning.
+    #[test]
+    fn the_parity_overflow_flag_is_one_identifier_not_a_division() {
+        let set = RuleSet::parse(
+            "pattern: x\n0: nop\nreplacement:\nconstraints:\nflagsNotUsedAfter(0,S,Z,H,P/V,N,C)\n"
+        )
+        .unwrap();
+        assert_eq!(set.rules[0].constraints[0].args, vec![
+            OperandPattern::Number(0),
+            id("S"),
+            id("Z"),
+            id("H"),
+            id("P/V"),
+            id("N"),
+            id("C")
+        ]);
+    }
+
+    /// ...while a real division of two operands still parses as one. The
+    /// `P/V` special case must not swallow genuine arithmetic.
+    #[test]
+    fn a_real_division_is_still_a_division() {
+        let set =
+            RuleSet::parse("pattern: x\n0: nop\nreplacement:\nconstraints:\nequal(?const/2,4)\n")
+                .unwrap();
+        assert!(
+            matches!(
+                &set.rules[0].constraints[0].args[0],
+                OperandPattern::Binary {
+                    op: BinOp::Div,
+                    ..
+                }
+            ),
+            "{:?}",
+            set.rules[0].constraints[0].args[0]
+        );
     }
 
     /// The real `ld0-to-xor` pattern - exercises a `?const` variable operand

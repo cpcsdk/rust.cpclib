@@ -1,0 +1,35 @@
+[package]
+
+name = "cpclib-basmopt"
+version.workspace = true
+description = "Z80 peephole optimization advisor/fixer for basm sources (cpclib-asmoptim's engine as a CLI tool)"
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[package.metadata.workspaces]
+independent = true
+
+[dependencies]
+cpclib-asm.workspace = true
+cpclib-asmoptim.workspace = true
+cpclib-common.workspace = true
+cpclib-tokens.workspace = true
+camino.workspace = true
+fs-err.workspace = true
+thiserror.workspace = true
+clap = { workspace = true, features = ["derive"], optional = true }
+
+[dev-dependencies]
+camino-tempfile.workspace = true
+
+[features]
+cmdline = ["dep:clap"]
+
+[[bin]]
+name = "basmopt"
+path = "src/main.rs"
+required-features = ["cmdline"]

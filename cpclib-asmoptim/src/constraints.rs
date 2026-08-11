@@ -7,19 +7,34 @@
 //! rather than matched without its safety condition, which would be the one
 //! genuinely dangerous failure mode for an optimizer.
 
-use cpclib_tokens::{DataAccessElem, ExprElement, IndexRegister16, Register16};
+use cpclib_tokens::{DataAccessElem, ExprElement, IndexRegister16, ListingElement, Register16};
 
+use crate::dependency::Dependency;
 use crate::dsl::{BinOp, Constraint, OperandPattern, Rule, RuleSet, UnOp};
 use crate::engine::Captures;
+use crate::liveness::Usage;
+use crate::regflag::{Flag, Reg};
 
 /// Constraint names this crate evaluates today.
 ///
 /// Ordered roughly by how often they appear in the real upstream corpus
-/// (`in` alone accounts for 168 of ~500 constraint uses). The big remaining
-/// ones - `regsNotUsedAfter` (86 uses) and `flagsNotUsedAfter` (78) - need
-/// real forward dataflow analysis over the instruction stream plus per-
-/// instruction read/write semantics, and are the intended next increment.
-pub const SUPPORTED: &[&str] = &["equal", "notEqual", "in", "notIn", "regpair", "reachableByJr"];
+/// (`in` alone accounts for 168 uses of ~500, then `regsNotUsedAfter` at 86
+/// and `flagsNotUsedAfter` at 78). The remaining unimplemented ones are all
+/// far rarer; the biggest group left is the *block-local* family
+/// (`regsNotModified`/`regsNotUsed`/`flagsNotModified`/`flagsNotUsed`, 45/13/
+/// 11/1 uses), which needs no control-flow walk at all now that
+/// [`crate::effects`] exists - just the classifier run over the already
+/// matched instructions.
+pub const SUPPORTED: &[&str] = &[
+    "equal",
+    "notEqual",
+    "in",
+    "notIn",
+    "regpair",
+    "reachableByJr",
+    "regsNotUsedAfter",
+    "flagsNotUsedAfter"
+];
 
 /// Constraint names that need a real assembled address to evaluate (i.e.
 /// need an `AddressResolver` backed by a real `Env`, not just the parsed
@@ -95,8 +110,33 @@ pub trait ConstraintContext {
     fn value_of_label(&self, name: &str) -> Option<i64>;
 }
 
-/// A context that knows nothing - every address-aware constraint reports
-/// [`Verdict::Unknown`], so rules needing one never match.
+/// What a *forward-liveness* constraint (`regsNotUsedAfter`,
+/// `flagsNotUsedAfter`) needs.
+///
+/// The walk itself lives behind this trait rather than in the constraint:
+/// answering it needs the normalized instruction stream and the label index,
+/// both of which are built once per `find_matches` call and are generic over
+/// the token type. Exposing them through the trait would push that generic
+/// parameter onto `evaluate` and every one of its callers, for the benefit of
+/// two constraints out of eight. Asking a *question* instead keeps the
+/// generics where the data is.
+///
+/// Deliberately separate from [`ConstraintContext`]: the two answer unrelated
+/// questions ("what address is this?" vs "what executes after this?"), the
+/// same way [`crate::engine::AddressResolver`] already sits beside it rather
+/// than inside it.
+pub trait LivenessContext {
+    /// Whether `dependency` is still read after the instruction matched by
+    /// pattern line `index`.
+    ///
+    /// `None` when `index` wasn't part of this match, or when no instruction
+    /// stream is available at all - in which case the constraint reports
+    /// [`Verdict::Unknown`] and therefore fails, never silently passes.
+    fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Usage>;
+}
+
+/// A context that knows nothing - every address-aware or liveness constraint
+/// reports [`Verdict::Unknown`], so rules needing one never match.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NoContext;
 
@@ -110,14 +150,21 @@ impl ConstraintContext for NoContext {
     }
 }
 
+impl LivenessContext for NoContext {
+    fn is_used_after(&self, _index: u32, _dependency: Dependency) -> Option<Usage> {
+        None
+    }
+}
+
 /// Evaluate one constraint against a candidate match.
 ///
 /// Takes the captures mutably because some constraints legitimately *produce*
 /// bindings rather than only testing them - see [`regpair`].
+///
 pub fn evaluate<D, C>(constraint: &Constraint, captures: &mut Captures<'_, D>, ctx: &C) -> Verdict
 where
     D: DataAccessElem,
-    C: ConstraintContext
+    C: ConstraintContext + LivenessContext
 {
     match constraint.name.as_str() {
         "equal" => compare(constraint, captures, ctx, true),
@@ -126,8 +173,65 @@ where
         "notIn" => membership(constraint, captures, false),
         "regpair" => regpair(constraint, captures),
         "reachableByJr" => reachable_by_jr(constraint, captures, ctx),
+        "regsNotUsedAfter" => regs_not_used_after(constraint, captures, ctx),
+        "flagsNotUsedAfter" => flags_not_used_after(constraint, captures, ctx),
         _ => Verdict::Unknown
     }
+}
+
+/// `regsNotUsedAfter(#, reg1, ..., regn)` - satisfied only if *every* named
+/// register is provably dead after line `#`'s instruction.
+fn regs_not_used_after<D, C>(
+    constraint: &Constraint,
+    captures: &Captures<'_, D>,
+    ctx: &C
+) -> Verdict
+where
+    D: DataAccessElem,
+    C: LivenessContext
+{
+    let Some(args) = parse_regs_args(constraint, captures)
+    else {
+        return Verdict::Unknown;
+    };
+    not_used_after(args.line, args.items.into_iter().map(Dependency::Reg), ctx)
+}
+
+/// `flagsNotUsedAfter(#, flag1, ..., flagn)` - as above, for flags.
+fn flags_not_used_after<D, C>(
+    constraint: &Constraint,
+    captures: &Captures<'_, D>,
+    ctx: &C
+) -> Verdict
+where
+    D: DataAccessElem,
+    C: LivenessContext
+{
+    let Some(args) = parse_flags_args(constraint, captures)
+    else {
+        return Verdict::Unknown;
+    };
+    not_used_after(args.line, args.items.into_iter().map(Dependency::Flag), ctx)
+}
+
+/// The shared body: every dependency must be provably unused. One that is
+/// used fails the constraint; one the walk couldn't decide makes the whole
+/// thing `Unknown`, which also fails - an optimization is only offered when
+/// it is *proven* safe.
+fn not_used_after<C>(
+    line: u32,
+    dependencies: impl Iterator<Item = Dependency>,
+    ctx: &C
+) -> Verdict
+where C: LivenessContext {
+    for dependency in dependencies {
+        match ctx.is_used_after(line, dependency) {
+            Some(Usage::NotUsed) => {},
+            Some(Usage::Used) => return Verdict::Failed,
+            Some(Usage::Unknown) | None => return Verdict::Unknown
+        }
+    }
+    Verdict::Satisfied
 }
 
 /// `equal(a, b)` / `notEqual(a, b)`.
@@ -388,6 +492,73 @@ where D: DataAccessElem {
     }
 }
 
+/// The parsed arguments of a `regsNotUsedAfter`/`flagsNotUsedAfter`-shaped
+/// constraint: the pattern line to walk forward from, and what to track.
+///
+/// Both constraint families share the exact same argument shape - a line
+/// number followed by one or more names - so they share one parser,
+/// differing only in what the names are parsed as.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LivenessArgs<Item> {
+    /// The pattern line number whose matched instruction the walk starts
+    /// after.
+    pub line: u32,
+    /// The registers (or flags) to track. Never empty - a constraint naming
+    /// nothing is rejected rather than treated as vacuously satisfied.
+    pub items: Vec<Item>
+}
+
+/// Parse `regsNotUsedAfter(#, reg1, ..., regn)`'s arguments, substituting any
+/// `?variable` through `captures` first (upstream does the same, before
+/// dispatching: a real rule writes `regsNotUsedAfter(2, ?regpair1)`).
+///
+/// `None` - and therefore [`Verdict::Unknown`], a *failing* answer - whenever
+/// anything is unrecognized, rather than silently tracking fewer registers
+/// than the rule asked for.
+fn parse_regs_args<D>(
+    constraint: &Constraint,
+    captures: &Captures<'_, D>
+) -> Option<LivenessArgs<Reg>>
+where D: DataAccessElem {
+    parse_liveness_args(constraint, captures, Reg::parse)
+}
+
+/// Parse `flagsNotUsedAfter(#, flag1, ..., flagn)`'s arguments - see
+/// [`parse_regs_args`].
+fn parse_flags_args<D>(
+    constraint: &Constraint,
+    captures: &Captures<'_, D>
+) -> Option<LivenessArgs<Flag>>
+where D: DataAccessElem {
+    parse_liveness_args(constraint, captures, Flag::parse)
+}
+
+fn parse_liveness_args<D, Item>(
+    constraint: &Constraint,
+    captures: &Captures<'_, D>,
+    parse_item: impl Fn(&str) -> Option<Item>
+) -> Option<LivenessArgs<Item>>
+where
+    D: DataAccessElem
+{
+    let (first, rest) = constraint.args.split_first()?;
+    let OperandPattern::Number(line) = first
+    else {
+        return None;
+    };
+    let line = u32::try_from(*line).ok()?;
+
+    if rest.is_empty() {
+        return None;
+    }
+    let items = rest
+        .iter()
+        .map(|arg| parse_item(&capture_or_literal_text(arg, captures)?))
+        .collect::<Option<Vec<_>>>()?;
+
+    Some(LivenessArgs { line, items })
+}
+
 /// Render a literal operand pattern back to text, for comparison against a
 /// capture. Returns `None` for anything holding an unresolved variable.
 fn render_operand_pattern(pattern: &OperandPattern) -> Option<String> {
@@ -405,7 +576,121 @@ fn render_operand_pattern(pattern: &OperandPattern) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use cpclib_tokens::Token;
+
     use super::*;
+
+    /// Parse a whole rule out of real DSL text and hand back its first
+    /// constraint - so the tests below exercise the *real* parser, not a
+    /// hand-built `Constraint` that might not match what the corpus produces.
+    fn constraint_of(dsl: &str) -> Constraint {
+        let src = format!("pattern: x\n0: nop\n1: nop\n2: nop\nreplacement:\nconstraints:\n{dsl}\n");
+        RuleSet::parse(&src).unwrap().rules[0].constraints[0].clone()
+    }
+
+    fn no_captures() -> Captures<'static, cpclib_tokens::DataAccess> {
+        Captures::default()
+    }
+
+    /// The exact constraint from upstream's `cp12deca`.
+    #[test]
+    fn a_real_regs_constraint_parses_into_typed_registers() {
+        let c = constraint_of("regsNotUsedAfter(0,A)");
+        assert_eq!(parse_regs_args(&c, &no_captures()), Some(LivenessArgs {
+            line: 0,
+            items: vec![Reg::A]
+        }));
+    }
+
+    /// The exact constraint from upstream's `czjump2c` - and the reason
+    /// `dsl::ident` had to learn about `P/V`.
+    #[test]
+    fn a_real_flags_constraint_parses_every_flag_including_the_slashed_one() {
+        let c = constraint_of("flagsNotUsedAfter(2,Z,C,N,P/V,H,S)");
+        assert_eq!(parse_flags_args(&c, &no_captures()), Some(LivenessArgs {
+            line: 2,
+            items: vec![Flag::Z, Flag::C, Flag::N, Flag::PV, Flag::H, Flag::S]
+        }));
+    }
+
+    /// Real rules track *pairs*, not just 8-bit registers - upstream's
+    /// `unnecessary-ld-after-pop` writes `regsNotUsedAfter(1,?regpair1)`.
+    #[test]
+    fn a_captured_register_variable_is_substituted_before_parsing() {
+        let c = constraint_of("regsNotUsedAfter(1,?regpair1)");
+        // Unbound, the constraint can't be evaluated at all...
+        assert_eq!(parse_regs_args(&c, &no_captures()), None);
+
+        // ...but once the match has bound it, it resolves to a real pair.
+        let mut captures = no_captures();
+        assert!(captures.bind_text("regpair1", "BC".to_string()));
+        assert_eq!(parse_regs_args(&c, &captures), Some(LivenessArgs {
+            line: 1,
+            items: vec![Reg::Bc]
+        }));
+    }
+
+    /// Anything unrecognized must yield `None` (→ `Unknown` → the constraint
+    /// fails), never a partial list that would silently under-check.
+    #[test]
+    fn an_unparsable_argument_rejects_the_whole_constraint() {
+        assert_eq!(
+            parse_regs_args(&constraint_of("regsNotUsedAfter(0,A,nonsense)"), &no_captures()),
+            None
+        );
+        assert_eq!(
+            parse_flags_args(&constraint_of("flagsNotUsedAfter(0,Z,nonsense)"), &no_captures()),
+            None
+        );
+        // A constraint naming no registers at all is rejected rather than
+        // treated as vacuously satisfied.
+        assert_eq!(
+            parse_regs_args(&constraint_of("regsNotUsedAfter(0)"), &no_captures()),
+            None
+        );
+    }
+
+    /// Every real `regsNotUsedAfter`/`flagsNotUsedAfter` in the vendored
+    /// corpus must parse - once its `?variables` are bound. Unbound ones are
+    /// expected to fail here and are skipped; what this guards is that no
+    /// *literal* register or flag name upstream uses is unknown to us.
+    #[test]
+    fn every_literal_liveness_argument_in_the_real_corpus_is_recognised() {
+        let rules = crate::builtin_rules::builtin_rules(crate::OptimizationGoal::Neutral);
+        let captures = no_captures();
+        let mut checked = 0;
+        for rule in &rules.rules {
+            for c in &rule.constraints {
+                let has_variable = c
+                    .args
+                    .iter()
+                    .any(|a| matches!(a, OperandPattern::Variable(_)));
+                if has_variable {
+                    continue;
+                }
+                match c.name.as_str() {
+                    "regsNotUsedAfter" => {
+                        assert!(
+                            parse_regs_args(c, &captures).is_some(),
+                            "unparsed in {:?}: {c:?}",
+                            rule.name
+                        );
+                        checked += 1;
+                    },
+                    "flagsNotUsedAfter" => {
+                        assert!(
+                            parse_flags_args(c, &captures).is_some(),
+                            "unparsed in {:?}: {c:?}",
+                            rule.name
+                        );
+                        checked += 1;
+                    },
+                    _ => {}
+                }
+            }
+        }
+        assert!(checked > 50, "expected many real constraints, checked {checked}");
+    }
 
     #[test]
     fn a_rule_set_with_only_structural_constraints_needs_no_addresses() {
@@ -445,7 +730,7 @@ mod tests {
              replacement:\n\
              constraints:\n\
              reachableByJr(0,?const1)\n\
-             flagsNotUsedAfter(0,N)\n"
+             regsNotModified(0,A)\n"
         )
         .unwrap();
         assert!(!rules_need_addresses(&rules));
@@ -481,8 +766,9 @@ mod tests {
                 args: Vec::new(),
                 check_after: None
             },
+            // Still genuinely unimplemented: block-local, 45 real uses.
             Constraint {
-                name: "flagsNotUsedAfter".to_string(),
+                name: "regsNotModified".to_string(),
                 args: Vec::new(),
                 check_after: None
             },
@@ -509,7 +795,7 @@ mod tests {
 
     #[test]
     fn numeric_expressions_evaluate_with_upstreams_boolean_convention() {
-        let mut captures: Captures<'_, cpclib_tokens::DataAccess> = Captures::default();
+        let captures: Captures<'_, cpclib_tokens::DataAccess> = Captures::default();
         // `?const >= 3` yields -1 when true, which upstream then compares
         // against -1 via `equal(?const1 >= 3, -1)`.
         let pattern = OperandPattern::Binary {
