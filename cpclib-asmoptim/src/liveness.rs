@@ -27,7 +27,7 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
 
-use crate::analysis_op::AnalysisOp;
+use crate::analysis_op::{AnalysisOp, OpClass};
 use crate::dependency::Dependency;
 use crate::effects::effects_of;
 use crate::regflag::Reg;
@@ -129,32 +129,26 @@ where
             return Usage::Unknown;
         };
 
-        // Data reached as if it were code means either a bug or hand-placed
-        // bytes; either way the analysis has lost the thread.
-        if op.is_data() {
-            return Usage::Unknown;
-        }
-
-        // Anything that is neither an instruction nor a label is something
-        // this analysis cannot account for, and stepping over it would be
-        // assuming it touches no register - which is exactly the assumption
-        // that is unsafe to make.
+        // Anything this analysis cannot account for ends the walk. Stepping
+        // over it would assume it touches no register, which is exactly the
+        // assumption that is unsafe to make: data reached as if it were code
+        // means the walk has lost the thread, and basm's multi-register
+        // `push bc, hl` does not parse to a plain opcode, so it arrives with
+        // no mnemonic at all. Treating that as inert made a sprite loop's
+        // `ld b, height` look dead - the `push bc` reading B had simply been
+        // stepped over - and the optimizer offered to delete it.
         //
-        // Labels and comments really are inert (a label is a position, a
-        // comment is never executed), so those may be skipped. Everything else that reaches
-        // here does so *because* it was not understood: basm's multi-register
-        // `push bc, hl`, for one, does not parse to a plain opcode, so it
-        // arrives with no mnemonic at all. Treating that as inert made a
-        // sprite loop's `ld b, height` look dead - the `push bc` that reads B
-        // had simply been stepped over - and the optimizer offered to delete
-        // it.
-        if op.mnemonic().is_none() && !op.is_label() && !op.is_comment() {
-            return Usage::Unknown;
-        }
+        // See [`OpClass`] for the classification itself, which is shared with
+        // the block-local constraints so the two can never drift apart.
+        let executes = match op.classify() {
+            OpClass::Inert => false,
+            OpClass::Opaque => return Usage::Unknown,
+            OpClass::Executes => true
+        };
 
         let mut dependency = state.dependency;
 
-        if op.mnemonic().is_some() {
+        if executes {
             let Some(effects) = effects_of(op)
             else {
                 // No table row - an instruction whose behavior we cannot

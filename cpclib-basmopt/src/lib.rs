@@ -100,12 +100,13 @@ pub struct Suggestion {
     /// The suggested replacement, one entry per instruction. Empty means the
     /// matched instructions should simply be removed.
     pub replacement: Vec<String>,
-    /// Byte range in the source text spanning every line the match touches -
-    /// what [`apply_fixes`] replaces. Line-granular, not token-granular: a
-    /// trailing end-of-line comment on a matched line is not preserved. Kept
-    /// private - a `Suggestion` a caller builds by hand (rather than getting
-    /// from [`analyze_file`]) has no meaningful byte range to give it.
-    fix_range: std::ops::Range<usize>
+    /// The source edit that applies this suggestion, computed by
+    /// [`cpclib_asmoptim::edit`]. `None` when the match had no span to anchor
+    /// an edit to.
+    ///
+    /// Kept private - a `Suggestion` a caller builds by hand (rather than
+    /// getting one from [`analyze_file`]) has no meaningful edit to give it.
+    fix: Option<cpclib_asmoptim::edit::SourceEdit>
 }
 
 /// [`analyze_file`]'s result: the source text (so [`apply_fixes`] can be
@@ -260,8 +261,11 @@ fn build_rule_set(options: &Options, source_path: &Utf8Path) -> Result<RuleSet, 
     Ok(rules)
 }
 
-/// Turn one engine match into a user-facing [`Suggestion`], computing the
-/// line-granular byte range [`apply_fixes`] needs.
+/// Turn one engine match into a user-facing [`Suggestion`].
+///
+/// The byte range comes from [`cpclib_asmoptim::edit`], shared with the LSP's
+/// quickfix - see that module for why computing it is more delicate than it
+/// looks.
 fn to_suggestion(
     source: &str,
     tokens: &[&LocatedToken],
@@ -272,17 +276,7 @@ fn to_suggestion(
     let anchor_span = tokens[m.anchor].span();
     let (line, column) = anchor_span.relative_line_and_column();
 
-    let first_span = tokens[m.start].span();
-    let last_span = tokens[m.end - 1].span();
-    let range_start = line_start(source, first_span.offset_from_start());
-    let mut range_end = line_end(source, last_span.offset_from_start());
-    // A deletion (empty replacement) also swallows the line's own trailing
-    // newline, so the matched lines vanish cleanly instead of leaving a
-    // blank line behind. A real replacement keeps the boundary as-is: its
-    // own rendered lines take over exactly the space the matched ones held.
-    if m.replacement.is_empty() && source[range_end..].starts_with('\n') {
-        range_end += 1;
-    }
+    let edit = cpclib_asmoptim::edit::edit_for_match(source, tokens, m);
 
     Suggestion {
         line: line as u32,
@@ -290,52 +284,24 @@ fn to_suggestion(
         rule_name: m.rule_name.clone(),
         message: m.message.clone(),
         replacement: m.replacement.clone(),
-        fix_range: range_start..range_end
+        fix: edit
     }
 }
 
-fn line_start(source: &str, offset: usize) -> usize {
-    source[..offset].rfind('\n').map_or(0, |i| i + 1)
-}
-
-fn line_end(source: &str, offset: usize) -> usize {
-    source[offset..]
-        .find('\n')
-        .map_or(source.len(), |i| offset + i)
-}
-
-/// Rewrite `source`, replacing every suggestion's matched lines with its
-/// rendered replacement (indented to match the replaced block's own first
-/// line), most-suggestions-last first so earlier byte offsets stay valid as
-/// the string is edited.
+/// Rewrite `source`, applying every suggestion, highest byte offset first so
+/// earlier offsets stay valid as the string is edited.
 ///
-/// Line-granular, not token-granular (see [`Suggestion::fix_range`]'s own
-/// doc comment): a trailing end-of-line comment on a matched instruction is
-/// dropped along with the instruction it was attached to. Run `basm-fmt`
-/// afterwards if you want the result reformatted.
+/// A suggestion whose edit could not be computed (no span to anchor it) is
+/// skipped rather than guessed at.
 pub fn apply_fixes(source: &str, suggestions: &[Suggestion]) -> String {
-    let mut ordered: Vec<&Suggestion> = suggestions.iter().collect();
-    ordered.sort_by_key(|s| std::cmp::Reverse(s.fix_range.start));
+    let mut ordered: Vec<&Suggestion> = suggestions.iter().filter(|s| s.fix.is_some()).collect();
+    ordered.sort_by_key(|s| std::cmp::Reverse(s.fix.as_ref().unwrap().range.start));
 
     let mut out = source.to_owned();
     for s in ordered {
-        let indent = leading_whitespace(&out[s.fix_range.clone()]);
-        let replacement = if s.replacement.is_empty() {
-            String::new()
-        }
-        else {
-            s.replacement
-                .iter()
-                .map(|line| format!("{indent}{line}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
-        out.replace_range(s.fix_range.clone(), &replacement);
+        let edit = s.fix.as_ref().unwrap();
+        out.replace_range(edit.range.clone(), &edit.text);
     }
     out
 }
 
-fn leading_whitespace(line: &str) -> &str {
-    let trimmed = line.trim_start_matches([' ', '\t']);
-    &line[..line.len() - trimmed.len()]
-}

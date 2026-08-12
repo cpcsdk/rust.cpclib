@@ -7,7 +7,7 @@
 //! rather than matched without its safety condition, which would be the one
 //! genuinely dangerous failure mode for an optimizer.
 
-use cpclib_tokens::{DataAccessElem, ExprElement, IndexRegister16, ListingElement, Register16};
+use cpclib_tokens::{DataAccessElem, ExprElement, IndexRegister16, Register16};
 
 use crate::dependency::Dependency;
 use crate::dsl::{BinOp, Constraint, OperandPattern, Rule, RuleSet, UnOp};

@@ -203,53 +203,43 @@ impl AssemblyAnalyzer {
 /// All", so they can never disagree about what a given match's edit looks
 /// like.
 fn edit_for_match(document: &Document, tokens: &[&LocatedToken], m: &PeepholeMatch) -> TextEdit {
-    let first_line = super::token::span_line(tokens[m.start]);
-    let last_line = super::token::span_line(tokens[m.end - 1]);
-
-    if m.replacement.is_empty() {
-        // Delete the whole matched line(s), trailing newline included, so
-        // removing an instruction doesn't leave a blank line behind (same
-        // fix `cpclib-basmopt::apply_fixes` already applies).
-        TextEdit {
-            range: Range {
-                start: Position {
-                    line: first_line,
-                    character: 0
+    let text = document.text();
+    // Shared with `cpclib-basmopt` so the editor and the CLI never disagree
+    // about what applying a suggestion means - and so the awkward parts (a
+    // line holding several instructions, the `:` separators, a comment
+    // running to end of line) are solved once. See `cpclib_asmoptim::edit`.
+    match cpclib_asmoptim::edit::edit_for_match(&text, tokens, m) {
+        Some(edit) => {
+            TextEdit {
+                range: byte_range_to_lsp(&text, &edit.range),
+                new_text: edit.text
+            }
+        },
+        // No span to anchor an edit to. Falling back to the matched
+        // instructions' own range with no text would delete them, so the
+        // safe degenerate edit is one that changes nothing.
+        None => {
+            let here = Position {
+                line: super::token::span_line(tokens[m.start]),
+                character: 0
+            };
+            TextEdit {
+                range: Range {
+                    start: here,
+                    end: here
                 },
-                end: Position {
-                    line: last_line + 1,
-                    character: 0
-                }
-            },
-            new_text: String::new()
+                new_text: String::new()
+            }
         }
     }
-    else {
-        let first_span = tokens[m.start].span();
-        let last_span = tokens[m.end - 1].span();
-        let indent = leading_whitespace(&document.line(first_line as usize).unwrap_or_default());
-        let new_text = m.replacement.join(&format!("\n{indent}"));
-        TextEdit {
-            range: match_range(first_span, last_span),
-            new_text
-        }
-    }
-}
-
-/// The leading spaces/tabs of `line` - reused to indent every continuation
-/// line of a multi-instruction replacement the same way the line it's
-/// replacing was indented.
-fn leading_whitespace(line: &str) -> String {
-    line.chars().take_while(|c| *c == ' ' || *c == '\t').collect()
 }
 
 /// LSP `Range` covering everything from `start_span`'s own start to
 /// `end_span`'s own end - the whole matched instruction sequence, which may
-/// span several lines (e.g. a `push`/`pop` pair), not just `start_span`'s
-/// single line. Same simple, always-ASCII-Z80-source assumption
-/// `call_hierarchy.rs`'s `label_span_to_range` makes (no UTF-16 column
-/// conversion): a matched instruction's own mnemonic/operand text is never
-/// inside a string literal, so byte and UTF-16 columns coincide here.
+/// span several lines (e.g. a `push`/`pop` pair). Used to underline a
+/// diagnostic; the *edit* that fixes it comes from `cpclib_asmoptim::edit`
+/// instead, which has to be far more careful about exactly which bytes it
+/// claims.
 fn match_range(start_span: &Z80Span, end_span: &Z80Span) -> Range {
     let (start_line_1, start_col_1) = start_span.relative_line_and_column();
     let (end_line_1, end_col_1) = end_span.relative_line_and_column();
@@ -262,6 +252,29 @@ fn match_range(start_span: &Z80Span, end_span: &Z80Span) -> Range {
             line: end_line_1.saturating_sub(1) as u32,
             character: (end_col_1.saturating_sub(1) + end_span.as_str().len()) as u32
         }
+    }
+}
+
+/// Convert a byte range in the document's text into the LSP `Range` a client
+/// expects, with UTF-16 columns.
+fn byte_range_to_lsp(text: &str, range: &std::ops::Range<usize>) -> Range {
+    Range {
+        start: byte_offset_to_position(text, range.start),
+        end: byte_offset_to_position(text, range.end)
+    }
+}
+
+fn byte_offset_to_position(text: &str, offset: usize) -> Position {
+    let offset = offset.min(text.len());
+    let line = text[..offset].matches('\n').count();
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line_text = &text[line_start..cpclib_asmoptim::edit::line_end(text, line_start)];
+    Position {
+        line: line as u32,
+        character: crate::common::document::byte_offset_to_utf16_col(
+            line_text,
+            offset - line_start
+        ) as u32
     }
 }
 
@@ -302,6 +315,28 @@ mod quickfix_tests {
         );
     }
 
+    /// Apply a quickfix's edit to the document, so a test can assert on the
+    /// file the user ends up with rather than on how the edit happens to be
+    /// encoded. The range/text split is an implementation detail - replacing
+    /// `    jp x` with `    jr x` and replacing `jp x` with `jr x` are the
+    /// same fix - and pinning it made these tests fail when the edit logic
+    /// moved into `cpclib_asmoptim::edit` without the result changing at all.
+    fn apply(d: &Document, edit: &TextEdit) -> String {
+        let text = d.text();
+        let lines: Vec<&str> = text.split_inclusive('\n').collect();
+        let offset = |p: Position| -> usize {
+            let before: usize = lines
+                .iter()
+                .take(p.line as usize)
+                .map(|l| l.len())
+                .sum();
+            before + p.character as usize
+        };
+        let mut out = text.clone();
+        out.replace_range(offset(edit.range.start)..offset(edit.range.end), &edit.new_text);
+        out
+    }
+
     #[test]
     fn offers_a_multi_line_replacement_quickfix_with_matching_indentation() {
         let d = doc("start:\n    push hl\n    pop de\n    ret\n");
@@ -313,13 +348,10 @@ mod quickfix_tests {
         let edit = action.edit.expect("expected an edit");
         let text_edits = &edit.changes.expect("expected changes")[&d.uri];
         assert_eq!(text_edits.len(), 1);
-        assert_eq!(text_edits[0].new_text, "ld d, h\n    ld e, l");
         assert_eq!(
-            text_edits[0].range,
-            Range {
-                start: Position { line: 1, character: 4 },
-                end: Position { line: 2, character: 10 }
-            }
+            apply(&d, &text_edits[0]),
+            "start:\n    ld d, h\n    ld e, l\n    ret\n",
+            "both replacement instructions must land, indented like the code they replace"
         );
     }
 
@@ -338,7 +370,11 @@ mod quickfix_tests {
             .expect("expected jp2jr to fire");
         let edit = action.edit.expect("expected an edit");
         let text_edits = &edit.changes.expect("expected changes")[&d.uri];
-        assert_eq!(text_edits[0].new_text, "jr SomeLabel");
+        assert_eq!(
+            apply(&d, &text_edits[0]),
+            "SomeLabel:\n    jr SomeLabel\n",
+            "the label's own spelling must survive the rewrite"
+        );
     }
 
     #[test]

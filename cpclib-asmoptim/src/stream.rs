@@ -112,6 +112,30 @@ where
     pub fn token_of_op(&self, op_index: usize) -> Option<usize> {
         self.op_to_token.get(op_index).copied()
     }
+
+    /// The ops covering a *token* range - what a constraint asking "what does
+    /// this matched region do?" needs.
+    ///
+    /// Returns an empty slice for an empty range, which is a real case rather
+    /// than an error: a `*` line that matched no instructions covers nothing,
+    /// and every block-local constraint is then trivially satisfied. `None`
+    /// means the range could not be resolved at all.
+    ///
+    /// Handling the expansion boundaries (`first_op_of_token` at the start,
+    /// `after_token` at the end, so a fake instruction is never entered
+    /// halfway) in one place - it was previously repeated at each caller,
+    /// empty-range special case included.
+    pub fn ops_for_token_range(
+        &self,
+        range: std::ops::Range<usize>
+    ) -> Option<&[AnalysisOp<'t, T>]> {
+        if range.is_empty() {
+            return Some(&[]);
+        }
+        let first = self.first_op_of_token(range.start)?;
+        let last = self.after_token(range.end - 1)?;
+        self.ops.get(first..last)
+    }
 }
 
 enum Classified {

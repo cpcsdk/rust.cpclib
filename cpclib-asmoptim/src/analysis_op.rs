@@ -14,6 +14,27 @@
 //! resolved once, here, and every consumer downstream just reads
 //! [`AnalysisOp::mnemonic`]/[`AnalysisOp::arg1`]/... without ever asking
 //! whether it's looking at something the user literally typed.
+//!
+//! ## It is a hybrid token, and deliberately not a `ListingElement`
+//!
+//! This *is* the "either the token the user wrote, or one we synthesized"
+//! type: [`AnalysisOp::Real`] borrows the original, [`AnalysisOp::Expanded`]
+//! owns a real [`Token`] standing in for it.
+//!
+//! It does not implement [`ListingElement`], and cannot. That trait is generic
+//! over its operand type - `Token::DataAccess` is `DataAccess` while
+//! `LocatedToken::DataAccess` is `LocatedDataAccess` - so a type spanning both
+//! would have to pick one `type DataAccess`, and `mnemonic_arg1` hands back a
+//! *reference*, leaving nowhere to convert. Making that work would mean
+//! returning `Cow` from all ~107 of the trait's methods, across
+//! `cpclib-tokens`, `cpclib-asm` and every consumer.
+//!
+//! The accessors below are the deliberate alternative: the same questions,
+//! answered in *normalized* terms ([`AnalysisOp::arg1`] returns
+//! `Cow<'_, DataAccess>` rather than `&Self::DataAccess`), which is exactly
+//! why they carry different names from their `ListingElement` counterparts.
+//! Analysis code that only has a plain token wraps it - `AnalysisOp::Real(&t)`
+//! is free - rather than the trait being widened to meet it.
 
 use std::borrow::Cow;
 
@@ -58,6 +79,10 @@ pub enum AnalysisOp<'t, T> {
     /// A token that isn't an instruction: a label (a jump target), a data
     /// directive (`db`/`dw`), `org`, `equ`, ...
     ///
+    /// See [`AnalysisOp::classify`] for how an analysis is expected to treat
+    /// one - the distinctions inside this variant matter more than the variant
+    /// itself.
+    ///
     /// Kept in the stream rather than filtered out, because a forward walk
     /// genuinely needs them - labels to resolve jump targets, and data to
     /// fail closed if execution ever reaches it (data reached as code means
@@ -66,9 +91,45 @@ pub enum AnalysisOp<'t, T> {
     Other(&'t T)
 }
 
+/// What an op means to an analysis that must fail closed.
+///
+/// The single statement of this crate's safety rule: **anything whose effects
+/// cannot be described must never read as "touches nothing"**. Before this
+/// existed the rule was spelled out at five call sites in two different
+/// shapes, agreeing only by coincidence - and adding one new inert token kind
+/// meant finding all five.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpClass {
+    /// Nothing executes here: a label (a position), a comment. Safe to skip.
+    Inert,
+    /// A real instruction, whose effects can be looked up.
+    Executes,
+    /// Everything else: data reached as if it were code, and any token
+    /// carrying no mnemonic that is not inert.
+    ///
+    /// Note what lands here *by default* - `ds`/`defs`, `str`, an `org` in the
+    /// middle of a walk, and every token kind added to the assembler in
+    /// future. That is the safe direction: a caller must decline rather than
+    /// assume such a token leaves registers alone.
+    Opaque
+}
+
 impl<'t, T> AnalysisOp<'t, T>
 where T: ListingElement
 {
+    /// How an analysis should treat this op - see [`OpClass`].
+    pub fn classify(&self) -> OpClass {
+        if self.mnemonic().is_some() {
+            OpClass::Executes
+        }
+        else if self.is_label() || self.is_comment() {
+            OpClass::Inert
+        }
+        else {
+            OpClass::Opaque
+        }
+    }
+
     /// The token the user actually wrote. Several consecutive ops can share
     /// one origin (an expansion), so this is *not* unique across the stream.
     pub fn origin(&self) -> &'t T {
@@ -270,6 +331,48 @@ mod tests {
         assert!(op.is_label());
         assert!(!op.is_data());
         assert!(!op.is_expanded());
+    }
+
+    /// The safety rule, in one place. Written as a table so a new token kind
+    /// forces a deliberate decision about which column it belongs in.
+    #[test]
+    fn every_op_is_classified_for_a_fail_closed_analysis() {
+        let nop = opcode(Mnemonic::Nop, None, None, None);
+        assert_eq!(AnalysisOp::<Token>::Real(&nop).classify(), OpClass::Executes);
+
+        let origin = opcode(Mnemonic::Ld, None, None, None);
+        let expanded = AnalysisOp::Expanded {
+            origin: &origin,
+            step: 0,
+            total: 1,
+            op: nop.clone()
+        };
+        assert_eq!(expanded.classify(), OpClass::Executes);
+
+        let label = Token::Label("start".into());
+        assert_eq!(AnalysisOp::<Token>::Other(&label).classify(), OpClass::Inert);
+
+        let comment = Token::Comment("; hi".into());
+        assert_eq!(
+            AnalysisOp::<Token>::Other(&comment).classify(),
+            OpClass::Inert
+        );
+
+        let db = Token::Defb(vec![0.into()]);
+        assert_eq!(AnalysisOp::<Token>::Other(&db).classify(), OpClass::Opaque);
+    }
+
+    /// The default has to be `Opaque`, not `Inert` - a token kind nobody
+    /// thought about must stop an analysis, never be stepped over. `org` is a
+    /// stand-in for "some directive that is neither an instruction nor
+    /// inert".
+    #[test]
+    fn an_unclassified_token_kind_defaults_to_opaque() {
+        let org = Token::Org {
+            val1: 0x4000.into(),
+            val2: None
+        };
+        assert_eq!(AnalysisOp::<Token>::Other(&org).classify(), OpClass::Opaque);
     }
 
     #[test]

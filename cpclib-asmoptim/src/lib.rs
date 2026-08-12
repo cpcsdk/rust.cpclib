@@ -22,6 +22,7 @@ pub mod builtin_rules;
 pub mod constraints;
 pub mod dependency;
 pub mod dsl;
+pub mod edit;
 pub mod effects;
 pub mod engine;
 pub mod env_resolver;

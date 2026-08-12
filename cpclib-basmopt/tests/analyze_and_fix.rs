@@ -305,3 +305,138 @@ fn a_syntax_error_reports_a_parse_error() {
     let err = analyze_file(&path, &Options::default()).unwrap_err();
     assert!(matches!(err, BasmOptError::Parse { .. }), "{err:?}");
 }
+
+/// Applying a fix must leave a file that still assembles. This is the property
+/// that matters most for `-i`, and the one nothing checked until preserved
+/// regions started carrying comments and multiple instructions per suggestion.
+fn assert_applies_cleanly(source: &str) -> String {
+    let dir = camino_tempfile::tempdir().unwrap();
+    let path = write(&dir, "test.asm", source);
+    let (text, suggestions) = analyze(&path, &Options::default());
+    let fixed = apply_fixes(&text, &suggestions);
+
+    cpclib_asm::parser::parse_z80_str(&fixed)
+        .unwrap_or_else(|e| panic!("fixed source no longer parses: {e}\n---\n{fixed}\n---"));
+
+    // ... and re-analysing the result must not loop: a fix that keeps
+    // re-suggesting itself would make `--fix` never converge.
+    let again = write(&dir, "again.asm", &fixed);
+    let (_, remaining) = analyze(&again, &Options::default());
+    assert!(
+        remaining.len() <= suggestions.len(),
+        "applying fixes increased the number of suggestions:\n{fixed}"
+    );
+    fixed
+}
+
+#[test]
+fn applying_a_fix_that_preserves_a_gap_keeps_the_users_own_text() {
+    // `unnecessary-push-pop` removes the push/pop and writes the gap back out.
+    // That gap is code the rule never intended to touch, so it has to come
+    // through the rewrite unchanged - comment, hex spelling and case included.
+    let fixed = assert_applies_cleanly(
+        "start:\n    PUSH HL\n    LD BC, #7F10   ; set the gate array\n\
+             OUT (C), C\n    POP HL\n    ret\n"
+    );
+
+    assert!(
+        fixed.contains("#7F10"),
+        "the number's base must survive the rewrite:\n{fixed}"
+    );
+    assert!(
+        fixed.contains("set the gate array"),
+        "the comment must survive the rewrite:\n{fixed}"
+    );
+    assert!(
+        !fixed.to_uppercase().contains("PUSH HL"),
+        "the push should be gone:\n{fixed}"
+    );
+    assert!(
+        fixed.to_uppercase().contains("OUT (C), C"),
+        "the instruction after the comment must not be swallowed by it:\n{fixed}"
+    );
+}
+
+#[test]
+fn applying_fixes_to_a_variety_of_sources_always_yields_assemblable_code() {
+    for source in [
+        // A plain deletion.
+        "start:\n    ld b, b\n    inc hl\n    ret\n",
+        // A rewrite with a captured symbol.
+        "start:\n    jp target\ntarget:\n    ret\n",
+        // A multi-instruction replacement.
+        "start:\n    push hl\n    pop de\n    ret\n",
+        // Several independent fixes in one file - the ordering path.
+        "start:\n    ld b, b\n    nop\n    ld c, c\n    nop\n    ld d, d\n    ret\n",
+        // A fix whose line carries a trailing comment.
+        "start:\n    ld b, b   ; redundant\n    inc hl\n    ret\n",
+        // A labelled instruction, to be sure the label is not swallowed.
+        "start:\nhere:\n    ld b, b\n    inc hl\n    ret\n"
+    ] {
+        assert_applies_cleanly(source);
+    }
+}
+
+/// basm allows several instructions on a line, and a fix must touch only the
+/// matched ones. Replacing whole lines instead silently deleted the rest -
+/// on real CPC palette code (`ld bc,#7F01 : out (c),c : ld a,#44 : out (c),a`)
+/// three instructions per line disappeared, and the file still assembled, so
+/// nothing short of counting instructions would have noticed.
+#[test]
+fn a_fix_on_a_shared_line_leaves_the_other_instructions_alone() {
+    let dir = camino_tempfile::tempdir().unwrap();
+    let source = "start:\n\
+         ld bc,#7F00 : out (c),c : ld a,#54 : out (c),a\n\
+         ld bc,#7F01 : out (c),c : ld a,#44 : out (c),a\n\
+         ret\n";
+    let path = write(&dir, "test.asm", source);
+
+    let (text, suggestions) = analyze(&path, &Options::default());
+    assert!(!suggestions.is_empty(), "expected the inc-bc rule to fire");
+    let fixed = apply_fixes(&text, &suggestions);
+
+    // Every instruction that was not part of a match must survive.
+    assert_eq!(
+        fixed.matches("out (c),c").count(),
+        2,
+        "both `out (c),c` must survive:\n{fixed}"
+    );
+    assert_eq!(
+        fixed.matches("ld a,#44").count(),
+        1,
+        "`ld a,#44` must survive:\n{fixed}"
+    );
+    assert_eq!(
+        fixed.matches("out (c),a").count(),
+        2,
+        "both `out (c),a` must survive:\n{fixed}"
+    );
+
+    // ... and the result is still assemblable, with the separator intact
+    // rather than glued to the new instruction (`inc bc: out` would read
+    // `bc:` as a label).
+    cpclib_asm::parser::parse_z80_str(&fixed)
+        .unwrap_or_else(|e| panic!("fixed source no longer parses: {e}\n{fixed}"));
+    assert!(
+        !fixed.contains("bc: out"),
+        "the statement separator must stay separated:\n{fixed}"
+    );
+}
+
+/// A deletion on a shared line has the opposite need: it must take a `:` with
+/// it, or a dangling separator is left behind.
+#[test]
+fn a_deletion_on_a_shared_line_takes_its_separator() {
+    let dir = camino_tempfile::tempdir().unwrap();
+    let path = write(&dir, "test.asm", "start:\n    nop : ld b, b : inc hl\n    ret\n");
+
+    let (text, suggestions) = analyze(&path, &Options::default());
+    assert!(!suggestions.is_empty(), "expected ld b,b to be flagged");
+    let fixed = apply_fixes(&text, &suggestions);
+
+    assert!(fixed.contains("nop"), "{fixed}");
+    assert!(fixed.contains("inc hl"), "{fixed}");
+    assert!(!fixed.contains("ld b, b"), "the ld should be gone:\n{fixed}");
+    cpclib_asm::parser::parse_z80_str(&fixed)
+        .unwrap_or_else(|e| panic!("fixed source no longer parses: {e}\n{fixed}"));
+}

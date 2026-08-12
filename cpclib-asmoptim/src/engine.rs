@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
 
+use crate::analysis_op::OpClass;
 use crate::constraints::{
     self, ConstraintContext, LivenessContext, RegionSummary, RegionUse, Writes
 };
@@ -140,23 +141,12 @@ where
     fn region_summary(&self, index: u32) -> Option<RegionSummary> {
         let range = self.positions.get(&index)?.clone();
         let mut summary = RegionSummary::default();
-        if range.is_empty() {
-            return Some(summary);
-        }
 
-        let ops = self.analysis.stream.ops();
-        let first = self.analysis.stream.first_op_of_token(range.start)?;
-        let last = self.analysis.stream.after_token(range.end - 1)?;
-
-        for op in ops.get(first..last)? {
-            // Labels and comments are inert: a label is a position, a
-            // comment is not executed at all. Everything else without a
-            // mnemonic is something this analysis cannot describe.
-            if op.is_label() || op.is_comment() {
-                continue;
-            }
-            if op.is_data() || op.mnemonic().is_none() {
-                return None;
+        for op in self.analysis.stream.ops_for_token_range(range)? {
+            match op.classify() {
+                OpClass::Inert => continue,
+                OpClass::Opaque => return None,
+                OpClass::Executes => {}
             }
             let effects = effects_of(op)?;
             summary.instruction_count += 1;
@@ -193,14 +183,10 @@ where
         // `jp X` for a routine that reads its arguments off the stack.
         let mut depth: i32 = 0;
         for op in ops.get(start..)? {
-            // Labels and comments are inert: a label is a position, a
-            // comment is not executed at all. Everything else without a
-            // mnemonic is something this analysis cannot describe.
-            if op.is_label() || op.is_comment() {
-                continue;
-            }
-            if op.is_data() || op.mnemonic().is_none() {
-                return None;
+            match op.classify() {
+                OpClass::Inert => continue,
+                OpClass::Opaque => return None,
+                OpClass::Executes => {}
             }
             let effects = effects_of(op)?;
             match op.mnemonic() {
@@ -252,24 +238,13 @@ where
 
     fn writes_of(&self, index: u32) -> Option<Writes> {
         let range = self.positions.get(&index)?.clone();
-        if range.is_empty() {
-            return Some(Writes::default());
-        }
-
-        let ops = self.analysis.stream.ops();
-        let first = self.analysis.stream.first_op_of_token(range.start)?;
-        let last = self.analysis.stream.after_token(range.end - 1)?;
-
         let mut writes = Writes::default();
-        for op in ops.get(first..last)? {
-            // Labels and comments are inert: a label is a position, a
-            // comment is not executed at all. Everything else without a
-            // mnemonic is something this analysis cannot describe.
-            if op.is_label() || op.is_comment() {
-                continue;
-            }
-            if op.is_data() || op.mnemonic().is_none() {
-                return None;
+
+        for op in self.analysis.stream.ops_for_token_range(range)? {
+            match op.classify() {
+                OpClass::Inert => continue,
+                OpClass::Opaque => return None,
+                OpClass::Executes => {}
             }
             let effects = effects_of(op)?;
 
@@ -292,31 +267,17 @@ where
 
     fn region_use(&self, index: u32, dependency: Dependency) -> Option<RegionUse> {
         let range = self.positions.get(&index)?.clone();
-        // A line that matched nothing touches nothing - a `*` taking zero
+        // A region that matched nothing touches nothing - a `*` taking zero
         // instructions trivially satisfies "these registers are not modified
-        // here", which is exactly what the rules using it rely on.
-        if range.is_empty() {
-            return Some(RegionUse::default());
-        }
-
-        let ops = self.analysis.stream.ops();
-        let first = self.analysis.stream.first_op_of_token(range.start)?;
-        let last = self.analysis.stream.after_token(range.end - 1)?;
-
+        // here", which is what the rules using it rely on. That falls out of
+        // `ops_for_token_range` handing back an empty slice.
         let mut used = RegionUse::default();
-        for op in ops.get(first..last)? {
-            // Labels and comments are inert: a label is a position, a
-            // comment is not executed at all. Everything else without a
-            // mnemonic is something this analysis cannot describe.
-            if op.is_label() || op.is_comment() {
-                continue;
-            }
-            // Same policy as the forward walk: data, or anything carrying no
-            // mnemonic that is not a label, is something whose effects cannot
-            // be described - and "cannot describe" must never read as
-            // "touches nothing".
-            if op.is_data() || op.mnemonic().is_none() {
-                return None;
+
+        for op in self.analysis.stream.ops_for_token_range(range)? {
+            match op.classify() {
+                OpClass::Inert => continue,
+                OpClass::Opaque => return None,
+                OpClass::Executes => {}
             }
             let effects = effects_of(op)?;
 
