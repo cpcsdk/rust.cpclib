@@ -12,7 +12,7 @@ use cpclib_tokens::{DataAccessElem, ExprElement, IndexRegister16, Register16};
 use crate::dependency::Dependency;
 use crate::dsl::{BinOp, Constraint, OperandPattern, Rule, RuleSet, UnOp};
 use crate::engine::Captures;
-use crate::liveness::Usage;
+use crate::liveness::{Liveness, Usage};
 use crate::regflag::{Flag, Reg};
 
 /// Constraint names this crate evaluates today.
@@ -111,6 +111,61 @@ impl Verdict {
     }
 }
 
+/// Why a suggestion is safe, in terms a reader can check for themselves.
+///
+/// A peephole suggestion is unauditable without this. "Remove unused
+/// `ld b, c`" gives no way to tell whether B is clobbered two instructions
+/// later, inside a routine three calls deep, or not at all - so the constraint
+/// that *decided* it says so, and points at the instruction that proves it.
+///
+/// Only the safety-bearing constraints produce one. `in`/`notIn`/`regpair`
+/// stay silent: they restate what the pattern already shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reason {
+    /// One sentence, with the real register, flag or label names in it.
+    pub text: String,
+    /// The token that proves it, as an index into the caller's own token
+    /// slice - what an editor jumps to. `None` when the reason rests on
+    /// something with no single location (execution simply ending, a distance
+    /// between two points).
+    pub witness: Option<usize>
+}
+
+impl Reason {
+    fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            witness: None
+        }
+    }
+
+    fn at(text: impl Into<String>, witness: Option<usize>) -> Self {
+        Self {
+            text: text.into(),
+            witness
+        }
+    }
+}
+
+/// Render a dependency list the way a person would say it: `A`, `B and C`,
+/// `S, Z and C`.
+fn list_of(items: &[Dependency]) -> String {
+    let names: Vec<String> = items
+        .iter()
+        .map(|d| {
+            match d {
+                Dependency::Reg(r) => r.to_string(),
+                Dependency::Flag(f) => f.to_string()
+            }
+        })
+        .collect();
+    match names.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", "))
+    }
+}
+
 /// Everything a constraint may need beyond the captures themselves.
 ///
 /// Address-aware constraints (`reachableByJr`) need the address each matched
@@ -143,13 +198,17 @@ pub trait ConstraintContext {
 /// same way [`crate::engine::AddressResolver`] already sits beside it rather
 /// than inside it.
 pub trait LivenessContext {
-    /// Whether `dependency` is still read after the instruction matched by
-    /// pattern line `index`.
-    ///
     /// `None` when `index` wasn't part of this match, or when no instruction
     /// stream is available at all - in which case the constraint reports
     /// [`Verdict::Unknown`] and therefore fails, never silently passes.
-    fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Usage>;
+    ///
+    /// Whether `dependency` is still read after the instruction matched by
+    /// pattern line `index`, and the instruction that settled it.
+    ///
+    /// [`Liveness::witness`] arrives here already converted to a **token**
+    /// index, so a [`Reason`] built from it points at something the user
+    /// wrote.
+    fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Liveness>;
 
     /// What the instructions matched by pattern line `index` do to
     /// `dependency` themselves.
@@ -164,6 +223,11 @@ pub trait LivenessContext {
     /// available, or when the region contains something whose effects cannot
     /// be described - all of which report [`Verdict::Unknown`] and so fail.
     fn region_use(&self, index: u32, dependency: Dependency) -> Option<RegionUse>;
+
+    /// The token range pattern line `index` matched, so a [`Reason`] about a
+    /// region can point at where it starts rather than quoting a pattern line
+    /// number the reader never sees.
+    fn region_token_span(&self, index: u32) -> Option<std::ops::Range<usize>>;
 
     /// Everything the instructions matched by pattern line `index` write.
     ///
@@ -200,7 +264,20 @@ pub struct RegionSummary {
     /// surrounding push/pop pair would change.
     pub uses_sp_directly: bool,
     pub reads_memory: bool,
-    pub writes_memory: bool
+    pub writes_memory: bool,
+    /// At some point in the region a `pop` ran ahead of its `push`, so the
+    /// region reached into the stack frame *outside* it.
+    ///
+    /// Counting pushes and pops is not enough. `push bc / pop iy / push de /
+    /// pop bc` is a register-transfer idiom, perfectly balanced, in which the
+    /// pushes and pops pair up *crosswise*: the `pop iy` takes what the outer
+    /// `push bc` stored. A rule that removed the outer pair on the strength of
+    /// the balance alone would silently change what `pop iy` receives.
+    ///
+    /// Upstream checks the same thing, inside its counting loop rather than
+    /// after it: *"if at any point, there are more pops than push, stop"*
+    /// (`Pattern.java`, `evenPushPopsSPNotRead`).
+    pub reaches_outside_stack: bool
 }
 
 /// What a matched region produces.
@@ -245,11 +322,15 @@ impl ConstraintContext for NoContext {
 }
 
 impl LivenessContext for NoContext {
-    fn is_used_after(&self, _index: u32, _dependency: Dependency) -> Option<Usage> {
+    fn is_used_after(&self, _index: u32, _dependency: Dependency) -> Option<Liveness> {
         None
     }
 
     fn region_use(&self, _index: u32, _dependency: Dependency) -> Option<RegionUse> {
+        None
+    }
+
+    fn region_token_span(&self, _index: u32) -> Option<std::ops::Range<usize>> {
         None
     }
 
@@ -271,7 +352,12 @@ impl LivenessContext for NoContext {
 /// Takes the captures mutably because some constraints legitimately *produce*
 /// bindings rather than only testing them - see [`regpair`].
 ///
-pub fn evaluate<D, C>(constraint: &Constraint, captures: &mut Captures<'_, D>, ctx: &C) -> Verdict
+pub fn evaluate<D, C>(
+    constraint: &Constraint,
+    captures: &mut Captures<'_, D>,
+    ctx: &C,
+    reasons: &mut Vec<Reason>
+) -> Verdict
 where
     D: DataAccessElem,
     C: ConstraintContext + LivenessContext
@@ -282,19 +368,19 @@ where
         "in" => membership(constraint, captures, true),
         "notIn" => membership(constraint, captures, false),
         "regpair" => regpair(constraint, captures),
-        "reachableByJr" => reachable_by_jr(constraint, captures, ctx),
-        "regsNotUsedAfter" => regs_not_used_after(constraint, captures, ctx),
-        "flagsNotUsedAfter" => flags_not_used_after(constraint, captures, ctx),
-        "regsNotModified" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Write),
-        "regsNotUsed" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Read),
-        "flagsNotModified" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Write),
-        "flagsNotUsed" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Read),
-        "regFlagEffectsNotUsedAfter" => reg_flag_effects_not_used_after(constraint, ctx),
+        "reachableByJr" => reachable_by_jr(constraint, captures, ctx, reasons),
+        "regsNotUsedAfter" => regs_not_used_after(constraint, captures, ctx, reasons),
+        "flagsNotUsedAfter" => flags_not_used_after(constraint, captures, ctx, reasons),
+        "regsNotModified" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Write, reasons),
+        "regsNotUsed" => block_local(constraint, captures, ctx, Kind::Reg, Touch::Read, reasons),
+        "flagsNotModified" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Write, reasons),
+        "flagsNotUsed" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Read, reasons),
+        "regFlagEffectsNotUsedAfter" => reg_flag_effects_not_used_after(constraint, ctx, reasons),
         "atLeastOneCPUOp" => at_least_one_cpu_op(constraint, ctx),
-        "evenPushPopsSPNotRead" => even_push_pops_sp_not_read(constraint, ctx),
+        "evenPushPopsSPNotRead" => even_push_pops_sp_not_read(constraint, ctx, reasons),
         "memoryNotWritten" => memory_untouched(constraint, captures, ctx, false),
         "memoryNotUsed" => memory_untouched(constraint, captures, ctx, true),
-        "noStackArguments" => no_stack_arguments(constraint, captures, ctx),
+        "noStackArguments" => no_stack_arguments(constraint, captures, ctx, reasons),
         "regsModified" => regs_modified(constraint, captures, ctx),
         _ => Verdict::Unknown
     }
@@ -365,7 +451,11 @@ where C: LivenessContext {
 /// the rules using this constraint gain nothing from the extra precision, and
 /// hand-written CPC code that moves `SP` by hand is doing something the
 /// analysis should not second-guess.
-fn even_push_pops_sp_not_read<C>(constraint: &Constraint, ctx: &C) -> Verdict
+fn even_push_pops_sp_not_read<C>(
+    constraint: &Constraint,
+    ctx: &C,
+    reasons: &mut Vec<Reason>
+) -> Verdict
 where C: LivenessContext {
     let [line] = constraint.args.as_slice()
     else {
@@ -377,7 +467,20 @@ where C: LivenessContext {
     };
     match ctx.region_summary(line) {
         Some(summary) => {
-            Verdict::from_bool(summary.pushes == summary.pops && !summary.uses_sp_directly)
+            let balanced = summary.pushes == summary.pops && !summary.reaches_outside_stack;
+            if !balanced || summary.uses_sp_directly {
+                return Verdict::Failed;
+            }
+            reasons.push(Reason::new(format!(
+                "the {} in between are balanced and nothing there touches SP",
+                if summary.pushes == 1 {
+                    "push/pop".to_string()
+                }
+                else {
+                    format!("{} pushes and pops", summary.pushes * 2)
+                }
+            )));
+            Verdict::Satisfied
         },
         None => Verdict::Unknown
     }
@@ -449,7 +552,8 @@ where
 fn no_stack_arguments<D, C>(
     constraint: &Constraint,
     captures: &Captures<'_, D>,
-    ctx: &C
+    ctx: &C,
+    reasons: &mut Vec<Reason>
 ) -> Verdict
 where
     D: DataAccessElem,
@@ -465,7 +569,12 @@ where
     };
     match ctx.callee_takes_stack_arguments(&name) {
         Some(true) => Verdict::Failed,
-        Some(false) => Verdict::Satisfied,
+        Some(false) => {
+            reasons.push(Reason::new(format!(
+                "{name} never pops more than it pushes, so it takes no arguments off the stack"
+            )));
+            Verdict::Satisfied
+        },
         None => Verdict::Unknown
     }
 }
@@ -501,7 +610,11 @@ fn line_index(pattern: &OperandPattern) -> Option<u32> {
 /// register is used afterwards" would remove the entire point of the
 /// instruction. Register liveness simply cannot speak to memory or port
 /// effects, so their presence makes this undecidable rather than satisfied.
-fn reg_flag_effects_not_used_after<C>(constraint: &Constraint, ctx: &C) -> Verdict
+fn reg_flag_effects_not_used_after<C>(
+    constraint: &Constraint,
+    ctx: &C,
+    reasons: &mut Vec<Reason>
+) -> Verdict
 where C: LivenessContext {
     let [effects_line, after_line] = constraint.args.as_slice()
     else {
@@ -540,7 +653,7 @@ where C: LivenessContext {
     }
     // An instruction that writes nothing at all is trivially one whose output
     // is unused - which is correct: that is exactly what a `NOP` is.
-    not_used_after(after_line, writes.deps.into_iter(), ctx)
+    not_used_after(after_line, writes.deps.into_iter(), ctx, reasons)
 }
 
 /// Whether a block-local constraint is about registers or flags.
@@ -571,7 +684,8 @@ fn block_local<D, C>(
     captures: &Captures<'_, D>,
     ctx: &C,
     kind: Kind,
-    touch: Touch
+    touch: Touch,
+    reasons: &mut Vec<Reason>
 ) -> Verdict
 where
     D: DataAccessElem,
@@ -600,6 +714,7 @@ where
         }
     };
 
+    let all = dependencies.clone();
     for dependency in dependencies {
         let Some(used) = ctx.region_use(line, dependency)
         else {
@@ -613,6 +728,26 @@ where
             return Verdict::Failed;
         }
     }
+
+    // Worded in terms of the *source*, not the pattern: "line 1" is a pattern
+    // line number, which the reader never sees and cannot act on. What they
+    // can act on is "the instructions in between", plus somewhere to look.
+    let span = ctx.region_token_span(line);
+    let verb = match touch {
+        Touch::Read => "reads",
+        Touch::Write => "writes"
+    };
+    let names = list_of(&all);
+    let empty = span.as_ref().is_some_and(|s| s.is_empty());
+    reasons.push(Reason::at(
+        if empty {
+            format!("there are no instructions in between, so nothing {verb} {names}")
+        }
+        else {
+            format!("nothing in between {verb} {names}")
+        },
+        span.filter(|s| !s.is_empty()).map(|s| s.start)
+    ));
     Verdict::Satisfied
 }
 
@@ -621,7 +756,8 @@ where
 fn regs_not_used_after<D, C>(
     constraint: &Constraint,
     captures: &Captures<'_, D>,
-    ctx: &C
+    ctx: &C,
+    reasons: &mut Vec<Reason>
 ) -> Verdict
 where
     D: DataAccessElem,
@@ -631,14 +767,15 @@ where
     else {
         return Verdict::Unknown;
     };
-    not_used_after(args.line, args.items.into_iter().map(Dependency::Reg), ctx)
+    not_used_after(args.line, args.items.into_iter().map(Dependency::Reg), ctx, reasons)
 }
 
 /// `flagsNotUsedAfter(#, flag1, ..., flagn)` - as above, for flags.
 fn flags_not_used_after<D, C>(
     constraint: &Constraint,
     captures: &Captures<'_, D>,
-    ctx: &C
+    ctx: &C,
+    reasons: &mut Vec<Reason>
 ) -> Verdict
 where
     D: DataAccessElem,
@@ -648,7 +785,7 @@ where
     else {
         return Verdict::Unknown;
     };
-    not_used_after(args.line, args.items.into_iter().map(Dependency::Flag), ctx)
+    not_used_after(args.line, args.items.into_iter().map(Dependency::Flag), ctx, reasons)
 }
 
 /// The shared body: every dependency must be provably unused. One that is
@@ -658,16 +795,46 @@ where
 fn not_used_after<C>(
     line: u32,
     dependencies: impl Iterator<Item = Dependency>,
-    ctx: &C
+    ctx: &C,
+    reasons: &mut Vec<Reason>
 ) -> Verdict
 where C: LivenessContext {
+    let mut checked = Vec::new();
+    // Any one example is enough to point at, and the first is the closest.
+    let mut witness = None;
     for dependency in dependencies {
         match ctx.is_used_after(line, dependency) {
-            Some(Usage::NotUsed) => {},
-            Some(Usage::Used) => return Verdict::Failed,
-            Some(Usage::Unknown) | None => return Verdict::Unknown
+            Some(answer) => {
+                match answer.usage {
+                    Usage::NotUsed => {
+                        witness = witness.or(answer.witness);
+                        checked.push(dependency);
+                    },
+                    Usage::Used => return Verdict::Failed,
+                    Usage::Unknown => return Verdict::Unknown
+                }
+            },
+            None => return Verdict::Unknown
         }
     }
+
+    let names = list_of(&checked);
+    let plural = checked.len() > 1;
+    reasons.push(Reason::at(
+        match (witness.is_some(), plural) {
+            // The strong case: something demonstrably clobbers it first.
+            (true, false) => format!("{names} is overwritten before anything reads it"),
+            (true, true) => format!("{names} are overwritten before anything reads them"),
+            // The weaker one: nothing overwrote it, every path just ran out.
+            (false, false) => {
+                format!("no reachable instruction reads {names} before execution ends")
+            },
+            (false, true) => {
+                format!("no reachable instruction reads {names} before execution ends")
+            }
+        },
+        witness
+    ));
     Verdict::Satisfied
 }
 
@@ -811,7 +978,12 @@ fn split_register_pair(name: &str) -> Option<(String, String)> {
 
 /// `reachableByJr(#, label)` - whether the instruction matched by pattern line
 /// `#` could reach `label` with a relative jump.
-fn reachable_by_jr<D, C>(constraint: &Constraint, captures: &Captures<'_, D>, ctx: &C) -> Verdict
+fn reachable_by_jr<D, C>(
+    constraint: &Constraint,
+    captures: &Captures<'_, D>,
+    ctx: &C,
+    reasons: &mut Vec<Reason>
+) -> Verdict
 where
     D: DataAccessElem,
     C: ConstraintContext
@@ -838,7 +1010,17 @@ where
     // displacement is measured from the address *after* the two-byte JR, and
     // must fit in a signed byte.
     let delta = to - i64::from(from) - JR_OPCODE_LEN;
-    Verdict::from_bool((-128..=127).contains(&delta))
+    if !(-128..=127).contains(&delta) {
+        return Verdict::Failed;
+    }
+    // The distance is the whole answer here, and it is the one thing a reader
+    // cannot work out by eye - which is exactly why `jp2jr` firing on real
+    // code looks arbitrary without it.
+    reasons.push(Reason::new(format!(
+        "the target is at {to:#06x}, {delta} byte{} from the jump - within JR's -128..=127",
+        if delta.abs() == 1 { "" } else { "s" }
+    )));
+    Verdict::Satisfied
 }
 
 /// A `JR`'s own encoded length, which its displacement is relative to.
@@ -1189,7 +1371,7 @@ mod tests {
             // *from its own arm*; the point is simply that none of them can
             // return `Satisfied` by accident here.
             assert!(
-                !evaluate(&constraint, &mut captures, &NoContext).is_satisfied(),
+                !evaluate(&constraint, &mut captures, &NoContext, &mut Vec::new()).is_satisfied(),
                 "{name} must not be satisfiable without arguments"
             );
         }
@@ -1267,7 +1449,7 @@ mod tests {
         };
         let mut captures: Captures<'_, cpclib_tokens::DataAccess> = Captures::default();
         assert_eq!(
-            evaluate(&constraint, &mut captures, &NoContext),
+            evaluate(&constraint, &mut captures, &NoContext, &mut Vec::new()),
             Verdict::Unknown
         );
     }

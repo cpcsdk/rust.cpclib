@@ -106,7 +106,27 @@ pub struct Suggestion {
     ///
     /// Kept private - a `Suggestion` a caller builds by hand (rather than
     /// getting one from [`analyze_file`]) has no meaningful edit to give it.
-    fix: Option<cpclib_asmoptim::edit::SourceEdit>
+    fix: Option<cpclib_asmoptim::edit::SourceEdit>,
+    /// Why this suggestion is safe - see [`SuggestionReason`]. Empty when the
+    /// rule rests only on the shape of the instructions and there is nothing
+    /// to explain beyond what is already visible.
+    pub reasons: Vec<SuggestionReason>
+}
+
+/// One reason a suggestion is safe, with the source position of the
+/// instruction that proves it.
+///
+/// The point of this is auditability: "Remove unused `ld b, c`" alone gives a
+/// reader no way to tell whether B is clobbered two instructions later, inside
+/// a routine three calls deep, or not at all.
+#[derive(Debug, Clone)]
+pub struct SuggestionReason {
+    pub text: String,
+    /// 1-based position of the instruction that proves it, when the reason
+    /// rests on one. `None` for reasons about a distance or about execution
+    /// ending, which have no single location.
+    pub line: Option<u32>,
+    pub column: Option<u32>
 }
 
 /// [`analyze_file`]'s result: the source text (so [`apply_fixes`] can be
@@ -278,13 +298,32 @@ fn to_suggestion(
 
     let edit = cpclib_asmoptim::edit::edit_for_match(source, tokens, m);
 
+    // A reason's witness is a token index; turn it into a source position, so
+    // the reason can name a line the reader can go and look at.
+    let reasons = m
+        .reasons
+        .iter()
+        .map(|r| {
+            let at = r
+                .witness
+                .and_then(|i| tokens.get(i))
+                .map(|t| t.span().relative_line_and_column());
+            SuggestionReason {
+                text: r.text.clone(),
+                line: at.map(|(l, _)| l as u32),
+                column: at.map(|(_, c)| c as u32)
+            }
+        })
+        .collect();
+
     Suggestion {
         line: line as u32,
         column: column as u32,
         rule_name: m.rule_name.clone(),
         message: m.message.clone(),
         replacement: m.replacement.clone(),
-        fix: edit
+        fix: edit,
+        reasons
     }
 }
 

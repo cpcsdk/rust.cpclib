@@ -7,6 +7,16 @@ use cpclib_basmopt::{Suggestion, analyze_file, apply_fixes};
 fn print_suggestion(source: &camino::Utf8Path, s: &Suggestion) {
     let rule = s.rule_name.as_deref().unwrap_or("<unnamed>");
     println!("{}:{}:{}: [{rule}] {}", source, s.line, s.column, s.message);
+    // Indented under the finding: what makes it safe, and where to look. A
+    // suggestion nobody can check is a suggestion nobody should apply.
+    for reason in &s.reasons {
+        match (reason.line, reason.column) {
+            (Some(line), Some(column)) => {
+                println!("    because {} (at {}:{})", reason.text, line, column)
+            },
+            _ => println!("    because {}", reason.text)
+        }
+    }
 }
 
 fn run() -> i32 {

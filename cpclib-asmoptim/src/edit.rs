@@ -91,6 +91,22 @@ where T: ListingElement + MayHaveSpan {
             .collect::<Vec<_>>()
             .join("\n")
     }
+    else if m.replacement.iter().any(|l| is_comment_line(l)) {
+        // A comment runs to end of line, so these cannot be strung together
+        // with `:` at all - whichever entry follows a comment would be
+        // swallowed by it. Give each its own line instead.
+        //
+        // Found by the upstream corpus: a preserved region beginning with the
+        // comment that had trailed the matched instruction rendered as
+        // `; should be removed : ld a,(bc) : ld (val),a`, quietly commenting
+        // out both instructions the rule had promised to keep.
+        let indent = leading_whitespace(&source[ls..]);
+        m.replacement
+            .iter()
+            .map(|line| format!("{indent}{line}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
     else {
         // Mid-line: stay on the line, using basm's own separator, because the
         // instructions around this one are still part of it.
@@ -99,7 +115,7 @@ where T: ListingElement + MayHaveSpan {
 
     // A comment swallows the rest of its line, so anything still to come has
     // to start a new one.
-    let text = if m.replacement.last().is_some_and(|l| l.trim_start().starts_with(';'))
+    let text = if m.replacement.last().is_some_and(|l| is_comment_line(l))
         && !source[end..line_end(source, end)].trim().is_empty()
     {
         let indent = leading_whitespace(&source[ls..]).to_owned();
@@ -113,6 +129,12 @@ where T: ListingElement + MayHaveSpan {
         range: start..end,
         text
     })
+}
+
+/// Whether a rendered replacement entry is a comment - i.e. something that
+/// claims the rest of its line.
+fn is_comment_line(line: &str) -> bool {
+    line.trim_start().starts_with(';')
 }
 
 /// Widen a deletion's range to take in the `:` separating it from the

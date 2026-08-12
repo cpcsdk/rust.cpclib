@@ -8,16 +8,16 @@
 
 use std::collections::HashMap;
 
-use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
+use cpclib_tokens::{BinaryOperation, DataAccessElem, ExprElement, ListingElement, Mnemonic};
 
 use crate::analysis_op::OpClass;
 use crate::constraints::{
-    self, ConstraintContext, LivenessContext, RegionSummary, RegionUse, Writes
+    self, ConstraintContext, LivenessContext, Reason, RegionSummary, RegionUse, Writes
 };
 use crate::dependency::Dependency;
 use crate::regflag::Reg;
 use crate::effects::effects_of;
-use crate::liveness::{self, Usage};
+use crate::liveness::{self, Liveness};
 use crate::stream::AnalysisStream;
 use crate::smc;
 use crate::dsl::{
@@ -115,7 +115,7 @@ where
     T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem
 {
-    fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Usage> {
+    fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Liveness> {
         let range = self.positions.get(&index)?;
         // "After" means after everything the line matched, not after its first
         // token: a `*` or `[?n]` line covers a whole region, and starting the
@@ -130,17 +130,28 @@ where
             // instructions), so "after it" is simply where it began.
             _ => self.analysis.stream.first_op_of_token(range.start)?
         };
-        Some(liveness::is_used_after(
+        let answer = liveness::is_used_after(
             &self.analysis.stream,
             &self.analysis.labels,
             start,
             dependency
-        ))
+        );
+        // The walk works in op indices; everything above this trait works in
+        // token indices. Convert here so a `Reason`'s witness is already in
+        // the caller's own coordinates - an expansion's several ops all map
+        // back to the one token the user wrote.
+        Some(Liveness {
+            witness: answer
+                .witness
+                .and_then(|op| self.analysis.stream.token_of_op(op)),
+            ..answer
+        })
     }
 
     fn region_summary(&self, index: u32) -> Option<RegionSummary> {
         let range = self.positions.get(&index)?.clone();
         let mut summary = RegionSummary::default();
+        let mut depth: i32 = 0;
 
         for op in self.analysis.stream.ops_for_token_range(range)? {
             match op.classify() {
@@ -154,8 +165,19 @@ where
             summary.writes_memory |= effects.writes_memory;
 
             match op.mnemonic() {
-                Some(Mnemonic::Push) => summary.pushes += 1,
-                Some(Mnemonic::Pop) => summary.pops += 1,
+                Some(Mnemonic::Push) => {
+                    summary.pushes += 1;
+                    depth += 1;
+                },
+                Some(Mnemonic::Pop) => {
+                    summary.pops += 1;
+                    depth -= 1;
+                    // A pop with nothing of its own left to take is taking
+                    // whatever the surrounding code pushed.
+                    if depth < 0 {
+                        summary.reaches_outside_stack = true;
+                    }
+                },
                 _ => {
                     // Everything else that touches SP is a direct use. `call`
                     // and `ret` land here through their own SP effects, which
@@ -234,6 +256,10 @@ where
             }
         }
         None
+    }
+
+    fn region_token_span(&self, index: u32) -> Option<std::ops::Range<usize>> {
+        self.positions.get(&index).cloned()
     }
 
     fn writes_of(&self, index: u32) -> Option<Writes> {
@@ -480,7 +506,14 @@ pub struct PeepholeMatch {
     pub anchor: usize,
     /// The suggested replacement, one entry per instruction. Empty means the
     /// matched instructions should simply be removed.
-    pub replacement: Vec<String>
+    pub replacement: Vec<String>,
+    /// Why this is safe - one entry per safety-bearing constraint that had to
+    /// be satisfied, in the order they were checked. Empty for a rule resting
+    /// only on the shape of the instructions, where there is nothing to
+    /// explain beyond the pattern itself.
+    ///
+    /// A [`Reason::witness`] indexes the same token slice the match does.
+    pub reasons: Vec<Reason>
 }
 
 impl PeepholeMatch {
@@ -681,8 +714,11 @@ where
         resolver,
         analysis
     };
+    // Collected as the constraints decide, so a suggestion can say what makes
+    // it safe rather than only that it is.
+    let mut reasons = Vec::new();
     for constraint in &rule.constraints {
-        if !constraints::evaluate(constraint, &mut captures, &ctx).is_satisfied() {
+        if !constraints::evaluate(constraint, &mut captures, &ctx, &mut reasons).is_satisfied() {
             return None;
         }
     }
@@ -694,14 +730,35 @@ where
     let replacement =
         render_replacement(&rule.replacement_lines, &captures, tokens, &ctx.positions)?;
 
+    // ...and a replacement we *can* render is still no use if the assembler
+    // cannot read it back. Rendering only guarantees we produced text, not
+    // that the text is basm: an upstream rule emitting `-(10) & 65535` reads
+    // as an indirection to basm ("invalid LD: wrong source") and would break
+    // the file it was meant to improve. Checking here makes "a suggestion
+    // never breaks the source" structural rather than something the tests
+    // happen to sample.
+    if !replacement.iter().all(|line| is_assemblable(line)) {
+        return None;
+    }
+
     Some(PeepholeMatch {
         rule_name: rule.name.clone(),
         message: substitute_message(&rule.description, &captures),
         start,
         end,
         anchor,
-        replacement
+        replacement,
+        reasons
     })
+}
+
+/// Whether one rendered replacement line is something basm can actually read.
+///
+/// Deliberately syntax-only: the line is parsed on its own, so symbols it
+/// mentions need not exist. A comment line (which a preserved region can
+/// contain) parses fine and is accepted.
+fn is_assemblable(line: &str) -> bool {
+    cpclib_asm::parser::parse_z80_str(format!("    {line}\n")).is_ok()
 }
 
 /// Match `lines[line_idx..]` against `tokens[pos..]`, returning the position
@@ -993,9 +1050,22 @@ where D: DataAccessElem {
                 return false;
             }
             // `get_index` rather than `get_expression`: an indexed access keeps
-            // its displacement (and the `+`/`-` that introduced it) in its own
-            // slot, and `get_expression` returns nothing for one.
-            let Some((_, offset)) = operand.get_index()
+            // its displacement, *and the `+`/`-` that introduced it*, in its
+            // own slot - `get_expression` returns nothing for one.
+            //
+            // Only `+` matches. The pattern spells the operator literally
+            // (`(?regixiy + ?const1)`) and the replacement re-renders it the
+            // same way, so matching `(ix - 5)` here would bind `?const1` to
+            // `5` and emit `(ix + 5)` - a different address, silently. That
+            // really happened: `ld (ix - 5), a` came back as
+            // `ld (ix + 0x5), a`.
+            //
+            // Declining instead of trying to carry the sign through costs
+            // very little: the only rules using an indexed operand are the
+            // four `sdcc-*` patterns aimed at compiler output, where negative
+            // displacements are common but the code is not hand-written CPC
+            // source. Getting an address wrong is not worth the coverage.
+            let Some((BinaryOperation::Add, offset)) = operand.get_index()
             else {
                 return false;
             };

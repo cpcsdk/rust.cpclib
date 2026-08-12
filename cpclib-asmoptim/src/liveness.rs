@@ -33,6 +33,35 @@ use crate::effects::effects_of;
 use crate::regflag::Reg;
 use crate::stream::AnalysisStream;
 
+/// The answer to "is this dependency used after that point?", together with
+/// the instruction that settled it.
+///
+/// The witness is what lets a suggestion explain itself. "Remove unused
+/// `ld b, c`" is unauditable on its own - the user cannot tell whether B was
+/// clobbered two instructions later or inside a routine three calls deep - so
+/// the walk records the instruction that made it safe and hands it back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Liveness {
+    pub usage: Usage,
+    /// For [`Usage::NotUsed`]: an example op that overwrote the dependency
+    /// before anything read it. `None` when nothing overwrote it and every
+    /// path simply ran out - a different and weaker reason, worth wording
+    /// differently.
+    ///
+    /// Only ever *an* example: several paths can each kill it in their own
+    /// place, and naming one is far more useful than naming none.
+    pub witness: Option<usize>
+}
+
+impl Liveness {
+    fn of(usage: Usage) -> Self {
+        Self {
+            usage,
+            witness: None
+        }
+    }
+}
+
 /// The answer to "is this dependency used after that point?".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Usage {
@@ -77,7 +106,7 @@ pub fn is_used_after<T>(
     labels: &HashMap<String, usize>,
     start: usize,
     dependency: Dependency
-) -> Usage
+) -> Liveness
 where
     T: ListingElement,
     T::DataAccess: DataAccessElem
@@ -99,7 +128,7 @@ where
     // leaves interrupts pushing over whatever the stack pointer happened to
     // hold.
     if dependency == Dependency::Reg(Reg::Sp) {
-        return Usage::Used;
+        return Liveness::of(Usage::Used);
     }
 
     let ops = stream.ops();
@@ -114,11 +143,12 @@ where
     // dependency differently is still explored rather than skipped.
     let mut seen: HashMap<usize, Vec<(Dependency, Option<Vec<usize>>)>> = HashMap::new();
     let mut expanded = 0usize;
+    let mut witness: Option<usize> = None;
 
     while let Some(state) = worklist.pop() {
         expanded += 1;
         if expanded > MAX_STATES {
-            return Usage::Unknown;
+            return Liveness::of(Usage::Unknown);
         }
 
         let Some(op) = ops.get(state.position)
@@ -126,7 +156,7 @@ where
             // Ran off the end of what we can see. The stream is the whole
             // flattened file, so this really is "we don't know what runs
             // next", not "the program stops".
-            return Usage::Unknown;
+            return Liveness::of(Usage::Unknown);
         };
 
         // Anything this analysis cannot account for ends the walk. Stepping
@@ -142,7 +172,7 @@ where
         // the block-local constraints so the two can never drift apart.
         let executes = match op.classify() {
             OpClass::Inert => false,
-            OpClass::Opaque => return Usage::Unknown,
+            OpClass::Opaque => return Liveness::of(Usage::Unknown),
             OpClass::Executes => true
         };
 
@@ -153,7 +183,7 @@ where
             else {
                 // No table row - an instruction whose behavior we cannot
                 // describe. Never assume it touches nothing.
-                return Usage::Unknown;
+                return Liveness::of(Usage::Unknown);
             };
 
             let reads_it = effects
@@ -165,7 +195,7 @@ where
                     .iter()
                     .any(|f| dependency.matches(Dependency::Flag(*f)));
             if reads_it {
-                return Usage::Used;
+                return Liveness::of(Usage::Used);
             }
 
             // Not read here - now apply what this instruction overwrites,
@@ -191,6 +221,11 @@ where
                 // Fully overwritten. Nothing further along *this* path can
                 // reveal a use, so abandon it - without concluding anything
                 // about the other paths still in the worklist.
+                //
+                // This is the instruction that makes the optimization safe, so
+                // remember the first one seen: it is what a suggestion points
+                // at when asked why.
+                witness.get_or_insert(state.position);
                 continue;
             };
             dependency = remaining;
@@ -199,7 +234,7 @@ where
         // Where can execution go from here?
         let successors = match successors_of(ops, labels, state.position, &state.call_stack) {
             Some(next) => next,
-            None => return Usage::Unknown
+            None => return Liveness::of(Usage::Unknown)
         };
 
         for (position, call_stack) in successors {
@@ -219,7 +254,10 @@ where
         }
     }
 
-    Usage::NotUsed
+    Liveness {
+        usage: Usage::NotUsed,
+        witness
+    }
 }
 
 /// Every place execution can continue from `position`, with the call stack it
@@ -383,7 +421,7 @@ mod tests {
             .nth(after_index)
             .expect("instruction index out of range");
 
-        is_used_after(&stream, &labels, nth_instruction + 1, dep)
+        is_used_after(&stream, &labels, nth_instruction + 1, dep).usage
     }
 
     fn reg(r: Reg) -> Dependency {

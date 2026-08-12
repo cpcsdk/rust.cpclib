@@ -143,6 +143,7 @@ impl AssemblyAnalyzer {
                     &listing,
                     &env,
                     self.config().peephole_goal.into(),
+                    &document.uri,
                     &mut diagnostics
                 );
             }

@@ -45,3 +45,19 @@ Upstream pattern sources:
 Note that the size and speed files contain **directly opposing** rules (size
 turns `jp` into `jr`; speed turns `jr` into `jp`), which is why they are exposed
 as alternative goals rather than unioned into one set.
+
+## `tests/fixtures/upstream_potests/`
+
+The peephole-optimizer test corpus from mdlz80optimizer
+(`src/test/resources/data/potests/`), vendored verbatim: 88 inputs, 37 of them
+paired with an `-expected.asm` recording what upstream's optimizer produces.
+Apache-2.0, same project and licence as the pattern files above.
+
+Kept as fixtures rather than rewritten because their value is precisely that
+they are *not* ours: they are what the reference implementation is held to, so
+running our engine over them is a differential test against it rather than
+against our own assumptions.
+
+Comparison has to be semantic. Upstream reformats as it emits (`ld a, (value)`)
+and renames labels it moves (`__mdlrenamed__end`), so the expected files are
+compared by what they *assemble to*, never by their text.

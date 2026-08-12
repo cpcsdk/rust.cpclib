@@ -67,17 +67,52 @@ pub(super) fn collect_peephole_warnings(
     listing: &LocatedListing,
     env: &Env,
     goal: OptimizationGoal,
+    uri: &Url,
     out: &mut Vec<Diagnostic>
 ) {
     let (tokens, matches) = peephole_matches(listing, env, goal);
     for m in &matches {
         let start_span = tokens[m.start].span();
         let end_span = tokens[m.end - 1].span();
+        // The evidence goes in `relatedInformation` rather than the message:
+        // the squiggle stays readable, and the editor turns each reason into a
+        // clickable jump to the instruction that proves the suggestion safe.
+        // Without it a reader has no way to tell whether a register is
+        // clobbered two instructions later or inside a routine three calls
+        // deep.
+        let related: Vec<DiagnosticRelatedInformation> = m
+            .reasons
+            .iter()
+            .map(|reason| {
+                let range = reason
+                    .witness
+                    .and_then(|i| tokens.get(i))
+                    .map(|t| {
+                        let span = t.span();
+                        match_range(span, span)
+                    })
+                    .unwrap_or_else(|| match_range(start_span, end_span));
+                DiagnosticRelatedInformation {
+                    location: Location {
+                        uri: uri.clone(),
+                        range
+                    },
+                    message: reason.text.clone()
+                }
+            })
+            .collect();
+
         out.push(Diagnostic {
             range: match_range(start_span, end_span),
             severity: Some(DiagnosticSeverity::WARNING),
             source: Some(SOURCE.to_string()),
             message: m.message.clone(),
+            related_information: if related.is_empty() {
+                None
+            }
+            else {
+                Some(related)
+            },
             ..Default::default()
         });
     }
