@@ -34,4 +34,4 @@ pub mod stream;
 pub use builtin_rules::{OptimizationGoal, builtin_rules};
 pub use constraints::rules_need_addresses;
 pub use cpclib_asm::flatten::{flatten_for_analysis, flatten_listing};
-pub use env_resolver::EnvAddressResolver;
+pub use env_resolver::{EnvAddressResolver, ProjectAddressResolver};

@@ -131,7 +131,7 @@ impl AssemblyAnalyzer {
         if diagnostics.is_empty()
             && let Ok(listing) = self.parse_document(document)
         {
-            let mut env = self.dry_run_env_cached(document, &listing);
+            let (mut env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
             collect_assembler_warnings(&env, document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
             Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
@@ -139,10 +139,13 @@ impl AssemblyAnalyzer {
                 collect_unused_binding_warnings(&listing, document, &mut diagnostics);
             }
             if self.config().warnings.peephole_optimizer {
+                let peephole_addresses =
+                    super::peephole::address_source(self, document, own_complete);
                 super::peephole::collect_peephole_warnings(
                     &listing,
                     &env,
                     self.config().peephole_goal.into(),
+                    peephole_addresses.as_addresses(),
                     &document.uri,
                     &mut diagnostics
                 );

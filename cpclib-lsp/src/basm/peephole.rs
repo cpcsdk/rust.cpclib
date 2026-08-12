@@ -16,8 +16,9 @@ use cpclib_asm::assembler::Env;
 use cpclib_asm::flatten::flatten_for_analysis;
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, MayHaveSpan};
 use cpclib_asm::parser::source::{SourceString, Z80Span};
-use cpclib_asmoptim::engine::{PeepholeMatch, find_matches_with_resolver};
-use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal, builtin_rules};
+use cpclib_asmoptim::engine::{PeepholeMatch, find_matches, find_matches_with_resolver};
+use cpclib_tokens::{DataAccessElem, ListingElement};
+use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal, ProjectAddressResolver, builtin_rules};
 
 use super::AssemblyAnalyzer;
 use super::command::{single_file_edit, single_file_multi_edit};
@@ -43,6 +44,7 @@ pub(crate) const FIX_ALL_COMMAND: &str = "cpclib.fixAllPeephole";
 fn peephole_matches<'a>(
     listing: &'a LocatedListing,
     env: &Env,
+    addresses: Addresses<'_>,
     goal: OptimizationGoal
 ) -> (Vec<&'a LocatedToken>, Vec<PeepholeMatch>) {
     let tokens: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
@@ -50,9 +52,200 @@ fn peephole_matches<'a>(
         return (tokens, Vec::new());
     }
     let rules = builtin_rules(goal);
-    let resolver = EnvAddressResolver::new(env);
-    let matches = find_matches_with_resolver(&tokens, rules, &resolver);
+
+    // Without a *complete* assemble the recorded addresses describe a program
+    // that was never finished being laid out, so no address-aware rule may
+    // read them. Matching with no resolver at all is the existing, tested way
+    // to say that: `reachableByJr` reports `Unknown`, and `jp2jr` stays quiet
+    // rather than quoting a distance from a half-built program.
+    //
+    // `cpclib-basmopt::analyze_file` has always done exactly this on a failed
+    // assemble; only this path did not, which is how a user was told a target
+    // was 127 bytes away when the real build measured 146.
+    let matches = match addresses {
+        // The document is its own program: its own assemble is the real one.
+        Addresses::OwnAssemble => {
+            let resolver = EnvAddressResolver::new(env);
+            find_matches_with_resolver(&tokens, rules, &resolver)
+        },
+        // The document is part of a larger program, so the addresses come from
+        // assembling *that* - see `entry::project_addresses`.
+        Addresses::Project(project) => {
+            let resolver = ProjectAddressResolver::new(&project.env, project.document.clone());
+            find_matches_with_resolver(&tokens, rules, &resolver)
+        },
+        Addresses::None => find_matches(&tokens, rules)
+    };
     (tokens, matches)
+}
+
+
+/// The span of the first unconditional `jp <label>` in `listing`, if any.
+///
+/// Used to decide whether the "addresses unavailable" notice is worth showing:
+/// without such a jump there is no address-aware suggestion to be missing, and
+/// the notice would be pure noise.
+fn unconditional_jump_span(listing: &LocatedListing) -> Option<&Z80Span> {
+    flatten_for_analysis(listing.iter())
+        .find(|t: &&LocatedToken| {
+            if t.mnemonic() != Some(&cpclib_tokens::Mnemonic::Jp) {
+                return false;
+            }
+            // Unconditional only: `jp nz, x` cannot become a `jr` for every
+            // condition anyway, and it is not what `jp2jr` matches. Which slot
+            // holds the target differs between the conditional and
+            // unconditional forms, so this counts operands rather than
+            // assuming one.
+            let operands: Vec<_> = [t.mnemonic_arg1(), t.mnemonic_arg2()]
+                .into_iter()
+                .flatten()
+                .collect();
+            operands.len() == 1 && operands[0].get_expression().is_some()
+        })
+        .map(|t| t.span())
+}
+
+/// [`AssemblyAnalyzer::peephole_addresses`], reachable from sibling modules.
+pub(super) fn address_source(
+    analyzer: &AssemblyAnalyzer,
+    document: &Document,
+    own_assemble_complete: bool
+) -> AddressSource {
+    analyzer.peephole_addresses(document, own_assemble_complete)
+}
+
+/// Owned form of [`Addresses`], so a caller can hold the project assemble
+/// alive across the call.
+pub(super) enum AddressSource {
+    OwnAssemble,
+    Project(super::entry::ProjectAddresses),
+    None
+}
+
+impl AddressSource {
+    pub(super) fn as_addresses(&self) -> Addresses<'_> {
+        match self {
+            Self::OwnAssemble => Addresses::OwnAssemble,
+            Self::Project(p) => Addresses::Project(p),
+            Self::None => Addresses::None
+        }
+    }
+}
+
+impl AssemblyAnalyzer {
+    /// The assembled project `Env` for `entry`, cached.
+    ///
+    /// Assembling a whole demo takes tens of seconds, so this must not happen
+    /// per request. The cache key is the newest modification time across the
+    /// project's sources: it changes exactly when a rebuild would lay code out
+    /// differently, and costs a `stat` per file instead of an assemble.
+    fn project_env_cached(
+        &self,
+        entry: &std::path::Path,
+        doc_uri: &Url,
+        config: &crate::common::config::AsmConfig
+    ) -> Option<std::sync::Arc<Env>> {
+        let root = super::entry::root_of(doc_uri)?;
+        let fingerprint = super::entry::sources_fingerprint(&root);
+        if let Some(entry_cache) = self.project_env_cache.get(entry)
+            && entry_cache.0 == fingerprint
+        {
+            return Some(entry_cache.1.clone());
+        }
+
+        let disabled = super::parse::disabled_assembling_warning_categories(&config.warnings);
+        let env = std::sync::Arc::new(super::entry::assemble_entry(
+            entry,
+            config.case_sensitive,
+            disabled
+        )?);
+        self.project_env_cache
+            .insert(entry.to_path_buf(), (fingerprint, env.clone()));
+        Some(env)
+    }
+
+    /// Where this document's real addresses come from.
+    ///
+    /// `own_assemble_complete` is whether assembling the document by itself
+    /// finished - necessary but not sufficient, because a file that is only
+    /// ever `include`d assembles into a *different program* than the one it
+    /// really belongs to, quite possibly without erroring at all.
+    ///
+    /// Ordered so the cheap test comes first: an unsaved buffer disqualifies
+    /// the project route immediately (recorded addresses are keyed by byte
+    /// offsets in the file *as assembled*), which means the expensive work -
+    /// walking the workspace for the include graph, then assembling the entry
+    /// - only ever happens for a document that matches disk, i.e. just after a
+    /// save rather than on every keystroke.
+    fn peephole_addresses(
+        &self,
+        document: &Document,
+        own_assemble_complete: bool
+    ) -> AddressSource {
+        let Ok(path) = document.uri.to_file_path()
+        else {
+            return AddressSource::None;
+        };
+        // Cheap gate, before anything expensive. Two ways to fail it, both
+        // meaning "the project route cannot apply here":
+        //
+        // * the buffer has unsaved edits, so every offset the project assemble
+        //   recorded for this file has shifted;
+        // * there is no file on disk at all (an unsaved or synthetic
+        //   document), so it belongs to no project we can see.
+        //
+        // Either way the document's *own* assemble still describes the buffer
+        // faithfully, which is what the LSP has always used.
+        let buffer = document.text();
+        let matches_disk = std::fs::read_to_string(&path).is_ok_and(|disk| disk == buffer);
+        if !matches_disk {
+            return if own_assemble_complete {
+                AddressSource::OwnAssemble
+            }
+            else {
+                AddressSource::None
+            };
+        }
+
+        let config = self.config();
+        match super::entry::entry_for(&document.uri, config.entry.as_deref()) {
+            super::entry::Entry::Standalone => {
+                if own_assemble_complete {
+                    AddressSource::OwnAssemble
+                }
+                else {
+                    AddressSource::None
+                }
+            },
+            super::entry::Entry::Project(entry) => {
+                let Some(env) = self.project_env_cached(&entry, &document.uri, &config)
+                else {
+                    return AddressSource::None;
+                };
+                match std::fs::canonicalize(&path) {
+                    Ok(document) => {
+                        AddressSource::Project(super::entry::ProjectAddresses { env, document })
+                    },
+                    Err(_) => AddressSource::None
+                }
+            },
+            super::entry::Entry::Unknown => AddressSource::None
+        }
+    }
+}
+
+/// Where a document's real addresses come from, if anywhere.
+pub(super) enum Addresses<'a> {
+    /// This document *is* the program - assemble it directly, as the LSP has
+    /// always done.
+    OwnAssemble,
+    /// This document is only part of a program; addresses come from assembling
+    /// the entry that contains it.
+    Project(&'a super::entry::ProjectAddresses),
+    /// Nothing trustworthy. Address-aware rules must stay quiet: an
+    /// incomplete assemble, an ambiguous entry, or a buffer that no longer
+    /// matches disk (which shifts every recorded offset).
+    None
 }
 
 /// Match `listing` against the built-in peephole rules and push one
@@ -67,10 +260,32 @@ pub(super) fn collect_peephole_warnings(
     listing: &LocatedListing,
     env: &Env,
     goal: OptimizationGoal,
+    addresses: Addresses<'_>,
     uri: &Url,
     out: &mut Vec<Diagnostic>
 ) {
-    let (tokens, matches) = peephole_matches(listing, env, goal);
+    // Say so when address-aware rules had to sit out. Silence is
+    // indistinguishable from "nothing to suggest", and a user who has just
+    // been told a `jp` is fine has no way to know the question was never
+    // actually asked.
+    if matches!(addresses, Addresses::None)
+        && let Some(first) = unconditional_jump_span(listing)
+    {
+        out.push(Diagnostic {
+            range: match_range(first, first),
+            severity: Some(DiagnosticSeverity::INFORMATION),
+            source: Some(SOURCE.to_string()),
+            message: "jp/jr analysis skipped: this file's real addresses are not \
+                      available. It is assembled as part of a larger program whose \
+                      entry could not be determined or assembled (unsaved edits, an \
+                      ambiguous entry, or missing -D definitions from the build \
+                      rule). Set [asm] entry in cpclib-lsp.toml to name it."
+                .to_string(),
+            ..Default::default()
+        });
+    }
+
+    let (tokens, matches) = peephole_matches(listing, env, addresses, goal);
     for m in &matches {
         let start_span = tokens[m.start].span();
         let end_span = tokens[m.end - 1].span();
@@ -146,9 +361,10 @@ impl AssemblyAnalyzer {
         range: Range
     ) -> Option<CodeAction> {
         let listing = self.parse_document(document).ok()?;
-        let env = self.dry_run_env_cached(document, &listing);
+        let (env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
+        let addresses = self.peephole_addresses(document, own_complete);
         let goal = self.config().peephole_goal.into();
-        let (tokens, matches) = peephole_matches(&listing, &env, goal);
+        let (tokens, matches) = peephole_matches(&listing, &env, addresses.as_addresses(), goal);
 
         let cursor_line = range.start.line;
         let m = matches.iter().find(|m| {
@@ -177,9 +393,10 @@ impl AssemblyAnalyzer {
         else {
             return Vec::new();
         };
-        let env = self.dry_run_env_cached(document, &listing);
+        let (env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
+        let addresses = self.peephole_addresses(document, own_complete);
         let goal = self.config().peephole_goal.into();
-        let (_tokens, matches) = peephole_matches(&listing, &env, goal);
+        let (_tokens, matches) = peephole_matches(&listing, &env, addresses.as_addresses(), goal);
         if matches.is_empty() {
             return Vec::new();
         }
@@ -218,9 +435,10 @@ impl AssemblyAnalyzer {
     /// never overlap in the first place (`find_matches`'s own guarantee).
     pub(crate) fn fix_all_peephole_edit(&self, document: &Document) -> Option<(WorkspaceEdit, usize)> {
         let listing = self.parse_document(document).ok()?;
-        let env = self.dry_run_env_cached(document, &listing);
+        let (env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
+        let addresses = self.peephole_addresses(document, own_complete);
         let goal = self.config().peephole_goal.into();
-        let (tokens, matches) = peephole_matches(&listing, &env, goal);
+        let (tokens, matches) = peephole_matches(&listing, &env, addresses.as_addresses(), goal);
         if matches.is_empty() {
             return None;
         }
@@ -412,6 +630,178 @@ mod quickfix_tests {
         );
     }
 
+    /// A failed assemble must never produce an address-aware suggestion.
+    ///
+    /// The reported bug: `demo_code.asm` is not the program (`sna.asm` is), so
+    /// assembling it alone fails on an unresolvable include - and the LSP used
+    /// the half-built `Env`'s addresses anyway, telling the user a `jp` target
+    /// was 127 bytes away when the real build measured 146.
+    #[test]
+    fn an_incomplete_assemble_yields_no_address_aware_suggestion() {
+        // `include` of a file that does not exist: the assemble cannot finish,
+        // exactly like `include MUSIC_CFG` in the real project.
+        let d = doc("    include \"there-is-no-such-file.asm\"\nSomeLabel:\n    JP SomeLabel\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).expect("must parse");
+        let (env, own_complete) = analyzer.dry_run_env_cached_checked(&d, &listing);
+        assert!(
+            !own_complete,
+            "an unresolvable include must mark the assemble incomplete"
+        );
+
+        let (_tokens, matches) = peephole_matches(
+            &listing,
+            &env,
+            Addresses::None,
+            OptimizationGoal::Neutral
+        );
+        assert!(
+            !matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+            "jp2jr must not fire off a half-built program: {matches:?}"
+        );
+    }
+
+    /// The control: the same jump in a file that assembles cleanly still gets
+    /// its suggestion, so the guard above is about completeness and not about
+    /// jp2jr having been switched off.
+    #[test]
+    fn a_complete_assemble_still_gets_its_address_aware_suggestion() {
+        let d = doc("SomeLabel:\n    JP SomeLabel\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).expect("must parse");
+        let (env, own_complete) = analyzer.dry_run_env_cached_checked(&d, &listing);
+        assert!(own_complete, "this file assembles fine");
+
+        let (_tokens, matches) = peephole_matches(
+            &listing,
+            &env,
+            Addresses::OwnAssemble,
+            OptimizationGoal::Neutral
+        );
+        assert!(
+            matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+            "jp2jr should fire when the addresses are real: {matches:?}"
+        );
+    }
+
+    /// The reported bug, against the real project layout in miniature: the
+    /// document is only ever `include`d, and the file including it is the one
+    /// that carries `RUN` *and* the memory map. Assembled alone the document
+    /// starts at 0 and the jump looks near; through the entry it starts where
+    /// the `org` puts it and the same jump is far out of `jr` range.
+    #[test]
+    fn an_included_file_is_measured_through_its_entry_not_on_its_own() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let root = tmp.path().as_std_path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+
+        // 200 bytes of padding puts `target` out of `jr` reach *only* once the
+        // entry's `org` and preceding data are taken into account.
+        let mut body = String::from("start\n    jp target\n");
+        for _ in 0..200 {
+            body.push_str("    nop\n");
+        }
+        body.push_str("target\n    ret\n");
+        std::fs::write(root.join("code.asm"), &body).unwrap();
+        std::fs::write(
+            root.join("main.asm"),
+            "    org 0x4000\n    run start\n    include \"code.asm\"\n"
+        )
+        .unwrap();
+
+        let code = std::fs::canonicalize(root.join("code.asm")).unwrap();
+        let uri = Url::from_file_path(&code).unwrap();
+        let d = Document::new(uri, body.clone(), 1);
+
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).expect("must parse");
+        let (env, own_complete) = analyzer.dry_run_env_cached_checked(&d, &listing);
+        let addresses = analyzer.peephole_addresses(&d, own_complete);
+
+        assert!(
+            matches!(addresses, AddressSource::Project(_)),
+            "an included file must be measured through its entry"
+        );
+
+        let (_tokens, matches) =
+            peephole_matches(&listing, &env, addresses.as_addresses(), OptimizationGoal::Size);
+        assert!(
+            !matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+            "the target is >127 bytes away in the real program, so jp2jr must \
+             not fire: {matches:?}"
+        );
+    }
+
+    /// The control: the very same file, with the jump close enough that it is
+    /// in range even through the entry. Without this, the test above would
+    /// pass just as well if the project route were silently broken.
+    #[test]
+    fn a_near_jump_in_an_included_file_still_gets_its_suggestion() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let root = tmp.path().as_std_path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+
+        let body = String::from("start\n    jp target\n    nop\ntarget\n    ret\n");
+        std::fs::write(root.join("code.asm"), &body).unwrap();
+        std::fs::write(
+            root.join("main.asm"),
+            "    org 0x4000\n    run start\n    include \"code.asm\"\n"
+        )
+        .unwrap();
+
+        let code = std::fs::canonicalize(root.join("code.asm")).unwrap();
+        let uri = Url::from_file_path(&code).unwrap();
+        let d = Document::new(uri, body.clone(), 1);
+
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).expect("must parse");
+        let (env, own_complete) = analyzer.dry_run_env_cached_checked(&d, &listing);
+        let addresses = analyzer.peephole_addresses(&d, own_complete);
+        assert!(matches!(addresses, AddressSource::Project(_)));
+
+        let (_tokens, matches) =
+            peephole_matches(&listing, &env, addresses.as_addresses(), OptimizationGoal::Size);
+        assert!(
+            matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+            "a genuinely near jump must still be offered: {matches:?}"
+        );
+    }
+
+    /// Unsaved edits shift every offset the project assemble recorded, so the
+    /// project route must not be used for a dirty buffer.
+    #[test]
+    fn an_unsaved_buffer_falls_back_rather_than_using_stale_offsets() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let root = tmp.path().as_std_path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::write(root.join("code.asm"), "start\n    jp target\ntarget\n    ret\n").unwrap();
+        std::fs::write(
+            root.join("main.asm"),
+            "    org 0x4000\n    run start\n    include \"code.asm\"\n"
+        )
+        .unwrap();
+
+        let code = std::fs::canonicalize(root.join("code.asm")).unwrap();
+        let uri = Url::from_file_path(&code).unwrap();
+        // The buffer has an extra line the file on disk does not.
+        let d = Document::new(
+            uri,
+            "start\n    nop\n    jp target\ntarget\n    ret\n".to_string(),
+            2
+        );
+
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).expect("must parse");
+        let (_env, own_complete) = analyzer.dry_run_env_cached_checked(&d, &listing);
+        assert!(
+            !matches!(
+                analyzer.peephole_addresses(&d, own_complete),
+                AddressSource::Project(_)
+            ),
+            "a dirty buffer must not be measured against the assembled file"
+        );
+    }
+
     #[test]
     fn is_wired_into_code_actions() {
         let d = doc("start:\n    ld b, b\n    ret\n");
@@ -494,5 +884,91 @@ mod code_lens_and_fix_all_tests {
         let d = doc("start:\n    xor a\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
         assert!(analyzer.fix_all_peephole_edit(&d).is_none());
+    }
+}
+
+#[cfg(test)]
+mod skipped_notice_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    /// Going quiet is indistinguishable from "nothing to suggest", so when the
+    /// addresses are unavailable the user is told - otherwise a `jp` that was
+    /// never actually examined looks like a `jp` that was examined and passed.
+    #[test]
+    fn a_file_whose_addresses_are_unavailable_says_so() {
+        let d = doc("start\n    jp target\ntarget\n    ret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).expect("parses");
+        let (env, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
+
+        let mut out = Vec::new();
+        collect_peephole_warnings(
+            &listing,
+            &env,
+            OptimizationGoal::Neutral,
+            Addresses::None,
+            &d.uri,
+            &mut out
+        );
+        let notice = out
+            .iter()
+            .find(|d| d.severity == Some(DiagnosticSeverity::INFORMATION))
+            .expect("expected the skipped-analysis notice");
+        assert!(notice.message.contains("addresses"), "{}", notice.message);
+        assert!(notice.message.contains("entry"), "{}", notice.message);
+    }
+
+    /// ...but only when there is something it could have said. A file with no
+    /// unconditional jump loses nothing by the analysis being skipped, so the
+    /// notice would be pure noise.
+    #[test]
+    fn a_file_with_no_jump_gets_no_notice() {
+        let d = doc("start\n    nop\n    ret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).expect("parses");
+        let (env, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
+
+        let mut out = Vec::new();
+        collect_peephole_warnings(
+            &listing,
+            &env,
+            OptimizationGoal::Neutral,
+            Addresses::None,
+            &d.uri,
+            &mut out
+        );
+        assert!(
+            !out.iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::INFORMATION)),
+            "{out:?}"
+        );
+    }
+
+    /// And nothing is said when the analysis did run.
+    #[test]
+    fn a_file_with_real_addresses_gets_no_notice() {
+        let d = doc("start\n    jp target\ntarget\n    ret\n");
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).expect("parses");
+        let (env, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
+
+        let mut out = Vec::new();
+        collect_peephole_warnings(
+            &listing,
+            &env,
+            OptimizationGoal::Neutral,
+            Addresses::OwnAssemble,
+            &d.uri,
+            &mut out
+        );
+        assert!(
+            !out.iter()
+                .any(|d| d.severity == Some(DiagnosticSeverity::INFORMATION)),
+            "{out:?}"
+        );
     }
 }

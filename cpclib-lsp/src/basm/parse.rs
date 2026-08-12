@@ -36,7 +36,7 @@ pub(super) fn disabled_parser_warning_categories(
 /// assembler-known categories, since `fake_instructions`/
 /// `redundant_accumulator_prefix` are also passed here as a
 /// belt-and-suspenders backstop (their real gate is the parser one above).
-pub(super) fn disabled_assembling_warning_categories(
+pub(crate) fn disabled_assembling_warning_categories(
     warnings: &crate::common::config::AsmWarningClasses
 ) -> BitFlags<WarningCategory> {
     let mut disabled = disabled_parser_warning_categories(warnings);

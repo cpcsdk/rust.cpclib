@@ -136,7 +136,7 @@ pub(super) fn dry_run_env(
     doc_uri: &Url,
     case_sensitive: bool,
     disabled_categories: enumflags2::BitFlags<cpclib_asm::WarningCategory>
-) -> Env {
+) -> (Env, bool) {
     let mut assemble = AssemblingOptions::default();
     assemble.set_dry_run(true);
     assemble.set_case_sensitive(case_sensitive);
@@ -160,8 +160,13 @@ pub(super) fn dry_run_env(
     let options = EnvOptions::new(parse, assemble, Arc::new(DiscardObserver));
 
     match cpclib_asm::assembler::visit_tokens_all_passes_with_options(listing, options) {
-        Ok((_tokens, env)) => env,
-        Err((_tokens, env, _err)) => env
+        Ok((_tokens, env)) => (env, true),
+        // The partial `Env` is still returned: hover and `EQU` resolution use
+        // it happily, and a half-built symbol table is better than none for
+        // those. But it is flagged, because anything *address*-shaped read
+        // from it is fiction - the addresses recorded before the failure
+        // describe a program that was never finished being laid out.
+        Err((_tokens, env, _err)) => (env, false)
     }
 }
 
@@ -228,19 +233,36 @@ impl AssemblyAnalyzer {
     /// needs should use `local_symbols_env_cached` instead, see its own
     /// doc comment for why.
     pub(super) fn dry_run_env_cached(&self, document: &Document, listing: &LocatedListing) -> Env {
+        self.dry_run_env_cached_checked(document, listing).0
+    }
+
+    /// [`Self::dry_run_env_cached`], plus whether the assemble that produced
+    /// the `Env` actually finished.
+    ///
+    /// Every *address*-shaped question has to ask for this. A failed assemble
+    /// still hands back a usable partial `Env` - which is right for hover and
+    /// `EQU` values - but the addresses in it belong to a program that was
+    /// never fully laid out. Reading `reachableByJr` off one told a user a
+    /// jump target was 127 bytes away when the real build measured 146, and
+    /// the resulting `jr` did not assemble.
+    pub(super) fn dry_run_env_cached_checked(
+        &self,
+        document: &Document,
+        listing: &LocatedListing
+    ) -> (Env, bool) {
         if let Some(entry) = self.env_cache.get(&document.uri)
             && entry.0 == document.version
         {
-            return (*entry.1).clone();
+            return ((*entry.1).clone(), entry.2);
         }
         let config = self.config();
         let disabled = disabled_assembling_warning_categories(&config.warnings);
-        let env = dry_run_env(listing, &document.uri, config.case_sensitive, disabled);
+        let (env, complete) = dry_run_env(listing, &document.uri, config.case_sensitive, disabled);
         self.env_cache.insert(
             document.uri.clone(),
-            (document.version, Arc::new(env.clone()))
+            (document.version, Arc::new(env.clone()), complete)
         );
-        env
+        (env, complete)
     }
 
     /// `local_symbols_env`, cached per `(document.uri, document.version)` -

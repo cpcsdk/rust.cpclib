@@ -1,3 +1,15 @@
+/// Canonical form of a source path, so the same file reached by different
+/// routes (`include "x.asm"` from one directory, an absolute path from
+/// another) hashes to the same key in [`Env::address_trace_by_file`].
+///
+/// Falls back to the path as written when it cannot be canonicalised - a
+/// synthetic in-memory source has no real path - which is harmless, since such
+/// a source is only ever compared against itself.
+fn canonical_source_path(name: &str) -> Option<std::path::PathBuf> {
+    let path = std::path::Path::new(name);
+    Some(std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
+}
+
 use crate::disass::disassemble;
 use crate::error::AssemblerError;
 pub mod control;
@@ -512,6 +524,17 @@ pub struct Env {
     /// simply misses, which is the safe failure mode (`Option::None`, never a
     /// wrong address).
     address_trace: HashMap<SpanIdentity, u16>,
+    /// The same addresses, keyed by `(canonical file, byte offset in that
+    /// file)` instead of by [`SpanIdentity`].
+    ///
+    /// `SpanIdentity` is deliberately *parse-local* - it exists so that two
+    /// files whose spans both start at offset 0 cannot collide - which also
+    /// means it cannot connect one assemble to a *different* parse of the same
+    /// file. That is exactly what an editor needs: it assembles the project's
+    /// entry file, then wants the addresses of tokens in its own, separately
+    /// parsed copy of an `include`d file. A `(file, offset)` key survives that
+    /// crossing; a `SpanIdentity` cannot.
+    address_trace_by_file: HashMap<(std::path::PathBuf, usize), u16>,
 
     included_paths: HashSet<Utf8PathBuf>,
 
@@ -570,6 +593,7 @@ impl Clone for Env {
             if_token_adr_to_used_decision: self.if_token_adr_to_used_decision.clone(),
             if_token_adr_to_unused_decision: self.if_token_adr_to_unused_decision.clone(),
             address_trace: self.address_trace.clone(),
+            address_trace_by_file: self.address_trace_by_file.clone(),
             requested_additional_pass: self.requested_additional_pass,
 
             functions: self.functions.clone(),
@@ -1754,6 +1778,19 @@ impl Env {
     /// `address_trace`'s own doc comment).
     pub fn address_of_span(&self, span: &Z80Span) -> Option<u16> {
         self.address_trace.get(&span.identity()).copied()
+    }
+
+    /// The real assembled address of the token starting at `offset` in `file`.
+    ///
+    /// Unlike [`Self::address_of_span`] this survives being asked from a
+    /// different parse of the same file, which is what lets an editor assemble
+    /// a project's entry point and then resolve addresses for a file that
+    /// entry merely `include`s. The caller is responsible for the offsets
+    /// still being meaningful - i.e. for the file not having changed since the
+    /// assemble.
+    pub fn address_of_file_offset(&self, file: &std::path::Path, offset: usize) -> Option<u16> {
+        let path = canonical_source_path(file.to_str()?)?;
+        self.address_trace_by_file.get(&(path, offset)).copied()
     }
 
     pub fn physical_output_address(&self) -> PhysicalAddress {
@@ -3876,6 +3913,7 @@ impl Env {
             if_token_adr_to_used_decision: HashMap::default(),
             if_token_adr_to_unused_decision: HashMap::default(),
             address_trace: HashMap::default(),
+            address_trace_by_file: HashMap::default(),
             requested_additional_pass: false,
 
             functions: Default::default(),
@@ -4262,8 +4300,18 @@ impl Env {
         let span = Some(outer_token.span());
 
         if self.options().assemble_options().record_token_addresses() {
-            self.address_trace
-                .insert(outer_token.span().identity(), self.logical_output_address());
+            let span = outer_token.span();
+            let address = self.logical_output_address();
+            self.address_trace.insert(span.identity(), address);
+            // Recorded a second way so a *different* parse of the same file
+            // can look it up - see `address_trace_by_file`. Canonicalised on
+            // the way in, because how a file was reached (`include "x.asm"`
+            // from one directory, an absolute path from another) must not
+            // change its identity.
+            if let Some(path) = canonical_source_path(span.filename()) {
+                self.address_trace_by_file
+                    .insert((path, span.offset_from_start()), address);
+            }
         }
 
         // handle warning if any - in practice, `build_processed_token`

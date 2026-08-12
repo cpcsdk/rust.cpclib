@@ -1173,6 +1173,12 @@ pub(super) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathB
 /// `filename`, stopping once a project-root marker or the filesystem root is
 /// reached. Shared by ctrl+click include navigation and the eager
 /// cross-file goto-definition fallback.
+/// Whether `dir` looks like the top of a project, by the same markers
+/// `resolve_include_path`/`ancestor_search_directories` already stop at.
+pub(super) fn is_project_root(dir: &std::path::Path) -> bool {
+    PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists())
+}
+
 pub fn resolve_include_path(filename: &str, doc_uri: &Url) -> Option<std::path::PathBuf> {
     let doc_path = doc_uri.to_file_path().ok()?;
     let mut dir = doc_path.parent()?;

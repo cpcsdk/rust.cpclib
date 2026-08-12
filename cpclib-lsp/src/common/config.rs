@@ -44,7 +44,22 @@ pub struct AsmConfig {
     /// Which `cpclib-asmoptim` built-in rule set the peephole-optimizer
     /// diagnostic, quickfix, and "Fix All" CodeLens all match against - see
     /// `PeepholeGoal`'s own doc comment.
-    pub peephole_goal: PeepholeGoal
+    pub peephole_goal: PeepholeGoal,
+    /// The project's entry file, relative to the project root - the one a real
+    /// build assembles (`src/sna.asm` in a typical demo).
+    ///
+    /// Address-aware analysis (`jp2jr`) needs the addresses a real build
+    /// produces, and a file that is only ever `include`d does not produce them
+    /// on its own: assembled alone it has no memory map, and the constants
+    /// that decide which conditional blocks exist live in the entry.
+    ///
+    /// Left empty, the entry is discovered by following the include graph back
+    /// to whichever `RUN`-bearing file reaches the open document. Set this only
+    /// when that is ambiguous - a shared file included by several programs has
+    /// genuinely different addresses in each, so the LSP refuses to guess and
+    /// simply reports no address-aware suggestions until told which to use.
+    #[serde(default)]
+    pub entry: Option<String>
 }
 
 impl Default for AsmConfig {
@@ -54,7 +69,8 @@ impl Default for AsmConfig {
             warnings_as_errors: false,
             warnings: AsmWarningClasses::default(),
             firmware_docs: true,
-            peephole_goal: PeepholeGoal::default()
+            peephole_goal: PeepholeGoal::default(),
+            entry: None
         }
     }
 }

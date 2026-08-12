@@ -20,12 +20,14 @@ use tower_lsp::lsp_types::Url;
 use crate::common::config::AsmConfig;
 
 pub mod autocomplete;
+mod build_defs;
 pub mod call_hierarchy;
 pub mod color;
 pub mod command;
 pub mod cycles;
 pub mod definition;
 pub mod diagnostics;
+mod entry;
 pub mod disassemble;
 pub mod embedded_basic;
 pub mod embedded_bndbuild;
@@ -72,7 +74,13 @@ pub struct AssemblyAnalyzer {
     /// genuinely need one (cross-file macro/`FUNCTION`/`STRUCT` lookup,
     /// real assembler warnings). Same `(version, Arc<T>)` shape as
     /// `parse_cache`.
-    env_cache: DashMap<Url, (i32, Arc<Env>)>,
+    /// `(document version, env, whether the assemble actually finished)`.
+    ///
+    /// The completeness flag matters because a *failed* assemble still yields a
+    /// usable partial `Env` - good enough for hover and `EQU` values, and
+    /// actively wrong for anything address-shaped. See
+    /// `expand::dry_run_env_cached_checked`.
+    env_cache: DashMap<Url, (i32, Arc<Env>, bool)>,
     /// Cache for `expand::local_symbols_env`'s result (a lightweight,
     /// non-assembling local `EQU`/`SET` resolution) - what most hover
     /// value-substitution needs actually use, since `dry_run_env`'s real
@@ -87,6 +95,14 @@ pub struct AssemblyAnalyzer {
     /// `env_cache` since it holds a different `Env` for the same
     /// document/version.
     local_env_cache: DashMap<Url, (i32, Arc<Env>)>,
+    /// Assembled project `Env`s, keyed by entry file.
+    ///
+    /// Assembling a whole demo is expensive - 37s for `birthtro` - so this is
+    /// not optional. The stored fingerprint is the newest modification time
+    /// across the project's sources, which changes exactly when a rebuild
+    /// would produce different addresses, and costs a `stat` per file to
+    /// compute rather than a full assemble.
+    project_env_cache: DashMap<std::path::PathBuf, (u128, Arc<Env>)>,
     /// Cache for `autocomplete::collect_symbols`'s result (labels/`EQU`/
     /// `ASSIGN`/macro/module/section names, extracted by walking a
     /// document's full flattened token listing) - same `(version, Arc<T>)`
@@ -113,6 +129,7 @@ impl AssemblyAnalyzer {
             parse_cache: DashMap::new(),
             env_cache: DashMap::new(),
             local_env_cache: DashMap::new(),
+            project_env_cache: DashMap::new(),
             symbols_cache: DashMap::new(),
             config: RwLock::new(Arc::new(AsmConfig::default()))
         }
