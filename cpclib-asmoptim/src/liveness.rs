@@ -140,15 +140,15 @@ where
         // assuming it touches no register - which is exactly the assumption
         // that is unsafe to make.
         //
-        // A label really is inert (it is a position, nothing executes), so it
-        // is the one thing that may be skipped. Everything else that reaches
+        // Labels and comments really are inert (a label is a position, a
+        // comment is never executed), so those may be skipped. Everything else that reaches
         // here does so *because* it was not understood: basm's multi-register
         // `push bc, hl`, for one, does not parse to a plain opcode, so it
         // arrives with no mnemonic at all. Treating that as inert made a
         // sprite loop's `ld b, height` look dead - the `push bc` that reads B
         // had simply been stepped over - and the optimizer offered to delete
         // it.
-        if op.mnemonic().is_none() && !op.is_label() {
+        if op.mnemonic().is_none() && !op.is_label() && !op.is_comment() {
             return Usage::Unknown;
         }
 

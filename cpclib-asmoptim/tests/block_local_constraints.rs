@@ -185,12 +185,19 @@ fn a_wildcard_in_the_replacement_writes_the_gap_back_out() {
     // those instructions by deleting them.
     let found = matches(&with_gap("    nop\n    ld c, 1\n"), INTERMEDIATE_REG);
     assert_eq!(found.len(), 1, "{found:?}");
-    assert_eq!(found[0].replacement.len(), 2, "{:?}", found[0].replacement);
+    // One entry per preserved instruction, in order, after the rewritten one.
+    assert_eq!(found[0].replacement.len(), 3, "{:?}", found[0].replacement);
     assert_eq!(found[0].replacement[0], "ld (hl), 5");
-    // The gap comes back, both instructions of it, in order.
-    let gap = &found[0].replacement[1];
-    assert!(gap.to_lowercase().contains("nop"), "{gap:?}");
-    assert!(gap.to_lowercase().contains("ld c"), "{gap:?}");
+    assert!(
+        found[0].replacement[1].to_lowercase().contains("nop"),
+        "{:?}",
+        found[0].replacement
+    );
+    assert!(
+        found[0].replacement[2].to_lowercase().contains("ld c"),
+        "{:?}",
+        found[0].replacement
+    );
 }
 
 #[test]
@@ -203,7 +210,7 @@ fn a_symbol_inside_a_preserved_gap_survives_verbatim() {
     );
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(
-        found[0].replacement[1].contains("MyRoutine"),
+        found[0].replacement.iter().any(|l| l.contains("MyRoutine")),
         "the symbol's own spelling must survive: {:?}",
         found[0].replacement
     );
@@ -216,4 +223,67 @@ fn an_empty_gap_contributes_no_replacement_line_at_all() {
     let found = matches(&with_gap(""), INTERMEDIATE_REG);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].replacement, vec!["ld (hl), 5".to_string()]);
+}
+
+// ---------------------------------------------------------------------------
+// The straight-line assumption a matched span rests on
+// ---------------------------------------------------------------------------
+
+/// `unnecessary-ld`, verbatim: a reload that repeats an earlier copy.
+const UNNECESSARY_LD: &str = "\
+pattern: remove unnecessary ld ?reg1, ?reg2
+name: unnecessary-ld
+2: ld ?reg2, ?reg1
+1: *
+0: ld ?reg1, ?reg2
+replacement:
+2: ld ?reg2, ?reg1
+1: *
+constraints:
+notIn(?reg1,I,R)
+notIn(?reg2,I,R)
+regsNotModified(1, ?reg1)
+regsNotModified(1, ?reg2)
+";
+
+#[test]
+fn a_label_inside_the_span_blocks_the_rule() {
+    // Straight from `birthtro`'s scroller. Nothing between the two loads
+    // *modifies* A or C, so every block-local constraint is satisfied - and
+    // the rewrite is still wrong, because `.entry` is jumped to from
+    // elsewhere and arrives with A holding something else entirely.
+    //
+    // Block-local constraints ask what a region's instructions do; they cannot
+    // see that the region is enterable partway through.
+    assert!(
+        matches(
+            "start:\n    ld c, a\n    jr .loop\n.entry\n    ld a, c\n    ret\n.loop\n    ret\n",
+            UNNECESSARY_LD
+        )
+        .is_empty(),
+        "the reload is only redundant on the fall-through path"
+    );
+
+    // The same two loads with an ordinary instruction between them instead of
+    // a jump and a label - now the region really is straight-line, and the
+    // rule fires.
+    let found = matches(
+        "start:\n    ld c, a\n    inc d\n    ld a, c\n    ret\n",
+        UNNECESSARY_LD
+    );
+    assert_eq!(found.len(), 1, "{found:?}");
+}
+
+#[test]
+fn a_branch_inside_the_span_blocks_the_rule() {
+    // The instruction after an unconditional jump does not run next, so a
+    // pattern spanning it is not describing a real execution sequence.
+    assert!(
+        matches(
+            "start:\n    ld c, a\n    jr .skip\n    ld a, c\n.skip\n    ret\n",
+            UNNECESSARY_LD
+        )
+        .is_empty(),
+        "the jump means the second load is not reached from the first"
+    );
 }

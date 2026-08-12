@@ -44,7 +44,13 @@ pub const SUPPORTED: &[&str] = &[
     "regsNotUsed",
     "flagsNotModified",
     "flagsNotUsed",
-    "regFlagEffectsNotUsedAfter"
+    "regFlagEffectsNotUsedAfter",
+    "atLeastOneCPUOp",
+    "evenPushPopsSPNotRead",
+    "memoryNotWritten",
+    "memoryNotUsed",
+    "noStackArguments",
+    "regsModified"
 ];
 
 /// Constraint names that need a real assembled address to evaluate (i.e.
@@ -166,6 +172,35 @@ pub trait LivenessContext {
     /// instruction's entire output dead?" needs, since it cannot name the
     /// registers in advance.
     fn writes_of(&self, index: u32) -> Option<Writes>;
+
+    /// Aggregate facts about the region matched by pattern line `index` that
+    /// the remaining constraints ask about, gathered in one pass.
+    fn region_summary(&self, index: u32) -> Option<RegionSummary>;
+
+    /// Whether the routine at `label` takes arguments off the stack.
+    ///
+    /// `None` when it cannot be determined - which includes not finding the
+    /// label at all.
+    fn callee_takes_stack_arguments(&self, label: &str) -> Option<bool>;
+}
+
+/// Aggregate facts about one matched region.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RegionSummary {
+    /// How many real CPU instructions it contains (labels do not count).
+    pub instruction_count: usize,
+    pub pushes: usize,
+    pub pops: usize,
+    /// Something other than a `push`/`pop` reads or writes `SP`.
+    ///
+    /// `push`/`pop` are excluded because they are what the balance count is
+    /// *for*; anything else touching SP (`ld sp,hl`, `add hl,sp`,
+    /// `ex (sp),hl`, a `call` or `ret`) means the region cares about the
+    /// stack's actual contents or depth, which is exactly what removing a
+    /// surrounding push/pop pair would change.
+    pub uses_sp_directly: bool,
+    pub reads_memory: bool,
+    pub writes_memory: bool
 }
 
 /// What a matched region produces.
@@ -221,6 +256,14 @@ impl LivenessContext for NoContext {
     fn writes_of(&self, _index: u32) -> Option<Writes> {
         None
     }
+
+    fn region_summary(&self, _index: u32) -> Option<RegionSummary> {
+        None
+    }
+
+    fn callee_takes_stack_arguments(&self, _label: &str) -> Option<bool> {
+        None
+    }
 }
 
 /// Evaluate one constraint against a candidate match.
@@ -247,7 +290,194 @@ where
         "flagsNotModified" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Write),
         "flagsNotUsed" => block_local(constraint, captures, ctx, Kind::Flag, Touch::Read),
         "regFlagEffectsNotUsedAfter" => reg_flag_effects_not_used_after(constraint, ctx),
+        "atLeastOneCPUOp" => at_least_one_cpu_op(constraint, ctx),
+        "evenPushPopsSPNotRead" => even_push_pops_sp_not_read(constraint, ctx),
+        "memoryNotWritten" => memory_untouched(constraint, captures, ctx, false),
+        "memoryNotUsed" => memory_untouched(constraint, captures, ctx, true),
+        "noStackArguments" => no_stack_arguments(constraint, captures, ctx),
+        "regsModified" => regs_modified(constraint, captures, ctx),
         _ => Verdict::Unknown
+    }
+}
+
+/// `regsModified(#, reg1, ..., regn)` - at least one of the named registers is
+/// written somewhere in the region matched by `#`.
+///
+/// The mirror of `regsNotModified`, and note it is an *any*, not an *all*:
+/// upstream returns `true` as soon as one named register is modified by one
+/// statement. Documented in the upstream file header but used by no rule in the
+/// corpus; implemented for completeness so no constraint name is left
+/// unevaluated.
+fn regs_modified<D, C>(constraint: &Constraint, captures: &Captures<'_, D>, ctx: &C) -> Verdict
+where
+    D: DataAccessElem,
+    C: LivenessContext
+{
+    let Some(args) = parse_regs_args(constraint, captures)
+    else {
+        return Verdict::Unknown;
+    };
+    for reg in args.items {
+        match ctx.region_use(args.line, Dependency::Reg(reg)) {
+            Some(used) if used.writes => return Verdict::Satisfied,
+            Some(_) => {},
+            None => return Verdict::Unknown
+        }
+    }
+    Verdict::Failed
+}
+
+/// `atLeastOneCPUOp(#)` - the region matched by `#` contains at least one real
+/// instruction.
+///
+/// Upstream's own note says exactly why it exists: *"to prevent eliminating the
+/// usual push af; pop af combination used for timing"*. An empty gap between a
+/// `push` and its `pop` means the pair is doing nothing to the registers - and
+/// on a CPC that is precisely the signature of deliberate cycle padding, not of
+/// dead code.
+fn at_least_one_cpu_op<C>(constraint: &Constraint, ctx: &C) -> Verdict
+where C: LivenessContext {
+    let [line] = constraint.args.as_slice()
+    else {
+        return Verdict::Unknown;
+    };
+    let Some(line) = line_index(line)
+    else {
+        return Verdict::Unknown;
+    };
+    match ctx.region_summary(line) {
+        Some(summary) => Verdict::from_bool(summary.instruction_count >= 1),
+        None => Verdict::Unknown
+    }
+}
+
+/// `evenPushPopsSPNotRead(#)` - the region has as many `push`es as `pop`s and
+/// does not otherwise touch `SP`.
+///
+/// What the rules using it need: if a `push`/`pop` pair around this region is
+/// to be removed, nothing inside may depend on the stack being one entry
+/// deeper. An unbalanced region would leave the stack shifted; one that reads
+/// `SP` (or, as upstream notes, copies it into `IX`/`IY` first - covered here
+/// because that copy itself reads `SP`) could observe the difference.
+///
+/// Stricter than upstream, which also folds `inc sp`/`dec sp` into the balance
+/// count. Here anything but a `push`/`pop` that touches `SP` simply refuses:
+/// the rules using this constraint gain nothing from the extra precision, and
+/// hand-written CPC code that moves `SP` by hand is doing something the
+/// analysis should not second-guess.
+fn even_push_pops_sp_not_read<C>(constraint: &Constraint, ctx: &C) -> Verdict
+where C: LivenessContext {
+    let [line] = constraint.args.as_slice()
+    else {
+        return Verdict::Unknown;
+    };
+    let Some(line) = line_index(line)
+    else {
+        return Verdict::Unknown;
+    };
+    match ctx.region_summary(line) {
+        Some(summary) => {
+            Verdict::from_bool(summary.pushes == summary.pops && !summary.uses_sp_directly)
+        },
+        None => Verdict::Unknown
+    }
+}
+
+/// `memoryNotWritten(#, exp)` / `memoryNotUsed(#, exp)`.
+///
+/// Deliberately **more conservative than upstream**. Upstream matches the
+/// address *syntactically* - its own documentation warns that "if you specify a
+/// constant and there happens to be a register that has that address, it will
+/// not match" - so a write through `(hl)` is treated as not touching `(ix+4)`
+/// even when `hl` happens to point there. That is a real aliasing hole, and
+/// this crate's whole policy is to decline rather than guess.
+///
+/// So the expression argument is not used to discriminate at all: a region that
+/// touches no memory satisfies the constraint, and one that does is `Unknown`.
+/// Sound, and it still fires for the case the rules care about (an untouched
+/// gap), at the cost of missing writes that are provably to a different slot.
+fn memory_untouched<D, C>(
+    constraint: &Constraint,
+    _captures: &Captures<'_, D>,
+    ctx: &C,
+    reads_count: bool
+) -> Verdict
+where
+    D: DataAccessElem,
+    C: LivenessContext
+{
+    let Some(line) = constraint.args.first().and_then(line_index)
+    else {
+        return Verdict::Unknown;
+    };
+    let Some(summary) = ctx.region_summary(line)
+    else {
+        return Verdict::Unknown;
+    };
+    let touched = summary.writes_memory || (reads_count && summary.reads_memory);
+    if touched {
+        // Might or might not be the location in question - undecidable.
+        Verdict::Unknown
+    }
+    else {
+        Verdict::Satisfied
+    }
+}
+
+/// `noStackArguments(label)` - the routine at `label` takes no arguments off
+/// the stack.
+///
+/// Used only by `tail-recursion` (`call X; ret` -> `jp X`). Upstream's own note
+/// on that rule is that it "is not safe for any code that passes parameters in
+/// the stack", and on a CPC there is a second, sharper version of the same
+/// hazard: reading *inline parameters* by popping the return address is a
+/// standard idiom, and after the rewrite that pop yields the caller's return
+/// address instead.
+///
+/// So this is answered by actually looking at the callee rather than assuming a
+/// calling convention - see `callee_takes_stack_arguments`.
+///
+/// Deliberately a different question from upstream's. Upstream scans the first
+/// ten instructions for SDCC's stack-frame prologue (`ld ix,0` / `add ix,sp`)
+/// and otherwise answers "no stack arguments". That is right for compiler
+/// output and wrong here: a CPC routine takes its arguments off the stack by
+/// popping its own return address, which that scan would never see. This
+/// implementation looks for exactly that instead, and answers `Unknown` for
+/// any routine it cannot follow to a plain `ret` - so the rule fires less
+/// often than upstream's, and never on a routine whose stack behaviour is
+/// unclear.
+fn no_stack_arguments<D, C>(
+    constraint: &Constraint,
+    captures: &Captures<'_, D>,
+    ctx: &C
+) -> Verdict
+where
+    D: DataAccessElem,
+    C: LivenessContext
+{
+    let [target] = constraint.args.as_slice()
+    else {
+        return Verdict::Unknown;
+    };
+    let Some(name) = operand_text(target, captures)
+    else {
+        return Verdict::Unknown;
+    };
+    match ctx.callee_takes_stack_arguments(&name) {
+        Some(true) => Verdict::Failed,
+        Some(false) => Verdict::Satisfied,
+        None => Verdict::Unknown
+    }
+}
+
+/// The text a constraint argument denotes - a literal name, or whatever a
+/// `?variable` is bound to.
+fn operand_text<D>(pattern: &OperandPattern, captures: &Captures<'_, D>) -> Option<String>
+where D: DataAccessElem {
+    match pattern {
+        OperandPattern::Ident(name) => Some(name.clone()),
+        OperandPattern::Variable(name) => captures.text_of(name),
+        _ => None
     }
 }
 
@@ -283,11 +513,29 @@ where C: LivenessContext {
         return Verdict::Unknown;
     };
 
+    // Upstream: "#1 must be a block with a single instruction."
+    match ctx.region_summary(effects_line) {
+        Some(summary) if summary.instruction_count == 1 => {},
+        Some(_) => return Verdict::Unknown,
+        None => return Verdict::Unknown
+    }
+
     let Some(writes) = ctx.writes_of(effects_line)
     else {
         return Verdict::Unknown;
     };
     if writes.has_side_effects {
+        return Verdict::Unknown;
+    }
+    // Upstream: "It will also fail if the op modifies register I or R."
+    // Those are the interrupt-vector and refresh registers - writing either is
+    // a deliberate act with consequences no dataflow analysis of this kind
+    // models (`ld r,a` in particular is used for its side effect on refresh).
+    if writes
+        .deps
+        .iter()
+        .any(|d| matches!(d, Dependency::Reg(Reg::I) | Dependency::Reg(Reg::R)))
+    {
         return Verdict::Unknown;
     }
     // An instruction that writes nothing at all is trivially one whose output
@@ -919,7 +1167,7 @@ mod tests {
              replacement:\n\
              constraints:\n\
              reachableByJr(0,?const1)\n\
-             memoryNotWritten(0,1)\n"
+             constraintFromAFutureRelease(0,A)\n"
         )
         .unwrap();
         assert!(!rules_need_addresses(&rules));
@@ -955,10 +1203,14 @@ mod tests {
                 args: Vec::new(),
                 check_after: None
             },
-            // Still genuinely unimplemented (4 real uses); the block-local
-            // family this used to name is supported now.
+            // Deliberately invented. Every constraint the upstream format
+            // documents is now implemented, so there is no real name left to
+            // use here - and that is exactly why this test still matters: it
+            // guards the skip-the-whole-rule mechanism that protects us from
+            // a constraint a *future* upstream release adds, which we would
+            // otherwise silently ignore while still applying the rule.
             Constraint {
-                name: "memoryNotWritten".to_string(),
+                name: "constraintFromAFutureRelease".to_string(),
                 args: Vec::new(),
                 check_after: None
             },

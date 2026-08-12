@@ -112,12 +112,14 @@ fn a_rule_whose_constraints_are_unsupported_is_skipped_entirely() {
     // evaluate. Skipping is the only safe behavior: matching anyway would
     // suggest an optimization whose safety condition was never checked.
     //
-    // `memoryNotWritten` is deliberately chosen as a constraint that is still
-    // genuinely unimplemented. This test has now had to be updated twice, as
-    // first `flagsNotUsedAfter` and then `regsNotModified` were implemented
-    // under it - each time it kept passing for an entirely different reason
-    // than its name claims, which is exactly why the counterpart test below
-    // exists.
+    // The name here is invented, because every constraint the upstream format
+    // documents is now implemented. That is precisely why the test still
+    // earns its place: it guards the mechanism protecting us from a constraint
+    // a *future* upstream release adds, which would otherwise be ignored while
+    // the rule was applied anyway. (This test had to be re-pointed three times
+    // as each constraint it named got implemented - each time it kept passing
+    // for a different reason than its name claimed, which is why the
+    // counterpart test below exists.)
     let with_unsupported = "\
 pattern: Replace cp 0 with or a
 name: cp02ora
@@ -125,7 +127,7 @@ name: cp02ora
 replacement:
 0: or a
 constraints:
-memoryNotWritten(0,1)
+constraintFromAFutureRelease(0,A)
 ";
     assert!(matches_for(" cp 0\n", with_unsupported).is_empty());
     // ... while the same source does match once that constraint is gone.

@@ -125,14 +125,19 @@ fn the_supported_rule_count_is_what_we_think_it_is() {
     // (`regsNotUsedAfter`/`flagsNotUsedAfter`, the two most common constraints
     // in the corpus at 87 and 78 uses); 120 -> 173 from the block-local family
     // (`regsNotModified`/`regsNotUsed`/`flagsNotModified`/`flagsNotUsed`,
-    // 45/13/11/1). The remaining 8 need `memoryNotWritten`/`memoryNotUsed`
-    // (the four `sdcc-*` rules, which would need real memory aliasing),
-    // `atLeastOneCPUOp` + `evenPushPopsSPNotRead` together (the three
-    // push/pop rules), or `noStackArguments` (SDCC calling-convention
-    // specific, and not meaningful for basm).
+    // 45/13/11/1), and the last 8 from `atLeastOneCPUOp`,
+    // `evenPushPopsSPNotRead`, `memoryNotWritten`, `memoryNotUsed` and
+    // `noStackArguments`.
+    //
+    // Every constraint any real rule uses is now evaluated. Note "evaluated"
+    // is not "always decidable": three of them answer conservatively where a
+    // sound answer is not available (memory aliasing, and a callee whose stack
+    // behaviour cannot be scanned), reporting `Unknown` - which fails, so the
+    // rule stays silent rather than guessing. `regsModified` is the one name
+    // left unimplemented, and no rule in the corpus uses it.
     assert_eq!(
         supported.len(),
-        177,
+        185,
         "the supported subset of the {} upstream rules changed - a constraint \
          was implemented or removed, or the corpus was re-vendored",
         rules.rules.len()
@@ -166,12 +171,20 @@ fn the_supported_rule_count_is_what_we_think_it_is() {
             "{name} should be unlocked by the block-local constraints"
         );
     }
-    // ...and the whole-instruction-effects one.
+    // ...the whole-instruction-effects one...
     for name in ["unnecessary-0args", "unnecessary-2args"] {
         assert!(
             supported.contains(&name),
             "{name} should be unlocked by regFlagEffectsNotUsedAfter"
         );
+    }
+    // ...and the stack/memory ones that close the corpus out.
+    for name in [
+        "unnecessary-push-pop",
+        "tail-recursion",
+        "sdcc-inefficient-index-register-use1"
+    ] {
+        assert!(supported.contains(&name), "{name} should now be supported");
     }
 }
 

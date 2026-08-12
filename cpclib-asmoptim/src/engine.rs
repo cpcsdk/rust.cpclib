@@ -10,15 +10,18 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
 
-use crate::constraints::{self, ConstraintContext, LivenessContext, RegionUse, Writes};
+use crate::constraints::{
+    self, ConstraintContext, LivenessContext, RegionSummary, RegionUse, Writes
+};
 use crate::dependency::Dependency;
+use crate::regflag::Reg;
 use crate::effects::effects_of;
 use crate::liveness::{self, Usage};
 use crate::stream::AnalysisStream;
 use crate::smc;
 use crate::dsl::{
-    Constraint, InstrPattern, MnemonicPattern, NumberedInstr, OperandPattern, RepeatCount, Rule,
-    RuleSet
+    BinOp, Constraint, InstrPattern, MnemonicPattern, NumberedInstr, OperandPattern, RepeatCount,
+    Rule, RuleSet
 };
 
 /// How many *instructions* a `*` wildcard may span.
@@ -108,7 +111,7 @@ where R: AddressResolver<T>
 
 impl<T, R> LivenessContext for MatchContext<'_, T, R>
 where
-    T: ListingElement,
+    T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem
 {
     fn is_used_after(&self, index: u32, dependency: Dependency) -> Option<Usage> {
@@ -134,6 +137,119 @@ where
         ))
     }
 
+    fn region_summary(&self, index: u32) -> Option<RegionSummary> {
+        let range = self.positions.get(&index)?.clone();
+        let mut summary = RegionSummary::default();
+        if range.is_empty() {
+            return Some(summary);
+        }
+
+        let ops = self.analysis.stream.ops();
+        let first = self.analysis.stream.first_op_of_token(range.start)?;
+        let last = self.analysis.stream.after_token(range.end - 1)?;
+
+        for op in ops.get(first..last)? {
+            // Labels and comments are inert: a label is a position, a
+            // comment is not executed at all. Everything else without a
+            // mnemonic is something this analysis cannot describe.
+            if op.is_label() || op.is_comment() {
+                continue;
+            }
+            if op.is_data() || op.mnemonic().is_none() {
+                return None;
+            }
+            let effects = effects_of(op)?;
+            summary.instruction_count += 1;
+            summary.reads_memory |= effects.reads_memory;
+            summary.writes_memory |= effects.writes_memory;
+
+            match op.mnemonic() {
+                Some(Mnemonic::Push) => summary.pushes += 1,
+                Some(Mnemonic::Pop) => summary.pops += 1,
+                _ => {
+                    // Everything else that touches SP is a direct use. `call`
+                    // and `ret` land here through their own SP effects, which
+                    // is right: they move the stack pointer for reasons this
+                    // balance count does not track.
+                    summary.uses_sp_directly |= effects
+                        .reads
+                        .iter()
+                        .chain(effects.writes.iter())
+                        .any(|r| *r == Reg::Sp);
+                }
+            }
+        }
+        Some(summary)
+    }
+
+    fn callee_takes_stack_arguments(&self, label: &str) -> Option<bool> {
+        let start = *self.analysis.labels.get(label)?;
+        let ops = self.analysis.stream.ops();
+
+        // A straight-line scan to the routine's first `ret`. Anything that
+        // diverges from that - a jump, a nested call, an instruction whose
+        // effects are unknown - is answered `None` (undecidable) rather than
+        // guessed at, because getting this wrong turns `call X; ret` into
+        // `jp X` for a routine that reads its arguments off the stack.
+        let mut depth: i32 = 0;
+        for op in ops.get(start..)? {
+            // Labels and comments are inert: a label is a position, a
+            // comment is not executed at all. Everything else without a
+            // mnemonic is something this analysis cannot describe.
+            if op.is_label() || op.is_comment() {
+                continue;
+            }
+            if op.is_data() || op.mnemonic().is_none() {
+                return None;
+            }
+            let effects = effects_of(op)?;
+            match op.mnemonic() {
+                Some(Mnemonic::Push) => depth += 1,
+                Some(Mnemonic::Pop) => {
+                    depth -= 1;
+                    // Popping something it never pushed: the routine is
+                    // reaching into the caller's stack frame, which is exactly
+                    // what "takes stack arguments" means. On a CPC this is
+                    // also how a routine reads inline parameters placed after
+                    // its own call site.
+                    if depth < 0 {
+                        return Some(true);
+                    }
+                },
+                Some(Mnemonic::Ret) => {
+                    // A conditional `ret` leaves the routine along a path this
+                    // scan does not follow; only a plain one ends it.
+                    return if op.arg1().is_none() && depth == 0 {
+                        Some(false)
+                    }
+                    else {
+                        None
+                    };
+                },
+                _ => {
+                    if effects
+                        .reads
+                        .iter()
+                        .chain(effects.writes.iter())
+                        .any(|r| *r == Reg::Sp)
+                    {
+                        return None;
+                    }
+                    // A jump or call moves control somewhere this scan does not
+                    // model.
+                    if matches!(
+                        op.mnemonic(),
+                        Some(Mnemonic::Jp | Mnemonic::Jr | Mnemonic::Jq)
+                            | Some(Mnemonic::Call | Mnemonic::Rst | Mnemonic::Djnz)
+                    ) {
+                        return None;
+                    }
+                }
+            }
+        }
+        None
+    }
+
     fn writes_of(&self, index: u32) -> Option<Writes> {
         let range = self.positions.get(&index)?.clone();
         if range.is_empty() {
@@ -146,7 +262,10 @@ where
 
         let mut writes = Writes::default();
         for op in ops.get(first..last)? {
-            if op.is_label() {
+            // Labels and comments are inert: a label is a position, a
+            // comment is not executed at all. Everything else without a
+            // mnemonic is something this analysis cannot describe.
+            if op.is_label() || op.is_comment() {
                 continue;
             }
             if op.is_data() || op.mnemonic().is_none() {
@@ -186,7 +305,10 @@ where
 
         let mut used = RegionUse::default();
         for op in ops.get(first..last)? {
-            if op.is_label() {
+            // Labels and comments are inert: a label is a position, a
+            // comment is not executed at all. Everything else without a
+            // mnemonic is something this analysis cannot describe.
+            if op.is_label() || op.is_comment() {
                 continue;
             }
             // Same policy as the forward walk: data, or anything carrying no
@@ -227,6 +349,9 @@ pub struct Captures<'a, D> {
     /// Name-only bindings: a `?op` mnemonic, or a register name a constraint
     /// derived rather than matched (see [`Captures::bind_text`]).
     texts: HashMap<String, String>,
+    /// Names in `texts` whose spelling came from the source and must survive
+    /// rendering untouched - see [`Captures::bind_verbatim_text`].
+    verbatim: std::collections::HashSet<String>,
     counts: HashMap<String, u32>
 }
 
@@ -235,6 +360,7 @@ impl<D> Default for Captures<'_, D> {
         Self {
             operands: HashMap::new(),
             texts: HashMap::new(),
+            verbatim: std::collections::HashSet::new(),
             counts: HashMap::new()
         }
     }
@@ -245,6 +371,7 @@ impl<D> Clone for Captures<'_, D> {
         Self {
             operands: self.operands.clone(),
             texts: self.texts.clone(),
+            verbatim: self.verbatim.clone(),
             counts: self.counts.clone()
         }
     }
@@ -275,8 +402,9 @@ impl<'a, D: DataAccessElem> Captures<'a, D> {
     fn is_keyword_binding(&self, name: &str) -> bool {
         if self.texts.contains_key(name) {
             // Derived by a constraint (a register half) or captured from a
-            // mnemonic slot - keyword either way.
-            return true;
+            // mnemonic slot - keyword either way, unless it was bound
+            // verbatim because its spelling is the user's own.
+            return !self.verbatim.contains(name);
         }
         self.operands.get(name).is_some_and(|op| {
             op.is_register8()
@@ -334,6 +462,22 @@ impl<'a, D: DataAccessElem> Captures<'a, D> {
                 true
             }
         }
+    }
+
+    /// Bind `name` to text that must be rendered back **exactly** as written.
+    ///
+    /// [`Self::bind_text`] is for keywords (register names, mnemonics), which
+    /// may be case-folded to a canonical spelling. This is for anything whose
+    /// spelling is the user's: the displacement of an indexed access is
+    /// usually a number but is just as often a symbol (`(ix + FRAME_COUNT)`),
+    /// and folding that would rewrite it into a different symbol - the exact
+    /// failure this crate has been bitten by before with labels.
+    fn bind_verbatim_text(&mut self, name: &str, text: String) -> bool {
+        if !self.bind_text(name, text) {
+            return false;
+        }
+        self.verbatim.insert(name.to_string());
+        true
     }
 
     /// Bind an operand, requiring equality if the name is already bound.
@@ -394,7 +538,7 @@ impl PeepholeMatch {
 /// to evaluate those too.
 pub fn find_matches<T>(tokens: &[&T], rules: &RuleSet) -> Vec<PeepholeMatch>
 where
-    T: ListingElement,
+    T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem
 {
     find_matches_with_resolver(tokens, rules, &NoResolver)
@@ -408,7 +552,7 @@ pub fn find_matches_with_resolver<T, R>(
     resolver: &R
 ) -> Vec<PeepholeMatch>
 where
-    T: ListingElement,
+    T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem,
     R: AddressResolver<T>
 {
@@ -428,6 +572,54 @@ where
     // so computed here rather than per candidate match.
     let protected = smc::protected_tokens(tokens);
 
+    /// Does this span really execute from its first instruction to its last?
+    ///
+    /// Every pattern is written as though it does, and every block-local
+    /// constraint (`regsNotModified` and friends) reasons on that basis - they
+    /// ask what the *instructions* in a region do, which only answers the
+    /// question if those instructions are what runs, in that order.
+    ///
+    /// Two things break it, both taken from real code this got wrong:
+    ///
+    /// * **A label inside the span.** It is an entry point, so execution can
+    ///   arrive in the middle with entirely different register contents.
+    ///   `unnecessary-ld` matched `ld c,a` ... `ld a,c` across
+    ///   `jr .add_instruction_loop` / `.try_handle_nop:` in `birthtro`'s
+    ///   scroller and offered to delete the reload - which is only valid on the
+    ///   fall-through path, not for anything jumping to that label.
+    /// * **A branch inside the span**, other than as its last instruction:
+    ///   whatever follows it does not run next.
+    ///
+    /// A `call` is deliberately not a branch here - it comes back, so the
+    /// sequence continues (which is what lets `tail-recursion` match
+    /// `call X; ret`).
+    fn span_runs_straight_through<T>(tokens: &[&T], start: usize, end: usize) -> bool
+    where T: ListingElement {
+        for (offset, token) in tokens[start..end].iter().enumerate() {
+            let index = start + offset;
+            if index > start && token.is_label() {
+                return false;
+            }
+            let is_branch = matches!(
+                token.mnemonic(),
+                Some(
+                    Mnemonic::Jp
+                        | Mnemonic::Jr
+                        | Mnemonic::Jq
+                        | Mnemonic::Djnz
+                        | Mnemonic::Ret
+                        | Mnemonic::Reti
+                        | Mnemonic::Retn
+                        | Mnemonic::Rst
+                )
+            );
+            if is_branch && index + 1 < end {
+                return false;
+            }
+        }
+        true
+    }
+
     let mut start = 0usize;
     while start < tokens.len() {
         let mut advanced = false;
@@ -439,7 +631,9 @@ where
                 // going to do with it. Dropped *after* matching rather than by
                 // skipping the region, so `start` still advances past it and
                 // a later rule cannot re-propose the same span.
-                if !m.range().any(|i| protected.contains(&i)) {
+                if !m.range().any(|i| protected.contains(&i))
+                    && span_runs_straight_through(tokens, m.start, m.end)
+                {
                     matches.push(m);
                 }
                 start = next;
@@ -462,7 +656,7 @@ where
 /// and any analysis crossing it fails closed.
 fn resolve_jq<T, R>(token: &T, resolver: &R) -> Option<Mnemonic>
 where
-    T: ListingElement,
+    T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem,
     R: AddressResolver<T>
 {
@@ -497,7 +691,7 @@ fn try_rule<'t, T, R>(
     analysis: &'t Analysis<'t, T>
 ) -> Option<PeepholeMatch>
 where
-    T: ListingElement,
+    T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem,
     R: AddressResolver<T>
 {
@@ -564,7 +758,7 @@ fn match_lines<'a, T>(
     positions: &mut HashMap<u32, std::ops::Range<usize>>
 ) -> Option<usize>
 where
-    T: ListingElement,
+    T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem
 {
     let Some(line) = lines.get(line_idx)
@@ -721,7 +915,7 @@ fn match_instr<'a, T>(
     captures: &mut Captures<'a, T::DataAccess>
 ) -> bool
 where
-    T: ListingElement,
+    T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem
 {
     let InstrPattern::Instr { mnemonic, operands } = pattern
@@ -796,11 +990,76 @@ where D: DataAccessElem {
 
         OperandPattern::Ident(name) => match_ident(name, operand),
 
+        // `(ix + 4)`, `(?regixiy + ?const1)` - an indexed access, matched
+        // against its parts rather than its text.
+        //
+        // Text comparison cannot do this job: a `?variable` inside the pattern
+        // has nothing to render *to* until it binds, and even the fully
+        // literal form fails because the pattern's spelling and the operand's
+        // `Display` need not agree on spacing or number base. The result was
+        // that no indexed operand ever matched - which silently disabled every
+        // rule using one, the four `sdcc-*` index-register rules included.
+        OperandPattern::Indirect(inner)
+            if matches!(
+                inner.as_ref(),
+                OperandPattern::Binary {
+                    op: BinOp::Add,
+                    ..
+                }
+            ) && operand.is_indexregister_with_index() =>
+        {
+            let OperandPattern::Binary { lhs, rhs, .. } = inner.as_ref()
+            else {
+                return false;
+            };
+            let Some(register) = operand.get_indexregister16()
+            else {
+                return false;
+            };
+            // The base half names the index register, the offset half its
+            // displacement; either may be a literal or a capture.
+            let base_ok = match lhs.as_ref() {
+                OperandPattern::Ident(name) => name.eq_ignore_ascii_case(&register.to_string()),
+                // Bound to the *register name*, not to the whole access: the
+                // rules go on to test it with `in(?regixiy,ix,iy)`, which
+                // compares against the binding's text.
+                OperandPattern::Variable(name) => {
+                    name.starts_with("reg") && captures.bind_text(name, register.to_string())
+                },
+                _ => false
+            };
+            if !base_ok {
+                return false;
+            }
+            // `get_index` rather than `get_expression`: an indexed access keeps
+            // its displacement (and the `+`/`-` that introduced it) in its own
+            // slot, and `get_expression` returns nothing for one.
+            let Some((_, offset)) = operand.get_index()
+            else {
+                return false;
+            };
+            match rhs.as_ref() {
+                OperandPattern::Number(value) => {
+                    offset.is_value() && i64::from(offset.value()) == *value
+                },
+                // Bound to the displacement's own text - it has no
+                // `DataAccess` to point at, and it may be a symbol, so it is
+                // bound verbatim rather than as a foldable keyword.
+                OperandPattern::Variable(name) => {
+                    // `to_expr().to_simplified_string()` rather than `Display`:
+                    // `ExprElement` is generic over the token type and carries
+                    // no `Display` bound of its own.
+                    captures
+                        .bind_verbatim_text(name, offset.to_expr().to_simplified_string())
+                },
+                _ => false
+            }
+        },
+
         OperandPattern::Indirect(_) | OperandPattern::Binary { .. } | OperandPattern::Unary { .. } => {
-            // Structural operands (`(hl)`, `(?ix+?const)`, arithmetic) are
-            // compared by rendered text - enough for the rules this crate
-            // supports today, and never produces a false positive because a
-            // mismatch just fails the rule.
+            // Everything else structural (`(hl)`, plain arithmetic) is still
+            // compared by rendered text - enough for the rules that use it, and
+            // never a false positive because a mismatch just fails the rule.
             render_pattern_text(pattern)
                 .is_some_and(|text| text.eq_ignore_ascii_case(&operand.to_string()))
         }
@@ -850,7 +1109,7 @@ fn render_replacement<T>(
     positions: &HashMap<u32, std::ops::Range<usize>>
 ) -> Option<Vec<String>>
 where
-    T: ListingElement,
+    T: ListingElement + std::fmt::Display,
     T::DataAccess: DataAccessElem
 {
     let mut rendered = Vec::with_capacity(lines.len());
@@ -861,31 +1120,33 @@ where
         // with these lines: emitting nothing here would silently delete the
         // very instructions the rule promised to preserve.
         if matches!(line.instr, InstrPattern::Wildcard) {
-            // Rendered from the parsed token, i.e. canonically: mnemonics come
-            // back upper case and `1+2` as `0x1 + 0x2`. Symbols are *not*
-            // touched (`MyRoutine` and `.skip` survive verbatim), so this is
-            // safe - but applying such a fix does reformat instructions the
-            // rule never intended to change, and drops their comments, the
-            // same way `cpclib_basmopt::apply_fixes` already does for a
-            // matched line's trailing comment.
+            // Rendered through `Display`, which is what preserves the user's
+            // own text: a `LocatedToken` displays its source span, so case,
+            // number base (`#7F10` stays `#7F10`) and comments all survive
+            // into a region the rule promised not to change. A spanless
+            // `Token` falls back to its canonical rendering, which is the best
+            // that can be done without a source to quote.
             //
-            // A `LocatedToken` could render its own source span verbatim
-            // instead, which would be strictly nicer. Not done here because it
-            // would make the two `ListingElement` implementations produce
-            // *different* replacement text for the same source, and the engine
-            // deliberately asserts they agree (see `tests/common`).
+            // The two therefore produce deliberately *different text* for the
+            // same source, and the parity tests compare what that text parses
+            // to rather than the text itself (see `tests/common`).
             let range = positions.get(&line.index)?.clone();
             // A wildcard that matched nothing contributes no line at all,
             // rather than a blank one.
             if range.is_empty() {
                 continue;
             }
-            let kept: Vec<String> = tokens
-                .get(range)?
-                .iter()
-                .map(|token| token.to_token().to_string().trim().to_string())
-                .collect();
-            rendered.push(kept.join(" : "));
+            // One replacement entry per instruction, rather than joining them
+            // with basm's `:` separator. A comment runs to end of line, so
+            // joining would fold everything after it *into* the comment -
+            // turning `ld bc,#7f10 ; set the gate array : out (c),c` into a
+            // silent deletion of the `out`.
+            for token in tokens.get(range)? {
+                let text = token.to_string().trim().to_string();
+                if !text.is_empty() {
+                    rendered.push(text);
+                }
+            }
         }
         else {
             rendered.push(render_instr(&line.instr, captures)?);

@@ -143,6 +143,19 @@ where T: ListingElement
         }
     }
 
+    /// Whether this is a comment.
+    ///
+    /// Inert like a label, and worth its own accessor because the alternative
+    /// is treating it as "carries no mnemonic, therefore unanalysable" - which
+    /// would make a single comment inside a matched region defeat every
+    /// constraint asking what that region does, in code that is full of them.
+    pub fn is_comment(&self) -> bool {
+        match self {
+            Self::Other(t) => t.is_comment(),
+            _ => false
+        }
+    }
+
     /// Whether this emits raw data (`db`/`dw`). Reaching one while walking
     /// execution flow means the analysis has lost the thread and must fail
     /// closed.

@@ -41,9 +41,39 @@ pub enum OptimizationGoal {
     Speed
 }
 
-/// Whether a rule applies to the Amstrad CPC, by its upstream tags.
+/// Rules held back on the CPC because an instruction's *duration* is part of
+/// its meaning here.
 ///
-/// Upstream documents the tag vocabulary in `pbo-patterns.txt`'s own header:
+/// These four delete an instruction on the grounds that every register and flag
+/// it writes is dead. That reasoning is sound about data and useless about
+/// time: an instruction whose entire output is dead is, on this platform,
+/// overwhelmingly likely to have been written for exactly that reason - to burn
+/// a known number of NOPs. Measured against the real sources in
+/// `current_projects`, every single one of the 16 suggestions these produced was
+/// timing padding (`cp (hl)` in the Arkos players, sitting under a
+/// `;Waits for 29 cycles` comment), and applying any of them would break a
+/// cycle-exact music player.
+///
+/// This is the same judgement upstream already makes twice: it filters
+/// `tstatez80` rules for t-state-based Z80s, and its own `unnecessary-push-pop`
+/// rules carry an `atLeastOneCPUOp` constraint whose stated purpose is *"to
+/// prevent eliminating the usual push af; pop af combination used for timing"*.
+/// Upstream simply has no equivalent guard for the single-instruction case.
+///
+/// Deliberately narrow: only the rules that delete purely on dead-output
+/// grounds. Rules that *rewrite* an instruction, or delete a provably
+/// meaningless one like `ld b,b`, are untouched - and a user who wants these
+/// back can supply them through `basmopt --rules`.
+const TIMING_HOSTILE_RULES: &[&str] = &[
+    "unnecessary-0args",
+    "unnecessary-1args",
+    "unnecessary-2args",
+    "unnecessary-2args-ex"
+];
+
+/// Whether a rule applies to the Amstrad CPC.
+///
+/// Upstream documents its tag vocabulary in `pbo-patterns.txt`'s own header:
 ///
 /// * `cpc` - "will only be loaded when z80cpc cpu is selected". That is us.
 /// * `tstatez80` - "will only be loaded on t-state-based z80s (z80/z80msx)".
@@ -56,8 +86,16 @@ pub enum OptimizationGoal {
 /// An unknown tag is treated as applicable: a future upstream tag should not
 /// silently disable rules, and the engine's own constraint checking is what
 /// actually guarantees safety.
+///
+/// On top of the tags, [`TIMING_HOSTILE_RULES`] are held back by name.
 pub fn is_applicable(rule: &Rule) -> bool {
-    !rule.tags.iter().any(|tag| tag == "tstatez80")
+    if rule.tags.iter().any(|tag| tag == "tstatez80") {
+        return false;
+    }
+    !rule
+        .name
+        .as_deref()
+        .is_some_and(|name| TIMING_HOSTILE_RULES.contains(&name))
 }
 
 /// Parse one of the vendored files, resolving its `include` against the others.
@@ -181,9 +219,11 @@ mod tests {
     #[test]
     fn the_executable_builtin_rules_are_known() {
         let neutral = supported_names(OptimizationGoal::Neutral);
+        // 185 base rules are *evaluable* (see `upstream_engine.rs`); four are
+        // held back here as timing-hostile on the CPC.
         assert_eq!(
             neutral.len(),
-            177,
+            181,
             "executable rule count changed; see upstream_engine.rs's own \
              assertion for the same number over the raw corpus"
         );
@@ -208,7 +248,8 @@ mod tests {
         for name in [
             "unnecessary-intermediate-reg",
             "unnecessary-ld-after-pop",
-            "unnecessary-2args"
+            "unnecessary-push-pop",
+            "tail-recursion"
         ] {
             assert!(
                 neutral.contains(&name),
@@ -220,5 +261,52 @@ mod tests {
         let size = supported_names(OptimizationGoal::Size);
         assert!(size.len() > supported_names(OptimizationGoal::Neutral).len());
         assert!(size.contains(&"jp2jr"));
+    }
+}
+
+#[cfg(test)]
+mod timing_tests {
+    use super::*;
+
+    /// The four dead-output deletion rules must not reach a CPC user by
+    /// default - see `TIMING_HOSTILE_RULES`.
+    #[test]
+    fn the_timing_hostile_rules_are_held_back() {
+        for goal in [
+            OptimizationGoal::Neutral,
+            OptimizationGoal::Size,
+            OptimizationGoal::Speed
+        ] {
+            let names: Vec<&str> = builtin_rules(goal)
+                .rules
+                .iter()
+                .filter_map(|r| r.name.as_deref())
+                .collect();
+            for held in TIMING_HOSTILE_RULES {
+                assert!(
+                    !names.contains(held),
+                    "{held} must not be active under {goal:?}"
+                );
+            }
+        }
+    }
+
+    /// ...but they are still *evaluable*, so this is a deliberate policy
+    /// choice about the CPC rather than a gap in the engine. A user supplying
+    /// them through `--rules` gets a working rule, not a silently skipped one.
+    #[test]
+    fn the_held_back_rules_are_still_fully_supported() {
+        let all = parse_vendored(BASE);
+        for held in TIMING_HOSTILE_RULES {
+            let rule = all
+                .rules
+                .iter()
+                .find(|r| r.name.as_deref() == Some(held))
+                .unwrap_or_else(|| panic!("{held} must exist in the corpus"));
+            assert!(
+                crate::constraints::all_supported(&rule.constraints),
+                "{held} is held back by policy, not because it cannot be evaluated"
+            );
+        }
     }
 }
