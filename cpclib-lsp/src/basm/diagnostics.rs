@@ -138,17 +138,29 @@ impl AssemblyAnalyzer {
             if self.config().warnings.unused_bindings {
                 collect_unused_binding_warnings(&listing, document, &mut diagnostics);
             }
-            if self.config().warnings.peephole_optimizer {
-                let peephole_addresses =
-                    super::peephole::address_source(self, document, own_complete);
+            // Either the warning class is on, or the user asked for this
+            // document by hand (`cpclib.analyzePeephole`). The default is off
+            // because answering costs a full project assemble.
+            if self.peephole_wanted(&document.uri) {
+                let (peephole_addresses, own_env) =
+                    super::peephole::address_source(self, document, &listing);
+                let before = diagnostics.len();
                 super::peephole::collect_peephole_warnings(
                     &listing,
-                    &env,
                     self.config().peephole_goal.into(),
-                    peephole_addresses.as_addresses(),
+                    peephole_addresses.as_addresses(own_env.as_ref()),
                     &document.uri,
                     &mut diagnostics
                 );
+                // A request narrowed to a selection reports only what falls
+                // inside it - but note the analysis above ran over the whole
+                // document regardless, because a match's safety depends on
+                // the code around it.
+                if let Some(scope) = self.peephole_scope(&document.uri) {
+                    let mut kept = diagnostics.split_off(before);
+                    kept.retain(|d| super::peephole::overlaps(&d.range, &scope));
+                    diagnostics.extend(kept);
+                }
             }
         }
 
@@ -588,6 +600,14 @@ mod tests {
         AssemblyAnalyzer::new().analyze(&document)
     }
 
+    /// The peephole pass is off by default (a full project assemble is not a
+    /// keystroke-time cost), so a test about it has to ask for it.
+    fn diagnostics_with_peephole(text: &str) -> Vec<Diagnostic> {
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.peephole_optimizer = true;
+        diagnostics_for_with_config(text, config)
+    }
+
     fn diagnostics_for_with_config(
         text: &str,
         config: crate::common::config::AsmConfig
@@ -931,6 +951,10 @@ mod tests {
         let uri = Url::parse("file:///t.asm").unwrap();
         let document = Document::new(uri, text.to_string(), 1);
         let analyzer = AssemblyAnalyzer::new();
+        // This test is about the diagnostic, so the pass has to be on.
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.peephole_optimizer = true;
+        analyzer.set_config(config);
 
         // Simulate a quickfix request (or hover, or anything else built on
         // `self.parse_document`) running before diagnostics ever do.
@@ -974,7 +998,7 @@ mod tests {
     #[test]
     fn a_peephole_optimisation_is_reported_as_a_warning() {
         let text = "org 0x4000\n ld b, b\n ret\n";
-        let diags = diagnostics_for(text);
+        let diags = diagnostics_with_peephole(text);
         let peephole: Vec<_> = diags
             .iter()
             .filter(|d| d.source.as_deref() == Some("basm-peephole"))
@@ -998,25 +1022,97 @@ mod tests {
     }
 
     #[test]
-    fn disabling_peephole_optimizer_suppresses_that_diagnostic() {
+    fn peephole_optimizer_is_off_unless_asked_for() {
         let text = "org 0x4000\n ld b, b\n ret\n";
-        let enabled = diagnostics_for(text);
+        // The default: nothing, because deciding this needs a whole-project
+        // assemble and the user did not ask for one.
+        let by_default = diagnostics_for(text);
+        assert!(
+            !by_default
+                .iter()
+                .any(|d| d.source.as_deref() == Some("basm-peephole")),
+            "the peephole pass must not run unasked: {by_default:?}"
+        );
+
+        let enabled = diagnostics_with_peephole(text);
         assert!(
             enabled
                 .iter()
                 .any(|d| d.source.as_deref() == Some("basm-peephole")),
             "{enabled:?}"
         );
+    }
 
-        let mut config = crate::common::config::AsmConfig::default();
-        config.warnings.peephole_optimizer = false;
-        let disabled = diagnostics_for_with_config(text, config);
-        assert!(
-            !disabled
-                .iter()
-                .any(|d| d.source.as_deref() == Some("basm-peephole")),
-            "{disabled:?}"
+    /// The other way in: leave the warning class off, and ask for this one
+    /// document by hand the way `cpclib.analyzePeephole` does.
+    #[test]
+    fn an_explicit_request_reports_peephole_matches_with_the_class_still_off() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let document = Document::new(uri.clone(), "org 0x4000\n ld b, b\n ret\n".into(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let peephole = |diags: Vec<Diagnostic>| {
+            diags
+                .into_iter()
+                .filter(|d| d.source.as_deref() == Some("basm-peephole"))
+                .count()
+        };
+
+        assert_eq!(peephole(analyzer.analyze(&document)), 0);
+
+        analyzer.request_peephole(&uri, None);
+        assert_eq!(
+            peephole(analyzer.analyze(&document)),
+            1,
+            "asking for this document must be enough, with the class off"
         );
+
+        // Only this document: the request is per-URI, not global.
+        let other_uri = Url::parse("file:///other.asm").unwrap();
+        let other = Document::new(other_uri, "org 0x4000\n ld b, b\n ret\n".into(), 1);
+        assert_eq!(peephole(analyzer.analyze(&other)), 0);
+
+        analyzer.clear_peephole_request(Some(&uri));
+        assert_eq!(peephole(analyzer.analyze(&document)), 0);
+    }
+
+    /// A request narrowed to a selection reports only what falls inside it.
+    /// The analysis itself still covers the whole document - a match is only
+    /// safe because of the code around it - so this is a filter on the
+    /// output, which is what the test checks: the same document reports more
+    /// when the scope is widened, not something different.
+    #[test]
+    fn a_scoped_request_reports_only_matches_inside_the_selection() {
+        let uri = Url::parse("file:///t.asm").unwrap();
+        let text = "org 0x4000\n ld b, b\n nop\n ld c, c\n ret\n";
+        let document = Document::new(uri.clone(), text.into(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let peephole_lines = |diags: Vec<Diagnostic>| {
+            let mut lines: Vec<u32> = diags
+                .into_iter()
+                .filter(|d| d.source.as_deref() == Some("basm-peephole"))
+                .map(|d| d.range.start.line)
+                .collect();
+            lines.sort();
+            lines
+        };
+
+        analyzer.request_peephole(&uri, None);
+        assert_eq!(peephole_lines(analyzer.analyze(&document)), vec![1, 3]);
+
+        // Just the `ld b, b` line.
+        analyzer.request_peephole(&uri, Some(Range {
+            start: Position {
+                line: 1,
+                character: 0
+            },
+            end: Position {
+                line: 1,
+                character: 8
+            }
+        }));
+        assert_eq!(peephole_lines(analyzer.analyze(&document)), vec![1]);
     }
 
     #[test]

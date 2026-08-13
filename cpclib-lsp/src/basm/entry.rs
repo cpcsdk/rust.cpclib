@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 
 use tower_lsp::lsp_types::Url;
 
+use cpclib_tokens::ListingElement;
 use cpclib_tokens::symbols::SymbolsTableTrait;
 
 use super::definition::{extract_include_filenames, resolve_include_path};
@@ -42,20 +43,43 @@ pub(super) enum Entry {
 
 /// Does this text define the program's entry point?
 ///
-/// A line-anchored text scan, deliberately matching how
-/// [`extract_include_filenames`] works: parsing every assembly file in a
-/// workspace to answer this would cost far more than the question is worth,
-/// and both directions of error are safe - a missed `RUN` loses coverage, a
-/// spurious one is filtered out again by the reachability check below.
+/// Asked of the parser, not of the raw lines. A line scan gets this wrong in
+/// both directions: basm allows several instructions per line, so `nop : run
+/// start` declares an entry that no line-anchored scan sees, and a `RUN`
+/// inside a block comment is one that it wrongly believes.
+///
+/// Parsing every assembly file in a workspace would cost far more than the
+/// question is worth, so a substring prefilter guards it: a file whose text
+/// does not contain `run` at all cannot hold a `RUN` directive, which makes
+/// the prefilter incapable of a false negative while keeping the common case
+/// a scan rather than a parse.
 fn declares_run(text: &str) -> bool {
-    text.lines().any(|line| {
-        let trimmed = line.trim_start();
-        let mut words = trimmed.split_whitespace();
-        words
-            .next()
-            .is_some_and(|w| w.eq_ignore_ascii_case("run"))
-            && words.next().is_some()
-    })
+    if !contains_run_word(text) {
+        return false;
+    }
+    let Ok(listing) = cpclib_asm::parser::parse_z80_str(text)
+    else {
+        // A file that does not parse standalone is common enough - fragments
+        // meant to be `include`d lean on macros their includer defines. Fall
+        // back to the line scan this used to be, which is wrong in the ways
+        // described above but never worse than what was here before.
+        return text.lines().any(|line| {
+            let mut words = line.split_whitespace();
+            words
+                .next()
+                .is_some_and(|w| w.eq_ignore_ascii_case("run"))
+                && words.next().is_some()
+        });
+    };
+    cpclib_asm::flatten::flatten_for_analysis(listing.iter()).any(|t| t.is_run())
+}
+
+/// Case-insensitive `run` substring, without allocating a lowercased copy of
+/// the file.
+fn contains_run_word(text: &str) -> bool {
+    text.as_bytes()
+        .windows(3)
+        .any(|w| w.eq_ignore_ascii_case(b"run"))
 }
 
 /// The project root for `doc_uri`: the highest ancestor directory still inside
@@ -74,29 +98,158 @@ fn project_root(doc_uri: &Url) -> Option<PathBuf> {
     }
 }
 
-/// Every `.asm` file under `root`, with its text.
-fn workspace_sources(root: &Path) -> Vec<(PathBuf, String)> {
-    walkdir::WalkDir::new(root)
+/// Everything one traversal of a project needs to answer both questions asked
+/// of it: *which file is the entry* (needs the sources) and *has anything
+/// changed* (needs their timestamps).
+///
+/// One walk, because these were two - `entry_for` reading every `.asm` and
+/// `sources_fingerprint` stat-ing them all again, from four call sites, on
+/// every request.
+pub(super) struct Workspace {
+    pub sources: Vec<(PathBuf, String)>,
+    /// Newest modification time across every source that could affect a
+    /// build - `.asm` and the build files themselves. Changes exactly when a
+    /// rebuild would lay code out differently.
+    pub fingerprint: u128
+}
+
+/// Every file under `root` a rebuild would read, paired with whether it is an
+/// assembly source. `.bnd`/`.build` count for the fingerprint - changing a
+/// build rule changes `-D` values, which changes addresses - but are never
+/// sources.
+fn build_affecting_files(root: &Path) -> impl Iterator<Item = (ignore::DirEntry, bool)> {
+    crate::common::walk::files_under(root)
         .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().is_some_and(|ext| ext == "asm"))
-        .filter_map(|e| {
-            let path = std::fs::canonicalize(e.path()).ok()?;
-            let text = std::fs::read_to_string(&path).ok()?;
-            Some((path, text))
+        .filter_map(|entry| {
+            let extension = entry.path().extension().and_then(|e| e.to_str())?;
+            let is_source = extension == "asm";
+            (is_source || extension == "bnd" || extension == "build").then_some((entry, is_source))
         })
-        .collect()
+}
+
+fn newest_mtime(entry: &ignore::DirEntry) -> u128 {
+    entry
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+}
+
+/// The fingerprint alone, without reading a single file.
+///
+/// This is the cache *key* for everything below it, so it has to be the cheap
+/// half of the walk: `stat` per candidate, no `read_to_string`. When it matches
+/// what a previous answer was computed under, nothing else runs at all.
+pub(super) fn fingerprint_of(root: &Path) -> u128 {
+    build_affecting_files(root)
+        .map(|(entry, _)| newest_mtime(&entry))
+        .max()
+        .unwrap_or(0)
+}
+
+pub(super) fn scan_workspace(root: &Path) -> Workspace {
+    let mut sources = Vec::new();
+    let mut fingerprint = 0u128;
+
+    for (entry, is_source) in build_affecting_files(root) {
+        fingerprint = fingerprint.max(newest_mtime(&entry));
+
+        if is_source
+            && let Ok(path) = std::fs::canonicalize(entry.path())
+            && let Ok(text) = std::fs::read_to_string(&path)
+        {
+            sources.push((path, text));
+        }
+    }
+
+    Workspace {
+        sources,
+        fingerprint
+    }
+}
+
+/// [`entry_for`] with a workspace scan of its own, for callers that ask once
+/// and have no fingerprint to reuse.
+pub(super) fn entry_of(doc_uri: &Url, configured: Option<&str>) -> Entry {
+    match project_root(doc_uri) {
+        Some(root) => entry_for(doc_uri, configured, &scan_workspace(&root)),
+        None => Entry::Unknown
+    }
 }
 
 /// Resolve the entry for `doc_uri`.
 ///
 /// `configured` is `[asm] entry` from `cpclib-lsp.toml`, taken as read when
 /// set - it exists precisely so a user can settle the ambiguous case below.
-pub(super) fn entry_for(doc_uri: &Url, configured: Option<&str>) -> Entry {
+pub(super) fn entry_for(doc_uri: &Url, configured: Option<&str>, workspace: &Workspace) -> Entry {
     let Some(root) = project_root(doc_uri)
     else {
         return Entry::Unknown;
     };
+    entry_in_graph(doc_uri, configured, &root, &graph_of(workspace))
+}
+
+/// Everything resolving an entry needs that does **not** depend on which
+/// document is asking: who includes whom, and which files carry `RUN`.
+///
+/// Split out because it was being rebuilt per document, and it is the
+/// expensive half by a wide margin - one graph reads every source in the
+/// project and parses each one that might hold a `RUN`. Answering for N
+/// documents that way is N times the work of answering for one, which turned
+/// a workspace-wide scan quadratic. Held by
+/// `AssemblyAnalyzer::project_graph_cached` against the project fingerprint,
+/// so it is built once per change instead.
+pub(super) struct ProjectGraph {
+    /// Edges resolved from the *including* file, since a file's own directory
+    /// drives include resolution.
+    includes: HashMap<PathBuf, Vec<PathBuf>>,
+    /// The files that declare the program's entry point.
+    run_roots: Vec<PathBuf>
+}
+
+pub(super) fn graph_of(workspace: &Workspace) -> ProjectGraph {
+    let sources = &workspace.sources;
+
+    let mut includes: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    for (path, text) in sources {
+        let Ok(uri) = Url::from_file_path(path)
+        else {
+            continue;
+        };
+        let targets = extract_include_filenames(text)
+            .iter()
+            .filter_map(|name| resolve_include_path(name, &uri))
+            .filter_map(|p| std::fs::canonicalize(p).ok())
+            .collect();
+        includes.insert(path.clone(), targets);
+    }
+
+    let mut run_roots: Vec<PathBuf> = sources
+        .iter()
+        .filter(|(_, text)| declares_run(text))
+        .map(|(path, _)| path.clone())
+        .collect();
+    run_roots.sort();
+    run_roots.dedup();
+
+    ProjectGraph {
+        includes,
+        run_roots
+    }
+}
+
+/// Which program `doc_uri` belongs to, given an already-built [`ProjectGraph`].
+///
+/// Reachability over a graph that is already in hand - cheap enough to run per
+/// document, which is the whole point of the split.
+pub(super) fn entry_in_graph(
+    doc_uri: &Url,
+    configured: Option<&str>,
+    root: &Path,
+    graph: &ProjectGraph
+) -> Entry {
     let Ok(document) = doc_uri
         .to_file_path()
         .and_then(|p| std::fs::canonicalize(p).map_err(|_| ()))
@@ -115,37 +268,16 @@ pub(super) fn entry_for(doc_uri: &Url, configured: Option<&str>) -> Entry {
         };
     }
 
-    let sources = workspace_sources(&root);
-
-    // Who includes whom. A file's own directory drives include resolution, so
-    // each edge is resolved from the *including* file.
-    let mut includes: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
-    for (path, text) in &sources {
-        let Ok(uri) = Url::from_file_path(path)
-        else {
-            continue;
-        };
-        let targets = extract_include_filenames(text)
-            .iter()
-            .filter_map(|name| resolve_include_path(name, &uri))
-            .filter_map(|p| std::fs::canonicalize(p).ok())
-            .collect();
-        includes.insert(path.clone(), targets);
-    }
-
     // Which RUN-bearing files reach the document.
-    let mut roots: Vec<PathBuf> = sources
+    let roots: Vec<&PathBuf> = graph
+        .run_roots
         .iter()
-        .filter(|(_, text)| declares_run(text))
-        .filter(|(path, _)| reaches(path, &document, &includes))
-        .map(|(path, _)| path.clone())
+        .filter(|path| reaches(path, &document, &graph.includes))
         .collect();
-    roots.sort();
-    roots.dedup();
 
     match roots.as_slice() {
-        [only] if *only == document => Entry::Standalone,
-        [only] => Entry::Project(only.clone()),
+        [only] if ***only == *document => Entry::Standalone,
+        [only] => Entry::Project((*only).clone()),
         // Several programs include this file, and its addresses differ in each
         // of them. There is no right one to pick, so pick none - `[asm] entry`
         // is how a user resolves it deliberately.
@@ -202,7 +334,7 @@ mod tests {
         let code = write(tmp.path().as_std_path(), "demo_code.asm", "demo_start\n    ret\n");
 
         let uri = Url::from_file_path(&code).unwrap();
-        assert_eq!(entry_for(&uri, None), Entry::Project(sna));
+        assert_eq!(entry_of(&uri, None), Entry::Project(sna));
     }
 
     /// A standalone test program is its own entry, so nothing that worked
@@ -214,7 +346,7 @@ mod tests {
         let test = write(tmp.path().as_std_path(), "test1.asm", "    run start\nstart\n    ret\n");
 
         let uri = Url::from_file_path(&test).unwrap();
-        assert_eq!(entry_for(&uri, None), Entry::Standalone);
+        assert_eq!(entry_of(&uri, None), Entry::Standalone);
     }
 
     /// The case that must refuse: a shared library reached from two programs
@@ -237,7 +369,7 @@ mod tests {
         let shared = write(tmp.path().as_std_path(), "shared.asm", "start\n    ret\n");
 
         let uri = Url::from_file_path(&shared).unwrap();
-        assert_eq!(entry_for(&uri, None), Entry::Unknown);
+        assert_eq!(entry_of(&uri, None), Entry::Unknown);
     }
 
     /// ...and the configured entry is how a user settles it.
@@ -258,7 +390,7 @@ mod tests {
         let shared = write(tmp.path().as_std_path(), "shared.asm", "start\n    ret\n");
 
         let uri = Url::from_file_path(&shared).unwrap();
-        assert_eq!(entry_for(&uri, Some("one.asm")), Entry::Project(one));
+        assert_eq!(entry_of(&uri, Some("one.asm")), Entry::Project(one));
     }
 
     /// A file nothing includes and which declares no program of its own.
@@ -269,7 +401,7 @@ mod tests {
         let orphan = write(tmp.path().as_std_path(), "orphan.asm", "    nop\n");
 
         let uri = Url::from_file_path(&orphan).unwrap();
-        assert_eq!(entry_for(&uri, None), Entry::Unknown);
+        assert_eq!(entry_of(&uri, None), Entry::Unknown);
     }
 
     #[test]
@@ -279,6 +411,26 @@ mod tests {
         assert!(!declares_run("    run\n"), "a bare RUN names no entry");
         assert!(!declares_run("    running_total equ 3\n"));
         assert!(!declares_run("    ret\n"));
+
+        // Neither of these is answerable by a line scan, which is why this
+        // goes through the parser.
+        assert!(
+            declares_run("    nop : run start\n"),
+            "basm allows several instructions per line"
+        );
+        assert!(
+            !declares_run("    ;; run start\n"),
+            "a commented-out RUN declares nothing"
+        );
+        assert!(
+            !declares_run("/*\n    run start\n*/\n    ret\n"),
+            "a RUN inside a block comment declares nothing"
+        );
+
+        // The prefilter is a substring test on purpose: it must never say
+        // "no RUN here" about a file that has one.
+        assert!(contains_run_word("    nop : RuN start"));
+        assert!(!contains_run_word("    ld a, 1 : ret"));
     }
 }
 
@@ -294,28 +446,6 @@ pub(super) struct ProjectAddresses {
     /// The document's own canonical path, which is the key its tokens are
     /// recorded under in `env`.
     pub document: PathBuf
-}
-
-/// The newest modification time across every source that could affect the
-/// project assemble.
-///
-/// Cheap enough to compute on every request (a `stat` per file) and it changes
-/// exactly when a rebuild would place code differently - which is what makes
-/// caching the assemble safe rather than merely fast.
-pub(super) fn sources_fingerprint(root: &Path) -> u128 {
-    walkdir::WalkDir::new(root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path().extension().is_some_and(|ext| {
-                ext == "asm" || ext == "bnd" || ext == "build"
-            })
-        })
-        .filter_map(|e| e.metadata().ok()?.modified().ok())
-        .filter_map(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_nanos())
-        .max()
-        .unwrap_or(0)
 }
 
 /// The project root for a path, exposed so callers can fingerprint it.

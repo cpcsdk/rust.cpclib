@@ -726,11 +726,9 @@ fn resolve_referenced_path(path_str: &str, doc_uri: &Url) -> Option<Url> {
             .map(|p| p.to_path_buf())
     })?;
     let basename = std::path::Path::new(path_str).file_name()?;
-    walkdir::WalkDir::new(&search_root)
+    crate::common::walk::files_under(&search_root)
         .into_iter()
-        .filter_entry(|e| !crate::server::backend::is_ignored_dir(e))
-        .filter_map(|e| e.ok())
-        .find(|e| e.file_type().is_file() && e.file_name() == basename)
+        .find(|e| e.file_name() == basename)
         .and_then(|e| Url::from_file_path(e.path()).ok())
 }
 

@@ -194,24 +194,19 @@ impl CpcLspBackend {
 
         tokio::task::spawn_blocking(move || {
             let mut paths = Vec::new();
-            for root in roots {
-                let walker = walkdir::WalkDir::new(&root)
-                    .into_iter()
-                    .filter_entry(|e| !is_ignored_dir(e));
-                for entry in walker.filter_map(|e| e.ok()) {
-                    if !entry.file_type().is_file() {
-                        continue;
-                    }
-                    let path = entry.path();
-                    let is_asm = path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
-                    if !is_asm || from_path.as_deref() == Some(path) {
-                        continue;
-                    }
-                    paths.push(path.to_path_buf());
+            // `files_under_all` rather than a walk per root: workspace roots
+            // nest, and a file reached through two of them must not be
+            // searched twice.
+            for entry in crate::common::walk::files_under_all(&roots) {
+                let path = entry.path();
+                let is_asm = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("asm"));
+                if !is_asm || from_path.as_deref() == Some(path) {
+                    continue;
                 }
+                paths.push(path.to_path_buf());
             }
             paths
         })
@@ -854,17 +849,6 @@ fn non_empty_workspace_edit(
     }
 }
 
-/// Directories never worth descending into while scanning the workspace for
-/// `.asm` files: VCS metadata and build output can be huge and are never
-/// where hand-written assembly sources live.
-pub(crate) fn is_ignored_dir(entry: &walkdir::DirEntry) -> bool {
-    entry.file_type().is_dir()
-        && matches!(
-            entry.file_name().to_str(),
-            Some(".git" | ".hg" | ".svn" | "target" | "node_modules")
-        )
-}
-
 /// A version for a not-open-in-the-editor document, derived from the
 /// file's own mtime rather than a fixed `0` - `parse_document`'s cache is
 /// keyed on `(uri, version)`, and a fixed version would serve a stale
@@ -882,6 +866,32 @@ fn disk_file_version(path: &std::path::Path) -> i32 {
         .map(|d| d.as_secs() as i32)
         .unwrap_or(0)
 }
+
+/// Every command this server advertises in its `executeCommandProvider`
+/// capability.
+///
+/// A named list rather than an inline `vec!` because it is also the thing a
+/// VS Code extension must **not** re-register: `vscode-languageclient`
+/// auto-registers a bridge command for each of these, and a second
+/// `registerCommand` with the same id throws "command already exists" and
+/// aborts the client start - which the user sees as "Client is not running"
+/// on the next command they invoke, with no hint of the real cause. See
+/// `no_advertised_command_is_also_registered_by_the_vscode_extension`.
+pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
+    "cpclib.getTargets",
+    "cpclib.getTargetsForFile",
+    "cpclib.getEmbeddedBndbuildFiles",
+    "cpclib.selectRange",
+    "cpclib.runRule",
+    "cpclib.runTask",
+    "cpclib.runBasic",
+    "cpclib.cycleCountForSelection",
+    "cpclib.registersAtPosition",
+    "cpclib.removeUnusedParameter",
+    crate::basm::peephole::FIX_ALL_COMMAND,
+    crate::basm::peephole::ANALYZE_COMMAND,
+    crate::basm::peephole::CLEAR_COMMAND
+];
 
 #[tower_lsp::async_trait]
 impl LanguageServer for CpcLspBackend {
@@ -965,19 +975,7 @@ impl LanguageServer for CpcLspBackend {
                     resolve_provider: Some(false)
                 }),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec![
-                        "cpclib.getTargets".to_string(),
-                        "cpclib.getTargetsForFile".to_string(),
-                        "cpclib.getEmbeddedBndbuildFiles".to_string(),
-                        "cpclib.selectRange".to_string(),
-                        "cpclib.runRule".to_string(),
-                        "cpclib.runTask".to_string(),
-                        "cpclib.runBasic".to_string(),
-                        "cpclib.cycleCountForSelection".to_string(),
-                        "cpclib.registersAtPosition".to_string(),
-                        "cpclib.removeUnusedParameter".to_string(),
-                        crate::basm::peephole::FIX_ALL_COMMAND.to_string(),
-                    ],
+                    commands: EXECUTE_COMMANDS.iter().map(|c| c.to_string()).collect(),
                     work_done_progress_options: WorkDoneProgressOptions::default()
                 }),
                 document_formatting_provider: Some(OneOf::Left(true)),
@@ -2319,6 +2317,95 @@ impl LanguageServer for CpcLspBackend {
             return Ok(None);
         }
 
+        if params.command == crate::basm::peephole::ANALYZE_COMMAND {
+            let mut arguments = params.arguments.into_iter();
+            let Some(uri) = arguments
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| s.parse::<Url>().ok()))
+            else {
+                return Ok(None);
+            };
+            // A second argument narrows the *report* to a selection. Anything
+            // unparseable is treated as "no selection" rather than as an
+            // error: the useful thing to do with a malformed range is still to
+            // analyse the file.
+            let scope = arguments
+                .next()
+                .and_then(|v| serde_json::from_value::<Range>(v).ok());
+
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+            self.asm_analyzer.request_peephole(&uri, scope);
+
+            // An open document already shows a full set of diagnostics;
+            // replacing them with peephole-only findings would silently drop
+            // the rest. A file the editor never opened has nothing to
+            // preserve, so it gets the cheap scan - which matters because
+            // that one skips assembling a project file on its own, and a
+            // client-driven project sweep is almost entirely such files.
+            let open = self.documents.contains_key(&uri);
+            let diagnostics = if open {
+                compute_diagnostics(
+                    &self.asm_analyzer,
+                    &self.build_analyzer,
+                    &self.basic_analyzer,
+                    &document,
+                    &self.workspace_roots(),
+                    &self.build_error_diagnostics
+                )
+            }
+            else {
+                self.asm_analyzer.peephole_scan(&document)
+            };
+            // Where each finding is, not just how many - a count alone leaves
+            // the user to go looking. Warnings only: this module also emits an
+            // INFORMATION notice when address-aware analysis had to sit out,
+            // and that is not an optimization to jump to.
+            let findings: Vec<serde_json::Value> = diagnostics
+                .iter()
+                .filter(|d| {
+                    d.source.as_deref() == Some(crate::basm::peephole::DIAGNOSTIC_SOURCE)
+                        && d.severity == Some(DiagnosticSeverity::WARNING)
+                })
+                .map(|d| {
+                    serde_json::json!({
+                        "uri": uri.to_string(),
+                        "line": d.range.start.line,
+                        "character": d.range.start.character,
+                        "message": d.message
+                    })
+                })
+                .collect();
+            self.publish_diagnostics(uri, diagnostics).await;
+            return Ok(Some(serde_json::json!(findings)));
+        }
+
+        if params.command == crate::basm::peephole::CLEAR_COMMAND {
+            // No argument means "everywhere" - the natural reading of a
+            // palette command with nothing selected.
+            let uri = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| s.parse::<Url>().ok()));
+            self.asm_analyzer.clear_peephole_request(uri.as_ref());
+
+            // Re-publish so the diagnostics actually disappear: nothing else
+            // will ask for this document until the user next edits it.
+            let refresh: Vec<Url> = match uri {
+                Some(uri) => vec![uri],
+                None => self.documents.iter().map(|e| e.key().clone()).collect()
+            };
+            for target in refresh {
+                if let Some(document) = self.load_document(&target) {
+                    self.analyze_document(&document).await;
+                }
+            }
+            return Ok(None);
+        }
+
         if params.command == crate::basm::peephole::FIX_ALL_COMMAND {
             let Some(uri) = params
                 .arguments
@@ -2609,6 +2696,188 @@ impl LanguageServer for CpcLspBackend {
             }
         }
         Ok(None)
+    }
+}
+
+/// The VS Code extension and the server both name commands, and the two name
+/// spaces are not allowed to overlap.
+#[cfg(test)]
+mod vscode_command_tests {
+    use super::*;
+
+    /// `vscode-languageclient` registers a bridge command for every name the
+    /// server advertises in `executeCommandProvider`. A `registerCommand` in
+    /// the extension using one of those same names throws "command already
+    /// exists", which aborts `client.start()` entirely - so the *next* thing
+    /// the user does reports "Client is not running", and nothing points at
+    /// the duplicate name that actually caused it.
+    ///
+    /// This has now happened twice (`cpclib.runRule`, then the peephole
+    /// commands), and the symptom never resembles the cause. Extension-side
+    /// ids therefore differ from the server-side ones they forward to
+    /// (`cpclib.findPeepholeInFile` -> `cpclib.analyzePeephole`), and this
+    /// test holds that line by reading the extension's own manifest.
+    #[test]
+    fn no_advertised_command_is_also_registered_by_the_vscode_extension() {
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../cpclib-vscode/package.json");
+        let Ok(text) = std::fs::read_to_string(&manifest)
+        else {
+            // The extension is not part of every checkout; nothing to check.
+            return;
+        };
+        let json: serde_json::Value =
+            serde_json::from_str(&text).expect("the extension manifest must be valid JSON");
+
+        let contributed: Vec<&str> = json["contributes"]["commands"]
+            .as_array()
+            .map(|commands| {
+                commands
+                    .iter()
+                    .filter_map(|c| c["command"].as_str())
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(
+            !contributed.is_empty(),
+            "the manifest declares no commands - the shape this test reads must have changed"
+        );
+
+        // `cpclib.runRule` is the documented exception: the extension
+        // contributes it (so it appears in the palette) but deliberately does
+        // *not* `registerCommand` it, leaving the bridge to handle it.
+        let clashes: Vec<&&str> = contributed
+            .iter()
+            .filter(|c| **c != "cpclib.runRule" && EXECUTE_COMMANDS.contains(c))
+            .collect();
+        assert!(
+            clashes.is_empty(),
+            "these ids are both advertised by the server and contributed by the extension, \
+             which aborts the client start: {clashes:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod peephole_command_tests {
+    use tower_lsp::LspService;
+
+    use super::*;
+
+    fn init_params() -> InitializeParams {
+        InitializeParams {
+            process_id: None,
+            root_path: None,
+            root_uri: None,
+            initialization_options: None,
+            capabilities: ClientCapabilities::default(),
+            trace: Some(TraceValue::Off),
+            workspace_folders: None,
+            client_info: None,
+            locale: None
+        }
+    }
+
+    /// The command answers with *where*, not just how many.
+    ///
+    /// A count on its own is not actionable - it leaves the user to go looking
+    /// for something the analysis already located exactly. The client turns
+    /// these into `file:line` labels and a jumpable list, so the positions have
+    /// to survive the round trip.
+    #[tokio::test]
+    async fn analyze_reports_the_location_of_every_finding() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        backend.initialize(init_params()).await.unwrap();
+
+        let uri = Url::parse("file:///t.asm").unwrap();
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".into(),
+                    version: 1,
+                    // `ld b, b` on line 2 (0-based 1) is a no-op the built-in
+                    // rules recognise; the `jp` gives the address-aware rules
+                    // something to be quiet about.
+                    text: "org 0x4000\n ld b, b\n jp done\ndone\n ret\n".into()
+                }
+            })
+            .await;
+
+        let result = backend
+            .execute_command(ExecuteCommandParams {
+                command: crate::basm::peephole::ANALYZE_COMMAND.to_string(),
+                arguments: vec![serde_json::json!(uri.to_string())],
+                work_done_progress_params: WorkDoneProgressParams::default()
+            })
+            .await
+            .unwrap()
+            .expect("the command must answer");
+
+        // Two: the redundant `ld b, b`, and the `jp` that reaches as a `jr`
+        // now that the file is short enough to have real addresses.
+        let findings = result.as_array().expect("an array of findings");
+        assert_eq!(findings.len(), 2, "{findings:?}");
+        assert!(
+            findings
+                .iter()
+                .all(|f| f["uri"] == serde_json::json!(uri.to_string())),
+            "{findings:?}"
+        );
+        let lines: Vec<&serde_json::Value> = findings.iter().map(|f| &f["line"]).collect();
+        assert_eq!(lines, vec![
+            &serde_json::json!(1),
+            &serde_json::json!(2)
+        ]);
+        assert!(
+            findings[0]["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("ld b,b") || m.contains("ld b, b")),
+            "{findings:?}"
+        );
+    }
+
+    /// The "addresses unavailable" notice shares this module's diagnostic
+    /// source but is not an optimization - counting it told the user there
+    /// were findings to jump to when there were none.
+    #[tokio::test]
+    async fn the_skipped_analysis_notice_is_not_reported_as_a_finding() {
+        let (service, _socket) = LspService::build(CpcLspBackend::new).finish();
+        let backend = service.inner();
+        backend.initialize(init_params()).await.unwrap();
+
+        // An unresolvable `include` means the assemble never completes, so no
+        // address is trustworthy: `jp2jr` must stay quiet and the notice is
+        // all that is left.
+        let uri = Url::parse("file:///nowhere/t.asm").unwrap();
+        backend
+            .did_open(DidOpenTextDocumentParams {
+                text_document: TextDocumentItem {
+                    uri: uri.clone(),
+                    language_id: "z80-asm".into(),
+                    version: 1,
+                    text: "    include \"no_such_file.asm\"\nstart\n jp target\ntarget\n ret\n"
+                        .into()
+                }
+            })
+            .await;
+
+        let result = backend
+            .execute_command(ExecuteCommandParams {
+                command: crate::basm::peephole::ANALYZE_COMMAND.to_string(),
+                arguments: vec![serde_json::json!(uri.to_string())],
+                work_done_progress_params: WorkDoneProgressParams::default()
+            })
+            .await
+            .unwrap()
+            .expect("the command must answer");
+
+        assert_eq!(
+            result.as_array().map(|a| a.len()),
+            Some(0),
+            "the notice is not something to jump to: {result:?}"
+        );
     }
 }
 

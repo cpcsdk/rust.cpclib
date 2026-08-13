@@ -10,6 +10,8 @@
 //! `basm` assemble and never changes what gets assembled (see
 //! `cpclib-asmoptim`'s own crate doc comment).
 
+use std::sync::Arc;
+
 use tower_lsp::lsp_types::*;
 
 use cpclib_asm::assembler::Env;
@@ -27,7 +29,10 @@ use crate::common::document::Document;
 /// Diagnostic `source` tag for every peephole warning, distinct from plain
 /// `"basm"` (used for real parser/assembler diagnostics) so a user can tell
 /// at a glance which findings are advisory-only.
-const SOURCE: &str = "basm-peephole";
+/// `Diagnostic::source` for everything this module reports, so the on-demand
+/// commands can count their own findings among a document's diagnostics.
+pub(crate) const DIAGNOSTIC_SOURCE: &str = "basm-peephole";
+const SOURCE: &str = DIAGNOSTIC_SOURCE;
 
 /// The command name a "Fix All" CodeLens (see [`AssemblyAnalyzer::peephole_code_lenses`])
 /// invokes - handled in `server/backend.rs`'s `execute_command`. `pub(crate)`,
@@ -36,6 +41,24 @@ const SOURCE: &str = "basm-peephole";
 /// constant rather than duplicating the literal string.
 pub(crate) const FIX_ALL_COMMAND: &str = "cpclib.fixAllPeephole";
 
+/// Ask for peephole analysis on demand: `[uri]`, or `[uri, range]` to narrow
+/// the report to a selection.
+///
+/// One file per call, on purpose. Scanning a whole project used to be a single
+/// server-side command, which meant the user got no progress, no way to stop
+/// it, and no say in how many files it was about to assemble - on a workspace
+/// holding several demos that is an hour of silence. The client drives the
+/// loop instead, so it owns the count, the progress bar and the cancel button.
+///
+/// The automatic pass is off by default (see
+/// `AsmWarningClasses::peephole_optimizer`), so this is how a user gets an
+/// answer without turning it on for everything. Handled in `server/backend.rs`.
+pub(crate) const ANALYZE_COMMAND: &str = "cpclib.analyzePeephole";
+
+/// Undo an [`ANALYZE_COMMAND`]: `[uri]` to stop reporting for one document,
+/// or no arguments at all to stop everywhere.
+pub(crate) const CLEAR_COMMAND: &str = "cpclib.clearPeephole";
+
 /// Flatten `listing` and match it against `goal`'s built-in rules, using
 /// `env` (see [`AssemblyAnalyzer::peephole_quickfix_action`]'s own doc
 /// comment on why it must be the same parse `env` was assembled from) to
@@ -43,7 +66,6 @@ pub(crate) const FIX_ALL_COMMAND: &str = "cpclib.fixAllPeephole";
 /// this file so they can never disagree with each other about what matches.
 fn peephole_matches<'a>(
     listing: &'a LocatedListing,
-    env: &Env,
     addresses: Addresses<'_>,
     goal: OptimizationGoal
 ) -> (Vec<&'a LocatedToken>, Vec<PeepholeMatch>) {
@@ -64,7 +86,7 @@ fn peephole_matches<'a>(
     // was 127 bytes away when the real build measured 146.
     let matches = match addresses {
         // The document is its own program: its own assemble is the real one.
-        Addresses::OwnAssemble => {
+        Addresses::OwnAssemble(env) => {
             let resolver = EnvAddressResolver::new(env);
             find_matches_with_resolver(&tokens, rules, &resolver)
         },
@@ -105,27 +127,47 @@ fn unconditional_jump_span(listing: &LocatedListing) -> Option<&Z80Span> {
         .map(|t| t.span())
 }
 
-/// [`AssemblyAnalyzer::peephole_addresses`], reachable from sibling modules.
+/// Do two ranges share at least one position?
+///
+/// Used to narrow an explicitly-requested analysis to a selection. A match
+/// straddling the edge of the selection counts as inside it: the user pointed
+/// at part of it, and reporting half an instruction sequence would be worse
+/// than reporting one they did not fully select.
+pub(super) fn overlaps(a: &Range, b: &Range) -> bool {
+    a.start <= b.end && b.start <= a.end
+}
+
+/// [`AssemblyAnalyzer::peephole_inputs`], reachable from sibling modules.
 pub(super) fn address_source(
     analyzer: &AssemblyAnalyzer,
     document: &Document,
-    own_assemble_complete: bool
-) -> AddressSource {
-    analyzer.peephole_addresses(document, own_assemble_complete)
+    listing: &LocatedListing
+) -> (Arc<AddressSource>, Option<Env>) {
+    analyzer.peephole_inputs(document, listing)
 }
 
 /// Owned form of [`Addresses`], so a caller can hold the project assemble
 /// alive across the call.
 pub(super) enum AddressSource {
     OwnAssemble,
-    Project(super::entry::ProjectAddresses),
+    Project(crate::basm::entry::ProjectAddresses),
     None
 }
 
 impl AddressSource {
-    pub(super) fn as_addresses(&self) -> Addresses<'_> {
+    /// Borrow this as an [`Addresses`], supplying the document's own `Env`.
+    ///
+    /// `own_env` is only read for [`AddressSource::OwnAssemble`], and
+    /// [`AssemblyAnalyzer::peephole_inputs`] is what produces the pair: it
+    /// computes the own assemble exactly when this variant turns out to be
+    /// the answer. `None` here degrades to [`Addresses::None`] rather than
+    /// pretending - an address-aware rule with no addresses must stay quiet.
+    pub(super) fn as_addresses<'a>(&'a self, own_env: Option<&'a Env>) -> Addresses<'a> {
         match self {
-            Self::OwnAssemble => Addresses::OwnAssemble,
+            Self::OwnAssemble => match own_env {
+                Some(env) => Addresses::OwnAssemble(env),
+                None => Addresses::None
+            },
             Self::Project(p) => Addresses::Project(p),
             Self::None => Addresses::None
         }
@@ -142,11 +184,9 @@ impl AssemblyAnalyzer {
     fn project_env_cached(
         &self,
         entry: &std::path::Path,
-        doc_uri: &Url,
+        fingerprint: u128,
         config: &crate::common::config::AsmConfig
     ) -> Option<std::sync::Arc<Env>> {
-        let root = super::entry::root_of(doc_uri)?;
-        let fingerprint = super::entry::sources_fingerprint(&root);
         if let Some(entry_cache) = self.project_env_cache.get(entry)
             && entry_cache.0 == fingerprint
         {
@@ -154,7 +194,7 @@ impl AssemblyAnalyzer {
         }
 
         let disabled = super::parse::disabled_assembling_warning_categories(&config.warnings);
-        let env = std::sync::Arc::new(super::entry::assemble_entry(
+        let env = std::sync::Arc::new(crate::basm::entry::assemble_entry(
             entry,
             config.case_sensitive,
             disabled
@@ -177,10 +217,93 @@ impl AssemblyAnalyzer {
     /// walking the workspace for the include graph, then assembling the entry
     /// - only ever happens for a document that matches disk, i.e. just after a
     /// save rather than on every keystroke.
+    /// The project's include graph, rebuilt only when the project changed.
+    ///
+    /// Returns the fingerprint alongside it so callers reuse the one stat
+    /// pass this already paid for rather than walking again.
+    fn project_graph_cached(
+        &self,
+        root: &std::path::Path
+    ) -> (u128, Arc<crate::basm::entry::ProjectGraph>) {
+        let fingerprint = crate::basm::entry::fingerprint_of(root);
+        if let Some(cached) = self.project_graph_cache.get(root)
+            && cached.0 == fingerprint
+        {
+            return (fingerprint, cached.1.clone());
+        }
+        let graph = Arc::new(crate::basm::entry::graph_of(
+            &crate::basm::entry::scan_workspace(root)
+        ));
+        self.project_graph_cache
+            .insert(root.to_path_buf(), (fingerprint, graph.clone()));
+        (fingerprint, graph)
+    }
+
+    /// Everything the matcher needs for `document`: where its real addresses
+    /// come from, and - only when that turns out to be this file's own
+    /// assemble - the `Env` that assemble produced.
+    ///
+    /// The own assemble is deferred rather than done up front because a file
+    /// belonging to a project never needs it: its addresses come from the
+    /// project's `Env`. Skipping it is what makes scanning a whole project
+    /// affordable, since assembling every file in one separately is most of
+    /// the cost.
+    pub(super) fn peephole_inputs(
+        &self,
+        document: &Document,
+        listing: &LocatedListing
+    ) -> (Arc<AddressSource>, Option<Env>) {
+        let mut own: Option<Env> = None;
+        let source = self.peephole_addresses(document, || {
+            let (env, complete) = self.dry_run_env_cached_checked(document, listing);
+            own = Some(env);
+            complete
+        });
+        // A cache hit answers without ever running the closure, so the `Env`
+        // still has to be fetched when the answer turns out to need one.
+        if matches!(&*source, AddressSource::OwnAssemble) && own.is_none() {
+            own = Some(self.dry_run_env_cached_checked(document, listing).0);
+        }
+        (source, own)
+    }
+
+    /// [`Self::resolve_peephole_addresses`], memoised per
+    /// `(document version, workspace fingerprint)`.
+    ///
+    /// Four entry points ask this during a single editor interaction -
+    /// diagnostics, the quickfix, the CodeLens and Fix All - and resolving it
+    /// means walking the project and reading every source in it. On a hit, all
+    /// that runs is [`entry::fingerprint_of`]: one `stat` per candidate file,
+    /// no reads.
+    ///
+    /// The fingerprint has to be in the key, not just the version: an edit to
+    /// an *included* file changes this document's addresses without touching
+    /// its version.
     fn peephole_addresses(
         &self,
         document: &Document,
-        own_assemble_complete: bool
+        own_assemble_complete: impl FnOnce() -> bool
+    ) -> Arc<AddressSource> {
+        let fingerprint = crate::basm::entry::root_of(&document.uri)
+            .map(|root| crate::basm::entry::fingerprint_of(&root))
+            .unwrap_or(0);
+        let key = (document.version, fingerprint);
+
+        if let Some(cached) = self.address_source_cache.get(&document.uri)
+            && cached.0 == key
+        {
+            return cached.1.clone();
+        }
+        let resolved = Arc::new(self.resolve_peephole_addresses(document, own_assemble_complete));
+        self.address_source_cache
+            .insert(document.uri.clone(), (key, resolved.clone()));
+        resolved
+    }
+
+    fn resolve_peephole_addresses(
+        &self,
+        document: &Document,
+        own_assemble_complete: impl FnOnce() -> bool
     ) -> AddressSource {
         let Ok(path) = document.uri.to_file_path()
         else {
@@ -199,7 +322,7 @@ impl AssemblyAnalyzer {
         let buffer = document.text();
         let matches_disk = std::fs::read_to_string(&path).is_ok_and(|disk| disk == buffer);
         if !matches_disk {
-            return if own_assemble_complete {
+            return if own_assemble_complete() {
                 AddressSource::OwnAssemble
             }
             else {
@@ -208,40 +331,58 @@ impl AssemblyAnalyzer {
         }
 
         let config = self.config();
-        match super::entry::entry_for(&document.uri, config.entry.as_deref()) {
-            super::entry::Entry::Standalone => {
-                if own_assemble_complete {
+        let Some(root) = crate::basm::entry::root_of(&document.uri)
+        else {
+            return AddressSource::None;
+        };
+        // Shared across every document in the project: reading and parsing
+        // the sources happens once per change, not once per document.
+        let (fingerprint, graph) = self.project_graph_cached(&root);
+        match crate::basm::entry::entry_in_graph(
+            &document.uri,
+            config.entry.as_deref(),
+            &root,
+            &graph
+        ) {
+            crate::basm::entry::Entry::Standalone => {
+                if own_assemble_complete() {
                     AddressSource::OwnAssemble
                 }
                 else {
                     AddressSource::None
                 }
             },
-            super::entry::Entry::Project(entry) => {
-                let Some(env) = self.project_env_cached(&entry, &document.uri, &config)
+            crate::basm::entry::Entry::Project(entry) => {
+                let Some(env) = self.project_env_cached(&entry, fingerprint, &config)
                 else {
                     return AddressSource::None;
                 };
                 match std::fs::canonicalize(&path) {
                     Ok(document) => {
-                        AddressSource::Project(super::entry::ProjectAddresses { env, document })
+                        AddressSource::Project(crate::basm::entry::ProjectAddresses { env, document })
                     },
                     Err(_) => AddressSource::None
                 }
             },
-            super::entry::Entry::Unknown => AddressSource::None
+            crate::basm::entry::Entry::Unknown => AddressSource::None
         }
     }
 }
 
 /// Where a document's real addresses come from, if anywhere.
 pub(super) enum Addresses<'a> {
-    /// This document *is* the program - assemble it directly, as the LSP has
-    /// always done.
-    OwnAssemble,
+    /// This document *is* the program - its own assemble is the real one, and
+    /// the `Env` it produced is carried here.
+    ///
+    /// The `Env` lives in this variant rather than beside it because the
+    /// project case has no use for it at all: carrying it separately meant
+    /// every caller paid for this file's own assemble before finding out it
+    /// would be ignored, which is most of what a whole-project scan spent its
+    /// time on.
+    OwnAssemble(&'a Env),
     /// This document is only part of a program; addresses come from assembling
     /// the entry that contains it.
-    Project(&'a super::entry::ProjectAddresses),
+    Project(&'a crate::basm::entry::ProjectAddresses),
     /// Nothing trustworthy. Address-aware rules must stay quiet: an
     /// incomplete assemble, an ambiguous entry, or a buffer that no longer
     /// matches disk (which shifts every recorded offset).
@@ -251,14 +392,14 @@ pub(super) enum Addresses<'a> {
 /// Match `listing` against the built-in peephole rules and push one
 /// `WARNING` `Diagnostic` per finding into `out`.
 ///
-/// `env` should come from the same real (dry-run) assemble already computed
-/// for this document version - `dry_run_env_cached`'s `Env` has
-/// `record_token_addresses` enabled unconditionally (see that function's own
-/// doc comment), which is what lets address-aware rules like `jp2jr`
-/// (`reachableByJr`) actually fire instead of silently reporting unknown.
+/// The `Env` inside `addresses` (when there is one) must come from the same
+/// real (dry-run) assemble already computed for this document version -
+/// `dry_run_env_cached`'s `Env` has `record_token_addresses` enabled
+/// unconditionally (see that function's own doc comment), which is what lets
+/// address-aware rules like `jp2jr` (`reachableByJr`) actually fire instead of
+/// silently reporting unknown.
 pub(super) fn collect_peephole_warnings(
     listing: &LocatedListing,
-    env: &Env,
     goal: OptimizationGoal,
     addresses: Addresses<'_>,
     uri: &Url,
@@ -285,7 +426,7 @@ pub(super) fn collect_peephole_warnings(
         });
     }
 
-    let (tokens, matches) = peephole_matches(listing, env, addresses, goal);
+    let (tokens, matches) = peephole_matches(listing, addresses, goal);
     for m in &matches {
         let start_span = tokens[m.start].span();
         let end_span = tokens[m.end - 1].span();
@@ -361,10 +502,10 @@ impl AssemblyAnalyzer {
         range: Range
     ) -> Option<CodeAction> {
         let listing = self.parse_document(document).ok()?;
-        let (env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
-        let addresses = self.peephole_addresses(document, own_complete);
+        let (addresses, own_env) = self.peephole_inputs(document, &listing);
         let goal = self.config().peephole_goal.into();
-        let (tokens, matches) = peephole_matches(&listing, &env, addresses.as_addresses(), goal);
+        let (tokens, matches) =
+            peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), goal);
 
         let cursor_line = range.start.line;
         let m = matches.iter().find(|m| {
@@ -389,14 +530,22 @@ impl AssemblyAnalyzer {
     /// `bndbuild::BuildFileAnalyzer`). Clicking it invokes
     /// [`FIX_ALL_COMMAND`], handled in `server/backend.rs`.
     pub(super) fn peephole_code_lenses(&self, document: &Document) -> Vec<CodeLens> {
+        // Gated like the diagnostic, and for the same reason: a `codeLens`
+        // request re-derives every match, so it costs exactly what the
+        // diagnostic costs. Both are things the editor asks for on its own
+        // schedule rather than things the user asked for - so both wait for
+        // the warning class, or for an explicit `cpclib.analyzePeephole`.
+        if !self.peephole_wanted(&document.uri) {
+            return Vec::new();
+        }
         let Ok(listing) = self.parse_document(document)
         else {
             return Vec::new();
         };
-        let (env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
-        let addresses = self.peephole_addresses(document, own_complete);
+        let (addresses, own_env) = self.peephole_inputs(document, &listing);
         let goal = self.config().peephole_goal.into();
-        let (_tokens, matches) = peephole_matches(&listing, &env, addresses.as_addresses(), goal);
+        let (_tokens, matches) =
+            peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), goal);
         if matches.is_empty() {
             return Vec::new();
         }
@@ -425,6 +574,35 @@ impl AssemblyAnalyzer {
         }]
     }
 
+    /// Peephole diagnostics for `document`, and nothing else.
+    ///
+    /// What a whole-project scan publishes for files the editor does not have
+    /// open. The saving over [`AssemblyAnalyzer::analyze`] is not the skipped
+    /// warnings - it is that a file belonging to a project never gets
+    /// assembled on its own here, because [`Self::peephole_inputs`] only
+    /// reaches for that when the file *is* the program. `analyze` must do it
+    /// regardless, to report assembler warnings.
+    pub(crate) fn peephole_scan(&self, document: &Document) -> Vec<Diagnostic> {
+        let Ok(listing) = self.parse_document(document)
+        else {
+            return Vec::new();
+        };
+        let (addresses, own_env) = self.peephole_inputs(document, &listing);
+
+        let mut out = Vec::new();
+        collect_peephole_warnings(
+            &listing,
+            self.config().peephole_goal.into(),
+            addresses.as_addresses(own_env.as_ref()),
+            &document.uri,
+            &mut out
+        );
+        if let Some(scope) = self.peephole_scope(&document.uri) {
+            out.retain(|d| overlaps(&d.range, &scope));
+        }
+        out
+    }
+
     /// Build one `WorkspaceEdit` applying every peephole match in
     /// `document` at once (the [`FIX_ALL_COMMAND`] handler's job), alongside
     /// how many matches it covers (for the confirmation message). `None`
@@ -435,10 +613,10 @@ impl AssemblyAnalyzer {
     /// never overlap in the first place (`find_matches`'s own guarantee).
     pub(crate) fn fix_all_peephole_edit(&self, document: &Document) -> Option<(WorkspaceEdit, usize)> {
         let listing = self.parse_document(document).ok()?;
-        let (env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
-        let addresses = self.peephole_addresses(document, own_complete);
+        let (addresses, own_env) = self.peephole_inputs(document, &listing);
         let goal = self.config().peephole_goal.into();
-        let (tokens, matches) = peephole_matches(&listing, &env, addresses.as_addresses(), goal);
+        let (tokens, matches) =
+            peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), goal);
         if matches.is_empty() {
             return None;
         }
@@ -651,7 +829,6 @@ mod quickfix_tests {
 
         let (_tokens, matches) = peephole_matches(
             &listing,
-            &env,
             Addresses::None,
             OptimizationGoal::Neutral
         );
@@ -674,8 +851,7 @@ mod quickfix_tests {
 
         let (_tokens, matches) = peephole_matches(
             &listing,
-            &env,
-            Addresses::OwnAssemble,
+            Addresses::OwnAssemble(&env),
             OptimizationGoal::Neutral
         );
         assert!(
@@ -715,20 +891,69 @@ mod quickfix_tests {
 
         let analyzer = AssemblyAnalyzer::new();
         let listing = analyzer.parse_document(&d).expect("must parse");
-        let (env, own_complete) = analyzer.dry_run_env_cached_checked(&d, &listing);
-        let addresses = analyzer.peephole_addresses(&d, own_complete);
+        let (addresses, own_env) = analyzer.peephole_inputs(&d, &listing);
 
         assert!(
-            matches!(addresses, AddressSource::Project(_)),
+            matches!(*addresses, AddressSource::Project(_)),
             "an included file must be measured through its entry"
         );
 
         let (_tokens, matches) =
-            peephole_matches(&listing, &env, addresses.as_addresses(), OptimizationGoal::Size);
+            peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), OptimizationGoal::Size);
         assert!(
             !matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
             "the target is >127 bytes away in the real program, so jp2jr must \
              not fire: {matches:?}"
+        );
+    }
+
+    /// Resolving where the addresses come from is the expensive step - it
+    /// walks the project and reads every source in it - and four entry points
+    /// ask for it during one editor interaction. So it must be computed once
+    /// and shared, and it must stop being shared the moment the project could
+    /// have moved underneath it.
+    #[test]
+    fn the_resolved_address_source_is_reused_until_the_project_changes() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let root = tmp.path().as_std_path();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+
+        let body = String::from("start\n    jp target\n    nop\ntarget\n    ret\n");
+        let main = root.join("main.asm");
+        std::fs::write(root.join("code.asm"), &body).unwrap();
+        std::fs::write(&main, "    org 0x4000\n    run start\n    include \"code.asm\"\n").unwrap();
+
+        let code = std::fs::canonicalize(root.join("code.asm")).unwrap();
+        let uri = Url::from_file_path(&code).unwrap();
+        let d = Document::new(uri.clone(), body.clone(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+
+        let first = analyzer.peephole_addresses(&d, || false);
+        let second = analyzer.peephole_addresses(&d, || false);
+        assert!(
+            Arc::ptr_eq(&first, &second),
+            "the second ask must be served from the cache, not walked again"
+        );
+
+        // Touching an *included* file - not this document - has to invalidate
+        // it. The document's version is unchanged, so a version-only key would
+        // wrongly keep serving the old answer.
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::fs::write(&main, "    org 0x5000\n    run start\n    include \"code.asm\"\n").unwrap();
+        let third = analyzer.peephole_addresses(&d, || false);
+        assert!(
+            !Arc::ptr_eq(&first, &third),
+            "a changed include must invalidate the cached answer"
+        );
+
+        // And closing the document must not leave it behind.
+        let fourth = analyzer.peephole_addresses(&d, || false);
+        assert!(Arc::ptr_eq(&third, &fourth));
+        analyzer.evict(&uri);
+        let after_close = analyzer.peephole_addresses(&d, || false);
+        assert!(
+            !Arc::ptr_eq(&fourth, &after_close),
+            "evict() must drop the cached address source"
         );
     }
 
@@ -755,12 +980,11 @@ mod quickfix_tests {
 
         let analyzer = AssemblyAnalyzer::new();
         let listing = analyzer.parse_document(&d).expect("must parse");
-        let (env, own_complete) = analyzer.dry_run_env_cached_checked(&d, &listing);
-        let addresses = analyzer.peephole_addresses(&d, own_complete);
-        assert!(matches!(addresses, AddressSource::Project(_)));
+        let (addresses, own_env) = analyzer.peephole_inputs(&d, &listing);
+        assert!(matches!(*addresses, AddressSource::Project(_)));
 
         let (_tokens, matches) =
-            peephole_matches(&listing, &env, addresses.as_addresses(), OptimizationGoal::Size);
+            peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), OptimizationGoal::Size);
         assert!(
             matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
             "a genuinely near jump must still be offered: {matches:?}"
@@ -795,7 +1019,7 @@ mod quickfix_tests {
         let (_env, own_complete) = analyzer.dry_run_env_cached_checked(&d, &listing);
         assert!(
             !matches!(
-                analyzer.peephole_addresses(&d, own_complete),
+                *analyzer.peephole_addresses(&d, || own_complete),
                 AddressSource::Project(_)
             ),
             "a dirty buffer must not be measured against the assembled file"
@@ -842,6 +1066,11 @@ mod code_lens_and_fix_all_tests {
     fn offers_a_fix_all_lens_with_the_right_count_when_matches_exist() {
         let d = doc("start:\n    ld b, b\n    push hl\n    pop de\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
+        // The lens costs what the diagnostic costs, so it is gated the same
+        // way and has to be asked for.
+        let mut config = crate::common::config::AsmConfig::default();
+        config.warnings.peephole_optimizer = true;
+        analyzer.set_config(config);
         let lenses = analyzer.peephole_code_lenses(&d);
         assert_eq!(lenses.len(), 1, "{lenses:?}");
         let cmd = lenses[0].command.as_ref().unwrap();
@@ -903,12 +1132,9 @@ mod skipped_notice_tests {
         let d = doc("start\n    jp target\ntarget\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
         let listing = analyzer.parse_document(&d).expect("parses");
-        let (env, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
-
         let mut out = Vec::new();
         collect_peephole_warnings(
             &listing,
-            &env,
             OptimizationGoal::Neutral,
             Addresses::None,
             &d.uri,
@@ -930,12 +1156,9 @@ mod skipped_notice_tests {
         let d = doc("start\n    nop\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
         let listing = analyzer.parse_document(&d).expect("parses");
-        let (env, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
-
         let mut out = Vec::new();
         collect_peephole_warnings(
             &listing,
-            &env,
             OptimizationGoal::Neutral,
             Addresses::None,
             &d.uri,
@@ -955,13 +1178,11 @@ mod skipped_notice_tests {
         let analyzer = AssemblyAnalyzer::new();
         let listing = analyzer.parse_document(&d).expect("parses");
         let (env, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
-
         let mut out = Vec::new();
         collect_peephole_warnings(
             &listing,
-            &env,
             OptimizationGoal::Neutral,
-            Addresses::OwnAssemble,
+            Addresses::OwnAssemble(&env),
             &d.uri,
             &mut out
         );

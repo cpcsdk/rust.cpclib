@@ -123,6 +123,17 @@ pub struct AsmWarningClasses {
     /// and never changes what gets assembled. Suggests improvable Z80
     /// instruction sequences (e.g. `ld a,0` where `xor a` would do) using
     /// real, community-vetted rules from `mdlz80optimizer`'s pattern format.
+    ///
+    /// **Off by default**, unlike every other warning class here. Deciding
+    /// whether a `jp` reaches as a `jr` needs the addresses a real build
+    /// produces, which means assembling the whole project - 37s cold for a
+    /// demo the size of `birthtro`. That is not a price to pay unprompted, on
+    /// a keystroke, for advice. Turn it on to have the suggestions appear as
+    /// you type; leave it off and ask for them explicitly with
+    /// `cpclib.analyzePeephole` (VS Code: *CPClib: Find Peephole
+    /// Optimizations in File / Selection / Workspace*), which reports for the
+    /// chosen document exactly as if this were on, until
+    /// `cpclib.clearPeephole`.
     pub peephole_optimizer: bool
 }
 
@@ -134,7 +145,7 @@ impl Default for AsmWarningClasses {
             override_memory: true,
             overflow: true,
             unused_bindings: true,
-            peephole_optimizer: true
+            peephole_optimizer: false
         }
     }
 }
@@ -366,7 +377,9 @@ unused_bindings = true
 # An improvable Z80 instruction sequence (e.g. "ld a,0" where "xor a" would
 # do), using real community-vetted rules (LSP-only advisory, no basm CLI
 # equivalent - never changes what actually gets assembled).
-peephole_optimizer = true
+# Off by default: answering needs a whole-project assemble. Ask on demand
+# with the "CPClib: Find Peephole Optimizations" commands instead.
+peephole_optimizer = false
 
 [basic]
 warnings_as_errors = false

@@ -155,6 +155,7 @@ built = { version = "0.8.0", features = ["chrono"] }
 camino = "1.2.5"
 camino-tempfile = "1.4.1"
 walkdir = "2.5.0"
+ignore = "0.4.23"
 cc = "1.4.0"
 cfg-if = "1.0.4"
 chardetng = { version = "1.0.0", features = ["multithreading"] }

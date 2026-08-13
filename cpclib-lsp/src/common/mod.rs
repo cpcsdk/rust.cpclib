@@ -8,3 +8,4 @@ pub mod document;
 pub mod firmware_docs;
 pub mod render;
 pub mod symbols;
+pub mod walk;

@@ -62,6 +62,7 @@ dashmap = "6"
 
 # Cross-file goto-definition: walking the workspace for .asm files
 walkdir.workspace = true
+ignore.workspace = true
 rayon.workspace = true
 
 [build-dependencies]

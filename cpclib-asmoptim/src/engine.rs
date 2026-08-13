@@ -562,6 +562,25 @@ where
     let labels = liveness::label_index(&stream);
     let analysis = Analysis { stream, labels };
 
+    // The mnemonic each rule's first line demands, where it demands one at
+    // all. `InstrPattern::Instr` matches `tokens[pos]` exactly - it never
+    // skips ahead - so a rule whose first line names a mnemonic cannot
+    // possibly match a position holding a different one, and does not need
+    // `try_rule`'s per-attempt `Captures` and `HashMap` to find that out.
+    //
+    // Rules stay in their original order: the first match at a position wins,
+    // and this only ever skips attempts that were going to fail.
+    let first_mnemonic: Vec<Option<&str>> = usable
+        .iter()
+        .map(|rule| match rule.match_lines.first().map(|line| &line.instr) {
+            Some(InstrPattern::Instr {
+                mnemonic: MnemonicPattern::Literal(name),
+                ..
+            }) => Some(name.as_str()),
+            _ => None
+        })
+        .collect();
+
     // Instructions something points *into* - see `smc`. A whole-file property,
     // so computed here rather than per candidate match.
     let protected = smc::protected_tokens(tokens);
@@ -617,7 +636,13 @@ where
     let mut start = 0usize;
     while start < tokens.len() {
         let mut advanced = false;
-        for rule in &usable {
+        let here = tokens[start].mnemonic();
+        for (index, rule) in usable.iter().enumerate() {
+            if let Some(expected) = first_mnemonic[index]
+                && here.is_none_or(|actual| !mnemonic_is(expected, actual))
+            {
+                continue;
+            }
             if let Some(m) = try_rule(rule, tokens, start, resolver, &analysis) {
                 let next = m.end.max(start + 1);
                 // Every rewrite changes the byte layout, so a match covering a
@@ -926,6 +951,44 @@ where
     }
 }
 
+/// Is `actual` the mnemonic named by `expected`, ignoring case?
+///
+/// A `Mnemonic`'s name is only reachable through `Display`, and the obvious
+/// `expected.eq_ignore_ascii_case(&actual.to_string())` was one heap
+/// allocation per rule per token - by a wide margin the hottest thing in the
+/// matcher on a large file, and paid in full even for the ~99% of rules whose
+/// first instruction was never going to match. This compares the formatted
+/// name as it is written, without ever materialising it.
+fn mnemonic_is(expected: &str, actual: &Mnemonic) -> bool {
+    use std::fmt::Write;
+
+    /// Consumes `Display` output and compares it to `expected` as it arrives.
+    struct Compare<'a> {
+        rest: &'a str,
+        equal: bool
+    }
+
+    impl Write for Compare<'_> {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            if !self.equal {
+                return Ok(());
+            }
+            match self.rest.split_at_checked(s.len()) {
+                Some((head, tail)) if head.eq_ignore_ascii_case(s) => self.rest = tail,
+                _ => self.equal = false
+            }
+            Ok(())
+        }
+    }
+
+    let mut compare = Compare {
+        rest: expected,
+        equal: true
+    };
+    let _ = write!(compare, "{actual}");
+    compare.equal && compare.rest.is_empty()
+}
+
 /// Match a single instruction pattern against a single token.
 fn match_instr<'a, T>(
     pattern: &InstrPattern,
@@ -946,16 +1009,15 @@ where
     else {
         return false;
     };
-    let actual_name = actual_mnemonic.to_string();
 
     match mnemonic {
         MnemonicPattern::Literal(expected) => {
-            if !expected.eq_ignore_ascii_case(&actual_name) {
+            if !mnemonic_is(expected, actual_mnemonic) {
                 return false;
             }
         },
         MnemonicPattern::Variable(name) => {
-            if !captures.bind_text(name, actual_name) {
+            if !captures.bind_text(name, actual_mnemonic.to_string()) {
                 return false;
             }
         }

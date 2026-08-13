@@ -99,6 +99,26 @@
         "command": "cpclib.buildActiveFile",
         "title": "Build Active File's bndbuild Target",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.findPeepholeInFile",
+        "title": "Find Peephole Optimizations in File",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.findPeepholeInSelection",
+        "title": "Find Peephole Optimizations in Selection",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.findPeepholeInProject",
+        "title": "Find Peephole Optimizations in Project",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.clearPeepholeResults",
+        "title": "Clear Peephole Optimization Results",
+        "category": "CPClib"
       }
     ],
     "menus": {
@@ -106,6 +126,16 @@
         {
           "command": "cpclib.pickInkColor",
           "when": "(editorLangId == basm || editorLangId == locomotive-basic || editorLangId == catart-basic) && cpclib.cursorOnInkColor",
+          "group": "9_cutcopypaste"
+        },
+        {
+          "command": "cpclib.findPeepholeInSelection",
+          "when": "editorLangId == basm && editorHasSelection",
+          "group": "9_cutcopypaste"
+        },
+        {
+          "command": "cpclib.findPeepholeInFile",
+          "when": "editorLangId == basm && !editorHasSelection",
           "group": "9_cutcopypaste"
         }
       ]

@@ -15,7 +15,7 @@ use std::sync::{Arc, RwLock};
 use cpclib_asm::assembler::Env;
 use cpclib_asm::parser::obtained::LocatedListing;
 use dashmap::DashMap;
-use tower_lsp::lsp_types::Url;
+use tower_lsp::lsp_types::{Range, Url};
 
 use crate::common::config::AsmConfig;
 
@@ -103,6 +103,31 @@ pub struct AssemblyAnalyzer {
     /// would produce different addresses, and costs a `stat` per file to
     /// compute rather than a full assemble.
     project_env_cache: DashMap<std::path::PathBuf, (u128, Arc<Env>)>,
+    /// Where each document's real addresses come from, keyed by
+    /// `(document version, workspace fingerprint)`.
+    ///
+    /// Resolving this walks the workspace reading every source, and four
+    /// separate entry points ask for it during one editor interaction.
+    address_source_cache:
+        DashMap<Url, ((i32, u128), Arc<super::basm::peephole::AddressSource>)>,
+    /// The include graph and `RUN`-bearing files of each project root, keyed
+    /// by the project fingerprint.
+    ///
+    /// Keyed by *root*, not by document: every document in a project shares
+    /// one graph, and building it reads and parses every source. Without this
+    /// a workspace-wide scan rebuilds it once per file.
+    project_graph_cache: DashMap<std::path::PathBuf, (u128, Arc<super::basm::entry::ProjectGraph>)>,
+    /// Documents the user has explicitly asked to have analysed for peephole
+    /// optimizations, and the range they asked about (`None` = the whole
+    /// file).
+    ///
+    /// The automatic pass is off by default because it costs a full project
+    /// assemble, so this is the other way in: an entry here makes the
+    /// diagnostic and the Fix All lens behave exactly as if the warning class
+    /// were enabled, for this document only. It is *sticky* on purpose -
+    /// having asked once, the user keeps getting answers as they edit,
+    /// instead of having to re-ask after every keystroke.
+    peephole_requested: DashMap<Url, Option<Range>>,
     /// Cache for `autocomplete::collect_symbols`'s result (labels/`EQU`/
     /// `ASSIGN`/macro/module/section names, extracted by walking a
     /// document's full flattened token listing) - same `(version, Arc<T>)`
@@ -130,6 +155,9 @@ impl AssemblyAnalyzer {
             env_cache: DashMap::new(),
             local_env_cache: DashMap::new(),
             project_env_cache: DashMap::new(),
+            address_source_cache: DashMap::new(),
+            project_graph_cache: DashMap::new(),
+            peephole_requested: DashMap::new(),
             symbols_cache: DashMap::new(),
             config: RwLock::new(Arc::new(AsmConfig::default()))
         }
@@ -143,6 +171,41 @@ impl AssemblyAnalyzer {
         self.env_cache.remove(uri);
         self.local_env_cache.remove(uri);
         self.symbols_cache.remove(uri);
+        self.address_source_cache.remove(uri);
+        self.peephole_requested.remove(uri);
+        // `project_env_cache` deliberately survives: it is keyed by entry
+        // path, not by document, and the project outlives any one editor tab.
+    }
+
+    /// Ask for peephole analysis of `uri`, optionally narrowed to `scope`.
+    ///
+    /// The scope narrows *what is reported*, never what is analysed: a
+    /// suggestion inside a selection is only safe because of what surrounds
+    /// it, so the whole document (and its project) is always examined.
+    pub fn request_peephole(&self, uri: &Url, scope: Option<Range>) {
+        self.peephole_requested.insert(uri.clone(), scope);
+    }
+
+    /// Stop reporting peephole optimizations for `uri` - the undo for
+    /// [`Self::request_peephole`]. `None` clears every document at once.
+    pub fn clear_peephole_request(&self, uri: Option<&Url>) {
+        match uri {
+            Some(uri) => {
+                self.peephole_requested.remove(uri);
+            },
+            None => self.peephole_requested.clear()
+        }
+    }
+
+    /// Should peephole matches be reported for `uri` at all - because the
+    /// warning class is on, or because the user asked for this document?
+    pub(super) fn peephole_wanted(&self, uri: &Url) -> bool {
+        self.config().warnings.peephole_optimizer || self.peephole_requested.contains_key(uri)
+    }
+
+    /// The range an explicit request narrowed itself to, if any.
+    pub(super) fn peephole_scope(&self, uri: &Url) -> Option<Range> {
+        self.peephole_requested.get(uri).and_then(|e| *e.value())
     }
 
     pub fn set_config(&self, config: AsmConfig) {
