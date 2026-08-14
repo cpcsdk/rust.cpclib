@@ -538,10 +538,12 @@ fn standard_display_code(mode: u8, palette: &AnyPalette) -> String {
         "
         org 0x4000
         di
-        ld bc, 0x7f00 + 0x{code_mode:x}
-        out (c), c
+    
 
         {palette_code}
+
+        ld bc, 0x7f00 + 0x{code_mode:x}
+        out (c), c
 
         jp $
     "
@@ -1108,6 +1110,23 @@ fn convert_with_palette<C: AmstradColor>(
 
             sna.add_data(&code, 0x4000).unwrap();
             sna.set_value(SnapshotFlag::Z80_PC, 0x4000).unwrap();
+
+            // The ASIC has its own 6845, and an emulator has to be told to use
+            // it - the display code we just generated talks to hardware a plain
+            // CPC does not have. Both fields only exist from version 3 of the
+            // snapshot format, so a Plus snapshot is saved as V3.
+            let is_plus = matches!(palette, AnyPalette::Asic(_));
+            let sna_version = if is_plus {
+                sna.set_value(SnapshotFlag::CPC_TYPE, 4).unwrap(); // 6128 Plus
+                sna.set_value(SnapshotFlag::CRTC_TYPE, 3).unwrap();
+                sna::SnapshotVersion::V3
+            }
+            else {
+                sna.set_value(SnapshotFlag::CPC_TYPE, 0).unwrap(); // CPC464
+                sna.set_value(SnapshotFlag::CRTC_TYPE, 0).unwrap();
+                sna::SnapshotVersion::V2
+            };
+
             // A Plus palette does not fit these registers; its display code
             // installs it through the ASIC instead.
             if let Some(inks) = palette.gate_array_bytes() {
@@ -1120,7 +1139,7 @@ fn convert_with_palette<C: AmstradColor>(
 
             if let Some(sub_sna) = sub_sna {
                 let sna_fname = sub_sna.get_one::<String>("SNA").unwrap();
-                sna.save(sna_fname, sna::SnapshotVersion::V2)
+                sna.save(sna_fname, sna_version)
                     .expect("Unable to save the snapshot");
             }
             else if let Some(sub_m4) = sub_m4 {
@@ -1131,7 +1150,7 @@ fn convert_with_palette<C: AmstradColor>(
                         .tempfile()
                         .expect("Unable to create the temporary file");
 
-                    sna.write_all(f.as_file_mut(), cpclib::sna::SnapshotVersion::V2)
+                    sna.write_all(f.as_file_mut(), sna_version)
                         .expect("Unable to write the sna in the temporary file");
 
                     let xfer = CpcXfer::new(sub_m4.get_one::<String>("CPCM4").unwrap());

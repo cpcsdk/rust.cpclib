@@ -120,6 +120,11 @@ An Amstrad Plus palette cannot travel through a snapshot's Gate Array registers,
 so the display code generated for `sna`/`dsk`/`exec` installs it itself: it
 unlocks the ASIC, copies the 32 bytes to `&6400`, and locks it again.
 
+A snapshot built this way also announces the machine it needs - CRTC type 3 (the
+6845 inside the ASIC) and CPC type 4 (6128 Plus). Those fields only exist from
+version 3 of the snapshot format, so a Plus snapshot is written as V3 where a CPC
+one stays V2.
+
 ```bash
 # Let the converter pick 16 twelve-bit colours from the image
 img2cpc --mode 0 --plus artwork.png sprite -o artwork.spr --kit artwork.kit
