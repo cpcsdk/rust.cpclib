@@ -105,6 +105,42 @@ Referencing an extra index a particular call doesn't actually provide (e.g. the 
 but that call only passed one argument) is an assembling error, not a fallback to `0`/empty -
 the same way an out-of-range `string_format` placeholder is.
 
+### Default values: `{N:=...}`
+
+Write `{N:=text}` to say what should be used when a call does not supply argument `N`. When the
+call *does* supply it, the argument wins and the default is ignored.
+
+This matters because macro expansion is textual and happens *before* the Z80 parser runs, so it
+cannot know which branch of a conditional will be taken. A body that only uses an extra argument
+inside one `SWITCH` case still mentions `{2}` as far as expansion is concerned, and every call
+that omits that argument fails - even the ones whose branch never touches it:
+
+```z80
+MACRO REGISTER_EVENT timeout, kind, ...
+    dw {timeout}
+    SWITCH {kind}
+        CASE EVENT_CHANGE_PALETTE
+            ASSERT {#} == 3
+            dw {2:=0}          ; only this branch uses a third argument
+            BREAK
+        CASE EVENT_START_MUSIC
+            ASSERT {#} == 2
+            BREAK
+    ENDSWITCH
+ENDM
+
+REGISTER_EVENT 100, EVENT_START_MUSIC          ; fine: {2} is never emitted,
+                                               ; and the default covers expansion
+REGISTER_EVENT 100, EVENT_CHANGE_PALETTE, pal  ; {2} is `pal`, not the default
+```
+
+The default is macro-body text and is emitted verbatim - it may be any expression
+(`{2:=BASE + 5}`), and it is never re-expanded, so it cannot reference other arguments.
+
+Defaults work for named parameters too (`{a:=0}`), and are deliberately opt-in: a `{N}` written
+without one still fails when the call omits that argument, so a genuine mistake stays an error
+rather than silently assembling as `0`.
+
 ## Fake instructions
 
 To ease coding, several fake instructions are allowed by `BASM`. It replaces them by the combination of true instructions.

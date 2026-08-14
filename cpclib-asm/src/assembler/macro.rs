@@ -152,6 +152,30 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 match *segment {
                     MacroSegment::Lit { start, end } => Ok(acc + (end - start)),
                     MacroSegment::ArgCount => Ok(acc + arg_count.len()),
+                    // `{N:=text}`: the call may legitimately not supply this
+                    // argument, and then the default stands in for it. The
+                    // default is body text, so its length is known without
+                    // expanding anything.
+                    MacroSegment::ArgOr { index, start, end } => {
+                        if index < self.args.len() {
+                            let slot = &mut expanded_args[index];
+                            if slot.is_none() {
+                                let mut expanded = expand_param(&self.args[index], env)?;
+                                if let Some(argname) = self.r#macro.params().get(index) {
+                                    expanded = strip_raw_string_quotes(argname, expanded);
+                                }
+                                let arg_len = expanded.len();
+                                *slot = Some(expanded);
+                                Ok(acc + arg_len)
+                            }
+                            else {
+                                Ok(acc + slot.as_ref().unwrap().len())
+                            }
+                        }
+                        else {
+                            Ok(acc + (end - start))
+                        }
+                    },
                     MacroSegment::Arg { index } => {
                         // `index` comes from the macro's own body, tokenized
                         // once at declaration time - independent of any
@@ -196,6 +220,16 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                 },
                 MacroSegment::ArgCount => {
                     output.push_str(&arg_count);
+                },
+                MacroSegment::ArgOr { index, start, end } => {
+                    match expanded_args.get(index).and_then(|slot| slot.as_ref()) {
+                        Some(value) => output.push_str(value),
+                        // Emitted verbatim, never re-expanded: a default is
+                        // written by whoever wrote the macro, in the macro's
+                        // own body, so there is nothing caller-specific in it
+                        // to substitute.
+                        None => output.push_str(&listing[start..end])
+                    }
                 },
                 MacroSegment::Arg { index } => {
                     // All in-range arguments were expanded in the first pass

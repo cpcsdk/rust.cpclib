@@ -11,8 +11,22 @@ use cpclib_common::itertools::Itertools;
 use fs_err::File;
 use image as im;
 
+use crate::color::AmstradColor;
 use crate::ga::*;
 use crate::image::*;
+
+// This pipeline converts *for the Gate Array*: every palette it builds is made
+// of the 27 hardware inks. The Plus path is chosen further up, at the command
+// line, and reaches the machine through `AnyPalette`.
+//
+// These aliases name that choice once. Without them the same four `<Ink>`
+// arguments would be repeated across ~24 signatures below, none of which is
+// making a decision - they are all just downstream of this one.
+type Palette = crate::palette::Palette<Ink>;
+type LockablePalette = crate::palette::LockablePalette<Ink>;
+type Sprite = crate::image::Sprite<Ink>;
+type ColorMatrix = crate::image::ColorMatrix<Ink>;
+type ColorMatrixList = crate::image::ColorMatrixList<Ink>;
 
 /// Encode the position of a line or column to transform in the source image
 #[derive(Copy, Clone, Debug)]
@@ -179,7 +193,7 @@ impl Transformation {
 
             Transformation::ReplaceInk { from, to } => {
                 let mut res = matrix.clone();
-                res.replace_ink(*from, *to);
+                res.replace_color(*from, *to);
                 res
             },
             Transformation::MaskFromBackgroundInk(ink) => {
@@ -1428,9 +1442,9 @@ impl ImageConverter {
             let mask_transformations = transformations
                 .clone()
                 .build_mask_from_background_ink(*mask_ink);
-            let mut mask_palette = vec![ColorMatrix::INK_NOT_USED_IN_MASK; 16];
-            mask_palette[0] = ColorMatrix::INK_MASK_FOREGROUND; // at the position with all bits reset
-            mask_palette[mode.max_colors() - 1] = ColorMatrix::INK_MASK_BACKGROUND; // at the position with all bits set up
+            let mut mask_palette = vec![<Ink as AmstradColor>::not_in_mask(); 16];
+            mask_palette[0] = <Ink as AmstradColor>::mask_foreground(); // at the position with all bits reset
+            mask_palette[mode.max_colors() - 1] = <Ink as AmstradColor>::mask_background(); // at the position with all bits set up
             let mask = Self::convert_to_sprite(
                 input_file,
                 LockablePalette::locked(mask_palette.into()), /* we want and 0 ; or byte where we plot */

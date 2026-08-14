@@ -547,6 +547,15 @@ impl From<im::Rgba<u8>> for Ink {
     }
 }
 
+impl From<Ink> for im::Rgb<u8> {
+    /// The pixel this ink displays as - the other half of the round trip
+    /// [`AmstradColor`](crate::color::AmstradColor) requires, and the same
+    /// table [`Ink::color`] reads.
+    fn from(ink: Ink) -> Self {
+        ink.color()
+    }
+}
+
 impl From<im::Rgb<u8>> for Ink {
     /// Convert an rgb value to the corresponding ink.
     /// The closest color is provided if the provided color is not strictly corresponding to a CPC color.
@@ -796,6 +805,6 @@ mod tests {
             .cartesian_product(RGB_RATIOS)
             .map(|t| (*t.0.0, *t.0.1, *t.1))
             .map(Ink::from);
-        let _rgb_palette = Palette::from_iter(rgb_palette);
+        let _rgb_palette = Palette::<Ink>::from_iter::<_, Ink>(rgb_palette);
     }
 }

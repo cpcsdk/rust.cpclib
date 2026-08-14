@@ -5,7 +5,7 @@
   "version": "0.0.1",
   "publisher": "krusty-benediction",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "Programming Languages"
@@ -119,6 +119,11 @@
         "command": "cpclib.clearPeepholeResults",
         "title": "Clear Peephole Optimization Results",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.assembleThisFile",
+        "title": "Assemble This File with basm",
+        "category": "CPClib"
       }
     ],
     "menus": {
@@ -136,6 +141,11 @@
         {
           "command": "cpclib.findPeepholeInFile",
           "when": "editorLangId == basm && !editorHasSelection",
+          "group": "9_cutcopypaste"
+        },
+        {
+          "command": "cpclib.assembleThisFile",
+          "when": "editorLangId == basm",
           "group": "9_cutcopypaste"
         }
       ]
@@ -164,15 +174,15 @@
       {
         "name": "basm",
         "owner": "basm",
-        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "fileLocation": ["search", { "include": ["${workspaceFolder}"] }],
         "pattern": [
           {
-            "regexp": "^(error|warning):\\s+(.*)$",
+            "regexp": "^(?:\\[[^\\]]*\\]\\s*)?(error|warning):\\s+(.*)$",
             "severity": 1,
             "message": 2
           },
           {
-            "regexp": "^\\s*(?:┌─|-->)\\s+(.*):(\\d+):(\\d+)$",
+            "regexp": "^(?:\\[[^\\]]*\\]\\s*)?\\s*(?:┌─|-->)\\s+(.*):(\\d+):(\\d+)$",
             "file": 1,
             "line": 2,
             "column": 3

@@ -58,8 +58,31 @@ pub fn tokenize_macro_body<'l, 'p>(
         }
         if let Some(rel_close) = memchr(b'}', &bytes[after_open..]) {
             let close = after_open + rel_close;
-            let key = &listing[after_open..close];
+            let raw = &listing[after_open..close];
+            // `{key:=default}` - the default is used only when the call did
+            // not supply that argument. `:=` cannot collide with anything
+            // that works today: a key containing it matches no parameter name
+            // and parses as no number, so such a `{...}` already fell through
+            // to a literal.
+            let (key, default) = match raw.find(":=") {
+                Some(at) => {
+                    (
+                        &raw[..at],
+                        Some((after_open + at + 2, close))
+                    )
+                },
+                None => (raw, None)
+            };
             if let Some(&idx) = param_names.get(key) {
+                if let Some((start, end)) = default {
+                    segments.push(MacroSegment::ArgOr {
+                        index: idx,
+                        start,
+                        end
+                    });
+                    cursor = close + 1;
+                    continue;
+                }
                 segments.push(MacroSegment::Arg { index: idx });
                 cursor = close + 1;
                 continue;
@@ -71,7 +94,16 @@ pub fn tokenize_macro_body<'l, 'p>(
                     continue;
                 }
                 if let Ok(idx) = key.parse::<usize>() {
-                    segments.push(MacroSegment::Arg { index: idx });
+                    segments.push(match default {
+                        Some((start, end)) => {
+                            MacroSegment::ArgOr {
+                                index: idx,
+                                start,
+                                end
+                            }
+                        },
+                        None => MacroSegment::Arg { index: idx }
+                    });
                     cursor = close + 1;
                     continue;
                 }
@@ -106,6 +138,30 @@ pub fn tokenize_macro_body<'l, 'p>(
 pub enum MacroSegment {
     Lit { start: usize, end: usize },
     Arg { index: usize },
+    /// `{N:=text}` - argument `index`, or `text` when this call did not
+    /// supply one.
+    ///
+    /// A variadic macro's body legitimately references arguments that only
+    /// *some* calls pass, and the reference is often inside a branch those
+    /// calls never take:
+    ///
+    /// ```text
+    /// switch {kind}
+    ///     case EVENT_CHANGE_PALETTE
+    ///         dw {3}          ; only this branch uses a 3rd argument
+    /// ```
+    ///
+    /// Expansion happens before the Z80 parser runs and cannot know which
+    /// branch will be taken, so `{3}` alone is an error for every call that
+    /// passes two arguments. `{3:=0}` says what to put there instead.
+    ///
+    /// `start`/`end` bound the default text inside the macro body, like
+    /// [`MacroSegment::Lit`]; it is emitted verbatim, never re-expanded.
+    ArgOr {
+        index: usize,
+        start: usize,
+        end: usize
+    },
     /// `{#}` in a variadic macro's body - the total number of arguments
     /// actually passed at a given call site.
     ArgCount
@@ -130,6 +186,71 @@ mod tokenize_macro_body_tests {
 
     fn args(segments: &TokenizedMacroContent) -> Vec<MacroSegment> {
         segments.iter().copied().collect()
+    }
+
+    /// `{N:=default}` records where the default text lives, so expansion can
+    /// use it when the call supplies no such argument.
+    #[test]
+    fn a_positional_reference_can_carry_a_default() {
+        let body = "dw {3:=0}";
+        let tokenized = tokenize_macro_body(body, &["a", "b"], true);
+        let segments = args(&tokenized);
+        assert_eq!(segments.len(), 2, "{segments:?}");
+        let MacroSegment::ArgOr { index, start, end } = segments[1]
+        else {
+            panic!("expected an ArgOr, got {:?}", segments[1]);
+        };
+        assert_eq!(index, 3);
+        assert_eq!(&body[start..end], "0");
+    }
+
+    /// The default may be any text, including an expression with spaces - it
+    /// is spliced into the body verbatim.
+    #[test]
+    fn a_default_may_be_an_arbitrary_expression() {
+        let body = "dw {3:=SOME_LABEL + 2}";
+        let tokenized = tokenize_macro_body(body, &[] as &[&str], true);
+        let MacroSegment::ArgOr { start, end, .. } = args(&tokenized)[1]
+        else {
+            panic!("expected an ArgOr")
+        };
+        assert_eq!(&body[start..end], "SOME_LABEL + 2");
+    }
+
+    /// Named parameters take a default the same way.
+    #[test]
+    fn a_named_reference_can_carry_a_default_too() {
+        let body = "dw {b:=7}";
+        let tokenized = tokenize_macro_body(body, &["a", "b"], false);
+        let MacroSegment::ArgOr { index, start, end } = args(&tokenized)[1]
+        else {
+            panic!("expected an ArgOr")
+        };
+        assert_eq!(index, 1);
+        assert_eq!(&body[start..end], "7");
+    }
+
+    /// Without a default the segment is unchanged - every macro that works
+    /// today keeps tokenizing exactly as it did.
+    #[test]
+    fn a_reference_without_a_default_is_untouched() {
+        let tokenized = tokenize_macro_body("dw {3}", &[] as &[&str], true);
+        assert_eq!(args(&tokenized)[1], MacroSegment::Arg { index: 3 });
+    }
+
+    /// `:=` inside a `{...}` that names nothing is still a literal, as it was
+    /// before this existed - so no macro can change meaning by accident.
+    #[test]
+    fn a_default_on_an_unknown_key_stays_literal() {
+        let body = "dw {nope:=0}";
+        let tokenized = tokenize_macro_body(body, &["a"], false);
+        assert!(
+            args(&tokenized)
+                .iter()
+                .all(|s| matches!(s, MacroSegment::Lit { .. })),
+            "{:?}",
+            args(&tokenized)
+        );
     }
 
     #[test]

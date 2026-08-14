@@ -14,8 +14,15 @@ use cpclib::disc::amsdos::*;
 use cpclib::disc::disc::Disc;
 use cpclib::disc::edsk::Head;
 use cpclib::image::convert::*;
-use cpclib::image::ga::{LockablePalette, Palette};
-use cpclib::image::image::{ColorMatrix, Mode};
+use cpclib::image::image::Mode;
+
+// Most of this tool is Gate Array work: 27 inks, written through the GA ports.
+// The Plus path is a *choice made at the command line* and travels as an
+// `AnyLockablePalette`, so it is spelled out where it matters rather than
+// making every signature here generic.
+type Palette = cpclib::image::ga::Palette<Ink>;
+type LockablePalette = cpclib::image::ga::LockablePalette<Ink>;
+type ColorMatrix = cpclib::image::image::ColorMatrix<Ink>;
 use cpclib::image::ocp::{self, OcpPalette};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]

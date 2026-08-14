@@ -3,6 +3,7 @@
 //! failure back onto the source line that caused it.
 
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use cpclib_bndbuild::event::{
@@ -21,14 +22,19 @@ pub struct RuleRunOutcome {
     pub message: String,
     /// Error diagnostic anchored on the failing line; empty on success.
     pub diagnostics: Vec<Diagnostic>,
-    /// A diagnostic for a *different* file the failing tool's own output
-    /// referenced (e.g. `basm`'s own `┌─ sna.asm:24:5` syntax-error locus) —
-    /// `None` when the failure carries no such reference, or it couldn't be
+    /// Diagnostics for the *other* files the failing tool's own output
+    /// referenced (e.g. `basm`'s own `┌─ sna.asm:24:5` syntax-error locus) -
+    /// empty when the failure carries no such reference, or none could be
     /// resolved to a real file. Unlike `diagnostics` (always for the build
     /// file itself, republished fresh on every run), the caller is expected
-    /// to store this and keep it visible on the target file until the next
-    /// successful build, not just until that file's own next edit.
-    pub build_error: Option<(Url, Diagnostic)>,
+    /// to store these and keep them visible on the target files until the
+    /// next successful build, not just until each file's own next edit.
+    ///
+    /// A `Vec`, because one build reports as many errors as it hit: bndbuild
+    /// aggregates per failing task (`Error 1:`, `Error 2:`, ...) and each can
+    /// carry its own locus. Reporting only the first meant fixing one error
+    /// to be shown the next, one build at a time.
+    pub build_errors: Vec<(Url, Diagnostic)>,
     pub success: bool
 }
 
@@ -263,7 +269,7 @@ impl BuildFileAnalyzer {
                 RuleRunOutcome {
                     message: format!("Rule '{rule}' built successfully"),
                     diagnostics: Vec::new(),
-                    build_error: None,
+                    build_errors: Vec::new(),
                     success: true
                 }
             },
@@ -367,7 +373,7 @@ impl BuildFileAnalyzer {
                         task_index + 1
                     ),
                     diagnostics: Vec::new(),
-                    build_error: None,
+                    build_errors: Vec::new(),
                     success: true
                 }
             },
@@ -484,7 +490,7 @@ impl BuildFileAnalyzer {
                 RuleRunOutcome {
                     message: format!("Rule '{rule}' built successfully"),
                     diagnostics: Vec::new(),
-                    build_error: None,
+                    build_errors: Vec::new(),
                     success: true
                 }
             },
@@ -614,71 +620,293 @@ fn failure_outcome(
     // "test" rule whose `basm` task failed produced a correct-looking
     // `showMessage` (built from `msg`) but no clickable cross-file
     // diagnostic, because only `full_output` (empty here) was ever scanned.
-    let build_error = extract_referenced_location(full_output)
-        .or_else(|| extract_referenced_location(&msg))
-        .and_then(|(path, ref_line, ref_col)| {
-            let target_uri = resolve_referenced_path(&path, &document.uri)?;
-            let line = ref_line.saturating_sub(1);
-            let character = ref_col.saturating_sub(1);
-            let diagnostic = Diagnostic {
-                range: Range {
-                    start: Position { line, character },
-                    end: Position {
-                        line,
-                        character: character + 1
-                    }
-                },
-                severity: Some(DiagnosticSeverity::ERROR),
-                source: Some("bndbuild".to_string()),
-                message: format!("Build error (from rule '{failing_target}'): {msg}"),
-                ..Default::default()
-            };
-            Some((target_uri, diagnostic))
-        });
+    let build_errors = {
+        let located = extract_referenced_errors(full_output);
+        let located = if located.is_empty() {
+            extract_referenced_errors(&msg)
+        }
+        else {
+            located
+        };
+        located
+            .into_iter()
+            .filter_map(|located| {
+                let target_uri = resolve_referenced_path(&located.path, &document.uri)?;
+                let line = located.line.saturating_sub(1);
+                let character = located.column.saturating_sub(1);
+                let diagnostic = Diagnostic {
+                    range: Range {
+                        start: Position { line, character },
+                        end: Position {
+                            line,
+                            character: character + 1
+                        }
+                    },
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    source: Some("bndbuild".to_string()),
+                    // The tool's own one-line reason, not the whole captured
+                    // output. The full text still reaches the user through the
+                    // build's output channel and the bnd-file diagnostic; a
+                    // Problems-panel entry repeating ten lines of
+                    // caret-underline art was unreadable at the size that
+                    // panel actually is.
+                    message: format!("{} (build rule '{failing_target}')", located.message),
+                    ..Default::default()
+                };
+                Some((target_uri, diagnostic))
+            })
+            .collect()
+    };
 
     RuleRunOutcome {
         message: format!("Rule '{requested_rule}' failed: {msg}"),
         diagnostics: vec![diagnostic],
-        build_error,
+        build_errors,
         success: false
     }
 }
 
-/// Extract a `path:line:col` location referenced in a failing tool's own
-/// captured output (e.g. a `codespan-reporting`-rendered `basm` syntax
-/// error) - `line`/`col` both 1-based, exactly as reported. Scans line by
-/// line for one containing the `"┌─ "` locus marker `codespan-reporting`
-/// actually renders by default in this workspace (`colored_errors` is a
-/// default Cargo feature on `cpclib-asm`, empirically confirmed by running
-/// the real `basm` binary against a broken file) or the ASCII `"--> "` form
-/// (a differently-configured build, or a different tool). `path` may itself
+/// Assemble one `.asm` file with `basm`, outside any build file.
+///
+/// The build-file path (`run_rule`) only reports what a *rule* builds, and a
+/// demo has many sources that no rule names directly. This is the "just try
+/// assembling this file" answer: the user asks for it explicitly, from the
+/// editor, and gets the assembler's own errors back on the right lines.
+///
+/// `extra_args` is passed through verbatim after the file, so the user can
+/// supply whatever the real build would (`-DSOME=1`, `--snapshot`, ...) - the
+/// same arguments they would put in a bndbuild rule. It goes *last* so it can
+/// override anything set here.
+///
+/// Search paths are supplied with `-I` rather than by changing the process
+/// working directory: cwd is global to the whole server, and two concurrent
+/// requests changing it would corrupt each other's include resolution.
+pub(crate) fn assemble_file(
+    document: &Document,
+    extra_args: &str,
+    output: Option<UnboundedSender<OutputLine>>
+) -> AssembleOutcome {
+    let Ok(path) = document.uri.to_file_path()
+    else {
+        return AssembleOutcome {
+            message: "invalid file path".to_owned(),
+            errors: Vec::new(),
+            success: false
+        };
+    };
+
+    let mut command = format!("basm {}", quote_if_needed(&path.to_string_lossy()));
+    for dir in crate::basm::definition::ancestor_search_directories(&document.uri) {
+        command.push_str(&format!(" -I {}", quote_if_needed(&dir.to_string_lossy())));
+    }
+    if !extra_args.trim().is_empty() {
+        command.push(' ');
+        command.push_str(extra_args.trim());
+    }
+
+    let task = match cpclib_bndbuild::task::Task::from_str(&command) {
+        Ok(task) => task,
+        Err(e) => {
+            return AssembleOutcome {
+                message: format!("could not build the basm command: {e}"),
+                errors: Vec::new(),
+                success: false
+            };
+        }
+    };
+
+    // A caller that does not want the live output still needs a sink: the
+    // observer writes unconditionally, and a dropped receiver is fine.
+    let tx = output.unwrap_or_else(|| {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        tx
+    });
+    let observer = Arc::new(StreamingObserver::new(tx));
+    match task.execute(&observer) {
+        Ok(()) => {
+            AssembleOutcome {
+                message: format!("basm: {} assembled successfully", path.display()),
+                errors: Vec::new(),
+                success: true
+            }
+        },
+        Err(msg) => {
+            // Stripped first, as `run_rule` already does for the same reason:
+            // `cpclib-asm` renders its errors coloured, and a colour reset
+            // lands between the `┌─` marker and the path
+            // (`┌─\x1b[0m /tmp/x.asm:3:5`), so an uncoloured match finds
+            // nothing. Whether colour is on depends on global state, which is
+            // why this failed only under some test orderings.
+            let msg = strip_ansi(&msg);
+            let errors = extract_referenced_errors(&msg)
+                .into_iter()
+                .filter_map(|located| {
+                    let target_uri = resolve_referenced_path(&located.path, &document.uri)?;
+                    let line = located.line.saturating_sub(1);
+                    let character = located.column.saturating_sub(1);
+                    Some((
+                        target_uri,
+                        Diagnostic {
+                            range: Range {
+                                start: Position { line, character },
+                                end: Position {
+                                    line,
+                                    character: character + 1
+                                }
+                            },
+                            severity: Some(DiagnosticSeverity::ERROR),
+                            source: Some("basm".to_string()),
+                            message: located.message,
+                            ..Default::default()
+                        }
+                    ))
+                })
+                .collect();
+            AssembleOutcome {
+                message: format!("basm failed: {msg}"),
+                errors,
+                success: false
+            }
+        }
+    }
+}
+
+/// What one explicit `basm` run produced.
+pub(crate) struct AssembleOutcome {
+    pub message: String,
+    /// One diagnostic per reported error, on the file it belongs to.
+    pub errors: Vec<(Url, Diagnostic)>,
+    pub success: bool
+}
+
+/// Wrap in double quotes when the path contains something a shell-style
+/// tokenizer would split on. `Task::from_str` parses its argument string, so
+/// a path with a space would otherwise arrive as two arguments.
+fn quote_if_needed(raw: &str) -> String {
+    if raw.contains(' ') || raw.contains('\t') {
+        format!("\"{raw}\"")
+    }
+    else {
+        raw.to_owned()
+    }
+}
+
+/// One error a failing tool reported, with where it happened.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LocatedError {
+    path: String,
+    /// 1-based, exactly as the tool reported it.
+    line: u32,
+    column: u32,
+    /// The tool's own one-line reason (`error: FAIL: ...`), without the
+    /// `error: ` prefix. Falls back to a generic phrase when the output had a
+    /// locus but no readable reason above it.
+    message: String
+}
+
+/// Every `path:line:col` location referenced in a failing tool's own captured
+/// output (e.g. a `codespan-reporting`-rendered `basm` error), each paired
+/// with the reason printed above it.
+///
+/// A locus line is recognised by the `"┌─ "` marker `codespan-reporting`
+/// renders by default in this workspace (`colored_errors` is a default Cargo
+/// feature on `cpclib-asm`, empirically confirmed by running the real `basm`
+/// binary against a broken file) or the ASCII `"--> "` form (a
+/// differently-configured build, or a different tool). `path` may itself
 /// contain `:` (rare on Linux, but not impossible), so only the *last two*
 /// colon-separated segments are required to be plain digits.
-fn extract_referenced_location(text: &str) -> Option<(String, u32, u32)> {
-    for line in text.lines() {
-        let after_marker = line
+///
+/// The reason is whatever `error:`/`warning:` line most recently preceded the
+/// locus - which is exactly how the format lays it out:
+///
+/// ```text
+/// error: FAIL: Forced error to help LSP design
+///     --> events.asm:121:1
+///     |
+/// 121 | fail "Forced error to help LSP design"
+/// ```
+fn extract_referenced_errors(text: &str) -> Vec<LocatedError> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut found = Vec::new();
+    let mut reason: Option<String> = None;
+
+    for (index, line) in lines.iter().enumerate() {
+        // Keep the most recent reason; a locus below it belongs to it.
+        //
+        // Searched anywhere in the line, not just at its start: bndbuild
+        // prefixes every line of a task's output with the target it belongs
+        // to (`[birthtro.sna]  error: ...`), so anchoring at the start found
+        // nothing and every diagnostic fell back to the word "build error".
+        for marker in ["error: ", "warning: "] {
+            if let Some(at) = line.find(marker) {
+                reason = Some(line[at + marker.len()..].trim().to_owned());
+            }
+        }
+
+        let Some((_, rest)) = line
             .split_once("┌─ ")
             .or_else(|| line.split_once("--> "))
-            .map(|(_, rest)| rest.trim());
-        let Some(rest) = after_marker
         else {
             continue;
         };
 
-        let mut parts = rest.rsplitn(3, ':');
-        let (Some(col_str), Some(line_str), Some(path)) =
+        let mut parts = rest.trim().rsplitn(3, ':');
+        let (Some(column), Some(line_no), Some(path)) =
             (parts.next(), parts.next(), parts.next())
         else {
             continue;
         };
-        let (Ok(col), Ok(line_no)) = (col_str.parse::<u32>(), line_str.parse::<u32>())
+        let (Ok(column), Ok(line_no)) = (column.parse::<u32>(), line_no.parse::<u32>())
         else {
             continue;
         };
         if path.is_empty() {
             continue;
         }
-        return Some((path.to_string(), line_no, col));
+
+        // The `error:` line is often generic ("Syntax error") while the real
+        // detail sits on the caret line underneath the offending token
+        // (`^ invalid LD: wrong source`). Take both when both exist - dropping
+        // either one loses the part that identifies the problem, depending on
+        // which tool produced it.
+        let annotation = caret_annotation(&lines[index + 1..]);
+        let reason = reason.take().unwrap_or_else(|| "build error".to_owned());
+        let message = match annotation {
+            Some(detail) => format!("{reason}: {detail}"),
+            None => reason
+        };
+
+        found.push(LocatedError {
+            path: path.to_owned(),
+            line: line_no,
+            column,
+            message
+        });
+    }
+    found
+}
+
+/// The text a `codespan-reporting` caret line carries after its `^`s, if any -
+/// `"invalid LD: wrong source"` for `  │       ^ invalid LD: wrong source`.
+///
+/// Stops at the next error's own header so one error cannot pick up the
+/// annotation belonging to the following one.
+fn caret_annotation(following: &[&str]) -> Option<String> {
+    for line in following {
+        let trimmed = line.trim();
+        if line.contains("error: ")
+            || line.contains("warning: ")
+            || line.contains("┌─ ")
+            || line.contains("--> ")
+        {
+            return None;
+        }
+        if let Some(caret) = trimmed.rfind('^') {
+            let detail = trimmed[caret + 1..].trim();
+            if !detail.is_empty() {
+                return Some(detail.to_owned());
+            }
+        }
     }
     None
 }
@@ -924,6 +1152,125 @@ mod tests {
         std::fs::write(&path, content).unwrap();
         let uri = Url::from_file_path(&path).unwrap();
         Document::new(uri, content.to_string(), 1)
+    }
+
+
+    /// `basm assemble` on a file that is fine.
+    #[test]
+    #[serial]
+    fn assemble_file_succeeds_on_a_valid_source() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let path = tmp.path().as_std_path().join("ok.asm");
+        let text = "    org 0x4000\n    nop\n    ret\n";
+        std::fs::write(&path, text).unwrap();
+        let uri = Url::from_file_path(std::fs::canonicalize(&path).unwrap()).unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+
+        let outcome = assemble_file(&document, "", None);
+        assert!(outcome.success, "{}", outcome.message);
+        assert!(outcome.errors.is_empty(), "{:?}", outcome.errors);
+    }
+
+    /// ...and on one that is not: the assembler's own reason, on its own line.
+    ///
+    /// This is the whole point of the command - `run_rule` only ever reports
+    /// what a build *rule* names, and most sources in a demo are not a rule's
+    /// target.
+    #[test]
+    #[serial]
+    fn assemble_file_reports_the_assembler_error_on_the_right_line() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let path = tmp.path().as_std_path().join("broken.asm");
+        let text = "    org 0x4000\n    nop\n    fail \"deliberate\"\n";
+        std::fs::write(&path, text).unwrap();
+        let uri = Url::from_file_path(std::fs::canonicalize(&path).unwrap()).unwrap();
+        let document = Document::new(uri.clone(), text.to_string(), 1);
+
+        let outcome = assemble_file(&document, "", None);
+        assert!(!outcome.success, "{}", outcome.message);
+        // The message is in the assertion on purpose: this failed once under
+        // heavy parallel load and an empty `errors` alone said nothing about
+        // why. If it happens again, the assembler's own output is right here.
+        assert_eq!(
+            outcome.errors.len(),
+            1,
+            "expected one located error; basm said: {}",
+            outcome.message
+        );
+        let (target, diagnostic) = &outcome.errors[0];
+        assert_eq!(target, &uri);
+        assert_eq!(diagnostic.range.start.line, 2, "0-based line of the `fail`");
+        assert!(
+            diagnostic.message.contains("deliberate"),
+            "{}",
+            diagnostic.message
+        );
+    }
+
+    /// Extra arguments are the user's own, and go last so they win.
+    #[test]
+    #[serial]
+    fn assemble_file_passes_extra_arguments_through() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let path = tmp.path().as_std_path().join("needs_define.asm");
+        // Only assembles when the caller defines `WANTED`.
+        let text = "    org 0x4000\n    ld a, WANTED\n    ret\n";
+        std::fs::write(&path, text).unwrap();
+        let uri = Url::from_file_path(std::fs::canonicalize(&path).unwrap()).unwrap();
+        let document = Document::new(uri, text.to_string(), 1);
+
+        assert!(
+            !assemble_file(&document, "", None).success,
+            "without the definition this must fail, or the test proves nothing"
+        );
+        let outcome = assemble_file(&document, "-DWANTED=1", None);
+        assert!(outcome.success, "{}", outcome.message);
+    }
+
+    /// `cpclib-asm` renders its errors coloured, and the reset sequence lands
+    /// *between* the `┌─` marker and the path. Nothing matched, so a real
+    /// error produced no diagnostic at all - and only under the test orderings
+    /// where colour happened to be enabled, which is what made it look like a
+    /// flake rather than a bug.
+    #[test]
+    fn a_coloured_locus_line_is_still_matched() {
+        let coloured = "\u{1b}[0m\u{1b}[1m\u{1b}[38;5;9merror\u{1b}[0m\u{1b}[1m: FAIL: deliberate\u{1b}[0m\n  \u{1b}[0m\u{1b}[36m┌─\u{1b}[0m /tmp/x/broken.asm:3:5\n";
+        assert!(
+            extract_referenced_errors(coloured).is_empty(),
+            "raw coloured text is not expected to match - it must be stripped first"
+        );
+        let found = extract_referenced_errors(&strip_ansi(coloured));
+        assert_eq!(found.len(), 1, "{found:#?}");
+        assert_eq!(
+            (found[0].path.as_str(), found[0].line, found[0].column),
+            ("/tmp/x/broken.asm", 3, 5)
+        );
+        assert_eq!(found[0].message, "FAIL: deliberate");
+    }
+
+    /// bndbuild prefixes every line of a task's output with the target it
+    /// belongs to. Anchoring the `error:` search at the start of the line
+    /// therefore found nothing, and every diagnostic from a real build read
+    /// "build error" instead of what actually went wrong.
+    ///
+    /// Verbatim output from a real failing build.
+    #[test]
+    fn a_reason_is_found_even_when_bndbuild_prefixes_the_line() {
+        let text = "[birthtro.sna]  Error while assembling.\n\
+[birthtro.sna]  Assembling error:\n\
+[birthtro.sna]  error: Error in macro call REGISTER_EVENT (defined in events.asm:17:1)\n\
+[birthtro.sna]      --> events.asm:112:2\n\
+[birthtro.sna]      |\n\
+[birthtro.sna]  112 |     REGISTER_EVENT(3*SECONDS, EVENT_START_MUSIC)\n\
+[birthtro.sna]      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
+        let found = extract_referenced_errors(text);
+        assert_eq!(found.len(), 1, "{found:#?}");
+        assert_eq!((found[0].path.as_str(), found[0].line), ("events.asm", 112));
+        assert!(
+            found[0].message.starts_with("Error in macro call REGISTER_EVENT"),
+            "{}",
+            found[0].message
+        );
     }
 
     /// Regression test: `StreamingObserver` feeds VS Code's Output channel
@@ -1235,19 +1582,22 @@ mod tests {
         // renders by default in this workspace (`colored_errors` is a
         // default Cargo feature on `cpclib-asm`).
         let text = "error: Syntax error\n  ┌─ /tmp/broken.asm:2:7\n  │\n2 │ ld a, ,\n  │       ^ invalid LD: wrong source\n";
-        assert_eq!(
-            extract_referenced_location(text),
-            Some(("/tmp/broken.asm".to_string(), 2, 7))
-        );
+        let found = extract_referenced_errors(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, "/tmp/broken.asm");
+        assert_eq!((found[0].line, found[0].column), (2, 7));
+        // The reason printed above the locus *and* the caret line's own
+        // detail - not the whole rendered block, and not either half alone.
+        assert_eq!(found[0].message, "Syntax error: invalid LD: wrong source");
     }
 
     #[test]
     fn extract_referenced_location_finds_the_ascii_locus_line_too() {
         let text = "error: Syntax error\n  --> /tmp/broken.asm:2:7\n";
-        assert_eq!(
-            extract_referenced_location(text),
-            Some(("/tmp/broken.asm".to_string(), 2, 7))
-        );
+        let found = extract_referenced_errors(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, "/tmp/broken.asm");
+        assert_eq!((found[0].line, found[0].column), (2, 7));
     }
 
     /// Regression test for a real repro (`birthtro/src/build.bnd`'s `test`
@@ -1260,31 +1610,85 @@ mod tests {
     #[test]
     fn extract_referenced_location_finds_it_inside_an_aggregated_nested_dependency_error() {
         let text = "Error 1:\nUnable to build birthtro.sna: Error while assembling.\nAssembling error:\nerror: FAIL: \n  --> sna.asm:4:1\n  |\n4 | fail\n  | ^^^^\n\n.";
-        assert_eq!(
-            extract_referenced_location(text),
-            Some(("sna.asm".to_string(), 4, 1))
-        );
+        let found = extract_referenced_errors(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, "sna.asm");
+        assert_eq!((found[0].line, found[0].column), (4, 1));
+        assert_eq!(found[0].message, "FAIL:");
+    }
+
+    /// A build reports as many errors as it hit - bndbuild aggregates one
+    /// block per failing task - and every one must reach its own file.
+    ///
+    /// Only the first was surfaced before, so fixing one error just revealed
+    /// the next, one build at a time.
+    #[test]
+    fn every_reported_error_is_extracted_not_just_the_first() {
+        let text = "Error 1:\n\
+                    Unable to build a.sna: Error while assembling.\n\
+                    Assembling error:\n\
+                    error: FAIL: first problem\n  --> one.asm:12:1\n  |\n\
+                    Error 2:\n\
+                    Unable to build b.sna: Error while assembling.\n\
+                    Assembling error:\n\
+                    error: Unknown symbol: missing\n  --> two.asm:7:5\n  |\n";
+        let found = extract_referenced_errors(text);
+        assert_eq!(found.len(), 2, "{found:#?}");
+        assert_eq!((found[0].path.as_str(), found[0].line), ("one.asm", 12));
+        assert_eq!(found[0].message, "FAIL: first problem");
+        assert_eq!((found[1].path.as_str(), found[1].line), ("two.asm", 7));
+        assert_eq!(found[1].message, "Unknown symbol: missing");
+    }
+
+    /// The real shape of the error the user planted in `birthtro` while this
+    /// was built: a `fail` directive, aggregated through a dependency rule.
+    /// Its whole value is on the `error:` line; there is no caret annotation,
+    /// and appending an empty one would leave a trailing `": "`.
+    #[test]
+    fn a_fail_directive_reports_its_own_message_with_no_trailing_separator() {
+        let text = "Error 1:\nUnable to build birthtro.sna: Error while assembling.\n\
+                    Assembling error:\n\
+                    error: FAIL: Forced error to help LSP design\n\
+                    \u{20}   --> events.asm:121:1\n\
+                    \u{20}   |\n\
+                    121 | fail \"Forced error to help LSP design\"\n\
+                    \u{20}   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n";
+        let found = extract_referenced_errors(text);
+        assert_eq!(found.len(), 1, "{found:#?}");
+        assert_eq!(found[0].message, "FAIL: Forced error to help LSP design");
+        assert_eq!((found[0].path.as_str(), found[0].line), ("events.asm", 121));
+    }
+
+    /// A caret line belonging to the *next* error must not be attached to
+    /// this one.
+    #[test]
+    fn an_annotation_is_not_stolen_from_the_following_error() {
+        let text = "error: first\n  --> a.asm:1:1\n\
+                    error: second\n  --> b.asm:2:2\n  |\n  | ^ detail of the second\n";
+        let found = extract_referenced_errors(text);
+        assert_eq!(found.len(), 2, "{found:#?}");
+        assert_eq!(found[0].message, "first");
+        assert_eq!(found[1].message, "second: detail of the second");
     }
 
     #[test]
     fn extract_referenced_location_handles_a_path_containing_a_colon() {
         let text = "  ┌─ C:/weird/path.asm:10:3\n";
-        assert_eq!(
-            extract_referenced_location(text),
-            Some(("C:/weird/path.asm".to_string(), 10, 3))
-        );
+        let found = extract_referenced_errors(text);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].path, "C:/weird/path.asm");
     }
 
     #[test]
     fn extract_referenced_location_returns_none_without_a_locus_line() {
         let text = "Error while launching the command.\nsome generic message\n";
-        assert_eq!(extract_referenced_location(text), None);
+        assert!(extract_referenced_errors(text).is_empty());
     }
 
     #[test]
     fn extract_referenced_location_returns_none_for_a_malformed_locus_line() {
         let text = "  ┌─ not_a_real_location\n";
-        assert_eq!(extract_referenced_location(text), None);
+        assert!(extract_referenced_errors(text).is_empty());
     }
 
     #[test]
@@ -1309,7 +1713,9 @@ mod tests {
         );
 
         let (target_uri, diag) = outcome
-            .build_error
+            .build_errors
+            .into_iter()
+            .next()
             .expect("expected a cross-file diagnostic");
         assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
         assert_eq!(
@@ -1319,8 +1725,16 @@ mod tests {
                 character: 6
             }
         );
-        assert!(diag.message.contains("Build error"), "{}", diag.message);
+        // The tool's own reason, plus where it came from - not the ten lines
+        // of caret-underline art the whole captured output would have been.
+        assert!(diag.message.contains("Syntax error"), "{}", diag.message);
         assert!(diag.message.contains("invalid LD"), "{}", diag.message);
+        assert!(diag.message.contains("build rule 'broken'"), "{}", diag.message);
+        assert!(
+            !diag.message.contains('\n'),
+            "a Problems-panel entry must stay one line: {}",
+            diag.message
+        );
     }
 
     #[test]
@@ -1352,7 +1766,9 @@ mod tests {
         let outcome = failure_outcome(&document, "test", "test", msg, None, "");
 
         let (target_uri, diag) = outcome
-            .build_error
+            .build_errors
+            .into_iter()
+            .next()
             .expect("expected a cross-file diagnostic even though full_output is empty");
         assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
         assert_eq!(diag.range.start.line, 0);
@@ -1386,7 +1802,9 @@ mod tests {
         let outcome = failure_outcome(&bnd_document, "test", "test", msg, None, "");
 
         let (target_uri, _diag) = outcome
-            .build_error
+            .build_errors
+            .into_iter()
+            .next()
             .expect("expected the recursive subdirectory search to find palettes.asm");
         assert_eq!(target_uri, Url::from_file_path(&palettes_path).unwrap());
     }
@@ -1424,7 +1842,9 @@ mod tests {
         let outcome = failure_outcome(&bnd_document, "test", "test", msg, None, "");
 
         let (target_uri, diag) = outcome
-            .build_error
+            .build_errors
+            .into_iter()
+            .next()
             .expect("expected a cross-file diagnostic for the relative sna.asm reference");
         assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
         assert_eq!(diag.range.start.line, 3);
@@ -1445,7 +1865,7 @@ mod tests {
             None,
             "cp: cannot stat 'does_not_exist_anywhere.src': No such file or directory\n"
         );
-        assert!(outcome.build_error.is_none(), "{:?}", outcome.message);
+        assert!(outcome.build_errors.is_empty(), "{:?}", outcome.message);
     }
 
     // ── run_embedded_rule ────────────────────────────────────────────────
@@ -1583,7 +2003,7 @@ mod tests {
             None
         );
         assert!(!outcome.success);
-        let (target_uri, diag) = outcome.build_error.unwrap_or_else(|| {
+        let (target_uri, diag) = outcome.build_errors.into_iter().next().unwrap_or_else(|| {
             panic!(
                 "expected a cross-file diagnostic; message was: {}",
                 outcome.message
@@ -1591,7 +2011,7 @@ mod tests {
         });
         assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
         assert_eq!(diag.range.start.line, 0);
-        assert!(diag.message.contains("Build error"), "{}", diag.message);
+        assert!(diag.message.contains("build rule 'broken'"), "{}", diag.message);
     }
 
     #[serial]

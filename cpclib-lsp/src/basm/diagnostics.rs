@@ -619,6 +619,7 @@ mod tests {
         analyzer.analyze(&document)
     }
 
+
     #[test]
     fn valid_file_yields_no_diagnostics() {
         let text = "org 0x4000\n ld a, 1\n ret\n";

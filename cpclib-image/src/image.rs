@@ -9,6 +9,8 @@ use cpclib_common::itertools::Itertools;
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use image as im;
 
+use crate::asic::AsicColor;
+use crate::color::AmstradColor;
 use crate::ga::*;
 use crate::pixels;
 use crate::pixels::bytes_to_pens;
@@ -102,15 +104,15 @@ fn get_unique_colors(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> HashSet<im:
 
 /// Browse the image and returns the palette to use
 #[allow(unused)]
-fn extract_palette(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> Palette {
+fn extract_palette<C: AmstradColor>(img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>) -> Palette<C> {
     let colors = get_unique_colors(img);
-    let mut p = Palette::empty();
+    let mut p = Palette::<C>::empty();
 
     assert!(colors.len() <= 16);
 
     for (idx, color) in colors.iter().enumerate() {
         let color = *color;
-        p.set(Pen::from(idx as u8), Ink::from(color))
+        p.set(Pen::from(idx as u8), C::from(color))
     }
 
     p
@@ -170,17 +172,17 @@ fn merge_mode0_mode3(line1: &[u8], line2: &[u8]) -> Vec<u8> {
 }
 
 // Convert inks to pens
-fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
+fn colors_to_pens<C: AmstradColor>(colors: &[Vec<C>], p: &Palette<C>) -> Vec<Vec<Pen>> {
     #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
-    let iter = inks.par_iter();
+    let iter = colors.par_iter();
     #[cfg(any(target_arch = "wasm32", not(feature = "rayon")))]
-    let iter = inks.iter();
+    let iter = colors.iter();
 
     iter.map(|line| {
         line.iter()
-            .map(|ink| {
-                p.get_pen_for_ink(*ink).unwrap_or_else(|| {
-                    panic!("Unable to find a correspondance for ink {ink:?} in given palette {p:?}")
+            .map(|color| {
+                p.get_pen_for_color(*color).unwrap_or_else(|| {
+                    panic!("Unable to find a correspondance for color {color:?} in given palette {p:?}")
                 })
             })
             .collect::<Vec<Pen>>()
@@ -188,17 +190,23 @@ fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette) -> Vec<Vec<Pen>> {
     .collect::<Vec<_>>()
 }
 
+#[deprecated(note = "Use colors_to_pens instead")]
+#[allow(unused)]
+fn inks_to_pens(inks: &[Vec<Ink>], p: &Palette<Ink>) -> Vec<Vec<Pen>> {
+    colors_to_pens(inks, p)
+}
+
 /// A ColorMatrix represents an image through a list of Inks.
 /// It has no real meaning in CPC world but can be used for image transformaton
 /// There is no mode information
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ColorMatrix {
+pub struct ColorMatrix<C: AmstradColor> {
     /// List of inks
-    data: Vec<Vec<Ink>>
+    data: Vec<Vec<C>>
 }
 
-impl From<Vec<Vec<Ink>>> for ColorMatrix {
-    fn from(data: Vec<Vec<Ink>>) -> Self {
+impl<C: AmstradColor> From<Vec<Vec<C>>> for ColorMatrix<C> {
+    fn from(data: Vec<Vec<C>>) -> Self {
         ColorMatrix { data }
     }
 }
@@ -215,13 +223,11 @@ pub enum ColorConversionStrategy {
     Fail
 }
 
-impl ColorMatrix {
-    pub const INK_MASK_BACKGROUND: Ink = Ink::BRIGHTWHITE;
-    pub const INK_MASK_FOREGROUND: Ink = Ink::BLACK;
-    pub const INK_NOT_USED_IN_MASK: Ink = Ink::RED;
+
+impl<C:AmstradColor> ColorMatrix<C> {
 
     /// Build a representation of a palette
-    pub fn from_palette(pal: &Palette, ink_size: usize) -> Self {
+    pub fn from_palette(pal: &Palette<C>, ink_size: usize) -> Self {
         let height = ink_size;
         let width = ink_size * 17;
 
@@ -235,7 +241,7 @@ impl ColorMatrix {
             let i = pal.get(&p);
             for w in 0..ink_size {
                 for h in 0..ink_size {
-                    matrix.set_ink(x + w, y + h, *i);
+                    matrix.set_color(x + w, y + h, *i);
                 }
             }
         }
@@ -243,7 +249,7 @@ impl ColorMatrix {
         matrix
     }
 
-    pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette) -> Self {
+    pub fn from_screen(data: &[u8], bytes_width: usize, mode: Mode, palette: &Palette<C>) -> Self {
         let pixel_height = {
             let mut height = 0x4000 / bytes_width;
             while !height.is_multiple_of(8) {
@@ -275,7 +281,7 @@ impl ColorMatrix {
             .into()
     }
 
-    pub fn from_sprite(data: &[u8], pixels_width: u16, mode: Mode, palette: &Palette) -> Self {
+    pub fn from_sprite(data: &[u8], pixels_width: u16, mode: Mode, palette: &Palette<C>) -> Self {
         let width = mode.nb_bytes_for_pixels_width(pixels_width as _);
 
         // convert it
@@ -299,11 +305,11 @@ impl ColorMatrix {
 }
 
 #[allow(missing_docs)]
-impl ColorMatrix {
+impl<C: AmstradColor> ColorMatrix<C> {
     /// Create a new empty color matrix for the given dimensions
     pub fn new(width: usize, height: usize) -> Self {
         Self {
-            data: vec![vec![Ink::from(0); width]; height]
+            data: vec![vec![C::default(); width]; height]
         }
     }
 
@@ -313,8 +319,8 @@ impl ColorMatrix {
     /// - The sprite where the background is replaced by a selected ink (Ideally the one that will be considered as being pen 0)
     pub fn extract_mask_and_sprite(
         &self,
-        mask_ink: impl Into<Ink>,
-        replacement_ink: impl Into<Ink>
+        mask_ink: impl Into<C>,
+        replacement_ink: impl Into<C>
     ) -> (Self, Self) {
         let mask_ink = mask_ink.into();
         let replacement_ink = replacement_ink.into();
@@ -323,28 +329,30 @@ impl ColorMatrix {
         mask_data.convert_to_mask(mask_ink);
 
         let mut sprite_data = self.clone();
-        sprite_data.replace_ink(mask_ink, replacement_ink);
+        sprite_data.replace_color(mask_ink, replacement_ink);
 
         (mask_data, sprite_data)
     }
 
+
     /// Destroy the image to build the mask according to the background ink
-    pub fn convert_to_mask(&mut self, mask: Ink) -> &mut Self {
+    pub fn convert_to_mask(&mut self, mask: C) -> &mut Self {
         self.data.iter_mut().for_each(|row| {
             row.iter_mut().for_each(|ink| {
                 *ink = if *ink == mask {
-                    Self::INK_MASK_BACKGROUND
+                    C::mask_background()
                 }
                 else {
-                    Self::INK_MASK_FOREGROUND
+                    C::mask_foreground()
                 }
             })
         });
         self
     }
 
+
     /// Exchange all the occurrences of `from` Ink with `to` ink
-    pub fn replace_ink(&mut self, from: Ink, to: Ink) -> &mut Self {
+    pub fn replace_color(&mut self, from: C, to: C) -> &mut Self {
         self.data.iter_mut().for_each(|row| {
             row.iter_mut().for_each(|ink| {
                 if *ink == from {
@@ -362,19 +370,19 @@ impl ColorMatrix {
     /// Create a new ColorMatrix that encodes a new image full of black
     pub fn empty_like(&self) -> Self {
         Self {
-            data: vec![vec![Ink::from(0); self.width() as usize]; self.height() as usize]
+            data: vec![vec![C::black(); self.width() as usize]; self.height() as usize]
         }
     }
 
-    /// Double the width (usefull for chuncky conversions)
+    /// Double the width (usefull for chunky conversions)
     #[allow(clippy::needless_range_loop, clippy::identity_op)]
     pub fn double_horizontally(&mut self) {
         // Create the doubled pixels
         let mut new_data =
-            vec![vec![Ink::from(0); (2 * self.width()) as usize]; self.height() as usize];
+            vec![vec![C::black(); (2 * self.width()) as usize]; self.height() as usize];
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
-                let color = self.get_ink(x, y);
+                let color = self.get_color(x, y);
                 new_data[y][x * 2 + 0] = *color;
                 new_data[y][x * 2 + 1] = *color;
             }
@@ -387,10 +395,10 @@ impl ColorMatrix {
     pub fn remove_odd_columns(&mut self) {
         // Create the doubled pixels
         let mut new_data =
-            vec![vec![Ink::from(0); (self.width() / 2) as usize]; self.height() as usize];
+            vec![vec![C::black(); (self.width() / 2) as usize]; self.height() as usize];
         for x in 0..((self.width() / 2) as usize) {
             for y in 0..(self.height() as usize) {
-                let color = self.get_ink(x * 2, y);
+                let color = self.get_color(x * 2, y);
                 new_data[y][x] = *color;
             }
         }
@@ -405,48 +413,48 @@ impl ColorMatrix {
         self.data.len() as u32
     }
 
-    /// Returns the ink at the right position
-    pub fn get_ink(&self, x: usize, y: usize) -> &Ink {
+    /// Returns the color at the right position
+    pub fn get_color(&self, x: usize, y: usize) -> &C {
         &self.data[y][x]
     }
 
-    /// Set ink
-    pub fn set_ink(&mut self, x: usize, y: usize, ink: Ink) {
-        self.data[y][x] = ink;
+    /// Set color
+    pub fn set_color(&mut self, x: usize, y: usize, color: C) {
+        self.data[y][x] = color;
     }
 
     /// Add a line within the image
     /// Panic if impossible
-    pub fn add_line(&mut self, position: usize, line: &[Ink]) {
+    pub fn add_line(&mut self, position: usize, line: &[C]) {
         assert_eq!(line.len(), self.width() as usize);
         self.data.insert(position, line.to_vec());
     }
 
     /// Returns a reference on the wanted line of inks
-    pub fn get_line(&self, y: usize) -> &[Ink] {
+    pub fn get_line(&self, y: usize) -> &[C] {
         &self.data[y]
     }
 
     /// Return a mutable version of the line. Care needs to be taken in order to not destroy the data structure
-    fn get_line_mut(&mut self, y: usize) -> &mut Vec<Ink> {
+    fn get_line_mut(&mut self, y: usize) -> &mut Vec<C> {
         &mut self.data[y]
     }
 
     /// Add a column within the image
     /// Panic if impossible
-    pub fn add_column(&mut self, position: usize, column: &[Ink]) {
+    pub fn add_column(&mut self, position: usize, column: &[C]) {
         assert_eq!(column.len(), self.height() as usize);
-        for (row, ink) in column.iter().enumerate() {
-            self.get_line_mut(row).insert(position, *ink);
+        for (row, color) in column.iter().enumerate() {
+            self.get_line_mut(row).insert(position, *color);
         }
     }
 
-    /// Build a vector of Inks that contains all the inks of the given column
-    pub fn get_column(&self, x: usize) -> Vec<Ink> {
-        self.data.iter().map(|line| line[x]).collect::<Vec<Ink>>()
+    /// Build a vector of Colors that contains all the colors of the given column
+    pub fn get_column(&self, x: usize) -> Vec<C> {
+        self.data.iter().map(|line| line[x]).collect::<Vec<C>>()
     }
 
-    /// Return a copy of the inks for the given window definition
+    /// Return a copy of the colors for the given window definition
     pub fn window(&self, start_x: usize, start_y: usize, width: usize, height: usize) -> Self {
         let selected_lines = &self.data[start_y..start_y + height];
         let window = selected_lines
@@ -461,13 +469,13 @@ impl ColorMatrix {
         Self { data: window }
     }
 
-    /// Return the number of different inks in the image
-    pub fn nb_inks(&self) -> usize {
+    /// Return the number of different colors in the image
+    pub fn nb_colors(&self) -> usize {
         self.data.iter().flatten().unique().count()
     }
 
-    /// Returns the palette used (as soon as there is less than the maximum number of inks fr the requested mode)
-    pub fn extract_palette(&self, mode: Mode) -> Palette {
+    /// Returns the palette used (as soon as there is less than the maximum number of colors for the requested mode)
+    pub fn extract_palette(&self, mode: Mode) -> Palette<C> {
         self.extract_palette_with_hint(mode, LockablePalette::empty())
             .unwrap()
     }
@@ -476,24 +484,24 @@ impl ColorMatrix {
     pub fn extract_palette_with_hint(
         &self,
         mode: Mode,
-        mut hint: LockablePalette
-    ) -> Result<Palette, String> {
-        for &ink in self.data.iter().flatten().unique().sorted() {
-            if !hint.contains_ink(ink) {
-                // here the palette does not contain the ink, so we have to add it
+        mut hint: LockablePalette<C>
+    ) -> Result<Palette<C>, String> {
+        for &color in self.data.iter().flatten().unique().sorted() {
+            if !hint.contains_color(color) {
+                // here the palette does not contain the color, so we have to add it
                 if hint.is_locked() {
                     return Err(format!(
-                        "Palette is locked, it is not possible to add ink {ink}"
+                        "Palette is locked, it is not possible to add color {color}"
                     ));
                 }
 
                 let target_pen = hint.next_unused_pen_for_mode(mode);
                 if let Some(target_pen) = target_pen {
-                    hint.as_palette_mut().unwrap().set(target_pen, ink);
+                    hint.as_palette_mut().unwrap().set(target_pen, color);
                 }
                 else {
                     return Err(format!(
-                        "Palette is full, it is not possible to add extra ink {ink}"
+                        "Palette is full, it is not possible to add extra color {color}"
                     ));
                 }
             }
@@ -518,7 +526,7 @@ impl ColorMatrix {
             .flatten()
             .unique()
             .copied()
-            .collect::<Vec<Ink>>();
+            .collect::<Vec<C>>();
         let max_count = mode.max_colors().min(inks.len());
         let inks = &inks[..max_count];
 
@@ -528,7 +536,7 @@ impl ColorMatrix {
     /// Modify the image in order to use only the provided palette
     pub fn reduce_colors_with(
         &mut self,
-        inks: &[Ink],
+        inks: &[C],
         strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         for y in 0..(self.height() as usize) {
@@ -598,7 +606,7 @@ impl ColorMatrix {
                 };
 
                 let src_color = img.get_pixel(src_x, src_y);
-                let dest_ink = Ink::from(*src_color);
+                let dest_ink = C::from(*src_color);
 
                 // Add the current ink to the current line
                 line.push(dest_ink);
@@ -614,13 +622,13 @@ impl ColorMatrix {
     /// Compute a difference map to see the problematic positions
     pub fn diff(&self, other: &Self) -> Self {
         // Create a map encoding a complete success
-        let mut data = vec![vec![Ink::from(26); other.width() as usize]; other.height() as usize];
+        let mut data = vec![vec![C::white(); other.width() as usize]; other.height() as usize];
 
         // Set the error positions
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
                 if self.data[y][x] != other.data[y][x] {
-                    data[y][x] = Ink::from(0);
+                    data[y][x] = C::black();
                 }
             }
         }
@@ -634,7 +642,7 @@ impl ColorMatrix {
         let mut res = Vec::new();
         for x in 0..(self.width() as usize) {
             for y in 0..(self.height() as usize) {
-                if self.data[y][x] == Ink::from(0) {
+                if self.data[y][x] == C::black() {
                     res.push((x, y));
                 }
             }
@@ -649,7 +657,7 @@ impl ColorMatrix {
 
         for x in 0..(self.width()) {
             for y in 0..(self.height()) {
-                buffer.put_pixel(x, y, self.get_ink(x as usize, y as usize).color());
+                buffer.put_pixel(x, y, (*self.get_color(x as usize, y as usize)).into());
             }
         }
 
@@ -660,9 +668,9 @@ impl ColorMatrix {
     pub fn as_sprite(
         &self,
         mode: Mode,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         missing_pen: Option<Pen>
-    ) -> Sprite {
+    ) -> Sprite<C> {
         // Extract the palette is not provided as an argument
         let palette = if palette.is_locked() {
             palette.into_palette()
@@ -672,7 +680,7 @@ impl ColorMatrix {
         };
 
         // Really make the conversion
-        let pens = inks_to_pens(&self.data, &palette);
+        let pens = colors_to_pens(&self.data, &palette);
 
         // Build the sprite
         Sprite {
@@ -681,14 +689,18 @@ impl ColorMatrix {
             data: encode(&pens, mode, missing_pen)
         }
     }
+}
+
+impl ColorMatrix<Ink> {
+
 
     /// Convert the matrix as a sprite in mode1. Pen 1/2/3 are changed at each line. Pen 0 is constant
     pub fn as_mode1_sprite_with_different_inks_per_line(
         &self,
         palette: &[(Ink, Ink, Ink, Ink)],
-        dummy_palette: &Palette,
+        dummy_palette: &Palette<Ink>,
         missing_pen: Option<Pen>
-    ) -> Sprite {
+    ) -> Sprite<Ink> {
         // Build the matrix of pens
         let mut data: Vec<Vec<Pen>> = Vec::new();
         for y in 0..self.height() {
@@ -696,7 +708,7 @@ impl ColorMatrix {
 
             // Build the palette for the current ink
             let line_palette = {
-                let mut p = Palette::new(); // Palette full of 0
+                let mut p = Palette::<Ink>::new(); // Palette full of 0
                 p.set(Pen::from(0), palette[y].0);
                 p.set(Pen::from(1), palette[y].1);
                 p.set(Pen::from(2), palette[y].2);
@@ -741,7 +753,7 @@ impl ColorMatrix {
     }
 
     /// Generate an iterator on the pixels
-    pub fn inks(&self) -> Inks<'_> {
+    pub fn inks(&self) -> Inks<'_, Ink> {
         Inks {
             image: self,
             x: 0,
@@ -765,12 +777,12 @@ impl ColorMatrix {
     }
 }
 
-impl ColorMatrix {
+impl<C: AmstradColor> ColorMatrix<C> {
     pub fn draw_matrix_at(&mut self, x: usize, y: usize, other: &Self) {
         for w in 0..(other.width() as usize) {
             for h in 0..(other.height() as usize) {
-                let i = other.get_ink(w, h);
-                self.set_ink(x + w, y + h, *i);
+                let i = other.get_color(w, h);
+                self.set_color(x + w, y + h, *i);
             }
         }
     }
@@ -778,18 +790,18 @@ impl ColorMatrix {
 
 /// Immutable ink iterator for generate (x, y, ink)
 #[derive(Debug)]
-pub struct Inks<'a> {
-    image: &'a ColorMatrix,
+pub struct Inks<'a, C: AmstradColor> {
+    image: &'a ColorMatrix<C>,
     x: u32,
     y: u32,
     width: u32,
     height: u32
 }
 
-impl Iterator for Inks<'_> {
-    type Item = (u32, u32, Ink);
+impl<C: AmstradColor> Iterator for Inks<'_, C> {
+    type Item = (u32, u32, C);
 
-    fn next(&mut self) -> Option<(u32, u32, Ink)> {
+    fn next(&mut self) -> Option<(u32, u32, C)> {
         if self.x >= self.width {
             self.x = 0;
             self.y += 1;
@@ -799,7 +811,7 @@ impl Iterator for Inks<'_> {
             None
         }
         else {
-            let ink = self.image.get_ink(self.x as _, self.y as _);
+            let ink = self.image.get_color(self.x as _, self.y as _);
             let i = (self.x, self.y, *ink);
 
             self.x += 1;
@@ -811,22 +823,22 @@ impl Iterator for Inks<'_> {
 
 /// Animation are stored in lists of ColorMatrices of same sze
 #[derive(Debug)]
-pub struct ColorMatrixList(Vec<ColorMatrix>);
+pub struct ColorMatrixList<C: AmstradColor>(Vec<ColorMatrix<C>>);
 
-impl From<Vec<ColorMatrix>> for ColorMatrixList {
-    fn from(src: Vec<ColorMatrix>) -> Self {
+impl<C: AmstradColor> From<Vec<ColorMatrix<C>>> for ColorMatrixList<C> {
+    fn from(src: Vec<ColorMatrix<C>>) -> Self {
         ColorMatrixList(src)
     }
 }
 
-impl From<&ColorMatrixList> for Vec<ColorMatrix> {
-    fn from(val: &ColorMatrixList) -> Self {
+impl<C: AmstradColor> From<&ColorMatrixList<C>> for Vec<ColorMatrix<C>> {
+    fn from(val: &ColorMatrixList<C>) -> Self {
         val.0.clone()
     }
 }
 
-impl std::ops::Deref for ColorMatrixList {
-    type Target = Vec<ColorMatrix>;
+impl<C: AmstradColor> std::ops::Deref for ColorMatrixList<C> {
+    type Target = Vec<ColorMatrix<C>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -868,9 +880,9 @@ pub enum VerticalCrop {
     None
 }
 
-impl ColorMatrixList {
+impl<C: AmstradColor> ColorMatrixList<C> {
     /// Provide a Vec version of the items
-    pub fn to_vec(&self) -> Vec<ColorMatrix> {
+    pub fn to_vec(&self) -> Vec<ColorMatrix<C>> {
         self.into()
     }
 
@@ -913,12 +925,12 @@ impl ColorMatrixList {
     /// Delegate the color reduction to the underlying ColorMatrix objects
     pub fn reduce_colors_with(
         &mut self,
-        inks: &[Ink],
+        colors: &[C],
         strategy: ColorConversionStrategy
     ) -> Result<(), anyhow::Error> {
         self.0
             .iter_mut()
-            .try_for_each(|matrix| matrix.reduce_colors_with(inks, strategy))
+            .try_for_each(|matrix| matrix.reduce_colors_with(colors, strategy))
     }
 
     /// Number of frames in the animation
@@ -945,13 +957,13 @@ impl ColorMatrixList {
     pub fn as_sprites(
         &self,
         mode: Mode,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         missing_pen: Option<Pen>
-    ) -> SpriteList {
+    ) -> SpriteList<C> {
         self.to_vec()
             .iter()
             .map(|matrix| matrix.as_sprite(mode, palette.clone(), missing_pen))
-            .collect::<Vec<Sprite>>()
+            .collect::<Vec<Sprite<C>>>()
             .into()
     }
 
@@ -1059,23 +1071,23 @@ impl ColorMatrixList {
         self.to_vec()
             .iter()
             .map(|matrix| matrix.window(start_x, start_y, width, height))
-            .collect::<Vec<ColorMatrix>>()
+            .collect::<Vec<ColorMatrix<C>>>()
             .into()
     }
 }
 
 /// List of sprites for animations
 #[derive(Debug)]
-pub struct SpriteList(Vec<Sprite>);
+pub struct SpriteList<C: AmstradColor>(Vec<Sprite<C>>);    
 
-impl From<Vec<Sprite>> for SpriteList {
-    fn from(src: Vec<Sprite>) -> Self {
+impl<C: AmstradColor> From<Vec<Sprite<C>>> for SpriteList<C> {
+    fn from(src: Vec<Sprite<C>>) -> Self {
         SpriteList(src)
     }
 }
 
-impl std::ops::Deref for SpriteList {
-    type Target = Vec<Sprite>;
+impl<C: AmstradColor> std::ops::Deref for SpriteList<C> {
+    type Target = Vec<Sprite<C>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -1087,18 +1099,18 @@ impl std::ops::Deref for SpriteList {
 /// TODO Check why mode nad palette are optionnals. Force them if it is not mandatory to have htem
 /// optionnal
 #[derive(Debug)]
-pub struct Sprite {
+pub struct Sprite<C: AmstradColor> {
     /// Optional screen mode of the sprite
     pub(crate) mode: Option<Mode>,
     /// Optionnal palete of the sprite
-    pub(crate) palette: Option<Palette>,
+    pub(crate) palette: Option<Palette<C>>,
     /// Content of the sprite
     pub(crate) data: Vec<Vec<u8>>
 }
 
 #[allow(missing_docs)]
-impl Sprite {
-    pub fn from_pens(pens: &[Vec<Pen>], mode: Mode, palette: Option<Palette>) -> Self {
+impl<C: AmstradColor> Sprite<C> {
+    pub fn from_pens(pens: &[Vec<Pen>], mode: Mode, palette: Option<Palette<C>>) -> Self {
         let data = pens
             .iter()
             .map(|line| crate::pixels::pens_to_bytes(line, mode))
@@ -1110,7 +1122,7 @@ impl Sprite {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8], bytes_width: usize, mode: Mode, palette: Palette) -> Self {
+    pub fn from_bytes(bytes: &[u8], bytes_width: usize, mode: Mode, palette: Palette<C>) -> Self {
         let pens: Vec<Vec<_>> = bytes
             .chunks(bytes_width)
             .map(|chunk| pixels::bytes_to_pens(chunk, mode).collect::<Vec<_>>())
@@ -1121,7 +1133,7 @@ impl Sprite {
 
     /// TODO Use TryFrom once in standard rust
     /// The conversion can only work if a palette and a mode is provided
-    pub fn to_color_matrix(&self) -> Option<ColorMatrix> {
+    pub fn to_color_matrix(&self) -> Option<ColorMatrix<C>> {
         if self.mode.is_none() && self.palette.is_none() {
             return None;
         }
@@ -1141,7 +1153,7 @@ impl Sprite {
                             };
                             vec![*p.get(&pens[0]), *p.get(&pens[1])]
                         })
-                        .collect::<Vec<Ink>>()
+                        .collect::<Vec<C>>()
                 },
 
                 Some(mode) => {
@@ -1171,11 +1183,11 @@ impl Sprite {
     }
 
     /// Get the palette of the sprite
-    pub fn palette(&self) -> Option<Palette> {
+    pub fn palette(&self) -> Option<Palette<C>> {
         self.palette.clone()
     }
 
-    pub fn set_palette(&mut self, palette: Palette) {
+    pub fn set_palette(&mut self, palette: Palette<C>) {
         self.palette = Some(palette);
     }
 
@@ -1236,7 +1248,7 @@ impl Sprite {
         img: &im::ImageBuffer<im::Rgb<u8>, Vec<u8>>,
         mode: Mode,
         conversion: ConversionRule,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         missing_pen: Option<Pen>
     ) -> Self {
         // Get the list of Inks that represent the image
@@ -1248,7 +1260,7 @@ impl Sprite {
         fname: P,
         mode: Mode,
         conversion: ConversionRule,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         missing_pen: Option<Pen>
     ) -> Result<Self, im::ImageError> {
         let img = im::open(fname.as_ref())?;
@@ -1278,9 +1290,9 @@ impl Sprite {
 /// The palette is assumed to be the same on all the lines
 #[derive(Clone, Debug)]
 #[allow(missing_docs, unused)]
-pub struct MultiModeSprite {
+pub struct MultiModeSprite<C: AmstradColor>  {
     mode: Vec<Mode>,
-    palette: Palette,
+    palette: Palette<C>,
     data: Vec<Vec<u8>>
 }
 
@@ -1292,9 +1304,9 @@ pub enum MultiModeConversion {
 }
 
 #[allow(missing_docs)]
-impl MultiModeSprite {
+impl<C: AmstradColor> MultiModeSprite<C> {
     /// Build an empty multimode sprite BUT provide the palette
-    pub fn new(p: Palette) -> Self {
+    pub fn new(p: Palette<C>) -> Self {
         Self {
             palette: p,
             mode: Vec::new(), // Color modes for the real lines
@@ -1318,7 +1330,7 @@ impl MultiModeSprite {
     /// Bytes values will be strictly the same. However representation is loss (bytes supposed to
     /// be displayed in mode 1, 2, 3 will be represented in mode 0)
     /// The multimode sprite is consummed
-    pub fn to_mode0_sprite(&self) -> Sprite {
+    pub fn to_mode0_sprite(&self) -> Sprite<C> {
         Sprite {
             mode: Some(Mode::Zero),
             palette: Some(self.palette.clone()),
@@ -1326,7 +1338,7 @@ impl MultiModeSprite {
         }
     }
 
-    pub fn to_mode3_sprite(&self) -> Sprite {
+    pub fn to_mode3_sprite(&self) -> Sprite<C> {
         Sprite {
             mode: Some(Mode::Three),
             palette: Some(self.palette.clone()),
@@ -1336,13 +1348,13 @@ impl MultiModeSprite {
 
     /// Generate a multimode sprite that mixes mode 0 and mode 3 and uses only 4 colors
     #[allow(clippy::similar_names, clippy::identity_op)]
-    pub fn mode0_mode3_mix_from_mode0(sprite: &Sprite, conversion: MultiModeConversion) -> Self {
+    pub fn mode0_mode3_mix_from_mode0(sprite: &Sprite<C>, conversion: MultiModeConversion) -> Self {
         // TODO check that there are only the first 4 inks used
         let p_orig = sprite.palette().unwrap();
 
         //  Build the specific palette for multimode
         let p = {
-            let mut p = Palette::new();
+            let mut p = Palette::<C>::new();
 
             // First 4 inks are strictly the same
             for i in 0..4 {
@@ -1483,7 +1495,7 @@ mod tests {
         );
 
         let mask2 = sprite_with_mask.clone().convert_to_mask(bg_).clone();
-        let sprite2 = sprite_with_mask.clone().replace_ink(bg_, rep).clone();
+        let sprite2 = sprite_with_mask.clone().replace_color(bg_, rep).clone();
 
         assert_eq!(mask, mask2);
         assert_eq!(sprite, sprite2);

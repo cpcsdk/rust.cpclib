@@ -48,7 +48,7 @@ pub struct CpcLspBackend {
     /// merges an entry in here into every analyze/publish cycle for that URI
     /// until `execute_command`'s `"cpclib.runRule"` handler clears it (on the
     /// next successful run) or overwrites it (on the next failing one).
-    build_error_diagnostics: Arc<DashMap<Url, Diagnostic>>,
+    build_error_diagnostics: Arc<DashMap<Url, Vec<Diagnostic>>>,
     /// `.asm` files known (from having been opened/analyzed at least once
     /// this session) to declare at least one `#!bndbuild`-embedded rule,
     /// each mapped to its target names - backs `cpclib.getEmbeddedBndbuildFiles`
@@ -652,7 +652,7 @@ fn compute_diagnostics(
     basic_analyzer: &BasicAnalyzer,
     document: &Document,
     workspace_roots: &[PathBuf],
-    build_error_diagnostics: &DashMap<Url, Diagnostic>
+    build_error_diagnostics: &DashMap<Url, Vec<Diagnostic>>
 ) -> Vec<Diagnostic> {
     let mut diagnostics = match document.doc_type {
         DocumentType::Assembly => asm_analyzer.analyze(document),
@@ -689,8 +689,8 @@ fn compute_diagnostics(
     }
 
     relativize_diagnostic_messages(&mut diagnostics, workspace_roots);
-    if let Some(build_error) = build_error_diagnostics.get(&document.uri) {
-        diagnostics.push(build_error.clone());
+    if let Some(build_errors) = build_error_diagnostics.get(&document.uri) {
+        diagnostics.extend(build_errors.iter().cloned());
     }
     diagnostics
 }
@@ -890,7 +890,8 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.removeUnusedParameter",
     crate::basm::peephole::FIX_ALL_COMMAND,
     crate::basm::peephole::ANALYZE_COMMAND,
-    crate::basm::peephole::CLEAR_COMMAND
+    crate::basm::peephole::CLEAR_COMMAND,
+    "cpclib.assembleFile"
 ];
 
 #[tower_lsp::async_trait]
@@ -1877,7 +1878,7 @@ impl LanguageServer for CpcLspBackend {
                                         "No embedded bndbuild rule '{rule}' found in this file"
                                     ),
                                     diagnostics: Vec::new(),
-                                    build_error: None,
+                                    build_errors: Vec::new(),
                                     success: false
                                 }
                             },
@@ -1928,9 +1929,17 @@ impl LanguageServer for CpcLspBackend {
                 // until the next successful build, not just this file's own
                 // next edit. Stored, then republished immediately so it's
                 // visible without waiting for that.
-                if let Some((target_uri, diagnostic)) = outcome.build_error {
+                // One entry per file, holding every error that landed in it -
+                // a build reports as many as it hit, and keeping only the
+                // last would mean fixing one to be shown the next.
+                let mut per_file: std::collections::HashMap<Url, Vec<Diagnostic>> =
+                    std::collections::HashMap::new();
+                for (target_uri, diagnostic) in outcome.build_errors {
+                    per_file.entry(target_uri).or_default().push(diagnostic);
+                }
+                for (target_uri, diagnostics) in per_file {
                     self.build_error_diagnostics
-                        .insert(target_uri.clone(), diagnostic);
+                        .insert(target_uri.clone(), diagnostics);
                     if let Some(target_document) = self.load_document(&target_uri) {
                         self.analyze_document(&target_document).await;
                     }
@@ -1966,6 +1975,102 @@ impl LanguageServer for CpcLspBackend {
                 )
                 .await;
             return Ok(None);
+        }
+
+        if params.command == "cpclib.assembleFile" {
+            let mut arguments = params.arguments.into_iter();
+            let Some(uri) = arguments
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| s.parse::<Url>().ok()))
+            else {
+                return Ok(None);
+            };
+            // Whatever the user typed into the prompt - the same arguments the
+            // real build would pass. Absent is fine; most files need none.
+            let extra = arguments
+                .next()
+                .and_then(|v| v.as_str().map(|s| s.to_owned()))
+                .unwrap_or_default();
+
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            // Live output, same as a build: assembling a big source is not
+            // instant and silence looks like a hang.
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            // On the blocking pool: assembling is real CPU work and must not
+            // occupy an async worker the rest of the server shares.
+            let outcome = tokio::task::spawn_blocking(move || {
+                crate::bndbuild::command::assemble_file(&document, &extra, Some(tx))
+            })
+            .await
+            .unwrap_or_else(|_| {
+                crate::bndbuild::command::AssembleOutcome {
+                    message: "the assemble task panicked".to_owned(),
+                    errors: Vec::new(),
+                    success: false
+                }
+            });
+            let _ = log_task.await;
+
+            // Stored the same way a failing build's errors are: sticky on the
+            // target file until the next successful assemble or build, so the
+            // user can navigate away and back.
+            let previously = self.build_error_diagnostics.get(&uri).is_some();
+            if outcome.success {
+                if previously {
+                    self.build_error_diagnostics.remove(&uri);
+                }
+            }
+            else {
+                let mut per_file: std::collections::HashMap<Url, Vec<Diagnostic>> =
+                    std::collections::HashMap::new();
+                for (target_uri, diagnostic) in outcome.errors {
+                    per_file.entry(target_uri).or_default().push(diagnostic);
+                }
+                for (target_uri, diagnostics) in per_file {
+                    self.build_error_diagnostics.insert(target_uri, diagnostics);
+                }
+            }
+            for target in [uri.clone()] {
+                if let Some(target_document) = self.load_document(&target) {
+                    self.analyze_document(&target_document).await;
+                }
+            }
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    outcome.message.lines().next().unwrap_or("").to_owned()
+                )
+                .await;
+            return Ok(Some(serde_json::json!(outcome.success)));
         }
 
         if params.command == "cpclib.runTask" {
@@ -3425,11 +3530,11 @@ mod build_error_diagnostics_tests {
         let asm_analyzer = AssemblyAnalyzer::new();
         let build_analyzer = BuildFileAnalyzer::new();
         let basic_analyzer = BasicAnalyzer::new();
-        let build_error_diagnostics: DashMap<Url, Diagnostic> = DashMap::new();
+        let build_error_diagnostics: DashMap<Url, Vec<Diagnostic>> = DashMap::new();
 
         let uri = Url::parse("file:///sna.asm").unwrap();
         let stored = build_error_diag("Build error (from rule 'x'): boom");
-        build_error_diagnostics.insert(uri.clone(), stored.clone());
+        build_error_diagnostics.insert(uri.clone(), vec![stored.clone()]);
 
         // Clean, valid code - live analysis alone finds nothing.
         let document = Document::new(uri, "org 0x8000\n    ret\n".to_string(), 1);
@@ -3450,11 +3555,11 @@ mod build_error_diagnostics_tests {
         let asm_analyzer = AssemblyAnalyzer::new();
         let build_analyzer = BuildFileAnalyzer::new();
         let basic_analyzer = BasicAnalyzer::new();
-        let build_error_diagnostics: DashMap<Url, Diagnostic> = DashMap::new();
+        let build_error_diagnostics: DashMap<Url, Vec<Diagnostic>> = DashMap::new();
 
         build_error_diagnostics.insert(
             Url::parse("file:///other.asm").unwrap(),
-            build_error_diag("Build error (from rule 'x'): boom")
+            vec![build_error_diag("Build error (from rule 'x'): boom")]
         );
 
         let document = Document::new(
@@ -3496,7 +3601,7 @@ mod build_error_diagnostics_tests {
         let target_uri = Url::parse("file:///sna.asm").unwrap();
         backend.build_error_diagnostics.insert(
             target_uri,
-            build_error_diag("Build error (from rule 'x'): stale")
+            vec![build_error_diag("Build error (from rule 'x'): stale")]
         );
 
         let tmp = camino_tempfile::tempdir().unwrap();

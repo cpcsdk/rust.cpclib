@@ -181,11 +181,15 @@ pub fn parse(matches: &ArgMatches) -> Result<(LocatedListing, ParserOptions), Ba
         options.set_flavor(AssemblerFlavor::Orgams);
     }
 
-    match std::env::current_dir() {
-        Ok(cwd) => {
-            options.add_search_path(cwd)?;
-        },
-        Err(_) => todo!()
+    // The working directory is *a* search path, not a required one - the
+    // file's own directory and every `-I` are added just below. A process can
+    // legitimately have no valid working directory: `bndbuild` chdirs into a
+    // build file's directory (`BndBuilder::from_path`), and if that directory
+    // is later removed or renamed, `current_dir` fails for every call after
+    // it. Panicking there took down whatever asked to assemble - in the LSP,
+    // any assemble at all from that point on.
+    if let Ok(cwd) = std::env::current_dir() {
+        options.add_search_path(cwd)?;
     }
     let _ = options.add_search_path_from_file(filename); // we ignore the potential error
     if let Some(directories) = matches.get_many::<String>("INCLUDE_DIRECTORIES") {

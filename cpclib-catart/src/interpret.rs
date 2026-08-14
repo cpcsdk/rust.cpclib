@@ -163,7 +163,14 @@ impl Mode {
 
 use bon;
 use cpclib_common::smallvec::SmallVec;
-use cpclib_image::ga::{Palette, Pen};
+use cpclib_image::ga::{Ink, Pen};
+
+// CatArt is a text-mode format: its colours are the 27 Gate Array inks, and
+// there is no Plus variant of a disc catalogue. Naming the instantiation once
+// keeps every signature below unchanged.
+type Palette = cpclib_image::ga::Palette<Ink>;
+type Sprite = cpclib_image::image::Sprite<Ink>;
+type ColorMatrix = cpclib_image::image::ColorMatrix<Ink>;
 use cpclib_image::pixels;
 
 /// Pixel-accurate memory representation of the CPC screen
@@ -447,12 +454,12 @@ impl BasicMemoryScreen {
     }
 
     /// Convert the memory screen to a Sprite
-    pub fn to_sprite(&self) -> cpclib_image::image::Sprite {
+    pub fn to_sprite(&self) -> cpclib_image::image::Sprite<Ink> {
         let pens = self.to_pens();
-        cpclib_image::image::Sprite::from_pens(&pens, self.mode, Some(self.palette.clone()))
+        cpclib_image::image::Sprite::<Ink>::from_pens(&pens, self.mode, Some(self.palette.clone()))
     }
 
-    pub fn to_color_matrix(&self) -> Option<cpclib_image::image::ColorMatrix> {
+    pub fn to_color_matrix(&self) -> Option<cpclib_image::image::ColorMatrix<Ink>> {
         self.to_color_matrix_with_border(3, 4)
     }
 
@@ -461,7 +468,7 @@ impl BasicMemoryScreen {
         &self,
         border_horizontal: usize,
         border_vertical: usize
-    ) -> Option<cpclib_image::image::ColorMatrix> {
+    ) -> Option<cpclib_image::image::ColorMatrix<Ink>> {
         // First convert to sprite
         let sprite = self.to_sprite();
 

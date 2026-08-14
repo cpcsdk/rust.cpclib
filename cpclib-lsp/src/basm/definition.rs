@@ -1145,7 +1145,7 @@ impl AssemblyAnalyzer {
 /// `linking/src/hbl_inner.asm` doing `include 'src/demosystem/foo.asm'`
 /// means relative to `linking/`, not `linking/src/`. A single directory
 /// (just the file's own) isn't enough to resolve that.
-pub(super) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathBuf> {
+pub(crate) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathBuf> {
     let mut dirs = Vec::new();
     let Ok(doc_path) = doc_uri.to_file_path()
     else {
