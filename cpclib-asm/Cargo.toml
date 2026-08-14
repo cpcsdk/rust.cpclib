@@ -17,6 +17,7 @@ cpclib-basic.workspace = true
 cpclib-crunchers.workspace = true
 cpclib-sna.workspace = true
 cpclib-tokens.workspace = true
+cpclib-z80flow.workspace = true
 cpclib-disc.workspace = true
 fs-err.workspace = true
 cpclib-common.workspace = true

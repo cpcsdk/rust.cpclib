@@ -41,6 +41,7 @@ fn test_cost(token: &LocatedToken) -> InstructionCost {
     }
 }
 
+
 fn balance(code: &str) -> Result<Vec<StabilizeEdit>, String> {
     // `LocatedToken::clone()` is an `unimplemented!()` stub in this
     // codebase today, so tests borrow straight from the parsed

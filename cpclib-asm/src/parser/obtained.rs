@@ -667,6 +667,26 @@ impl From<LocatedExpr> for Expr {
 }
 
 impl DataAccessElem for LocatedDataAccess {
+
+    fn kind(&self) -> cpclib_tokens::OperandKind {
+        use cpclib_tokens::OperandKind;
+        match self {
+            Self::IndexRegister16WithIndex(..) => OperandKind::Indexed,
+            Self::IndexRegister16(reg, ..) => OperandKind::IndexReg16(*reg),
+            Self::IndexRegister8(..) => OperandKind::IndexReg8,
+            Self::Register16(reg, ..) => OperandKind::Reg16(*reg),
+            Self::Register8(reg, ..) => OperandKind::Reg8(*reg),
+            Self::MemoryRegister16(reg, ..) => OperandKind::MemReg16(*reg),
+            Self::MemoryIndexRegister16(..) => OperandKind::MemIndexReg16,
+            Self::Expression(..) => OperandKind::Expression,
+            Self::Memory(..) => OperandKind::Memory,
+            Self::FlagTest(..) => OperandKind::FlagTest,
+            Self::SpecialRegisterI(..) => OperandKind::SpecialI,
+            Self::SpecialRegisterR(..) => OperandKind::SpecialR,
+            Self::PortC(..) => OperandKind::PortC,
+            Self::PortN(..) => OperandKind::PortN
+        }
+    }
     type Expr = LocatedExpr;
 
     data_access_impl_most_methods!();
@@ -2470,7 +2490,31 @@ where T: Locate
 // }
 
 impl TokenExt for LocatedToken {
+    /// An opcode's duration is read straight off this token.
+    ///
+    /// This used to be `self.to_token().estimated_duration()` - a full clone of
+    /// the token, every time, only to read one number back out. The rules moved
+    /// to `cpclib-z80flow` and became generic over `DataAccessElem`, so they
+    /// now run on a `LocatedDataAccess` as readily as on a `DataAccess` and the
+    /// clone is gone. `cpclib-z80flow-tests`'s `duration.rs` checks the two
+    /// token types get identical answers across ~100 instructions.
+    ///
+    /// Everything that is *not* a plain opcode (a `REPEAT`, a `DEFB` that has
+    /// to be disassembled first, ...) still goes the long way, because those
+    /// really do need the owned tree.
     fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
+        if let Some(mnemonic) = self.mnemonic()
+            // `NOP n` needs its expression evaluated, which `Token`'s own
+            // implementation does.
+            && !(*mnemonic == Mnemonic::Nop && self.mnemonic_arg1().is_some())
+            && let Some(duration) = cpclib_z80flow::cost::opcode_duration(
+                mnemonic,
+                self.mnemonic_arg1(),
+                self.mnemonic_arg2()
+            )
+        {
+            return Ok(duration as usize);
+        }
         self.to_token().estimated_duration()
     }
 

@@ -2527,6 +2527,7 @@ dependencies = [
  "cpclib-image",
  "cpclib-sna",
  "cpclib-tokens",
+ "cpclib-z80flow",
  "criterion",
  "custom_error",
  "delegate",

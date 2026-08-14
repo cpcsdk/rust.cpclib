@@ -145,13 +145,6 @@ impl CostModel<LocatedToken> for StrictTimingCosts {
         nops_of(&token.to_string())
     }
 
-    /// A real opcode a fake instruction expanded into - `ld h, d` for the
-    /// `ld hl, de` the user actually wrote. Same table, asked about something
-    /// nobody typed, which is exactly what makes the fake instruction cost
-    /// what it assembles to instead of contributing nothing.
-    fn expanded_cost(&self, op: &cpclib_tokens::Token) -> InstructionCost {
-        nops_of(&op.to_string())
-    }
 }
 
 /// The min/max cost summary for every token inside `range` of the
@@ -344,6 +337,8 @@ mod tests {
             "the two candidates disagree, so this must not be guessed: {s:?}"
         );
     }
+
+
 
 
     #[test]

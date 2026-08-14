@@ -91,14 +91,6 @@ impl CostModel<LocatedToken> for TimingCosts {
         nops_of(&token.to_string())
     }
 
-    /// A real opcode a fake instruction expanded into. Balancing needs an
-    /// exact figure, so this matters more here than for the read-only cycle
-    /// count: before it, a `ld hl, de` in one arm made the whole selection
-    /// unbalanceable (`Unknown` aborts the pass) rather than costing the two
-    /// opcodes it assembles to.
-    fn expanded_cost(&self, op: &cpclib_tokens::Token) -> InstructionCost {
-        nops_of(&op.to_string())
-    }
 }
 
 /// `(taken, not_taken)` nops for a conditional instruction's real timing

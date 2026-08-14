@@ -49,6 +49,7 @@ fn test_cost(token: &LocatedToken) -> InstructionCost {
     }
 }
 
+
 fn range(code: &str) -> Result<CostRange, String> {
     let listing = parse_z80_str(code).unwrap();
     let tokens: Vec<&LocatedToken> = listing.iter().collect();
