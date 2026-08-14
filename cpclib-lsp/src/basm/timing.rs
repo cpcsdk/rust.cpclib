@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use cpclib_z80flow::InstructionCost;
 
 use super::overflow::format_value_like_source;
 
@@ -62,6 +63,33 @@ fn block_repeat_total_nops(bc: i32, per_iteration: u8, last_iteration: u8) -> u3
 /// whole-instruction match instead of routing through the generic scorer,
 /// which is otherwise correct for every other pattern in the table.
 const LITERAL_IR_REGISTER_PATTERNS: &[&str] = &["ld i,a", "ld r,a", "ld a,i", "ld a,r"];
+
+/// One instruction's NOP cost, straight from `data/timings.txt`.
+///
+/// The single lookup behind every cost source in this crate - the two in
+/// `cycles.rs` and `stabilize.rs`, and the "what does this real opcode cost"
+/// half both of them answer for `cpclib-z80flow` so that a *fake* instruction
+/// can be priced by what it assembles to.
+///
+/// Takes text rather than a token on purpose: it is asked both about real
+/// `LocatedToken`s and about synthetic `Token`s that no one wrote, and text is
+/// what the table is keyed by.
+pub fn nops_of(instruction_text: &str) -> InstructionCost {
+    match find_timings(instruction_text).first() {
+        Some(entry) => {
+            match entry.nops_alt {
+                Some(alt) => {
+                    InstructionCost::Conditional {
+                        taken: entry.nops as u32,
+                        not_taken: alt as u32
+                    }
+                },
+                None => InstructionCost::Fixed(entry.nops as u32)
+            }
+        },
+        None => InstructionCost::Unknown
+    }
+}
 
 /// Given raw instruction text from the source line (e.g. `"LD A, (IX+5)"`),
 /// return the best-matching timing entries.

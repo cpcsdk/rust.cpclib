@@ -54,21 +54,9 @@ use std::collections::HashMap;
 
 use cpclib_tokens::{ListingElement, Mnemonic};
 
+pub use crate::cost::InstructionCost;
 use crate::cfg::{Cfg, Terminator, build_cfg, compute_postdominators, expect_block, mnemonic_of};
-
-/// A cost source the algorithm queries once per token - kept fully
-/// decoupled from any specific timing-data representation (see the module
-/// doc comment).
-pub enum InstructionCost {
-    /// A plain instruction's single cost.
-    Fixed(u32),
-    /// A conditional `JR`/`JP`'s own two costs. Mirrors `timing::
-    /// format_hover`'s "taken/not taken" convention in `cpclib-lsp`.
-    Conditional { taken: u32, not_taken: u32 },
-    /// The cost source doesn't recognize this instruction - aborts the
-    /// whole pass (same fail-safe policy as every other unsupported case).
-    Unknown
-}
+use crate::cost::{CostModel, instruction_cost};
 
 /// One point where padding is needed, in one of two shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,7 +143,7 @@ fn straight_line_cost<T: ListingElement>(
     labels: &HashMap<String, usize>,
     start: usize,
     end: usize,
-    cost: &impl Fn(&T) -> InstructionCost
+    cost: &impl CostModel<T>
 ) -> Result<u32, String> {
     if start > end {
         return Ok(0);
@@ -179,7 +167,7 @@ fn straight_line_cost<T: ListingElement>(
             total += n;
             continue;
         }
-        match cost(token) {
+        match instruction_cost(token, cost) {
             InstructionCost::Fixed(n) => total += n,
             InstructionCost::Conditional { taken, .. } => total += taken,
             InstructionCost::Unknown => {
@@ -201,7 +189,7 @@ fn balance<T: ListingElement>(
     postdom: &[usize],
     tokens: &[&T],
     labels: &HashMap<String, usize>,
-    cost: &impl Fn(&T) -> InstructionCost
+    cost: &impl CostModel<T>
 ) -> Result<Vec<StabilizeEdit>, String> {
     let mut edits = Vec::new();
     // resolved[b] = fixed cost from block b to postdom[b], once b (a
@@ -228,7 +216,7 @@ fn balance<T: ListingElement>(
         // supplied by the caller's cost function (see `build_cfg`'s own
         // note on why this is deferred to here).
         let branch_token = tokens[cfg.blocks[b].end];
-        let (cost_taken, cost_not_taken) = match cost(branch_token) {
+        let (cost_taken, cost_not_taken) = match instruction_cost(branch_token, cost) {
             InstructionCost::Conditional { taken, not_taken } => (taken, not_taken),
             InstructionCost::Fixed(n) => (n, n),
             InstructionCost::Unknown => {
@@ -300,7 +288,7 @@ fn arm_cost<T: ListingElement>(
     postdom: &[usize],
     tokens: &[&T],
     labels: &HashMap<String, usize>,
-    cost: &impl Fn(&T) -> InstructionCost,
+    cost: &impl CostModel<T>,
     start: usize,
     end: usize
 ) -> Result<u32, String> {
@@ -385,7 +373,7 @@ fn arm_padding_index(
 /// necessarily a mistake, just a shape this feature doesn't cover yet).
 pub fn balance_branches<T: ListingElement>(
     tokens: &[&T],
-    cost: impl Fn(&T) -> InstructionCost
+    cost: impl CostModel<T>
 ) -> Result<Vec<StabilizeEdit>, String> {
     if tokens.is_empty() {
         return Ok(Vec::new());

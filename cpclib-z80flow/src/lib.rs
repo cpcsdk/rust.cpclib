@@ -35,6 +35,7 @@
 pub mod analysis_op;
 pub mod branch_balance;
 pub(crate) mod cfg;
+pub mod cost;
 pub mod cost_range;
 pub mod dependency;
 pub mod effects;
@@ -43,7 +44,8 @@ pub mod liveness;
 pub mod regflag;
 pub mod stream;
 
-pub use branch_balance::{InstructionCost, StabilizeEdit, balance_branches};
+pub use branch_balance::{StabilizeEdit, balance_branches};
+pub use cost::{CostModel, InstructionCost};
 pub use cost_range::{CostRange, cost_range};
 
 /// Does control go anywhere other than the next instruction?

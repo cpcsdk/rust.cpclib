@@ -47,12 +47,13 @@
 //! reports no edits) rather than emit a reference that might not reliably
 //! resolve.
 
-use cpclib_z80flow::branch_balance::{self, InstructionCost, StabilizeEdit};
+use cpclib_z80flow::branch_balance::{self, StabilizeEdit};
+use cpclib_z80flow::{CostModel, InstructionCost};
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken};
 use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::{Position, Range};
 
-use super::timing::{find_timings, split_head};
+use super::timing::{find_timings, nops_of, split_head};
 use super::token::{token_lsp_range, tokens_in_lines, tokens_in_range};
 
 /// One point of text change needed to balance the selection.
@@ -80,23 +81,23 @@ pub(super) enum StabilizeTextEdit {
 /// recognize, `Fixed(0)` for anything that isn't an instruction at all
 /// (labels, comments, directives, ...), matching how those contributed
 /// nothing to the old text-based version's own cost sum.
-fn cost_from_timing(token: &LocatedToken) -> InstructionCost {
-    if token.mnemonic().is_none() {
-        return InstructionCost::Fixed(0);
+struct TimingCosts;
+
+impl CostModel<LocatedToken> for TimingCosts {
+    fn cost(&self, token: &LocatedToken) -> InstructionCost {
+        if token.mnemonic().is_none() {
+            return InstructionCost::Fixed(0);
+        }
+        nops_of(&token.to_string())
     }
-    match find_timings(&token.to_string()).first() {
-        Some(entry) => {
-            match entry.nops_alt {
-                Some(alt) => {
-                    InstructionCost::Conditional {
-                        taken: entry.nops as u32,
-                        not_taken: alt as u32
-                    }
-                },
-                None => InstructionCost::Fixed(entry.nops as u32)
-            }
-        },
-        None => InstructionCost::Unknown
+
+    /// A real opcode a fake instruction expanded into. Balancing needs an
+    /// exact figure, so this matters more here than for the read-only cycle
+    /// count: before it, a `ld hl, de` in one arm made the whole selection
+    /// unbalanceable (`Unknown` aborts the pass) rather than costing the two
+    /// opcodes it assembles to.
+    fn expanded_cost(&self, op: &cpclib_tokens::Token) -> InstructionCost {
+        nops_of(&op.to_string())
     }
 }
 
@@ -192,7 +193,7 @@ pub(super) fn stabilize_selection(
 ) -> Result<Vec<StabilizeTextEdit>, String> {
     let tokens = tokens_in_range(listing.iter(), range);
 
-    let raw_edits = branch_balance::balance_branches(&tokens, cost_from_timing)?;
+    let raw_edits = branch_balance::balance_branches(&tokens, TimingCosts)?;
 
     let mut edits = Vec::with_capacity(raw_edits.len());
     let mut tail_blocks = String::new();

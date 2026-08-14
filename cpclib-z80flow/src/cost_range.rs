@@ -27,7 +27,8 @@
 
 use cpclib_tokens::ListingElement;
 
-pub use crate::branch_balance::InstructionCost;
+pub use crate::cost::InstructionCost;
+use crate::cost::{CostModel, instruction_cost};
 use crate::cfg::{Successor, Terminator, build_cfg};
 
 /// The min/max cost summary for a token selection.
@@ -105,10 +106,10 @@ fn call_cost<T: ListingElement>(
     outer: &[&T],
     labels: &std::collections::HashMap<String, usize>,
     token: &T,
-    cost: &impl Fn(&T) -> InstructionCost,
+    cost: &impl CostModel<T>,
     calls: &mut CallCosts
 ) -> RunCost {
-    let own = match cost(token) {
+    let own = match instruction_cost(token, cost) {
         InstructionCost::Fixed(n) => (n, n),
         InstructionCost::Conditional { taken, not_taken } => (taken, not_taken),
         InstructionCost::Unknown => (0, 0)
@@ -225,7 +226,7 @@ pub(crate) fn exact_call_cost<T: ListingElement>(
     tokens: &[&T],
     labels: &std::collections::HashMap<String, usize>,
     token: &T,
-    cost: &impl Fn(&T) -> InstructionCost
+    cost: &impl CostModel<T>
 ) -> Option<u32> {
     let run = call_cost(tokens, labels, token, cost, &mut CallCosts::default());
     (!run.unbounded && !run.incomplete && run.min == run.max).then_some(run.min)
@@ -246,7 +247,7 @@ fn sum_range<T: ListingElement>(
     outer: &[&T],
     tokens: &[&T],
     range: std::ops::Range<usize>,
-    cost: &impl Fn(&T) -> InstructionCost,
+    cost: &impl CostModel<T>,
     labels: &std::collections::HashMap<String, usize>,
     calls: &mut CallCosts,
     instruction_count: &mut u32,
@@ -266,7 +267,7 @@ fn sum_range<T: ListingElement>(
             *instruction_count += 1;
             continue;
         }
-        match cost(token) {
+        match instruction_cost(token, cost) {
             // `Fixed(0)` is this whole feature's own established signal
             // for "not really an executing instruction at all" (a
             // directive, e.g.) - no real Z80 instruction genuinely costs
@@ -301,7 +302,7 @@ fn sum_range<T: ListingElement>(
 /// gracefully (see the module doc comment).
 pub fn cost_range<T: ListingElement>(
     tokens: &[&T],
-    cost: impl Fn(&T) -> InstructionCost
+    cost: impl CostModel<T>
 ) -> Result<CostRange, String> {
     let labels = crate::cfg::label_indices(tokens);
     cost_range_inner(tokens, 0, &labels, &cost, &mut CallCosts::default())
@@ -320,7 +321,7 @@ fn cost_range_inner<T: ListingElement>(
     outer: &[&T],
     base: usize,
     labels: &std::collections::HashMap<String, usize>,
-    cost: &impl Fn(&T) -> InstructionCost,
+    cost: &impl CostModel<T>,
     calls: &mut CallCosts
 ) -> Result<CostRange, String> {
     let tokens = &outer[base.min(outer.len())..];
@@ -409,7 +410,7 @@ fn cost_range_inner<T: ListingElement>(
                 );
                 incomplete |= prefix.incomplete;
                 let branch_token = tokens[block.end];
-                let (branch_taken_cost, branch_not_taken_cost) = match cost(branch_token) {
+                let (branch_taken_cost, branch_not_taken_cost) = match instruction_cost(branch_token, cost) {
                     InstructionCost::Conditional { taken, not_taken } => {
                         instruction_count += 1;
                         (taken, not_taken)

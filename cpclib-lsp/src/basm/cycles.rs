@@ -22,13 +22,13 @@
 //! .ok()`, so this module joining that established convention isn't a
 //! special exception).
 
-use cpclib_z80flow::branch_balance::InstructionCost;
+use cpclib_z80flow::{CostModel, InstructionCost};
 use cpclib_z80flow::cost_range::{self};
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, LocatedTokenInner};
 use cpclib_tokens::{ExprElement, ListingElement};
 use tower_lsp::lsp_types::{Position, Range};
 
-use super::timing::{find_timings, split_head};
+use super::timing::{nops_of, split_head};
 use super::token::{tokens_in_lines, tokens_in_range};
 
 /// Total NOP-count summary for a selected line range.
@@ -125,33 +125,32 @@ fn waitnops_cost(token: &LocatedToken) -> Option<InstructionCost> {
 /// non-executing (a comment, or a bookkeeping directive) - everything
 /// else with no recognized timing entry is `Unknown`, incrementing
 /// `unrecognized_count` instead of vanishing silently.
-fn strict_cost_from_timing(token: &LocatedToken) -> InstructionCost {
-    if token.mnemonic().is_none() {
-        if token.is_directive()
-            && let Some(cost) = waitnops_cost(token)
-        {
-            return cost;
-        }
-        return if token.is_comment() || token.is_directive() {
-            InstructionCost::Fixed(0)
-        }
-        else {
-            InstructionCost::Unknown
-        };
-    }
-    match find_timings(&token.to_string()).first() {
-        Some(entry) => {
-            match entry.nops_alt {
-                Some(alt) => {
-                    InstructionCost::Conditional {
-                        taken: entry.nops as u32,
-                        not_taken: alt as u32
-                    }
-                },
-                None => InstructionCost::Fixed(entry.nops as u32)
+struct StrictTimingCosts;
+
+impl CostModel<LocatedToken> for StrictTimingCosts {
+    fn cost(&self, token: &LocatedToken) -> InstructionCost {
+        if token.mnemonic().is_none() {
+            if token.is_directive()
+                && let Some(cost) = waitnops_cost(token)
+            {
+                return cost;
             }
-        },
-        None => InstructionCost::Unknown
+            return if token.is_comment() || token.is_directive() {
+                InstructionCost::Fixed(0)
+            }
+            else {
+                InstructionCost::Unknown
+            };
+        }
+        nops_of(&token.to_string())
+    }
+
+    /// A real opcode a fake instruction expanded into - `ld h, d` for the
+    /// `ld hl, de` the user actually wrote. Same table, asked about something
+    /// nobody typed, which is exactly what makes the fake instruction cost
+    /// what it assembles to instead of contributing nothing.
+    fn expanded_cost(&self, op: &cpclib_tokens::Token) -> InstructionCost {
+        nops_of(&op.to_string())
     }
 }
 
@@ -167,7 +166,7 @@ pub(super) fn count_cycles_in_selection(
     range: Range
 ) -> SelectionCycleCount {
     let tokens = tokens_in_range(listing.iter(), range);
-    let Ok(result) = cost_range::cost_range(&tokens, strict_cost_from_timing)
+    let Ok(result) = cost_range::cost_range(&tokens, StrictTimingCosts)
     else {
         return SelectionCycleCount::default();
     };
@@ -295,6 +294,57 @@ mod tests {
             format_title(&s)
         );
     }
+
+    /// `ld hl, de` is not a Z80 opcode - basm assembles it to `ld h, d` /
+    /// `ld l, e`, two real instructions at 1 NOP each. The timing table is
+    /// keyed by instruction text and has no entry for the written form, so
+    /// before the cost model could ask about an expansion this contributed
+    /// **zero** and merely bumped `unrecognized_count`. The corpus has 29 of
+    /// these across 15 files.
+    #[test]
+    fn a_fake_instruction_costs_what_it_assembles_to() {
+        let s = summary("    ld hl, de\n    nop\n");
+        assert_eq!(s.min_nops, 3, "ld h,d + ld l,e + nop: {s:?}");
+        assert_eq!(s.max_nops, 3, "{s:?}");
+        assert_eq!(
+            s.unrecognized_count, 0,
+            "the expansion is fully priced, so nothing is unrecognized: {s:?}"
+        );
+    }
+
+    /// The control: a real 16-bit load is a single opcode with its own entry,
+    /// so the test above is not just measuring "any ld costs 2".
+    #[test]
+    fn a_real_sixteen_bit_load_is_still_one_instruction() {
+        let s = summary("    ld hl, 0x4000\n    nop\n");
+        assert_eq!(s.min_nops, 4, "ld hl,nn is 3 NOPs, plus nop: {s:?}");
+        assert_eq!(s.unrecognized_count, 0, "{s:?}");
+    }
+
+    /// `jq` is basm's "assembler picks JR or JP" form, absent from the timing
+    /// table for the same reason a fake instruction is. Unconditionally both
+    /// candidates cost 3, so the answer does not depend on which one basm
+    /// picks - and the cost model asks for both rather than assuming that.
+    #[test]
+    fn an_unconditional_jq_costs_what_both_candidates_agree_on() {
+        let s = summary("    jq elsewhere\n");
+        assert_eq!(s.min_nops, 3, "jr and jp are both 3 NOPs: {s:?}");
+        assert_eq!(s.unrecognized_count, 0, "{s:?}");
+    }
+
+    /// A *conditional* `jq` genuinely differs between the two candidates
+    /// (`jr cc` is "3 or 2", `jp cc` is always 3), so it stays unknown rather
+    /// than picking one. Which it is depends on a distance only a real
+    /// assemble knows.
+    #[test]
+    fn a_conditional_jq_stays_unknown_because_the_candidates_disagree() {
+        let s = summary("    jq nz, elsewhere\n");
+        assert_eq!(
+            s.unrecognized_count, 1,
+            "the two candidates disagree, so this must not be guessed: {s:?}"
+        );
+    }
+
 
     #[test]
     fn an_unconditional_sequence_sums_to_a_single_fixed_total() {
