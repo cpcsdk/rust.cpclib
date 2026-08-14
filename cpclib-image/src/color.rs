@@ -32,9 +32,22 @@ pub trait AmstradColor:
     // again. Requiring it here rather than at each generic method is what lets
     // the whole conversion pipeline be written once.
     + From<image::Rgb<u8>>
-    + Into<image::Rgb<u8>> {
+    + Into<image::Rgb<u8>>
+    // Every Amstrad colour space can name the 27 Gate Array inks - the Plus's
+    // ASIC is a superset of them, not a replacement. Command-line options that
+    // are spelled as an ink (`--mask-ink`) therefore mean something on both
+    // machines, and generic code can say so without knowing which it is on.
+    + From<Ink> {
     fn black() -> Self;
     fn white() -> Self;
+
+    /// Wrap a palette of this colour into the runtime seam.
+    ///
+    /// This is the one place a monomorphised pipeline can hand back to code
+    /// that has to know which machine it is talking to - writing the palette
+    /// out, or emitting the Z80 that installs it. Everything else stays
+    /// generic and never asks the question.
+    fn into_any_palette(palette: crate::palette::Palette<Self>) -> crate::palette::AnyPalette;
 
     /// The colour standing for "background" in a sprite-with-mask image.
     fn mask_background() -> Self;
@@ -45,6 +58,10 @@ pub trait AmstradColor:
 }
 
 impl AmstradColor for Ink {
+    fn into_any_palette(palette: crate::palette::Palette<Self>) -> crate::palette::AnyPalette {
+        crate::palette::AnyPalette::GateArray(palette)
+    }
+
     fn mask_background() -> Self {
         Ink::BRIGHTWHITE
     }
@@ -70,6 +87,10 @@ impl AmstradColor for Ink {
 /// are about *which* colour means what, not about how many are available, so
 /// they must agree between the two machines.
 impl AmstradColor for AsicColor {
+    fn into_any_palette(palette: crate::palette::Palette<Self>) -> crate::palette::AnyPalette {
+        crate::palette::AnyPalette::Asic(palette)
+    }
+
     fn mask_background() -> Self {
         Ink::mask_background().into()
     }

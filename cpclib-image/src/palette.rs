@@ -514,6 +514,11 @@ impl<C: AmstradColor> Palette<C> {
     }
 
 
+    /// This palette, as something that knows which machine it is for.
+    pub fn into_any(self) -> AnyPalette {
+        C::into_any_palette(self)
+    }
+
     pub fn nb_pens_used(&self) -> usize {
         self.values.len()
     }
@@ -623,36 +628,178 @@ impl<C: AmstradColor> LockablePalette<C> {
 
 
 
+/// A palette whose machine is only known at runtime.
+///
+/// The conversion pipeline is monomorphised - `Palette<Ink>` for the Gate
+/// Array, `Palette<AsicColor>` for the Plus - because the two are genuinely
+/// different colour spaces, not one with a flag. But the *command line* only
+/// learns which is meant when it reads `--pen0` or `--colb0`/`--kit`, so
+/// something has to carry that choice from there to the code that acts on it.
+/// This is that something: one runtime seam, at the container, delegating to
+/// the concrete palettes underneath.
+#[derive(Clone, Debug)]
 pub enum AnyLockablePalette {
     GateArray(LockablePalette<Ink>),
     Asic(LockablePalette<AsicColor>)
 }
 
 impl AnyLockablePalette {
-    pub fn as_palette(&self) -> AnyPaletteRef {
+    pub fn as_palette(&self) -> AnyPaletteRef<'_> {
         match self {
             AnyLockablePalette::GateArray(p) => AnyPaletteRef::GateArray(p.as_palette()),
             AnyLockablePalette::Asic(p) => AnyPaletteRef::Asic(p.as_palette())
         }
     }
 
-    pub fn as_palette_mut(&mut self) -> Option<AnyPaletteRefMut> {
+    pub fn as_palette_mut(&mut self) -> Option<AnyPaletteRefMut<'_>> {
         match self {
-            AnyLockablePalette::GateArray(p) => p.as_palette_mut().map(|p| AnyPaletteRefMut::GateArray(p)),
-            AnyLockablePalette::Asic(p) => p.as_palette_mut().map(|p| AnyPaletteRefMut::Asic(p))
+            AnyLockablePalette::GateArray(p) => {
+                p.as_palette_mut().map(AnyPaletteRefMut::GateArray)
+            },
+            AnyLockablePalette::Asic(p) => p.as_palette_mut().map(AnyPaletteRefMut::Asic)
         }
     }
+
     pub fn into_palette(self) -> AnyPalette {
         match self {
             AnyLockablePalette::GateArray(p) => AnyPalette::GateArray(p.into_palette()),
             AnyLockablePalette::Asic(p) => AnyPalette::Asic(p.into_palette())
         }
     }
+
+    pub fn is_locked(&self) -> bool {
+        match self {
+            AnyLockablePalette::GateArray(p) => p.is_locked(),
+            AnyLockablePalette::Asic(p) => p.is_locked()
+        }
+    }
+
+    pub fn is_unlocked(&self) -> bool {
+        !self.is_locked()
+    }
+
+    /// The Gate Array palette, or `None` for a Plus one.
+    ///
+    /// Named rather than a bare `match` at every call site, because "this code
+    /// path is Gate Array only" is a real, recurring statement while the
+    /// conversion pipeline is monomorphised at `Ink`.
+    pub fn gate_array(&self) -> Option<&LockablePalette<Ink>> {
+        match self {
+            AnyLockablePalette::GateArray(p) => Some(p),
+            AnyLockablePalette::Asic(_) => None
+        }
+    }
+
+    pub fn into_gate_array(self) -> Option<LockablePalette<Ink>> {
+        match self {
+            AnyLockablePalette::GateArray(p) => Some(p),
+            AnyLockablePalette::Asic(_) => None
+        }
+    }
+
+    pub fn asic(&self) -> Option<&LockablePalette<AsicColor>> {
+        match self {
+            AnyLockablePalette::GateArray(_) => None,
+            AnyLockablePalette::Asic(p) => Some(p)
+        }
+    }
+
+    /// What to call this palette in a message to the user.
+    pub fn machine(&self) -> &'static str {
+        match self {
+            AnyLockablePalette::GateArray(_) => "Amstrad CPC (Gate Array)",
+            AnyLockablePalette::Asic(_) => "Amstrad Plus (ASIC)"
+        }
+    }
 }
 
+impl From<LockablePalette<Ink>> for AnyLockablePalette {
+    fn from(p: LockablePalette<Ink>) -> Self {
+        Self::GateArray(p)
+    }
+}
+
+impl From<LockablePalette<AsicColor>> for AnyLockablePalette {
+    fn from(p: LockablePalette<AsicColor>) -> Self {
+        Self::Asic(p)
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum AnyPalette {
     GateArray(Palette<Ink>),
     Asic(Palette<AsicColor>)
+}
+
+impl AnyPalette {
+    /// The bytes a display routine writes to the hardware.
+    ///
+    /// Two very different things share this name because they answer the same
+    /// question - "what do I poke to make these colours appear" - and the
+    /// caller emitting the Z80 has to branch on the machine anyway.
+    pub fn gate_array_bytes(&self) -> Option<[u8; Pen::NB_PENS as usize]> {
+        match self {
+            // A converted image often uses fewer than 16 pens; the hardware
+            // still wants a value for each, and black is the one that shows
+            // nothing.
+            AnyPalette::GateArray(p) => Some(p.to_gate_array_with_default(Ink::BLACK)),
+            AnyPalette::Asic(_) => None
+        }
+    }
+
+    /// The 32 bytes of an ASIC palette, in `.kit` order - what gets copied to
+    /// `&6400`.
+    pub fn asic_bytes(&self) -> Option<[u8; 32]> {
+        match self {
+            AnyPalette::GateArray(_) => None,
+            AnyPalette::Asic(p) => {
+                let mut bytes = [0; 32];
+                // A converted image often uses fewer than 16 pens. The ASIC
+                // still reads all 32 bytes, so the unused ones are black -
+                // the same choice `to_gate_array_with_default` makes.
+                let black = AsicColor::default();
+                for pen in 0..Pen::NB_PENS.min(16) {
+                    let [high, low] = p.get_with_default(&Pen::from(pen), &black).to_bytes();
+                    bytes[pen as usize * 2] = high;
+                    bytes[pen as usize * 2 + 1] = low;
+                }
+                Some(bytes)
+            }
+        }
+    }
+
+    pub fn gate_array(&self) -> Option<&Palette<Ink>> {
+        match self {
+            AnyPalette::GateArray(p) => Some(p),
+            AnyPalette::Asic(_) => None
+        }
+    }
+
+    pub fn asic(&self) -> Option<&Palette<AsicColor>> {
+        match self {
+            AnyPalette::GateArray(_) => None,
+            AnyPalette::Asic(p) => Some(p)
+        }
+    }
+
+    pub fn machine(&self) -> &'static str {
+        match self {
+            AnyPalette::GateArray(_) => "Amstrad CPC (Gate Array)",
+            AnyPalette::Asic(_) => "Amstrad Plus (ASIC)"
+        }
+    }
+}
+
+impl From<Palette<Ink>> for AnyPalette {
+    fn from(p: Palette<Ink>) -> Self {
+        Self::GateArray(p)
+    }
+}
+
+impl From<Palette<AsicColor>> for AnyPalette {
+    fn from(p: Palette<AsicColor>) -> Self {
+        Self::Asic(p)
+    }
 }
 
 pub enum AnyPaletteRef<'a> {

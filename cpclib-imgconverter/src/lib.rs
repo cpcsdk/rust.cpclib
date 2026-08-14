@@ -23,6 +23,12 @@ use cpclib::image::image::Mode;
 type Palette = cpclib::image::ga::Palette<Ink>;
 type LockablePalette = cpclib::image::ga::LockablePalette<Ink>;
 type ColorMatrix = cpclib::image::image::ColorMatrix<Ink>;
+type AsicPalette = cpclib::image::ga::Palette<AsicColor>;
+type AsicLockablePalette = cpclib::image::ga::LockablePalette<AsicColor>;
+use cpclib::image::asic::AsicColor;
+use cpclib::image::color::AmstradColor;
+use cpclib::image::ga::{AnyLockablePalette, AnyPalette};
+use cpclib::image::kit::Kit;
 use cpclib::image::ocp::{self, OcpPalette};
 use cpclib::sna::*;
 #[cfg(feature = "xferlib")]
@@ -47,6 +53,93 @@ pub fn clap_parse_ink(arg: &str) -> Result<Ink, String> {
     }
 }
 
+/// The pens a palette argument can name: 0-15, plus 16 for the border.
+pub fn pen_indices() -> std::ops::RangeInclusive<u8> {
+    0..=16
+}
+
+/// clap wants `&'static str` for names and flags, so the generated ones are
+/// built once into a static table rather than leaked afresh on every call -
+/// `specify_palette!` runs for each subcommand that takes a palette.
+static PALETTE_ARG_NAMES: std::sync::LazyLock<Vec<[String; 4]>> =
+    std::sync::LazyLock::new(|| {
+        pen_indices()
+            .map(|i| {
+                [
+                    format!("PEN{i}"),
+                    format!("pen{i}"),
+                    format!("COLB{i}"),
+                    format!("colb{i}")
+                ]
+            })
+            .collect()
+    });
+
+fn arg_names(index: u8) -> &'static [String; 4] {
+    &PALETTE_ARG_NAMES[index as usize]
+}
+
+fn pen_description(index: u8) -> String {
+    if index == 16 {
+        "Ink number of the pen 16 (border)".to_owned()
+    }
+    else {
+        format!("Ink number of the pen {index}")
+    }
+}
+
+/// `--penN <ink>` - one Gate Array ink for pen `N`.
+///
+/// Generated rather than written out: there are 17 of these, and with the
+/// Amstrad Plus's `--colbN` beside them every pair also needs a conflict
+/// declaration. Spelled by hand that is ~600 lines in which every line looks
+/// like its neighbour and none of them is making a decision.
+pub fn pen_argument(index: u8) -> Arg {
+    let names = arg_names(index);
+    let mut arg = Arg::new(names[0].as_str())
+        .long(names[1].as_str())
+        .required(false)
+        .help(pen_description(index))
+        .conflicts_with("PENS")
+        .conflicts_with("OCP_PAL")
+        .conflicts_with("GA_PAL")
+        .conflicts_with("KIT_PAL")
+        .conflicts_with("PLUS")
+        .value_parser(value_parser!(u8));
+    // A palette is homogeneous: all Gate Array inks, or all ASIC colours.
+    // There is no hardware that shows a mixture, so asking for one is a
+    // mistake worth naming rather than resolving arbitrarily.
+    for other in pen_indices() {
+        arg = arg.conflicts_with(arg_names(other)[2].as_str());
+    }
+    arg
+}
+
+/// `--colbN <colour>` - one ASIC colour for pen `N`, for the Amstrad Plus.
+///
+/// Accepts either spelling `AsicColor`'s own parser does: packed hex (`4A5`,
+/// `0x4A5`) or `R,G,B` components (`4,10,5`).
+pub fn colb_argument(index: u8) -> Arg {
+    let names = arg_names(index);
+    let mut arg = Arg::new(names[2].as_str())
+        .long(names[3].as_str())
+        .required(false)
+        .help(format!(
+            "Asic color for pen {index} (Amstrad Plus). Either packed hex \
+             (4A5, 0x4A5) or R,G,B components 0-15 (4,10,5)"
+        ))
+        .conflicts_with("PENS")
+        .conflicts_with("OCP_PAL")
+        .conflicts_with("GA_PAL")
+        .value_parser(|raw: &str| {
+            <cpclib::image::asic::AsicColor as std::str::FromStr>::from_str(raw)
+        });
+    for other in pen_indices() {
+        arg = arg.conflicts_with(arg_names(other)[0].as_str());
+    }
+    arg
+}
+
 #[macro_export]
 macro_rules! specify_palette {
 
@@ -55,7 +148,7 @@ macro_rules! specify_palette {
     };
 
     ($e:expr, $unlock:expr) => {{
-        let cmd = $e.arg(
+        let mut cmd = $e.arg(
             Arg::new("OCP_PAL")
             .long("pal")
             .alias("ocp-pal"    )
@@ -74,185 +167,41 @@ macro_rules! specify_palette {
 
         )
         .arg(
+            Arg::new("KIT_PAL")
+                .long("kit")
+                .required(false)
+                .help("Kit file for Amstrad Plus. A binary file that contains the 32 bytes")
+                .value_parser(|p: &str| cpclib::common::utf8pathbuf_value_parser(true)(p))
+                .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
+                .conflicts_with("PENS")
+                .conflicts_with("UNLOCK_PENS")
+        )
+        .arg(
+            Arg::new("PLUS")
+                .long("plus")
+                .required(false)
+                .help("Target the Amstrad Plus: build the palette out of 12-bit ASIC colours taken from the image, instead of the 27 Gate Array inks")
+                .action(ArgAction::SetTrue)
+                .conflicts_with("OCP_PAL")
+                .conflicts_with("GA_PAL")
+                .conflicts_with("PENS")
+                .conflicts_with("KIT_PAL")
+        )
+        .arg(
             Arg::new("PENS")
                 .long("pens")
                 .required(false)
                 .help("Separated list of ink number. Use ',' as a separater")
                 .conflicts_with("OCP_PAL")
                 .conflicts_with("GA_PAL")
-        )
-        .arg(
-            Arg::new("PEN0")
-                .long("pen0")
-                .required(false)
-                .help("Ink number of the pen 0")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN1")
-                .long("pen1")
-                .required(false)
-                .help("Ink number of the pen 1")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN2")
-                .long("pen2")
-                .required(false)
-                .help("Ink number of the pen 2")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN3")
-                .long("pen3")
-                .required(false)
-                .help("Ink number of the pen 3")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN4")
-                .long("pen4")
-                .required(false)
-                .help("Ink number of the pen 4")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN5")
-                .long("pen5")
-                .required(false)
-                .help("Ink number of the pen 5")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN6")
-                .long("pen6")
-                .required(false)
-                .help("Ink number of the pen 6")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN7")
-                .long("pen7")
-                .required(false)
-                .help("Ink number of the pen 7")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN8")
-                .long("pen8")
-                .required(false)
-                .help("Ink number of the pen 8")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN9")
-                .long("pen9")
-                .required(false)
-                .help("Ink number of the pen 9")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN10")
-                .long("pen10")
-                .required(false)
-                .help("Ink number of the pen 10")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN11")
-                .long("pen11")
-                .required(false)
-                .help("Ink number of the pen 11")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN12")
-                .long("pen12")
-                .required(false)
-                .help("Ink number of the pen 12")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN13")
-                .long("pen13")
-                .required(false)
-                .help("Ink number of the pen 13")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN14")
-                .long("pen14")
-                .required(false)
-                .help("Ink number of the pen 14")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN15")
-                .long("pen15")
-                .required(false)
-                .help("Ink number of the pen 15")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        .arg(
-            Arg::new("PEN16")
-                .long("pen16")
-                .required(false)
-                .help("Ink number of the pen 16 (border)")
-                .conflicts_with("PENS")
-                .conflicts_with("OCP_PAL")
-                .conflicts_with("GA_PAL")
-                .value_parser(value_parser!(u8))
-        )
-        ;
+        );
 
+        for index in $crate::pen_indices() {
+            cmd = cmd
+                .arg($crate::pen_argument(index))
+                .arg($crate::colb_argument(index));
+        }
 
         if $unlock {
 
@@ -272,7 +221,51 @@ macro_rules! specify_palette {
     }};
 }
 
-pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, AmsdosError> {
+/// Whether a flag is both present in this subcommand and set.
+///
+/// `--unlock-pens` and `--plus` are only declared for the subcommands that can
+/// use them, so asking for one that was never declared has to be a plain
+/// "no" rather than a panic.
+fn pens_are_unlocked(matches: &ArgMatches, id: &str) -> bool {
+    matches.try_get_one::<bool>(id).ok().flatten() == Some(&true)
+}
+
+/// The palette the user asked for, on whichever machine they asked for.
+///
+/// `--kit`/`--colbN` mean the Amstrad Plus and give the `Asic` variant; every
+/// other spelling means the Gate Array and behaves exactly as it always has.
+pub fn get_requested_palette(matches: &ArgMatches) -> Result<AnyLockablePalette, AmsdosError> {
+    if let Some(fname) = matches.get_one::<Utf8PathBuf>("KIT_PAL") {
+        let kit = Kit::from_file(fname)
+            .map_err(|e| AmsdosError::IO(format!("Unable to read the kit palette file: {e}")))?;
+        return Ok(AsicLockablePalette::unlocked(AsicPalette::from(kit)).into());
+    }
+
+    // An ASIC palette, either named colour by colour or left to the converter.
+    // `--colbN` conflicts with every `--penN`, so seeing one here means the
+    // whole palette is ASIC.
+    let named_colors = pen_indices().any(|i| matches.contains_id(arg_names(i)[2].as_str()));
+    if named_colors || pens_are_unlocked(matches, "PLUS") {
+        let mut palette = AsicPalette::empty();
+        for i in pen_indices() {
+            let key = arg_names(i)[2].as_str();
+            if let Some(color) = matches.get_one::<AsicColor>(key) {
+                palette.set(i as i32, *color);
+            }
+        }
+        // Same rule as the Gate Array path: naming some colours pins the
+        // palette unless the user explicitly allows the rest to be chosen.
+        return Ok(
+            if named_colors && !pens_are_unlocked(matches, "UNLOCK_PENS") {
+                AsicLockablePalette::locked(palette)
+            }
+            else {
+                AsicLockablePalette::unlocked(palette)
+            }
+            .into()
+        );
+    }
+
     if matches.contains_id("PENS") {
         let numbers = matches
             .get_one::<String>("PENS")
@@ -285,13 +278,13 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
             })
             .map(|n: u32| Ink::from(n))
             .collect::<Vec<_>>();
-        Ok(LockablePalette::unlocked(numbers.into()))
+        Ok(LockablePalette::unlocked(numbers.into()).into())
     }
     else if let Some(fname) = matches.get_one::<Utf8PathBuf>("OCP_PAL") {
         let (mut data, _header) = cpclib::disc::read(fname)?; // get the file content but skip the header
         let data = data.make_contiguous();
         let pal = OcpPalette::from_buffer(data);
-        Ok(LockablePalette::unlocked(pal.palette(0).clone()))
+        Ok(LockablePalette::unlocked(pal.palette(0).clone()).into())
     }
     else if let Some(fname) = matches.get_one::<Utf8PathBuf>("GA_PAL") {
         use std::io::Read;
@@ -300,7 +293,7 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
         file.read_to_end(&mut buffer)
             .expect("Unable to read the gate array palette file");
         let pal = Palette::from_iter(buffer);
-        Ok(LockablePalette::unlocked(pal))
+        Ok(LockablePalette::unlocked(pal).into())
     }
     else {
         let mut one_pen_set = false;
@@ -313,10 +306,10 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<LockablePalette, Am
             }
         }
         if matches.get_flag("UNLOCK_PENS") || !one_pen_set {
-            Ok(LockablePalette::unlocked(palette))
+            Ok(LockablePalette::unlocked(palette).into())
         }
         else {
-            Ok(LockablePalette::locked(palette))
+            Ok(LockablePalette::locked(palette).into())
         }
     }
 }
@@ -331,6 +324,14 @@ macro_rules! export_palette {
                 .action(ArgAction::Set)
                 .value_parser(clap::value_parser!(Utf8PathBuf))
                 .help("Name of the binary file that contains the palette (Gate Array format)"),
+        )
+        .arg(
+            Arg::new("EXPORT_KIT")
+                .long("kit")
+                .required(false)
+                .action(ArgAction::Set)
+                .value_parser(clap::value_parser!(Utf8PathBuf))
+                .help("Name of the binary file that contains the palette in Amstrad Plus kit format (32 bytes)")
         )
         .arg(
             Arg::new("EXPORT_INKS")
@@ -360,48 +361,100 @@ macro_rules! export_palette {
     };
 }
 
+/// Write out whatever palette exports the user asked for.
+///
+/// Each flag names a format, not a machine: `--palette` writes the 17 Gate
+/// Array bytes and `--kit` the Plus's 32. A Gate Array palette can be written
+/// either way - the 27 inks are a subset of the ASIC's colours - but an
+/// Amstrad Plus palette has no Gate Array spelling, so `--palette` says so and
+/// points at `--kit`.
+///
+/// The remaining exports (`--inks`, the two fade-outs) are Gate Array notions -
+/// an ink *number*, and a walk down the 27-ink ladder - and say the same.
 macro_rules! do_export_palette {
     ($arg:expr, $palette:ident) => {
+        let any = $palette.clone().into_any();
+
         if let Some(palette_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_PALETTE") {
+            let palette = any.gate_array().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "--palette exports the Gate Array format, which cannot hold the 12-bit \
+                     colours of an Amstrad Plus palette. Use --kit to export its 32 bytes."
+                )
+            })?;
+            let bytes: Vec<u8> = palette.into();
             let mut file = File::create(palette_fname).expect("Unable to create the palette file");
-            let p: Vec<u8> = $palette.into();
-            file.write_all(&p).unwrap();
-        }
-
-        if let Some(fade_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_PALETTE_FADEOUT") {
-            let palettes = $palette.rgb_fadout();
-            let bytes = palettes.iter().fold(Vec::<u8>::default(), |mut acc, x| {
-                acc.extend(&x.to_gate_array_with_default(0.into()));
-                acc
-            });
-
-            assert_eq!(palettes.len() * 17, bytes.len());
-
-            let mut file = File::create(fade_fname).expect("Unable to create the fade out file");
             file.write_all(&bytes).unwrap();
         }
 
-        if let Some(palette_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_INKS") {
-            let mut file = File::create(palette_fname).expect("Unable to create the inks file");
-            let inks = $palette
-                .inks()
-                .iter()
-                .map(|i| i.number())
-                .collect::<Vec<_>>();
-            file.write_all(&inks).unwrap();
+        if let Some(kit_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_KIT") {
+            // A Gate Array palette is exportable as a kit: every ink has an
+            // exact ASIC colour. The reverse is what is impossible.
+            let bytes = match &any {
+                AnyPalette::Asic(_) => any.asic_bytes().unwrap(),
+                AnyPalette::GateArray(p) => {
+                    cpclib::image::ga::AnyPalette::Asic(
+                        cpclib::image::ga::Palette::<AsicColor>::from(p.clone())
+                    )
+                    .asic_bytes()
+                    .unwrap()
+                }
+            };
+            let mut file = File::create(kit_fname).expect("Unable to create the kit file");
+            file.write_all(&bytes).unwrap();
         }
 
-        if let Some(fade_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_INK_FADEOUT") {
-            let palettes = $palette.rgb_fadout();
-            let bytes = palettes
-                .iter()
-                .map(|p| p.inks().iter().map(|i| i.number()).collect::<Vec<_>>())
-                .fold(Vec::default(), |mut acc, x| {
-                    acc.extend(&x);
+        let gate_array_only = ["EXPORT_PALETTE_FADEOUT", "EXPORT_INKS", "EXPORT_INK_FADEOUT"]
+            .iter()
+            .find(|id| $arg.get_one::<Utf8PathBuf>(*id).is_some());
+        if let Some(id) = gate_array_only {
+            let palette = any.gate_array().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "{} exports ink numbers, which only exist on the Gate Array - this is an \
+                     Amstrad Plus palette. Use --kit to export its 32 bytes instead.",
+                    match *id {
+                        "EXPORT_PALETTE_FADEOUT" => "--palette_fadeout",
+                        "EXPORT_INKS" => "--inks",
+                        _ => "--ink_fadeout"
+                    }
+                )
+            })?;
+
+            if let Some(fade_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_PALETTE_FADEOUT") {
+                let palettes = palette.rgb_fadout();
+                let bytes = palettes.iter().fold(Vec::<u8>::default(), |mut acc, x| {
+                    acc.extend(&x.to_gate_array_with_default(0.into()));
                     acc
                 });
-            let mut file = File::create(fade_fname).expect("Unable to create the fade out file");
-            file.write_all(&bytes).unwrap();
+
+                assert_eq!(palettes.len() * 17, bytes.len());
+
+                let mut file = File::create(fade_fname).expect("Unable to create the fade out file");
+                file.write_all(&bytes).unwrap();
+            }
+
+            if let Some(palette_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_INKS") {
+                let mut file = File::create(palette_fname).expect("Unable to create the inks file");
+                let inks = palette
+                    .inks()
+                    .iter()
+                    .map(|i| i.number())
+                    .collect::<Vec<_>>();
+                file.write_all(&inks).unwrap();
+            }
+
+            if let Some(fade_fname) = $arg.get_one::<Utf8PathBuf>("EXPORT_INK_FADEOUT") {
+                let palettes = palette.rgb_fadout();
+                let bytes = palettes
+                    .iter()
+                    .map(|p| p.inks().iter().map(|i| i.number()).collect::<Vec<_>>())
+                    .fold(Vec::default(), |mut acc, x| {
+                        acc.extend(&x);
+                        acc
+                    });
+                let mut file = File::create(fade_fname).expect("Unable to create the fade out file");
+                file.write_all(&bytes).unwrap();
+            }
         }
     };
 }
@@ -413,30 +466,27 @@ fn lz4_compress(bytes: &[u8]) -> Vec<u8> {
     cpclib::crunchers::lz4::compress(bytes)
 }
 
-fn palette_code(pal: &Palette) -> String {
-    let mut asm = " ld bc, 0x7f00\n".to_string();
-    // TODO create the linker
-
-    for idx in 0..(16 / 2) {
-        asm += &format!(
-            "\tld hl, 256*{} + {} : out (c), c : out (c), h : inc c : out (c), c: out (c), l : inc c\n",
-            pal[2 * idx].gate_array_value(),
-            pal[2 * idx + 1].gate_array_value()
-        )
+/// The palette installation as a single self-contained block.
+///
+/// `palette_installation_code` keeps its data separate so a display routine can
+/// place it past its own final `jp`. A loader has no such tail, so the bytes go
+/// inline and the code jumps over them.
+fn palette_installation_inline(pal: &AnyPalette) -> String {
+    let (code, data) = palette_installation_code(pal);
+    if data.is_empty() {
+        code
     }
-
-    asm
+    else {
+        format!("{code}\n\tjr palette_installed\n{data}\npalette_installed\n")
+    }
 }
 
-fn standard_linked_code(mode: u8, pal: &Palette, screen: &[u8]) -> String {
-    let base_code = standard_display_code(mode);
+fn standard_linked_code(mode: u8, pal: &AnyPalette, screen: &[u8]) -> String {
+    let base_code = standard_display_code(mode, pal);
     format!(
         "   org 0x1000
         di
         ld sp, $
-
-        ; Select palette
-        {palette}
 
         ; Copy image on screen
         ld hl, image
@@ -464,7 +514,6 @@ image_end
 
         assert $<0xc000
     ",
-        palette = palette_code(pal),
         decompressor = include_str!("lz4_docent.asm"),
         code = defb_elements(&assemble(&base_code).unwrap()),
         screen = defb_elements(screen)
@@ -472,25 +521,77 @@ image_end
 }
 
 // Produce the code that display a standard screen
-fn standard_display_code(mode: u8) -> String {
+//
+// It installs the palette itself rather than leaving it to the caller: a
+// snapshot's `GA_PAL` registers can carry 27 Gate Array inks and nothing else,
+// so an Amstrad Plus palette has no other way in.
+fn standard_display_code(mode: u8, palette: &AnyPalette) -> String {
+    let code_mode = match mode {
+        0 => 0x8C,
+        1 => 0x8D,
+        2 => 0x8E,
+        _ => unreachable!()
+    };
+    let palette_code = palette_installation_inline(palette);
+
     format!(
         "
         org 0x4000
         di
-        ld bc, 0x7f00 + 0x{:x}
+        ld bc, 0x7f00 + 0x{code_mode:x}
         out (c), c
+
+        {palette_code}
+
         jp $
-    ",
-        match mode {
-            0 => 0x8C,
-            1 => 0x8D,
-            2 => 0x8E,
-            _ => unreachable!()
-        }
+    "
     )
 }
 
-fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> String {
+/// The palette installation, and the data it needs after the routine.
+///
+/// The Gate Array writes 16 inks through port `0x7f00`, one `out` per pen. The
+/// Plus cannot: its colours are 12-bit, so the ASIC is unlocked, the 32 bytes
+/// are `ldir`ed into the colour registers at `0x6400`, and the ASIC is locked
+/// again. The bytes are data - they are emitted *after* the routine's final
+/// `jp`, never in its path.
+fn palette_installation_code(palette: &AnyPalette) -> (String, String) {
+    match palette {
+        AnyPalette::GateArray(_) => {
+            let inks = palette
+                .gate_array_bytes()
+                .expect("a Gate Array palette must produce its ink values");
+            let mut code = String::from("\tld bc, 0x7f00\n");
+            for ink in inks.iter().take(16) {
+                code += &format!(
+                    "\tld a, {ink}\n\t out (c), c\n\tout (c), a\n\t inc c\n"
+                );
+            }
+            (code, String::new())
+        },
+        AnyPalette::Asic(_) => {
+            let bytes = palette
+                .asic_bytes()
+                .expect("an ASIC palette must produce its 32 bytes");
+            (
+                "
+        ld bc, 0x7fb8 ; unlock the ASIC
+        out (c), c
+        ld hl, palette_tab
+        ld de, 0x6400
+        ld bc, 32
+        ldir
+        ld bc, 0x7fa0 ; lock it again
+        out (c), c
+"
+                .to_owned(),
+                format!("\npalette_tab\n\t{}\n", defb_elements(&bytes))
+            )
+        }
+    }
+}
+
+fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &AnyPalette) -> String {
     let code_mode = match mode {
         0 => 0x8C,
         1 => 0x8D,
@@ -500,14 +601,7 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &Palette) -> St
 
     let r12 = 0x20 + 0b0000_1100;
 
-    let mut palette_code = String::new();
-    palette_code += "\tld bc, 0x7f00\n";
-    for i in 0..16 {
-        palette_code += &format!(
-            "\tld a, {}\n\t out (c), c\n\tout (c), a\n\t inc c\n",
-            palette.get(i.into()).gate_array_value()
-        );
-    }
+    let (palette_code, palette_data) = palette_installation_code(palette);
 
     format!(
         "
@@ -565,11 +659,12 @@ vsync_loop
 
 
         jp frame_loop
+{palette_data}
     "
     )
 }
 
-fn overscan_display_code(mode: u8, crtc_width: usize, pal: &Palette) -> String {
+fn overscan_display_code(mode: u8, crtc_width: usize, pal: &AnyPalette) -> String {
     fullscreen_display_code(mode, crtc_width, pal)
 }
 
@@ -579,7 +674,7 @@ fn parse_int(repr: &str) -> usize {
 }
 
 #[allow(clippy::if_same_then_else)] // false positive
-fn get_output_format(matches: &ArgMatches) -> OutputFormat {
+fn get_output_format<C: AmstradColor>(matches: &ArgMatches) -> OutputFormat<C> {
     if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
         // Get the format for the sprite encoding
         let sprite_format = match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
@@ -594,11 +689,15 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
         if sprite_matches.contains_id("MASK_FNAME") {
             OutputFormat::MaskedSprite {
                 sprite_format,
-                mask_ink: sprite_matches.get_one::<Ink>("MASK_INK").cloned().unwrap(),
-                replacement_ink: sprite_matches
-                    .get_one::<Ink>("REPLACEMENT_INK")
-                    .cloned()
-                    .unwrap()
+                mask_ink: C::from(
+                    sprite_matches.get_one::<Ink>("MASK_INK").cloned().unwrap()
+                ),
+                replacement_ink: C::from(
+                    sprite_matches
+                        .get_one::<Ink>("REPLACEMENT_INK")
+                        .cloned()
+                        .unwrap()
+                )
             }
         }
         else {
@@ -671,7 +770,21 @@ fn get_output_format(matches: &ArgMatches) -> OutputFormat {
 // TODO - Add the ability to import a target palette
 #[allow(clippy::cast_possible_wrap)]
 #[allow(clippy::cast_possible_truncation)]
+/// The whole conversion is monomorphised on the colour type: the machine is
+/// decided once, here, from the palette the user asked for, and nothing
+/// downstream has to keep asking.
 fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
+    match get_requested_palette(matches)? {
+        AnyLockablePalette::GateArray(palette) => convert_with_palette(matches, palette, o),
+        AnyLockablePalette::Asic(palette) => convert_with_palette(matches, palette, o)
+    }
+}
+
+fn convert_with_palette<C: AmstradColor>(
+    matches: &ArgMatches,
+    palette: cpclib::image::ga::LockablePalette<C>,
+    o: &dyn EventObserver
+) -> anyhow::Result<()> {
     let input_file = matches.get_one::<Utf8PathBuf>("SOURCE").unwrap();
     let output_mode = matches
         .get_one::<String>("MODE")
@@ -679,8 +792,6 @@ fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
         .parse::<u8>()
         .unwrap();
     let mut transformations = TransformationsList::default();
-
-    let palette = get_requested_palette(matches)?;
 
     if matches.get_flag("SKIP_ODD_PIXELS") {
         transformations = transformations.skip_odd_pixels();
@@ -761,10 +872,11 @@ fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
                 do_export_palette!(sub_sprite, palette);
 
                 // Save the binary data of the sprite
-                let sprite_fname = sub_sprite.get_one::<String>("SPRITE_FNAME").unwrap();
-                sprite
-                    .save_sprite(sprite_fname)
-                    .expect("Unable to create the sprite file");
+                if let Some(sprite_fname) = sub_sprite.get_one::<String>("SPRITE_FNAME") {
+                    sprite
+                        .save_sprite(sprite_fname)
+                        .expect("Unable to create the sprite file");
+                }
 
                 sub_sprite
                     .get_one::<String>("CONFIGURATION")
@@ -893,7 +1005,7 @@ fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
         if sub_dsk.is_some() || sub_exec.is_some() {
             let code = match &conversion {
                 Output::CPCMemoryStandard(memory, pal) => {
-                    standard_linked_code(output_mode, pal, memory)
+                    standard_linked_code(output_mode, &pal.clone().into_any(), memory)
                 },
 
                 Output::CPCMemoryOverscan(_memory1, _memory2, _pal) => unimplemented!(),
@@ -959,12 +1071,15 @@ fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
         if sub_sna.is_some() || sub_m4.is_some() {
             let (palette, code) = match &conversion {
                 Output::CPCMemoryStandard(_memory, pal) => {
-                    (pal, assemble(&standard_display_code(output_mode)).unwrap())
+                    let pal = pal.clone().into_any();
+                    let code = assemble(&standard_display_code(output_mode, &pal)).unwrap();
+                    (pal, code)
                 },
 
                 Output::CPCMemoryOverscan(_memory1, _memory2, pal) => {
+                    let pal = pal.clone().into_any();
                     let code =
-                        assemble(&fullscreen_display_code(output_mode, 96 / 2, pal)).unwrap();
+                        assemble(&fullscreen_display_code(output_mode, 96 / 2, &pal)).unwrap();
                     (pal, code)
                 },
 
@@ -993,13 +1108,14 @@ fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
 
             sna.add_data(&code, 0x4000).unwrap();
             sna.set_value(SnapshotFlag::Z80_PC, 0x4000).unwrap();
-            sna.set_value(SnapshotFlag::GA_PAL(Some(16)), 0x54).unwrap();
-            for i in 0..16 {
-                sna.set_value(
-                    SnapshotFlag::GA_PAL(Some(i)),
-                    u16::from(palette.get((i as i32).into()).gate_array_value())
-                )
-                .unwrap();
+            // A Plus palette does not fit these registers; its display code
+            // installs it through the ASIC instead.
+            if let Some(inks) = palette.gate_array_bytes() {
+                sna.set_value(SnapshotFlag::GA_PAL(Some(16)), 0x54).unwrap();
+                for (i, ink) in inks.iter().enumerate().take(16) {
+                    sna.set_value(SnapshotFlag::GA_PAL(Some(i)), u16::from(*ink))
+                        .unwrap();
+                }
             }
 
             if let Some(sub_sna) = sub_sna {
@@ -1441,8 +1557,28 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
     }
 }
 
+/// Decode CPC bytes back into an image, using the palette they were encoded
+/// with - whichever machine that palette belongs to.
+fn cpc2img_decode<C: AmstradColor>(
+    matches: &ArgMatches,
+    data: &[u8],
+    mode: Mode,
+    palette: &cpclib::image::ga::Palette<C>
+) -> cpclib::image::image::ColorMatrix<C> {
+    if let Some(sprite) = matches.subcommand_matches("sprite") {
+        let width: usize = sprite.get_one::<String>("WIDTH").unwrap().parse().unwrap();
+        cpclib::image::image::ColorMatrix::from_sprite(data, width as _, mode, palette)
+    }
+    else if let Some(screen) = matches.subcommand_matches("screen") {
+        let width: usize = screen.get_one::<String>("WIDTH").unwrap().parse().unwrap();
+        cpclib::image::image::ColorMatrix::from_screen(data, width as _, mode, palette)
+    }
+    else {
+        unreachable!()
+    }
+}
+
 pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<()> {
-    let palette = get_requested_palette(matches)?;
     let input_fname = matches.get_one::<String>("INPUT").unwrap();
     let output_fname = matches.get_one::<String>("OUTPUT").unwrap();
     let mode = *matches.get_one::<i64>("MODE").unwrap() as u8;
@@ -1463,15 +1599,10 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
         &data
     };
 
-    let mut matrix: ColorMatrix = if let Some(sprite) = matches.subcommand_matches("sprite") {
-        let width: usize = sprite.get_one::<String>("WIDTH").unwrap().parse().unwrap();
-        ColorMatrix::from_sprite(data, width as _, mode, &palette)
-    }
-    else if let Some(screen) = matches.subcommand_matches("screen") {
-        let width: usize = screen.get_one::<String>("WIDTH").unwrap().parse().unwrap();
-        ColorMatrix::from_screen(data, width as _, mode, &palette)
-    }
-    else if let Some(_paletteocp) = matches.subcommand_matches("palette") {
+    // Rendering a palette file as an image is a Gate Array affair: both formats
+    // it reads (my 17-byte one, and OCP's) store ink numbers. It also ignores
+    // the palette the user asked for - the file *is* the palette.
+    if matches.subcommand_matches("palette").is_some() {
         let palettes = if data.len() % 17 == 0 {
             // this is my gate array format
             data.chunks(17)
@@ -1495,18 +1626,39 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
             .map(|p| ColorMatrix::from_palette(&p, 32))
             .collect_vec();
 
-        ColorMatrix::vstack(&rows)
+        let mut matrix = ColorMatrix::vstack(&rows);
+        if mode0ratio {
+            matrix.double_horizontally();
+        }
+        matrix
+            .as_image()
+            .save(output_fname)
+            .expect("Error while saving the file");
+        return Ok(());
     }
-    else {
-        unreachable!()
-    };
 
-    if mode0ratio {
-        matrix.double_horizontally();
+    match get_requested_palette(matches)? {
+        AnyLockablePalette::GateArray(palette) => {
+            let mut matrix = cpc2img_decode(matches, data, mode, palette.as_palette());
+            if mode0ratio {
+                matrix.double_horizontally();
+            }
+            matrix
+                .as_image()
+                .save(output_fname)
+                .expect("Error while saving the file");
+        },
+        AnyLockablePalette::Asic(palette) => {
+            let mut matrix = cpc2img_decode(matches, data, mode, palette.as_palette());
+            if mode0ratio {
+                matrix.double_horizontally();
+            }
+            matrix
+                .as_image()
+                .save(output_fname)
+                .expect("Error while saving the file");
+        }
     }
-    // save the generated file
-    let img = matrix.as_image();
-    img.save(output_fname).expect("Error while saving the file");
 
     Ok(())
 }
@@ -1536,7 +1688,11 @@ pub fn process_img2cpc(
         std::process::exit(exitcode::USAGE);
     }
 
-    convert(matches, o).expect("Unable to make the conversion");
+    // A rejected combination of flags is a user error, not a bug: hand it back
+    // to `main` to be printed, rather than unwinding with a backtrace over it.
+    // (The observer this runs with discards what it is given, so reporting it
+    // here would report it to nobody.)
+    convert(matches, o)?;
 
     #[cfg(feature = "xferlib")]
     if let Some(sub_m4) = matches.subcommand_matches("m4") {
@@ -1806,4 +1962,104 @@ pub fn fade_handle_matches(matches: &ArgMatches, o: &dyn EventObserver) -> Resul
     use clap::FromArgMatches;
     let args = FadeArgs::from_arg_matches(matches).map_err(|e| e.to_string())?;
     fade_process(&args, o)
+}
+
+#[cfg(test)]
+mod plus_display_code_tests {
+    //! The Z80 that installs a palette, for each machine.
+
+    use cpclib::image::asic::{AsicColor, AsicColorComponent};
+    use cpclib::image::ga::{AnyPalette, Palette};
+    use cpclib::{Ink, Pen};
+
+    use super::*;
+
+    fn asic_palette() -> AnyPalette {
+        let mut palette = Palette::<AsicColor>::empty();
+        for pen in 0..16u8 {
+            palette.set(
+                pen as i32,
+                AsicColor::new(
+                    AsicColorComponent::from(pen),
+                    AsicColorComponent::from(0u8),
+                    AsicColorComponent::from(0xFu8)
+                )
+            );
+        }
+        AnyPalette::Asic(palette)
+    }
+
+    fn gate_array_palette() -> AnyPalette {
+        let mut palette = Palette::<Ink>::empty();
+        for pen in 0..16u8 {
+            palette.set(pen as i32, Ink::from(pen));
+        }
+        AnyPalette::GateArray(palette)
+    }
+
+    /// The Gate Array path must be untouched by the Plus work: 16 `out`s
+    /// through `0x7f00`, and no data hanging off the end of the routine.
+    #[test]
+    fn a_gate_array_palette_is_still_written_pen_by_pen() {
+        let code = fullscreen_display_code(0, 48, &gate_array_palette());
+        assert_eq!(code.matches("out (c), a").count(), 16, "{code}");
+        assert!(!code.contains("palette_tab"), "{code}");
+        assemble(&code).expect("the Gate Array display code must assemble");
+    }
+
+    /// The Plus path unlocks the ASIC, copies 32 bytes to `0x6400`, and locks
+    /// it again.
+    #[test]
+    fn an_asic_palette_is_copied_through_the_asic() {
+        let code = fullscreen_display_code(0, 48, &asic_palette());
+        for expected in [
+            "ld bc, 0x7fb8",
+            "ld hl, palette_tab",
+            "ld de, 0x6400",
+            "ld bc, 32",
+            "ldir",
+            "ld bc, 0x7fa0"
+        ] {
+            assert!(code.contains(expected), "missing `{expected}` in:\n{code}");
+        }
+        assemble(&code).expect("the ASIC display code must assemble");
+    }
+
+    /// The 32 bytes are data. They must sit *after* the `jp` that closes the
+    /// display loop, never in its path.
+    #[test]
+    fn the_asic_palette_bytes_come_after_the_final_jump() {
+        let code = fullscreen_display_code(0, 48, &asic_palette());
+        let jump = code.rfind("jp frame_loop").expect("the display loop must end with its jump");
+        let table = code.find("\npalette_tab\n").expect("the bytes must be labelled");
+        assert!(
+            table > jump,
+            "palette_tab is emitted before the routine's final jump:\n{code}"
+        );
+    }
+
+    /// A snapshot's `GA_PAL` registers cannot carry 12-bit colours, so the
+    /// standard routine has to install a Plus palette itself - whereas for the
+    /// Gate Array the snapshot still does it.
+    #[test]
+    fn the_standard_routine_installs_only_what_a_snapshot_cannot() {
+        let asic = standard_display_code(0, &asic_palette());
+        assert!(asic.contains("ldir"), "{asic}");
+        assemble(&asic).expect("the standard ASIC display code must assemble");
+
+        let ga = standard_display_code(0, &gate_array_palette());
+        assemble(&ga).expect("the standard Gate Array display code must assemble");
+    }
+
+    /// The exported bytes are the ones the routine copies, in `.kit` order.
+    #[test]
+    fn the_emitted_bytes_are_the_palette_itself() {
+        let palette = asic_palette();
+        let bytes = palette.asic_bytes().unwrap();
+        assert_eq!(bytes.len(), 32);
+        // pen 3 was built as red=3, green=0, blue=15
+        assert_eq!(bytes[6], 0x3F, "byte 0 packs red then blue");
+        assert_eq!(bytes[7], 0x00, "byte 1 holds green alone");
+        let _ = Pen::from(3);
+    }
 }

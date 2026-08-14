@@ -119,3 +119,40 @@ fn an_oversized_component_is_truncated() {
     assert_eq!(AsicColorComponent::from(0xFFu8).value(), 0xF);
     assert_eq!(AsicColor::new(0xFFu8, 0u8, 0u8).value(), 0xF000);
 }
+
+/// Both spellings the command line accepts, and that they agree.
+#[test]
+fn a_colour_can_be_written_packed_or_as_components() {
+    use std::str::FromStr;
+
+    let expected = AsicColor::new(0x4u8, 0xAu8, 0x5u8); // red 4, green 10, blue 5
+    for spelling in ["4A5", "0x4A5", "0X4a5", "4,10,5", " 4 , 10 , 5 "] {
+        assert_eq!(
+            AsicColor::from_str(spelling).unwrap(),
+            expected,
+            "spelling {spelling:?}"
+        );
+    }
+}
+
+/// A wrong colour is refused with a reason, not silently clamped - a palette
+/// entry the user did not mean is worse than a message.
+#[test]
+fn a_malformed_colour_is_refused_with_a_reason() {
+    use std::str::FromStr;
+
+    for (spelling, expected) in [
+        ("4,10", "3 components"),
+        ("4,16,5", "green is 16"),
+        ("1FFF", "out of range"),
+        ("zz", "hexadecimal"),
+        ("", "empty")
+    ] {
+        let error = AsicColor::from_str(spelling)
+            .expect_err(&format!("{spelling:?} must be refused"));
+        assert!(
+            error.contains(expected),
+            "{spelling:?} said {error:?}, expected it to mention {expected:?}"
+        );
+    }
+}

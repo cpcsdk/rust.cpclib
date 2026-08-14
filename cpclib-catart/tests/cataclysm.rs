@@ -234,7 +234,7 @@ fn generate_comparison_png(
     let mut generated_img: RgbImage = ImageBuffer::new(gen_width, gen_height);
     for y in 0..gen_height {
         for x in 0..gen_width {
-            let color = color_matrix.get_ink(x as usize, y as usize);
+            let color = color_matrix.get_color(x as usize, y as usize);
             let rgb = color.color();
             generated_img.put_pixel(x, y, Rgb([rgb[0], rgb[1], rgb[2]]));
         }
@@ -283,7 +283,7 @@ fn generate_comparison_png(
     let mut diff_img: RgbImage = ImageBuffer::new(diff_width, diff_height);
     for y in 0..diff_height {
         for x in 0..diff_width {
-            let color = diff_color_matrix.get_ink(x as usize, y as usize);
+            let color = diff_color_matrix.get_color(x as usize, y as usize);
             let rgb = color.color();
             diff_img.put_pixel(x, y, Rgb([rgb[0], rgb[1], rgb[2]]));
         }

@@ -6,6 +6,10 @@ use cpclib_asm::{
     IfBuilder, Listing, ListingBuilder, ListingFromStr, ListingSelector, Register8, Register16,
     TestKind, dec_e, dec_l, inc_e, inc_l
 };
+// The compiler reads a converted sprite's *bytes* - its width, height and
+// encoding - and never its colours, so it works the same whichever machine the
+// palette was built for.
+use cpclib_image::color::AmstradColor;
 use cpclib_image::convert::{SpriteEncoding, SpriteOutput};
 use itertools::Itertools;
 use smol_str::SmolStr;
@@ -155,7 +159,7 @@ impl DerefMut for Compiler {
 }
 
 impl Compiler {
-    pub fn build_stats(spr: &SpriteOutput, msk: &SpriteOutput) -> BTreeMap<u8, usize> {
+    pub fn build_stats<C: AmstradColor>(spr: &SpriteOutput<C>, msk: &SpriteOutput<C>) -> BTreeMap<u8, usize> {
         let mut set: BTreeMap<u8, usize> = Default::default();
         for b in spr
             .data()
@@ -182,7 +186,7 @@ impl Compiler {
         set
     }
 
-    pub fn compile(mut self, spr: &SpriteOutput, msk: &SpriteOutput) -> Listing {
+    pub fn compile<C: AmstradColor>(mut self, spr: &SpriteOutput<C>, msk: &SpriteOutput<C>) -> Listing {
         assert_eq!(spr.bytes_width(), msk.bytes_width());
         assert_eq!(spr.height(), msk.height());
         assert_eq!(spr.encoding(), msk.encoding());
@@ -611,10 +615,10 @@ impl Bc26 {
 /// Prefetch most important bytes in registers (but do not update them)
 ///
 /// ; Input: HL = drawing address
-pub fn standard_sprite_compiler(
+pub fn standard_sprite_compiler<C: AmstradColor>(
     label: &str,
-    spr: &SpriteOutput,
-    msk: &SpriteOutput,
+    spr: &SpriteOutput<C>,
+    msk: &SpriteOutput<C>,
     r1: u8
 ) -> Listing {
     let spr = spr.with_encoding(SpriteEncoding::LeftToRightToLeft);
@@ -628,10 +632,10 @@ pub fn standard_sprite_compiler(
     comp.compile(&spr, &msk)
 }
 
-pub fn standard_sprite_with_background_backup_and_restore_compiler(
+pub fn standard_sprite_with_background_backup_and_restore_compiler<C: AmstradColor>(
     label: &str,
-    _spr: &SpriteOutput,
-    _msk: &SpriteOutput,
+    _spr: &SpriteOutput<C>,
+    _msk: &SpriteOutput<C>,
     r1: u8
 ) -> Listing {
     let spr = _spr.with_encoding(SpriteEncoding::LeftToRightToLeft);

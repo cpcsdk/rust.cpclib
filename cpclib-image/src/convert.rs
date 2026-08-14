@@ -22,11 +22,7 @@ use crate::image::*;
 // These aliases name that choice once. Without them the same four `<Ink>`
 // arguments would be repeated across ~24 signatures below, none of which is
 // making a decision - they are all just downstream of this one.
-type Palette = crate::palette::Palette<Ink>;
-type LockablePalette = crate::palette::LockablePalette<Ink>;
-type Sprite = crate::image::Sprite<Ink>;
-type ColorMatrix = crate::image::ColorMatrix<Ink>;
-type ColorMatrixList = crate::image::ColorMatrixList<Ink>;
+
 
 /// Encode the position of a line or column to transform in the source image
 #[derive(Copy, Clone, Debug)]
@@ -64,7 +60,7 @@ pub type TransformationColumnPosition = TransformationPosition;
 
 /// List of all the possible transformations applicable to a ColorMatrix
 #[derive(Clone, Debug)]
-pub enum Transformation {
+pub enum Transformation<C: AmstradColor> {
     /// When using mode 0, do not read all the pixel columns
     SkipOddPixels,
     /// Shorten lines of several pixel columns on the left
@@ -76,7 +72,7 @@ pub enum Transformation {
     /// Add artifical blank lines. The line is build by repeating the background the right amount of time
     BlankLines {
         /// The pattern to use to fill the background
-        pattern: Vec<Ink>,
+        pattern: Vec<C>,
         /// The location of the line within the image
         position: TransformationPosition,
         /// The amount of lines to add
@@ -86,36 +82,36 @@ pub enum Transformation {
     /// Add artificial blank columns given a pattern
     BlankColumns {
         /// The pattern to use to fill the background
-        pattern: Vec<Ink>,
+        pattern: Vec<C>,
         /// The location of the column within the image
         position: TransformationPosition,
         /// The amount of columns to add
         amount: u16
     },
 
-    /// Replace one Ink by another one
+    /// Replace one C by another one
     ReplaceInk {
-        from: Ink,
-        to: Ink
+        from: C,
+        to: C
     },
 
-    /// Create a mask from the background Ink MaskFromBackgroundInk
-    MaskFromBackgroundInk(Ink)
+    /// Create a mask from the background C MaskFromBackgroundInk
+    MaskFromBackgroundInk(C)
 }
 
-impl Transformation {
+impl<C: AmstradColor> Transformation<C> {
     /// Apply the transformation to the list of colormatrix
-    /// TODO find a way to use the same function name than for a ColorMatrix
-    pub fn apply_to_list(&self, list: &ColorMatrixList) -> ColorMatrixList {
+    /// TODO find a way to use the same function name than for a ColorMatrix<C>
+    pub fn apply_to_list(&self, list: &ColorMatrixList<C>) -> ColorMatrixList<C> {
         list.to_vec()
             .iter()
             .map(|matrix| self.apply(matrix))
-            .collect::<Vec<ColorMatrix>>()
+            .collect::<Vec<ColorMatrix<C>>>()
             .into()
     }
 
     /// Apply the transformation to the given image
-    pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
+    pub fn apply(&self, matrix: &ColorMatrix<C>) -> ColorMatrix<C> {
         match self {
             Transformation::SkipOddPixels => {
                 let mut res = matrix.clone();
@@ -205,20 +201,20 @@ impl Transformation {
     }
 
     /// Create a transformation that adds blank lines
-    pub fn blank_lines<I: Into<Ink> + Copy>(
+    pub fn blank_lines<I: Into<C> + Copy>(
         pattern: &[I],
         position: TransformationLinePosition,
         amount: u16
     ) -> Self {
         Self::BlankLines {
-            pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<Ink>>(),
+            pattern: pattern.iter().map(|&i| i.into()).collect::<Vec<C>>(),
             position,
             amount
         }
     }
 
     /// Create a transformation that adds blanck columns
-    pub fn blank_columns<I: Into<Ink> + Copy>(
+    pub fn blank_columns<I: Into<C> + Copy>(
         pattern: &[I],
         position: TransformationColumnPosition,
         amount: u16
@@ -233,15 +229,15 @@ impl Transformation {
 
 /// Container of transformations
 #[derive(Clone, Debug, Default)]
-pub struct TransformationsList {
+pub struct TransformationsList<C: AmstradColor> {
     /// list of transformations
-    transformations: Vec<Transformation>
+    transformations: Vec<Transformation<C>>
 }
 
 #[allow(missing_docs)]
-impl TransformationsList {
+impl<C: AmstradColor> TransformationsList<C> {
     /// Create an empty list of transformations
-    pub fn new(transformations: &[Transformation]) -> Self {
+    pub fn new(transformations: &[Transformation<C>]) -> Self {
         TransformationsList {
             transformations: transformations.to_vec()
         }
@@ -277,20 +273,20 @@ impl TransformationsList {
         self
     }
 
-    pub fn replace(mut self, from: Ink, to: Ink) -> Self {
+    pub fn replace(mut self, from: C, to: C) -> Self {
         self.transformations
             .push(Transformation::ReplaceInk { from, to });
         self
     }
 
-    pub fn build_mask_from_background_ink(mut self, background: Ink) -> Self {
+    pub fn build_mask_from_background_ink(mut self, background: C) -> Self {
         self.transformations
             .push(Transformation::MaskFromBackgroundInk(background));
         self
     }
 
     /// Apply ALL the transformation (in order of addition)
-    pub fn apply(&self, matrix: &ColorMatrix) -> ColorMatrix {
+    pub fn apply(&self, matrix: &ColorMatrix<C>) -> ColorMatrix<C> {
         let mut result = matrix.clone();
         for transformation in &self.transformations {
             result = transformation.apply(&result);
@@ -556,11 +552,11 @@ impl DisplayAddress {
 /// TODO - add additional output format (for example zigzag sprites that can be usefull or sprite display routines)
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
-pub enum OutputFormat {
+pub enum OutputFormat<C: AmstradColor> {
     MaskedSprite {
         sprite_format: SpriteEncoding,
-        mask_ink: Ink,
-        replacement_ink: Ink
+        mask_ink: C,
+        replacement_ink: C
     },
     Sprite(SpriteEncoding),
 
@@ -574,7 +570,7 @@ pub enum OutputFormat {
     },
 
     /// CPC memory encoded to be used with hardware splitting. The vector only contains the Variant CPCMemory
-    CPCSplittingMemory(Vec<OutputFormat>),
+    CPCSplittingMemory(Vec<OutputFormat<C>>),
 
     /// For quite complexe coding more related to very fast display
     TileEncoded {
@@ -594,7 +590,7 @@ pub enum OutputFormat {
 }
 
 #[allow(missing_docs)]
-impl OutputFormat {
+impl<C: AmstradColor> OutputFormat<C> {
     /// For formats manipulating a display address, modify it vertically in order to make scroll the image
     pub fn vertically_shift_display_address(&mut self, delta: i32) {
         if let Self::CPCMemory {
@@ -1005,22 +1001,22 @@ pub enum SpriteEncoding {
 }
 
 #[derive(Clone)]
-pub struct SpriteOutput {
+pub struct SpriteOutput<C: AmstradColor> {
     data: Vec<u8>,
-    palette: Palette,
+    palette: Palette<C>,
     mode: Mode,
     bytes_width: usize,
     height: usize,
     encoding: SpriteEncoding
 }
 
-impl AsRef<[u8]> for SpriteOutput {
+impl<C: AmstradColor> AsRef<[u8]> for SpriteOutput<C> {
     fn as_ref(&self) -> &[u8] {
         self.data()
     }
 }
 
-impl SpriteOutput {
+impl<C: AmstradColor> SpriteOutput<C> {
     pub fn with_encoding(&self, encoding: SpriteEncoding) -> Self {
         if encoding == self.encoding {
             return self.clone();
@@ -1055,8 +1051,8 @@ impl SpriteOutput {
         )
     }
 
-    pub fn as_sprite(&self) -> Sprite {
-        Sprite::from_bytes(
+    pub fn as_sprite(&self) -> Sprite<C> {
+        Sprite::<C>::from_bytes(
             &self.data,
             self.bytes_width(),
             self.mode,
@@ -1072,7 +1068,7 @@ impl SpriteOutput {
         &self.data
     }
 
-    pub fn palette(&self) -> &Palette {
+    pub fn palette(&self) -> &Palette<C> {
         &self.palette
     }
 
@@ -1095,31 +1091,31 @@ impl SpriteOutput {
 /// There must be one implementation per OuputFormat
 #[allow(missing_docs)]
 #[allow(clippy::large_enum_variant)]
-pub enum Output {
+pub enum Output<C: AmstradColor> {
     // Mask and sprite are encoded the very same way
     SpriteAndMask {
-        sprite: SpriteOutput,
-        mask: SpriteOutput
+        sprite: SpriteOutput<C>,
+        mask: SpriteOutput<C>
     },
 
     // Any kind of sprite
-    Sprite(SpriteOutput),
+    Sprite(SpriteOutput<C>),
 
     LinearEncodedChuncky {
         data: Vec<u8>,
-        palette: Palette,
+        palette: Palette<C>,
         bytes_width: usize,
         height: usize
     },
 
     /// Result using one bank
-    CPCMemoryStandard([u8; 0x4000], Palette),
+    CPCMemoryStandard([u8; 0x4000], Palette<C>),
 
     /// Result using two banks
-    CPCMemoryOverscan([u8; 0x4000], Option<[u8; 0x4000]>, Palette),
+    CPCMemoryOverscan([u8; 0x4000], Option<[u8; 0x4000]>, Palette<C>),
 
     /// Result using several chunks of memory
-    CPCSplittingMemory(Vec<Output>),
+    CPCSplittingMemory(Vec<Output<C>>),
 
     /// Result containing several tiles
     TilesList {
@@ -1127,7 +1123,7 @@ pub enum Output {
         tile_width: u32,
         horizontal_movement: TileHorizontalCapture,
         vertical_movement: TileVerticalCapture,
-        palette: Palette,
+        palette: Palette<C>,
         list: Vec<Vec<u8>>
     }
 }
@@ -1143,20 +1139,20 @@ impl Debug for SpriteEncoding {
     }
 }
 
-impl Debug for SpriteOutput {
+impl<C: AmstradColor> Debug for SpriteOutput<C> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         writeln!(fmt, "{:?}Sprite", self.encoding)
     }
 }
 
-impl Debug for Output {
+impl<C: AmstradColor> Debug for Output<C> {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Output::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
-            Output::CPCMemoryStandard(..) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
-            Output::CPCMemoryOverscan(..) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
-            Output::CPCSplittingMemory(vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", vec),
-            Output::TilesList {
+            Output::<C>::LinearEncodedChuncky { .. } => writeln!(fmt, "LinearEncodedChuncky"),
+            Output::<C>::CPCMemoryStandard(..) => writeln!(fmt, "CPCMemoryStandard (16kb)"),
+            Output::<C>::CPCMemoryOverscan(..) => writeln!(fmt, "CPCMemoryStandard (32kb)"),
+            Output::<C>::CPCSplittingMemory(vec) => writeln!(fmt, "CPCSplitteringMemory {:?}", vec),
+            Output::<C>::TilesList {
                 tile_height,
                 tile_width,
                 list,
@@ -1170,14 +1166,14 @@ impl Debug for Output {
                     tile_height
                 )
             },
-            Output::SpriteAndMask { sprite: _, mask: _ } => writeln!(fmt, "SpriteAndMask"),
-            Output::Sprite(sprite_output) => writeln!(fmt, "{sprite_output:?}")
+            Output::<C>::SpriteAndMask { sprite: _, mask: _ } => writeln!(fmt, "SpriteAndMask"),
+            Output::<C>::Sprite(sprite_output) => writeln!(fmt, "{sprite_output:?}")
         }
     }
 }
 
 #[allow(missing_docs)]
-impl Output {
+impl<C: AmstradColor> Output<C> {
     /// Returns the bank that contains the first half of the screen
     pub fn overscan_screen1(&self) -> Option<&[u8; 0x4000]> {
         match self {
@@ -1186,7 +1182,7 @@ impl Output {
         }
     }
 
-    pub fn sprite(self) -> Option<SpriteOutput> {
+    pub fn sprite(self) -> Option<SpriteOutput<C>> {
         if let Self::Sprite(sprite) = self {
             Some(sprite)
         }
@@ -1214,38 +1210,38 @@ impl Output {
 
 /// ImageConverter is able to make the conversion of images to several output format
 #[derive(Debug, Clone)]
-pub struct ImageConverter {
+pub struct ImageConverter<C: AmstradColor> {
     // TODO add a crop area to not keep the complete image
     // cropArea: Option<???>
     /// A palette can be specified
-    palette: LockablePalette,
+    palette: LockablePalette<C>,
 
     /// Screen mode
     mode: Mode,
 
-    /// Output format
-    output: OutputFormat,
+    /// Output<C> format
+    output: OutputFormat<C>,
 
     /// List of transformations
-    transformations: TransformationsList,
+    transformations: TransformationsList<C>,
 
     /// Crop image if too large in comparison to result screen
     crop_if_too_large: bool
 }
 
 #[allow(missing_docs)]
-impl ImageConverter {
+impl<C: AmstradColor> ImageConverter<C> {
     /// Create the object that will be used to make the conversion
     pub fn convert<P>(
         input_file: P,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         mode: Mode,
-        transformations: TransformationsList,
-        output: OutputFormat,
+        transformations: TransformationsList<C>,
+        output: OutputFormat<C>,
         crop_if_too_large: bool,
         missing_pen: Option<Pen>,
         o: &dyn EventObserver
-    ) -> anyhow::Result<Output>
+    ) -> anyhow::Result<Output<C>>
     where
         P: AsRef<Utf8Path>
     {
@@ -1263,14 +1259,14 @@ impl ImageConverter {
 
     fn convert_to_sprite(
         input_file: &Utf8Path,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         mode: Mode,
-        transformations: TransformationsList,
+        transformations: TransformationsList<C>,
         encoding: SpriteEncoding,
         crop_if_too_large: bool,
         missing_pen: Option<Pen>,
         o: &dyn EventObserver
-    ) -> anyhow::Result<SpriteOutput> {
+    ) -> anyhow::Result<SpriteOutput<C>> {
         match &encoding {
             SpriteEncoding::Linear => {
                 let mut converter = ImageConverter {
@@ -1380,14 +1376,14 @@ impl ImageConverter {
 
     fn convert_impl(
         input_file: &Utf8Path,
-        palette: LockablePalette,
+        palette: LockablePalette<C>,
         mode: Mode,
-        transformations: TransformationsList,
-        output: OutputFormat,
+        transformations: TransformationsList<C>,
+        output: OutputFormat<C>,
         crop_if_too_large: bool,
         missing_pen: Option<Pen>,
         o: &dyn EventObserver
-    ) -> anyhow::Result<Output> {
+    ) -> anyhow::Result<Output<C>> {
         let mut converter = ImageConverter {
             palette: palette.clone(),
             mode,
@@ -1399,8 +1395,8 @@ impl ImageConverter {
         if let OutputFormat::LinearEncodedChuncky = &output {
             let mut matrix = converter.load_color_matrix(input_file);
             matrix.double_horizontally();
-            let sprite = matrix.as_sprite(mode, LockablePalette::empty(), None);
-            Ok(Output::LinearEncodedChuncky {
+            let sprite = matrix.as_sprite(mode, LockablePalette::<C>::empty(), None);
+            Ok(Output::<C>::LinearEncodedChuncky {
                 data: sprite.to_linear_vec(),
                 palette: sprite.palette.as_ref().unwrap().clone(), /* By definition, we expect the palette to be set */
                 bytes_width: sprite.bytes_width() as _,
@@ -1418,7 +1414,7 @@ impl ImageConverter {
                 missing_pen,
                 o
             )
-            .map(Output::Sprite)
+            .map(Output::<C>::Sprite)
         }
         else if let OutputFormat::MaskedSprite {
             sprite_format,
@@ -1442,12 +1438,12 @@ impl ImageConverter {
             let mask_transformations = transformations
                 .clone()
                 .build_mask_from_background_ink(*mask_ink);
-            let mut mask_palette = vec![<Ink as AmstradColor>::not_in_mask(); 16];
-            mask_palette[0] = <Ink as AmstradColor>::mask_foreground(); // at the position with all bits reset
-            mask_palette[mode.max_colors() - 1] = <Ink as AmstradColor>::mask_background(); // at the position with all bits set up
+            let mut mask_palette = vec![<C as AmstradColor>::not_in_mask(); 16];
+            mask_palette[0] = <C as AmstradColor>::mask_foreground(); // at the position with all bits reset
+            mask_palette[mode.max_colors() - 1] = <C as AmstradColor>::mask_background(); // at the position with all bits set up
             let mask = Self::convert_to_sprite(
                 input_file,
-                LockablePalette::locked(mask_palette.into()), /* we want and 0 ; or byte where we plot */
+                LockablePalette::<C>::locked(mask_palette.into()), /* we want and 0 ; or byte where we plot */
                 mode,
                 mask_transformations,
                 *sprite_format,
@@ -1464,7 +1460,7 @@ impl ImageConverter {
                 let _ = sprite_img.save_with_format("/tmp/sprite.png", image::ImageFormat::Png);
             }
 
-            Ok(Output::SpriteAndMask { sprite, mask })
+            Ok(Output::<C>::SpriteAndMask { sprite, mask })
         }
         else {
             let sprite = converter.load_sprite(input_file, missing_pen);
@@ -1474,15 +1470,15 @@ impl ImageConverter {
 
     /// Makes the conversion of the provided sprite to the expected format
     pub fn import(
-        sprite: &Sprite,
-        output: OutputFormat,
+        sprite: &Sprite<C>,
+        output: OutputFormat<C>,
         o: &dyn EventObserver
-    ) -> anyhow::Result<Output> {
+    ) -> anyhow::Result<Output<C>> {
         let mut converter = ImageConverter {
-            palette: LockablePalette::empty(),
+            palette: LockablePalette::<C>::empty(),
             mode: Mode::Zero, // TODO make the mode an optional argument,
             output,
-            transformations: TransformationsList::default(),
+            transformations: TransformationsList::<C>::default(),
             crop_if_too_large: false
         };
 
@@ -1492,32 +1488,32 @@ impl ImageConverter {
     /// Load the initial image
     /// TODO make compatibility tests are alike
     /// TODO propagate errors when needed
-    fn load_sprite(&mut self, input_file: &Utf8Path, missing_pen: Option<Pen>) -> Sprite {
+    fn load_sprite(&mut self, input_file: &Utf8Path, missing_pen: Option<Pen>) -> Sprite<C> {
         let matrix = self.load_color_matrix(input_file);
         let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen);
-        self.palette = LockablePalette::locked(sprite.palette().unwrap());
+        self.palette = LockablePalette::<C>::locked(sprite.palette().unwrap());
 
         sprite
     }
 
-    fn load_color_matrix(&self, input_file: &Utf8Path) -> ColorMatrix {
+    fn load_color_matrix(&self, input_file: &Utf8Path) -> ColorMatrix<C> {
         let img = im::open(input_file)
             .unwrap_or_else(|e| panic!("Unable to convert {input_file:?} properly. {e}"));
-        let mat = ColorMatrix::convert(&img.to_rgb8(), ConversionRule::AnyModeUseAllPixels);
+        let mat = ColorMatrix::<C>::convert(&img.to_rgb8(), ConversionRule::AnyModeUseAllPixels);
         self.transformations.apply(&mat)
     }
 
     /// Manage the conversion on the given sprite
     fn apply_sprite_conversion(
         &mut self,
-        sprite: &Sprite,
+        sprite: &Sprite<C>,
         o: &dyn EventObserver
-    ) -> anyhow::Result<Output> {
+    ) -> anyhow::Result<Output<C>> {
         let output = self.output.clone();
 
         match output {
             OutputFormat::Sprite(SpriteEncoding::Linear) => {
-                self.linearize_sprite(sprite).map(Output::Sprite)
+                self.linearize_sprite(sprite).map(Output::<C>::Sprite)
             },
             OutputFormat::CPCMemory {
                 ref output_dimension,
@@ -1549,7 +1545,7 @@ impl ImageConverter {
 
     /// Produce the linearized version of the sprite.
     /// TODO add size constraints to keep a small part of the sprite
-    fn linearize_sprite(&mut self, sprite: &Sprite) -> anyhow::Result<SpriteOutput> {
+    fn linearize_sprite(&mut self, sprite: &Sprite<C>) -> anyhow::Result<SpriteOutput<C>> {
         Ok(SpriteOutput {
             encoding: SpriteEncoding::Linear,
             mode: sprite.mode.unwrap(),
@@ -1569,8 +1565,8 @@ impl ImageConverter {
         vertical_movement: TileVerticalCapture,
         grid_width: GridWidthCapture,
         grid_height: GridHeightCapture,
-        sprite: &Sprite
-    ) -> anyhow::Result<Output> {
+        sprite: &Sprite<C>
+    ) -> anyhow::Result<Output<C>> {
         // Compute the real value of the arguments
         let tile_width = match tile_width {
             TileWidthCapture::FullWidth => sprite.bytes_width(),
@@ -1639,7 +1635,7 @@ impl ImageConverter {
         }
 
         // build the object to return
-        Ok(Output::TilesList {
+        Ok(Output::<C>::TilesList {
             tile_height,
             tile_width,
             horizontal_movement,
@@ -1653,11 +1649,11 @@ impl ImageConverter {
     /// XXX Warning, overscan is wrongly used, it is more fullscreen with 2 pages
     fn build_memory_blocks(
         &mut self,
-        sprite: &Sprite,
+        sprite: &Sprite<C>,
         dim: CPCScreenDimension,
         display_address: DisplayAddress,
         o: &dyn EventObserver
-    ) -> anyhow::Result<Output> {
+    ) -> anyhow::Result<Output<C>> {
         let screen_width = u32::from(dim.width(sprite.mode().unwrap()));
         let screen_height = u32::from(dim.height());
 
@@ -1778,14 +1774,14 @@ impl ImageConverter {
         // Generate the right output format
         let palette = sprite.palette().unwrap();
         if is_overscan {
-            Ok(Output::CPCMemoryOverscan(
+            Ok(Output::<C>::CPCMemoryOverscan(
                 used_pages[0],
                 used_pages.get(1).cloned(),
                 palette
             ))
         }
         else {
-            Ok(Output::CPCMemoryStandard(used_pages[0], palette))
+            Ok(Output::<C>::CPCMemoryStandard(used_pages[0], palette))
         }
     }
 }

@@ -284,14 +284,14 @@ fn generate_comparison_png_from_interpreters(
 }
 
 /// Helper to convert a color matrix to RGB image
-fn color_matrix_to_rgb_image(color_matrix: &cpclib_image::image::ColorMatrix) -> RgbImage {
+fn color_matrix_to_rgb_image(color_matrix: &cpclib_image::image::ColorMatrix<cpclib_image::ga::Ink>) -> RgbImage {
     let width = color_matrix.width() as u32;
     let height = color_matrix.height() as u32;
 
     let mut img: RgbImage = ImageBuffer::new(width, height);
     for y in 0..height {
         for x in 0..width {
-            let color = color_matrix.get_ink(x as usize, y as usize);
+            let color = color_matrix.get_color(x as usize, y as usize);
             let rgb = color.color();
             img.put_pixel(x, y, Rgb([rgb[0], rgb[1], rgb[2]]));
         }
@@ -302,7 +302,7 @@ fn color_matrix_to_rgb_image(color_matrix: &cpclib_image::image::ColorMatrix) ->
 /// Compare raw memory buffers and generate visual diff
 /// Returns Result with error message containing details and file paths
 pub fn compare_memory_with_visual_diff(
-    palette: &Palette,
+    palette: &Palette<cpclib_image::ga::Ink>,
     expected: &[u8; 16384],
     actual: &[u8; 16384],
     output_prefix: &str,
@@ -446,7 +446,7 @@ pub fn compare_memory_with_visual_diff(
 fn memory_to_image(
     memory: &[u8; 16384],
     mode: &Mode,
-    palette: &Palette,
+    palette: &Palette<cpclib_image::ga::Ink>,
     border_horizontal: usize,
     border_vertical: usize
 ) -> RgbImage {

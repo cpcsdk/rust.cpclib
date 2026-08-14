@@ -200,3 +200,65 @@ impl Debug for AsicColor {
         )
     }
 }
+
+impl std::str::FromStr for AsicColor {
+    type Err = String;
+
+    /// Two spellings, because both are natural in different places.
+    ///
+    /// * `4A5` or `0x4A5` - the packed 12-bit value, exactly as it appears in a
+    ///   `.kit` file, red nibble first.
+    /// * `4,10,5` - red, green, blue, each 0-15, which is what someone reading
+    ///   a colour off a palette editor has in front of them.
+    ///
+    /// The comma is what tells them apart; it cannot appear in a hex number.
+    fn from_str(raw: &str) -> std::result::Result<Self, Self::Err> {
+        let raw = raw.trim();
+        if raw.is_empty() {
+            return Err("empty colour".to_owned());
+        }
+
+        if raw.contains(',') {
+            let parts: Vec<&str> = raw.split(',').map(str::trim).collect();
+            if parts.len() != 3 {
+                return Err(format!(
+                    "{raw:?}: an R,G,B colour needs exactly 3 components, got {}",
+                    parts.len()
+                ));
+            }
+            let mut components = [0u8; 3];
+            for (component, (name, text)) in components
+                .iter_mut()
+                .zip(["red", "green", "blue"].into_iter().zip(parts))
+            {
+                let value: u8 = text
+                    .parse()
+                    .map_err(|_| format!("{text:?} is not a number ({name} component)"))?;
+                if value > AsicColorComponent::MAX {
+                    return Err(format!(
+                        "{name} is {value}; an ASIC component is 0-{}",
+                        AsicColorComponent::MAX
+                    ));
+                }
+                *component = value;
+            }
+            return Ok(AsicColor::new(components[0], components[1], components[2]));
+        }
+
+        let digits = raw.strip_prefix("0x").or_else(|| raw.strip_prefix("0X")).unwrap_or(raw);
+        let value = u16::from_str_radix(digits, 16)
+            .map_err(|_| format!("{raw:?} is not a hexadecimal colour (expected e.g. 4A5)"))?;
+        if value > 0xFFF {
+            return Err(format!(
+                "{raw:?} is out of range; an ASIC colour is 3 hex digits (0x000-0xFFF)"
+            ));
+        }
+        // `4A5` reads red-green-blue left to right, which is *not* the order the
+        // bits sit in - green is the low nibble on the hardware.
+        Ok(AsicColor::new(
+            ((value >> 8) & 0xF) as u8,
+            ((value >> 4) & 0xF) as u8,
+            (value & 0xF) as u8
+        ))
+    }
+}
