@@ -47,7 +47,7 @@
 //! reports no edits) rather than emit a reference that might not reliably
 //! resolve.
 
-use cpclib_asm::branch_balance::{self, InstructionCost, StabilizeEdit};
+use cpclib_z80flow::branch_balance::{self, InstructionCost, StabilizeEdit};
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken};
 use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::{Position, Range};
@@ -413,12 +413,71 @@ mod tests {
         assert!(stabilize(text).is_err());
     }
 
+    /// `DJNZ` is still out of scope - its taken arm is a loop, and padding an
+    /// unknown iteration count means nothing.
+    ///
+    /// A **conditional** `CALL` is out of scope for a different, narrower
+    /// reason: `data/timings.txt` gives `call ccc,nn` as "5 or 3", so its cost
+    /// is a range, and balancing needs one exact number to pad against.
     #[test]
-    fn djnz_and_call_are_rejected() {
-        for instr in ["djnz .x", "call nz,.x"] {
-            let text = format!("    {instr}\n.x:\n    nop\n");
-            assert!(stabilize(&text).is_err(), "{instr}");
-        }
+    fn djnz_is_rejected() {
+        let text = "    djnz .x\n.x:\n    nop\n    ret\n";
+        assert!(stabilize(text).is_err());
+    }
+
+    /// A **conditional** call is out of scope for a narrower reason than the
+    /// old blanket rejection: `data/timings.txt` gives `call ccc,nn` as
+    /// "5 or 3", so its cost is a range, and balancing needs one exact number
+    /// to pad against.
+    ///
+    /// It has to sit inside a real branch to be reached at all - a selection
+    /// whose only conditional thing is a `call cc` has no branch to balance,
+    /// so the honest answer there is "no edits", not an error.
+    #[test]
+    fn a_conditional_call_inside_a_branch_arm_is_rejected() {
+        let text = "\
+    jr nz,.taken
+    call nz,.small
+    jr .over
+.taken:
+    nop
+.over:
+    ret
+.small:
+    nop
+    ret
+";
+        assert!(stabilize(text).is_err());
+    }
+
+    /// An *unconditional* call to a routine with a single exact cost used to
+    /// be rejected out of hand, so a selection containing any call could never
+    /// be stabilized. It can be now: the routine's own cost is priced in, and
+    /// the two arms are balanced against it.
+    #[test]
+    fn an_unconditional_call_to_an_exact_routine_no_longer_blocks_stabilizing() {
+        let text = "\
+    jr nz,.taken
+    call .small
+    jr .over
+.taken:
+    call .big
+.over:
+    ret
+.small:
+    nop
+    ret
+.big:
+    nop
+    nop
+    ret
+";
+        let edits = stabilize(text)
+            .expect("a call with a knowable cost must no longer abort the whole pass");
+        assert!(
+            !edits.is_empty(),
+            "the arms differ by their routines' costs, so padding is needed"
+        );
     }
 
     #[test]

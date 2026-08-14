@@ -243,13 +243,16 @@ where
                     {
                         return None;
                     }
-                    // A jump or call moves control somewhere this scan does not
-                    // model.
-                    if matches!(
-                        op.mnemonic(),
-                        Some(Mnemonic::Jp | Mnemonic::Jr | Mnemonic::Jq)
-                            | Some(Mnemonic::Call | Mnemonic::Rst | Mnemonic::Djnz)
-                    ) {
+                    // A jump, a call, or a return moves control somewhere this
+                    // scan does not model.
+                    //
+                    // Asked of `cpclib-z80flow`'s own table rather than of a
+                    // list kept here: the list this replaces named
+                    // `JP`/`JR`/`JQ`/`CALL`/`RST`/`DJNZ` and quietly omitted
+                    // `RETI`/`RETN`, so an interrupt handler's own return read
+                    // as an ordinary instruction and the scan walked straight
+                    // past the end of the routine.
+                    if cpclib_z80flow::diverts_control(op.mnemonic()) {
                         return None;
                     }
                 }

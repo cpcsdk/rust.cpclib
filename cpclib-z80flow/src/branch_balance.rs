@@ -115,16 +115,26 @@ impl StabilizeEdit {
 }
 
 /// `Err` the first time `tokens` contains a `CALL` or `DJNZ` anywhere, in
-/// any form - unlike `JR`/`JP`/`RET`, neither has a self-contained,
-/// in-selection "taken arm" this module can express (`DJNZ`'s taken arm is
-/// a loop; a taken `CALL` runs an entire subroutine of unknowable cost).
+/// any form - its taken arm is a loop, with no self-contained, in-selection
+/// cost this module could express, and padding an unknown iteration count is
+/// not meaningful.
+///
+/// **`CALL` used to be rejected here too**, on the grounds that "a taken
+/// `CALL` runs an entire subroutine of unknowable cost". That is no longer
+/// true: `cost_range::exact_call_cost` prices the callee when the callee is in
+/// view and costs a single known number, which is the common case for a
+/// routine defined in the same file. A call whose cost is *not* exact - it
+/// branches, loops, recurses, or lives elsewhere - still stops the balance,
+/// but now at `straight_line_cost`, with a reason naming the actual problem
+/// rather than the mnemonic.
+///
 /// Checked directly against `tokens`, not the `Cfg` - `crate::cfg::build_cfg`
-/// itself no longer treats either mnemonic specially (it's permissive,
-/// shared with `cost_range`, which *does* want to model them), so this
-/// module's own blanket rejection has to be an explicit, separate scan.
-fn reject_call_or_djnz<T: ListingElement>(tokens: &[&T]) -> Result<(), String> {
+/// itself doesn't treat `DJNZ` specially (it's permissive, shared with
+/// `cost_range`, which *does* want to model it), so this module's own
+/// rejection has to be an explicit, separate scan.
+fn reject_djnz<T: ListingElement>(tokens: &[&T]) -> Result<(), String> {
     for (i, token) in tokens.iter().enumerate() {
-        if let Some(m @ (Mnemonic::Call | Mnemonic::Djnz)) = mnemonic_of(*token) {
+        if let Some(m @ Mnemonic::Djnz) = mnemonic_of(*token) {
             return Err(format!(
                 "{m:?} at token index {i} isn't supported (only JR/JP/RET are balanced)"
             ));
@@ -142,6 +152,7 @@ fn reject_call_or_djnz<T: ListingElement>(tokens: &[&T]) -> Result<(), String> {
 /// Label tokens contribute nothing (a real, zero-cost marker).
 fn straight_line_cost<T: ListingElement>(
     tokens: &[&T],
+    labels: &HashMap<String, usize>,
     start: usize,
     end: usize,
     cost: &impl Fn(&T) -> InstructionCost
@@ -152,6 +163,20 @@ fn straight_line_cost<T: ListingElement>(
     let mut total = 0u32;
     for token in tokens[start..=end].iter().copied() {
         if token.is_label() {
+            continue;
+        }
+        // A `call`'s cost is its own plus its callee's - and balancing needs
+        // that to be one exact number, since it pads against the difference.
+        if mnemonic_of(token) == Some(Mnemonic::Call) {
+            let Some(n) = crate::cost_range::exact_call_cost(tokens, labels, token, cost)
+            else {
+                return Err(
+                    "a CALL in the selection has no single known cost (its routine \
+                     branches, loops, or is defined outside the selection)"
+                        .to_string()
+                );
+            };
+            total += n;
             continue;
         }
         match cost(token) {
@@ -175,6 +200,7 @@ fn balance<T: ListingElement>(
     cfg: &Cfg,
     postdom: &[usize],
     tokens: &[&T],
+    labels: &HashMap<String, usize>,
     cost: &impl Fn(&T) -> InstructionCost
 ) -> Result<Vec<StabilizeEdit>, String> {
     let mut edits = Vec::new();
@@ -212,9 +238,9 @@ fn balance<T: ListingElement>(
         let merge = postdom[b];
 
         let taken_cost =
-            cost_taken + arm_cost(cfg, &resolved, postdom, tokens, cost, taken, merge)?;
+            cost_taken + arm_cost(cfg, &resolved, postdom, tokens, labels, cost, taken, merge)?;
         let not_taken_cost =
-            cost_not_taken + arm_cost(cfg, &resolved, postdom, tokens, cost, not_taken, merge)?;
+            cost_not_taken + arm_cost(cfg, &resolved, postdom, tokens, labels, cost, not_taken, merge)?;
 
         if taken_cost != not_taken_cost {
             let padding_taken_arm = taken_cost < not_taken_cost;
@@ -273,6 +299,7 @@ fn arm_cost<T: ListingElement>(
     resolved: &HashMap<usize, u32>,
     postdom: &[usize],
     tokens: &[&T],
+    labels: &HashMap<String, usize>,
     cost: &impl Fn(&T) -> InstructionCost,
     start: usize,
     end: usize
@@ -289,7 +316,7 @@ fn arm_cost<T: ListingElement>(
         }
         else {
             let block = cfg.blocks[cur];
-            total += straight_line_cost(tokens, block.start, block.end, cost)?;
+            total += straight_line_cost(tokens, labels, block.start, block.end, cost)?;
             cur = match &cfg.terms[cur] {
                 Terminator::Fallthrough(t) => *t,
                 Terminator::Jump(s) => expect_block(s),
@@ -352,8 +379,8 @@ fn arm_padding_index(
 /// Detects and balances every hand-written `JR`/`JP`/`RET` branch in
 /// `tokens`, returning the padding needed (empty when already balanced).
 /// `Err` with a human-readable reason when `tokens` contains something
-/// this v1 doesn't support (a loop, `DJNZ`/`CALL` in any form, or an
-/// escaping jump target) - the caller is expected to offer no action at
+/// this v1 doesn't support (a loop, `DJNZ`, a `CALL` whose routine has no
+/// single exact cost, or an escaping jump target) - the caller is expected to offer no action at
 /// all in that case, not surface the message as an error (this isn't
 /// necessarily a mistake, just a shape this feature doesn't cover yet).
 pub fn balance_branches<T: ListingElement>(
@@ -363,8 +390,9 @@ pub fn balance_branches<T: ListingElement>(
     if tokens.is_empty() {
         return Ok(Vec::new());
     }
-    reject_call_or_djnz(tokens)?;
+    reject_djnz(tokens)?;
     let cfg = build_cfg(tokens)?;
+    let labels = crate::cfg::label_indices(tokens);
     cfg.validate_forward_only()?;
     if !cfg
         .terms
@@ -374,254 +402,7 @@ pub fn balance_branches<T: ListingElement>(
         return Ok(Vec::new());
     }
     let postdom = compute_postdominators(&cfg);
-    let mut edits = balance(&cfg, &postdom, tokens, &cost)?;
+    let mut edits = balance(&cfg, &postdom, tokens, &labels, &cost)?;
     edits.sort_unstable_by(|a, b| b.anchor_index().cmp(&a.anchor_index()));
     Ok(edits)
-}
-
-#[cfg(test)]
-mod tests {
-    use cpclib_tokens::{DataAccessElem, ListingElement};
-
-    use super::*;
-    use crate::parser::obtained::LocatedToken;
-    use crate::parser::parse_z80_str;
-
-    /// A tiny, test-only cost source mirroring the real Z80/CPC "NOPs"
-    /// timing convention (1 NOP = 4 T-states) this whole feature is built
-    /// around: `jr cc`/`ret cc` = 3 taken / 2 not-taken, unconditional
-    /// `jr`/`ret` = 3, `ld r,r'`/`nop` = 1 each - the same real values used
-    /// to hand-verify the shipped LSP version's own tests, kept identical
-    /// here so the same hand-verified expected numbers still apply.
-    fn test_cost(token: &LocatedToken) -> InstructionCost {
-        match token.mnemonic() {
-            Some(Mnemonic::Jr) | Some(Mnemonic::Ret) => {
-                if token.mnemonic_arg1().is_some_and(|a| a.is_flag_test()) {
-                    InstructionCost::Conditional {
-                        taken: 3,
-                        not_taken: 2
-                    }
-                }
-                else {
-                    InstructionCost::Fixed(3)
-                }
-            },
-            Some(Mnemonic::Ld) | Some(Mnemonic::Nop) => InstructionCost::Fixed(1),
-            Some(Mnemonic::Djnz) | Some(Mnemonic::Call) => InstructionCost::Unknown,
-            _ => InstructionCost::Fixed(0)
-        }
-    }
-
-    fn balance(code: &str) -> Result<Vec<StabilizeEdit>, String> {
-        // `LocatedToken::clone()` is an `unimplemented!()` stub in this
-        // codebase today, so tests borrow straight from the parsed
-        // `LocatedListing` rather than collecting an owned `Vec`.
-        let listing = parse_z80_str(code).unwrap();
-        let tokens: Vec<&LocatedToken> = listing.iter().collect();
-        balance_branches(&tokens, test_cost)
-    }
-
-    /// The classic shape: `jr nz,.b` / cheap not-taken arm (ends with its
-    /// own unconditional jump over) / `.b:` expensive taken arm / `.over:`.
-    /// Hand-verified: taken path = 3 (jr taken) + 1 (ld a,b) + 1 (ld c,d) =
-    /// 5; not-taken path = 2 (jr not taken) + 1 (ld a,b) + 3 (jr .over) =
-    /// 6. The taken arm is cheaper by 1, so 1 NOP must land right before
-    /// the token starting the `.over:` block (index 6: `jr nz,.b`(0),
-    /// `ld a,b`(1), `jr .over`(2), `.b`(3), `ld a,b`(4), `ld c,d`(5),
-    /// `.over`(6)).
-    #[test]
-    fn single_branch_pads_the_cheaper_arm() {
-        let code = "    jr nz,.b\n    ld a,b\n    jr .over\n.b\n    ld a,b\n    ld c,d\n.over\n";
-        let edits = balance(code).unwrap();
-        assert_eq!(
-            edits,
-            vec![StabilizeEdit::InsertPadding {
-                insert_before_index: 6,
-                nop_count: 1
-            }]
-        );
-    }
-
-    #[test]
-    fn already_balanced_branch_needs_no_edits() {
-        // not-taken: 2 (jr) + 1+1 (nop*2) + 3 (jr .over) = 7
-        // taken:      3 (jr) + 1+1+1+1 (nop*4) = 7
-        let code = "    jr nz,.b\n    nop\n    nop\n    jr .over\n.b\n    nop\n    nop\n    nop\n    nop\n.over\n";
-        assert!(balance(code).unwrap().is_empty());
-    }
-
-    #[test]
-    fn nested_branch_is_resolved_innermost_first() {
-        let code = "\
-    jr nz,.outer_b
-    nop
-    jr .outer_over
-.outer_b
-    jr z,.inner_b
-    nop
-    jr .inner_over
-.inner_b
-    nop
-    nop
-.inner_over
-.outer_over
-";
-        let edits = balance(code).unwrap();
-        // Inner branch: taken (3) + nop*2 (2) = 5; not-taken (2) + nop (1)
-        // + jr .inner_over (3) = 6 -> inner taken arm padded by 1, landing
-        // right before the `.inner_over` token (index 10).
-        assert!(
-            edits.iter().any(|e| {
-                matches!(
-                    e,
-                    StabilizeEdit::InsertPadding {
-                        insert_before_index: 10,
-                        nop_count: 1
-                    }
-                )
-            }),
-            "{edits:?}"
-        );
-        // Whatever the outer branch's own imbalance resolves to, it must
-        // land at or before `.outer_over` (index 11), never past it.
-        assert!(
-            edits.iter().all(|e| {
-                match e {
-                    StabilizeEdit::InsertPadding {
-                        insert_before_index,
-                        ..
-                    } => *insert_before_index <= 11,
-                    StabilizeEdit::RewriteConditionalRetAndPad {
-                        ret_token_index, ..
-                    } => *ret_token_index <= 11
-                }
-            }),
-            "{edits:?}"
-        );
-    }
-
-    #[test]
-    fn sibling_branches_are_each_balanced_independently() {
-        let code = "\
-    jr nz,.a_b
-    nop
-    jr .a_over
-.a_b
-    nop
-    nop
-.a_over
-    jr z,.c_b
-    nop
-    jr .c_over
-.c_b
-    nop
-    nop
-    nop
-.c_over
-";
-        let edits = balance(code).unwrap();
-        // First branch: taken (3+2=5) vs not-taken (2+1+3=6) -> pad taken
-        // arm by 1 before `.a_over` (index 6).
-        assert!(
-            edits.contains(&StabilizeEdit::InsertPadding {
-                insert_before_index: 6,
-                nop_count: 1
-            }),
-            "{edits:?}"
-        );
-        // Second branch: taken (3+3=6) vs not-taken (2+1+3=6) -> already
-        // balanced, no edit for it.
-        assert_eq!(edits.len(), 1, "{edits:?}");
-    }
-
-    #[test]
-    fn a_backward_jump_is_rejected_as_a_loop() {
-        let code = ".loop\n    nop\n    jr nz,.loop\n";
-        assert!(balance(code).is_err());
-    }
-
-    #[test]
-    fn djnz_and_call_are_rejected() {
-        for instr in ["djnz .x", "call nz,.x", "call .x"] {
-            let code = format!("    {instr}\n.x\n    nop\n");
-            assert!(balance(&code).is_err(), "{instr}");
-        }
-    }
-
-    /// A real-world idiom (from the user's own `bc26_hl` example): `RET cc`
-    /// is no longer blanket-rejected the way `DJNZ`/`CALL` still are. A
-    /// lone unconditional `RET` in particular - how nearly every real
-    /// subroutine selection ends - must not abort the whole pass just
-    /// because it's present (this was the actual root cause of the Quick
-    /// Fix never appearing at all for real selections).
-    #[test]
-    fn a_lone_unconditional_ret_is_not_rejected() {
-        let code = "    ld a,b\n    ret\n";
-        assert!(balance(code).unwrap().is_empty());
-    }
-
-    /// `RET cc` alone, nothing following it in the selection: its taken
-    /// side reaches the virtual exit directly (cost 3, no arm content -
-    /// there is nothing after this token at all), and so does its
-    /// not-taken side (cost 2, also no arm content - `next_block` defaults
-    /// to `exit` when nothing follows). The not-taken side is cheaper by
-    /// 1, and - unlike the taken side - it has a perfectly well-defined
-    /// insertion point (right after this one token, index 1) via
-    /// `arm_padding_index`'s own "end == exit" fallback, so this is a
-    /// plain `InsertPadding`, not a rewrite.
-    #[test]
-    fn ret_cc_alone_pads_the_fallthrough_arm_via_plain_insertion() {
-        let code = "    ret nc\n";
-        let edits = balance(code).unwrap();
-        assert_eq!(
-            edits,
-            vec![StabilizeEdit::InsertPadding {
-                insert_before_index: 1,
-                nop_count: 1
-            }]
-        );
-    }
-
-    /// The user's own idiom, minimally reproduced: `ret nc` (early exit)
-    /// followed by more code ending in its own unconditional `ret`. Hand
-    /// verified: taken (early-exit) path = 3 (ret nc taken) + 0 (nothing
-    /// else - it leaves immediately) = 3; not-taken path = 2 (ret nc not
-    /// taken) + 1 (nop) + 3 (the trailing ret) = 6. The early-exit arm is
-    /// cheaper by 3, and it has no in-selection code to pad into - this
-    /// must come back as a rewrite, not a plain insertion.
-    #[test]
-    fn ret_cc_pads_the_early_exit_arm_via_rewrite() {
-        let code = "    ret nc\n    nop\n    ret\n";
-        let edits = balance(code).unwrap();
-        assert_eq!(
-            edits,
-            vec![StabilizeEdit::RewriteConditionalRetAndPad {
-                ret_token_index: 0,
-                nop_count: 3
-            }]
-        );
-    }
-
-    /// Same shape as the rewrite case above, but the fallthrough arm's own
-    /// content (just one `nop`, no trailing `ret` - it simply runs off the
-    /// end of the selection, itself reaching the virtual exit) is sized so
-    /// both paths cost exactly 3: taken = 3 (ret nc taken); not-taken = 2
-    /// (ret nc not taken) + 1 (nop) = 3.
-    #[test]
-    fn ret_cc_already_balanced_needs_no_edits() {
-        let code = "    ret nc\n    nop\n";
-        assert!(balance(code).unwrap().is_empty());
-    }
-
-    #[test]
-    fn a_jump_target_outside_the_tokens_is_rejected() {
-        let code = "    jr nz,.elsewhere\n    nop\n";
-        assert!(balance(code).is_err());
-    }
-
-    #[test]
-    fn a_selection_with_no_branch_at_all_yields_no_edits() {
-        let code = "    ld a,b\n    ld c,d\n    nop\n";
-        assert!(balance(code).unwrap().is_empty());
-    }
 }

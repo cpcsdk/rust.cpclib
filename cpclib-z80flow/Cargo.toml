@@ -1,8 +1,8 @@
 [package]
 
-name = "cpclib-asmoptim"
+name = "cpclib-z80flow"
 version.workspace = true
-description = "Z80 peephole optimization pattern engine (mdlz80optimizer-compatible rule format)"
+description = "Control flow and instruction semantics over a Z80 token slice - shared by the timing analyses and the peephole optimizer"
 
 authors.workspace = true
 edition.workspace = true
@@ -14,8 +14,4 @@ homepage.workspace = true
 independent = true
 
 [dependencies]
-cpclib-asm.workspace = true
-cpclib-common.workspace = true
 cpclib-tokens.workspace = true
-cpclib-z80flow.workspace = true
-cpclib-z80emu.workspace = true

@@ -25,7 +25,9 @@
 
 use std::collections::HashMap;
 
-use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
+use cpclib_tokens::{DataAccessElem, ListingElement, Mnemonic};
+
+use crate::flow::{jump, successors};
 
 use crate::analysis_op::{AnalysisOp, OpClass};
 use crate::dependency::Dependency;
@@ -274,36 +276,59 @@ where
 {
     let op = ops.get(position)?;
     let fallthrough = position + 1;
+    let mnemonic = op.mnemonic();
 
-    let Some(mnemonic) = op.mnemonic()
-    else {
-        // Labels, `org`, ... - control simply continues.
-        return Some(vec![(fallthrough, call_stack.clone())]);
-    };
+    // Two things this view cares about that are *not* control-flow shape, so
+    // they stay here rather than in the shared table:
+    //
+    // * `HALT` stops the CPU until an interrupt fires, and the handler can
+    //   clobber anything. Continuing past it would be a fail-open. (The timing
+    //   view has no such concern: a `halt` costs what it costs and control
+    //   does continue afterwards.)
+    // * `PUSH`/`POP` shift what a later `RET` would find, and this analysis
+    //   does not track *what* is pushed, so it cannot trust the stack after
+    //   one.
+    if mnemonic == Some(Mnemonic::Halt) {
+        return None;
+    }
 
-    match mnemonic {
-        Mnemonic::Ret | Mnemonic::Reti | Mnemonic::Retn => {
-            let conditional = op.arg1().is_some_and(|a| a.get_flag_test().is_some());
-            let stack = call_stack.as_ref()?;
-            let Some((&target, rest)) = stack.split_last()
-            else {
-                // Returning to a caller this walk never entered: the
-                // continuation is genuinely unknown.
-                return None;
-            };
-            let mut next = vec![(target, Some(rest.to_vec()))];
-            if conditional {
-                next.push((fallthrough, call_stack.clone()));
+    let arg1 = op.arg1();
+    let arg2 = op.arg2();
+    let edges = successors::edges_of(
+        mnemonic,
+        successors::Policy::DATAFLOW,
+        jump::is_conditional(arg1.as_deref()),
+        || {
+            if mnemonic == Some(Mnemonic::Djnz) {
+                return jump::djnz_target(arg1.as_deref())
+                    .and_then(|name| labels.get(name).copied())
+                    .map(|target| (true, target));
             }
-            Some(next)
+            let (conditional, target) = jump::condition_and_target(arg1.as_deref(), arg2.as_deref())?;
+            let name = jump::label_of(target)?;
+            Some((conditional, labels.get(name).copied()?))
+        }
+    );
+
+    match edges {
+        successors::Edges::Fallthrough => {
+            let stack = match mnemonic {
+                Some(Mnemonic::Push | Mnemonic::Pop) => None,
+                _ => call_stack.clone()
+            };
+            Some(vec![(fallthrough, stack)])
         },
 
-        Mnemonic::Call | Mnemonic::Rst => {
-            // `RST` jumps into firmware this analysis has no view of.
-            if mnemonic == Mnemonic::Rst {
-                return None;
-            }
-            let (conditional, target) = jump_target(op, labels)?;
+        successors::Edges::Jump(target) => Some(vec![(target, call_stack.clone())]),
+
+        successors::Edges::Branch(target) => {
+            Some(vec![
+                (target, call_stack.clone()),
+                (fallthrough, call_stack.clone()),
+            ])
+        },
+
+        successors::Edges::Call { target, conditional } => {
             let mut stack = call_stack.clone()?;
             stack.push(fallthrough);
             let mut next = vec![(target, Some(stack))];
@@ -313,72 +338,21 @@ where
             Some(next)
         },
 
-        Mnemonic::Jp | Mnemonic::Jr => {
-            let (conditional, target) = jump_target(op, labels)?;
-            let mut next = vec![(target, call_stack.clone())];
+        // `Policy::DATAFLOW` returns to whoever called - so this walk has to
+        // have seen the call. Returning to a caller it never entered leaves
+        // the continuation genuinely unknown.
+        successors::Edges::Return { conditional } => {
+            let stack = call_stack.as_ref()?;
+            let (&target, rest) = stack.split_last()?;
+            let mut next = vec![(target, Some(rest.to_vec()))];
             if conditional {
                 next.push((fallthrough, call_stack.clone()));
             }
             Some(next)
         },
 
-        Mnemonic::Djnz => {
-            // Always conditional: loop back, or fall through when `B` hits
-            // zero.
-            let target = op
-                .arg1()
-                .and_then(|a| label_of(a.as_ref()))
-                .and_then(|name| labels.get(&name).copied())?;
-            Some(vec![
-                (target, call_stack.clone()),
-                (fallthrough, call_stack.clone()),
-            ])
-        },
-
-        // Anything that leaves the CPU's control, or that this analysis
-        // cannot follow.
-        Mnemonic::Halt => None,
-
-        _ => {
-            // Ordinary instruction. Only the stack discipline needs care:
-            // `PUSH`/`POP` shift what a later `RET` would find, and this
-            // analysis does not track *what* is pushed, so it can no longer
-            // trust the stack afterwards.
-            let stack = match mnemonic {
-                Mnemonic::Push | Mnemonic::Pop => None,
-                _ => call_stack.clone()
-            };
-            Some(vec![(fallthrough, stack)])
-        }
+        successors::Edges::Unknown => None
     }
-}
-
-/// `(is_conditional, target op index)` for a jump/call, or `None` when the
-/// target isn't a resolvable label - a computed `JP (HL)`, an expression, or a
-/// label defined outside this listing.
-fn jump_target<T>(op: &AnalysisOp<'_, T>, labels: &HashMap<String, usize>) -> Option<(bool, usize)>
-where
-    T: ListingElement,
-    T::DataAccess: DataAccessElem
-{
-    let arg1 = op.arg1();
-    let arg2 = op.arg2();
-    let (conditional, target) = match (&arg1, &arg2) {
-        (Some(a1), Some(_)) if a1.get_flag_test().is_some() => (true, arg2.as_ref()),
-        (None, Some(_)) => (false, arg2.as_ref()),
-        (Some(_), None) => (false, arg1.as_ref()),
-        _ => return None
-    };
-    let name = label_of(target?.as_ref())?;
-    Some((conditional, labels.get(&name).copied()?))
-}
-
-/// The label an operand names, if it names one directly.
-fn label_of(operand: &cpclib_tokens::DataAccess) -> Option<String> {
-    operand
-        .get_expression()
-        .filter(|e| e.is_label())
-        .map(|e| e.label().to_string())
 }
 
 /// Index every label in the stream, so jumps can be followed.
@@ -393,215 +367,4 @@ where T: ListingElement {
         }
     }
     labels
-}
-
-#[cfg(test)]
-mod tests {
-    use cpclib_asm::flatten::flatten_for_analysis;
-    use cpclib_asm::parser::{LocatedToken, parse_z80_str};
-
-    use super::*;
-    use crate::regflag::{Flag, Reg};
-    use crate::stream::build_without_addresses;
-
-    /// Walk from just after the instruction on 0-based `after_index` (counting
-    /// only real instructions, so tests read like the source).
-    fn usage(source: &str, after_index: usize, dep: Dependency) -> Usage {
-        let listing = parse_z80_str(source).expect("source must parse");
-        let tokens: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
-        let stream = build_without_addresses(&tokens);
-        let labels = label_index(&stream);
-
-        let nth_instruction = stream
-            .ops()
-            .iter()
-            .enumerate()
-            .filter(|(_, op)| op.mnemonic().is_some())
-            .map(|(i, _)| i)
-            .nth(after_index)
-            .expect("instruction index out of range");
-
-        is_used_after(&stream, &labels, nth_instruction + 1, dep).usage
-    }
-
-    fn reg(r: Reg) -> Dependency {
-        Dependency::Reg(r)
-    }
-
-    #[test]
-    fn a_value_read_by_the_next_instruction_is_used() {
-        // ld a, 1 / ld b, a  -> A is read.
-        assert_eq!(
-            usage("    ld a, 1\n    ld b, a\n    ret\n", 0, reg(Reg::A)),
-            Usage::Used
-        );
-    }
-
-    #[test]
-    fn a_value_overwritten_before_any_read_is_not_used() {
-        // ld a, 1 / ld a, 2 / ret -> the first A is dead.
-        assert_eq!(
-            usage("    ld a, 1\n    ld a, 2\n    ret\n", 0, reg(Reg::A)),
-            Usage::NotUsed
-        );
-    }
-
-    /// The narrowing model end to end: writing `B` leaves `C` live, so a
-    /// later read of `C` still counts as using `BC`.
-    #[test]
-    fn writing_one_half_leaves_the_other_half_live() {
-        assert_eq!(
-            usage("    ld bc, 0\n    ld b, 1\n    ld a, c\n    ret\n", 0, reg(Reg::Bc)),
-            Usage::Used
-        );
-        // ...and once *both* halves are rewritten, the original is dead.
-        assert_eq!(
-            usage(
-                "    ld bc, 0\n    ld b, 1\n    ld c, 2\n    ld a, c\n    ret\n",
-                0,
-                reg(Reg::Bc)
-            ),
-            Usage::NotUsed
-        );
-    }
-
-    /// A `RET` this walk never entered via a `CALL` goes somewhere unknown.
-    #[test]
-    fn returning_to_an_unknown_caller_is_unknown() {
-        assert_eq!(
-            usage("    ld a, 1\n    ret\n", 0, reg(Reg::A)),
-            Usage::Unknown
-        );
-    }
-
-    /// Falling off the end of the file is not "the program ended" - the
-    /// stream is only what we can see.
-    #[test]
-    fn running_out_of_instructions_is_unknown() {
-        assert_eq!(usage("    ld a, 1\n    nop\n", 0, reg(Reg::A)), Usage::Unknown);
-    }
-
-    /// The loop cases the memoized worklist exists for.
-    #[test]
-    fn a_loop_that_reads_the_value_reports_it_used() {
-        let source = "\
-    ld a, 1
-loop:
-    inc b
-    or a
-    jr nz, loop
-    ret
-";
-        // `A` is read by `or a` inside the loop.
-        assert_eq!(usage(source, 0, reg(Reg::A)), Usage::Used);
-    }
-
-    #[test]
-    fn a_loop_that_never_touches_the_value_terminates_and_reports_not_used() {
-        let source = "\
-    ld a, 1
-loop:
-    inc b
-    dec c
-    jr nz, loop
-    ld a, 2
-    ret
-";
-        // Nothing in the loop reads `A`, and it is overwritten after it.
-        assert_eq!(usage(source, 0, reg(Reg::A)), Usage::NotUsed);
-    }
-
-    /// Both arms of a conditional branch have to be explored - a read on
-    /// either side counts.
-    #[test]
-    fn both_arms_of_a_branch_are_explored() {
-        let source = "\
-    ld a, 1
-    jr z, taken
-    ld a, 2
-    jr done
-taken:
-    ld b, a
-done:
-    ld a, 3
-    ret
-";
-        // The taken arm reads `A`; the fallthrough overwrites it.
-        assert_eq!(usage(source, 0, reg(Reg::A)), Usage::Used);
-    }
-
-    /// A call is followed into and back out of.
-    #[test]
-    fn a_call_is_followed_and_returns_to_the_call_site() {
-        // NB: the label can't be called `sub` - that's a real Z80 mnemonic.
-        let source = "\
-    ld a, 1
-    call routine
-    ld b, a
-    ret
-routine:
-    nop
-    ret
-";
-        // The subroutine doesn't touch `A`, but the instruction after the
-        // call reads it - so the walk must come back.
-        assert_eq!(usage(source, 0, reg(Reg::A)), Usage::Used);
-    }
-
-    #[test]
-    fn a_value_read_inside_a_called_subroutine_is_used() {
-        let source = "\
-    ld a, 1
-    call routine
-    ret
-routine:
-    ld b, a
-    ret
-";
-        assert_eq!(usage(source, 0, reg(Reg::A)), Usage::Used);
-    }
-
-    /// A computed jump has an unknowable continuation.
-    #[test]
-    fn a_computed_jump_is_unknown() {
-        assert_eq!(
-            usage("    ld a, 1\n    jp (hl)\n", 0, reg(Reg::A)),
-            Usage::Unknown
-        );
-    }
-
-    /// Reaching data as if it were code means the analysis lost the thread.
-    #[test]
-    fn falling_into_data_is_unknown() {
-        assert_eq!(
-            usage("    ld a, 1\n    defb 0, 1, 2\n", 0, reg(Reg::A)),
-            Usage::Unknown
-        );
-    }
-
-    /// Flags work exactly like registers, including being killed by an
-    /// instruction that rewrites them.
-    #[test]
-    fn a_flag_overwritten_before_any_test_is_not_used() {
-        assert_eq!(
-            usage(
-                "    or a\n    ld a, 5\n    cp 3\n    jr z, done\ndone:\n    ret\n",
-                0,
-                Dependency::Flag(Flag::Z)
-            ),
-            Usage::NotUsed
-        );
-    }
-
-    #[test]
-    fn a_flag_tested_by_a_later_branch_is_used() {
-        assert_eq!(
-            usage(
-                "    or a\n    ld a, 5\n    jr z, done\ndone:\n    ret\n",
-                0,
-                Dependency::Flag(Flag::Z)
-            ),
-            Usage::Used
-        );
-    }
 }

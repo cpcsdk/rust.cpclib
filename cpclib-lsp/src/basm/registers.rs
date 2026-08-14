@@ -46,19 +46,15 @@ fn is_boundary(token: &LocatedToken) -> bool {
     {
         return true;
     }
-    matches!(
-        token.mnemonic(),
-        Some(
-            Mnemonic::Jp
-                | Mnemonic::Jr
-                | Mnemonic::Call
-                | Mnemonic::Ret
-                | Mnemonic::Reti
-                | Mnemonic::Retn
-                | Mnemonic::Djnz
-                | Mnemonic::Rst
-        )
-    )
+    // Asked of `cpclib-z80flow`'s own table rather than of a list kept here.
+    // The list this replaces named JP/JR/CALL/RET/RETI/RETN/DJNZ/RST and
+    // omitted `JQ` (basm's "assembler picks JR or JP" form). That omission
+    // happened not to be observable - `track::apply` clears its state for any
+    // instruction it does not model, so `JQ` reset the walk anyway - but it
+    // was one of three copies of this question in the workspace, each
+    // complete in a different way, and only one of them can be right about
+    // the next instruction someone adds.
+    cpclib_z80flow::diverts_control(token.mnemonic().copied())
 }
 
 /// Tracked state at `position` for the register named `hovered_register_upper`.
@@ -476,6 +472,33 @@ mod tests {
         assert_eq!(s.get8(Register8::C), None);
         assert_eq!(s.get8(Register8::B), Some(10));
         assert_eq!(s.get8(Register8::D), Some(20));
+    }
+
+    /// Every control transfer resets the walk, `jq` included.
+    ///
+    /// Note what this does *not* prove: `jq` passed here even before
+    /// `is_boundary` knew about it, because `track::apply` clears its state
+    /// for any instruction it does not model. The property is worth pinning
+    /// regardless - it is the behaviour users see - but the reason the
+    /// boundary check now comes from one shared table is
+    /// single-source-of-truth, not a bug this test would have caught.
+    #[test]
+    fn a_jq_resets_the_walk_like_every_other_control_transfer() {
+        for transfer in ["jq elsewhere", "jr elsewhere", "jp elsewhere", "call elsewhere"] {
+            let text = format!("    ld a,1\n    {transfer}\n    nop\n");
+            let s = state_at(&text, 2, 4);
+            assert_eq!(
+                s.get8(Register8::A),
+                None,
+                "`{transfer}` must reset the tracked state"
+            );
+        }
+
+        // The control: an ordinary instruction in the same position does not
+        // reset anything, so the test above is not passing for a trivial
+        // reason.
+        let s = state_at("    ld a,1\n    ld c,2\n    nop\n", 2, 4);
+        assert_eq!(s.get8(Register8::A), Some(1));
     }
 
     #[test]

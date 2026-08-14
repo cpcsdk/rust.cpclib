@@ -17,19 +17,17 @@
 //! diagnostics and quickfixes. A real `basm` build is never silently altered by
 //! anything here.
 
-pub mod analysis_op;
 pub mod builtin_rules;
 pub mod constraints;
-pub mod dependency;
 pub mod dsl;
 pub mod edit;
-pub mod effects;
 pub mod engine;
 pub mod env_resolver;
-pub mod liveness;
-pub mod regflag;
 pub mod smc;
-pub mod stream;
+
+// Re-exported so existing consumers keep one import path for "the optimizer's
+// analysis vocabulary", now that the analysis half lives a crate below.
+pub use cpclib_z80flow::{analysis_op, dependency, effects, liveness, regflag, stream};
 
 pub use builtin_rules::{OptimizationGoal, builtin_rules};
 pub use constraints::rules_need_addresses;

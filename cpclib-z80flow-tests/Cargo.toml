@@ -1,0 +1,30 @@
+[package]
+
+name = "cpclib-z80flow-tests"
+version.workspace = true
+description = "Integration tests exercising cpclib-z80flow against real parsed Z80 source"
+publish = false
+
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[package.metadata.workspaces]
+independent = true
+
+# Deliberately empty: this crate exists only to host the tests below.
+[dependencies]
+
+# `cpclib-z80flow` must not depend on `cpclib-asm`, not even for tests - it
+# sits *below* the assembler and its whole point is to need nothing but
+# `cpclib-tokens`. But the analyses in it are only worth trusting if they are
+# checked against source a real parser produced, not against token trees
+# hand-built to match the implementation's own assumptions. Both are true at
+# once only if the tests live somewhere that may depend on both, which is what
+# this crate is.
+[dev-dependencies]
+cpclib-asm.workspace = true
+cpclib-tokens.workspace = true
+cpclib-z80flow.workspace = true

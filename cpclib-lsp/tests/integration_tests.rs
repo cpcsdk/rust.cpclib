@@ -1131,15 +1131,25 @@ async fn test_cycle_count_for_selection_command() {
         .unwrap()
         .expect("expected a cycle count result");
 
-    // djnz loop: 3 (not taken) or 4 (taken), plus nop's own fixed 1.
+    // The `djnz`'s taken side is a *back*-edge: it goes backward, so it never
+    // competes with the not-taken side for the cost of a path running forward
+    // to the selection's exit (`cost_range`'s own doc comment argues this).
+    // So both min and max are the not-taken 3, plus nop's own fixed 1 - and
+    // the real worst case, an unknown iteration count, is reported by
+    // `max_unbounded` rather than by pretending `max` is one taken iteration.
     assert_eq!(result["min_nops"], 4);
-    assert_eq!(result["max_nops"], 5);
+    assert_eq!(result["max_nops"], 4);
+    assert_eq!(
+        result["max_unbounded"], true,
+        "a djnz loop's real worst case is unbounded, and saying so is the \
+         whole point of this answer: {result}"
+    );
     assert_eq!(result["instruction_count"], 2);
     assert_eq!(result["unrecognized_count"], 0);
 }
 
 #[tokio::test]
-async fn test_cycle_count_for_selection_command_with_no_selection_returns_none() {
+async fn test_cycle_count_for_selection_command_with_no_selection_reports_the_cursor_line() {
     let (service, _socket) = LspService::build(|client| CpcLspBackend::new(client)).finish();
     let backend = service.inner();
 
@@ -1193,7 +1203,13 @@ async fn test_cycle_count_for_selection_command_with_no_selection_returns_none()
         .await
         .unwrap();
 
-    assert!(result.is_none());
+    // A bare cursor with no selection reports the cost of the line it sits on,
+    // so the status bar stays live as the cursor moves rather than blanking
+    // out whenever nothing is dragged out. Pinned at the unit level by
+    // `command.rs::cycle_count_for_selection_shows_the_cursor_lines_own_cost_with_no_real_selection`.
+    let result = result.expect("a cursor position reports its own line's cost");
+    assert_eq!(result["min_nops"], 1, "{result}");
+    assert_eq!(result["max_nops"], 1, "{result}");
 }
 
 #[tokio::test]

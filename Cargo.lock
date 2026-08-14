@@ -2573,6 +2573,7 @@ dependencies = [
  "cpclib-common",
  "cpclib-tokens",
  "cpclib-z80emu",
+ "cpclib-z80flow",
 ]
 
 [[package]]
@@ -3059,6 +3060,7 @@ dependencies = [
  "cpclib-runner",
  "cpclib-tokens",
  "cpclib-z80emu",
+ "cpclib-z80flow",
  "dashmap 6.2.1",
  "either",
  "enumflags2",
@@ -3323,6 +3325,22 @@ dependencies = [
  "delegate",
  "either",
  "paste",
+]
+
+[[package]]
+name = "cpclib-z80flow"
+version = "0.11.0"
+dependencies = [
+ "cpclib-tokens",
+]
+
+[[package]]
+name = "cpclib-z80flow-tests"
+version = "0.11.0"
+dependencies = [
+ "cpclib-asm",
+ "cpclib-tokens",
+ "cpclib-z80flow",
 ]
 
 [[package]]

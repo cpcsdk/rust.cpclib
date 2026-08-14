@@ -31,13 +31,9 @@
 
 use std::collections::HashMap;
 
-use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic};
+use cpclib_tokens::{ListingElement, Mnemonic};
 
-/// Mnemonics treated as a two-target branch with a real label operand
-/// (`RET`/`DJNZ` are handled separately - `RET`'s conditional form has no
-/// label operand at all, and `DJNZ`'s single operand is always the loop
-/// target, never a flag test).
-pub(crate) const JUMP_MNEMONICS: &[Mnemonic] = &[Mnemonic::Jr, Mnemonic::Jp];
+use crate::flow::{jump, successors};
 
 pub(crate) fn mnemonic_of<T: ListingElement>(token: &T) -> Option<Mnemonic> {
     token.mnemonic().copied()
@@ -66,11 +62,14 @@ pub(crate) struct BasicBlock {
 pub(crate) enum Terminator {
     Fallthrough(usize),
     Jump(Successor),
+    /// Two-way. Carries no costs: an earlier version had `cost_taken` /
+    /// `cost_not_taken` fields here, but they were only ever constructed as
+    /// `0` and `branch_balance` computed its own from the caller's cost
+    /// function anyway. Pricing belongs where the cost function is in scope,
+    /// not on the graph.
     Branch {
         taken: Successor,
-        not_taken: usize,
-        cost_taken: u32,
-        cost_not_taken: u32
+        not_taken: usize
     }
 }
 
@@ -147,61 +146,40 @@ impl Cfg {
 }
 
 /// The target label name and, for a conditional jump, confirmation that a
-/// flag condition is present - `Some(condition_present, label)`. For a
-/// conditional jump (`JR cc,label`), `arg1` carries the flag test and
-/// `arg2` the target; for an unconditional one (`JR label`), the parser
-/// still places the sole argument in `arg2`, leaving `arg1` empty (verified
-/// against the real parser output, not assumed). Fully generic via
-/// `DataAccessElem`/`ExprElement`'s trait-level accessors - no matching on
-/// concrete `DataAccess`/`Expr` variants, so this works identically for
-/// `Token` and `LocatedToken`.
+/// flag condition is present - `Some(condition_present, label)`.
+///
+/// Which operand slot the target lives in is [`flow::jump`]'s business, shared
+/// with the optimizer's own walk - see there for the parser quirk involved.
 fn jump_condition_and_target<T: ListingElement>(token: &T) -> Option<(bool, &str)> {
-    let arg1 = token.mnemonic_arg1();
-    let arg2 = token.mnemonic_arg2();
-    let (conditional, target_arg) = match (arg1, arg2) {
-        (Some(a1), Some(_)) if a1.is_flag_test() => (true, arg2),
-        (None, Some(_)) => (false, arg2),
-        (Some(_), None) => (false, arg1),
-        _ => return None
-    };
-    let label = target_arg?
-        .get_expression()
-        .filter(|e| e.is_label())
-        .map(|e| e.label())?;
-    Some((conditional, label))
+    let (conditional, target) =
+        jump::condition_and_target(token.mnemonic_arg1(), token.mnemonic_arg2())?;
+    Some((conditional, jump::label_of(target)?))
 }
 
 /// `DJNZ`'s own sole operand is always its loop target - no flag test to
 /// distinguish, unlike `JR`/`RET`.
 fn djnz_target<T: ListingElement>(token: &T) -> Option<&str> {
-    token
-        .mnemonic_arg1()?
-        .get_expression()
-        .filter(|e| e.is_label())
-        .map(|e| e.label())
+    jump::djnz_target(token.mnemonic_arg1())
 }
 
-/// Builds the control-flow graph for `tokens`. Always succeeds
-/// structurally (see the module doc comment) except for a genuine
-/// parse-shape anomaly this function itself can't interpret at all (e.g. a
-/// `JR`/`JP`/`DJNZ` whose operand isn't recognizable as a label at all) -
-/// that remains a real `Err`, not a policy choice either consumer could
-/// reasonably override.
-pub(crate) fn build_cfg<T: ListingElement>(tokens: &[&T]) -> Result<Cfg, String> {
-    // Pass 1: every label defined in `tokens` -> its index. A local
-    // (dot-prefixed) label is registered under *both* its bare form and
-    // its fully-qualified form (`<nearest preceding global>.local`) -
-    // mirroring basm's own symbol-table resolution (`set_current_global_
-    // label`/`extend_local_and_patterns_for_symbol`,
-    // `cpclib-tokens/src/symbols/table.rs`). A reference can legitimately
-    // be written either way: bare, relying on basm's own ambient "current
-    // global" tracking (the common case for hand-written code), or
-    // explicitly qualified (what `stabilize.rs`'s own rewritten `JR`
-    // targets always are, per the user's own correction that an
-    // unqualified local reference isn't reliable). Without this, analyzing
-    // a selection containing stabilize's own generated output - a
-    // qualified reference pointing at a bare-defined local label -
-    // spuriously "escapes" even though the label is right there.
+/// Every label defined in `tokens` -> its index.
+///
+/// A local (dot-prefixed) label is registered under *both* its bare form and
+/// its fully-qualified form (`<nearest preceding global>.local`) - mirroring
+/// basm's own symbol-table resolution (`set_current_global_label`/
+/// `extend_local_and_patterns_for_symbol`, `cpclib-tokens/src/symbols/
+/// table.rs`). A reference can legitimately be written either way: bare,
+/// relying on basm's own ambient "current global" tracking (the common case
+/// for hand-written code), or explicitly qualified (what `stabilize.rs`'s own
+/// rewritten `JR` targets always are, per the user's own correction that an
+/// unqualified local reference isn't reliable). Without this, analyzing a
+/// selection containing stabilize's own generated output - a qualified
+/// reference pointing at a bare-defined local label - spuriously "escapes"
+/// even though the label is right there.
+///
+/// Shared with `cost_range`, which resolves `CALL` targets against the same
+/// index rather than growing a second, subtly-different copy of these rules.
+pub(crate) fn label_indices<T: ListingElement>(tokens: &[&T]) -> HashMap<String, usize> {
     let mut label_indices: HashMap<String, usize> = HashMap::new();
     let mut current_global: Option<&str> = None;
     for (i, token) in tokens.iter().enumerate() {
@@ -218,6 +196,17 @@ pub(crate) fn build_cfg<T: ListingElement>(tokens: &[&T]) -> Result<Cfg, String>
             label_indices.insert(name.to_string(), i);
         }
     }
+    label_indices
+}
+
+/// Builds the control-flow graph for `tokens`. Always succeeds
+/// structurally (see the module doc comment) except for a genuine
+/// parse-shape anomaly this function itself can't interpret at all (e.g. a
+/// `JR`/`JP`/`DJNZ` whose operand isn't recognizable as a label at all) -
+/// that remains a real `Err`, not a policy choice either consumer could
+/// reasonably override.
+pub(crate) fn build_cfg<T: ListingElement>(tokens: &[&T]) -> Result<Cfg, String> {
+    let label_indices = label_indices(tokens);
 
     // Pass 2: block boundaries - a new block starts at 0, at every label,
     // and right after every JR/JP/RET/DJNZ token (a real terminator in
@@ -228,9 +217,15 @@ pub(crate) fn build_cfg<T: ListingElement>(tokens: &[&T]) -> Result<Cfg, String>
         if token.is_label() {
             block_starts.push(i);
         }
-        if let Some(m) = mnemonic_of(*token)
-            && (JUMP_MNEMONICS.contains(&m) || m == Mnemonic::Ret || m == Mnemonic::Djnz)
-            && i + 1 < tokens.len()
+        // Asked of the shared table rather than of a list kept here: a block
+        // ends wherever control can go somewhere other than the next
+        // instruction. `CALL` deliberately does not (see the module doc
+        // comment), and `Policy::TIMING` is what says so.
+        if successors::transfers_control(
+            mnemonic_of(*token),
+            successors::Policy::TIMING,
+            jump::is_conditional(token.mnemonic_arg1())
+        ) && i + 1 < tokens.len()
         {
             block_starts.push(i + 1);
         }
@@ -287,78 +282,63 @@ pub(crate) fn build_cfg<T: ListingElement>(tokens: &[&T]) -> Result<Cfg, String>
             .unwrap_or(exit);
 
         let last = tokens[block.end];
-        let Some(mnemonic) = mnemonic_of(last)
-        else {
-            terms.push(Terminator::Fallthrough(next_block));
-            continue;
-        };
 
-        // RET's taken side - conditional or not - leaves straight to the
-        // selection's own virtual exit, never to a real label. See the
-        // module doc comment for why this "cheat" gives the right shape.
-        if mnemonic == Mnemonic::Ret {
-            let conditional = last.mnemonic_arg1().is_some_and(|a| a.is_flag_test());
-            if conditional {
-                terms.push(Terminator::Branch {
+        // One shared decision table decides *what shape* the flow out of this
+        // block is (see `flow::successors`); resolving a label to a real block
+        // stays here, because "which block" is this view's own idea of a
+        // target and no other view shares it.
+        let mnemonic = mnemonic_of(last);
+        let edges = successors::edges_of(
+            mnemonic,
+            successors::Policy::TIMING,
+            jump::is_conditional(last.mnemonic_arg1()),
+            || {
+            if mnemonic == Some(Mnemonic::Djnz) {
+                // `DJNZ`'s sole operand is its target, never a flag test; the
+                // table already knows it is unconditional-in-form but two-way
+                // in fact, so the flag it gets here is irrelevant.
+                return djnz_target(last).map(|label| (true, resolve_successor(label, block.end)));
+            }
+                jump_condition_and_target(last).map(|(conditional, label)| {
+                    (conditional, resolve_successor(label, block.end))
+                })
+            }
+        );
+
+        terms.push(match edges {
+            successors::Edges::Fallthrough => Terminator::Fallthrough(next_block),
+            successors::Edges::Jump(target) => Terminator::Jump(target),
+            successors::Edges::Branch(target) => {
+                Terminator::Branch {
+                    taken: target,
+                    not_taken: next_block
+                }
+            },
+            // `Policy::TIMING` never follows a call, so this is unreachable -
+            // but expressing it as a fallthrough rather than a panic keeps the
+            // one place that decides call semantics in `flow::successors`.
+            successors::Edges::Call { .. } => Terminator::Fallthrough(next_block),
+            // A `RET`'s taken side leaves straight to the selection's own
+            // virtual exit, never to a real label - see the module doc comment
+            // for why that "cheat" gives both consumers the right shape.
+            successors::Edges::Return { conditional: true } => {
+                Terminator::Branch {
                     taken: Successor::Block(exit),
-                    not_taken: next_block,
-                    cost_taken: 0,
-                    cost_not_taken: 0
-                });
-            }
-            else {
-                terms.push(Terminator::Jump(Successor::Block(exit)));
-            }
-            continue;
-        }
-
-        if mnemonic == Mnemonic::Djnz {
-            let Some(label) = djnz_target(last)
-            else {
+                    not_taken: next_block
+                }
+            },
+            successors::Edges::Return { conditional: false } => {
+                Terminator::Jump(Successor::Block(exit))
+            },
+            successors::Edges::Unknown => {
                 return Err(format!(
-                    "could not parse the DJNZ target at token index {}",
+                    "could not parse the {} target at token index {}",
+                    mnemonic
+                        .map(|m| format!("{m:?}"))
+                        .unwrap_or_else(|| "branch".to_owned()),
                     block.end
                 ));
-            };
-            let target = resolve_successor(label, block.end);
-            terms.push(Terminator::Branch {
-                taken: target,
-                not_taken: next_block,
-                cost_taken: 0,
-                cost_not_taken: 0
-            });
-            continue;
-        }
-
-        if !JUMP_MNEMONICS.contains(&mnemonic) {
-            // Includes CALL, deliberately - see the module doc comment.
-            terms.push(Terminator::Fallthrough(next_block));
-            continue;
-        }
-
-        let Some((conditional, label)) = jump_condition_and_target(last)
-        else {
-            return Err(format!(
-                "could not parse the {mnemonic:?} target at token index {}",
-                block.end
-            ));
-        };
-        let target = resolve_successor(label, block.end);
-
-        if !conditional {
-            terms.push(Terminator::Jump(target));
-            continue;
-        }
-
-        // Callers supply real taken/not-taken costs via their own `cost`
-        // function - here we only need to know *that* this is a
-        // conditional jump to shape the CFG; the actual numbers are filled
-        // in later, where each consumer's cost function is in scope.
-        terms.push(Terminator::Branch {
-            taken: target,
-            not_taken: next_block,
-            cost_taken: 0,
-            cost_not_taken: 0
+            }
         });
     }
 

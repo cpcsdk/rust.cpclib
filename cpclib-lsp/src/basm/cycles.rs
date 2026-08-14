@@ -22,8 +22,8 @@
 //! .ok()`, so this module joining that established convention isn't a
 //! special exception).
 
-use cpclib_asm::branch_balance::InstructionCost;
-use cpclib_asm::cost_range::{self};
+use cpclib_z80flow::branch_balance::InstructionCost;
+use cpclib_z80flow::cost_range::{self};
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, LocatedTokenInner};
 use cpclib_tokens::{ExprElement, ListingElement};
 use tower_lsp::lsp_types::{Position, Range};
@@ -53,7 +53,15 @@ pub struct SelectionCycleCount {
     /// token this feature doesn't specifically recognize as zero-cost,
     /// e.g. a macro invocation) - the total is a lower bound when this is
     /// nonzero.
-    pub unrecognized_count: u32
+    pub unrecognized_count: u32,
+    /// A `CALL` in range reaches a routine defined outside the analysed
+    /// tokens, so only the call instruction itself could be priced.
+    ///
+    /// The counts are for a selection the user can see; this one is about
+    /// what they *cannot*: a routine in another file, or above the selection
+    /// they made. Worth saying out loud, because the number looks complete
+    /// either way.
+    pub incomplete: bool
 }
 
 impl SelectionCycleCount {
@@ -166,6 +174,7 @@ pub(super) fn count_cycles_in_selection(
     SelectionCycleCount {
         min_nops: result.min,
         max_nops: result.max,
+        incomplete: result.incomplete,
         max_unbounded: result.unbounded,
         instruction_count: result.instruction_count,
         unrecognized_count: result.unrecognized_count
@@ -226,6 +235,12 @@ pub(super) fn format_title(summary: &SelectionCycleCount) -> String {
             }
         ));
     }
+    if summary.incomplete {
+        // The cost of a `call` now includes the routine it calls - so when
+        // one of them could not be found, the total is short by an unknown
+        // amount and the user should not read it as final.
+        title.push_str(", a called routine is outside the selection");
+    }
     title
 }
 
@@ -239,6 +254,46 @@ mod tests {
         let listing = parse_z80_str(text).unwrap();
         let end_line = text.lines().count().saturating_sub(1);
         count_cycles_in_lines(&listing, 0, end_line)
+    }
+
+    /// The end-to-end check that call-following is driven by the *real*
+    /// timing table and not by any number written into the code.
+    ///
+    /// `data/timings.txt` says `call nn` is 5 and `ret` is 3, so `call go` +
+    /// `ret` + a body of `nop` + `ret` is 5 + (1 + 3) + 3 = 12. The number
+    /// that matters is that it is not 8 - which is what the old behaviour
+    /// gave, charging the `call` and ignoring what it called.
+    #[test]
+    fn a_call_is_priced_with_its_callee_using_the_real_timing_table() {
+        let s = summary("    call go\n    ret\ngo\n    nop\n    ret\n");
+        assert_eq!(s.min_nops, 12, "{s:?}");
+        assert_eq!(s.max_nops, 12, "{s:?}");
+        assert!(!s.incomplete, "{s:?}");
+    }
+
+    /// `call ccc,nn` is `5 or 3 if /ccc/ not met` in `data/timings.txt`, and
+    /// that `nops_alt` is what makes a conditional call bound the two ends
+    /// differently: 3 without the callee, 5 + the body with it.
+    #[test]
+    fn a_conditional_call_reads_both_of_its_timings_from_the_table() {
+        let s = summary("    call nz,go\n    ret\ngo\n    nop\n    ret\n");
+        assert_eq!(s.min_nops, 3 + 3, "not taken, then ret: {s:?}");
+        assert_eq!(s.max_nops, 5 + 4 + 3, "taken, callee body, then ret: {s:?}");
+        assert!(s.is_conditional(), "{s:?}");
+    }
+
+    /// A routine that is not in view cannot be priced, and the summary says
+    /// so rather than quietly reporting a total that is short.
+    #[test]
+    fn a_call_to_a_routine_outside_the_selection_is_reported_incomplete() {
+        let s = summary("    call elsewhere\n    ret\n");
+        assert_eq!(s.min_nops, 5 + 3, "{s:?}");
+        assert!(s.incomplete, "{s:?}");
+        assert!(
+            format_title(&s).contains("outside the selection"),
+            "{}",
+            format_title(&s)
+        );
     }
 
     #[test]
@@ -305,7 +360,8 @@ mod tests {
             max_nops: 12,
             max_unbounded: false,
             instruction_count: 4,
-            unrecognized_count: 0
+            unrecognized_count: 0,
+            incomplete: false
         };
         assert_eq!(
             format_title(&s),
@@ -320,7 +376,8 @@ mod tests {
             max_nops: 4,
             max_unbounded: false,
             instruction_count: 2,
-            unrecognized_count: 1
+            unrecognized_count: 1,
+            incomplete: false
         };
         assert_eq!(
             format_title(&s),

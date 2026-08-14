@@ -18,6 +18,7 @@ path = "src/main.rs"
 cpclib-asm.workspace = true
 cpclib-asmfmt.workspace = true
 cpclib-asmoptim.workspace = true
+cpclib-z80flow.workspace = true
 cpclib-basmdoc = { workspace = true, default-features = false }
 cpclib-bndbuild = { workspace = true, default-features = false, features = ["rayon", "basmdoc-generator", "tape"] }
 cpclib-runner = { workspace = true, default-features = false }
