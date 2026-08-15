@@ -56,6 +56,10 @@ struct Span {
 /// pay for the assemble again.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SourceMap {
+    /// Label -> address, so a debugger can answer "what is at `animation_state`"
+    /// without re-assembling. Kept beside the line map because both come from
+    /// the same build and are worthless if they come from different ones.
+    symbols: HashMap<String, u32>,
     files: Vec<PathBuf>,
     /// `(file, line) -> every address that line occupies`, in assembly order.
     /// A macro body called five times has five.
@@ -93,10 +97,61 @@ impl SourceMap {
         spans.sort_unstable_by_key(|s| (s.start, s.end));
 
         Self {
+            symbols: HashMap::new(),
             files,
             forward,
             spans
         }
+    }
+
+    /// Resolve the recorded file names against the program they came from.
+    ///
+    /// The assembler records a file by the name it was reached by, which for an
+    /// `include` is relative. An editor cannot open a relative path - it asks
+    /// the adapter for the contents instead, and an emulator has no idea what a
+    /// source file is. So every path is made absolute here, once, using the
+    /// same ancestor search `include` itself uses.
+    pub fn resolved_against(mut self, entry: &Path) -> Self {
+        self.files = self
+            .files
+            .into_iter()
+            .map(|file| {
+                if file.is_absolute() {
+                    return file;
+                }
+                let name = file.to_string_lossy().to_string();
+                crate::root::resolve_include_path(&name, entry)
+                    .or_else(|| entry.parent().map(|dir| dir.join(&file)))
+                    .and_then(|candidate| std::fs::canonicalize(&candidate).ok())
+                    .unwrap_or(file)
+            })
+            .collect();
+        self
+    }
+
+    /// Record the program's labels, so they can be watched by name.
+    pub fn with_symbols(mut self, symbols: HashMap<String, u32>) -> Self {
+        self.symbols = symbols;
+        self
+    }
+
+    /// The address a label stands for, matched case-insensitively as a
+    /// fallback - basm is case-sensitive by default but a user typing a watch
+    /// expression is not thinking about that.
+    pub fn address_of_symbol(&self, name: &str) -> Option<u32> {
+        if let Some(address) = self.symbols.get(name) {
+            return Some(*address);
+        }
+        let wanted = name.to_ascii_uppercase();
+        self.symbols
+            .iter()
+            .find(|(known, _)| known.to_ascii_uppercase() == wanted)
+            .map(|(_, address)| *address)
+    }
+
+    /// Every known label, for completion and for listing what can be watched.
+    pub fn symbols(&self) -> impl Iterator<Item = (&str, u32)> {
+        self.symbols.iter().map(|(name, address)| (name.as_str(), *address))
     }
 
     fn file_id(&self, file: &Path) -> Option<u16> {

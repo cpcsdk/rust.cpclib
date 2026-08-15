@@ -206,6 +206,30 @@ pub struct ProjectGraph {
     run_roots: Vec<PathBuf>
 }
 
+impl ProjectGraph {
+    /// The files that declare a `RUN`, i.e. the candidate entry points.
+    ///
+    /// Exposed so a caller that has no particular document in hand - a debug
+    /// session started from a build rule, say - can still find the program the
+    /// project builds.
+    pub fn run_roots(&self) -> &[PathBuf] {
+        &self.run_roots
+    }
+
+    /// The single entry point of this project, when there is exactly one.
+    ///
+    /// `None` when the project declares none, or several: with more than one
+    /// `RUN` the answer genuinely depends on which program is meant, and
+    /// guessing would silently debug the wrong one. `[asm] entry` in
+    /// `cpclib-lsp.toml` settles it.
+    pub fn sole_run_root(&self) -> Option<&Path> {
+        match self.run_roots.as_slice() {
+            [only] => Some(only.as_path()),
+            _ => None
+        }
+    }
+}
+
 pub fn graph_of(workspace: &Workspace) -> ProjectGraph {
     let sources = &workspace.sources;
 

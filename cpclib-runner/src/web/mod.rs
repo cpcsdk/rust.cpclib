@@ -238,6 +238,31 @@ mod tests {
         assert!(error.to_string().contains("index.html"), "{error}");
     }
 
+    /// The bridge has a few pieces it cannot work without, and losing one is
+    /// silent: the emulator still loads, still runs, and simply never tells the
+    /// debugger anything.
+    ///
+    /// This exists because exactly that happened - an edit to the transport
+    /// replaced a block that happened to contain the event poll, and the
+    /// symptom was "breakpoints do nothing", four layers away from the cause.
+    #[test]
+    fn the_bridge_keeps_the_pieces_it_cannot_work_without() {
+        for (needle, why) in [
+            ("setInterval", "without the poll, queued events are never flushed"),
+            ("sync()", "sync() is what flushes them"),
+            ("__cpclib_attach", "the emulator hands us its session through this"),
+            ("__cpclib_session", "the token is injected into the page, not the URL"),
+            ("loadSnapshot", "the program under test has to be loaded"),
+            ("/session/events", "the downstream half of the DAP channel"),
+            ("/session/dap", "the upstream half")
+        ] {
+            assert!(
+                BRIDGE_SCRIPT.contains(needle),
+                "the bridge lost `{needle}`: {why}"
+            );
+        }
+    }
+
     /// The one MIME type that actually matters.
     #[test]
     fn wasm_is_served_as_wasm() {

@@ -316,11 +316,16 @@ fn serve_file(stream: &mut TcpStream, site: &Site, path: &str) -> std::io::Resul
 
 /// The downstream half of the DAP channel.
 ///
-/// Held open for the life of the session; each frame becomes one SSE `data:`
-/// record. A newline inside a frame would end the record, and DAP frames are
-/// `Content-Length`-framed text that certainly contains them - so a frame is
-/// written as one `data:` line per source line, which is exactly what the
-/// EventSource specification says to do.
+/// Held open for the life of the session. Each message is sent as **one SSE
+/// `data:` line carrying the JSON body alone**, deliberately *not* the
+/// `Content-Length`-framed form.
+///
+/// Server-Sent Events are line-oriented and strip carriage returns, while the
+/// emulator's parser scans for the four bytes `\r\n\r\n` exactly. Sending a
+/// framed message therefore delivers `\n\n` to a parser that will never accept
+/// it - the conversation simply never starts, silently. A JSON body has no raw
+/// newline in it, so it survives one `data:` line intact, and the page rebuilds
+/// the frame with a byte-accurate length on arrival.
 fn event_stream(mut stream: TcpStream, site: &Site) -> std::io::Result<()> {
     let taken = site.outgoing.lock().unwrap().take();
     let Some(receiver) = taken
@@ -342,10 +347,12 @@ fn event_stream(mut stream: TcpStream, site: &Site) -> std::io::Result<()> {
     )?;
     stream.flush()?;
 
-    for frame in receiver {
-        for line in frame.split('\n') {
-            writeln!(stream, "data: {}", line.trim_end_matches('\r'))?;
-        }
+    for message in receiver {
+        // One line in, one line out: anything that could break the record
+        // apart would break the protocol, so a stray newline is refused rather
+        // than sent as something the page would silently mis-parse.
+        let single_line = message.replace(['\r', '\n'], " ");
+        writeln!(stream, "data: {single_line}")?;
         writeln!(stream)?;
         if stream.flush().is_err() {
             break; // the page went away

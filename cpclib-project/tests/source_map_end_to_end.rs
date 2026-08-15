@@ -159,3 +159,54 @@ fn a_program_assembled_without_asking_has_no_map() {
     env.handle_post_actions(&listing).expect("post actions");
     assert!(env.source_map().is_none());
 }
+
+/// The editor needs a path it can open.
+///
+/// The assembler records a file by the name it was reached by, which for an
+/// `include` is relative. A relative path is not openable, so the editor asks
+/// the adapter for the contents - and, failing that, shows disassembly instead
+/// of the code. Resolving them once, at build time, is what makes a stop land
+/// on the source line.
+#[test]
+fn included_files_are_recorded_with_a_path_the_editor_can_open() {
+    let tmp = camino_tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("lib.asm"), "\tnop\n").unwrap();
+    let entry = tmp.path().join("main.asm");
+    std::fs::write(&entry, "\torg 0x4000\n\tinclude \"lib.asm\"\n\tnop\n").unwrap();
+
+    let source = std::fs::read_to_string(&entry).unwrap();
+    let mut parse = cpclib_asm::parser::context::ParserOptions::default();
+    parse.set_quiet(true);
+    let _ = parse.add_search_path(tmp.path().to_string());
+    let builder = parse
+        .clone()
+        .context_builder()
+        .set_current_filename(entry.as_str());
+    let listing =
+        cpclib_asm::parser::parse_z80_with_context_builder(&source, builder).expect("parses");
+
+    let mut assemble = cpclib_asm::AssemblingOptions::default();
+    assemble.record_source_map();
+    let (_p, mut env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(
+        &listing,
+        cpclib_asm::EnvOptions::new(
+            parse,
+            assemble,
+            std::sync::Arc::new(cpclib_common::event::DiscardObserver)
+        )
+    )
+    .expect("assembles");
+    env.handle_post_actions(&listing).expect("post actions");
+
+    let map = SourceMap::from_raw(&env.source_map().expect("a map"))
+        .resolved_against(Path::new(entry.as_str()));
+
+    for file in map.files() {
+        assert!(
+            file.is_absolute(),
+            "{} is not openable by an editor",
+            file.display()
+        );
+        assert!(file.exists(), "{} does not exist", file.display());
+    }
+}

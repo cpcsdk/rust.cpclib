@@ -19,7 +19,29 @@ pub const CONFIG_FILE_NAME: &str = "cpclib-lsp.toml";
 pub struct LspConfig {
     pub asm: AsmConfig,
     pub basic: BasicConfig,
-    pub bndbuild: BndbuildConfig
+    pub bndbuild: BndbuildConfig,
+    pub dap: DapConfig
+}
+
+/// Debug-adapter settings.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DapConfig {
+    /// Where to write a transcript of the whole debug conversation.
+    ///
+    /// Empty means no log. Diagnosing a debug session from the outside is
+    /// otherwise guesswork - a pane that fails to appear says nothing about
+    /// which message caused it - so this exists to turn a symptom into
+    /// evidence. Relative paths are resolved against the project root.
+    pub log: String
+}
+
+impl Default for DapConfig {
+    fn default() -> Self {
+        Self {
+            log: String::new()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -338,11 +360,22 @@ pub struct LoadedConfig {
 /// workspace root is the actually correct anchor) for `cpclib-lsp.toml`,
 /// then fall back to the XDG-style global config location, mirroring
 /// `cpclib_asmfmt::config`'s own fallback convention.
+/// Locate `cpclib-lsp.toml`.
+///
+/// Searched **upwards** from `workspace_root`, then in the user's config
+/// directory. The ancestor walk matters more than it looks: a project is often
+/// opened at a subdirectory (`birthtro/src`) while the configuration sits at
+/// its root, and a tool that only checks the one directory it was handed finds
+/// nothing and says nothing - the setting appears to be ignored.
 pub fn find_config_file(workspace_root: Option<&Path>) -> Option<PathBuf> {
     if let Some(root) = workspace_root {
-        let path = root.join(CONFIG_FILE_NAME);
-        if path.is_file() {
-            return Some(path);
+        let mut directory = Some(root);
+        while let Some(current) = directory {
+            let path = current.join(CONFIG_FILE_NAME);
+            if path.is_file() {
+                return Some(path);
+            }
+            directory = current.parent();
         }
     }
     let config_base = std::env::var("XDG_CONFIG_HOME")
@@ -518,6 +551,13 @@ undefined_line = true
 # A CatArt-only warning: CURSOR/SYMBOL are valid BASIC but no-ops in CatArt.
 catart_no_op = true
 
+[dap]
+# Write a transcript of the whole debug-adapter conversation to this file.
+# Empty means no log. Relative paths are resolved against the project root.
+# Useful when a debug session misbehaves: the log shows every message in both
+# directions, which turns "the panes are empty" into something diagnosable.
+log = ""
+
 [bndbuild]
 warnings_as_errors = false
 # The "▶ Run" CodeLens on each rule, and on each individual task command.
@@ -599,6 +639,26 @@ mod tests {
         assert!(loaded.error.is_none());
         assert!(loaded.config.asm.case_sensitive);
         assert!(loaded.config.asm.warnings.fake_instructions);
+    }
+
+    /// A project opened at a subdirectory still finds the configuration at its
+    /// root - the case that made a configured setting look ignored.
+    #[test]
+    fn the_config_is_found_from_a_subdirectory() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(CONFIG_FILE_NAME),
+            "[asm]\ncase_sensitive = false\n"
+        )
+        .unwrap();
+        let deep = tmp.path().join("src").join("effects");
+        std::fs::create_dir_all(&deep).unwrap();
+
+        let found = find_config_file(Some(deep.as_std_path())).expect("found from below");
+        assert_eq!(found, tmp.path().join(CONFIG_FILE_NAME).as_std_path());
+
+        let loaded = load_config(Some(deep.as_std_path()));
+        assert!(!loaded.config.asm.case_sensitive, "and it is really loaded");
     }
 
     #[test]
