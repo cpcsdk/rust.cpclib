@@ -121,6 +121,16 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.debugThisFile",
+        "title": "CPClib: Debug this file in the emulator",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.debugRule",
+        "title": "CPClib: Debug a bndbuild rule in the emulator",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.assembleThisFile",
         "title": "Assemble This File with basm",
         "category": "CPClib"
@@ -145,6 +155,11 @@
         },
         {
           "command": "cpclib.assembleThisFile",
+          "when": "editorLangId == basm",
+          "group": "9_cutcopypaste"
+        },
+        {
+          "command": "cpclib.debugThisFile",
           "when": "editorLangId == basm",
           "group": "9_cutcopypaste"
         }

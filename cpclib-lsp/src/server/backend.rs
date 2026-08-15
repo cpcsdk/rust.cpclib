@@ -893,7 +893,8 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     crate::basm::peephole::CLEAR_COMMAND,
     "cpclib.assembleFile",
     "cpclib.breakpointEdit",
-    "cpclib.breakpointLines"
+    "cpclib.breakpointLines",
+    "cpclib.getDebuggableRules"
 ];
 
 #[tower_lsp::async_trait]
@@ -2636,6 +2637,44 @@ impl LanguageServer for CpcLspBackend {
         // Which lines of a file already carry a `breakpoint` directive, so the
         // editor can draw their red dots when it opens the file rather than
         // only after a click. Argument: `[uri]`.
+        // The rules of a build file that end in an emulator command, so the
+        // editor can offer a list instead of asking the user to remember rule
+        // names. Argument: `[buildFileUri]`, or none for every open build file.
+        if params.command == "cpclib.getDebuggableRules" {
+            let build_files: Vec<std::path::PathBuf> = match params
+                .arguments
+                .first()
+                .and_then(|v| v.as_str())
+                .and_then(|s| Url::parse(s).ok())
+                .and_then(|u| u.to_file_path().ok())
+            {
+                Some(path) => vec![path],
+                None => {
+                    self.documents
+                        .iter()
+                        .filter(|entry| entry.value().doc_type == DocumentType::BuildFile)
+                        .filter_map(|entry| entry.key().to_file_path().ok())
+                        .collect()
+                }
+            };
+
+            let rules: Vec<serde_json::Value> = build_files
+                .into_iter()
+                .flat_map(|file| {
+                    cpclib_dap::launch::debuggable_rules(&file)
+                        .into_iter()
+                        .map(move |rule| {
+                            serde_json::json!({
+                                "rule": rule,
+                                "buildFile": file.to_string_lossy()
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            return Ok(Some(serde_json::json!(rules)));
+        }
+
         if params.command == "cpclib.breakpointLines" {
             let Some(uri) = params
                 .arguments

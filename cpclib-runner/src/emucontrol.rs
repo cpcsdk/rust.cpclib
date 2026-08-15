@@ -1896,6 +1896,14 @@ pub enum Emu {
     Cadence,
     #[value(alias = "1984")]
     Emulator1984,
+    /// The emscripten build of 1984, served in a browser rather than spawned.
+    ///
+    /// The only emulator that can be debugged today, because it is the only one
+    /// that speaks the Debug Adapter Protocol. `run` cannot use it - there is
+    /// no process to run - so it is accepted here and refused there, with a
+    /// message that says which command to use instead.
+    #[value(alias = "1984js")]
+    Emulator1984Js,
     #[value(alias = "retrovm")]
     Rvm
 }
@@ -1976,10 +1984,72 @@ pub enum Commands {
     Run {
         #[arg(short, long, help = "Simple text to type")]
         text: Option<String>
+    },
+
+    /// Serve the web emulator with the snapshot loaded, for debugging.
+    ///
+    /// Unlike `run`, this does not spawn a native process: the emulator is a
+    /// web application, so it is served on a loopback port and opened in a
+    /// browser. An editor's debug adapter uses the same server for the Debug
+    /// Adapter Protocol channel; on this command line it is simply a way to
+    /// run a snapshot in the debuggable emulator without an editor at all.
+    Debug {
+        #[arg(long, help = "Do not open a browser, just print the URL")]
+        no_open: bool
     }
 }
 
 pub const EMUCTRL_CMD: &str = "cpc";
+
+/// Serve the web emulator and hold the process open.
+///
+/// Separate from `start_emulator` because nothing is shared: there is no
+/// process, no window to find, no argv translation - just files on a loopback
+/// port and the snapshot the user named.
+fn serve_web_emulator<E: EventObserver>(
+    conf: &EmulatorConf,
+    no_open: bool,
+    o: &E
+) -> Result<(), String> {
+    let snapshot = match conf.snapshot.as_ref() {
+        Some(path) => {
+            Some(std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?)
+        },
+        None => None
+    };
+
+    let root = crate::web::js1984::install()?;
+    let server = crate::web::serve(&root, snapshot)
+        .map_err(|e| format!("cannot serve the emulator: {e}"))?;
+    let url = server.debug_url();
+
+    o.emit_stdout(&format!("1984js is serving at {url}\n"));
+    if !no_open && let Err(problem) = open_in_browser(&url) {
+        o.emit_stderr(&format!("could not open a browser: {problem}\n"));
+    }
+    o.emit_stdout("Press Ctrl-C to stop.\n");
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+}
+
+/// Open `url` with whatever the desktop uses for http.
+fn open_in_browser(url: &str) -> Result<(), String> {
+    let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
+        ("open", vec![url])
+    }
+    else if cfg!(target_os = "windows") {
+        ("cmd", vec!["/C", "start", "", url])
+    }
+    else {
+        ("xdg-open", vec![url])
+    };
+    std::process::Command::new(program)
+        .args(args)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("{program}: {e}"))
+}
 
 pub struct EmulatorFacadeRunner<E: EventObserver> {
     command: Command,
@@ -2039,6 +2109,24 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         .break_on_bad_vbl(cli.break_on_bad_vbl);
     let conf = builder.build();
 
+    // Answered before anything native happens. A web emulator is *served*, not
+    // spawned: falling through would start the desktop 1984 as well, and print
+    // "snapshot loading is currently ignored" about a snapshot this path is
+    // about to serve perfectly well.
+    if let Commands::Debug { no_open } = &cli.command {
+        // Only one emulator can be debugged, and silently substituting it for
+        // whichever the user named would make a rule that says `ace` behave as
+        // something else - worth a clear refusal instead.
+        if !matches!(cli.emulator, Emu::Emulator1984Js) {
+            return Err(format!(
+                "{:?} cannot be debugged: only 1984js speaks the Debug Adapter Protocol. \
+                 Use `--emulator 1984js`.",
+                cli.emulator
+            ));
+        }
+        return serve_web_emulator(&conf, *no_open, o);
+    }
+
     let emu = match cli.emulator {
         Emu::Ace => Emulator::Ace(Default::default()),
         Emu::Winape => Emulator::Winape(Default::default()),
@@ -2050,6 +2138,9 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
         Emu::Cadence => Emulator::Cadence(Default::default()),
         Emu::Emulator1984 => Emulator::Emulator1984(Default::default()),
+        // Never spawned: the `debug` subcommand serves it instead, and every
+        // other path rejects it before reaching here.
+        Emu::Emulator1984Js => Emulator::Emulator1984(Default::default()),
         Emu::Rvm => Emulator::RetroVm(Default::default())
     };
 
@@ -2255,6 +2346,8 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     }
 
     let res = match cli.command {
+        // Handled at the top of this function, before anything native starts.
+        Commands::Debug { .. } => unreachable!("the debug path returns earlier"),
         #[cfg(feature = "screenshot")]
         Commands::Orgams(OrgamsCli {
             src,

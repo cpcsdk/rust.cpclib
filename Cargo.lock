@@ -2932,9 +2932,13 @@ name = "cpclib-dap"
 version = "0.11.0"
 dependencies = [
  "camino",
+ "camino-tempfile",
  "cpclib-asm",
+ "cpclib-bndbuild",
  "cpclib-common",
  "cpclib-project",
+ "cpclib-runner",
+ "cpclib-tokens",
  "serde",
  "serde_json",
 ]
@@ -3070,6 +3074,7 @@ dependencies = [
  "cpclib-bndbuild",
  "cpclib-catart",
  "cpclib-common",
+ "cpclib-dap",
  "cpclib-project",
  "cpclib-runner",
  "cpclib-tokens",

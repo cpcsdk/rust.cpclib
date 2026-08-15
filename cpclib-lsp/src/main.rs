@@ -47,7 +47,13 @@ enum Command {
     Bndbuild {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>
-    }
+    },
+    /// Run as the debug adapter, speaking DAP on stdin/stdout.
+    ///
+    /// Same reasoning as `bndbuild` above: the editor already knows where this
+    /// binary is, so exposing the adapter as a subcommand saves shipping and
+    /// locating a second one. Stdout carries protocol frames only.
+    Dap
 }
 
 /// A real, isolated clap subcommand (rather than a hand-rolled pre-`Cli::parse()`
@@ -99,6 +105,14 @@ async fn main() {
     let cli = Cli::parse();
     if let Some(Command::Bndbuild { args }) = cli.command {
         run_as_bndbuild(args);
+    }
+    if let Some(Command::Dap) = cli.command {
+        // Diagnostics to stderr: stdout is the protocol.
+        if let Err(problem) = cpclib_dap::run_stdio() {
+            eprintln!("cpclib-lsp dap: {problem}");
+            std::process::exit(1);
+        }
+        std::process::exit(0);
     }
     if let Some(dir) = cli.init_config {
         let path = dir.join(CONFIG_FILE_NAME);
@@ -207,6 +221,12 @@ mod tests {
             },
             other => panic!("expected the bndbuild subcommand, got {other:?}")
         }
+    }
+
+    #[test]
+    fn the_dap_subcommand_is_recognised() {
+        let cli = Cli::try_parse_from(["cpclib-lsp", "dap"]).expect("dap parses");
+        assert!(matches!(cli.command, Some(Command::Dap)));
     }
 
     #[test]

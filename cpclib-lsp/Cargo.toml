@@ -26,6 +26,7 @@ cpclib-basic.workspace = true
 cpclib-catart.workspace = true
 cpclib-common = { workspace = true, features = ["cmdline"] }
 cpclib-project.workspace = true
+cpclib-dap.workspace = true
 cpclib-tokens.workspace = true
 cpclib-z80emu.workspace = true
 camino.workspace = true

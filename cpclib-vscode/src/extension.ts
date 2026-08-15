@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isDebugSessionActive, registerDebugging } from './debug';
+import { isDebugSessionActive, registerDebugging, setDebugClient } from './debug';
 import { workspace, ExtensionContext, window } from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -213,6 +213,7 @@ export function activate(context: ExtensionContext) {
     context.subscriptions.push(taskProvider);
 
     client.start().then(() => {
+        setDebugClient(client);
         window.showInformationMessage('CPClib LSP server started.');
         installLogMessageMirror(client);
     }).catch((err: Error) => {

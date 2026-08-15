@@ -366,6 +366,27 @@ impl BuildFileAnalyzer {
                 data: None
             });
 
+            // A rule that launches an emulator can also be debugged: the same
+            // command is re-issued with `debug` instead of `run`, so the user
+            // does not have to keep a second, drifting rule for it.
+            if super::command::task_lines_in_rule(&text, rule_line)
+                .iter()
+                .any(|(_, content)| rule_launches_an_emulator(content))
+            {
+                lenses.push(CodeLens {
+                    range,
+                    command: Some(Command {
+                        title: format!("🐞 Debug: {names}"),
+                        command: "cpclib.debugRule".to_string(),
+                        arguments: Some(vec![
+                            serde_json::json!(names),
+                            serde_json::json!(file_path)
+                        ])
+                    }),
+                    data: None
+                });
+            }
+
             for (task_idx, (line_idx, _content)) in
                 super::command::task_lines_in_rule(&text, rule_line)
                     .into_iter()
@@ -669,5 +690,69 @@ mod tests {
             .map(|l| l.command.as_ref().unwrap().title.as_str())
             .collect();
         assert_eq!(titles, vec!["▶ Run: imported", "▶ Run: local"]);
+    }
+}
+
+
+/// Whether a rule's command line launches an emulator with `run`.
+///
+/// Only such a rule can be debugged: the rewrite turns its `run` into `debug`,
+/// and there is nothing to turn if the rule builds a disc or assembles a file.
+///
+/// Two details of bndbuild's own syntax matter here, and getting either wrong
+/// makes the button silently not appear:
+///
+/// * a tool may be prefixed with `-` to ignore its errors (`-emu ... run`);
+/// * a tool has several aliases, and the list belongs to bndbuild rather than
+///   to this file - hence `EMUCTRL_CMDS` rather than a copy that would drift.
+fn rule_launches_an_emulator(command: &str) -> bool {
+    let mut words = command.split_whitespace();
+    let Some(program) = words.next()
+    else {
+        return false;
+    };
+    let program = program.strip_prefix('-').unwrap_or(program);
+    let is_emulator = cpclib_bndbuild::task::EMUCTRL_CMDS.contains(&program);
+    is_emulator && words.any(|word| word == "run")
+}
+
+#[cfg(test)]
+mod debug_lens_tests {
+    use super::rule_launches_an_emulator;
+
+    #[test]
+    fn a_rule_that_runs_an_emulator_can_be_debugged() {
+        assert!(rule_launches_an_emulator("emu --snapshot demo.sna run"));
+        assert!(rule_launches_an_emulator("cpc --drivea test.dsk run"));
+        assert!(rule_launches_an_emulator("emucontrol --emulator ace run"));
+        assert!(rule_launches_an_emulator("emuctrl --snapshot d.sna run"));
+    }
+
+    /// A tool prefixed with `-` ignores its errors - and is still that tool.
+    /// This is the form a real build file uses, and missing it is why the
+    /// button did not appear.
+    #[test]
+    fn an_error_ignoring_prefix_still_counts() {
+        assert!(rule_launches_an_emulator(
+            "-emu --emulator ace   --snapshot demo.sna run"
+        ));
+        assert!(rule_launches_an_emulator("-cpc --drivea test.dsk run"));
+    }
+
+    /// Everything else offers no debug button, because there is nothing to
+    /// rewrite.
+    #[test]
+    fn other_rules_are_left_alone() {
+        assert!(!rule_launches_an_emulator("basm src/main.asm -o demo.sna"));
+        assert!(!rule_launches_an_emulator("dsk demo.dsk format"));
+        assert!(!rule_launches_an_emulator("emu --snapshot demo.sna orgams"));
+        assert!(!rule_launches_an_emulator(""));
+    }
+
+    /// A path that merely contains the word is not the subcommand - the same
+    /// trap the rewrite itself avoids.
+    #[test]
+    fn a_path_containing_run_is_not_enough() {
+        assert!(!rule_launches_an_emulator("basm build/run/main.asm"));
     }
 }
