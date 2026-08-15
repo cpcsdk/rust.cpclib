@@ -21,14 +21,7 @@ use crate::common::document::Document;
 pub(super) fn disabled_parser_warning_categories(
     warnings: &crate::common::config::AsmWarningClasses
 ) -> BitFlags<WarningCategory> {
-    let mut disabled = BitFlags::empty();
-    if !warnings.fake_instructions {
-        disabled.insert(WarningCategory::FakeInstruction);
-    }
-    if !warnings.redundant_accumulator_prefix {
-        disabled.insert(WarningCategory::RedundantAccumulatorPrefix);
-    }
-    disabled
+    warnings.disabled_parser_categories()
 }
 
 /// Same idea as `disabled_parser_warning_categories`, for real assembling
@@ -39,14 +32,7 @@ pub(super) fn disabled_parser_warning_categories(
 pub(crate) fn disabled_assembling_warning_categories(
     warnings: &crate::common::config::AsmWarningClasses
 ) -> BitFlags<WarningCategory> {
-    let mut disabled = disabled_parser_warning_categories(warnings);
-    if !warnings.override_memory {
-        disabled.insert(WarningCategory::OverrideMemory);
-    }
-    if !warnings.overflow {
-        disabled.insert(WarningCategory::Overflow);
-    }
-    disabled
+    warnings.disabled_assembling_categories()
 }
 
 impl AssemblyAnalyzer {

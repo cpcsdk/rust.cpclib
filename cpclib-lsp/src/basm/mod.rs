@@ -20,14 +20,16 @@ use tower_lsp::lsp_types::{Range, Url};
 use crate::common::config::AsmConfig;
 
 pub mod autocomplete;
-mod build_defs;
 pub mod call_hierarchy;
 pub mod color;
 pub mod command;
 pub mod cycles;
 pub mod definition;
 pub mod diagnostics;
-mod entry;
+// Moved to `cpclib-project`, shared with the debug adapter: "which program
+// does this file belong to, and how is it built" is not an LSP question.
+// The LSP converts its `Url`s to paths at each call site.
+use cpclib_project::{build_defs, entry};
 pub mod disassemble;
 pub mod embedded_basic;
 pub mod embedded_bndbuild;
@@ -104,7 +106,9 @@ pub struct AssemblyAnalyzer {
     /// across the project's sources, which changes exactly when a rebuild
     /// would produce different addresses, and costs a `stat` per file to
     /// compute rather than a full assemble.
-    project_env_cache: DashMap<std::path::PathBuf, (u128, Arc<Env>)>,
+    /// Shared with the debug adapter (`cpclib-project`): one assembled
+    /// project per fingerprint, however many features ask for it.
+    projects: Arc<cpclib_project::cache::ProjectCache>,
     /// Where each document's real addresses come from, keyed by
     /// `(document version, workspace fingerprint)`.
     ///
@@ -118,7 +122,6 @@ pub struct AssemblyAnalyzer {
     /// Keyed by *root*, not by document: every document in a project shares
     /// one graph, and building it reads and parses every source. Without this
     /// a workspace-wide scan rebuilds it once per file.
-    project_graph_cache: DashMap<std::path::PathBuf, (u128, Arc<super::basm::entry::ProjectGraph>)>,
     /// Documents the user has explicitly asked to have analysed for peephole
     /// optimizations, and the range they asked about (`None` = the whole
     /// file).
@@ -156,9 +159,8 @@ impl AssemblyAnalyzer {
             parse_cache: DashMap::new(),
             env_cache: DashMap::new(),
             local_env_cache: DashMap::new(),
-            project_env_cache: DashMap::new(),
+            projects: Arc::new(cpclib_project::cache::ProjectCache::new()),
             address_source_cache: DashMap::new(),
-            project_graph_cache: DashMap::new(),
             peephole_requested: DashMap::new(),
             symbols_cache: DashMap::new(),
             config: RwLock::new(Arc::new(AsmConfig::default()))
@@ -175,7 +177,7 @@ impl AssemblyAnalyzer {
         self.symbols_cache.remove(uri);
         self.address_source_cache.remove(uri);
         self.peephole_requested.remove(uri);
-        // `project_env_cache` deliberately survives: it is keyed by entry
+        // The project cache deliberately survives: it is keyed by entry
         // path, not by document, and the project outlives any one editor tab.
     }
 

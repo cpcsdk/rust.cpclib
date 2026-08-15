@@ -9,6 +9,7 @@
 //! are represented/dispatched only has to update this one file.
 
 pub mod basic_run;
+pub mod debug;
 
 use std::sync::Arc;
 

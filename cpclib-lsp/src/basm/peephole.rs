@@ -22,6 +22,8 @@ use cpclib_asmoptim::engine::{PeepholeMatch, find_matches, find_matches_with_res
 use cpclib_tokens::{DataAccessElem, ListingElement};
 use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal, ProjectAddressResolver, builtin_rules};
 
+use cpclib_project::entry;
+
 use super::AssemblyAnalyzer;
 use super::command::{single_file_edit, single_file_multi_edit};
 use crate::common::document::Document;
@@ -150,7 +152,7 @@ pub(super) fn address_source(
 /// alive across the call.
 pub(super) enum AddressSource {
     OwnAssemble,
-    Project(crate::basm::entry::ProjectAddresses),
+    Project(entry::ProjectAddresses),
     None
 }
 
@@ -177,31 +179,15 @@ impl AddressSource {
 impl AssemblyAnalyzer {
     /// The assembled project `Env` for `entry`, cached.
     ///
-    /// Assembling a whole demo takes tens of seconds, so this must not happen
-    /// per request. The cache key is the newest modification time across the
-    /// project's sources: it changes exactly when a rebuild would lay code out
-    /// differently, and costs a `stat` per file instead of an assemble.
+    /// See `cpclib_project::cache::ProjectCache` for why the key is a
+    /// fingerprint rather than a timestamp or a hash of the sources.
     fn project_env_cached(
         &self,
         entry: &std::path::Path,
         fingerprint: u128,
         config: &crate::common::config::AsmConfig
     ) -> Option<std::sync::Arc<Env>> {
-        if let Some(entry_cache) = self.project_env_cache.get(entry)
-            && entry_cache.0 == fingerprint
-        {
-            return Some(entry_cache.1.clone());
-        }
-
-        let disabled = super::parse::disabled_assembling_warning_categories(&config.warnings);
-        let env = std::sync::Arc::new(crate::basm::entry::assemble_entry(
-            entry,
-            config.case_sensitive,
-            disabled
-        )?);
-        self.project_env_cache
-            .insert(entry.to_path_buf(), (fingerprint, env.clone()));
-        Some(env)
+        self.projects.env_for(entry, fingerprint, config)
     }
 
     /// Where this document's real addresses come from.
@@ -218,25 +204,11 @@ impl AssemblyAnalyzer {
     /// - only ever happens for a document that matches disk, i.e. just after a
     /// save rather than on every keystroke.
     /// The project's include graph, rebuilt only when the project changed.
-    ///
-    /// Returns the fingerprint alongside it so callers reuse the one stat
-    /// pass this already paid for rather than walking again.
     fn project_graph_cached(
         &self,
         root: &std::path::Path
-    ) -> (u128, Arc<crate::basm::entry::ProjectGraph>) {
-        let fingerprint = crate::basm::entry::fingerprint_of(root);
-        if let Some(cached) = self.project_graph_cache.get(root)
-            && cached.0 == fingerprint
-        {
-            return (fingerprint, cached.1.clone());
-        }
-        let graph = Arc::new(crate::basm::entry::graph_of(
-            &crate::basm::entry::scan_workspace(root)
-        ));
-        self.project_graph_cache
-            .insert(root.to_path_buf(), (fingerprint, graph.clone()));
-        (fingerprint, graph)
+    ) -> (u128, Arc<entry::ProjectGraph>) {
+        self.projects.graph_for(root)
     }
 
     /// Everything the matcher needs for `document`: where its real addresses
@@ -284,8 +256,13 @@ impl AssemblyAnalyzer {
         document: &Document,
         own_assemble_complete: impl FnOnce() -> bool
     ) -> Arc<AddressSource> {
-        let fingerprint = crate::basm::entry::root_of(&document.uri)
-            .map(|root| crate::basm::entry::fingerprint_of(&root))
+        // The shared crate speaks paths; the LSP speaks document URIs. Convert
+        // here rather than teaching it about either.
+        let document_path = document.uri.to_file_path().ok();
+        let fingerprint = document_path
+            .as_deref()
+            .and_then(entry::root_of)
+            .map(|root| entry::fingerprint_of(&root))
             .unwrap_or(0);
         let key = (document.version, fingerprint);
 
@@ -331,20 +308,24 @@ impl AssemblyAnalyzer {
         }
 
         let config = self.config();
-        let Some(root) = crate::basm::entry::root_of(&document.uri)
+        let Some(document_path) = document.uri.to_file_path().ok()
+        else {
+            return AddressSource::None;
+        };
+        let Some(root) = entry::root_of(&document_path)
         else {
             return AddressSource::None;
         };
         // Shared across every document in the project: reading and parsing
         // the sources happens once per change, not once per document.
         let (fingerprint, graph) = self.project_graph_cached(&root);
-        match crate::basm::entry::entry_in_graph(
-            &document.uri,
+        match entry::entry_in_graph(
+            &document_path,
             config.entry.as_deref(),
             &root,
             &graph
         ) {
-            crate::basm::entry::Entry::Standalone => {
+            entry::Entry::Standalone => {
                 if own_assemble_complete() {
                     AddressSource::OwnAssemble
                 }
@@ -352,19 +333,19 @@ impl AssemblyAnalyzer {
                     AddressSource::None
                 }
             },
-            crate::basm::entry::Entry::Project(entry) => {
+            entry::Entry::Project(entry) => {
                 let Some(env) = self.project_env_cached(&entry, fingerprint, &config)
                 else {
                     return AddressSource::None;
                 };
                 match std::fs::canonicalize(&path) {
                     Ok(document) => {
-                        AddressSource::Project(crate::basm::entry::ProjectAddresses { env, document })
+                        AddressSource::Project(entry::ProjectAddresses { env, document })
                     },
                     Err(_) => AddressSource::None
                 }
             },
-            crate::basm::entry::Entry::Unknown => AddressSource::None
+            entry::Entry::Unknown => AddressSource::None
         }
     }
 }
@@ -382,7 +363,7 @@ pub(super) enum Addresses<'a> {
     OwnAssemble(&'a Env),
     /// This document is only part of a program; addresses come from assembling
     /// the entry that contains it.
-    Project(&'a crate::basm::entry::ProjectAddresses),
+    Project(&'a entry::ProjectAddresses),
     /// Nothing trustworthy. Address-aware rules must stay quiet: an
     /// incomplete assemble, an ambiguous entry, or a buffer that no longer
     /// matches disk (which shifts every recorded offset).

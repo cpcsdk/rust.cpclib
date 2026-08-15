@@ -1065,18 +1065,11 @@ fn find_scoped_local_matches(
 
 // ─── Include file navigation ──────────────────────────────────────────────────
 
-const INCLUDE_DIRECTIVES: &[&str] = &["INCLUDE", "INCBIN", "BINCLUDE"];
-
-/// Directory-level markers that indicate the project root.  We stop walking
-/// up the ancestor tree when we find one of these in the current directory.
-const PROJECT_ROOT_MARKERS: &[&str] = &[
-    ".git",
-    ".hg",
-    "Cargo.toml",
-    "Cargo.lock",
-    "Makefile",
-    "makefile"
-];
+// The walk itself, the include resolution and the directive scan now live in
+// `cpclib-project::root`, shared with the debug adapter. What stays in this
+// file is the `Url` boundary: the LSP speaks document URIs, the shared crate
+// speaks paths, and the conversion happens once, here.
+pub(crate) use cpclib_project::root::{INCLUDE_DIRECTIVES, PROJECT_ROOT_MARKERS};
 
 impl AssemblyAnalyzer {
     /// If `position` is on a line holding an INCLUDE/INCBIN/BINCLUDE
@@ -1146,27 +1139,10 @@ impl AssemblyAnalyzer {
 /// means relative to `linking/`, not `linking/src/`. A single directory
 /// (just the file's own) isn't enough to resolve that.
 pub(crate) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathBuf> {
-    let mut dirs = Vec::new();
-    let Ok(doc_path) = doc_uri.to_file_path()
-    else {
-        return dirs;
-    };
-    let Some(mut dir) = doc_path.parent().map(std::path::Path::to_path_buf)
-    else {
-        return dirs;
-    };
-    loop {
-        let at_root = PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists());
-        dirs.push(dir.clone());
-        if at_root {
-            break;
-        }
-        match dir.parent() {
-            Some(parent) => dir = parent.to_path_buf(),
-            None => break
-        }
+    match doc_uri.to_file_path() {
+        Ok(path) => cpclib_project::root::ancestor_directories(&path),
+        Err(_) => Vec::new()
     }
-    dirs
 }
 
 /// Walk up from `doc_uri`'s directory, trying each ancestor as a base for
@@ -1176,25 +1152,12 @@ pub(crate) fn ancestor_search_directories(doc_uri: &Url) -> Vec<std::path::PathB
 /// Whether `dir` looks like the top of a project, by the same markers
 /// `resolve_include_path`/`ancestor_search_directories` already stop at.
 pub(super) fn is_project_root(dir: &std::path::Path) -> bool {
-    PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists())
+    cpclib_project::root::is_project_root(dir)
 }
 
 pub fn resolve_include_path(filename: &str, doc_uri: &Url) -> Option<std::path::PathBuf> {
-    let doc_path = doc_uri.to_file_path().ok()?;
-    let mut dir = doc_path.parent()?;
-    loop {
-        let candidate = dir.join(filename);
-        if candidate.exists() {
-            return Some(candidate);
-        }
-        // If this directory contains a project-root marker, don't go further up.
-        let at_root = PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists());
-        match dir.parent() {
-            Some(parent) if !at_root => dir = parent,
-            _ => break
-        }
-    }
-    None
+    let path = doc_uri.to_file_path().ok()?;
+    cpclib_project::root::resolve_include_path(filename, &path)
 }
 
 /// Every filename referenced by an `INCLUDE`/`INCBIN`/`BINCLUDE` directive in
@@ -1202,32 +1165,7 @@ pub fn resolve_include_path(filename: &str, doc_uri: &Url) -> Option<std::path::
 /// directives as `resolve_include_at`, but line-anchored rather than
 /// cursor-anchored so the whole file can be scanned in one pass).
 pub fn extract_include_filenames(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        let upper = trimmed.to_uppercase();
-
-        let Some(directive) = INCLUDE_DIRECTIVES.iter().find(|d| {
-            upper == **d
-                || upper.starts_with(&format!("{d} "))
-                || upper.starts_with(&format!("{d}\t"))
-        })
-        else {
-            continue;
-        };
-
-        let after = &trimmed[directive.len()..];
-        let Some(q1) = after.find('"')
-        else {
-            continue;
-        };
-        let Some(q2_rel) = after[q1 + 1..].find('"')
-        else {
-            continue;
-        };
-        out.push(after[q1 + 1..q1 + 1 + q2_rel].to_string());
-    }
-    out
+    cpclib_project::root::extract_include_filenames(text)
 }
 
 /// The nearest ancestor directory of `doc_uri` containing a project-root
@@ -1236,18 +1174,8 @@ pub fn extract_include_filenames(text: &str) -> Vec<String> {
 /// base for the eager cross-file goto-definition fallback when the LSP
 /// client didn't report any workspace folder.
 pub fn project_root_for(doc_uri: &Url) -> Option<std::path::PathBuf> {
-    let doc_path = doc_uri.to_file_path().ok()?;
-    let own_dir = doc_path.parent()?.to_path_buf();
-    let mut dir = own_dir.clone();
-    loop {
-        if PROJECT_ROOT_MARKERS.iter().any(|m| dir.join(m).exists()) {
-            return Some(dir);
-        }
-        match dir.parent() {
-            Some(parent) => dir = parent.to_path_buf(),
-            None => return Some(own_dir)
-        }
-    }
+    let path = doc_uri.to_file_path().ok()?;
+    cpclib_project::root::project_root_or_own_dir(&path)
 }
 
 #[cfg(test)]

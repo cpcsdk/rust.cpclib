@@ -2928,6 +2928,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cpclib-dap"
+version = "0.11.0"
+dependencies = [
+ "camino",
+ "cpclib-asm",
+ "cpclib-common",
+ "cpclib-project",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cpclib-disc"
 version = "0.11.0"
 dependencies = [
@@ -3058,6 +3070,7 @@ dependencies = [
  "cpclib-bndbuild",
  "cpclib-catart",
  "cpclib-common",
+ "cpclib-project",
  "cpclib-runner",
  "cpclib-tokens",
  "cpclib-z80emu",
@@ -3106,6 +3119,26 @@ dependencies = [
  "cpclib-tokens",
  "encoding_rs",
  "fs-err",
+]
+
+[[package]]
+name = "cpclib-project"
+version = "0.11.0"
+dependencies = [
+ "camino",
+ "camino-tempfile",
+ "cpclib-asm",
+ "cpclib-asmoptim",
+ "cpclib-bndbuild",
+ "cpclib-common",
+ "cpclib-tokens",
+ "dashmap 6.2.1",
+ "enumflags2",
+ "ignore",
+ "minijinja",
+ "serde",
+ "toml 0.8.2",
+ "toml_edit 0.20.2",
 ]
 
 [[package]]

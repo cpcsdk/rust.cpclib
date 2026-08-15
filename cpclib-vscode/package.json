@@ -150,6 +150,79 @@
         }
       ]
     },
+    "debuggers": [
+      {
+        "type": "basm",
+        "label": "Amstrad CPC (basm)",
+        "languages": ["basm"],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "The .asm file to assemble and debug.",
+                "default": "${file}"
+              },
+              "rule": {
+                "type": "string",
+                "description": "A bndbuild rule that launches the emulator; its 'emu ... run' command is re-issued as 'debug'."
+              },
+              "buildFile": {
+                "type": "string",
+                "description": "The build file the rule lives in. Defaults to the nearest one."
+              },
+              "emulator": {
+                "type": "string",
+                "description": "Which emulator to debug in. Only 1984js can be debugged today.",
+                "default": "1984js"
+              },
+              "watchLabels": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Labels to report writes to, using the emulator's watchpoints.",
+                "default": []
+              },
+              "stopOnEntry": {"type": "boolean", "default": false},
+              "openInWebview": {
+                "type": "boolean",
+                "description": "Show the emulator in a VS Code tab. Turn off to open it in your browser instead.",
+                "default": true
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "basm",
+            "request": "launch",
+            "name": "Debug this .asm file",
+            "program": "${file}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "CPC: debug the current .asm file",
+            "description": "Assemble the open file and debug it in 1984js",
+            "body": {
+              "type": "basm",
+              "request": "launch",
+              "name": "Debug this .asm file",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "CPC: debug a bndbuild rule",
+            "description": "Re-issue a rule's 'emu ... run' as a debug session",
+            "body": {
+              "type": "basm",
+              "request": "launch",
+              "name": "Debug the demo",
+              "rule": "run"
+            }
+          }
+        ]
+      }
+    ],
     "breakpoints": [
       {
         "language": "basm"
@@ -198,6 +271,11 @@
     "configuration": {
       "title": "CPClib LSP",
       "properties": {
+        "cpclib.debug.openInWebview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the emulator in a VS Code tab during a debug session. Turn off to open it in your normal browser instead."
+        },
         "cpclib.breakpointDirective": {
           "type": "boolean",
           "default": true,

@@ -172,6 +172,42 @@ pub struct AsmWarningClasses {
     pub smc_label_without_equ: bool
 }
 
+impl AsmWarningClasses {
+    /// The warning categories to switch off in the *parser*.
+    ///
+    /// `OverrideMemory`/`Overflow` never apply here - they are only knowable
+    /// once something is actually assembled.
+    pub fn disabled_parser_categories(
+        &self
+    ) -> enumflags2::BitFlags<cpclib_asm::WarningCategory> {
+        use cpclib_asm::WarningCategory;
+        let mut disabled = enumflags2::BitFlags::empty();
+        if !self.fake_instructions {
+            disabled.insert(WarningCategory::FakeInstruction);
+        }
+        if !self.redundant_accumulator_prefix {
+            disabled.insert(WarningCategory::RedundantAccumulatorPrefix);
+        }
+        disabled
+    }
+
+    /// The same, for real assembling - all four categories, since the two
+    /// parser ones are passed again here as a backstop.
+    pub fn disabled_assembling_categories(
+        &self
+    ) -> enumflags2::BitFlags<cpclib_asm::WarningCategory> {
+        use cpclib_asm::WarningCategory;
+        let mut disabled = self.disabled_parser_categories();
+        if !self.override_memory {
+            disabled.insert(WarningCategory::OverrideMemory);
+        }
+        if !self.overflow {
+            disabled.insert(WarningCategory::Overflow);
+        }
+        disabled
+    }
+}
+
 impl Default for AsmWarningClasses {
     fn default() -> Self {
         Self {

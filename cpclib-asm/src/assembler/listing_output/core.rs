@@ -72,6 +72,14 @@ pub struct ListingOutput {
     format: ListingOutputFormat,
     renderer: ListingRenderer,
     current_file_index: usize,
+    /// Collects `(file, line, address, length)` alongside the rendered
+    /// listing when a caller asked for a source map. Independent of the
+    /// writer: both, either or neither can be wanted.
+    source_map: Option<super::SourceMapCollector>,
+    /// Where in the source the last token of the current line group started,
+    /// so a re-executed token (a new `REPEAT` iteration) is recognised rather
+    /// than glued onto the previous one. See `token_is_on_same_line`.
+    current_line_last_offset: Option<usize>,
     file_indices: HashMap<String, usize>,
     file_order: Vec<String>,
     file_map_header_printed: bool,
@@ -142,6 +150,8 @@ impl ListingOutput {
             format,
             renderer,
             current_file_index: 0,
+            source_map: None,
+            current_line_last_offset: None,
             file_indices: HashMap::new(),
             file_order: Vec::new(),
             file_map_header_printed: false,
@@ -428,11 +438,24 @@ impl ListingOutput {
     }
 
     /// Check if the token is for the same line than the previous token
+    /// Whether `token` continues the line currently being accumulated.
+    ///
+    /// Being on the same line is necessary but not sufficient. A `REPEAT` body
+    /// re-executes the *same* tokens, so iteration two arrives on the same line
+    /// as iteration one and would silently extend its row - a listing showing
+    /// one line with the bytes of three iterations glued together, and a source
+    /// map with one address where there should be three. Source position going
+    /// backwards (or standing still) is what distinguishes re-execution from a
+    /// genuine multi-statement line like `nop : nop : nop`, whose statements do
+    /// advance.
     fn token_is_on_same_line(&self, token: &LocatedToken) -> bool {
         match &self.current_line_group {
             Some((current_location, _current_line, _current_line_expanded)) => {
                 self.token_is_on_same_source(token)
                     && *current_location == token.span().location_line()
+                    && self
+                        .current_line_last_offset
+                        .is_none_or(|last| token.span().offset_from_start() > last)
             },
             None => false
         }
@@ -494,6 +517,7 @@ impl ListingOutput {
             self.current_line_group = Some((token.span().location_line(), raw_line, expanded_line));
         }
 
+        self.current_line_last_offset = Some(token.span().offset_from_start());
         self.update_current_token_kind(token, symbols);
         self.current_token_raw = token.span().as_str().to_string();
         self.current_token_expanded = if !Self::should_expand_source_for_token(token) {
@@ -831,6 +855,7 @@ impl ListingOutput {
         self.deferred_for_line.clear();
 
         // draw all lines that correspond to the instructions to output
+        let mut last_mapped_line: Option<u32> = None;
         let mut byte_offset = 0usize;
         let render_lines = line_representation_raw.len().max(data_representation.len());
         for idx in 0..render_lines {
@@ -909,6 +934,28 @@ impl ListingOutput {
                     })
                     .collect_vec();
 
+                // A long byte run (`defs 16`, an `incbin`) renders as several
+                // chunks, and only the first carries the source line - the
+                // continuations are the *same* line's bytes, so they must be
+                // recorded against it rather than dropped. `last_mapped_line`
+                // carries it across the chunks.
+                if let Some(line) = rendered_line_number {
+                    last_mapped_line = Some(line);
+                }
+                if let Some(collector) = self.source_map.as_mut()
+                    && let Some(line) = last_mapped_line
+                    && let Some(logical) = logical_representation
+                    && !current_chunk.is_empty()
+                {
+                    let name = self
+                        .file_order
+                        .get(self.current_file_index)
+                        .map(String::as_str)
+                        .unwrap_or("");
+                    let file = collector.file_id(name);
+                    collector.push(file, line, logical, current_chunk.len() as u16);
+                }
+
                 self.renderer.render_line(
                     &mut *self.writer,
                     &self.format,
@@ -955,6 +1002,7 @@ impl ListingOutput {
 
         // cleanup all the fields of the current line
         self.current_line_group = None;
+        self.current_line_last_offset = None;
         self.current_source = None;
         self.current_line_bytes.clear();
         self.current_line_tokens.clear();
@@ -984,6 +1032,22 @@ impl ListingOutput {
     }
 
     /// Print filename if needed
+    /// Start collecting a source map alongside (or instead of) the rendered
+    /// listing.
+    pub fn collect_source_map(&mut self) {
+        self.source_map = Some(super::SourceMapCollector::new());
+    }
+
+    /// The collected rows, if any were asked for.
+    pub fn take_source_map(&mut self) -> Option<super::RawSourceMap> {
+        self.source_map.take().map(|c| c.finish())
+    }
+
+    /// The collected rows, without consuming them.
+    pub fn source_map_snapshot(&self) -> Option<super::RawSourceMap> {
+        self.source_map.as_ref().map(|c| c.snapshot())
+    }
+
     pub fn manage_fname(&mut self, token: &LocatedToken) {
         // 	dbg!(token);
 

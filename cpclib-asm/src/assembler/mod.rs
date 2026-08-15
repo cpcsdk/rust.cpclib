@@ -1336,23 +1336,7 @@ impl Env {
             self.sna.add_chunk(remu.clone());
         }
 
-        // Add an additional pass to build the listing (this way it is built only one time)
-        if self.options().assemble_options().output_builder.is_some() {
-            let mut tokens = processed_token::build_processed_tokens_list(
-                tokens,
-                std::sync::Arc::new(std::sync::RwLock::new(self))
-            )
-            .expect("No errors must occur here");
-            self.pass = AssemblingPass::ListingPass;
-            self.start_new_pass()?;
-            processed_token::visit_processed_tokens(&mut tokens, self)
-                .map_err(|e| eprintln!("{e}"))
-                .expect("No error can arise in listing output mode; there is a bug somewhere");
-
-            if let Some(trigger) = self.output_trigger.as_mut() {
-                trigger.finish();
-            }
-        }
+        self.run_listing_pass(tokens)?;
 
         // BUG this is definitevely a bug
         // - I have moved file saving here because output was wrong when done before listing
@@ -1360,6 +1344,50 @@ impl Env {
         self.saved_files = Some(self.handle_file_save()?);
 
         Ok((remu, wabp))
+    }
+
+    /// Re-visit the whole program one last time, with the listing machinery
+    /// switched on.
+    ///
+    /// A separate pass because the listing needs *final* addresses: during the
+    /// convergence passes an address can still move, and a listing built from
+    /// them would be quietly wrong. Running it once, after everything has
+    /// settled, is also why it costs one extra pass rather than one per pass.
+    ///
+    /// Drives both the textual/HTML listing and - when
+    /// [`AssemblingOptions::record_source_map`] asked for it - the source map,
+    /// which are two consumers of the same records rather than two mechanisms.
+    /// Does nothing at all when no output was requested.
+    pub fn run_listing_pass<'token, T>(
+        &mut self,
+        tokens: &'token [T]
+    ) -> Result<(), Box<AssemblerError>>
+    where
+        T: Visited + ToSimpleToken + Debug + Sync + ListingElement + MayHaveSpan,
+        <T as cpclib_tokens::ListingElement>::Expr: ExprEvaluationExt + ExprElement + Sync,
+        <<T as cpclib_tokens::ListingElement>::TestKind as TestKindElement>::Expr:
+            ExprEvaluationExt + ExprElement,
+        ProcessedToken<'token, T>: FunctionBuilder
+    {
+        if self.options().assemble_options().output_builder.is_none() {
+            return Ok(());
+        }
+
+        let mut tokens = processed_token::build_processed_tokens_list(
+            tokens,
+            std::sync::Arc::new(std::sync::RwLock::new(self))
+        )
+        .expect("No errors must occur here");
+        self.pass = AssemblingPass::ListingPass;
+        self.start_new_pass()?;
+        processed_token::visit_processed_tokens(&mut tokens, self)
+            .map_err(|e| eprintln!("{e}"))
+            .expect("No error can arise in listing output mode; there is a bug somewhere");
+
+        if let Some(trigger) = self.output_trigger.as_mut() {
+            trigger.finish();
+        }
+        Ok(())
     }
 
     // Add the symbols in the snapshot
@@ -1788,6 +1816,23 @@ impl Env {
     /// entry merely `include`s. The caller is responsible for the offsets
     /// still being meaningful - i.e. for the file not having changed since the
     /// assemble.
+    /// Where each source line ended up, when
+    /// [`AssemblingOptions::record_source_map`] asked for it.
+    ///
+    /// Populated during the listing pass, i.e. once, after the address passes
+    /// have converged - so every address here is final.
+    pub fn source_map(&self) -> Option<crate::assembler::listing_output::RawSourceMap> {
+        let builder = self.options().assemble_options().output_builder.as_ref()?;
+        let mut output = builder.write().unwrap();
+        // The listing accumulates a line and only emits it when the *next*
+        // line starts, so the last one of the program - and the last iteration
+        // of a `REPEAT`, whose body never "changes line" - is still pending
+        // here. Flushing first is the difference between a map that accounts
+        // for every emitted byte and one that quietly loses the tail.
+        output.process_current_line();
+        output.source_map_snapshot()
+    }
+
     pub fn address_of_file_offset(&self, file: &std::path::Path, offset: usize) -> Option<u16> {
         let path = canonical_source_path(file.to_str()?)?;
         self.address_trace_by_file.get(&(path, offset)).copied()

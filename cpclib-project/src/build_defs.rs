@@ -19,14 +19,14 @@
 //! here are exactly the ones a user changes when swapping an image or a tune.
 //!
 //! The values come from `{% set %}` variables, so the build file is expanded
-//! through minijinja first - reusing `bndbuild::sourcemap::expand_with_source_map`,
+//! through minijinja first - reusing [`crate::jinja`]'s environment,
 //! the same expansion the bndbuild language features already run on.
 
 use std::path::{Path, PathBuf};
 
 /// What the build rule says to define, and where that was found.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(super) struct BuildDefinitions {
+pub struct BuildDefinitions {
     /// `(symbol, value)` exactly as written after `-D`, value unquoted.
     pub values: Vec<(String, String)>,
     /// The build file they came from - for telling the user where to look.
@@ -52,7 +52,7 @@ fn candidate_build_files(entry: &Path) -> Vec<PathBuf> {
                 out.push(candidate);
             }
         }
-        if super::definition::is_project_root(current) {
+        if crate::root::is_project_root(current) {
             break;
         }
         dir = current.parent();
@@ -64,7 +64,7 @@ fn candidate_build_files(entry: &Path) -> Vec<PathBuf> {
 ///
 /// Empty when no build file mentions it - which is not an error: plenty of
 /// programs need no definitions at all.
-pub(super) fn definitions_for_entry(entry: &Path) -> BuildDefinitions {
+pub fn definitions_for_entry(entry: &Path) -> BuildDefinitions {
     let Some(entry_name) = entry.file_name().and_then(|n| n.to_str())
     else {
         return BuildDefinitions::default();
@@ -77,7 +77,7 @@ pub(super) fn definitions_for_entry(entry: &Path) -> BuildDefinitions {
         };
         // `{% set FACE="face3" %}` and friends only mean something once
         // expanded; before that every value is a `{{ ... }}` placeholder.
-        let Ok((expanded, _map)) = crate::bndbuild::sourcemap::expand_with_source_map(
+        let Ok(expanded) = crate::jinja::expand(
             &text,
             build_file.parent()
         )
@@ -252,8 +252,7 @@ mod tests {
 "#;
 
     fn defs_of(entry: &str) -> Vec<(String, String)> {
-        let (expanded, _) =
-            crate::bndbuild::sourcemap::expand_with_source_map(BUILD, None).expect("expands");
+        let expanded = crate::jinja::expand(BUILD, None).expect("expands");
         definitions_in_command_for(&expanded, entry)
     }
 

@@ -58,7 +58,7 @@ fn builder(root: &Path) -> ignore::WalkBuilder {
 /// Every file under `root`, walked in parallel and returned in path order.
 ///
 /// Directories are not included: every caller here wants files.
-pub(crate) fn files_under(root: &Path) -> Vec<ignore::DirEntry> {
+pub fn files_under(root: &Path) -> Vec<ignore::DirEntry> {
     let found = Mutex::new(Vec::new());
     builder(root).build_parallel().run(|| {
         Box::new(|entry| {
@@ -78,7 +78,7 @@ pub(crate) fn files_under(root: &Path) -> Vec<ignore::DirEntry> {
 
 /// [`files_under`] across several roots, de-duplicated by path - workspace
 /// roots can nest.
-pub(crate) fn files_under_all(roots: &[PathBuf]) -> Vec<ignore::DirEntry> {
+pub fn files_under_all(roots: &[PathBuf]) -> Vec<ignore::DirEntry> {
     let mut found: Vec<ignore::DirEntry> = roots.iter().flat_map(|r| files_under(r)).collect();
     found.sort_by(|a, b| a.path().cmp(b.path()));
     found.dedup_by(|a, b| a.path() == b.path());

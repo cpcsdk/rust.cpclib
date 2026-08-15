@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { isDebugSessionActive, registerDebugging } from './debug';
 import { workspace, ExtensionContext, window } from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -249,6 +250,8 @@ export function activate(context: ExtensionContext) {
         vscode.commands.registerCommand('cpclib.clearPeepholeResults', clearPeephole),
         vscode.commands.registerCommand('cpclib.assembleThisFile', assembleActiveFile),
     );
+
+    registerDebugging(context, () => resolvedServerPath);
 
     context.subscriptions.push(
         vscode.debug.onDidChangeBreakpoints(e => { void syncBreakpointDirectives(e); }),
@@ -1403,6 +1406,13 @@ async function updateRegistersStatusBar(editor: vscode.TextEditor | undefined): 
  * label from a mnemonic needs a parse, not a regex.
  */
 async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): Promise<void> {
+    // During a debug session a red dot is a *live* breakpoint: VS Code sends it
+    // to the adapter, which sets it in the emulator. Writing the directive as
+    // well would edit the user's source behind their back and desynchronise the
+    // two - so the writer stands down for the duration.
+    if (isDebugSessionActive()) {
+        return;
+    }
     if (!vscode.workspace.getConfiguration('cpclib').get<boolean>('breakpointDirective', true)) {
         return;
     }

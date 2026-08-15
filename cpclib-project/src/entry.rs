@@ -19,16 +19,14 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use tower_lsp::lsp_types::Url;
-
 use cpclib_tokens::ListingElement;
 use cpclib_tokens::symbols::SymbolsTableTrait;
 
-use super::definition::{extract_include_filenames, resolve_include_path};
+use crate::root::{extract_include_filenames, resolve_include_path};
 
 /// What to assemble in order to get real addresses for a document.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Entry {
+pub enum Entry {
     /// Assemble this other file; the document is somewhere inside its include
     /// graph.
     Project(PathBuf),
@@ -84,11 +82,10 @@ fn contains_run_word(text: &str) -> bool {
 
 /// The project root for `doc_uri`: the highest ancestor directory still inside
 /// the project, found by the same markers `resolve_include_path` stops at.
-fn project_root(doc_uri: &Url) -> Option<PathBuf> {
-    let path = doc_uri.to_file_path().ok()?;
-    let mut dir = path.parent()?.to_path_buf();
+fn project_root(document: &Path) -> Option<PathBuf> {
+    let mut dir = document.parent()?.to_path_buf();
     loop {
-        if super::definition::is_project_root(&dir) {
+        if crate::root::is_project_root(&dir) {
             return Some(dir);
         }
         match dir.parent() {
@@ -105,7 +102,7 @@ fn project_root(doc_uri: &Url) -> Option<PathBuf> {
 /// One walk, because these were two - `entry_for` reading every `.asm` and
 /// `sources_fingerprint` stat-ing them all again, from four call sites, on
 /// every request.
-pub(super) struct Workspace {
+pub struct Workspace {
     pub sources: Vec<(PathBuf, String)>,
     /// Newest modification time across every source that could affect a
     /// build - `.asm` and the build files themselves. Changes exactly when a
@@ -118,7 +115,7 @@ pub(super) struct Workspace {
 /// build rule changes `-D` values, which changes addresses - but are never
 /// sources.
 fn build_affecting_files(root: &Path) -> impl Iterator<Item = (ignore::DirEntry, bool)> {
-    crate::common::walk::files_under(root)
+    crate::walk::files_under(root)
         .into_iter()
         .filter_map(|entry| {
             let extension = entry.path().extension().and_then(|e| e.to_str())?;
@@ -142,14 +139,14 @@ fn newest_mtime(entry: &ignore::DirEntry) -> u128 {
 /// This is the cache *key* for everything below it, so it has to be the cheap
 /// half of the walk: `stat` per candidate, no `read_to_string`. When it matches
 /// what a previous answer was computed under, nothing else runs at all.
-pub(super) fn fingerprint_of(root: &Path) -> u128 {
+pub fn fingerprint_of(root: &Path) -> u128 {
     build_affecting_files(root)
         .map(|(entry, _)| newest_mtime(&entry))
         .max()
         .unwrap_or(0)
 }
 
-pub(super) fn scan_workspace(root: &Path) -> Workspace {
+pub fn scan_workspace(root: &Path) -> Workspace {
     let mut sources = Vec::new();
     let mut fingerprint = 0u128;
 
@@ -172,9 +169,9 @@ pub(super) fn scan_workspace(root: &Path) -> Workspace {
 
 /// [`entry_for`] with a workspace scan of its own, for callers that ask once
 /// and have no fingerprint to reuse.
-pub(super) fn entry_of(doc_uri: &Url, configured: Option<&str>) -> Entry {
-    match project_root(doc_uri) {
-        Some(root) => entry_for(doc_uri, configured, &scan_workspace(&root)),
+pub fn entry_of(document: &Path, configured: Option<&str>) -> Entry {
+    match project_root(document) {
+        Some(root) => entry_for(document, configured, &scan_workspace(&root)),
         None => Entry::Unknown
     }
 }
@@ -183,12 +180,12 @@ pub(super) fn entry_of(doc_uri: &Url, configured: Option<&str>) -> Entry {
 ///
 /// `configured` is `[asm] entry` from `cpclib-lsp.toml`, taken as read when
 /// set - it exists precisely so a user can settle the ambiguous case below.
-pub(super) fn entry_for(doc_uri: &Url, configured: Option<&str>, workspace: &Workspace) -> Entry {
-    let Some(root) = project_root(doc_uri)
+pub fn entry_for(document: &Path, configured: Option<&str>, workspace: &Workspace) -> Entry {
+    let Some(root) = project_root(document)
     else {
         return Entry::Unknown;
     };
-    entry_in_graph(doc_uri, configured, &root, &graph_of(workspace))
+    entry_in_graph(document, configured, &root, &graph_of(workspace))
 }
 
 /// Everything resolving an entry needs that does **not** depend on which
@@ -201,7 +198,7 @@ pub(super) fn entry_for(doc_uri: &Url, configured: Option<&str>, workspace: &Wor
 /// a workspace-wide scan quadratic. Held by
 /// `AssemblyAnalyzer::project_graph_cached` against the project fingerprint,
 /// so it is built once per change instead.
-pub(super) struct ProjectGraph {
+pub struct ProjectGraph {
     /// Edges resolved from the *including* file, since a file's own directory
     /// drives include resolution.
     includes: HashMap<PathBuf, Vec<PathBuf>>,
@@ -209,18 +206,14 @@ pub(super) struct ProjectGraph {
     run_roots: Vec<PathBuf>
 }
 
-pub(super) fn graph_of(workspace: &Workspace) -> ProjectGraph {
+pub fn graph_of(workspace: &Workspace) -> ProjectGraph {
     let sources = &workspace.sources;
 
     let mut includes: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
     for (path, text) in sources {
-        let Ok(uri) = Url::from_file_path(path)
-        else {
-            continue;
-        };
         let targets = extract_include_filenames(text)
             .iter()
-            .filter_map(|name| resolve_include_path(name, &uri))
+            .filter_map(|name| resolve_include_path(name, path))
             .filter_map(|p| std::fs::canonicalize(p).ok())
             .collect();
         includes.insert(path.clone(), targets);
@@ -244,15 +237,13 @@ pub(super) fn graph_of(workspace: &Workspace) -> ProjectGraph {
 ///
 /// Reachability over a graph that is already in hand - cheap enough to run per
 /// document, which is the whole point of the split.
-pub(super) fn entry_in_graph(
-    doc_uri: &Url,
+pub fn entry_in_graph(
+    document: &Path,
     configured: Option<&str>,
     root: &Path,
     graph: &ProjectGraph
 ) -> Entry {
-    let Ok(document) = doc_uri
-        .to_file_path()
-        .and_then(|p| std::fs::canonicalize(p).map_err(|_| ()))
+    let Ok(document) = std::fs::canonicalize(document)
     else {
         return Entry::Unknown;
     };
@@ -333,7 +324,7 @@ mod tests {
         );
         let code = write(tmp.path().as_std_path(), "demo_code.asm", "demo_start\n    ret\n");
 
-        let uri = Url::from_file_path(&code).unwrap();
+        let uri = code.clone();
         assert_eq!(entry_of(&uri, None), Entry::Project(sna));
     }
 
@@ -345,7 +336,7 @@ mod tests {
         project(tmp.path().as_std_path());
         let test = write(tmp.path().as_std_path(), "test1.asm", "    run start\nstart\n    ret\n");
 
-        let uri = Url::from_file_path(&test).unwrap();
+        let uri = test.clone();
         assert_eq!(entry_of(&uri, None), Entry::Standalone);
     }
 
@@ -368,7 +359,7 @@ mod tests {
         );
         let shared = write(tmp.path().as_std_path(), "shared.asm", "start\n    ret\n");
 
-        let uri = Url::from_file_path(&shared).unwrap();
+        let uri = shared.clone();
         assert_eq!(entry_of(&uri, None), Entry::Unknown);
     }
 
@@ -389,7 +380,7 @@ mod tests {
         );
         let shared = write(tmp.path().as_std_path(), "shared.asm", "start\n    ret\n");
 
-        let uri = Url::from_file_path(&shared).unwrap();
+        let uri = shared.clone();
         assert_eq!(entry_of(&uri, Some("one.asm")), Entry::Project(one));
     }
 
@@ -400,7 +391,7 @@ mod tests {
         project(tmp.path().as_std_path());
         let orphan = write(tmp.path().as_std_path(), "orphan.asm", "    nop\n");
 
-        let uri = Url::from_file_path(&orphan).unwrap();
+        let uri = orphan.clone();
         assert_eq!(entry_of(&uri, None), Entry::Unknown);
     }
 
@@ -441,7 +432,7 @@ mod tests {
 /// "make no address-aware suggestion". That covers an ambiguous or missing
 /// entry, an entry that will not assemble, and - importantly - a document
 /// whose buffer no longer matches the file on disk.
-pub(super) struct ProjectAddresses {
+pub struct ProjectAddresses {
     pub env: std::sync::Arc<cpclib_asm::assembler::Env>,
     /// The document's own canonical path, which is the key its tokens are
     /// recorded under in `env`.
@@ -449,8 +440,8 @@ pub(super) struct ProjectAddresses {
 }
 
 /// The project root for a path, exposed so callers can fingerprint it.
-pub(super) fn root_of(doc_uri: &Url) -> Option<PathBuf> {
-    project_root(doc_uri)
+pub fn root_of(document: &Path) -> Option<PathBuf> {
+    project_root(document)
 }
 
 /// Assemble `entry` and hand back addresses usable for `document`.
@@ -459,18 +450,17 @@ pub(super) fn root_of(doc_uri: &Url) -> Option<PathBuf> {
 /// against *byte offsets in the file as assembled*; if the editor buffer has
 /// unsaved changes those offsets have shifted, and every answer would be
 /// confidently wrong. Being quiet while the user types is the right trade.
-pub(super) fn assemble_entry(
+pub fn assemble_entry(
     entry: &Path,
     case_sensitive: bool,
     disabled: enumflags2::BitFlags<cpclib_asm::WarningCategory>
 ) -> Option<cpclib_asm::assembler::Env> {
     let entry_text = std::fs::read_to_string(entry).ok()?;
-    let entry_uri = Url::from_file_path(entry).ok()?;
 
     let mut parse = cpclib_asm::parser::context::ParserOptions::default();
     parse.set_quiet(true);
     parse.set_disabled_warning_categories(disabled);
-    for dir in super::definition::ancestor_search_directories(&entry_uri) {
+    for dir in crate::root::ancestor_directories(entry) {
         let _ = parse.add_search_path(dir);
     }
     let builder = parse
@@ -493,7 +483,7 @@ pub(super) fn assemble_entry(
     // all without them, so the assemble fails and no address is trustworthy.
     // Read them from the build rule rather than asking the user to restate
     // them somewhere else, so they cannot drift apart. See `build_defs`.
-    let definitions = super::build_defs::definitions_for_entry(entry);
+    let definitions = crate::build_defs::definitions_for_entry(entry);
     for (name, value) in &definitions.values {
         let value = match value.parse::<i32>() {
             Ok(number) => cpclib_tokens::ExprResult::from(number),
@@ -504,7 +494,7 @@ pub(super) fn assemble_entry(
     let options = cpclib_asm::EnvOptions::new(
         parse,
         assemble,
-        std::sync::Arc::new(cpclib_common::event::DiscardObserver)
+        std::sync::Arc::new(cpclib_bndbuild::cpclib_common::event::DiscardObserver)
     );
 
     // Only a *complete* assemble is usable: a half-laid-out program's

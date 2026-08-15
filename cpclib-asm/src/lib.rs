@@ -299,6 +299,25 @@ impl AssemblingOptions {
         self
     }
 
+    /// Collect a source map: which address each source line ended up at, and
+    /// how many bytes it emitted.
+    ///
+    /// Independent of the listing *text* - a caller can want the map, the
+    /// listing, or both. Unlike `write_listing_output` this is **not** a no-op
+    /// under `dry_run`, because nothing is written anywhere: the rows are read
+    /// back out of the `Env` afterwards.
+    pub fn record_source_map(&mut self) -> &mut Self {
+        let builder = self.output_builder.get_or_insert_with(|| {
+            Arc::new(RwLock::new(ListingOutput::new(std::io::sink())))
+        });
+        {
+            let mut output = builder.write().unwrap();
+            output.on();
+            output.collect_source_map();
+        }
+        self
+    }
+
     /// No-op under `dry_run` — see [`Self::write_listing_output`].
     pub fn write_listing_output_with_format<W: 'static + Write + Send + Sync>(
         &mut self,

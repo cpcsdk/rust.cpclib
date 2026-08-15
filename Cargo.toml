@@ -18,6 +18,8 @@ members = [
   "cpclib-rasm-basm-tests",
   "cpclib-python",
   "cpclib-common",
+  "cpclib-project",
+  "cpclib-dap",
   "cpclib-cpr",
   "cpclib-cprcli", 
    "cpclib-crunch",
@@ -65,6 +67,8 @@ default-members = [
   "cpclib-catalog",
   "cpclib-catart",
   "cpclib-common",
+  "cpclib-project",
+  "cpclib-dap",
   "cpclib-cpr",
   "cpclib-cprcli",
    "cpclib-crunch",
@@ -125,6 +129,8 @@ cpclib-catart = { version = "0.11.0", path = "cpclib-catart", default-features =
 cpclib-catalog = { version = "0.11.0", path = "cpclib-catalog", default-features = false }
 cpclib-bndbuild-tauri = { version = "0.1.0", path = "cpclib-bndbuild-tauri/src-tauri", default-features = false }
 cpclib-common = { version = "0.11.0", path = "cpclib-common", default-features = false }
+cpclib-project = { version = "0.11.0", path = "cpclib-project", default-features = false }
+cpclib-dap = { version = "0.11.0", path = "cpclib-dap", default-features = false }
 cpclib-cpr = { version = "0.11.0", path = "cpclib-cpr", default-features = false }
 cpclib-cprcli = { version = "0.11.0", path = "cpclib-cprcli", default-features = false }
 cpclib-crunch = { version = "0.11.0", path = "cpclib-crunch", default-features = false }
