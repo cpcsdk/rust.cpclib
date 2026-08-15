@@ -891,7 +891,8 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     crate::basm::peephole::FIX_ALL_COMMAND,
     crate::basm::peephole::ANALYZE_COMMAND,
     crate::basm::peephole::CLEAR_COMMAND,
-    "cpclib.assembleFile"
+    "cpclib.assembleFile",
+    "cpclib.breakpointEdit"
 ];
 
 #[tower_lsp::async_trait]
@@ -2586,6 +2587,39 @@ impl LanguageServer for CpcLspBackend {
                 None => vec![]
             };
             return Ok(Some(serde_json::json!(targets)));
+        }
+
+        // The editor's red dot, written into the source. Arguments are
+        // `[uri, line (0-based), enable]`; the reply is a single `TextEdit`
+        // for the client to apply, or `null` when the line cannot carry one
+        // (nothing executes on it) or already says what is being asked for.
+        //
+        // The client could not compute this itself: deciding where the first
+        // *instruction* on a line starts means knowing whether the word at the
+        // front is a label or a mnemonic, which in basm is a parsing question,
+        // not a lexical one.
+        if params.command == "cpclib.breakpointEdit" {
+            let mut args = params.arguments.into_iter();
+            let uri = args
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| Url::parse(s).ok()));
+            let line = args.next().and_then(|v| v.as_u64()).map(|l| l as u32);
+            let enable = args.next().and_then(|v| v.as_bool()).unwrap_or(true);
+            let (Some(uri), Some(line)) = (uri, line)
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+            let edit = crate::basm::breakpoint::breakpoint_edit(
+                &self.asm_analyzer,
+                &document,
+                line,
+                enable
+            );
+            return Ok(edit.map(|e| serde_json::json!(e)));
         }
 
         if params.command == "cpclib.getEmbeddedBndbuildFiles" {

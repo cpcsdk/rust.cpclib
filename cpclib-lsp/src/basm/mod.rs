@@ -36,6 +36,8 @@ pub mod format;
 pub mod hover;
 pub mod includes;
 pub mod inlay_hints;
+pub(crate) mod breakpoint;
+mod lint_smc_label;
 pub mod overflow;
 pub mod parse;
 pub mod peephole;

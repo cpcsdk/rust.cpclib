@@ -1,6 +1,7 @@
 //! Diagnostics for assembly files: parse/assembly errors mapped to LSP
 //! diagnostics (recursive walk of the `AssemblerError` tree).
 
+use cpclib_asm::preamble::ListingElement;
 use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
@@ -138,6 +139,19 @@ impl AssemblyAnalyzer {
             if self.config().warnings.unused_bindings {
                 collect_unused_binding_warnings(&listing, document, &mut diagnostics);
             }
+            if self.config().warnings.smc_label_without_equ {
+                collect_smc_label_warnings(&listing, document, &mut diagnostics);
+            }
+            // Grey out the branches that will never assemble. The semantic
+            // token pass marks them too, but only with the `deprecated`
+            // modifier, which most themes render as strikethrough or ignore
+            // outright - `Unnecessary` is what actually fades code in an
+            // editor, and it is a plain LSP diagnostic tag rather than a
+            // client-specific extension. Free here: `env` is the dry run this
+            // block already paid for.
+            if super::token::flatten_listing(listing.iter()).any(|t| t.is_if()) {
+                collect_inactive_region_hints(&listing, &mut env, document, &mut diagnostics);
+            }
             // Either the warning class is on, or the user asked for this
             // document by hand (`cpclib.analyzePeephole`). The default is off
             // because answering costs a full project assemble.
@@ -165,6 +179,103 @@ impl AssemblyAnalyzer {
         }
 
         diagnostics
+    }
+}
+
+/// A label sitting where `equ $-1` was meant.
+///
+/// See [`super::lint_smc_label`] for what does and does not qualify. Reported
+/// as a warning rather than an error because the file does assemble - the
+/// damage only shows up when something patches through the label at run time.
+fn collect_smc_label_warnings(
+    listing: &cpclib_asm::parser::obtained::LocatedListing,
+    document: &Document,
+    out: &mut Vec<Diagnostic>
+) {
+    for found in super::lint_smc_label::find_suspicious_smc_labels(listing) {
+        let line_text = document.line(found.line as usize).unwrap_or_default();
+        let Some(col) = line_text.find(&found.name) else {
+            continue;
+        };
+        let start = crate::common::document::byte_offset_to_utf16_col(&line_text, col) as u32;
+        let end = start + found.name.chars().count() as u32;
+        out.push(Diagnostic {
+            range: Range {
+                start: Position {
+                    line: found.line,
+                    character: start
+                },
+                end: Position {
+                    line: found.line,
+                    character: end
+                }
+            },
+            severity: Some(DiagnosticSeverity::WARNING),
+            source: Some("basm".to_string()),
+            message: format!(
+                "'{}' marks the address after this instruction, not its operand. Did you mean \
+                 '{} {}'?",
+                found.name,
+                found.name,
+                found.suggestion()
+            ),
+            ..Default::default()
+        });
+    }
+}
+
+/// Report each statically-dead `IF`/`ELSEIF`/`ELSE` branch as one faded
+/// region.
+///
+/// One diagnostic per *contiguous run* of lines rather than per line: a
+/// twenty-line disabled block is one thing the reader is being told, and
+/// twenty entries in the Problems panel for it would be noise. Severity is
+/// `HINT` for the same reason - the code is not wrong, it is simply not the
+/// branch being built.
+fn collect_inactive_region_hints(
+    listing: &cpclib_asm::preamble::LocatedListing,
+    env: &mut cpclib_asm::assembler::Env,
+    document: &Document,
+    out: &mut Vec<Diagnostic>
+) {
+    let inactive = super::semantic_tokens_ast::inactive_if_branch_lines(listing, env);
+    if inactive.is_empty() {
+        return;
+    }
+
+    let mut lines: Vec<u32> = inactive.into_iter().collect();
+    lines.sort_unstable();
+
+    let line_end = |line: u32| -> u32 {
+        document
+            .line(line as usize)
+            .map(|l| l.trim_end_matches(['\r', '\n']).chars().count() as u32)
+            .unwrap_or(0)
+    };
+
+    let mut start = lines[0];
+    let mut previous = lines[0];
+    for &line in lines.iter().skip(1).chain(std::iter::once(&u32::MAX)) {
+        if line == previous + 1 {
+            previous = line;
+            continue;
+        }
+        out.push(Diagnostic {
+            range: Range {
+                start: Position { line: start, character: 0 },
+                end: Position {
+                    line: previous,
+                    character: line_end(previous)
+                }
+            },
+            severity: Some(DiagnosticSeverity::HINT),
+            source: Some("basm".to_string()),
+            message: "Inactive code: this branch is not the one that assembles".to_string(),
+            tags: Some(vec![DiagnosticTag::UNNECESSARY]),
+            ..Default::default()
+        });
+        start = line;
+        previous = line;
     }
 }
 
@@ -1272,5 +1383,74 @@ mod tests {
             !diags.iter().any(|d| d.message.contains("is never used")),
             "{diags:?}"
         );
+    }
+}
+
+
+#[cfg(test)]
+mod inactive_region_hint_tests {
+    //! Disabled branches have to *look* disabled.
+    //!
+    //! The semantic-token pass already marks them, but only with the
+    //! `deprecated` modifier - which themes are free to render as
+    //! strikethrough, or not at all. `Unnecessary` is the tag editors
+    //! actually fade text for.
+
+    use tower_lsp::lsp_types::*;
+
+    use super::*;
+    use crate::basm::AssemblyAnalyzer;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn faded_lines(text: &str) -> Vec<(u32, u32)> {
+        AssemblyAnalyzer::new()
+            .analyze(&doc(text))
+            .into_iter()
+            .filter(|d| {
+                d.tags
+                    .as_ref()
+                    .is_some_and(|t| t.contains(&DiagnosticTag::UNNECESSARY))
+            })
+            .map(|d| (d.range.start.line, d.range.end.line))
+            .collect()
+    }
+
+    /// The report that started this: `if false` with a `print` in each branch.
+    #[test]
+    fn the_false_branch_is_faded_and_the_taken_one_is_not() {
+        let faded = faded_lines("if false\n\tprint \"true\"\nelse\n\tprint \"false\"\nendif\n");
+        assert_eq!(faded, vec![(1, 1)], "only the `if false` body fades");
+    }
+
+    /// And the other way round.
+    #[test]
+    fn the_else_branch_fades_when_the_condition_holds() {
+        let faded = faded_lines("if true\n\tprint \"true\"\nelse\n\tprint \"false\"\nendif\n");
+        assert_eq!(faded, vec![(3, 3)]);
+    }
+
+    /// A block is one region, not one diagnostic per line - the reader is
+    /// being told a single thing.
+    #[test]
+    fn a_run_of_disabled_lines_is_reported_once() {
+        let faded = faded_lines("if 0\n\tld a, 1\n\tld b, 2\n\tld c, 3\nendif\n");
+        assert_eq!(faded, vec![(1, 3)]);
+    }
+
+    /// Nothing to fade when the condition cannot be decided.
+    #[test]
+    fn an_undecidable_condition_fades_nothing() {
+        let faded = faded_lines("if truly_undefined_symbol\n\tld a, 1\nelse\n\tld a, 2\nendif\n");
+        assert!(faded.is_empty(), "{faded:?}");
+    }
+
+    /// A file without any `IF` must not pay for this at all, and must not
+    /// grow a diagnostic.
+    #[test]
+    fn ordinary_code_is_untouched() {
+        assert!(faded_lines("\tld a, 1\n\tld b, 2\n").is_empty());
     }
 }

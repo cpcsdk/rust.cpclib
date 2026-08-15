@@ -76,6 +76,9 @@ impl AssemblyAnalyzer {
         if let Some(a) = self.no_op_or_improvable_instruction_action(document, range) {
             actions.push(a);
         }
+        if let Some(a) = self.smc_label_equ_action(document, range) {
+            actions.push(a);
+        }
         if let Some(a) = self.fake_instruction_to_real_action(document, range) {
             actions.push(a);
         }

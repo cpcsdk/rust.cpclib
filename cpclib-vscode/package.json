@@ -193,6 +193,11 @@
     "configuration": {
       "title": "CPClib LSP",
       "properties": {
+        "cpclib.breakpointDirective": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mirror editor breakpoints (the red dot) into the source as a basm 'breakpoint' directive on that line, removing it when the breakpoint is cleared. Turn this off if you would rather your .asm files were never edited on your behalf."
+        },
         "cpclib-lsp.serverPath": {
           "type": "string",
           "default": "cpclib-lsp",

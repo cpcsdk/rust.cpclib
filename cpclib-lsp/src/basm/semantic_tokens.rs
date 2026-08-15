@@ -1096,6 +1096,30 @@ mod inactive_if_branch_dimming_tests {
         );
     }
 
+    /// The other half of the user's report: `if false` must dim the *first*
+    /// branch, exactly as `if 0` does. `true`/`false` are expression literals
+    /// in basm, not symbols, so there is nothing here that needs a symbol
+    /// table to decide.
+    #[test]
+    fn a_false_literal_dims_the_first_branch() {
+        let text = "if false\n\tprint \"true\"\nelse\n\tprint \"false\"\nendif\n";
+        let d = doc(text);
+        let decoded = decode_lines_with_modifiers(&AssemblyAnalyzer::new().semantic_tokens(&d));
+        assert!(!decoded.is_empty(), "expected some tokens for {text:?}");
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 1 && m & MOD_INACTIVE != 0),
+            "the `if false` branch must be dimmed: {decoded:?}"
+        );
+        assert!(
+            decoded
+                .iter()
+                .any(|&(l, m)| l == 3 && m & MOD_INACTIVE == 0),
+            "the taken `else` branch must not be dimmed: {decoded:?}"
+        );
+    }
+
     /// Regression test for a real user report: `PRINT` isn't walked by the
     /// AST-driven scanner (`ast_semantic_tokens`), so it's entirely claimed
     /// by the byte-level fallback scanner further down `semantic_tokens` -

@@ -134,7 +134,12 @@ pub struct AsmWarningClasses {
     /// Optimizations in File / Selection / Workspace*), which reports for the
     /// chosen document exactly as if this were on, until
     /// `cpclib.clearPeephole`.
-    pub peephole_optimizer: bool
+    pub peephole_optimizer: bool,
+    /// LSP-only. A label written where the self-modifying-code idiom wants
+    /// `equ $-1` - `ld a, 0 : .counter` instead of
+    /// `ld a, 0 : .counter equ $-1`. Both assemble; only one names the byte
+    /// the patch is meant to reach.
+    pub smc_label_without_equ: bool
 }
 
 impl Default for AsmWarningClasses {
@@ -145,7 +150,8 @@ impl Default for AsmWarningClasses {
             override_memory: true,
             overflow: true,
             unused_bindings: true,
-            peephole_optimizer: false
+            peephole_optimizer: false,
+            smc_label_without_equ: true
         }
     }
 }
@@ -380,6 +386,10 @@ unused_bindings = true
 # Off by default: answering needs a whole-project assemble. Ask on demand
 # with the "CPClib: Find Peephole Optimizations" commands instead.
 peephole_optimizer = false
+# A label written where the self-modifying-code idiom wants "equ $-1":
+# "ld a, 0 : .counter" names the address *after* the instruction, so a patch
+# through it overwrites the next opcode instead of the operand.
+smc_label_without_equ = true
 
 [basic]
 warnings_as_errors = false

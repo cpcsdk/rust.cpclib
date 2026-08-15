@@ -250,6 +250,10 @@ export function activate(context: ExtensionContext) {
         vscode.commands.registerCommand('cpclib.assembleThisFile', assembleActiveFile),
     );
 
+    context.subscriptions.push(
+        vscode.debug.onDidChangeBreakpoints(e => { void syncBreakpointDirectives(e); }),
+    );
+
     // Keep the `cpclib.cursorOnInkColor` context key (used by the
     // "Pick CPC Ink Color" context-menu entry's `when` clause) in sync with
     // the cursor, so the menu entry only shows up where it'd actually do
@@ -1368,4 +1372,88 @@ async function updateRegistersStatusBar(editor: vscode.TextEditor | undefined): 
     const lines = rows.map(([name, value]) => `${name.padEnd(2)} = ${value ?? '?'}`);
     registersStatusBarItem.tooltip = `Registers at cursor:\n${lines.join('\n')}`;
     registersStatusBarItem.show();
+}
+
+
+// ---------------------------------------------------------------------------
+// Breakpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirror VS Code's breakpoints into `breakpoint` directives in the source.
+ *
+ * There is no debug adapter here, and writing one would not help: the red dot
+ * has to become an *address* for an emulator to stop on, and every emulator
+ * takes that list differently - when it takes one at all. basm already has a
+ * `breakpoint` directive that travels into the snapshot, so the shortest path
+ * from the dot to a stopped emulator is to put the directive in the file.
+ *
+ * Which means toggling a breakpoint edits the source. That is a real
+ * side-effect and not everyone will want it, hence
+ * `cpclib.breakpointDirective` - but it is on by default, since a red dot that
+ * does nothing at all is worse.
+ *
+ * The server decides *where* on the line the directive goes: in basm, telling a
+ * label from a mnemonic needs a parse, not a regex.
+ */
+async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): Promise<void> {
+    if (!vscode.workspace.getConfiguration('cpclib').get<boolean>('breakpointDirective', true)) {
+        return;
+    }
+    if (!client) {
+        return;
+    }
+
+    const wanted: { uri: vscode.Uri; line: number; enable: boolean }[] = [];
+    const collect = (breakpoints: readonly vscode.Breakpoint[], enable: boolean) => {
+        for (const breakpoint of breakpoints) {
+            if (!(breakpoint instanceof vscode.SourceBreakpoint)) { continue; }
+            const uri = breakpoint.location.uri;
+            if (!uri.fsPath.toLowerCase().endsWith('.asm')) { continue; }
+            wanted.push({ uri, line: breakpoint.location.range.start.line, enable });
+        }
+    };
+    collect(event.added, true);
+    collect(event.removed, false);
+    // A changed breakpoint may have moved: VS Code reports the new location
+    // only, so the directive is (re)placed there and any stale one elsewhere
+    // is left for the user - guessing at the old line would be worse than
+    // leaving a directive they can see.
+    collect(event.changed, true);
+
+    if (wanted.length === 0) {
+        return;
+    }
+
+    const edit = new vscode.WorkspaceEdit();
+    for (const { uri, line, enable } of wanted) {
+        try {
+            // The document must be open for the server to have parsed it.
+            await vscode.workspace.openTextDocument(uri);
+            const textEdit = await client.sendRequest<{
+                range: { start: { line: number; character: number }; end: { line: number; character: number } };
+                newText: string;
+            } | null>(
+                'workspace/executeCommand',
+                { command: 'cpclib.breakpointEdit', arguments: [uri.toString(), line, enable] },
+            );
+            if (!textEdit) { continue; }
+            edit.replace(
+                uri,
+                new vscode.Range(
+                    textEdit.range.start.line, textEdit.range.start.character,
+                    textEdit.range.end.line, textEdit.range.end.character,
+                ),
+                textEdit.newText,
+            );
+        } catch (err) {
+            client.outputChannel.appendLine(
+                `[breakpoints] cpclib.breakpointEdit failed for ${uri.fsPath}:${line + 1}: ${err}`,
+            );
+        }
+    }
+
+    if (edit.size > 0) {
+        await vscode.workspace.applyEdit(edit);
+    }
 }

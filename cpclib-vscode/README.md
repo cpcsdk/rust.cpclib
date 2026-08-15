@@ -25,6 +25,8 @@ The extension provides comprehensive support for Z80 assembly files (`.asm`, `.z
 #### Real-time Diagnostics
 - **Syntax errors** as you type
 - **Assembly warnings** (overflow, unused labels, etc.)
+- **Disabled code is greyed out**: a branch of an `IF`/`ELSEIF`/`ELSE` whose condition can be decided at assembly time fades, the same way an inactive `#if` block does in C
+- **Forgotten `equ $-1`**: `ld a, 0 : .counter` names the address *after* the instruction, so a self-modifying patch through it hits the next opcode instead of the operand. Flagged, with a quickfix that writes the `equ $-1` (or `$-2` for a 16-bit load)
 - **Instruction validation** with timing information
 - **Macro/struct expansion errors**
 
@@ -34,6 +36,7 @@ The extension provides comprehensive support for Z80 assembly files (`.asm`, `.z
 - **CPC color picker**: Right-click on `INK`/`BORDER`/`PAPER` directives to pick from the authentic 27-color CPC palette
 - **Format on type**: Auto-formatting for consistent code style
 - **Embedded BASIC**: Full support for LOCOMOTIVE BASIC blocks within assembly files
+- **Breakpoints**: clicking the editor gutter (the red dot) writes a basm `breakpoint` directive in front of that line's instruction, and clearing it takes the directive back out - so the breakpoint travels into the snapshot and the emulator honours it. Disable with `cpclib.breakpointDirective` if you would rather your sources were never edited on your behalf
 
 #### Code Actions & Refactoring
 - **Extract to macro**: Convert code selection into a reusable macro
@@ -115,6 +118,9 @@ Access via *File → Preferences → Settings* and search for "cpclib":
     "cpclib-lsp.serverPath": "/path/to/custom/cpclib-lsp"
   }
   ```
+
+- **`cpclib.breakpointDirective`** (default: `true`)  
+  Mirror editor breakpoints into the source as basm `breakpoint` directives. The directive is inserted in front of the first *instruction* on the line, so a label on that line keeps pointing where it did; removing the breakpoint removes it again. Set to `false` to leave your files untouched.
 
 - **`cpclib-lsp.trace.server`** (default: `"off"`)  
   LSP communication tracing for debugging. Options: `"off"`, `"messages"`, `"verbose"`.

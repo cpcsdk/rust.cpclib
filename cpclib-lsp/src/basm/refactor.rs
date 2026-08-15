@@ -176,6 +176,54 @@ impl AssemblyAnalyzer {
         })
     }
 
+    /// Offer to complete the self-modifying-code idiom: turn `.counter` into
+    /// `.counter equ $-1`.
+    ///
+    /// Appends rather than replaces - the label is fine as written, it is the
+    /// missing half that is the bug, and appending leaves whatever spacing and
+    /// comment the line already had untouched.
+    pub(super) fn smc_label_equ_action(
+        &self,
+        document: &Document,
+        range: Range
+    ) -> Option<CodeAction> {
+        if !self.config().warnings.smc_label_without_equ {
+            return None;
+        }
+        let listing = self.parse_document(document).ok()?;
+        let cursor_line = range.start.line;
+
+        let found = super::lint_smc_label::find_suspicious_smc_labels(&listing)
+            .into_iter()
+            .find(|f| f.line == cursor_line)?;
+
+        let line_text = document.line(cursor_line as usize)?;
+        let column = line_text.find(&found.name)?;
+        let after_label = crate::common::document::byte_offset_to_utf16_col(
+            &line_text,
+            column + found.name.len()
+        ) as u32;
+
+        let suggestion = found.suggestion();
+        let position = Position {
+            line: cursor_line,
+            character: after_label
+        };
+        Some(CodeAction {
+            title: format!("Name the operand byte: '{} {suggestion}'", found.name),
+            kind: Some(CodeActionKind::QUICKFIX),
+            edit: Some(single_file_edit(
+                document.uri.clone(),
+                Range {
+                    start: position,
+                    end: position
+                },
+                format!(" {suggestion}")
+            )),
+            ..Default::default()
+        })
+    }
+
     /// Offer to replace a "fake instruction" (accepted by this parser as a
     /// convenience, assembled using several real opcodes, e.g. `ld hl, de`)
     /// with the real instruction(s) it expands to, joined on one line with
