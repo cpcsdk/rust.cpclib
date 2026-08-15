@@ -150,6 +150,11 @@
         }
       ]
     },
+    "breakpoints": [
+      {
+        "language": "basm"
+      }
+    ],
     "taskDefinitions": [
       {
         "type": "bndbuild",

@@ -149,7 +149,9 @@ impl AssemblyAnalyzer {
             // editor, and it is a plain LSP diagnostic tag rather than a
             // client-specific extension. Free here: `env` is the dry run this
             // block already paid for.
-            if super::token::flatten_listing(listing.iter()).any(|t| t.is_if()) {
+            if self.config().inactive_code
+                && super::token::flatten_listing(listing.iter()).any(|t| t.is_if())
+            {
                 collect_inactive_region_hints(&listing, &mut env, document, &mut diagnostics);
             }
             // Either the warning class is on, or the user asked for this
@@ -213,9 +215,9 @@ fn collect_smc_label_warnings(
             severity: Some(DiagnosticSeverity::WARNING),
             source: Some("basm".to_string()),
             message: format!(
-                "'{}' marks the address after this instruction, not its operand. Did you mean \
-                 '{} {}'?",
+                "'{}' {}. Did you mean '{} {}'?",
                 found.name,
+                found.explanation(),
                 found.name,
                 found.suggestion()
             ),
@@ -1452,5 +1454,29 @@ mod inactive_region_hint_tests {
     #[test]
     fn ordinary_code_is_untouched() {
         assert!(faded_lines("\tld a, 1\n\tld b, 2\n").is_empty());
+    }
+
+    /// The switch has to reach the code, not just exist in the schema.
+    #[test]
+    fn turning_inactive_code_off_stops_the_fading() {
+        let text = "if false\n\tprint \"true\"\nelse\n\tprint \"false\"\nendif\n";
+        assert!(!faded_lines(text).is_empty(), "on by default");
+
+        let config = crate::common::config::AsmConfig {
+            inactive_code: false,
+            ..Default::default()
+        };
+        let analyzer = AssemblyAnalyzer::new();
+        analyzer.set_config(config);
+        let faded: Vec<_> = analyzer
+            .analyze(&doc(text))
+            .into_iter()
+            .filter(|d| {
+                d.tags
+                    .as_ref()
+                    .is_some_and(|t| t.contains(&DiagnosticTag::UNNECESSARY))
+            })
+            .collect();
+        assert!(faded.is_empty(), "{faded:?}");
     }
 }

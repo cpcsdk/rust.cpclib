@@ -252,7 +252,13 @@ export function activate(context: ExtensionContext) {
 
     context.subscriptions.push(
         vscode.debug.onDidChangeBreakpoints(e => { void syncBreakpointDirectives(e); }),
+        // The other direction: a file that already contains directives shows
+        // its dots as soon as it is opened.
+        vscode.workspace.onDidOpenTextDocument(doc => { void showExistingBreakpoints(doc); }),
     );
+    for (const doc of vscode.workspace.textDocuments) {
+        void showExistingBreakpoints(doc);
+    }
 
     // Keep the `cpclib.cursorOnInkColor` context key (used by the
     // "Pick CPC Ink Color" context-menu entry's `when` clause) in sync with
@@ -1403,6 +1409,13 @@ async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): P
     if (!client) {
         return;
     }
+    // `showExistingBreakpoints` adds breakpoints, which fires this event right
+    // back. Nothing breaks if it runs - the server declines to insert a second
+    // directive on a line that already has one - but the round trip is pure
+    // waste, so the flag skips it outright.
+    if (adoptingExistingBreakpoints) {
+        return;
+    }
 
     const wanted: { uri: vscode.Uri; line: number; enable: boolean }[] = [];
     const collect = (breakpoints: readonly vscode.Breakpoint[], enable: boolean) => {
@@ -1455,5 +1468,66 @@ async function syncBreakpointDirectives(event: vscode.BreakpointsChangeEvent): P
 
     if (edit.size > 0) {
         await vscode.workspace.applyEdit(edit);
+    }
+}
+
+
+/**
+ * Show a red dot for every `breakpoint` directive already written in a file.
+ *
+ * Without this the mapping only runs one way: a directive committed last week,
+ * or typed by hand, would sit in the source with nothing in the gutter to say
+ * so - and clicking that line would then try to add a *second* one.
+ *
+ * The server finds them, because a directive is not always the first thing on
+ * its line (`ld a,0 : BREAKPOINT` is as valid as the other order) and knowing
+ * that means parsing, not scanning for a word.
+ */
+let adoptingExistingBreakpoints = false;
+
+async function showExistingBreakpoints(document: vscode.TextDocument): Promise<void> {
+    if (!vscode.workspace.getConfiguration('cpclib').get<boolean>('breakpointDirective', true)) {
+        return;
+    }
+    if (!client || document.languageId !== 'basm') {
+        return;
+    }
+
+    let lines: number[] = [];
+    try {
+        lines = await client.sendRequest<number[]>(
+            'workspace/executeCommand',
+            { command: 'cpclib.breakpointLines', arguments: [document.uri.toString()] },
+        ) ?? [];
+    } catch (err) {
+        client.outputChannel.appendLine(
+            `[breakpoints] cpclib.breakpointLines failed for ${document.uri.fsPath}: ${err}`,
+        );
+        return;
+    }
+    if (lines.length === 0) {
+        return;
+    }
+
+    // Only the ones the editor does not already know about, so reopening a
+    // file does not pile duplicates onto the same line.
+    const known = new Set(
+        vscode.debug.breakpoints
+            .filter((b): b is vscode.SourceBreakpoint => b instanceof vscode.SourceBreakpoint)
+            .filter(b => b.location.uri.toString() === document.uri.toString())
+            .map(b => b.location.range.start.line),
+    );
+    const missing = lines.filter(line => !known.has(line));
+    if (missing.length === 0) {
+        return;
+    }
+
+    adoptingExistingBreakpoints = true;
+    try {
+        vscode.debug.addBreakpoints(missing.map(line => new vscode.SourceBreakpoint(
+            new vscode.Location(document.uri, new vscode.Position(line, 0)),
+        )));
+    } finally {
+        adoptingExistingBreakpoints = false;
     }
 }

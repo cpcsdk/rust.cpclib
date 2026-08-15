@@ -14,6 +14,19 @@
 //! instruction's opcode instead of the operand. Nothing complains: the file
 //! builds, and the demo misbehaves at run time.
 //!
+//! The same goes for an offset that does not match the operand. `ld hl, 0`
+//! carries a word - low byte first - so `$-2` is the operand and `$-1` is only
+//! its high half:
+//!
+//! ```text
+//!     ld hl, 0 : .address equ $-2    ; the whole operand
+//!     ld hl, 0 : .address equ $-1    ; just the high byte
+//! ```
+//!
+//! The second is occasionally what someone means (patching a page number, say)
+//! but far more often it is `$-1` typed out of habit from the 8-bit case, so
+//! it is reported and left to the reader to dismiss.
+//!
 //! This is the mirror image of what `cpclib_asmoptim::smc` already knows. That
 //! module reads `equ $-1` to decide an instruction must not be rewritten; this
 //! one notices the same idiom with the `equ` missing.
@@ -41,7 +54,19 @@ use std::collections::HashSet;
 
 use cpclib_asm::implementation::expression::ExprEvaluationExt;
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, MayHaveSpan};
-use cpclib_tokens::{DataAccessElem, ExprElement, ListingElement, Mnemonic, OperandKind};
+use cpclib_tokens::{
+    BinaryOperation, DataAccessElem, ExprElement, ListingElement, Mnemonic, OperandKind
+};
+
+/// What is wrong with the label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SmcLabelProblem {
+    /// No `equ` at all - the label marks the address after the instruction.
+    Missing,
+    /// An `equ $-N` whose `N` does not reach the start of the operand. Carries
+    /// the offset that was actually written.
+    WrongOffset(u8)
+}
 
 /// One suspicious label, with everything a diagnostic or quickfix needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,14 +75,31 @@ pub(super) struct SuspiciousSmcLabel {
     pub line: u32,
     /// The label as written, `.counter` included.
     pub name: String,
-    /// What the author almost certainly meant: `$-1` or `$-2`.
-    pub offset: u8
+    /// The offset that reaches the first byte of the operand.
+    pub offset: u8,
+    pub problem: SmcLabelProblem
 }
 
 impl SuspiciousSmcLabel {
-    /// The text a quickfix appends after the label.
+    /// The `equ` that would be right here.
     pub fn suggestion(&self) -> String {
         format!("equ $-{}", self.offset)
+    }
+
+    /// What to tell the user, without the label name (the caller has it).
+    pub fn explanation(&self) -> String {
+        match self.problem {
+            SmcLabelProblem::Missing => {
+                "marks the address after this instruction, not its operand".to_string()
+            },
+            SmcLabelProblem::WrongOffset(written) => {
+                format!(
+                    "is $-{written}, which lands {} of this {}-byte operand, not its first byte",
+                    if written == 1 { "on the last byte" } else { "past the start" },
+                    self.offset
+                )
+            }
+        }
     }
 }
 
@@ -89,6 +131,50 @@ fn literal_operand_width(token: &LocatedToken) -> Option<u8> {
         )
     });
     Some(if wide { 2 } else { 1 })
+}
+
+/// The `N` of an `equ $-N` (or `= $-N`), when that is exactly what the
+/// definition says.
+///
+/// Deliberately narrow: only `$ - <literal>`. Anything else - `$-1-1`, an
+/// offset built from a symbol - is not the idiom being checked, and guessing at
+/// its value would mean evaluating expressions this lint has no business
+/// evaluating.
+fn current_address_offset(token: &LocatedToken) -> Option<u8> {
+    let value = if token.is_equ() {
+        token.equ_value()
+    }
+    else if token.is_assign() {
+        token.assign_value()
+    }
+    else {
+        return None;
+    };
+
+    if !value.is_binary_operation() || value.binary_operation() != BinaryOperation::Sub {
+        return None;
+    }
+    if !value.arg1().is_label() || value.arg1().label() != "$" {
+        return None;
+    }
+    let offset = value.arg2();
+    if !offset.is_value() {
+        return None;
+    }
+    u8::try_from(offset.value()).ok()
+}
+
+/// The name an `EQU`/`=` defines.
+fn defined_symbol(token: &LocatedToken) -> Option<&str> {
+    if token.is_equ() {
+        Some(token.equ_symbol())
+    }
+    else if token.is_assign() {
+        Some(token.assign_symbol())
+    }
+    else {
+        None
+    }
 }
 
 /// 0-based line a token starts on.
@@ -128,9 +214,22 @@ pub(super) fn find_suspicious_smc_labels(listing: &LocatedListing) -> Vec<Suspic
     let mut out = Vec::new();
 
     for (index, token) in tokens.iter().enumerate() {
-        if !token.is_label() {
-            continue;
+        // Either a bare label, or a definition that tries to name the operand
+        // and misses. Both are the same idiom, only one half-written.
+        let (name, problem) = if token.is_label() {
+            (token.label_symbol(), None)
         }
+        else if let Some(name) = defined_symbol(token) {
+            match current_address_offset(token) {
+                Some(written) => (name, Some(written)),
+                // A definition that is not `$-N` is not this idiom at all.
+                None => continue
+            }
+        }
+        else {
+            continue;
+        };
+
         let Some(previous) = index.checked_sub(1).map(|i| tokens[i]) else {
             continue;
         };
@@ -142,14 +241,22 @@ pub(super) fn find_suspicious_smc_labels(listing: &LocatedListing) -> Vec<Suspic
         let Some(offset) = literal_operand_width(previous) else {
             continue;
         };
-        if targets.contains(token.label_symbol()) {
+        if targets.contains(name) {
             continue;
         }
 
+        let problem = match problem {
+            None => SmcLabelProblem::Missing,
+            // The offset that reaches the operand is right - nothing to say.
+            Some(written) if written == offset => continue,
+            Some(written) => SmcLabelProblem::WrongOffset(written)
+        };
+
         out.push(SuspiciousSmcLabel {
             line: line_of(token),
-            name: token.label_symbol().to_string(),
-            offset
+            name: name.to_string(),
+            offset,
+            problem
         });
     }
 
@@ -171,6 +278,49 @@ mod tests {
         let analyzer = AssemblyAnalyzer::new();
         let listing = analyzer.parse_document(&d).expect("must parse");
         find_suspicious_smc_labels(&listing)
+    }
+
+    /// The whole shape of the problem, in one file: which of these five
+    /// lines is wrong and which is not.
+    #[test]
+    fn the_reported_sample() {
+        let text = "\tld hl, 0 : .counter1\n\
+                    \tld a, 0: .counter2\n\
+                    \tld hl, 0 : .counter3 equ $-2\n\
+                    \tld hl, 0: .counter4 equ $-1\n\
+                    \tld hl, 0\n\
+                    .counter5\n";
+        let names: Vec<String> = found(text).into_iter().map(|f| f.name).collect();
+        assert_eq!(
+            names,
+            vec![".counter1", ".counter2", ".counter4"],
+            "counter3 is correct, counter5 is a plain label on its own line"
+        );
+    }
+
+    /// `$-1` after a 16-bit load names the high half of the operand, not the
+    /// operand.
+    #[test]
+    fn an_offset_that_misses_the_operand_is_flagged() {
+        let found = found("\tld hl, 0 : .address equ $-1\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].problem, SmcLabelProblem::WrongOffset(1));
+        assert_eq!(found[0].suggestion(), "equ $-2");
+    }
+
+    /// The right offset says nothing, for either width.
+    #[test]
+    fn a_correct_offset_is_silent() {
+        assert!(found("\tld hl, 0 : .address equ $-2\n").is_empty());
+        assert!(found("\tld a, 0 : .counter equ $-1\n").is_empty());
+        assert!(found("\tld a, 0 : .counter = $-1\n").is_empty());
+    }
+
+    /// An offset built from anything other than a plain literal is not this
+    /// idiom, and this lint does not evaluate expressions.
+    #[test]
+    fn a_computed_offset_is_left_alone() {
+        assert!(found("OFF equ 2\n\tld hl, 0 : .address equ $-OFF\n").is_empty());
     }
 
     /// The report that started this.
@@ -279,6 +429,58 @@ mod quickfix_tests {
         let action = action_on("\tld hl, 0 : .address\n", 0).unwrap();
         let changes = action.edit.unwrap().changes.unwrap();
         assert_eq!(changes.values().next().unwrap()[0].new_text, " equ $-2");
+    }
+
+    /// Apply the quickfix and hand back the line the user would see.
+    fn fixed(text: &str, line: u32) -> Option<String> {
+        let d = Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1);
+        let cursor = Range {
+            start: Position { line, character: 0 },
+            end: Position { line, character: 0 }
+        };
+        let action = AssemblyAnalyzer::new()
+            .code_actions(&d, cursor)
+            .into_iter()
+            .find(|a| a.title.contains("operand byte"))?;
+        let changes = action.edit.unwrap().changes.unwrap();
+        let edits = changes.values().next().unwrap().clone();
+        assert_eq!(edits.len(), 1);
+        let original = d.line(line as usize).unwrap();
+        let original = original.trim_end_matches(['\r', '\n']);
+        let start = edits[0].range.start.character as usize;
+        let end = edits[0].range.end.character as usize;
+        let mut out: String = original.chars().take(start).collect();
+        out.push_str(&edits[0].new_text);
+        out.extend(original.chars().skip(end));
+        Some(out)
+    }
+
+    /// A wrong offset is corrected in place - appending a second `equ` would
+    /// not even assemble.
+    #[test]
+    fn a_wrong_offset_is_rewritten_not_appended() {
+        assert_eq!(
+            fixed("\tld hl, 0: .counter4 equ $-1\n", 0).as_deref(),
+            Some("\tld hl, 0: .counter4 equ $-2")
+        );
+    }
+
+    /// Spacing and a trailing comment survive, because only the number moves.
+    #[test]
+    fn the_rest_of_the_line_is_left_alone() {
+        assert_eq!(
+            fixed("\tld hl, 0 : .p equ $ - 1 ; page\n", 0).as_deref(),
+            Some("\tld hl, 0 : .p equ $ - 2 ; page")
+        );
+    }
+
+    /// And the missing-`equ` case still appends.
+    #[test]
+    fn a_missing_equ_is_still_appended() {
+        assert_eq!(
+            fixed("\tld a, 0 : .counter\n", 0).as_deref(),
+            Some("\tld a, 0 : .counter equ $-1")
+        );
     }
 
     /// Nothing to offer where there is nothing wrong.

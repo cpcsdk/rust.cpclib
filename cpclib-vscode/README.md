@@ -36,7 +36,7 @@ The extension provides comprehensive support for Z80 assembly files (`.asm`, `.z
 - **CPC color picker**: Right-click on `INK`/`BORDER`/`PAPER` directives to pick from the authentic 27-color CPC palette
 - **Format on type**: Auto-formatting for consistent code style
 - **Embedded BASIC**: Full support for LOCOMOTIVE BASIC blocks within assembly files
-- **Breakpoints**: clicking the editor gutter (the red dot) writes a basm `breakpoint` directive in front of that line's instruction, and clearing it takes the directive back out - so the breakpoint travels into the snapshot and the emulator honours it. Disable with `cpclib.breakpointDirective` if you would rather your sources were never edited on your behalf
+- **Breakpoints**: clicking the editor gutter (the red dot) writes a basm `breakpoint` directive in front of that line's instruction, and clearing it takes the directive back out - so the breakpoint travels into the snapshot and the emulator honours it. It works both ways: opening a file that already contains directives shows their red dots, wherever on the line they sit (`ld a,0 : breakpoint` counts as much as the other order), and removing one takes the statement separator from whichever side has it. Disable with `cpclib.breakpointDirective` if you would rather your sources were never edited on your behalf. (VS Code only lets you click the gutter for languages an extension declares as breakpoint-capable; this extension declares `basm`. If the dot still refuses to appear in some other file type, turn on VS Code's own `debug.allowBreakpointsEverywhere`.)
 
 #### Code Actions & Refactoring
 - **Extract to macro**: Convert code selection into a reusable macro
@@ -120,7 +120,7 @@ Access via *File → Preferences → Settings* and search for "cpclib":
   ```
 
 - **`cpclib.breakpointDirective`** (default: `true`)  
-  Mirror editor breakpoints into the source as basm `breakpoint` directives. The directive is inserted in front of the first *instruction* on the line, so a label on that line keeps pointing where it did; removing the breakpoint removes it again. Set to `false` to leave your files untouched.
+  Mirror editor breakpoints into the source as basm `breakpoint` directives, and show a red dot for directives already in a file. The directive is inserted in front of the first *instruction* on the line, so a label on that line keeps pointing where it did; removing the breakpoint removes it again. Set to `false` to leave your files untouched. The word written is `cpclib-lsp.toml`'s `asm.breakpoint_directive`.
 
 - **`cpclib-lsp.trace.server`** (default: `"off"`)  
   LSP communication tracing for debugging. Options: `"off"`, `"messages"`, `"verbose"`.

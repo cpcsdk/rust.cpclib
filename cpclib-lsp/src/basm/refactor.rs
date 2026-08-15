@@ -176,12 +176,12 @@ impl AssemblyAnalyzer {
         })
     }
 
-    /// Offer to complete the self-modifying-code idiom: turn `.counter` into
-    /// `.counter equ $-1`.
+    /// Offer to make the self-modifying-code idiom name the right byte.
     ///
-    /// Appends rather than replaces - the label is fine as written, it is the
-    /// missing half that is the bug, and appending leaves whatever spacing and
-    /// comment the line already had untouched.
+    /// Two shapes, one intent. With no `equ` at all the missing half is
+    /// appended, leaving whatever spacing and comment the line already had.
+    /// With an `equ $-N` that misses the operand, only the `N` is rewritten -
+    /// appending a second `equ` would not even assemble.
     pub(super) fn smc_label_equ_action(
         &self,
         document: &Document,
@@ -198,28 +198,53 @@ impl AssemblyAnalyzer {
             .find(|f| f.line == cursor_line)?;
 
         let line_text = document.line(cursor_line as usize)?;
-        let column = line_text.find(&found.name)?;
-        let after_label = crate::common::document::byte_offset_to_utf16_col(
-            &line_text,
-            column + found.name.len()
-        ) as u32;
-
+        let label_end = line_text.find(&found.name)? + found.name.len();
         let suggestion = found.suggestion();
-        let position = Position {
-            line: cursor_line,
-            character: after_label
+
+        let (edit_range, new_text) = match found.problem {
+            super::lint_smc_label::SmcLabelProblem::Missing => {
+                let position = Position {
+                    line: cursor_line,
+                    character: crate::common::document::byte_offset_to_utf16_col(
+                        &line_text, label_end
+                    ) as u32
+                };
+                (
+                    Range {
+                        start: position,
+                        end: position
+                    },
+                    format!(" {suggestion}")
+                )
+            },
+            super::lint_smc_label::SmcLabelProblem::WrongOffset(_) => {
+                // Rewrite just the number, so `$ - 1` keeps its spacing and a
+                // trailing comment stays put.
+                let (start, end) = offset_literal_span(&line_text, label_end)?;
+                (
+                    Range {
+                        start: Position {
+                            line: cursor_line,
+                            character: crate::common::document::byte_offset_to_utf16_col(
+                                &line_text, start
+                            ) as u32
+                        },
+                        end: Position {
+                            line: cursor_line,
+                            character: crate::common::document::byte_offset_to_utf16_col(
+                                &line_text, end
+                            ) as u32
+                        }
+                    },
+                    found.offset.to_string()
+                )
+            }
         };
+
         Some(CodeAction {
             title: format!("Name the operand byte: '{} {suggestion}'", found.name),
             kind: Some(CodeActionKind::QUICKFIX),
-            edit: Some(single_file_edit(
-                document.uri.clone(),
-                Range {
-                    start: position,
-                    end: position
-                },
-                format!(" {suggestion}")
-            )),
+            edit: Some(single_file_edit(document.uri.clone(), edit_range, new_text)),
             ..Default::default()
         })
     }
@@ -1488,4 +1513,27 @@ mod firmware_symbol_replacement_tests {
             "{actions:?}"
         );
     }
+}
+
+/// Byte range of the number in the first `$ - <number>` at or after `from`.
+///
+/// Used to rewrite an offset in place rather than the whole `equ`, so the
+/// author's spacing and any trailing comment survive the fix.
+fn offset_literal_span(line: &str, from: usize) -> Option<(usize, usize)> {
+    let dollar = from + line.get(from..)?.find('$')?;
+    let after = line.get(dollar + 1..)?;
+    let minus = after.find('-')?;
+    if !after[..minus].chars().all(char::is_whitespace) {
+        return None;
+    }
+    let digits_from = dollar + 1 + minus + 1;
+    let rest = line.get(digits_from..)?;
+    let leading = rest.len() - rest.trim_start().len();
+    let start = digits_from + leading;
+    let digits = line.get(start..)?;
+    let len = digits.find(|c: char| !c.is_ascii_digit())?.min(digits.len());
+    if len == 0 {
+        return None;
+    }
+    Some((start, start + len))
 }

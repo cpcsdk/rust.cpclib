@@ -892,7 +892,8 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     crate::basm::peephole::ANALYZE_COMMAND,
     crate::basm::peephole::CLEAR_COMMAND,
     "cpclib.assembleFile",
-    "cpclib.breakpointEdit"
+    "cpclib.breakpointEdit",
+    "cpclib.breakpointLines"
 ];
 
 #[tower_lsp::async_trait]
@@ -1760,10 +1761,12 @@ impl LanguageServer for CpcLspBackend {
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
             match document.doc_type {
-                DocumentType::Assembly => {
+                DocumentType::Assembly if self.asm_analyzer.config().inlay_hints => {
                     return Ok(Some(self.asm_analyzer.inlay_hints(document, params.range)));
                 },
-                DocumentType::Basic | DocumentType::CatartBasic => {
+                DocumentType::Basic | DocumentType::CatartBasic
+                    if self.basic_analyzer.config().inlay_hints =>
+                {
                     return Ok(Some(
                         self.basic_analyzer.inlay_hints(document, params.range)
                     ));
@@ -1780,10 +1783,18 @@ impl LanguageServer for CpcLspBackend {
 
         if let Some(entry) = self.documents.get(&uri) {
             let document = entry.value();
+            // Each language decides for itself: a project may well want the
+            // bndbuild "▶ Run" buttons and not the ones on every `.bas`.
             let lenses = match document.doc_type {
-                DocumentType::BuildFile => self.build_analyzer.code_lens(document),
-                DocumentType::Assembly => self.asm_analyzer.code_lens(document),
-                DocumentType::Basic | DocumentType::CatartBasic => {
+                DocumentType::BuildFile if self.build_analyzer.config().code_lens => {
+                    self.build_analyzer.code_lens(document)
+                },
+                DocumentType::Assembly if self.asm_analyzer.config().code_lens => {
+                    self.asm_analyzer.code_lens(document)
+                },
+                DocumentType::Basic | DocumentType::CatartBasic
+                    if self.basic_analyzer.config().code_lens =>
+                {
                     self.basic_analyzer.code_lens(document)
                 },
                 _ => Vec::new()
@@ -2620,6 +2631,26 @@ impl LanguageServer for CpcLspBackend {
                 enable
             );
             return Ok(edit.map(|e| serde_json::json!(e)));
+        }
+
+        // Which lines of a file already carry a `breakpoint` directive, so the
+        // editor can draw their red dots when it opens the file rather than
+        // only after a click. Argument: `[uri]`.
+        if params.command == "cpclib.breakpointLines" {
+            let Some(uri) = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().and_then(|s| Url::parse(s).ok()))
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+            let lines = crate::basm::breakpoint::breakpoint_lines(&self.asm_analyzer, &document);
+            return Ok(Some(serde_json::json!(lines)));
         }
 
         if params.command == "cpclib.getEmbeddedBndbuildFiles" {

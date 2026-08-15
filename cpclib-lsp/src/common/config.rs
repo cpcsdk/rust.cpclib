@@ -10,11 +10,11 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub const CONFIG_FILE_NAME: &str = "cpclib-lsp.toml";
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(default)]
 pub struct LspConfig {
     pub asm: AsmConfig,
@@ -22,7 +22,7 @@ pub struct LspConfig {
     pub bndbuild: BndbuildConfig
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AsmConfig {
     /// Case-sensitive symbol matching for goto-definition/references, and
@@ -45,6 +45,32 @@ pub struct AsmConfig {
     /// diagnostic, quickfix, and "Fix All" CodeLens all match against - see
     /// `PeepholeGoal`'s own doc comment.
     pub peephole_goal: PeepholeGoal,
+    /// Fade the branches of an `IF`/`ELSEIF`/`ELSE` whose condition can be
+    /// decided at assembly time, the way an editor fades an inactive `#if`
+    /// block in C.
+    ///
+    /// Published as `Unnecessary`-tagged `HINT` diagnostics, so they colour
+    /// the code without appearing in the Problems panel and without being
+    /// touched by `warnings_as_errors` (which only escalates WARNINGs).
+    pub inactive_code: bool,
+    /// Inlay hints naming what a closing directive belongs to - the `ENDIF`
+    /// of *which* `IF`, and so on.
+    pub inlay_hints: bool,
+    /// CodeLens buttons above assembly code: "▶ Run" for each rule of an
+    /// embedded `#!bndbuild` block, and the peephole optimizer's "⚡ Fix All"
+    /// summary.
+    pub code_lens: bool,
+    /// The directive an editor breakpoint writes into the source.
+    ///
+    /// Toggling the gutter's red dot inserts this in front of the line's first
+    /// instruction, followed by basm's statement separator; clearing the
+    /// breakpoint takes it back out. Only the word is configurable - spelling
+    /// is a house style, and `BREAKPOINT`/`breakpoint` are equally valid basm.
+    ///
+    /// Removal recognises the directive through the parsed AST rather than by
+    /// matching this text, so changing it does not strand breakpoints already
+    /// written in a different case.
+    pub breakpoint_directive: String,
     /// The project's entry file, relative to the project root - the one a real
     /// build assembles (`src/sna.asm` in a typical demo).
     ///
@@ -68,6 +94,10 @@ impl Default for AsmConfig {
             case_sensitive: true,
             warnings_as_errors: false,
             warnings: AsmWarningClasses::default(),
+            inactive_code: true,
+            inlay_hints: true,
+            code_lens: true,
+            breakpoint_directive: default_breakpoint_directive(),
             firmware_docs: true,
             peephole_goal: PeepholeGoal::default(),
             entry: None
@@ -81,7 +111,7 @@ impl Default for AsmConfig {
 /// improvements; `Size`/`Speed` add extra rules that can actively disagree
 /// with each other (e.g. `jp` vs `jr`), see `builtin_rules`'s own doc
 /// comment in `cpclib-asmoptim`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum PeepholeGoal {
     #[default]
@@ -105,7 +135,7 @@ impl From<PeepholeGoal> for cpclib_asmoptim::OptimizationGoal {
 /// forwarded to real `ParserOptions`/`AssemblingOptions` before parsing/
 /// assembling (filtered at the source, exactly like `basm --disable-warning`
 /// would), never filtered after the fact from already-collected diagnostics.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AsmWarningClasses {
     pub fake_instructions: bool,
@@ -156,11 +186,15 @@ impl Default for AsmWarningClasses {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct BasicConfig {
     pub warnings_as_errors: bool,
     pub warnings: BasicWarningClasses,
+    /// The "▶ Run in emulator" CodeLens at the top of a `.bas` file.
+    pub code_lens: bool,
+    /// Inlay hints in BASIC listings.
+    pub inlay_hints: bool,
     /// Which emulator `cpclib.runBasic` (the "▶ Run in emulator" CodeLens on
     /// `.bas` files) launches. Must be one of
     /// `cpclib_bndbuild::pipeline::basic_run::SUPPORTED_AUTO_RUN_EMULATORS` (kept in
@@ -181,13 +215,15 @@ impl Default for BasicConfig {
         Self {
             warnings_as_errors: false,
             warnings: BasicWarningClasses::default(),
+            code_lens: true,
+            inlay_hints: true,
             run_emulator: "ace".to_string(),
             firmware_docs: true
         }
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct BasicWarningClasses {
     pub undefined_line: bool,
@@ -203,14 +239,34 @@ impl Default for BasicWarningClasses {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct BndbuildConfig {
     pub warnings_as_errors: bool,
-    pub warnings: BndbuildWarningClasses
+    pub warnings: BndbuildWarningClasses,
+    /// The "▶ Run" CodeLens on each rule and each individual task command.
+    pub code_lens: bool
 }
 
-#[derive(Debug, Clone, Deserialize)]
+impl Default for BndbuildConfig {
+    // Written out rather than derived: a `bool` feature switch that derives
+    // its default is off, which for a feature that ships enabled is a silent
+    // regression the type system will not catch.
+    fn default() -> Self {
+        Self {
+            warnings_as_errors: false,
+            warnings: BndbuildWarningClasses::default(),
+            code_lens: true
+        }
+    }
+}
+
+/// basm accepts either case; this is the one written by default.
+fn default_breakpoint_directive() -> String {
+    "BREAKPOINT".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct BndbuildWarningClasses {
     pub missing_build_structure: bool,
@@ -361,6 +417,21 @@ warnings_as_errors = false
 # Show firmware routine/constant documentation on hover, both for the
 # symbolic name (TXT_OUTPUT) and its resolved numeric address (&BB5A).
 firmware_docs = true
+# Fade the branches of an IF/ELSEIF/ELSE whose condition can be decided at
+# assembly time, the way an inactive #if block is faded in C. Published as
+# hints, so they never reach the Problems panel.
+inactive_code = true
+# Inlay hints naming what a closing directive belongs to - the ENDIF of
+# *which* IF, and so on.
+inlay_hints = true
+# CodeLens buttons above assembly code: "▶ Run" for each rule of an embedded
+# #!bndbuild block, and the peephole optimizer's "⚡ Fix All" summary.
+code_lens = true
+# The directive an editor breakpoint writes in front of the line's first
+# instruction (basm's statement separator is added after it). Removing the
+# breakpoint takes it back out - recognised through the parse, so changing
+# this does not strand breakpoints already written in another case.
+breakpoint_directive = "BREAKPOINT"
 # Which built-in peephole-optimization rule set to match against: "neutral"
 # (only rules every goal agrees are improvements), "size", or "speed" - the
 # latter two add extra rules that can actively disagree with each other
@@ -393,6 +464,10 @@ smc_label_without_equ = true
 
 [basic]
 warnings_as_errors = false
+# The "▶ Run in emulator" CodeLens at the top of a .bas file.
+code_lens = true
+# Inlay hints in BASIC listings.
+inlay_hints = true
 # Emulator launched by the "▶ Run in emulator" CodeLens on .bas files.
 # Supported (the only backends that honor auto-RUN): ace, winape,
 # cpcemupower, caprice, emulator1984, amspirit.
@@ -409,6 +484,8 @@ catart_no_op = true
 
 [bndbuild]
 warnings_as_errors = false
+# The "▶ Run" CodeLens on each rule, and on each individual task command.
+code_lens = true
 
 [bndbuild.warnings]
 # The build file has neither a "targets:" nor a "tasks:" section.
@@ -427,6 +504,56 @@ mod tests {
             .expect("EXAMPLE_CONFIG_TOML must parse against the real LspConfig schema");
         assert!(config.asm.case_sensitive);
         assert!(config.asm.warnings.unused_bindings);
+    }
+
+    /// Collect every `section.field` path a TOML value contains.
+    fn key_paths(value: &toml::Value, prefix: &str, out: &mut Vec<String>) {
+        if let Some(table) = value.as_table() {
+            for (key, item) in table {
+                let path = if prefix.is_empty() {
+                    key.clone()
+                }
+                else {
+                    format!("{prefix}.{key}")
+                };
+                if item.is_table() {
+                    key_paths(item, &path, out);
+                }
+                else {
+                    out.push(path);
+                }
+            }
+        }
+    }
+
+    /// Every setting the server understands must appear in the template.
+    ///
+    /// Parsing the template is not enough to know this: every struct here is
+    /// `#[serde(default)]`, so a field left out of the template still parses -
+    /// it just silently becomes undiscoverable, which is how a documented
+    /// config drifts from a real one. Comparing key *paths* against the
+    /// serialized defaults is what actually catches the omission.
+    #[test]
+    fn every_setting_appears_in_the_example_config() {
+        let template: toml::Value = toml::from_str(EXAMPLE_CONFIG_TOML).unwrap();
+        let schema = toml::Value::try_from(LspConfig::default()).unwrap();
+
+        let (mut wanted, mut present) = (Vec::new(), Vec::new());
+        key_paths(&schema, "", &mut wanted);
+        key_paths(&template, "", &mut present);
+
+        let missing: Vec<&String> = wanted.iter().filter(|k| !present.contains(k)).collect();
+        assert!(
+            missing.is_empty(),
+            "these settings exist but are not in EXAMPLE_CONFIG_TOML: {missing:?}"
+        );
+
+        // And nothing in the template that the server would ignore.
+        let unknown: Vec<&String> = present.iter().filter(|k| !wanted.contains(k)).collect();
+        assert!(
+            unknown.is_empty(),
+            "EXAMPLE_CONFIG_TOML documents settings that do not exist: {unknown:?}"
+        );
     }
 
     #[test]
