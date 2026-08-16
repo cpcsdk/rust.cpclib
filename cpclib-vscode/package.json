@@ -191,6 +191,11 @@
         "command": "cpclib.debugAssembly",
         "title": "CPClib: Debug this assembly file",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runAsm",
+        "title": "CPClib: Run this assembly file",
+        "category": "CPClib"
       }
     ],
     "menus": {

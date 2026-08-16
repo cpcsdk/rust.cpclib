@@ -1150,3 +1150,39 @@ mod inactive_if_branch_dimming_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod crlf_tests {
+    use tower_lsp::lsp_types::Url;
+
+    use super::*;
+    use crate::common::document::Document;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    /// A file saved on Windows must highlight exactly as the same file saved on
+    /// Unix. Line endings are not part of the program.
+    #[test]
+    fn crlf_and_lf_produce_the_same_tokens() {
+        const SOURCE: &str = "STORE_SP1\n\tld sp, &1000\n\tei\n\tret\nTAB_COLOR1\tdefb 68,84,87\n";
+
+        let analyzer = AssemblyAnalyzer::new();
+        let lf = analyzer.semantic_tokens(&doc(SOURCE));
+        let crlf = analyzer.semantic_tokens(&doc(&SOURCE.replace('\n', "\r\n")));
+
+        assert_eq!(
+            lf.len(),
+            crlf.len(),
+            "different token counts:\nlf   {lf:?}\ncrlf {crlf:?}"
+        );
+        for (index, (a, b)) in lf.iter().zip(crlf.iter()).enumerate() {
+            assert_eq!(
+                (a.delta_line, a.delta_start, a.length, a.token_type),
+                (b.delta_line, b.delta_start, b.length, b.token_type),
+                "token {index} moved between LF and CRLF"
+            );
+        }
+    }
+}

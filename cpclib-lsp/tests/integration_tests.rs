@@ -1494,7 +1494,7 @@ async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_c
         .collect();
     assert_eq!(
         commands,
-        vec!["cpclib.runAssembly", "cpclib.debugAssembly"],
+        vec!["cpclib.runAsm", "cpclib.debugAssembly"],
         "{asm_lenses:?}"
     );
 

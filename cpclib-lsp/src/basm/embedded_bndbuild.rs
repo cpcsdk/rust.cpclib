@@ -221,7 +221,10 @@ impl AssemblyAnalyzer {
                 range: top,
                 command: Some(Command {
                     title: "▶ Run in emulator".to_string(),
-                    command: "cpclib.runAssembly".to_string(),
+                    // Client-side: it resolves which program this file
+                    // belongs to - asking the user when several do - before
+                    // handing the answer to the server's `cpclib.runAssembly`.
+                    command: "cpclib.runAsm".to_string(),
                     arguments: Some(vec![serde_json::json!(file_path)])
                 }),
                 data: None
@@ -580,7 +583,7 @@ mod run_lens_tests {
         let lenses = AssemblyAnalyzer::new().code_lens(&doc("\torg 0x8000\n\tnop\n"));
         let run: Vec<_> = lenses
             .iter()
-            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runAssembly")
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runAsm")
             .collect();
         assert_eq!(run.len(), 1, "{lenses:?}");
         assert_eq!(run[0].command.as_ref().unwrap().title, "▶ Run in emulator");
@@ -625,7 +628,7 @@ mod run_lens_tests {
             .iter()
             .map(|l| l.command.as_ref().unwrap().command.as_str())
             .collect();
-        let run = commands.iter().position(|c| *c == "cpclib.runAssembly");
+        let run = commands.iter().position(|c| *c == "cpclib.runAsm");
         let debug = commands.iter().position(|c| *c == "cpclib.debugAssembly");
         assert!(run < debug, "{commands:?}");
     }
@@ -637,7 +640,7 @@ mod run_lens_tests {
         assert!(
             lenses.iter().all(|l| {
                 let command = &l.command.as_ref().unwrap().command;
-                command != "cpclib.runAssembly" && command != "cpclib.debugAssembly"
+                command != "cpclib.runAsm" && command != "cpclib.debugAssembly"
             }),
             "{lenses:?}"
         );

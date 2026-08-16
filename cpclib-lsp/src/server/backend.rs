@@ -886,6 +886,7 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.runTask",
     "cpclib.runBasic",
     "cpclib.runAssembly",
+    "cpclib.resolveEntry",
     "cpclib.cycleCountForSelection",
     "cpclib.registersAtPosition",
     "cpclib.removeUnusedParameter",
@@ -2250,6 +2251,34 @@ impl LanguageServer for CpcLspBackend {
             return Ok(None);
         }
 
+        // Which program a document belongs to, so the editor can ask the user
+        // when more than one includes it.
+        if params.command == "cpclib.resolveEntry" {
+            let fname = params
+                .arguments
+                .into_iter()
+                .next()
+                .and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let document = std::path::PathBuf::from(&fname);
+            return Ok(Some(match crate::basm::run::resolve_entry(&document) {
+                crate::basm::run::EntryChoice::Program(entry) => {
+                    serde_json::json!({ "entry": entry.to_string_lossy() })
+                },
+                crate::basm::run::EntryChoice::Ask(candidates) => {
+                    serde_json::json!({
+                        "candidates": candidates
+                            .iter()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .collect::<Vec<_>>()
+                    })
+                }
+            }));
+        }
+
         // The "▶ Run in emulator" lens on a `.asm` file. Same build as F5 -
         // `assemble_for_debug` - handed to the emulator the project names
         // rather than to the debuggable one.
@@ -2847,6 +2876,7 @@ impl LanguageServer for CpcLspBackend {
             DocumentType::Basic | DocumentType::CatartBasic => {
                 self.basic_analyzer.code_actions(entry.value(), range)
             },
+            DocumentType::BuildFile => self.build_analyzer.code_actions(entry.value(), range),
             _ => vec![]
         };
 
