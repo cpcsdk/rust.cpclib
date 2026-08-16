@@ -385,7 +385,8 @@ pub fn string_format(params: &[ExprResult]) -> Result<ExprResult, Box<AssemblerE
                 continue;
             }
             let after_brace = &rest[1..];
-            let Some(close_rel) = after_brace.find('}') else {
+            let Some(close_rel) = after_brace.find('}')
+            else {
                 return Err(string_format_error(format!(
                     "string_format: unclosed '{{' in template {template:?}"
                 )));
@@ -395,12 +396,14 @@ pub fn string_format(params: &[ExprResult]) -> Result<ExprResult, Box<AssemblerE
                 Some((idx, spec)) => (idx, Some(spec)),
                 None => (inner, None)
             };
-            let Ok(index) = index_str.parse::<usize>() else {
+            let Ok(index) = index_str.parse::<usize>()
+            else {
                 return Err(string_format_error(format!(
                     "string_format: invalid placeholder '{{{inner}}}' in template {template:?} - expected a plain 0-based index, optionally followed by ':spec'"
                 )));
             };
-            let Some(arg) = args.get(index) else {
+            let Some(arg) = args.get(index)
+            else {
                 return Err(string_format_error(format!(
                     "string_format: placeholder {{{inner}}} has no matching argument ({} argument(s) given) in template {template:?}",
                     args.len()
@@ -534,8 +537,12 @@ mod string_format_tests {
 
     #[test]
     fn substitutes_positional_placeholders_in_order() {
-        let result = string_format(&[s("Score: {0}/{1}"), ExprResult::Value(10), ExprResult::Value(100)])
-            .unwrap();
+        let result = string_format(&[
+            s("Score: {0}/{1}"),
+            ExprResult::Value(10),
+            ExprResult::Value(100)
+        ])
+        .unwrap();
         assert_eq!(result, s("Score: 10/100"));
     }
 

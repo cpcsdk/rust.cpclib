@@ -22,10 +22,10 @@
 //! .ok()`, so this module joining that established convention isn't a
 //! special exception).
 
-use cpclib_z80flow::{CostModel, InstructionCost};
-use cpclib_z80flow::cost_range::{self};
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, LocatedTokenInner};
 use cpclib_tokens::{ExprElement, ListingElement};
+use cpclib_z80flow::cost_range::{self};
+use cpclib_z80flow::{CostModel, InstructionCost};
 use tower_lsp::lsp_types::{Position, Range};
 
 use super::timing::{nops_of, split_head};
@@ -144,7 +144,6 @@ impl CostModel<LocatedToken> for StrictTimingCosts {
         }
         nops_of(&token.to_string())
     }
-
 }
 
 /// The min/max cost summary for every token inside `range` of the
@@ -337,9 +336,6 @@ mod tests {
             "the two candidates disagree, so this must not be guessed: {s:?}"
         );
     }
-
-
-
 
     #[test]
     fn an_unconditional_sequence_sums_to_a_single_fixed_total() {

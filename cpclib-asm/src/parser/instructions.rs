@@ -1082,11 +1082,7 @@ pub fn parse_call_jp_or_jr(
 
         let flag_test = flag_test.map(|(f, span)| LocatedDataAccess::FlagTest(f, span.into()));
 
-        let token = LocatedTokenInner::new_opcode(
-            call_jp_or_jr,
-            flag_test,
-            Some(dst)
-        );
+        let token = LocatedTokenInner::new_opcode(call_jp_or_jr, flag_test, Some(dst));
 
         // JQ is a fake instruction (JR if the target is in range, JP
         // otherwise) - flag it the same way every other fake instruction is

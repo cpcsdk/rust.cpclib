@@ -12,17 +12,17 @@
 
 use std::sync::Arc;
 
-use tower_lsp::lsp_types::*;
-
 use cpclib_asm::assembler::Env;
 use cpclib_asm::flatten::flatten_for_analysis;
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken, MayHaveSpan};
 use cpclib_asm::parser::source::{SourceString, Z80Span};
 use cpclib_asmoptim::engine::{PeepholeMatch, find_matches, find_matches_with_resolver};
-use cpclib_tokens::{DataAccessElem, ListingElement};
-use cpclib_asmoptim::{EnvAddressResolver, OptimizationGoal, ProjectAddressResolver, builtin_rules};
-
+use cpclib_asmoptim::{
+    EnvAddressResolver, OptimizationGoal, ProjectAddressResolver, builtin_rules
+};
 use cpclib_project::entry;
+use cpclib_tokens::{DataAccessElem, ListingElement};
+use tower_lsp::lsp_types::*;
 
 use super::AssemblyAnalyzer;
 use super::command::{single_file_edit, single_file_multi_edit};
@@ -103,7 +103,6 @@ fn peephole_matches<'a>(
     (tokens, matches)
 }
 
-
 /// The span of the first unconditional `jp <label>` in `listing`, if any.
 ///
 /// Used to decide whether the "addresses unavailable" notice is worth showing:
@@ -166,9 +165,11 @@ impl AddressSource {
     /// pretending - an address-aware rule with no addresses must stay quiet.
     pub(super) fn as_addresses<'a>(&'a self, own_env: Option<&'a Env>) -> Addresses<'a> {
         match self {
-            Self::OwnAssemble => match own_env {
-                Some(env) => Addresses::OwnAssemble(env),
-                None => Addresses::None
+            Self::OwnAssemble => {
+                match own_env {
+                    Some(env) => Addresses::OwnAssemble(env),
+                    None => Addresses::None
+                }
             },
             Self::Project(p) => Addresses::Project(p),
             Self::None => Addresses::None
@@ -204,10 +205,7 @@ impl AssemblyAnalyzer {
     /// - only ever happens for a document that matches disk, i.e. just after a
     /// save rather than on every keystroke.
     /// The project's include graph, rebuilt only when the project changed.
-    fn project_graph_cached(
-        &self,
-        root: &std::path::Path
-    ) -> (u128, Arc<entry::ProjectGraph>) {
+    fn project_graph_cached(&self, root: &std::path::Path) -> (u128, Arc<entry::ProjectGraph>) {
         self.projects.graph_for(root)
     }
 
@@ -319,12 +317,7 @@ impl AssemblyAnalyzer {
         // Shared across every document in the project: reading and parsing
         // the sources happens once per change, not once per document.
         let (fingerprint, graph) = self.project_graph_cached(&root);
-        match entry::entry_in_graph(
-            &document_path,
-            config.entry.as_deref(),
-            &root,
-            &graph
-        ) {
+        match entry::entry_in_graph(&document_path, config.entry.as_deref(), &root, &graph) {
             entry::Entry::Standalone => {
                 if own_assemble_complete() {
                     AddressSource::OwnAssemble
@@ -499,7 +492,11 @@ impl AssemblyAnalyzer {
         Some(CodeAction {
             title: format!("Peephole: {}", m.message),
             kind: Some(CodeActionKind::QUICKFIX),
-            edit: Some(single_file_edit(document.uri.clone(), edit.range, edit.new_text)),
+            edit: Some(single_file_edit(
+                document.uri.clone(),
+                edit.range,
+                edit.new_text
+            )),
             ..Default::default()
         })
     }
@@ -592,7 +589,10 @@ impl AssemblyAnalyzer {
     /// (`single_file_multi_edit`'s own doc comment), so this doesn't need to
     /// worry about one match's edit shifting another's offsets - matches
     /// never overlap in the first place (`find_matches`'s own guarantee).
-    pub(crate) fn fix_all_peephole_edit(&self, document: &Document) -> Option<(WorkspaceEdit, usize)> {
+    pub(crate) fn fix_all_peephole_edit(
+        &self,
+        document: &Document
+    ) -> Option<(WorkspaceEdit, usize)> {
         let listing = self.parse_document(document).ok()?;
         let (addresses, own_env) = self.peephole_inputs(document, &listing);
         let goal = self.config().peephole_goal.into();
@@ -683,10 +683,8 @@ fn byte_offset_to_position(text: &str, offset: usize) -> Position {
     let line_text = &text[line_start..cpclib_asmoptim::edit::line_end(text, line_start)];
     Position {
         line: line as u32,
-        character: crate::common::document::byte_offset_to_utf16_col(
-            line_text,
-            offset - line_start
-        ) as u32
+        character: crate::common::document::byte_offset_to_utf16_col(line_text, offset - line_start)
+            as u32
     }
 }
 
@@ -721,8 +719,14 @@ mod quickfix_tests {
         assert_eq!(
             text_edits[0].range,
             Range {
-                start: Position { line: 1, character: 0 },
-                end: Position { line: 2, character: 0 }
+                start: Position {
+                    line: 1,
+                    character: 0
+                },
+                end: Position {
+                    line: 2,
+                    character: 0
+                }
             }
         );
     }
@@ -737,15 +741,14 @@ mod quickfix_tests {
         let text = d.text();
         let lines: Vec<&str> = text.split_inclusive('\n').collect();
         let offset = |p: Position| -> usize {
-            let before: usize = lines
-                .iter()
-                .take(p.line as usize)
-                .map(|l| l.len())
-                .sum();
+            let before: usize = lines.iter().take(p.line as usize).map(|l| l.len()).sum();
             before + p.character as usize
         };
         let mut out = text.clone();
-        out.replace_range(offset(edit.range.start)..offset(edit.range.end), &edit.new_text);
+        out.replace_range(
+            offset(edit.range.start)..offset(edit.range.end),
+            &edit.new_text
+        );
         out
     }
 
@@ -808,13 +811,12 @@ mod quickfix_tests {
             "an unresolvable include must mark the assemble incomplete"
         );
 
-        let (_tokens, matches) = peephole_matches(
-            &listing,
-            Addresses::None,
-            OptimizationGoal::Neutral
-        );
+        let (_tokens, matches) =
+            peephole_matches(&listing, Addresses::None, OptimizationGoal::Neutral);
         assert!(
-            !matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+            !matches
+                .iter()
+                .any(|m| m.rule_name.as_deref() == Some("jp2jr")),
             "jp2jr must not fire off a half-built program: {matches:?}"
         );
     }
@@ -836,7 +838,9 @@ mod quickfix_tests {
             OptimizationGoal::Neutral
         );
         assert!(
-            matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+            matches
+                .iter()
+                .any(|m| m.rule_name.as_deref() == Some("jp2jr")),
             "jp2jr should fire when the addresses are real: {matches:?}"
         );
     }
@@ -879,10 +883,15 @@ mod quickfix_tests {
             "an included file must be measured through its entry"
         );
 
-        let (_tokens, matches) =
-            peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), OptimizationGoal::Size);
+        let (_tokens, matches) = peephole_matches(
+            &listing,
+            addresses.as_addresses(own_env.as_ref()),
+            OptimizationGoal::Size
+        );
         assert!(
-            !matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+            !matches
+                .iter()
+                .any(|m| m.rule_name.as_deref() == Some("jp2jr")),
             "the target is >127 bytes away in the real program, so jp2jr must \
              not fire: {matches:?}"
         );
@@ -902,7 +911,11 @@ mod quickfix_tests {
         let body = String::from("start\n    jp target\n    nop\ntarget\n    ret\n");
         let main = root.join("main.asm");
         std::fs::write(root.join("code.asm"), &body).unwrap();
-        std::fs::write(&main, "    org 0x4000\n    run start\n    include \"code.asm\"\n").unwrap();
+        std::fs::write(
+            &main,
+            "    org 0x4000\n    run start\n    include \"code.asm\"\n"
+        )
+        .unwrap();
 
         let code = std::fs::canonicalize(root.join("code.asm")).unwrap();
         let uri = Url::from_file_path(&code).unwrap();
@@ -920,7 +933,11 @@ mod quickfix_tests {
         // it. The document's version is unchanged, so a version-only key would
         // wrongly keep serving the old answer.
         std::thread::sleep(std::time::Duration::from_millis(10));
-        std::fs::write(&main, "    org 0x5000\n    run start\n    include \"code.asm\"\n").unwrap();
+        std::fs::write(
+            &main,
+            "    org 0x5000\n    run start\n    include \"code.asm\"\n"
+        )
+        .unwrap();
         let third = analyzer.peephole_addresses(&d, || false);
         assert!(
             !Arc::ptr_eq(&first, &third),
@@ -964,10 +981,15 @@ mod quickfix_tests {
         let (addresses, own_env) = analyzer.peephole_inputs(&d, &listing);
         assert!(matches!(*addresses, AddressSource::Project(_)));
 
-        let (_tokens, matches) =
-            peephole_matches(&listing, addresses.as_addresses(own_env.as_ref()), OptimizationGoal::Size);
+        let (_tokens, matches) = peephole_matches(
+            &listing,
+            addresses.as_addresses(own_env.as_ref()),
+            OptimizationGoal::Size
+        );
         assert!(
-            matches.iter().any(|m| m.rule_name.as_deref() == Some("jp2jr")),
+            matches
+                .iter()
+                .any(|m| m.rule_name.as_deref() == Some("jp2jr")),
             "a genuinely near jump must still be offered: {matches:?}"
         );
     }
@@ -979,7 +1001,11 @@ mod quickfix_tests {
         let tmp = camino_tempfile::tempdir().unwrap();
         let root = tmp.path().as_std_path();
         std::fs::create_dir_all(root.join(".git")).unwrap();
-        std::fs::write(root.join("code.asm"), "start\n    jp target\ntarget\n    ret\n").unwrap();
+        std::fs::write(
+            root.join("code.asm"),
+            "start\n    jp target\ntarget\n    ret\n"
+        )
+        .unwrap();
         std::fs::write(
             root.join("main.asm"),
             "    org 0x4000\n    run start\n    include \"code.asm\"\n"
@@ -1012,26 +1038,31 @@ mod quickfix_tests {
         let d = doc("start:\n    ld b, b\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
         let actions = analyzer.code_actions(&d, cursor(1, 6));
-        assert!(
-            actions
-                .iter()
-                .any(|a| a.title == "Peephole: Remove ld b,b"
-                    && a.kind == Some(CodeActionKind::QUICKFIX))
-        );
+        assert!(actions.iter().any(|a| {
+            a.title == "Peephole: Remove ld b,b" && a.kind == Some(CodeActionKind::QUICKFIX)
+        }));
     }
 
     #[test]
     fn no_quickfix_when_the_cursor_is_not_on_a_matched_line() {
         let d = doc("start:\n    ld b, b\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
-        assert!(analyzer.peephole_quickfix_action(&d, cursor(2, 4)).is_none());
+        assert!(
+            analyzer
+                .peephole_quickfix_action(&d, cursor(2, 4))
+                .is_none()
+        );
     }
 
     #[test]
     fn no_quickfix_for_already_optimal_source() {
         let d = doc("start:\n    xor a\n    ret\n");
         let analyzer = AssemblyAnalyzer::new();
-        assert!(analyzer.peephole_quickfix_action(&d, cursor(1, 4)).is_none());
+        assert!(
+            analyzer
+                .peephole_quickfix_action(&d, cursor(1, 4))
+                .is_none()
+        );
     }
 }
 
@@ -1080,7 +1111,10 @@ mod code_lens_and_fix_all_tests {
         assert_eq!(count, 2);
         let text_edits = &edit.changes.expect("expected changes")[&d.uri];
         assert_eq!(text_edits.len(), 2);
-        assert!(text_edits.iter().any(|e| e.new_text.is_empty()), "{text_edits:?}");
+        assert!(
+            text_edits.iter().any(|e| e.new_text.is_empty()),
+            "{text_edits:?}"
+        );
         assert!(
             text_edits
                 .iter()

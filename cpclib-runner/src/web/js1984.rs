@@ -18,7 +18,7 @@ pub const PINNED_COMMIT: &str = "3c3044ba239ea81b87c4fd0b86264622543e45e0";
 /// It is part of the cache folder name because the installed-or-not check in
 /// `DelegateApplicationDescription` is folder existence alone: without this, a
 /// changed bridge would silently never be reinstalled.
-pub const PATCH_REVISION: u32 = 7;
+pub const PATCH_REVISION: u32 = 11;
 
 /// The files that make up the distribution.
 ///
@@ -45,8 +45,7 @@ pub const DIST_FILES: &[&str] = &[
 /// Where the patched distribution lives.
 pub fn cache_folder() -> Utf8PathBuf {
     let short = &PINNED_COMMIT[..7];
-    crate::delegated::base_cache_folder()
-        .join(format!("1984js_{short}_p{PATCH_REVISION}"))
+    crate::delegated::base_cache_folder().join(format!("1984js_{short}_p{PATCH_REVISION}"))
 }
 
 /// Whether it is already installed.
@@ -82,8 +81,7 @@ pub fn install() -> Result<Utf8PathBuf, String> {
         let mut bytes = Vec::new();
         std::io::Read::read_to_end(&mut reader, &mut bytes)
             .map_err(|e| format!("cannot read {url}: {e}"))?;
-        std::fs::write(root.join(name), &bytes)
-            .map_err(|e| format!("cannot write {name}: {e}"))?;
+        std::fs::write(root.join(name), &bytes).map_err(|e| format!("cannot write {name}: {e}"))?;
     }
 
     apply_bridge_patch(&root).map_err(|e| {

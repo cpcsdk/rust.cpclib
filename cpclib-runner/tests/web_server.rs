@@ -9,8 +9,16 @@ use cpclib_runner::web::serve;
 /// A site with the two files a request can ask for.
 fn site() -> camino_tempfile::Utf8TempDir {
     let tmp = camino_tempfile::tempdir().unwrap();
-    std::fs::write(tmp.path().join("index.html"), "<html><head></head><body>emulator</body></html>").unwrap();
-    std::fs::write(tmp.path().join("6128.wasm"), [0u8, 'a' as u8, 's' as u8, 'm' as u8]).unwrap();
+    std::fs::write(
+        tmp.path().join("index.html"),
+        "<html><head></head><body>emulator</body></html>"
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.path().join("6128.wasm"),
+        [0u8, 'a' as u8, 's' as u8, 'm' as u8]
+    )
+    .unwrap();
     tmp
 }
 
@@ -39,7 +47,10 @@ fn wasm_arrives_as_application_wasm() {
     let tmp = site();
     let server = serve(tmp.path(), None).unwrap();
     let response = request(server.port(), "GET /6128.wasm HTTP/1.1\r\nHost: x\r\n\r\n");
-    assert!(response.contains("Content-Type: application/wasm"), "{response}");
+    assert!(
+        response.contains("Content-Type: application/wasm"),
+        "{response}"
+    );
 }
 
 /// Loopback is not a boundary: any local page can reach this port, so the
@@ -65,7 +76,7 @@ fn session_routes_refuse_without_the_token() {
 #[test]
 fn the_snapshot_is_served_with_the_token() {
     let tmp = site();
-    let server = serve(tmp.path(), Some(vec![0x4d, 0x56])).unwrap();
+    let server = serve(tmp.path(), Some(vec![0x4D, 0x56])).unwrap();
     let response = request(
         server.port(),
         &format!(
@@ -74,7 +85,10 @@ fn the_snapshot_is_served_with_the_token() {
         )
     );
     assert!(response.starts_with("HTTP/1.1 200"), "{response}");
-    assert!(response.ends_with("MV"), "the bytes are the body: {response:?}");
+    assert!(
+        response.ends_with("MV"),
+        "the bytes are the body: {response:?}"
+    );
 }
 
 /// Escaping the site root must not be possible.
@@ -133,14 +147,26 @@ fn the_debug_page_injects_the_session_token() {
 
     let url = server.debug_url();
     assert!(url.starts_with("http://127.0.0.1:"), "{url}");
-    assert!(!url.contains('?'), "nothing for a URI parser to mangle: {url}");
-    assert!(!url.contains(server.token()), "the token is not in the URL: {url}");
+    assert!(
+        !url.contains('?'),
+        "nothing for a URI parser to mangle: {url}"
+    );
+    assert!(
+        !url.contains(server.token()),
+        "the token is not in the URL: {url}"
+    );
 
     let page = request(server.port(), "GET /debug HTTP/1.1\r\nHost: x\r\n\r\n");
     assert!(page.starts_with("HTTP/1.1 200"), "{page}");
-    assert!(page.contains("__cpclib_session"), "the session is injected: {page}");
+    assert!(
+        page.contains("__cpclib_session"),
+        "the session is injected: {page}"
+    );
     assert!(page.contains(server.token()), "with this session's token");
-    assert!(page.contains("emulator"), "and the real page is still there");
+    assert!(
+        page.contains("emulator"),
+        "and the real page is still there"
+    );
 
     // The plain page is untouched, so ordinary browsing gets no debugger.
     let plain = request(server.port(), "GET / HTTP/1.1\r\nHost: x\r\n\r\n");

@@ -1172,10 +1172,7 @@ add_to_a(3)\n\
             .iter()
             .find(|t| t.is_macro_definition())
             .expect("a macro-definition token should have been parsed");
-        assert_eq!(
-            token.macro_definition_arguments().as_slice(),
-            ["a", "b"]
-        );
+        assert_eq!(token.macro_definition_arguments().as_slice(), ["a", "b"]);
         assert!(token.macro_definition_is_variadic());
     }
 
@@ -1191,10 +1188,7 @@ add_to_a(3)\n\
             .iter()
             .find(|t| t.is_macro_definition())
             .expect("a macro-definition token should have been parsed");
-        assert_eq!(
-            token.macro_definition_arguments().as_slice(),
-            ["a", "b"]
-        );
+        assert_eq!(token.macro_definition_arguments().as_slice(), ["a", "b"]);
         assert!(!token.macro_definition_is_variadic());
     }
 

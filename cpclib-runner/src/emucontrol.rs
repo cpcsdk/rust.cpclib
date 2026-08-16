@@ -1883,7 +1883,7 @@ pub struct EmuCli {
     command: Commands
 }
 
-#[derive(ValueEnum, Clone, Debug, PartialEq)]
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Emu {
     Ace,
     Winape,
@@ -2009,46 +2009,36 @@ pub const EMUCTRL_CMD: &str = "cpc";
 fn serve_web_emulator<E: EventObserver>(
     conf: &EmulatorConf,
     no_open: bool,
+    debuggable: bool,
     o: &E
 ) -> Result<(), String> {
     let snapshot = match conf.snapshot.as_ref() {
-        Some(path) => {
-            Some(std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?)
-        },
+        Some(path) => Some(std::fs::read(path).map_err(|e| format!("cannot read {path}: {e}"))?),
         None => None
     };
 
     let root = crate::web::js1984::install()?;
     let server = crate::web::serve(&root, snapshot)
         .map_err(|e| format!("cannot serve the emulator: {e}"))?;
-    let url = server.debug_url();
+    // `/debug` is the only page the server injects a session token into, so
+    // this *is* the difference between the two commands: `run` gets the plain
+    // emulator with the bridge dormant, `debug` gets one an editor can attach
+    // to.
+    let url = if debuggable {
+        server.debug_url()
+    }
+    else {
+        server.plain_url()
+    };
 
     o.emit_stdout(&format!("1984js is serving at {url}\n"));
-    if !no_open && let Err(problem) = open_in_browser(&url) {
+    if !no_open && let Err(problem) = webbrowser::open(&url) {
         o.emit_stderr(&format!("could not open a browser: {problem}\n"));
     }
     o.emit_stdout("Press Ctrl-C to stop.\n");
     loop {
         std::thread::sleep(std::time::Duration::from_millis(250));
     }
-}
-
-/// Open `url` with whatever the desktop uses for http.
-fn open_in_browser(url: &str) -> Result<(), String> {
-    let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
-        ("open", vec![url])
-    }
-    else if cfg!(target_os = "windows") {
-        ("cmd", vec!["/C", "start", "", url])
-    }
-    else {
-        ("xdg-open", vec![url])
-    };
-    std::process::Command::new(program)
-        .args(args)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("{program}: {e}"))
 }
 
 pub struct EmulatorFacadeRunner<E: EventObserver> {
@@ -2087,6 +2077,46 @@ impl<E: EventObserver + Clone + 'static> RunnerWithClap for EmulatorFacadeRunner
     }
 }
 
+/// What a command line asks for, decided before anything is installed, served
+/// or spawned.
+///
+/// Pulled out of `handle_arguments` because it is the whole of a bug worth a
+/// test: `run --emulator 1984js` used to fall past this decision into the
+/// emulator table, whose `Emulator1984Js` entry quietly handed back the
+/// *desktop* 1984. It started the native emulator and said nothing about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dispatch {
+    /// Serve 1984js on loopback. `debuggable` selects the page that carries a
+    /// session token, which is the only difference between `run` and `debug`.
+    ServeWeb { debuggable: bool, no_open: bool },
+    /// Install and spawn a desktop emulator.
+    Native,
+    /// `debug` was asked of an emulator that cannot be debugged. Substituting
+    /// 1984js would make a rule that says `ace` behave as something else.
+    RefuseDebug
+}
+
+impl Dispatch {
+    pub fn of(emulator: Emu, command: &Commands) -> Self {
+        let debuggable = matches!(command, Commands::Debug { .. });
+        if matches!(emulator, Emu::Emulator1984Js) {
+            return Self::ServeWeb {
+                debuggable,
+                no_open: match command {
+                    Commands::Debug { no_open } => *no_open,
+                    _ => false
+                }
+            };
+        }
+        if debuggable {
+            Self::RefuseDebug
+        }
+        else {
+            Self::Native
+        }
+    }
+}
+
 pub fn handle_arguments<E: EventObserver + Clone + 'static>(
     mut cli: EmuCli,
     o: &E
@@ -2109,22 +2139,24 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         .break_on_bad_vbl(cli.break_on_bad_vbl);
     let conf = builder.build();
 
-    // Answered before anything native happens. A web emulator is *served*, not
-    // spawned: falling through would start the desktop 1984 as well, and print
-    // "snapshot loading is currently ignored" about a snapshot this path is
-    // about to serve perfectly well.
-    if let Commands::Debug { no_open } = &cli.command {
-        // Only one emulator can be debugged, and silently substituting it for
-        // whichever the user named would make a rule that says `ace` behave as
-        // something else - worth a clear refusal instead.
-        if !matches!(cli.emulator, Emu::Emulator1984Js) {
+    // Answered before anything native happens: a web emulator is *served*, not
+    // spawned, and falling through would install and start the desktop 1984 as
+    // well.
+    match Dispatch::of(cli.emulator, &cli.command) {
+        Dispatch::ServeWeb {
+            debuggable,
+            no_open
+        } => {
+            return serve_web_emulator(&conf, no_open, debuggable, o);
+        },
+        Dispatch::RefuseDebug => {
             return Err(format!(
                 "{:?} cannot be debugged: only 1984js speaks the Debug Adapter Protocol. \
                  Use `--emulator 1984js`.",
                 cli.emulator
             ));
-        }
-        return serve_web_emulator(&conf, *no_open, o);
+        },
+        Dispatch::Native => {}
     }
 
     let emu = match cli.emulator {
@@ -2138,9 +2170,10 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
         Emu::Cadence => Emulator::Cadence(Default::default()),
         Emu::Emulator1984 => Emulator::Emulator1984(Default::default()),
-        // Never spawned: the `debug` subcommand serves it instead, and every
-        // other path rejects it before reaching here.
-        Emu::Emulator1984Js => Emulator::Emulator1984(Default::default()),
+        // Unreachable: every command with this emulator is served above. It
+        // used to fall through to the desktop 1984, which is the bug that
+        // comment claimed could not happen.
+        Emu::Emulator1984Js => unreachable!("1984js is served, never spawned"),
         Emu::Rvm => Emulator::RetroVm(Default::default())
     };
 
@@ -2537,7 +2570,7 @@ mod tests {
         // Verify DiskInsert for drive A
         assert!(
             script.instructions().iter().any(|inst| {
-                matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename } 
+                matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename }
                     if *drive == cpclib_csl::Drive::A && filename == &Utf8PathBuf::from("test.dsk"))
             }),
             "Expected DiskInsert for drive A with test.dsk"
@@ -2546,7 +2579,7 @@ mod tests {
         // Verify DiskInsert for drive B
         assert!(
             script.instructions().iter().any(|inst| {
-                matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename } 
+                matches!(inst, cpclib_csl::CslInstruction::DiskInsert { drive, filename }
                     if *drive == cpclib_csl::Drive::B && filename == &Utf8PathBuf::from("data.dsk"))
             }),
             "Expected DiskInsert for drive B with data.dsk"
@@ -2596,5 +2629,67 @@ mod tests {
             }),
             "Expected CrtcSelect with Type1"
         );
+    }
+
+    /// `run --emulator 1984js` serves the web emulator.
+    ///
+    /// It used to fall through to the emulator table and get the *desktop*
+    /// 1984 instead - silently, because the substituting match arm carried a
+    /// comment claiming this could not happen.
+    #[test]
+    fn asking_for_1984js_never_spawns_the_desktop_emulator() {
+        for command in [
+            Commands::Run { text: None },
+            Commands::Run {
+                text: Some("call &4000".into())
+            }
+        ] {
+            assert_eq!(
+                Dispatch::of(Emu::Emulator1984Js, &command),
+                Dispatch::ServeWeb {
+                    debuggable: false,
+                    no_open: false
+                },
+                "run must be served, not spawned"
+            );
+        }
+    }
+
+    /// `debug` serves the page that carries a session token; `run` serves the
+    /// plain one. That is the only difference between them.
+    #[test]
+    fn only_debug_serves_the_debuggable_page() {
+        assert_eq!(
+            Dispatch::of(Emu::Emulator1984Js, &Commands::Debug { no_open: true }),
+            Dispatch::ServeWeb {
+                debuggable: true,
+                no_open: true
+            }
+        );
+    }
+
+    /// Every other emulator is still spawned for `run`...
+    #[test]
+    fn other_emulators_are_still_spawned() {
+        for emulator in [Emu::Ace, Emu::Winape, Emu::Cpcec, Emu::Emulator1984] {
+            assert_eq!(
+                Dispatch::of(emulator, &Commands::Run { text: None }),
+                Dispatch::Native,
+                "{emulator:?}"
+            );
+        }
+    }
+
+    /// ...and refused for `debug`, rather than quietly becoming 1984js. A rule
+    /// that says `ace` must not behave as something else.
+    #[test]
+    fn debugging_another_emulator_is_refused_not_substituted() {
+        for emulator in [Emu::Ace, Emu::Amspirit, Emu::Emulator1984] {
+            assert_eq!(
+                Dispatch::of(emulator, &Commands::Debug { no_open: false }),
+                Dispatch::RefuseDebug,
+                "{emulator:?}"
+            );
+        }
     }
 }

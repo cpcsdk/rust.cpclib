@@ -79,6 +79,9 @@ pub fn build_environment(file_dir: Option<&std::path::Path>) -> Environment<'sta
 /// expansion adds line markers around this so it can map a rendered line back
 /// to the line the user wrote; a caller that only reads values needs none of
 /// that machinery.
-pub fn expand(source: &str, file_dir: Option<&std::path::Path>) -> Result<String, minijinja::Error> {
+pub fn expand(
+    source: &str,
+    file_dir: Option<&std::path::Path>
+) -> Result<String, minijinja::Error> {
     build_environment(file_dir).render_str(source, minijinja::context!())
 }

@@ -31,10 +31,7 @@ use std::sync::Mutex;
 /// it, because a project need not have git at all - and `target/` is worth
 /// skipping either way.
 fn is_ignored_dir(name: &str) -> bool {
-    matches!(
-        name,
-        ".git" | ".hg" | ".svn" | "target" | "node_modules"
-    )
+    matches!(name, ".git" | ".hg" | ".svn" | "target" | "node_modules")
 }
 
 fn builder(root: &Path) -> ignore::WalkBuilder {
@@ -149,10 +146,9 @@ mod tests {
         for name in ["c.asm", "a.asm", "b.asm"] {
             write(&root.join(name), "  ret\n");
         }
-        assert_eq!(names(root), vec![
-            "a.asm".to_owned(),
-            "b.asm".to_owned(),
-            "c.asm".to_owned()
-        ]);
+        assert_eq!(
+            names(root),
+            vec!["a.asm".to_owned(), "b.asm".to_owned(), "c.asm".to_owned()]
+        );
     }
 }

@@ -63,10 +63,7 @@ fn declares_run(text: &str) -> bool {
         // described above but never worse than what was here before.
         return text.lines().any(|line| {
             let mut words = line.split_whitespace();
-            words
-                .next()
-                .is_some_and(|w| w.eq_ignore_ascii_case("run"))
-                && words.next().is_some()
+            words.next().is_some_and(|w| w.eq_ignore_ascii_case("run")) && words.next().is_some()
         });
     };
     cpclib_asm::flatten::flatten_for_analysis(listing.iter()).any(|t| t.is_run())
@@ -346,7 +343,11 @@ mod tests {
             "sna.asm",
             "    run demo_start\n    include \"demo_code.asm\"\n"
         );
-        let code = write(tmp.path().as_std_path(), "demo_code.asm", "demo_start\n    ret\n");
+        let code = write(
+            tmp.path().as_std_path(),
+            "demo_code.asm",
+            "demo_start\n    ret\n"
+        );
 
         let uri = code.clone();
         assert_eq!(entry_of(&uri, None), Entry::Project(sna));
@@ -358,7 +359,11 @@ mod tests {
     fn a_file_carrying_its_own_run_is_standalone() {
         let tmp = camino_tempfile::tempdir().unwrap();
         project(tmp.path().as_std_path());
-        let test = write(tmp.path().as_std_path(), "test1.asm", "    run start\nstart\n    ret\n");
+        let test = write(
+            tmp.path().as_std_path(),
+            "test1.asm",
+            "    run start\nstart\n    ret\n"
+        );
 
         let uri = test.clone();
         assert_eq!(entry_of(&uri, None), Entry::Standalone);
@@ -513,7 +518,9 @@ pub fn assemble_entry(
             Ok(number) => cpclib_tokens::ExprResult::from(number),
             Err(_) => cpclib_tokens::ExprResult::String(value.as_str().into())
         };
-        let _ = assemble.symbols_mut().assign_symbol_to_value(name.as_str(), value);
+        let _ = assemble
+            .symbols_mut()
+            .assign_symbol_to_value(name.as_str(), value);
     }
     let options = cpclib_asm::EnvOptions::new(
         parse,

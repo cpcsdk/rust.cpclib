@@ -95,7 +95,12 @@ impl SuspiciousSmcLabel {
             SmcLabelProblem::WrongOffset(written) => {
                 format!(
                     "is $-{written}, which lands {} of this {}-byte operand, not its first byte",
-                    if written == 1 { "on the last byte" } else { "past the start" },
+                    if written == 1 {
+                        "on the last byte"
+                    }
+                    else {
+                        "past the start"
+                    },
                     self.offset
                 )
             }
@@ -230,7 +235,8 @@ pub(super) fn find_suspicious_smc_labels(listing: &LocatedListing) -> Vec<Suspic
             continue;
         };
 
-        let Some(previous) = index.checked_sub(1).map(|i| tokens[i]) else {
+        let Some(previous) = index.checked_sub(1).map(|i| tokens[i])
+        else {
             continue;
         };
         // Same source line: a label on its own line is naming the code that
@@ -238,7 +244,8 @@ pub(super) fn find_suspicious_smc_labels(listing: &LocatedListing) -> Vec<Suspic
         if line_of(token) != line_of(previous) {
             continue;
         }
-        let Some(offset) = literal_operand_width(previous) else {
+        let Some(offset) = literal_operand_width(previous)
+        else {
             continue;
         };
         if targets.contains(name) {
@@ -357,9 +364,7 @@ mod tests {
     /// which does carry a literal, and is still entirely correct.
     #[test]
     fn a_branch_target_is_never_flagged() {
-        assert!(
-            found("\tld (hl),%1111 : jr c,Non : ld (hl),%11110000 : Non\n\tnop\n").is_empty()
-        );
+        assert!(found("\tld (hl),%1111 : jr c,Non : ld (hl),%11110000 : Non\n\tnop\n").is_empty());
     }
 
     /// The discriminator: an instruction whose operand is a symbol is not the
@@ -394,11 +399,7 @@ mod quickfix_tests {
     use crate::common::document::Document;
 
     fn action_on(text: &str, line: u32) -> Option<CodeAction> {
-        let d = Document::new(
-            Url::parse("file:///t.asm").unwrap(),
-            text.to_string(),
-            1
-        );
+        let d = Document::new(Url::parse("file:///t.asm").unwrap(), text.to_string(), 1);
         let cursor = Range {
             start: Position { line, character: 0 },
             end: Position { line, character: 0 }
@@ -490,4 +491,3 @@ mod quickfix_tests {
         assert!(action_on("\tld a, 0\n", 0).is_none());
     }
 }
-

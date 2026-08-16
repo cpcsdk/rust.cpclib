@@ -172,7 +172,14 @@ fn handle(mut stream: TcpStream, site: &Site) -> std::io::Result<()> {
             let snapshot = site.snapshot.lock().unwrap();
             match snapshot.as_ref() {
                 Some(bytes) => respond(&mut stream, 200, "application/octet-stream", bytes),
-                None => respond(&mut stream, 404, "text/plain", b"no snapshot in this session")
+                None => {
+                    respond(
+                        &mut stream,
+                        404,
+                        "text/plain",
+                        b"no snapshot in this session"
+                    )
+                },
             }
         },
         (_, path) if path.starts_with("/session/") => {
@@ -268,6 +275,46 @@ fn percent_decode(value: &str) -> String {
 /// trusting every layer in between to preserve a query string. Injecting it
 /// into the document the server itself produces removes that dependency, and
 /// keeps the token out of the address bar.
+/// Everything but the pixels, hidden.
+///
+/// The emulator's own page is a whole workbench - machine selector, LEDs, tape
+/// deck, keyboard, monitor panel. In a browser that is the point; in an editor
+/// tab beside your source it is a screenful of chrome around a small picture,
+/// and every one of those controls has a better equivalent in the debugger.
+///
+/// Hidden rather than removed: `app.js` looks its elements up by id and would
+/// fault on a missing one, so `display: none` is the only safe way to do this
+/// without patching the page's own logic. Each rule un-hides exactly the
+/// ancestors of the canvas and hides their siblings, which is why the chain is
+/// spelled out rather than reduced to a wildcard.
+///
+/// Only `/debug` gets this. The plain URL - what a browser opens, and what
+/// `emu ... run` serves - keeps the full machine.
+const BARE_SCREEN_STYLE: &str = "<style id=\"cpclib-bare\">\n\
+    html, body { margin: 0; padding: 0; height: 100%; background: #000; \
+                 overflow: hidden; }\n\
+    body > *:not(main.workbench) { display: none !important; }\n\
+    main.workbench > *:not(.receiver) { display: none !important; }\n\
+    section.receiver > *:not(#screenStage) { display: none !important; }\n\
+    #screenStage > *:not(#screenFrame) { display: none !important; }\n\
+    #screenFrame > *:not(.screen-glass) { display: none !important; }\n\
+    .screen-glass > *:not(#screen) { display: none !important; }\n\
+    main.workbench, section.receiver, #screenStage, #screenFrame, .screen-glass {\n\
+      display: block !important; position: static !important;\n\
+      margin: 0 !important; padding: 0 !important; border: 0 !important;\n\
+      border-radius: 0 !important; box-shadow: none !important;\n\
+      background: #000 !important; width: 100% !important; height: 100% !important;\n\
+      max-width: none !important; max-height: none !important;\n\
+      min-width: 0 !important; min-height: 0 !important; gap: 0 !important;\n\
+      transform: none !important; filter: none !important;\n\
+    }\n\
+    #screen {\n\
+      display: block !important; width: 100% !important; height: 100% !important;\n\
+      object-fit: contain; image-rendering: pixelated; background: #000 !important;\n\
+      border: 0 !important; border-radius: 0 !important; box-shadow: none !important;\n\
+    }\n\
+    </style>";
+
 fn serve_debug_page(stream: &mut TcpStream, site: &Site) -> std::io::Result<()> {
     let index = site.root.join("index.html");
     let Ok(html) = std::fs::read_to_string(&index)
@@ -276,7 +323,7 @@ fn serve_debug_page(stream: &mut TcpStream, site: &Site) -> std::io::Result<()> 
     };
 
     let injected = format!(
-        "<script>window.__cpclib_session = {{\"token\": \"{}\"}};</script>\n</head>",
+        "{BARE_SCREEN_STYLE}\n<script>window.__cpclib_session = {{\"token\": \"{}\"}};</script>\n</head>",
         site.token
     );
     let html = if html.contains("</head>") {
@@ -387,4 +434,40 @@ fn respond(
     )?;
     stream.write_all(body)?;
     stream.flush()
+}
+
+#[cfg(test)]
+mod debug_page_tests {
+    use super::*;
+
+    /// The debug page hides the emulator's furniture and keeps the picture.
+    ///
+    /// Hidden, never removed: `app.js` looks its elements up by id and faults
+    /// on a missing one, so anything that deletes nodes breaks the emulator
+    /// rather than tidying it.
+    #[test]
+    fn the_bare_style_hides_the_chrome_without_removing_it() {
+        assert!(BARE_SCREEN_STYLE.contains("display: none"));
+        assert!(
+            !BARE_SCREEN_STYLE.contains("remove"),
+            "nodes are hidden, not deleted"
+        );
+
+        // Every ancestor of the canvas is un-hidden by name; miss one and the
+        // screen disappears with the rest.
+        for ancestor in [
+            "main.workbench",
+            "section.receiver",
+            "#screenStage",
+            "#screenFrame",
+            ".screen-glass",
+            "#screen"
+        ] {
+            assert!(BARE_SCREEN_STYLE.contains(ancestor), "{ancestor}");
+        }
+
+        // ...and the picture keeps its shape and its pixels.
+        assert!(BARE_SCREEN_STYLE.contains("object-fit: contain"));
+        assert!(BARE_SCREEN_STYLE.contains("image-rendering: pixelated"));
+    }
 }

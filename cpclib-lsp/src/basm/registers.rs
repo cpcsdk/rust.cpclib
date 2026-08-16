@@ -484,7 +484,12 @@ mod tests {
     /// single-source-of-truth, not a bug this test would have caught.
     #[test]
     fn a_jq_resets_the_walk_like_every_other_control_transfer() {
-        for transfer in ["jq elsewhere", "jr elsewhere", "jp elsewhere", "call elsewhere"] {
+        for transfer in [
+            "jq elsewhere",
+            "jr elsewhere",
+            "jp elsewhere",
+            "call elsewhere"
+        ] {
             let text = format!("    ld a,1\n    {transfer}\n    nop\n");
             let s = state_at(&text, 2, 4);
             assert_eq!(

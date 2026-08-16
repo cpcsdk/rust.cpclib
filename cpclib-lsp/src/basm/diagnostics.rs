@@ -196,7 +196,8 @@ fn collect_smc_label_warnings(
 ) {
     for found in super::lint_smc_label::find_suspicious_smc_labels(listing) {
         let line_text = document.line(found.line as usize).unwrap_or_default();
-        let Some(col) = line_text.find(&found.name) else {
+        let Some(col) = line_text.find(&found.name)
+        else {
             continue;
         };
         let start = crate::common::document::byte_offset_to_utf16_col(&line_text, col) as u32;
@@ -264,7 +265,10 @@ fn collect_inactive_region_hints(
         }
         out.push(Diagnostic {
             range: Range {
-                start: Position { line: start, character: 0 },
+                start: Position {
+                    line: start,
+                    character: 0
+                },
                 end: Position {
                     line: previous,
                     character: line_end(previous)
@@ -732,7 +736,6 @@ mod tests {
         analyzer.analyze(&document)
     }
 
-
     #[test]
     fn valid_file_yields_no_diagnostics() {
         let text = "org 0x4000\n ld a, 1\n ret\n";
@@ -1073,8 +1076,14 @@ mod tests {
         // Simulate a quickfix request (or hover, or anything else built on
         // `self.parse_document`) running before diagnostics ever do.
         let cursor = Range {
-            start: Position { line: 0, character: 0 },
-            end: Position { line: 0, character: 0 }
+            start: Position {
+                line: 0,
+                character: 0
+            },
+            end: Position {
+                line: 0,
+                character: 0
+            }
         };
         let _ = analyzer.peephole_quickfix_action(&document, cursor);
 
@@ -1130,7 +1139,9 @@ mod tests {
         let text = "org 0x4000\n xor a\n ld (hl), a\n ret\n";
         let diags = diagnostics_for(text);
         assert!(
-            !diags.iter().any(|d| d.source.as_deref() == Some("basm-peephole")),
+            !diags
+                .iter()
+                .any(|d| d.source.as_deref() == Some("basm-peephole")),
             "{diags:?}"
         );
     }
@@ -1216,16 +1227,19 @@ mod tests {
         assert_eq!(peephole_lines(analyzer.analyze(&document)), vec![1, 3]);
 
         // Just the `ld b, b` line.
-        analyzer.request_peephole(&uri, Some(Range {
-            start: Position {
-                line: 1,
-                character: 0
-            },
-            end: Position {
-                line: 1,
-                character: 8
-            }
-        }));
+        analyzer.request_peephole(
+            &uri,
+            Some(Range {
+                start: Position {
+                    line: 1,
+                    character: 0
+                },
+                end: Position {
+                    line: 1,
+                    character: 8
+                }
+            })
+        );
         assert_eq!(peephole_lines(analyzer.analyze(&document)), vec![1]);
     }
 
@@ -1387,7 +1401,6 @@ mod tests {
         );
     }
 }
-
 
 #[cfg(test)]
 mod inactive_region_hint_tests {

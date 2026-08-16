@@ -479,6 +479,20 @@ pub struct Env {
 
     /// optional object that manages the listing output
     output_trigger: Option<ListingOutputTrigger>,
+    /// How deep we are inside expression evaluation.
+    ///
+    /// An instruction's recorded source location is the *instruction's*, never
+    /// its operands' - whatever the operands contain. Resolving an expression
+    /// can walk arbitrary tokens (a user `function` body most obviously, but
+    /// also an `assert` condition or a `print` argument), and each of those
+    /// announces itself to the listing as "we are here now". Left unguarded,
+    /// `ld a, SPECTRAL_START + integral(...)` records its bytes against the
+    /// `return` inside `integral`, and the debugger jumps to a line the
+    /// program never executes - a function only runs at assembly time.
+    ///
+    /// A counter rather than a flag: expressions nest, and functions call
+    /// functions.
+    expression_depth: usize,
     /// Listing of symbols generator
     symbols_output: SymbolOutputGenerator,
 
@@ -583,6 +597,7 @@ impl Clone for Env {
             symbols: self.symbols.clone(),
             run_options: self.run_options,
             output_trigger: self.output_trigger.clone(),
+            expression_depth: self.expression_depth,
             symbols_output: self.symbols_output.clone(),
             warnings: self.warnings.clone(),
             nested_rorg: self.nested_rorg,
@@ -837,6 +852,25 @@ impl Env {
     /// If the expression is not solvable in second pass, an error is returned
     ///
     /// However, when assembling in a crunched section, the expression MUST NOT fail. edit: why ? I do not get it now and I have removed this limitation
+    /// Resolve an expression with the listing's idea of "where we are" frozen.
+    ///
+    /// Every expression in the assembler goes through `resolve`, and resolving
+    /// one can walk arbitrary tokens - a user `function`'s body, an `assert`
+    /// condition, a `print` argument. Each of those announces itself to the
+    /// listing, which would leave the current position inside the expression
+    /// rather than on the instruction that owns it. See `expression_depth`.
+    ///
+    /// The only place `resolve` should ever be called from `Env`.
+    fn resolve_isolated<E: ExprEvaluationExt>(
+        &mut self,
+        exp: &E
+    ) -> Result<ExprResult, Box<AssemblerError>> {
+        self.expression_depth += 1;
+        let result = exp.resolve(self);
+        self.expression_depth -= 1;
+        result
+    }
+
     pub fn resolve_expr_may_fail_in_first_pass<E: ExprEvaluationExt>(
         &mut self,
         exp: &E
@@ -868,7 +902,7 @@ impl Env {
     ) -> Result<ExprResult, Box<AssemblerError>> {
         self.track_used_symbols(exp)?;
 
-        match exp.resolve(self) {
+        match self.resolve_isolated(exp) {
             Ok(value) => Ok(value),
             Err(e) => {
                 // if we have no more remaining passes, we fail !
@@ -895,7 +929,7 @@ impl Env {
         &mut self,
         exp: &E
     ) -> Result<ExprResult, Box<AssemblerError>> {
-        match exp.resolve(self) {
+        match self.resolve_isolated(exp) {
             Ok(value) => Ok(value),
             Err(e) => {
                 if self.pass.is_first_pass() {
@@ -1112,8 +1146,35 @@ impl Env {
     }
 
     /// Manage the play with data for the output listing
+    /// The listing recorder, unless we are inside an expression.
+    ///
+    /// Every route into the listing goes through here, because "an
+    /// instruction's location is the instruction's, not its operands'" is not
+    /// only about which token is current: assigning a symbol also overrides the
+    /// address column with the assigned value, and `acc = 0` inside a
+    /// `function` body would leave the *next* instruction's row claiming to be
+    /// at address 0. See `expression_depth`.
+    pub(crate) fn listing_trigger(&mut self) -> Option<&mut ListingOutputTrigger> {
+        if self.expression_depth > 0 {
+            return None;
+        }
+        self.output_trigger.as_mut()
+    }
+
+    /// Whether the listing is recording right now.
+    fn listing_is_recording(&self) -> bool {
+        self.expression_depth == 0 && self.pass.is_listing_pass() && self.output_trigger.is_some()
+    }
+
     fn handle_output_trigger(&mut self, new: &LocatedToken) {
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+        // Tokens reached while resolving an expression are not where the code
+        // is: they are how a value was computed. Announcing them would move the
+        // listing's position into a `function` body that emits nothing and
+        // leave it there for the instruction that follows.
+        if self.expression_depth > 0 {
+            return;
+        }
+        if self.listing_is_recording() {
             let code_addr = self.logical_code_address();
             let phy_addr = self.logical_to_physical_address(self.logical_output_address());
 
@@ -1125,7 +1186,7 @@ impl Env {
             };
             let symbols = Some(self.symbols() as *const _);
 
-            let trig = self.output_trigger.as_mut().unwrap();
+            let trig = self.listing_trigger().unwrap();
 
             trig.new_token(new, code_addr as _, kind, phy_addr, symbols);
         }
@@ -1384,7 +1445,7 @@ impl Env {
             .map_err(|e| eprintln!("{e}"))
             .expect("No error can arise in listing output mode; there is a bug somewhere");
 
-        if let Some(trigger) = self.output_trigger.as_mut() {
+        if let Some(trigger) = self.listing_trigger() {
             trigger.finish();
         }
         Ok(())
@@ -1821,6 +1882,23 @@ impl Env {
     ///
     /// Populated during the listing pass, i.e. once, after the address passes
     /// have converged - so every address here is final.
+    /// Every breakpoint the program asked for, across all pages.
+    ///
+    /// Exposed for debuggers: a `BREAKPOINT` directive is the author saying
+    /// where they want to stop, and that is worth more than anything an editor
+    /// can infer. What an emulator does with the richer forms is its own
+    /// business - see `AssembledBreakpoint`.
+    pub fn assembled_breakpoints(
+        &self
+    ) -> Vec<crate::assembler::delayed_command::AssembledBreakpoint> {
+        self.sna
+            .pages_info
+            .iter()
+            .flat_map(|page| page.collect_breakpoints())
+            .map(|command| command.described())
+            .collect()
+    }
+
     pub fn source_map(&self) -> Option<crate::assembler::listing_output::RawSourceMap> {
         let builder = self.options().assemble_options().output_builder.as_ref()?;
         let mut output = builder.write().unwrap();
@@ -2049,8 +2127,8 @@ impl Env {
         }
 
         // Add the byte to the listing space
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
-            self.output_trigger.as_mut().unwrap().write_byte(v);
+        if self.listing_is_recording() {
+            self.listing_trigger().unwrap().write_byte(v);
         }
 
         self.active_page_info_mut().logical_outputadr =
@@ -2200,7 +2278,7 @@ impl Env {
 
     /// Evaluate the expression according to the current state of the environment
     pub fn eval(&mut self, expr: &Expr) -> Result<ExprResult, Box<AssemblerError>> {
-        expr.resolve(self)
+        self.resolve_isolated(expr)
     }
 
     pub fn sna(&self) -> &cpclib_sna::Snapshot {
@@ -2358,9 +2436,9 @@ impl Env {
         self.update_dollar();
 
         // update the erroneous information for the listing
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+        if self.listing_is_recording() {
             let output_adr = self.logical_to_physical_address(output_adr as _);
-            let trigger = self.output_trigger.as_mut().unwrap();
+            let trigger = self.listing_trigger().unwrap();
 
             trigger.replace_code_address(&code_adr.into());
             trigger.replace_physical_address(output_adr);
@@ -3089,7 +3167,7 @@ impl Env {
         self.active_page_info_mut().logical_codeadr = code_adr;
 
         self.update_dollar();
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&code_adr.into())
         }
 
@@ -3170,7 +3248,7 @@ impl Env {
                 destination.possible_span().map(|s| s.into())
             )?;
         }
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&value)
         }
 
@@ -3308,10 +3386,10 @@ impl Env {
 
         // BANK/BANKSET-like directives do not emit bytes, so refresh listing
         // coordinates after page/bank selection to avoid stale physical address.
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+        if self.listing_is_recording() {
             let code_adr = self.logical_code_address();
             let output_adr = self.logical_to_physical_address(self.logical_output_address());
-            let trigger = self.output_trigger.as_mut().unwrap();
+            let trigger = self.listing_trigger().unwrap();
 
             trigger.replace_code_address(&(code_adr as i32).into());
             trigger.replace_physical_address(output_adr);
@@ -3364,10 +3442,10 @@ impl Env {
         self.update_dollar();
 
         // Keep listing row addresses in sync for BANKSET directives.
-        if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+        if self.listing_is_recording() {
             let code_adr = self.logical_code_address();
             let output_adr = self.logical_to_physical_address(self.logical_output_address());
-            let trigger = self.output_trigger.as_mut().unwrap();
+            let trigger = self.listing_trigger().unwrap();
 
             trigger.replace_code_address(&(code_adr as i32).into());
             trigger.replace_physical_address(output_adr);
@@ -3745,7 +3823,7 @@ impl Env {
         // TODO OR play all the passes directly now
         let mut crunched_env = self.build_crunched_section_env(span);
 
-        if let Some(t) = self.output_trigger.as_mut() {
+        if let Some(t) = self.listing_trigger() {
             t.enter_crunched_section()
         }
 
@@ -3785,7 +3863,7 @@ impl Env {
             }
         }
 
-        if let Some(t) = self.output_trigger.as_mut() {
+        if let Some(t) = self.listing_trigger() {
             t.leave_crunched_section()
         }
 
@@ -3938,6 +4016,7 @@ impl Env {
             run_options: None,
             byte_written: false,
             output_trigger: None,
+            expression_depth: 0,
             symbols_output: Default::default(),
 
             crunched_section_state: None,
@@ -4601,7 +4680,7 @@ impl Env {
         self.update_dollar();
         let value = self.active_page_info_mut().logical_codeadr;
 
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&value.into())
         }
 
@@ -4971,7 +5050,7 @@ impl Env {
             let depth = self.symbols().counter_depth() + 1;
 
             if self.pass.is_listing_pass()
-                && let Some(trigger) = self.output_trigger.as_mut()
+                && let Some(trigger) = self.listing_trigger()
             {
                 trigger.repeat_iteration(counter_name, counter_value.as_ref(), depth)
             }
@@ -4979,7 +5058,7 @@ impl Env {
         else {
             let depth = self.symbols().counter_depth() + 1;
             if self.pass.is_listing_pass()
-                && let Some(trigger) = self.output_trigger.as_mut()
+                && let Some(trigger) = self.listing_trigger()
             {
                 trigger.repeat_iteration("<new iteration>", counter_value.as_ref(), depth)
             }
@@ -5059,7 +5138,7 @@ impl Env {
     ) -> Result<(), Box<AssemblerError>> {
         let address = self.resolve_expr_may_fail_in_first_pass(address)?.int()?;
 
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&address.into())
         }
 
@@ -5321,7 +5400,7 @@ impl Env {
             // self.symbols_mut().set_current_label(label)?;
             // }
             let value = self.resolve_expr_may_fail_in_first_pass(exp)?;
-            if let Some(o) = self.output_trigger.as_mut() {
+            if let Some(o) = self.listing_trigger() {
                 o.replace_code_address(&value)
             }
             self.add_symbol_to_symbol_table(
@@ -5418,7 +5497,7 @@ impl Env {
             }
 
             let value: ExprResult = self.map_counter.into();
-            if let Some(o) = self.output_trigger.as_mut() {
+            if let Some(o) = self.listing_trigger() {
                 o.replace_code_address(&value)
             }
             self.add_symbol_to_symbol_table(
@@ -5452,7 +5531,7 @@ impl Env {
             self.resolve_expr_may_fail_in_first_pass(exp)?
         };
 
-        if let Some(o) = self.output_trigger.as_mut() {
+        if let Some(o) = self.listing_trigger() {
             o.replace_code_address(&value)
         }
 
@@ -5618,8 +5697,7 @@ impl Env {
             // the last character with bit 7 set.
             if env.pass.is_listing_pass()
                 && let Some(last) = env
-                    .output_trigger
-                    .as_mut()
+                    .listing_trigger()
                     .and_then(|trigger| trigger.bytes.last_mut())
             {
                 *last = patched_last_value;
@@ -5632,11 +5710,14 @@ impl Env {
 
             // TODO add that in a function to reuse it with DEFS
             // collect the bytes
-            let mut bytes = (0..num_bytes).into_iter().map(|i| {
-                let addr = backup_address.wrapping_add(i as u16);
-                let phy = env.logical_to_physical_address(addr);
-                env.peek(&phy)
-            }).collect_vec();
+            let mut bytes = (0..num_bytes)
+                .into_iter()
+                .map(|i| {
+                    let addr = backup_address.wrapping_add(i as u16);
+                    let phy = env.logical_to_physical_address(addr);
+                    env.peek(&phy)
+                })
+                .collect_vec();
 
             // disassemble the bytes
             let obtained_listing = disassemble(&bytes);
@@ -5664,7 +5745,6 @@ impl Env {
 
             let listing_duration = obtained_listing.estimated_duration().unwrap();
             env.stable_counters.update_counters(listing_duration);
-
         }
 
         Ok(())
@@ -5721,10 +5801,10 @@ impl Env {
 
             // Keep listing token start/end addresses aligned with the effective
             // BASIC load address when LOCOMOTIVE is the first emitted content.
-            if self.pass.is_listing_pass() && self.output_trigger.is_some() {
+            if self.listing_is_recording() {
                 let code_adr = self.logical_code_address();
                 let output_adr = self.logical_to_physical_address(self.logical_output_address());
-                let trigger = self.output_trigger.as_mut().unwrap();
+                let trigger = self.listing_trigger().unwrap();
 
                 trigger.replace_code_address(&code_adr.into());
                 trigger.replace_physical_address(output_adr);

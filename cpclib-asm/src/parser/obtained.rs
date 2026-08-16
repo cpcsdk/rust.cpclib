@@ -667,6 +667,9 @@ impl From<LocatedExpr> for Expr {
 }
 
 impl DataAccessElem for LocatedDataAccess {
+    type Expr = LocatedExpr;
+
+    data_access_impl_most_methods!();
 
     fn kind(&self) -> cpclib_tokens::OperandKind {
         use cpclib_tokens::OperandKind;
@@ -687,9 +690,6 @@ impl DataAccessElem for LocatedDataAccess {
             Self::PortN(..) => OperandKind::PortN
         }
     }
-    type Expr = LocatedExpr;
-
-    data_access_impl_most_methods!();
 
     fn to_data_access_for_low_register(&self) -> Option<Self> {
         match self {
@@ -1320,7 +1320,9 @@ impl ListingElement for LocatedToken {
         fn mnemonic_arg1(&self) -> Option<&Self::DataAccess>;
         fn mnemonic_arg2(&self) -> Option<&Self::DataAccess>;
         fn mnemonic_arg3(&self) -> Option<Register8>;
-        fn multi_push_pop_to_listing(&self) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>>;
+        fn multi_push_pop_to_listing(
+            &self
+        ) -> Option<Vec<(Mnemonic, Option<DataAccess>, Option<DataAccess>)>>;
         fn rorg_expr(&self) -> &Self::Expr;
         fn iterate_counter_name(&self) -> &str;
         fn iterate_values(&self) -> either::Either<&Vec<Self::Expr>, &Self::Expr>;
@@ -2977,8 +2979,22 @@ impl ListingExt for LocatedListing {
         Ok(env.produced_bytes())
     }
 
+    /// Sum of what the tokens cost, in NOPs.
+    ///
+    /// The same rule as a plain `Listing`'s, and for the same reason it is
+    /// wanted: a debugger showing the cost of the line at `PC`, and a hover
+    /// showing the cost of the line under the cursor, are both asking a
+    /// *located* listing what it costs. This used to answer `todo!()` and
+    /// panic.
     fn estimated_duration(&self) -> Result<usize, Box<AssemblerError>> {
-        todo!()
+        if let Some(duration) = self.duration() {
+            return Ok(duration);
+        }
+        let mut duration = 0;
+        for token in self.listing().iter() {
+            duration += token.estimated_duration()?;
+        }
+        Ok(duration)
     }
 
     fn to_string(&self) -> String {

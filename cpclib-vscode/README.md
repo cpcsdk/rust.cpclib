@@ -63,6 +63,103 @@ Full integration with the **bndbuild** project automation tool:
 3. Use the Command Palette → "Tasks: Run Task" → select a bndbuild target
 4. Build output appears in the "CPClib LSP" output panel
 
+### 🐞 Debugging
+
+Press **F5** on a `.asm` file, or click the **🐞 Debug** CodeLens above a
+bndbuild rule that launches an emulator. The extension assembles the program,
+starts [1984js](https://github.com/gmarcusroberto/1984js) in a tab beside your
+code, and steps through your *source* rather than through addresses.
+
+**What works**
+
+- **Breakpoints** from the gutter, and from the program itself: every
+  `BREAKPOINT` directive basm assembled is armed too, and clearing the editor's
+  red dots does not clear them - you cannot un-write a line of source by
+  clicking.
+- **Stepping** in, over, out - and *back*, which the emulator supports through
+  its own checkpoints. On a line holding several instructions
+  (`ld a,l : inc a : ld (.p),a`) the cursor lands on the **instruction**, not on
+  the start of the line, and the whole instruction is highlighted.
+- **A real call stack.** The emulator reports one frame; the rest is
+  reconstructed by walking the stack for return addresses and checking the
+  three bytes before each against the assembled program. Each frame is named by
+  the routine its `CALL` entered and placed on the line of the `CALL`.
+- **Registers with labels**: `HL = 0xC000 (screen_buffer)`, `DE = 0xC003
+  (screen_buffer+3)`, decoded flags, and the **NOP cost** of the line at `PC` -
+  from the assembler's own table, so it agrees with what the build says.
+- **Watches**: type a label in the Watch pane to see the byte at it,
+  `label,w` for a word. **Break When Value Changes** on a label arms one of the
+  emulator's write-watch channels - as do `BREAKPOINT ... TYPE=MEM ACCESS=W`
+  directives and the `watchLabels` launch attribute.
+- **Debug console commands**: `-mv 0xC000 0x40` (or `-mv animation_state`)
+  opens a memory view in its own tab, with your labels marked in the dump. It
+  **re-reads itself on every stop and highlights the bytes that moved**, which
+  is the point of keeping it open. `-dv` disassembles memory into a tab whose
+  **rows link back to your source**; with no argument it starts at `PC` and
+  **follows it on every step**, which is worth having open beside the editor
+  because memory and source are not the same thing: a macro turns one line into
+  a screenful of opcodes, and self-modifying code means the bytes running are
+  not the bytes that were assembled. `-chips` prints the CRTC, Gate Array, PSG
+  and PPI; `-timer add raster` starts a stopwatch counted in **NOPs**.
+  `-help` lists the commands.
+- **A bare screen.** In the VS Code tab the emulator shows its picture and
+  nothing else - no keyboard, tape deck or monitor panel, all of which the
+  debugger does better. Open the URL in a browser for the full machine.
+- **Its own disassembler.** The bytes come from the emulator; the *decoding* is
+  `basm`'s own tables, so the view reads like the source it sits beside and does
+  not change when you change emulator.
+- **Timers.** `-timer add raster` counts NOPs. Exact while stepping - and
+  honest when it cannot be: this emulator exposes no elapsed-time call, so a
+  timer that spans a free run reports `>= N NOPs` rather than a total it cannot
+  stand behind. One call from the emulator (NOPs since the last stop) would
+  make it exact.
+- **Registers and chips.** Typing a register name in the debug console
+  (`hl`, `a`, `f`, `(hl)`) answers from the values the pane just fetched. The
+  **CRTC, Gate Array, PSG and PPI** get their own scopes, counters included -
+  `HCC`, `RLC`, `VLC` and the Gate Array's interrupt counter, which is where a
+  raster effect lives. The emulator exposes no API for any of that, so it is
+  recovered by having the machine write a snapshot of itself and reading its
+  header; the scopes are marked expensive so that only happens when you expand
+  one.
+
+**What it will tell you it cannot do**
+
+Rather than looking as though it worked, the Debug Console says so at the start:
+
+- A `BREAKPOINT` carrying `CONDITION=`, `MASK=` or `SIZE=` becomes a plain
+  address breakpoint, and the attribute that was dropped is named.
+- `TYPE=IO` has no equivalent in this emulator at all.
+- A watchpoint **reports** writes in the Debug Console; the emulator's watch
+  channels cannot stop the program on one. VS Code is told this in the text it
+  shows when you set it.
+- A program with code at the same address in **several banks** has its bank
+  worked out by a heuristic, since the emulator will not report which one is
+  paged in: the bytes really in memory are compared against each page's
+  assembled image, and the best match wins. Frames above the innermost get
+  their page for free, from the page whose image holds the `CALL`. When two
+  pages match equally well it says so and shows disassembly, rather than
+  picking one.
+- **An outer frame has no registers.** A Z80 `CALL` pushes the return address
+  and nothing else, so a caller's `HL` no longer exists anywhere to be read;
+  recovering it would need the emulator to record the whole register file at
+  every `CALL`. Clicking an outer frame shows what the stack *does* still hold
+  - the call site, the routine entered, and the words that frame pushed - and
+  says plainly that the registers are gone.
+- Editing a file mid-session marks the breakpoints you then set as stale: the
+  code that is *running* did not move.
+
+**Launch configuration**
+
+| Attribute | What it does |
+| --- | --- |
+| `program` | The `.asm` file to assemble and debug. |
+| `rule` | A bndbuild rule whose `emu ... run` is re-issued as `debug`; the project's own build flags apply. |
+| `buildFile` | Which build file that rule lives in. Defaults to the nearest one. |
+| `stopOnEntry` | Break at the address the snapshot starts from. |
+| `topOfStack` | A label or address the call stack is not walked past. Defaults to a `stack_top`/`stack` label if your program has one. |
+| `watchLabels` | Labels to report writes to. Unknown ones are named rather than silently ignored. |
+| `openInWebview` | Show the emulator in a VS Code tab (default) or in your browser. |
+
 ### 📝 BASIC Language Support
 
 Support for Locomotive BASIC (`.bas`) and CatArt (`.CAT`, `.ASC`) files:

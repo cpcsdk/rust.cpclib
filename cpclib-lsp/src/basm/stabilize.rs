@@ -47,10 +47,10 @@
 //! reports no edits) rather than emit a reference that might not reliably
 //! resolve.
 
-use cpclib_z80flow::branch_balance::{self, StabilizeEdit};
-use cpclib_z80flow::{CostModel, InstructionCost};
 use cpclib_asm::parser::obtained::{LocatedListing, LocatedToken};
 use cpclib_tokens::ListingElement;
+use cpclib_z80flow::branch_balance::{self, StabilizeEdit};
+use cpclib_z80flow::{CostModel, InstructionCost};
 use tower_lsp::lsp_types::{Position, Range};
 
 use super::timing::{find_timings, nops_of, split_head};
@@ -90,7 +90,6 @@ impl CostModel<LocatedToken> for TimingCosts {
         }
         nops_of(&token.to_string())
     }
-
 }
 
 /// `(taken, not_taken)` nops for a conditional instruction's real timing

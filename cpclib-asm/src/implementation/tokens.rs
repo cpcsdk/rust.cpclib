@@ -238,14 +238,14 @@ impl TokenExt for Token {
                 else {
                     cpclib_z80flow::cost::opcode_duration(mnemonic, arg1.as_ref(), arg2.as_ref())
                         .ok_or_else(|| {
-                        Box::new(AssemblerError::BugInAssembler {
-                            file: file!(),
-                            line: line!(),
-                            msg: format!(
-                                "Duration not set for {mnemonic:?}, {arg1:?}, {arg2:?}"
-                            )
-                        })
-                    })? as usize
+                            Box::new(AssemblerError::BugInAssembler {
+                                file: file!(),
+                                line: line!(),
+                                msg: format!(
+                                    "Duration not set for {mnemonic:?}, {arg1:?}, {arg2:?}"
+                                )
+                            })
+                        })? as usize
                 }
             },
             _ => {

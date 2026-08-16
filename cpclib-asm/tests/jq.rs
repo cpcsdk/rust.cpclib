@@ -14,8 +14,7 @@ fn jq_in_range_matches_jr() {
 #[test]
 fn jq_flag_in_range_matches_jr() {
     let jq = cpclib_asm::assemble("org 0\n jq nz, label\nlabel: nop\n").expect("assemble failed");
-    let jr =
-        cpclib_asm::assemble("org 0\n jr nz, label\nlabel: nop\n").expect("assemble failed");
+    let jr = cpclib_asm::assemble("org 0\n jr nz, label\nlabel: nop\n").expect("assemble failed");
     assert_eq!(jq, jr);
 }
 

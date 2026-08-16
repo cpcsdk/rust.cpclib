@@ -176,9 +176,8 @@ where T: ListingElement + 'a {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::parse_z80_str;
-
     use super::*;
+    use crate::parser::parse_z80_str;
 
     #[test]
     fn flattening_descends_into_an_if_block() {
@@ -256,11 +255,7 @@ counter: ld a, 0
         // separates it from the conditional above.
         let listing = parse_z80_str("    MODULE m\n    ld a, 1\n    ret\n    ENDMODULE\n").unwrap();
         let flat: Vec<&LocatedToken> = flatten_for_analysis(listing.iter()).collect();
-        assert_eq!(
-            flat.iter().filter(|t| t.is_opcode()).count(),
-            2,
-            "{flat:?}"
-        );
+        assert_eq!(flat.iter().filter(|t| t.is_opcode()).count(), 2, "{flat:?}");
     }
 
     #[test]

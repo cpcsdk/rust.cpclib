@@ -13,8 +13,11 @@ use cpclib_runner::web::serve;
 
 fn site() -> camino_tempfile::Utf8TempDir {
     let tmp = camino_tempfile::tempdir().unwrap();
-    std::fs::write(tmp.path().join("index.html"), "<html><head></head><body>x</body></html>")
-        .unwrap();
+    std::fs::write(
+        tmp.path().join("index.html"),
+        "<html><head></head><body>x</body></html>"
+    )
+    .unwrap();
     tmp
 }
 
@@ -66,7 +69,9 @@ fn a_message_survives_the_trip_to_the_page_as_a_parseable_frame() {
 
     // What the page does with it, byte for byte.
     let frame = format!("Content-Length: {}\r\n\r\n{received}", received.len());
-    let separator = frame.find("\r\n\r\n").expect("the frame has a CRLF CRLF separator");
+    let separator = frame
+        .find("\r\n\r\n")
+        .expect("the frame has a CRLF CRLF separator");
     let declared: usize = frame[..separator]
         .strip_prefix("Content-Length: ")
         .unwrap()
@@ -106,7 +111,11 @@ fn messages_arrive_one_per_record() {
     let mut reader = open_event_stream(server.port(), server.token());
 
     for seq in 1..=3 {
-        server.send(format!(r#"{{"seq":{seq},"type":"request","command":"threads"}}"#)).unwrap();
+        server
+            .send(format!(
+                r#"{{"seq":{seq},"type":"request","command":"threads"}}"#
+            ))
+            .unwrap();
     }
     for seq in 1..=3 {
         let received = next_event(&mut reader);

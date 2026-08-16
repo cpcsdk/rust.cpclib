@@ -843,16 +843,13 @@ fn extract_referenced_errors(text: &str) -> Vec<LocatedError> {
             }
         }
 
-        let Some((_, rest)) = line
-            .split_once("┌─ ")
-            .or_else(|| line.split_once("--> "))
+        let Some((_, rest)) = line.split_once("┌─ ").or_else(|| line.split_once("--> "))
         else {
             continue;
         };
 
         let mut parts = rest.trim().rsplitn(3, ':');
-        let (Some(column), Some(line_no), Some(path)) =
-            (parts.next(), parts.next(), parts.next())
+        let (Some(column), Some(line_no), Some(path)) = (parts.next(), parts.next(), parts.next())
         else {
             continue;
         };
@@ -1154,7 +1151,6 @@ mod tests {
         Document::new(uri, content.to_string(), 1)
     }
 
-
     /// `basm assemble` on a file that is fine.
     #[test]
     #[serial]
@@ -1267,7 +1263,9 @@ mod tests {
         assert_eq!(found.len(), 1, "{found:#?}");
         assert_eq!((found[0].path.as_str(), found[0].line), ("events.asm", 112));
         assert!(
-            found[0].message.starts_with("Error in macro call REGISTER_EVENT"),
+            found[0]
+                .message
+                .starts_with("Error in macro call REGISTER_EVENT"),
             "{}",
             found[0].message
         );
@@ -1729,7 +1727,11 @@ mod tests {
         // of caret-underline art the whole captured output would have been.
         assert!(diag.message.contains("Syntax error"), "{}", diag.message);
         assert!(diag.message.contains("invalid LD"), "{}", diag.message);
-        assert!(diag.message.contains("build rule 'broken'"), "{}", diag.message);
+        assert!(
+            diag.message.contains("build rule 'broken'"),
+            "{}",
+            diag.message
+        );
         assert!(
             !diag.message.contains('\n'),
             "a Problems-panel entry must stay one line: {}",
@@ -2011,7 +2013,11 @@ mod tests {
         });
         assert_eq!(target_uri, Url::from_file_path(&asm_path).unwrap());
         assert_eq!(diag.range.start.line, 0);
-        assert!(diag.message.contains("build rule 'broken'"), "{}", diag.message);
+        assert!(
+            diag.message.contains("build rule 'broken'"),
+            "{}",
+            diag.message
+        );
     }
 
     #[serial]

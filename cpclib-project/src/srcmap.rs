@@ -11,6 +11,13 @@
 //! honest: an address inside an instruction resolves to that instruction, and
 //! an address in no row at all resolves to nothing - so the editor shows
 //! disassembly instead of highlighting a line that has nothing to do with it.
+//!
+//! A CPC with extra memory asks a third question the other two hide: *which*
+//! `&4000`? Code assembled into page 5 and code assembled into the base 64K
+//! share every logical address they use, so a row records the page it was
+//! assembled for as well. When two pages claim one address and nothing has
+//! said which is currently banked in, the honest answer is to say so rather
+//! than to pick the first one and highlight a line from the wrong bank.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -30,7 +37,16 @@ const MAX_BREAKPOINT_SLIDE: u32 = 64;
 pub struct SourceLocation {
     pub file: PathBuf,
     /// 1-based, as the user sees it.
-    pub line: u32
+    pub line: u32,
+    /// 1-based columns the instruction occupies on that line.
+    ///
+    /// A line is often several instructions - `ld a,l : inc a : ld (.p),a` is
+    /// three - so "line 42" alone puts the cursor at the start of all three.
+    /// These let the editor highlight the one actually executing.
+    #[serde(default)]
+    pub column: u32,
+    #[serde(default)]
+    pub column_end: u32
 }
 
 /// Where a breakpoint actually went.
@@ -38,7 +54,29 @@ pub struct SourceLocation {
 pub struct BreakpointPlacement {
     pub address: u32,
     /// The line it ended up on, which may be later than the one asked for.
-    pub line: u32
+    pub line: u32,
+    /// The page that line was assembled into.
+    pub page: u8
+}
+
+/// What a logical address resolves to.
+///
+/// Distinguishes "no source here" from "source here, but in more than one
+/// bank" - two answers a plain `Option` would flatten into the same `None`,
+/// and only one of them is worth telling the user about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AddressResolution {
+    /// No row covers it: firmware, data, or a stray address.
+    Unknown,
+    Line(SourceLocation),
+    /// Several banks hold code at this logical address. Which one is running
+    /// depends on the banking state, which the emulator does not report.
+    Ambiguous {
+        pages: Vec<u8>,
+        /// What each page would say, so a caller that *does* know the banking
+        /// can still resolve it.
+        candidates: Vec<(u8, SourceLocation)>
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +84,10 @@ struct Span {
     start: u32,
     end: u32,
     file: u16,
-    line: u32
+    line: u32,
+    page: u8,
+    column: u16,
+    column_end: u16
 }
 
 /// Bidirectional line/address mapping for one assembled program.
@@ -65,7 +106,12 @@ pub struct SourceMap {
     /// A macro body called five times has five.
     forward: HashMap<(u16, u32), Vec<u32>>,
     /// Sorted by `start`, for binary search.
-    spans: Vec<Span>
+    spans: Vec<Span>,
+    /// Set when at least one logical address is claimed by more than one page,
+    /// computed once at build time: it is asked on every stop and answered in
+    /// a launch notice, and recomputing it would mean walking every span.
+    #[serde(default)]
+    banked_ambiguity: bool
 }
 
 impl SourceMap {
@@ -91,16 +137,27 @@ impl SourceMap {
                 start: row.logical,
                 end: row.logical + row.len as u32,
                 file: row.file,
-                line: row.line
+                line: row.line,
+                page: row.page,
+                column: row.column,
+                column_end: row.column_end
             });
         }
-        spans.sort_unstable_by_key(|s| (s.start, s.end));
+        spans.sort_unstable_by_key(|s| (s.start, s.end, s.page));
+
+        // Do any two pages emit at the same logical address? Sorted spans make
+        // this one linear sweep over neighbours rather than a search per
+        // address.
+        let banked_ambiguity = spans
+            .windows(2)
+            .any(|pair| pair[0].page != pair[1].page && pair[1].start < pair[0].end);
 
         Self {
             symbols: HashMap::new(),
             files,
             forward,
-            spans
+            spans,
+            banked_ambiguity
         }
     }
 
@@ -149,9 +206,36 @@ impl SourceMap {
             .map(|(_, address)| *address)
     }
 
+    /// The label standing exactly at `address`, if there is one.
+    ///
+    /// A linear scan: the reverse question is asked a few dozen times per stop
+    /// against a table of a few thousand, which is nothing, and an index would
+    /// have to be kept in step with `serde` round trips for no gain.
+    pub fn symbol_at(&self, address: u32) -> Option<&str> {
+        self.symbols
+            .iter()
+            .find(|(_, at)| **at == address)
+            .map(|(name, _)| name.as_str())
+    }
+
+    /// The nearest label at or before `address`, and how far past it that is.
+    ///
+    /// `screen_buffer+3` is what a register holding a pointer into a buffer
+    /// should read as; `None` when nothing is within `window`, because a label
+    /// two kilobytes back says nothing about where the register points.
+    pub fn symbol_near(&self, address: u32, window: u32) -> Option<(&str, u32)> {
+        self.symbols
+            .iter()
+            .filter(|(_, at)| **at <= address && address - **at <= window)
+            .min_by_key(|(_, at)| address - **at)
+            .map(|(name, at)| (name.as_str(), address - *at))
+    }
+
     /// Every known label, for completion and for listing what can be watched.
     pub fn symbols(&self) -> impl Iterator<Item = (&str, u32)> {
-        self.symbols.iter().map(|(name, address)| (name.as_str(), *address))
+        self.symbols
+            .iter()
+            .map(|(name, address)| (name.as_str(), *address))
     }
 
     fn file_id(&self, file: &Path) -> Option<u16> {
@@ -191,9 +275,16 @@ impl SourceMap {
             if let Some(addresses) = self.forward.get(&(id, candidate))
                 && let Some(address) = addresses.iter().copied().min()
             {
+                let page = self
+                    .spans
+                    .iter()
+                    .find(|s| s.file == id && s.line == candidate && s.start == address)
+                    .map(|s| s.page)
+                    .unwrap_or(0);
                 return Some(BreakpointPlacement {
                     address,
-                    line: candidate
+                    line: candidate,
+                    page
                 });
             }
         }
@@ -202,20 +293,107 @@ impl SourceMap {
 
     /// Which source line an address belongs to, or `None` when it belongs to
     /// none - which is a real answer, not a failure.
+    ///
+    /// Also `None` when several banks claim the address: see
+    /// [`Self::resolution_at`] for the distinction. Returning a line from an
+    /// arbitrary bank would be worse than returning nothing, because the
+    /// editor would highlight it and the user would believe it.
     pub fn location_at(&self, address: u32) -> Option<SourceLocation> {
-        // The last span starting at or before `address`, then a containment
-        // check: sorted starts make this a binary search, and the containment
-        // check is what stops a stray address being attributed to whatever
-        // happened to be nearest.
+        match self.resolution_at(address) {
+            AddressResolution::Line(location) => Some(location),
+            _ => None
+        }
+    }
+
+    /// Every page holding code at this logical address, with what each would
+    /// say the line is.
+    ///
+    /// One entry means the answer is certain. Several means the banking state
+    /// decides, and something outside the map has to choose between them -
+    /// comparing the bytes really in memory against each page's image is what
+    /// the debugger does.
+    pub fn candidates_at(&self, address: u32) -> Vec<(u8, SourceLocation)> {
+        let index = self.spans.partition_point(|s| s.start <= address);
+        let covering = self.spans[..index]
+            .iter()
+            .rev()
+            .filter(|s| address >= s.start && address < s.end);
+
+        // Within one page the *latest* span wins, as it always has: a macro
+        // expanded five times, or an `ORG` rewind, legitimately puts several
+        // rows on one address and the last one assembled is what is there.
+        let mut candidates: Vec<(u8, SourceLocation)> = Vec::new();
+        for span in covering {
+            if candidates.iter().any(|(page, _)| *page == span.page) {
+                continue;
+            }
+            let Some(file) = self.files.get(span.file as usize)
+            else {
+                continue;
+            };
+            candidates.push((
+                span.page,
+                SourceLocation {
+                    file: file.clone(),
+                    line: span.line,
+                    column: span.column as u32,
+                    column_end: span.column_end as u32
+                }
+            ));
+        }
+        candidates.sort_by_key(|(page, _)| *page);
+        candidates
+    }
+
+    /// The full answer for a logical address, ambiguity included.
+    pub fn resolution_at(&self, address: u32) -> AddressResolution {
+        let mut candidates = self.candidates_at(address);
+        match candidates.len() {
+            0 => AddressResolution::Unknown,
+            1 => AddressResolution::Line(candidates.pop().unwrap().1),
+            _ => {
+                AddressResolution::Ambiguous {
+                    pages: candidates.iter().map(|(page, _)| *page).collect(),
+                    candidates
+                }
+            },
+        }
+    }
+
+    /// Which source line a *long* address belongs to - a page plus the 16-bit
+    /// address the Z80 sees.
+    ///
+    /// This is the question `location_at` cannot answer on a banked program.
+    /// Nothing reports banking to us yet, but the map holds the answer for
+    /// when something does, and the disassembly path can use it whenever the
+    /// page is known from where the bytes were read.
+    pub fn location_at_long(&self, page: u8, address: u16) -> Option<SourceLocation> {
+        let address = address as u32;
         let index = self.spans.partition_point(|s| s.start <= address);
         let span = self.spans[..index]
             .iter()
             .rev()
-            .find(|s| address >= s.start && address < s.end)?;
+            .find(|s| s.page == page && address >= s.start && address < s.end)?;
         Some(SourceLocation {
             file: self.files.get(span.file as usize)?.clone(),
-            line: span.line
+            line: span.line,
+            column: span.column as u32,
+            column_end: span.column_end as u32
         })
+    }
+
+    /// Whether this program puts code from different pages at the same logical
+    /// address - the condition under which `location_at` has to give up.
+    pub fn has_banked_ambiguity(&self) -> bool {
+        self.banked_ambiguity
+    }
+
+    /// Every page this program emitted code into, in order.
+    pub fn pages(&self) -> Vec<u8> {
+        let mut pages: Vec<u8> = self.spans.iter().map(|s| s.page).collect();
+        pages.sort_unstable();
+        pages.dedup();
+        pages
     }
 
     /// The files this program was built from.
@@ -239,16 +417,96 @@ mod tests {
             files: vec!["main.asm".to_string(), "inc.asm".to_string()],
             rows: rows
                 .iter()
-                .map(|&(file, line, logical, len)| {
+                .map(|&(file, line, logical, len)| SourceMapRow::flat(file, line, logical, len))
+                .collect()
+        })
+    }
+
+    /// Same shape, but each row also says which page it was assembled into.
+    fn banked_map(rows: &[(u16, u32, u32, u8, u16)]) -> SourceMap {
+        SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".to_string(), "inc.asm".to_string()],
+            rows: rows
+                .iter()
+                .map(|&(file, line, logical, page, len)| {
                     SourceMapRow {
                         file,
                         line,
                         logical,
+                        physical: logical + page as u32 * 0x1_0000,
+                        page,
+                        column: 1,
+                        column_end: 1,
                         len
                     }
                 })
                 .collect()
         })
+    }
+
+    /// The same logical address in two banks resolves to neither by itself.
+    ///
+    /// Picking one would highlight a line the CPU is provably not executing
+    /// half the time, and the user has no way to tell.
+    #[test]
+    fn one_address_in_two_banks_is_reported_as_ambiguous() {
+        let m = banked_map(&[(0, 10, 0x4000, 0, 3), (1, 77, 0x4000, 5, 3)]);
+        assert!(m.has_banked_ambiguity());
+        assert_eq!(m.pages(), vec![0, 5]);
+        assert_eq!(m.location_at(0x4000), None, "no guess is made");
+
+        match m.resolution_at(0x4001) {
+            AddressResolution::Ambiguous { pages, candidates } => {
+                assert_eq!(pages, vec![0, 5]);
+                assert_eq!(candidates.len(), 2);
+                assert_eq!(candidates[0].1.line, 10);
+                assert_eq!(candidates[1].1.line, 77);
+            },
+            other => panic!("expected an ambiguity, got {other:?}")
+        }
+    }
+
+    /// Told the page, it answers precisely.
+    #[test]
+    fn a_long_address_resolves_to_exactly_one_line() {
+        let m = banked_map(&[(0, 10, 0x4000, 0, 3), (1, 77, 0x4000, 5, 3)]);
+        assert_eq!(m.location_at_long(0, 0x4001).unwrap().line, 10);
+        assert_eq!(m.location_at_long(5, 0x4001).unwrap().line, 77);
+        assert_eq!(
+            m.location_at_long(3, 0x4001),
+            None,
+            "a page that emitted nothing here answers nothing"
+        );
+    }
+
+    /// A program that never banks is unaffected: no ambiguity, and the plain
+    /// answer still comes out.
+    #[test]
+    fn a_single_page_program_keeps_its_plain_answers() {
+        let m = banked_map(&[(0, 10, 0x4000, 0, 3), (0, 11, 0x4003, 0, 1)]);
+        assert!(!m.has_banked_ambiguity());
+        assert_eq!(m.location_at(0x4001).unwrap().line, 10);
+        assert_eq!(m.pages(), vec![0]);
+    }
+
+    /// Two pages using *different* address ranges is not ambiguity - it is
+    /// just a program with more memory, and every address still answers.
+    #[test]
+    fn pages_that_do_not_overlap_are_not_ambiguous() {
+        let m = banked_map(&[(0, 10, 0x4000, 0, 3), (1, 77, 0x8000, 5, 3)]);
+        assert!(!m.has_banked_ambiguity());
+        assert_eq!(m.location_at(0x4001).unwrap().line, 10);
+        assert_eq!(m.location_at(0x8001).unwrap().line, 77);
+    }
+
+    /// One page assembling twice over the same address (a macro, an `ORG`
+    /// rewind) is the old behaviour and must stay: the last row assembled is
+    /// what is really there.
+    #[test]
+    fn a_repeated_address_in_one_page_still_takes_the_last_row() {
+        let m = banked_map(&[(0, 10, 0x4000, 0, 3), (0, 90, 0x4000, 0, 3)]);
+        assert!(!m.has_banked_ambiguity());
+        assert_eq!(m.location_at(0x4000).unwrap().line, 90);
     }
 
     #[test]
@@ -259,7 +517,9 @@ mod tests {
             m.location_at(0x4000).unwrap(),
             SourceLocation {
                 file: PathBuf::from("main.asm"),
-                line: 10
+                line: 10,
+                column: 1,
+                column_end: 1
             }
         );
     }
@@ -278,9 +538,9 @@ mod tests {
     #[test]
     fn an_address_in_no_row_is_unknown() {
         let m = map(&[(0, 10, 0x4000, 3)]);
-        assert!(m.location_at(0x3fff).is_none());
+        assert!(m.location_at(0x3FFF).is_none());
         assert!(m.location_at(0x4003).is_none(), "one past the end");
-        assert!(m.location_at(0xc000).is_none());
+        assert!(m.location_at(0xC000).is_none());
     }
 
     /// A macro body or a REPEAT emits the same line several times; each is a
@@ -351,7 +611,7 @@ mod tests {
     fn a_long_run_covers_its_whole_extent() {
         let m = map(&[(0, 30, 0x2000, 1024)]);
         assert_eq!(m.location_at(0x2000).unwrap().line, 30);
-        assert_eq!(m.location_at(0x23ff).unwrap().line, 30);
+        assert_eq!(m.location_at(0x23FF).unwrap().line, 30);
         assert!(m.location_at(0x2400).is_none());
     }
 }

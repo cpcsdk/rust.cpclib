@@ -60,10 +60,21 @@ fn addresses_follow_the_instructions() {
     assert_eq!(map.addresses_at(file, 4), &[0x4005], "nop");
 
     // ...and every byte in between resolves back to the right line.
-    assert_eq!(map.location_at(0x4001).unwrap().line, 2, "second byte of ld a,0");
-    assert_eq!(map.location_at(0x4004).unwrap().line, 3, "third byte of ld hl");
+    assert_eq!(
+        map.location_at(0x4001).unwrap().line,
+        2,
+        "second byte of ld a,0"
+    );
+    assert_eq!(
+        map.location_at(0x4004).unwrap().line,
+        3,
+        "third byte of ld hl"
+    );
     assert_eq!(map.location_at(0x4005).unwrap().line, 4);
-    assert!(map.location_at(0x4006).is_none(), "past the end of the program");
+    assert!(
+        map.location_at(0x4006).is_none(),
+        "past the end of the program"
+    );
 }
 
 /// A line that emits nothing holds no address, and a breakpoint on it slides.
@@ -73,7 +84,10 @@ fn a_comment_line_slides_to_the_next_instruction() {
     let file = tmp.path().join("main.asm");
     let file = Path::new(file.as_str());
 
-    assert!(map.addresses_at(file, 2).is_empty(), "a comment emits nothing");
+    assert!(
+        map.addresses_at(file, 2).is_empty(),
+        "a comment emits nothing"
+    );
     let placed = map.breakpoint_at(file, 2).expect("must slide to the nop");
     assert_eq!(placed.line, 4);
     assert_eq!(placed.address, 0x4000);
@@ -111,20 +125,40 @@ fn a_repeat_body_yields_one_address_per_iteration() {
     }
 }
 
-/// A multi-statement line is one line, and stays one row - the statements do
-/// advance through the source, so they are a continuation, not a re-execution.
-/// This is the case the `repeat` fix must not break.
+/// A multi-statement line is one line but several instructions, and each gets
+/// its own row - with the columns that let a debugger point at the one being
+/// executed rather than at the start of all three.
 #[test]
-fn a_multi_statement_line_stays_one_row() {
+fn a_multi_statement_line_yields_one_row_per_instruction() {
     let (map, tmp) = map_of("\torg 0x4000\n\tnop : nop : nop\n");
     let file = tmp.path().join("main.asm");
     let file = Path::new(file.as_str());
 
-    assert_eq!(map.addresses_at(file, 2), &[0x4000], "one row for the line");
-    // ...and every byte of it still resolves back to that line.
-    for address in 0x4000..0x4003 {
-        assert_eq!(map.location_at(address).unwrap().line, 2);
-    }
+    assert_eq!(
+        map.addresses_at(file, 2),
+        &[0x4000, 0x4001, 0x4002],
+        "one address per instruction on the line"
+    );
+
+    // A breakpoint on the line still lands on its *first* instruction, which is
+    // where a line is entered.
+    let placement = map.breakpoint_at(file, 2).expect("placed");
+    assert_eq!(placement.address, 0x4000);
+    assert_eq!(placement.line, 2);
+
+    // ...and each address resolves to its own instruction, not to the line.
+    let columns: Vec<(u32, u32)> = (0x4000..0x4003)
+        .map(|address| {
+            let location = map.location_at(address).unwrap();
+            assert_eq!(location.line, 2);
+            (location.column, location.column_end)
+        })
+        .collect();
+    assert_eq!(
+        columns,
+        vec![(2, 5), (8, 11), (14, 17)],
+        "\tnop : nop : nop"
+    );
 }
 
 /// `org` moving the assembly point is followed, not assumed monotonic.
@@ -209,4 +243,75 @@ fn included_files_are_recorded_with_a_path_the_editor_can_open() {
         );
         assert!(file.exists(), "{} does not exist", file.display());
     }
+}
+
+/// Each address on a multi-instruction line resolves to *its own* instruction.
+///
+/// Reported from real use: stopping on the second instruction of
+/// `ld e,(hl) : inc hl : ld d,(hl)` highlighted the third, and the next line's
+/// instruction was not highlighted at all.
+#[test]
+fn every_instruction_of_a_shared_line_resolves_to_itself() {
+    let (map, tmp) = map_of("\torg 0x4000\n\tld e, (hl) : inc hl : ld d, (hl)\n\tnop\n");
+    let file = tmp.path().join("main.asm");
+    let file = Path::new(file.as_str());
+
+    let at = |address: u32| {
+        let location = map
+            .location_at(address)
+            .unwrap_or_else(|| panic!("nothing at 0x{address:04X}"));
+        (location.line, location.column, location.column_end)
+    };
+
+    // `\tld e, (hl) : inc hl : ld d, (hl)` - the tab is column 1.
+    assert_eq!(at(0x4000), (2, 2, 12), "ld e, (hl)");
+    assert_eq!(at(0x4001), (2, 15, 21), "inc hl");
+    assert_eq!(at(0x4002), (2, 24, 34), "ld d, (hl)");
+    // ...and the line after it is reached too.
+    assert_eq!(at(0x4003).0, 3, "the next line");
+
+    // Nothing claims a byte it does not own.
+    assert_eq!(map.addresses_at(file, 2), &[0x4000, 0x4001, 0x4002]);
+    assert_eq!(map.addresses_at(file, 3), &[0x4003]);
+}
+
+/// The same, with a label in front - the shape real code actually has.
+#[test]
+fn a_label_before_a_shared_line_does_not_shift_the_instructions() {
+    let (map, _tmp) = map_of("\torg 0x4000\n.loop\tld e, (hl) : inc hl : ld d, (hl)\n\tnop\n");
+
+    let at = |address: u32| {
+        let l = map
+            .location_at(address)
+            .unwrap_or_else(|| panic!("nothing at 0x{address:04X}"));
+        (l.line, l.column)
+    };
+    assert_eq!(at(0x4000).0, 2);
+    assert_eq!(at(0x4001).0, 2);
+    assert_eq!(at(0x4002).0, 2);
+    // Three distinct columns, in order.
+    let columns = [at(0x4000).1, at(0x4001).1, at(0x4002).1];
+    assert!(
+        columns[0] < columns[1] && columns[1] < columns[2],
+        "{columns:?}"
+    );
+    assert_eq!(at(0x4003).0, 3, "and the next line is still reachable");
+}
+
+/// Instructions of differing length on one line: the offsets have to follow the
+/// bytes, not the count.
+#[test]
+fn instructions_of_different_lengths_share_a_line_correctly() {
+    let (map, _tmp) = map_of("\torg 0x4000\n\tld hl, 0x1234 : nop : ld a, 5\n\tnop\n");
+
+    // 3 bytes, then 1, then 2.
+    assert_eq!(map.location_at(0x4000).unwrap().line, 2);
+    assert_eq!(
+        map.location_at(0x4002).unwrap().column,
+        map.location_at(0x4000).unwrap().column
+    );
+    let nop = map.location_at(0x4003).unwrap();
+    let lda = map.location_at(0x4004).unwrap();
+    assert!(nop.column < lda.column, "{nop:?} then {lda:?}");
+    assert_eq!(map.location_at(0x4006).unwrap().line, 3, "the next line");
 }

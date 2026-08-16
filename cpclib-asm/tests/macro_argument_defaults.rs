@@ -55,8 +55,7 @@ fn a_branch_that_needs_no_extra_argument_assembles() {
 #[test]
 fn the_supplied_argument_still_wins_over_the_default() {
     let code = format!("{EVENTS}\n    REGISTER_EVENT(100, EVENT_CHANGE_PALETTE, 0x1234)\n");
-    let bytes = cpclib_asm::assemble(&code)
-        .unwrap_or_else(|e| panic!("assemble failed: {e}"));
+    let bytes = cpclib_asm::assemble(&code).unwrap_or_else(|e| panic!("assemble failed: {e}"));
     assert_eq!(bytes, vec![100, 0, 0x34, 0x12], "{bytes:?}");
 }
 

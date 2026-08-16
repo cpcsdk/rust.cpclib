@@ -16,9 +16,10 @@
 //! `breakpoint : loop ld a,0` would not even parse.
 
 use cpclib_asm::parser::obtained::{LocatedListing, MayHaveSpan};
-use crate::common::document::Document;
 use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::{Position, Range, TextEdit};
+
+use crate::common::document::Document;
 
 /// What gets written in, separator included.
 ///
@@ -134,8 +135,7 @@ pub(super) fn add_breakpoint_edit(
             return None;
         }
         let column = code.len() - code.trim_start().len();
-        let character =
-            crate::common::document::byte_offset_to_utf16_col(line_text, column) as u32;
+        let character = crate::common::document::byte_offset_to_utf16_col(line_text, column) as u32;
         let position = Position { line, character };
         return Some(TextEdit {
             range: Range {
@@ -150,8 +150,8 @@ pub(super) fn add_breakpoint_edit(
     let first = on_line.iter().find(|t| t.mnemonic().is_some())?;
 
     let column = line_and_column(*first).1;
-    let character = crate::common::document::byte_offset_to_utf16_col(line_text, column as usize)
-        as u32;
+    let character =
+        crate::common::document::byte_offset_to_utf16_col(line_text, column as usize) as u32;
     let position = Position { line, character };
     Some(TextEdit {
         range: Range {

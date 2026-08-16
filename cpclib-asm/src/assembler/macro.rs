@@ -113,7 +113,12 @@ impl<'a, P: MacroParamElement> MacroWithArgs<'a, P> {
                     msg: format!(
                         "{} arguments provided, but {}{} expected. [{}]",
                         args.len(),
-                        if r#macro.has_variadic() { "at least " } else { "" },
+                        if r#macro.has_variadic() {
+                            "at least "
+                        }
+                        else {
+                            ""
+                        },
                         r#macro.nb_args(),
                         r#macro.params().join(",")
                     )

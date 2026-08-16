@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use codespan_reporting::diagnostic::Severity;
 use cpclib_common::itertools::Itertools;
 use cpclib_sna::{
-    AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint, WabpAnyBreakpoint,
-    WinapeBreakPoint
+    AceBreakPoint, AceBrkRuntimeMode, AdvancedRemuBreakPoint, RemuBreakPoint,
+    RemuBreakPointAccessMode, RemuBreakPointType, WabpAnyBreakpoint, WinapeBreakPoint
 };
 
 use super::report::SavedFile;
@@ -285,7 +285,101 @@ impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointC
     }
 }
 
+/// One breakpoint the assembled program asked for, in a form a debugger can
+/// act on.
+///
+/// The assembler's own representation is shaped for the snapshot chunks it
+/// writes; this is the same information without that commitment, so a debug
+/// adapter can decide for itself what its emulator is able to honour.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssembledBreakpoint {
+    pub address: u16,
+    pub page: u8,
+    /// What the program asked to break on. Anything other than execution needs
+    /// an emulator that implements watchpoints.
+    pub kind: AssembledBreakpointKind,
+    /// Set when the directive carried attributes beyond an address - a
+    /// condition, a size, a mask. Held as text because its only use is telling
+    /// the user what an emulator could not honour.
+    pub extra: Option<String>,
+    pub name: Option<String>
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssembledBreakpointKind {
+    Execution,
+    /// A memory watchpoint, with the accesses it watches for.
+    Memory {
+        read: bool,
+        write: bool
+    },
+    Io
+}
+
 impl BreakpointCommand {
+    /// This breakpoint, described for a debugger rather than for a chunk.
+    pub fn described(&self) -> AssembledBreakpoint {
+        match &self.brk {
+            InnerBreakpointCommand::Simple(brk) => {
+                AssembledBreakpoint {
+                    address: brk.address,
+                    page: brk.page,
+                    kind: AssembledBreakpointKind::Execution,
+                    extra: None,
+                    name: None
+                }
+            },
+            InnerBreakpointCommand::Advanced(brk) => {
+                let kind = match brk.brk_type {
+                    RemuBreakPointType::Exec => AssembledBreakpointKind::Execution,
+                    RemuBreakPointType::IO => AssembledBreakpointKind::Io,
+                    RemuBreakPointType::Mem => {
+                        AssembledBreakpointKind::Memory {
+                            read: matches!(
+                                brk.access_mode,
+                                RemuBreakPointAccessMode::Read
+                                    | RemuBreakPointAccessMode::ReadWrite
+                            ),
+                            write: matches!(
+                                brk.access_mode,
+                                RemuBreakPointAccessMode::Write
+                                    | RemuBreakPointAccessMode::ReadWrite
+                            )
+                        }
+                    },
+                };
+
+                // Only the attributes a plain address breakpoint cannot express
+                // - the ones worth telling the user were lost.
+                let mut extra = Vec::new();
+                if let Some(condition) = &brk.condition {
+                    extra.push(format!("condition {}", AsRef::<str>::as_ref(condition)));
+                }
+                if brk.size > 1 {
+                    extra.push(format!("size {}", brk.size));
+                }
+                if brk.mask != 0xFFFF {
+                    extra.push(format!("mask 0x{:04X}", brk.mask));
+                }
+                if let Some(step) = brk.step {
+                    extra.push(format!("step {step}"));
+                }
+
+                AssembledBreakpoint {
+                    address: brk.addr,
+                    // The advanced form carries no page of its own.
+                    page: 0,
+                    kind,
+                    extra: (!extra.is_empty()).then(|| extra.join(", ")),
+                    name: brk
+                        .name
+                        .as_ref()
+                        .map(|n| AsRef::<str>::as_ref(n).to_string())
+                }
+            }
+        }
+    }
+
     pub fn new_simple(address: u16, page: u8, span: Option<Z80Span>) -> Self {
         (BreakPointCommandSimple { address, page }, span).into()
     }

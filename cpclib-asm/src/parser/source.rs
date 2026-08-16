@@ -352,7 +352,9 @@ mod identity_tests {
 
     #[test]
     fn two_different_offsets_in_the_same_parse_have_different_identities() {
-        let ctx = ParserOptions::default().context_builder().build("nop : nop");
+        let ctx = ParserOptions::default()
+            .context_builder()
+            .build("nop : nop");
         let whole = ctx.build_span(ctx.source);
         let tail = ctx.build_span(&ctx.source[7..]);
         assert_ne!(whole.identity(), tail.identity());

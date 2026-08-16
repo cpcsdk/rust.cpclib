@@ -2,12 +2,12 @@ pub use enigo;
 #[cfg(feature = "screenshot")]
 pub use xcap;
 
-pub mod web;
 pub mod ace_config;
 pub mod child_registry;
 pub mod delegated;
 pub mod embedded;
 pub mod emucontrol;
 pub mod runner;
+pub mod web;
 pub use child_registry::kill_all_children;
 pub use cpclib_common::event;

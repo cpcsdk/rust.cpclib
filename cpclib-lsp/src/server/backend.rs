@@ -2650,9 +2650,21 @@ impl LanguageServer for CpcLspBackend {
             {
                 Some(path) => vec![path],
                 None => {
+                    // Assembly files count too: a project small enough not to
+                    // want a separate build file keeps its rules in its
+                    // source's own `#!bndbuild` comments, and those are still
+                    // rules. `debuggable_rules` reads either shape, and
+                    // answers nothing for a file with no block - so offering
+                    // every open assembly file costs a read and no wrong
+                    // entries.
                     self.documents
                         .iter()
-                        .filter(|entry| entry.value().doc_type == DocumentType::BuildFile)
+                        .filter(|entry| {
+                            matches!(
+                                entry.value().doc_type,
+                                DocumentType::BuildFile | DocumentType::Assembly
+                            )
+                        })
                         .filter_map(|entry| entry.key().to_file_path().ok())
                         .collect()
                 }
@@ -2928,8 +2940,8 @@ mod vscode_command_tests {
     /// test holds that line by reading the extension's own manifest.
     #[test]
     fn no_advertised_command_is_also_registered_by_the_vscode_extension() {
-        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../cpclib-vscode/package.json");
+        let manifest =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../cpclib-vscode/package.json");
         let Ok(text) = std::fs::read_to_string(&manifest)
         else {
             // The extension is not part of every checkout; nothing to check.
@@ -3035,10 +3047,7 @@ mod peephole_command_tests {
             "{findings:?}"
         );
         let lines: Vec<&serde_json::Value> = findings.iter().map(|f| &f["line"]).collect();
-        assert_eq!(lines, vec![
-            &serde_json::json!(1),
-            &serde_json::json!(2)
-        ]);
+        assert_eq!(lines, vec![&serde_json::json!(1), &serde_json::json!(2)]);
         assert!(
             findings[0]["message"]
                 .as_str()

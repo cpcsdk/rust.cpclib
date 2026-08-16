@@ -1531,7 +1531,9 @@ fn offset_literal_span(line: &str, from: usize) -> Option<(usize, usize)> {
     let leading = rest.len() - rest.trim_start().len();
     let start = digits_from + leading;
     let digits = line.get(start..)?;
-    let len = digits.find(|c: char| !c.is_ascii_digit())?.min(digits.len());
+    let len = digits
+        .find(|c: char| !c.is_ascii_digit())?
+        .min(digits.len());
     if len == 0 {
         return None;
     }

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
+
 use cpclib_z80flow::InstructionCost;
 
 use super::overflow::format_value_like_source;

@@ -38,9 +38,7 @@ pub struct DapConfig {
 
 impl Default for DapConfig {
     fn default() -> Self {
-        Self {
-            log: String::new()
-        }
+        Self { log: String::new() }
     }
 }
 
@@ -199,9 +197,7 @@ impl AsmWarningClasses {
     ///
     /// `OverrideMemory`/`Overflow` never apply here - they are only knowable
     /// once something is actually assembled.
-    pub fn disabled_parser_categories(
-        &self
-    ) -> enumflags2::BitFlags<cpclib_asm::WarningCategory> {
+    pub fn disabled_parser_categories(&self) -> enumflags2::BitFlags<cpclib_asm::WarningCategory> {
         use cpclib_asm::WarningCategory;
         let mut disabled = enumflags2::BitFlags::empty();
         if !self.fake_instructions {
@@ -734,8 +730,14 @@ mod tests {
             OptimizationGoal::from(PeepholeGoal::Neutral),
             OptimizationGoal::Neutral
         );
-        assert_eq!(OptimizationGoal::from(PeepholeGoal::Size), OptimizationGoal::Size);
-        assert_eq!(OptimizationGoal::from(PeepholeGoal::Speed), OptimizationGoal::Speed);
+        assert_eq!(
+            OptimizationGoal::from(PeepholeGoal::Size),
+            OptimizationGoal::Size
+        );
+        assert_eq!(
+            OptimizationGoal::from(PeepholeGoal::Speed),
+            OptimizationGoal::Speed
+        );
     }
 
     #[test]

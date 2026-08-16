@@ -30,6 +30,7 @@ pub mod diagnostics;
 // does this file belong to, and how is it built" is not an LSP question.
 // The LSP converts its `Url`s to paths at each call site.
 use cpclib_project::{build_defs, entry};
+pub(crate) mod breakpoint;
 pub mod disassemble;
 pub mod embedded_basic;
 pub mod embedded_bndbuild;
@@ -38,7 +39,6 @@ pub mod format;
 pub mod hover;
 pub mod includes;
 pub mod inlay_hints;
-pub(crate) mod breakpoint;
 mod lint_smc_label;
 pub mod overflow;
 pub mod parse;
@@ -114,8 +114,7 @@ pub struct AssemblyAnalyzer {
     ///
     /// Resolving this walks the workspace reading every source, and four
     /// separate entry points ask for it during one editor interaction.
-    address_source_cache:
-        DashMap<Url, ((i32, u128), Arc<super::basm::peephole::AddressSource>)>,
+    address_source_cache: DashMap<Url, ((i32, u128), Arc<super::basm::peephole::AddressSource>)>,
     /// The include graph and `RUN`-bearing files of each project root, keyed
     /// by the project fingerprint.
     ///

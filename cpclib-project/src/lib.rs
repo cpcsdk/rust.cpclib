@@ -17,6 +17,7 @@
 pub mod build_defs;
 pub mod cache;
 pub mod config;
+pub mod embedded_build;
 pub mod entry;
 pub mod jinja;
 pub mod root;

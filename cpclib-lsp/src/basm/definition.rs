@@ -1120,7 +1120,12 @@ impl AssemblyAnalyzer {
                 token.incbin_fname()
             };
             if let LocatedExpr::String(unescaped) = fname_expr {
-                let directive = if token.is_include() { "INCLUDE" } else { "INCBIN" };
+                let directive = if token.is_include() {
+                    "INCLUDE"
+                }
+                else {
+                    "INCBIN"
+                };
                 return Some((directive, unescaped.as_ref().to_string()));
             }
         }
@@ -1229,19 +1234,28 @@ output_char:                      ;{{Addr=$c3a0 Code Calls/jump count: 12 Data
         let doc = crate::common::document::Document::new(uri, text.to_string(), 1);
         let analyzer = AssemblyAnalyzer::new();
 
-        let loc = analyzer.goto_definition(&doc, Position {
-            line: 0,
-            character: 20 // inside "macros.asm"
-        });
+        let loc = analyzer.goto_definition(
+            &doc,
+            Position {
+                line: 0,
+                character: 20 // inside "macros.asm"
+            }
+        );
         assert!(loc.is_some(), "INCLUDE ONCE should resolve, got None");
         assert!(loc.unwrap().uri.as_str().ends_with("macros.asm"));
 
         // The plain INCLUDE (no ONCE) on the next line must keep working too.
-        let loc = analyzer.goto_definition(&doc, Position {
-            line: 1,
-            character: 12 // inside "plain.asm"
-        });
-        assert!(loc.is_some(), "plain INCLUDE should still resolve, got None");
+        let loc = analyzer.goto_definition(
+            &doc,
+            Position {
+                line: 1,
+                character: 12 // inside "plain.asm"
+            }
+        );
+        assert!(
+            loc.is_some(),
+            "plain INCLUDE should still resolve, got None"
+        );
         assert!(loc.unwrap().uri.as_str().ends_with("plain.asm"));
 
         std::fs::remove_dir_all(&dir).ok();

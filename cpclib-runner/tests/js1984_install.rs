@@ -26,7 +26,10 @@ fn the_pinned_distribution_installs_and_serves() {
     // ...and the result is servable, with the wasm typed correctly.
     let server = serve(&root, None).expect("serves");
     let response = fetch(server.port(), "/6128.wasm");
-    assert!(response.contains("Content-Type: application/wasm"), "{response}");
+    assert!(
+        response.contains("Content-Type: application/wasm"),
+        "{response}"
+    );
 
     // A second install is a no-op rather than a re-download.
     let again = js1984::install().expect("idempotent");

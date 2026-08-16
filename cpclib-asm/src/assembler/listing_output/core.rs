@@ -37,7 +37,16 @@ struct ListingTokenItem {
     raw: String,
     expanded: String,
     bytes: Vec<u8>,
-    token_kind: TokenKind
+    token_kind: TokenKind,
+    /// 1-based column where this token starts on its source line, and where it
+    /// ends.
+    ///
+    /// A line is often several instructions - `ld a,l : inc a : ld (.p),a` is
+    /// three - and a debugger that can only say "line 42" puts the cursor at
+    /// the start of all three. These are what let it point at the one that is
+    /// actually executing.
+    column: u16,
+    column_end: u16
 }
 
 pub struct ListingOutput {
@@ -64,6 +73,9 @@ pub struct ListingOutput {
     current_token_raw: String,
     current_token_expanded: String,
     current_line_tokens: Vec<ListingTokenItem>,
+    /// Where the token currently being accumulated starts and ends on its line.
+    current_token_column: u16,
+    current_token_column_end: u16,
     next_token_id: usize,
     deferred_for_line: Vec<String>,
     counter_update: Vec<String>,
@@ -142,6 +154,8 @@ impl ListingOutput {
             current_token_raw: String::new(),
             current_token_expanded: String::new(),
             current_line_tokens: Vec::new(),
+            current_token_column: 1,
+            current_token_column_end: 1,
             next_token_id: 0,
             deferred_for_line: Default::default(),
             counter_update: Vec::new(),
@@ -419,7 +433,9 @@ impl ListingOutput {
             raw: self.current_token_raw.clone(),
             expanded: self.current_token_expanded.clone(),
             bytes: self.current_token_bytes.clone(),
-            token_kind: self.current_token_kind.clone()
+            token_kind: self.current_token_kind.clone(),
+            column: self.current_token_column,
+            column_end: self.current_token_column_end
         });
         self.next_token_id = self.next_token_id.saturating_add(1);
         self.current_token_bytes.clear();
@@ -520,6 +536,14 @@ impl ListingOutput {
         self.current_line_last_offset = Some(token.span().offset_from_start());
         self.update_current_token_kind(token, symbols);
         self.current_token_raw = token.span().as_str().to_string();
+        // Where this token sits on its line. `relative_line_and_column` is the
+        // same computation the parser uses for error reporting, so the columns
+        // agree with what a diagnostic would point at.
+        let (_, column) = token.span().relative_line_and_column();
+        self.current_token_column = column.max(1) as u16;
+        self.current_token_column_end = self
+            .current_token_column
+            .saturating_add(self.current_token_raw.trim_end().chars().count() as u16);
         self.current_token_expanded = if !Self::should_expand_source_for_token(token) {
             self.current_token_raw.clone()
         }
@@ -953,7 +977,63 @@ impl ListingOutput {
                         .map(String::as_str)
                         .unwrap_or("");
                     let file = collector.file_id(name);
-                    collector.push(file, line, logical, current_chunk.len() as u16);
+                    // `current_offset` is already the physical position of
+                    // these very bytes; the page is what distinguishes the
+                    // same logical address in two banks.
+                    let page = match self.current_physical_address {
+                        PhysicalAddress::Memory(adr) => adr.page(),
+                        PhysicalAddress::Bank(adr) => adr.bank() as u8,
+                        PhysicalAddress::Cpr(adr) => adr.bloc() as u8
+                    };
+
+                    // One row per *instruction*, not per line: `ld a,l : inc a`
+                    // is two, at two addresses, and a debugger stopped at the
+                    // second should say so rather than pointing at the start of
+                    // the line. The tokens of this chunk already carry their own
+                    // bytes and columns, so the split is a walk over them.
+                    let emitting: Vec<(u16, u16, u16)> = token_chunks
+                        .get(idx)
+                        .map(|tokens| {
+                            tokens
+                                .iter()
+                                .filter(|token| !token.bytes.is_empty())
+                                .map(|token| {
+                                    (token.column, token.column_end, token.bytes.len() as u16)
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+
+                    if emitting.is_empty() {
+                        // A continuation chunk of a long run (`defs 16`), which
+                        // carries bytes but no token of its own.
+                        collector.push(
+                            file,
+                            line,
+                            logical,
+                            current_offset,
+                            page,
+                            1,
+                            1,
+                            current_chunk.len() as u16
+                        );
+                    }
+                    else {
+                        let mut offset = 0u32;
+                        for (column, column_end, len) in emitting {
+                            collector.push(
+                                file,
+                                line,
+                                logical + offset,
+                                current_offset + offset,
+                                page,
+                                column,
+                                column_end,
+                                len
+                            );
+                            offset += len as u32;
+                        }
+                    }
                 }
 
                 self.renderer.render_line(
@@ -1763,14 +1843,18 @@ endm\n";
                 raw: "ld".to_string(),
                 expanded: "ld".to_string(),
                 bytes: vec![0x3E],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1
             },
             ListingTokenItem {
                 token_id: 1,
                 raw: "1".to_string(),
                 expanded: "1".to_string(),
                 bytes: vec![0x01],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1
             },
         ];
 
@@ -1829,28 +1913,36 @@ endm\n";
                 raw: "ld bc, 0xbc00 + 1".to_string(),
                 expanded: "ld bc, 0xbc00 + 1".to_string(),
                 bytes: vec![0x01, 0x01, 0xBC],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1
             },
             ListingTokenItem {
                 token_id: 30,
                 raw: "out (c), c".to_string(),
                 expanded: "out (c), c".to_string(),
                 bytes: vec![0xED, 0x49],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1
             },
             ListingTokenItem {
                 token_id: 31,
                 raw: "ld bc, 0xbd00 + 96/2".to_string(),
                 expanded: "ld bc, 0xbd00 + 96/2".to_string(),
                 bytes: vec![0x01, 0x30, 0xBD],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1
             },
             ListingTokenItem {
                 token_id: 32,
                 raw: "out (c), c".to_string(),
                 expanded: "out (c), c".to_string(),
                 bytes: vec![0xED, 0x49],
-                token_kind: TokenKind::Displayable
+                token_kind: TokenKind::Displayable,
+                column: 1,
+                column_end: 1
             },
         ];
 
@@ -1894,7 +1986,9 @@ endm\n";
             raw: "add hl, de".to_string(),
             expanded: "add hl, de".to_string(),
             bytes: vec![0x19],
-            token_kind: TokenKind::Displayable
+            token_kind: TokenKind::Displayable,
+            column: 1,
+            column_end: 1
         }];
 
         output.finish();
@@ -1938,7 +2032,9 @@ endm\n";
             raw: "start".to_string(),
             expanded: "start".to_string(),
             bytes: vec![0x00, 0x01],
-            token_kind: TokenKind::Displayable
+            token_kind: TokenKind::Displayable,
+            column: 1,
+            column_end: 1
         }];
 
         output.finish();

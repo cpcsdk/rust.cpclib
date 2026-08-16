@@ -25,111 +25,17 @@
 //! `basm -> locomotive` one (see `embedded_basic.rs`).
 
 use cpclib_asm::parser::obtained::{LocatedListing, MayHaveSpan};
+// The blocks themselves are found by `cpclib_project::embedded_build`, which
+// the debug adapter uses too: two scanners could disagree about where a block
+// starts, which would be two answers to "which rules does this file have".
+// What stays here is the *editor* half - mapping positions in and out of a
+// block, and the lenses.
+pub(crate) use cpclib_project::embedded_build::{EmbeddedBndbuildBlock, extract_embedded_blocks};
 use cpclib_tokens::ListingElement;
 use tower_lsp::lsp_types::{CodeLens, Location, Position, Range, Url};
 
 use super::AssemblyAnalyzer;
 use crate::common::document::Document;
-
-const MARKER: &str = "#!bndbuild";
-
-/// A `#!bndbuild`-marked run of consecutive `;`/`//` comment lines.
-pub(crate) struct EmbeddedBndbuildBlock {
-    /// 0-based line of the `#!bndbuild` marker comment itself.
-    pub(crate) marker_line: usize,
-    /// 0-based line of the first YAML content line (== `marker_line + 1`).
-    pub(crate) yaml_start_line: usize,
-    /// One line per content line, `"\n"`-joined, comment prefix stripped -
-    /// line-preserving by construction, which is what keeps mapping a
-    /// block-relative line back to `yaml_start_line + n` a plain constant
-    /// add.
-    pub(crate) yaml_text: String,
-    /// Per content line (same indexing as `yaml_text.lines()`), the
-    /// outer-document column at which that line's dedented content begins -
-    /// how much the `;`/`// ` prefix-stripping peeled off. Needed for
-    /// bidirectional `position.character` translation; code-lens/execute
-    /// don't need this (only `line` matters there).
-    pub(crate) content_start_cols: Vec<u32>
-}
-
-/// Walks `listing` (via the existing `flatten_listing`, so nested
-/// MODULE/IF/REPEAT/etc. bodies are covered too) for every `#!bndbuild`
-/// block. Multiple independent blocks in one file are all found.
-pub(crate) fn extract_embedded_blocks(listing: &LocatedListing) -> Vec<EmbeddedBndbuildBlock> {
-    let mut blocks = Vec::new();
-    // (marker_line, last_accepted_line, content lines so far, their columns)
-    let mut current: Option<(usize, usize, Vec<&str>, Vec<u32>)> = None;
-
-    for token in super::token::flatten_listing(listing.iter()) {
-        if !token.is_comment() {
-            finish_line_comment_block(&mut blocks, current.take());
-            continue;
-        }
-
-        let span = token.span();
-        let raw: &str = span.as_ref();
-
-        let (line_1based, col_1based) = span.relative_line_and_column();
-        let line = line_1based - 1;
-        let start_col = (col_1based - 1) as u32;
-        let stripped = strip_comment_prefix(raw);
-        let content_col = start_col + (raw.len() - stripped.len()) as u32;
-
-        if let Some((_marker_line, last_line, content, cols)) = current.as_mut() {
-            if line == *last_line + 1 {
-                content.push(stripped);
-                cols.push(content_col);
-                *last_line = line;
-                continue;
-            }
-            // Non-consecutive: the current block is done. Fall through so
-            // this same comment token is still checked as a possible new
-            // block start below.
-            finish_line_comment_block(&mut blocks, current.take());
-        }
-
-        if is_bndbuild_marker(stripped) {
-            current = Some((line, line, Vec::new(), Vec::new()));
-        }
-    }
-    finish_line_comment_block(&mut blocks, current.take());
-
-    blocks
-}
-
-fn finish_line_comment_block(
-    blocks: &mut Vec<EmbeddedBndbuildBlock>,
-    current: Option<(usize, usize, Vec<&str>, Vec<u32>)>
-) {
-    if let Some((marker_line, _last_line, content, cols)) = current
-        && !content.is_empty()
-    {
-        blocks.push(EmbeddedBndbuildBlock {
-            marker_line,
-            yaml_start_line: marker_line + 1,
-            yaml_text: content.join("\n"),
-            content_start_cols: cols
-        });
-    }
-}
-
-fn is_bndbuild_marker(stripped: &str) -> bool {
-    stripped.trim_end().split_whitespace().next() == Some(MARKER)
-}
-
-/// Strips a leading `;`/`//` comment prefix and at most one following space.
-/// `raw` is a real `Token::Comment` span's own text (always starts with one
-/// of the two prefixes, possibly after leading whitespace the parser left in
-/// the span) - never opaque/unrecognized text, since only comment tokens are
-/// passed here.
-fn strip_comment_prefix(raw: &str) -> &str {
-    let trimmed = raw.trim_start();
-    let rest = trimmed
-        .strip_prefix(';')
-        .or_else(|| trimmed.strip_prefix("//"))
-        .unwrap_or(trimmed);
-    rest.strip_prefix(' ').unwrap_or(rest)
-}
 
 /// Picks the block that actually declares `rule` as a target; falls back to
 /// the first block if none matches (a small, accepted staleness window

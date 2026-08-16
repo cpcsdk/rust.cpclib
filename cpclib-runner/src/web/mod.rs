@@ -53,7 +53,7 @@ pub const BRIDGE_FILENAME: &str = "cpclib-bridge.js";
 /// exists and changes no behaviour.
 const APP_HOOK: &str = "\n// added by cpclib: hand the DAP session to the bridge, if one is loaded\n\
                         if (typeof globalThis.__cpclib_attach === 'function') {\n\
-                        \x20 globalThis.__cpclib_attach({ module: m, session: mlDap, connection: new JS1984DAP.Connection(mlDap), loadSnapshot: loadSnapshotFile });\n\
+                        \x20 globalThis.__cpclib_attach({ module: m, session: mlDap, connection: new JS1984DAP.Connection(mlDap), loadSnapshot: loadSnapshotFile, startAudio: startAudio, audioContext: () => audioCtx });\n\
                         }\n";
 
 /// The `<script>` added to `index.html`, immediately before `</body>` so the
@@ -141,7 +141,10 @@ pub fn apply_bridge_patch(root: &Utf8Path) -> Result<(), PatchError> {
         // hooking the *definition* instead would need brace matching, so the
         // hook is appended after every call and is written to be idempotent on
         // the bridge side.
-        write(&app, &app_text.replace(anchor, &format!("{anchor}{APP_HOOK}")))?;
+        write(
+            &app,
+            &app_text.replace(anchor, &format!("{anchor}{APP_HOOK}"))
+        )?;
     }
 
     Ok(())
@@ -248,13 +251,43 @@ mod tests {
     #[test]
     fn the_bridge_keeps_the_pieces_it_cannot_work_without() {
         for (needle, why) in [
-            ("setInterval", "without the poll, queued events are never flushed"),
+            (
+                "setInterval",
+                "without the poll, queued events are never flushed"
+            ),
             ("sync()", "sync() is what flushes them"),
-            ("__cpclib_attach", "the emulator hands us its session through this"),
-            ("__cpclib_session", "the token is injected into the page, not the URL"),
+            (
+                "__cpclib_attach",
+                "the emulator hands us its session through this"
+            ),
+            (
+                "__cpclib_session",
+                "the token is injected into the page, not the URL"
+            ),
             ("loadSnapshot", "the program under test has to be loaded"),
             ("/session/events", "the downstream half of the DAP channel"),
-            ("/session/dap", "the upstream half")
+            ("/session/dap", "the upstream half"),
+            (
+                "cpclib/setWatches",
+                "watches are armed through the module, not through dap.js"
+            ),
+            (
+                "_poc_debug_watch_serial",
+                "without the write-event poll, watched labels report nothing"
+            ),
+            ("notifyWrite", "which is how a write reaches the editor"),
+            (
+                "_poc_debug_breakpoint_clear",
+                "channels the page armed from the snapshot are ones we cannot clear"
+            ),
+            (
+                "startAudio",
+                "a debug session never clicks the page, so nothing else starts the audio"
+            ),
+            (
+                "poc_save_snapshot",
+                "the CRTC and Gate Array are readable only through a snapshot"
+            )
         ] {
             assert!(
                 BRIDGE_SCRIPT.contains(needle),

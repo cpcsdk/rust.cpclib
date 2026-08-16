@@ -18,27 +18,56 @@
     "languages": [
       {
         "id": "basm",
-        "aliases": ["basm", "Z80 Assembly", "Z80"],
-        "extensions": [".asm", ".z80"],
+        "aliases": [
+          "basm",
+          "Z80 Assembly",
+          "Z80"
+        ],
+        "extensions": [
+          ".asm",
+          ".z80"
+        ],
         "configuration": "./language-configuration-asm.json"
       },
       {
         "id": "bndbuild",
-        "aliases": ["BndBuild", "Bndbuild"],
-        "extensions": [".build", ".bnd"],
-        "filenames": ["bndbuild.yml"],
+        "aliases": [
+          "BndBuild",
+          "Bndbuild"
+        ],
+        "extensions": [
+          ".build",
+          ".bnd"
+        ],
+        "filenames": [
+          "bndbuild.yml"
+        ],
         "configuration": "./language-configuration-bnd.json"
       },
       {
         "id": "locomotive-basic",
-        "aliases": ["Locomotive BASIC", "CPC BASIC"],
-        "extensions": [".bas", ".BAS"],
+        "aliases": [
+          "Locomotive BASIC",
+          "CPC BASIC"
+        ],
+        "extensions": [
+          ".bas",
+          ".BAS"
+        ],
         "configuration": "./language-configuration-bas.json"
       },
       {
         "id": "catart-basic",
-        "aliases": ["CatArt BASIC", "CatArt"],
-        "extensions": [".CAT", ".cat", ".ASC", ".asc"],
+        "aliases": [
+          "CatArt BASIC",
+          "CatArt"
+        ],
+        "extensions": [
+          ".CAT",
+          ".cat",
+          ".ASC",
+          ".asc"
+        ],
         "configuration": "./language-configuration-bas.json"
       }
     ],
@@ -53,7 +82,7 @@
         "scopeName": "source.bndbuild",
         "path": "./syntaxes/bndbuild.tmLanguage.json",
         "embeddedLanguages": {
-          "meta.embedded.block.jinja":  "jinja",
+          "meta.embedded.block.jinja": "jinja",
           "meta.embedded.inline.jinja": "jinja"
         }
       }
@@ -62,15 +91,33 @@
       {
         "language": "basm",
         "scopes": {
-          "keyword": ["keyword.control.instruction.z80"],
-          "macro": ["keyword.other.directive.z80"],
-          "variable": ["variable.language.register.z80"],
-          "number": ["constant.numeric.z80"],
-          "string": ["string.quoted.z80"],
-          "comment": ["comment.z80"],
-          "operator": ["keyword.operator.z80"],
-          "type": ["entity.name.function.label.z80"],
-          "enumMember": ["entity.name.function.label.z80"]
+          "keyword": [
+            "keyword.control.instruction.z80"
+          ],
+          "macro": [
+            "keyword.other.directive.z80"
+          ],
+          "variable": [
+            "variable.language.register.z80"
+          ],
+          "number": [
+            "constant.numeric.z80"
+          ],
+          "string": [
+            "string.quoted.z80"
+          ],
+          "comment": [
+            "comment.z80"
+          ],
+          "operator": [
+            "keyword.operator.z80"
+          ],
+          "type": [
+            "entity.name.function.label.z80"
+          ],
+          "enumMember": [
+            "entity.name.function.label.z80"
+          ]
         }
       }
     ],
@@ -169,7 +216,9 @@
       {
         "type": "basm",
         "label": "Amstrad CPC (basm)",
-        "languages": ["basm"],
+        "languages": [
+          "basm"
+        ],
         "configurationAttributes": {
           "launch": {
             "properties": {
@@ -193,15 +242,25 @@
               },
               "watchLabels": {
                 "type": "array",
-                "items": {"type": "string"},
-                "description": "Labels to report writes to, using the emulator's watchpoints.",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Labels to report writes to, using the emulator's write-watch channels. The program's own `BREAKPOINT ... TYPE=MEM` directives are watched too, and come first when channels are scarce.",
                 "default": []
               },
-              "stopOnEntry": {"type": "boolean", "default": false},
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Break at the address the snapshot starts from, before it runs.",
+                "default": false
+              },
               "openInWebview": {
                 "type": "boolean",
                 "description": "Show the emulator in a VS Code tab. Turn off to open it in your browser instead.",
                 "default": true
+              },
+              "topOfStack": {
+                "type": "string",
+                "description": "Where the program's stack starts - a label or an address. The call stack is walked no further than this. Defaults to a `stack_top`/`stack` label if the program has one."
               }
             }
           }
@@ -246,7 +305,9 @@
     "taskDefinitions": [
       {
         "type": "bndbuild",
-        "required": ["target"],
+        "required": [
+          "target"
+        ],
         "properties": {
           "target": {
             "type": "string",
@@ -267,7 +328,14 @@
       {
         "name": "basm",
         "owner": "basm",
-        "fileLocation": ["search", { "include": ["${workspaceFolder}"] }],
+        "fileLocation": [
+          "search",
+          {
+            "include": [
+              "${workspaceFolder}"
+            ]
+          }
+        ],
         "pattern": [
           {
             "regexp": "^(?:\\[[^\\]]*\\]\\s*)?(error|warning):\\s+(.*)$",
@@ -308,7 +376,11 @@
         },
         "cpclib-lsp.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Trace LSP communication between VS Code and the server (useful for debugging)."
         }

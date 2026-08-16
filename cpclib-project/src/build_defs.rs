@@ -77,10 +77,7 @@ pub fn definitions_for_entry(entry: &Path) -> BuildDefinitions {
         };
         // `{% set FACE="face3" %}` and friends only mean something once
         // expanded; before that every value is a `{{ ... }}` placeholder.
-        let Ok(expanded) = crate::jinja::expand(
-            &text,
-            build_file.parent()
-        )
+        let Ok(expanded) = crate::jinja::expand(&text, build_file.parent())
         else {
             continue;
         };
@@ -262,10 +259,7 @@ mod tests {
     fn the_definitions_come_back_expanded_and_unquoted() {
         let defs = defs_of("sna.asm");
         assert!(
-            defs.contains(&(
-                "FACE_SCR".to_string(),
-                "../data/face3_cpc.scr".to_string()
-            )),
+            defs.contains(&("FACE_SCR".to_string(), "../data/face3_cpc.scr".to_string())),
             "{defs:?}"
         );
         assert!(
@@ -339,11 +333,8 @@ mod tests {
         )
         .unwrap();
 
-        let defs = definitions_in_rule_building(
-            &dir.join("build.bnd"),
-            &dir.join("sna.asm")
-        )
-        .expect("the glob dependency must match the entry");
+        let defs = definitions_in_rule_building(&dir.join("build.bnd"), &dir.join("sna.asm"))
+            .expect("the glob dependency must match the entry");
 
         assert!(
             defs.contains(&("RIGHT".to_string(), "7".to_string())),
