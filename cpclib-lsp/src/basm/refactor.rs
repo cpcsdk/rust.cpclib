@@ -311,6 +311,34 @@ impl AssemblyAnalyzer {
     /// Also prepends `INCLUDE ONCE "<that file>"` at the very top of the
     /// document, unless a matching `INCLUDE` (of any form) is already
     /// present - otherwise the new symbol wouldn't actually resolve.
+    #[allow(clippy::type_complexity)]
+    /// The first number on `line` that names a documented firmware routine.
+    ///
+    /// Scans left to right, trying each position a number could start at, and
+    /// takes the first that resolves. A line has one such address in practice -
+    /// `call 0xBB5A` - and where it has more, the caret decides (the caller
+    /// tries that first).
+    fn firmware_number_on_line(
+        line: &str
+    ) -> Option<(
+        String,
+        i64,
+        usize,
+        &'static crate::common::firmware_docs::FirmwareDoc
+    )> {
+        let bytes = line.as_bytes();
+        let mut at = 0usize;
+        while at < bytes.len() {
+            if let Some((text, value, start)) = super::hover::extract_number_at_position(line, at)
+                && let Some(fw) = crate::common::firmware_docs::lookup_by_value(value)
+            {
+                return Some((text, value, start, fw));
+            }
+            at += 1;
+        }
+        None
+    }
+
     pub(super) fn firmware_symbol_replacement_action(
         &self,
         document: &Document,
@@ -318,9 +346,24 @@ impl AssemblyAnalyzer {
     ) -> Option<CodeAction> {
         let line_text = document.line(range.start.line as usize)?;
         let col = range.start.character as usize;
-        let (num_str, value, byte_start) =
-            super::hover::extract_number_at_position(&line_text, col)?;
-        let fw = crate::common::firmware_docs::lookup_by_value(value)?;
+
+        // The caret is rarely *on* the number. A hover is driven by the mouse,
+        // which is why hovering `0xBB5A` names `TXT_OUTPUT` while the lightbulb
+        // stayed empty: the editor asks for actions wherever the caret happens
+        // to be, and that is usually the end of the line or the mnemonic.
+        //
+        // So the cursor is tried first - it disambiguates a line carrying
+        // several numbers - and the line is then scanned for one that names a
+        // firmware routine. Anything that resolves to nothing is skipped rather
+        // than offered.
+        let (num_str, value, byte_start, fw) =
+            super::hover::extract_number_at_position(&line_text, col)
+                .and_then(|(text, value, start)| {
+                    crate::common::firmware_docs::lookup_by_value(value)
+                        .map(|fw| (text, value, start, fw))
+                })
+                .or_else(|| Self::firmware_number_on_line(&line_text))?;
+        let _ = value;
 
         let start_char = byte_offset_to_utf16_col(&line_text, byte_start) as u32;
         let end_char = byte_offset_to_utf16_col(&line_text, byte_start + num_str.len()) as u32;
@@ -1511,6 +1554,54 @@ mod firmware_symbol_replacement_tests {
                     && a.title == "Replace with firmware symbol 'TXT_OUTPUT'"
             }),
             "{actions:?}"
+        );
+    }
+
+    /// The caret is rarely *on* the number.
+    ///
+    /// A hover is driven by the mouse, so hovering `0xBB5A` named `TXT_OUTPUT`
+    /// while the lightbulb stayed empty - the editor asks for actions wherever
+    /// the caret is, which is the end of the line or the mnemonic. Reported
+    /// from real use.
+    #[test]
+    fn the_quickfix_is_offered_from_anywhere_on_the_line() {
+        let d = doc("\tcall 0xBB5A\n");
+        let analyzer = AssemblyAnalyzer::new();
+
+        // Caret at the start of the line, on the mnemonic, and past the end of
+        // the number - every place a caret actually sits.
+        for character in [0u32, 2, 4, 11] {
+            let action = analyzer
+                .firmware_symbol_replacement_action(&d, cursor(0, character))
+                .unwrap_or_else(|| panic!("no quickfix with the caret at {character}"));
+            assert!(action.title.contains("TXT_OUTPUT"), "{}", action.title);
+        }
+    }
+
+    /// ...and it is reachable through the editor's own entry point, with the
+    /// caret where the editor really puts it.
+    #[test]
+    fn the_line_wide_quickfix_is_wired_into_code_actions() {
+        let d = doc("\tcall 0xBB5A\n");
+        let actions = AssemblyAnalyzer::new().code_actions(&d, cursor(0, 0));
+        assert!(
+            actions.iter().any(|a| {
+                a.title
+                    .contains("Replace with firmware symbol 'TXT_OUTPUT'")
+            }),
+            "{actions:?}"
+        );
+    }
+
+    /// A line with no firmware address offers nothing, rather than the first
+    /// number it can find.
+    #[test]
+    fn an_ordinary_number_is_not_offered_as_firmware() {
+        let d = doc("\tld a, 0x12\n");
+        assert!(
+            AssemblyAnalyzer::new()
+                .firmware_symbol_replacement_action(&d, cursor(0, 0))
+                .is_none()
         );
     }
 }

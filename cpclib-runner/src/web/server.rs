@@ -293,7 +293,7 @@ fn percent_decode(value: &str) -> String {
 const BARE_SCREEN_STYLE: &str = "<style id=\"cpclib-bare\">\n\
     html, body { margin: 0; padding: 0; height: 100%; background: #000; \
                  overflow: hidden; }\n\
-    body > *:not(main.workbench) { display: none !important; }\n\
+    body > *:not(main.workbench):not(#cpclib-audio) { display: none !important; }\n\
     main.workbench > *:not(.receiver) { display: none !important; }\n\
     section.receiver > *:not(#screenStage) { display: none !important; }\n\
     #screenStage > *:not(#screenFrame) { display: none !important; }\n\
@@ -469,5 +469,20 @@ mod debug_page_tests {
         // ...and the picture keeps its shape and its pixels.
         assert!(BARE_SCREEN_STYLE.contains("object-fit: contain"));
         assert!(BARE_SCREEN_STYLE.contains("image-rendering: pixelated"));
+    }
+}
+
+#[cfg(test)]
+mod bare_style_exemption_tests {
+    use super::*;
+
+    /// The one thing on the debug page that is not the screen and must still be
+    /// seen: the button that turns the sound on.
+    #[test]
+    fn the_audio_prompt_survives_the_bare_screen() {
+        assert!(
+            BARE_SCREEN_STYLE.contains(":not(#cpclib-audio)"),
+            "the offer to fix the sound must not be hidden by the tidying"
+        );
     }
 }

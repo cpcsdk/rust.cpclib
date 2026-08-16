@@ -134,6 +134,7 @@ impl AssemblyAnalyzer {
         {
             let (mut env, own_complete) = self.dry_run_env_cached_checked(document, &listing);
             collect_assembler_warnings(&env, document, &mut diagnostics);
+            collect_firmware_literal_warnings(document, &mut diagnostics);
             enrich_fake_instruction_diagnostics(document, &mut diagnostics);
             Self::enrich_overflow_diagnostics(&listing, &mut env, &mut diagnostics);
             if self.config().warnings.unused_bindings {
@@ -316,6 +317,86 @@ pub(super) fn collect_assembler_warnings(
     }
     for diag in &mut out[start..] {
         diag.severity = Some(DiagnosticSeverity::WARNING);
+    }
+}
+
+/// One warning per raw firmware address written as a number.
+///
+/// `call 0xBB5A` works, and says nothing about what it calls; `call TXT_OUTPUT`
+/// says everything. The quickfix that swaps them - and adds the
+/// `include once` the symbol needs - already exists, but a code action is only
+/// found by someone who already suspects there is one. A diagnostic is how the
+/// editor *offers* it: the number is underlined wherever it appears in the
+/// file, and the lightbulb sits on it.
+///
+/// Scanned over the raw text rather than the parsed listing on purpose: the
+/// value may be anywhere an expression is - an operand, a `defw`, an `equ` -
+/// and the answer is the same everywhere. `lookup_by_value` is the same table
+/// hover uses, so what is underlined is exactly what hovering explains.
+pub(super) fn collect_firmware_literal_warnings(document: &Document, out: &mut Vec<Diagnostic>) {
+    for (line_index, line) in document.text().lines().enumerate() {
+        // A comment is prose about the code, not the code.
+        let code = match line.find([';']) {
+            Some(at) => &line[..at],
+            None => line
+        };
+
+        let mut at = 0usize;
+        while at < code.len() {
+            let Some((text, value, start)) = super::hover::extract_number_at_position(code, at)
+            else {
+                at += 1;
+                continue;
+            };
+            // Past this literal whatever happens, so a literal that names
+            // nothing cannot make this loop crawl through it byte by byte.
+            at = start + text.len().max(1);
+
+            let Some(firmware) = crate::common::firmware_docs::lookup_by_value(value)
+            else {
+                continue;
+            };
+
+            let start_col = crate::common::document::byte_offset_to_utf16_col(line, start) as u32;
+            let end_col =
+                crate::common::document::byte_offset_to_utf16_col(line, start + text.len()) as u32;
+
+            out.push(Diagnostic {
+                range: Range {
+                    start: Position {
+                        line: line_index as u32,
+                        character: start_col
+                    },
+                    end: Position {
+                        line: line_index as u32,
+                        character: end_col
+                    }
+                },
+                severity: Some(DiagnosticSeverity::WARNING),
+                source: Some("cpclib".to_string()),
+                message: {
+                    // The doc can be a paragraph; a diagnostic wants a line.
+                    let summary = firmware
+                        .doc
+                        .lines()
+                        .map(str::trim)
+                        .find(|line| !line.is_empty())
+                        .unwrap_or_default();
+                    let summary = if summary.is_empty() {
+                        String::new()
+                    }
+                    else {
+                        format!(" - {summary}")
+                    };
+                    format!(
+                        "{text} is the firmware routine {}{summary}. Replace it with \
+                         the symbol and `include once \"{}\"`.",
+                        firmware.symbol, firmware.source_file
+                    )
+                },
+                ..Default::default()
+            });
+        }
     }
 }
 
@@ -1399,6 +1480,147 @@ mod tests {
             !diags.iter().any(|d| d.message.contains("is never used")),
             "{diags:?}"
         );
+    }
+}
+/// Every firmware address written as a number is flagged, wherever it is -
+/// a code action is only found by someone who already suspects there is
+/// one, so the editor has to offer it.
+#[test]
+fn every_firmware_literal_in_the_file_is_warned_about() {
+    let diagnostics = AssemblyAnalyzer::new().analyze(&Document::new(
+        Url::parse("file:///t.asm").unwrap(),
+        "\torg 0x4000\n\
+             \tcall 0xBB5A\n\
+             \tld a, 1\n\
+             \tcall 0xBB06\n"
+            .to_string(),
+        1
+    ));
+    let firmware: Vec<&Diagnostic> = diagnostics
+        .iter()
+        .filter(|d| d.message.contains("firmware routine"))
+        .collect();
+
+    assert_eq!(
+        firmware.len(),
+        2,
+        "both, not just the one under the caret: {diagnostics:?}"
+    );
+    assert!(
+        firmware
+            .iter()
+            .all(|d| d.severity == Some(DiagnosticSeverity::WARNING))
+    );
+
+    // Each underlines its own literal, on its own line.
+    let lines: Vec<u32> = firmware.iter().map(|d| d.range.start.line).collect();
+    assert_eq!(lines, vec![1, 3]);
+    assert!(
+        firmware[0].message.contains("TXT_OUTPUT"),
+        "{:?}",
+        firmware[0].message
+    );
+    assert!(
+        firmware[0].message.contains("include once"),
+        "and says how to fix it: {:?}",
+        firmware[0].message
+    );
+    // The range covers the literal, not the whole line.
+    assert!(firmware[0].range.end.character > firmware[0].range.start.character);
+    assert!(
+        firmware[0].range.start.character >= 6,
+        "{:?}",
+        firmware[0].range
+    );
+}
+
+/// An ordinary number is not a firmware address, and a comment is prose.
+#[test]
+fn the_firmware_warning_ignores_ordinary_numbers_and_comments() {
+    let diagnostics = AssemblyAnalyzer::new().analyze(&Document::new(
+        Url::parse("file:///t.asm").unwrap(),
+        "\torg 0x4000\n\tld a, 0x12\n\t; see 0xBB5A for text output\n".to_string(),
+        1
+    ));
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|d| d.message.contains("firmware routine")),
+        "{diagnostics:?}"
+    );
+}
+
+#[cfg(test)]
+mod firmware_literal_warning_tests {
+    use super::*;
+
+    fn doc(text: &str) -> Document {
+        Document::new(Url::parse("file:///main.asm").unwrap(), text.to_string(), 1)
+    }
+
+    fn warnings(text: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        collect_firmware_literal_warnings(&doc(text), &mut out);
+        out
+    }
+
+    /// Every firmware address in the file is flagged, not just the one under
+    /// the caret. A code action is only found by someone who already suspects
+    /// there is one; a diagnostic is how the editor offers it.
+    #[test]
+    fn every_firmware_literal_in_the_file_is_flagged() {
+        let found = warnings(
+            "\torg 0x4000\n\
+             \tcall 0xBB5A\n\
+             \tld a, 1\n\
+             \tcall 0xBB06\n"
+        );
+        let lines: Vec<u32> = found.iter().map(|d| d.range.start.line).collect();
+        assert_eq!(lines, vec![1, 3], "{found:?}");
+        assert!(
+            found
+                .iter()
+                .all(|d| d.severity == Some(DiagnosticSeverity::WARNING)),
+            "clearly visible: {found:?}"
+        );
+    }
+
+    /// The warning underlines the number itself, so the lightbulb and the
+    /// quickfix land on it.
+    #[test]
+    fn the_warning_covers_the_literal_and_names_the_fix() {
+        let found = warnings("\tcall 0xBB5A\n");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].range.start.character, 6, "{found:?}");
+        assert_eq!(found[0].range.end.character, 12, "{found:?}");
+        assert!(
+            found[0].message.contains("TXT_OUTPUT"),
+            "{}",
+            found[0].message
+        );
+        assert!(
+            found[0].message.contains("include once"),
+            "{}",
+            found[0].message
+        );
+    }
+
+    /// A number that is not a firmware address is left alone, and so is a
+    /// firmware address that is only mentioned in a comment.
+    #[test]
+    fn the_firmware_warning_ignores_ordinary_numbers_and_comments() {
+        assert!(warnings("\tld a, 0x12\n").is_empty());
+        assert!(warnings("\tld hl, 0x4000\n").is_empty());
+        assert!(
+            warnings("\tnop ; 0xBB5A prints a character\n").is_empty(),
+            "a comment is prose about the code, not the code"
+        );
+    }
+
+    /// Already using the symbol? Nothing to say.
+    #[test]
+    fn the_symbol_itself_is_not_flagged() {
+        assert!(warnings("\tcall TXT_OUTPUT\n").is_empty());
     }
 }
 

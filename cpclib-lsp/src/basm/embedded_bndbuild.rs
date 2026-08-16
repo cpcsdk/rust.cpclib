@@ -32,7 +32,7 @@ use cpclib_asm::parser::obtained::{LocatedListing, MayHaveSpan};
 // block, and the lenses.
 pub(crate) use cpclib_project::embedded_build::{EmbeddedBndbuildBlock, extract_embedded_blocks};
 use cpclib_tokens::ListingElement;
-use tower_lsp::lsp_types::{CodeLens, Location, Position, Range, Url};
+use tower_lsp::lsp_types::{CodeLens, Command, Location, Position, Range, Url};
 
 use super::AssemblyAnalyzer;
 use crate::common::document::Document;
@@ -206,19 +206,60 @@ impl AssemblyAnalyzer {
             .to_file_path()
             .ok()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        // "Run this program" at the top of the file. Built exactly as F5
+        // builds it - same assemble, same `-D` definitions, same snapshot - and
+        // then handed to the emulator the project names rather than to the one
+        // that speaks the Debug Adapter Protocol: running and debugging differ
+        // in what you do afterwards, not in what you build.
+        let mut lenses: Vec<CodeLens> = Vec::new();
+        if self.config().code_lens && !document.text().trim().is_empty() {
+            let top = Range {
+                start: Position::new(0, 0),
+                end: Position::new(0, 0)
+            };
+            lenses.push(CodeLens {
+                range: top,
+                command: Some(Command {
+                    title: "▶ Run in emulator".to_string(),
+                    command: "cpclib.runAssembly".to_string(),
+                    arguments: Some(vec![serde_json::json!(file_path)])
+                }),
+                data: None
+            });
+            // The same build, stopped where you asked instead of run to
+            // completion. Beside the Run button because the choice between them
+            // is made at the moment you press one, not when you set the project
+            // up - and going to the debug panel to start a session on the file
+            // already open in front of you is a detour.
+            //
+            // A client-side command, like `cpclib.debugRule`: only the editor
+            // can start a debug session, so this is deliberately not in
+            // `executeCommandProvider.commands`.
+            lenses.push(CodeLens {
+                range: top,
+                command: Some(Command {
+                    title: "🐞 Debug".to_string(),
+                    command: "cpclib.debugAssembly".to_string(),
+                    arguments: Some(vec![serde_json::json!(file_path)])
+                }),
+                data: None
+            });
+        }
+
         let build_analyzer = crate::bndbuild::BuildFileAnalyzer::new();
-        let mut lenses: Vec<CodeLens> = self
-            .embedded_bndbuild_blocks(document)
-            .into_iter()
-            .flat_map(|block| {
-                build_analyzer.code_lens_for_embedded_block(
-                    &block.yaml_text,
-                    block.yaml_start_line as u32,
-                    &file_path,
-                    file_dir.as_deref()
-                )
-            })
-            .collect();
+        lenses.extend::<Vec<CodeLens>>(
+            self.embedded_bndbuild_blocks(document)
+                .into_iter()
+                .flat_map(|block| {
+                    build_analyzer.code_lens_for_embedded_block(
+                        &block.yaml_text,
+                        block.yaml_start_line as u32,
+                        &file_path,
+                        file_dir.as_deref()
+                    )
+                })
+                .collect()
+        );
         lenses.extend(self.peephole_code_lenses(document));
         lenses
     }
@@ -512,5 +553,111 @@ mod embedded_include_tests {
             .expect("expected a code lens for the local rule");
         assert_eq!(imported.range.start.line, 1, "{imported:?}");
         assert_eq!(local.range.start.line, 2, "{local:?}");
+    }
+}
+
+#[cfg(test)]
+mod run_lens_tests {
+    use tower_lsp::lsp_types::Url;
+
+    use super::*;
+    use crate::common::document::Document;
+
+    fn doc(text: &str) -> Document {
+        Document::new(
+            Url::parse("file:///demo/main.asm").unwrap(),
+            text.to_string(),
+            1
+        )
+    }
+
+    /// Every assembly file offers to run itself, the way a `.bas` file does.
+    ///
+    /// Built exactly as F5 builds it - the difference is the emulator it is
+    /// handed to afterwards, not the build.
+    #[test]
+    fn an_assembly_file_offers_to_run_itself() {
+        let lenses = AssemblyAnalyzer::new().code_lens(&doc("\torg 0x8000\n\tnop\n"));
+        let run: Vec<_> = lenses
+            .iter()
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runAssembly")
+            .collect();
+        assert_eq!(run.len(), 1, "{lenses:?}");
+        assert_eq!(run[0].command.as_ref().unwrap().title, "▶ Run in emulator");
+        assert_eq!(run[0].range.start.line, 0, "at the top of the file");
+        assert_eq!(
+            run[0].command.as_ref().unwrap().arguments.as_ref().unwrap()[0],
+            serde_json::json!("/demo/main.asm")
+        );
+    }
+
+    /// ...and to debug itself, beside it: the choice between running and
+    /// debugging is made when you press one, not when you set the project up.
+    #[test]
+    fn an_assembly_file_offers_to_debug_itself_too() {
+        let lenses = AssemblyAnalyzer::new().code_lens(&doc("\torg 0x8000\n\tnop\n"));
+        let debug: Vec<_> = lenses
+            .iter()
+            .filter(|l| l.command.as_ref().unwrap().command == "cpclib.debugAssembly")
+            .collect();
+        assert_eq!(debug.len(), 1, "{lenses:?}");
+        assert_eq!(debug[0].command.as_ref().unwrap().title, "🐞 Debug");
+        assert_eq!(debug[0].range.start.line, 0);
+        // It names the file it sits in, so clicking it debugs *that* file
+        // whatever the editor is focused on.
+        assert_eq!(
+            debug[0]
+                .command
+                .as_ref()
+                .unwrap()
+                .arguments
+                .as_ref()
+                .unwrap()[0],
+            serde_json::json!("/demo/main.asm")
+        );
+    }
+
+    /// Run comes first: it is the commoner of the two.
+    #[test]
+    fn run_is_offered_before_debug() {
+        let lenses = AssemblyAnalyzer::new().code_lens(&doc("\torg 0x8000\n\tnop\n"));
+        let commands: Vec<&str> = lenses
+            .iter()
+            .map(|l| l.command.as_ref().unwrap().command.as_str())
+            .collect();
+        let run = commands.iter().position(|c| *c == "cpclib.runAssembly");
+        let debug = commands.iter().position(|c| *c == "cpclib.debugAssembly");
+        assert!(run < debug, "{commands:?}");
+    }
+
+    /// An empty file has nothing to run.
+    #[test]
+    fn an_empty_file_offers_nothing() {
+        let lenses = AssemblyAnalyzer::new().code_lens(&doc("\n  \n"));
+        assert!(
+            lenses.iter().all(|l| {
+                let command = &l.command.as_ref().unwrap().command;
+                command != "cpclib.runAssembly" && command != "cpclib.debugAssembly"
+            }),
+            "{lenses:?}"
+        );
+    }
+
+    /// The Run lens sits alongside the embedded-rule lenses rather than
+    /// replacing them.
+    #[test]
+    fn the_run_lens_does_not_displace_the_embedded_rule_lenses() {
+        let lenses = AssemblyAnalyzer::new().code_lens(&doc(
+            "; #!bndbuild\n; - tgt: run\n;   cmd: -emu --snapshot demo.sna run\n\torg 0x8000\n"
+        ));
+        let titles: Vec<&str> = lenses
+            .iter()
+            .filter_map(|l| l.command.as_ref().map(|c| c.title.as_str()))
+            .collect();
+        assert!(titles.contains(&"▶ Run in emulator"), "{titles:?}");
+        assert!(
+            titles.iter().any(|t| t.starts_with("🐞 Debug")),
+            "{titles:?}"
+        );
     }
 }

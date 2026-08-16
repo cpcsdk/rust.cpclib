@@ -287,6 +287,10 @@ mod tests {
             (
                 "poc_save_snapshot",
                 "the CRTC and Gate Array are readable only through a snapshot"
+            ),
+            (
+                "_poc_debug_pause",
+                "the CPU must be held between loading a snapshot and arming breakpoints"
             )
         ] {
             assert!(

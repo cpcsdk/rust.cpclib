@@ -46,6 +46,7 @@ pub mod peephole;
 pub mod refactor;
 pub mod registers;
 pub mod remove_parameter;
+pub mod run;
 pub mod semantic_tokens;
 pub mod semantic_tokens_ast;
 pub mod stabilize;

@@ -885,6 +885,7 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.runRule",
     "cpclib.runTask",
     "cpclib.runBasic",
+    "cpclib.runAssembly",
     "cpclib.cycleCountForSelection",
     "cpclib.registersAtPosition",
     "cpclib.removeUnusedParameter",
@@ -2223,6 +2224,80 @@ impl LanguageServer for CpcLspBackend {
                 let config = self.basic_analyzer.config();
                 tokio::task::spawn_blocking(move || {
                     crate::locomotive::run::run_document_in_emulator(&document, &config, tx)
+                })
+                .await
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("run task panicked: {e}").into(),
+                        data: None
+                    }
+                })?
+            };
+            let _ = log_task.await;
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
+        // The "▶ Run in emulator" lens on a `.asm` file. Same build as F5 -
+        // `assemble_for_debug` - handed to the emulator the project names
+        // rather than to the debuggable one.
+        if params.command == "cpclib.runAssembly" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let Ok(uri) = Url::from_file_path(&fname)
+            else {
+                return Ok(None);
+            };
+            let Some(document) = self.load_document(&uri)
+            else {
+                return Ok(None);
+            };
+
+            self.client
+                .log_message(MessageType::INFO, "Assembling and launching...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let outcome = {
+                let document = document.clone();
+                let config = self.asm_analyzer.config();
+                tokio::task::spawn_blocking(move || {
+                    crate::basm::run::run_document_in_emulator(&document, &config, tx)
                 })
                 .await
                 .map_err(|e| {

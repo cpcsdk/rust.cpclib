@@ -1270,6 +1270,16 @@ impl Env {
             self.stable_counters.new_pass();
             self.run_options = None;
 
+            // A pass starts where the file starts: outside every global label.
+            //
+            // Local labels are stored as `<current global>.<local>`, and the
+            // current global was left wherever the *previous* pass ended. So a
+            // `.loop` written before the first global label became `.loop` in
+            // pass 1 and `message.loop` in pass 2 - "Label .loop is not present
+            // in the symbol table in pass 2", for a program with nothing
+            // conditional in it at all.
+            let _ = self.symbols_mut().set_current_global_label("");
+
             self.sna.reset_written_bytes();
             if let Some(cpr) = self.cpr.as_mut() {
                 cpr.reset_written_bytes()
@@ -3748,7 +3758,31 @@ impl Env {
                 )
             }));
         }
-        self.sna.sna = Snapshot::load(fname).map_err(|e| {
+        // `inner://` names a snapshot compiled into cpclib itself. A program
+        // that wants the firmware available - so `CALL &BB5A` does something -
+        // must start from a booted machine, and requiring every project to
+        // carry its own copy of one made the build depend on a binary blob
+        // sitting beside the source.
+        let loaded = match fname.as_str().strip_prefix("inner://") {
+            Some(inner) => {
+                Snapshot::from_embedded(inner).ok_or_else(|| {
+                    AssemblerError::AssemblingError {
+                        msg: format!(
+                            "There is no snapshot embedded as \"inner://{inner}\". \
+                             Available: {}.",
+                            Snapshot::EMBEDDED
+                                .iter()
+                                .map(|name| format!("inner://{name}"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    }
+                })?
+            },
+            None => Snapshot::load(fname)
+        };
+
+        self.sna.sna = loaded.map_err(|e| {
             AssemblerError::AssemblingError {
                 msg: format!("Error while loading snapshot. {e}")
             }

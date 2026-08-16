@@ -65,7 +65,8 @@ impl<E: EventObserver + 'static> Runner for BasmOptRunner<E> {
             return Ok(());
         }
 
-        let cli = cpclib_basmopt::cli::Cli::from_arg_matches(&matches).map_err(|e| e.to_string())?;
+        let cli =
+            cpclib_basmopt::cli::Cli::from_arg_matches(&matches).map_err(|e| e.to_string())?;
         let options = cli.options();
 
         let cpclib_basmopt::AnalyzeOutcome {

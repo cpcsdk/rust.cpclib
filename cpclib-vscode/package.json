@@ -181,6 +181,16 @@
         "command": "cpclib.assembleThisFile",
         "title": "Assemble This File with basm",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.openEmulatorInBrowser",
+        "title": "CPClib: Open the emulator in a browser (with sound)",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.debugAssembly",
+        "title": "CPClib: Debug this assembly file",
+        "category": "CPClib"
       }
     ],
     "menus": {

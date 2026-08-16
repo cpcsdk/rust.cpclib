@@ -56,6 +56,14 @@ pub struct AsmConfig {
     /// in `server/backend.rs::compute_diagnostics`.
     pub warnings_as_errors: bool,
     pub warnings: AsmWarningClasses,
+    /// Which emulator the "▶ Run in emulator" CodeLens on a `.asm` file
+    /// launches. The program is built exactly as `F5` builds it - same
+    /// assemble, same `-D` definitions, same snapshot - and then handed to this
+    /// emulator instead of to the debuggable one, because running and debugging
+    /// differ in what you do afterwards, not in what you build.
+    ///
+    /// `ace` by default, matching `BasicConfig::run_emulator`.
+    pub run_emulator: String,
     /// Show firmware routine/constant documentation (Action/Entry/Exit/Notes,
     /// extracted from `cpclib-asm`'s embedded `inner://firmware/*.asm`
     /// assets) on hover - both for the symbolic name (`TXT_OUTPUT`) and its
@@ -114,6 +122,7 @@ impl Default for AsmConfig {
             case_sensitive: true,
             warnings_as_errors: false,
             warnings: AsmWarningClasses::default(),
+            run_emulator: "ace".to_string(),
             inactive_code: true,
             inlay_hints: true,
             code_lens: true,
@@ -479,6 +488,10 @@ pub const EXAMPLE_CONFIG_TOML: &str = r#"# cpclib-lsp configuration file.
 case_sensitive = true
 # Escalate every warning in an assembly document to an error.
 warnings_as_errors = false
+# Which emulator the "Run in emulator" CodeLens launches. The program is built
+# exactly as F5 builds it - same assemble, same -D definitions, same snapshot -
+# and then handed to this emulator instead of to the debuggable one.
+run_emulator = "ace"
 # Show firmware routine/constant documentation on hover, both for the
 # symbolic name (TXT_OUTPUT) and its resolved numeric address (&BB5A).
 firmware_docs = true
@@ -797,5 +810,35 @@ mod tests {
     #[test]
     fn merge_rejects_malformed_existing_toml() {
         assert!(merge_missing_config_fields("this is not valid toml [[[").is_err());
+    }
+}
+
+#[cfg(test)]
+mod asm_run_emulator_tests {
+    use super::*;
+
+    /// Running a `.asm` falls back to the same emulator running a `.bas` does.
+    #[test]
+    fn asm_config_defaults_run_emulator_to_ace() {
+        assert_eq!(AsmConfig::default().run_emulator, "ace");
+        assert_eq!(
+            AsmConfig::default().run_emulator,
+            BasicConfig::default().run_emulator,
+            "one project, one idea of which emulator to use"
+        );
+    }
+
+    /// ...and the project can name another.
+    #[test]
+    fn the_project_can_choose_its_emulator() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(CONFIG_FILE_NAME),
+            "[asm]\nrun_emulator = \"winape\"\n"
+        )
+        .unwrap();
+        let loaded = load_config(Some(tmp.path().as_std_path()));
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        assert_eq!(loaded.config.asm.run_emulator, "winape");
     }
 }

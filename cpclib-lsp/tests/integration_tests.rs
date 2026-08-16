@@ -1310,10 +1310,14 @@ async fn test_code_lens_appears_for_an_asm_file_with_an_embedded_bndbuild_block(
         .unwrap()
         .expect("expected a code lens for the embedded rule");
 
-    assert_eq!(lenses.len(), 1);
-    let command = lenses[0].command.as_ref().expect("expected a command");
+    // The file's own "▶ Run in emulator" lens is there too; the rule's is the
+    // one this test is about.
+    let rule_lens = lenses
+        .iter()
+        .find(|l| l.command.as_ref().unwrap().command == "cpclib.runRule")
+        .unwrap_or_else(|| panic!("no rule lens: {lenses:?}"));
+    let command = rule_lens.command.as_ref().expect("expected a command");
     assert_eq!(command.title, "▶ Run: test");
-    assert_eq!(command.command, "cpclib.runRule");
     let args = command.arguments.as_ref().unwrap();
     assert_eq!(args[0], serde_json::json!("test"));
     assert_eq!(
@@ -1322,7 +1326,7 @@ async fn test_code_lens_appears_for_an_asm_file_with_an_embedded_bndbuild_block(
     );
     // The lens sits on the "- tgt: test" line inside the embedded block
     // (line 1), not on the "#!bndbuild" marker line (line 0).
-    assert_eq!(lenses[0].range.start.line, 1);
+    assert_eq!(rule_lens.range.start.line, 1);
 }
 
 #[tokio::test]
@@ -1480,9 +1484,18 @@ async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_c
         })
         .await
         .unwrap();
-    assert!(
-        asm_lenses.is_none(),
-        "expected no code lens for a plain .asm file"
+    // A plain `.asm` file gets the two lenses every assembly file offers -
+    // run and debug - and none of the per-rule lenses an embedded
+    // `#!bndbuild` block would add.
+    let asm_lenses = asm_lenses.expect("every .asm file offers to run itself");
+    let commands: Vec<&str> = asm_lenses
+        .iter()
+        .map(|l| l.command.as_ref().unwrap().command.as_str())
+        .collect();
+    assert_eq!(
+        commands,
+        vec!["cpclib.runAssembly", "cpclib.debugAssembly"],
+        "{asm_lenses:?}"
     );
 
     let bnd_lenses = backend

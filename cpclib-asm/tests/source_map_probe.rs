@@ -288,3 +288,99 @@ fn a_macro_body_is_recorded_against_a_real_file() {
         "nop: {rows:?}"
     );
 }
+
+/// A local label written before the first global one.
+///
+/// Local labels are stored as `<current global>.<local>`, and the current
+/// global used to survive from one pass into the next - so `.loop` was `.loop`
+/// in pass 1 and `message.loop` in pass 2, and the assembler blamed
+/// "conditional code" in a program with no condition in it.
+#[test]
+fn a_local_label_before_any_global_one_assembles() {
+    let source = "\torg 0x8000\n\
+                  \tld hl, message\n\
+                  .loop\n\
+                  \tld a, (hl) : inc hl\n\
+                  \tor a : jr z, .done\n\
+                  \tjr .loop\n\
+                  .done\n\
+                  \tjp $\n\
+                  message\n\
+                  \tdb \"HELLO\", 0\n";
+
+    let bytes = cpclib_asm::assemble(source).expect("assembles in every pass");
+    assert!(!bytes.is_empty());
+}
+
+/// ...and it still works when a global label *does* come first, which is the
+/// case that always worked and must keep working.
+#[test]
+fn a_local_label_after_a_global_one_still_belongs_to_it() {
+    let source = "\torg 0x8000\n\
+                  routine\n\
+                  .loop\n\
+                  \tjr .loop\n\
+                  other\n\
+                  .loop\n\
+                  \tjr .loop\n";
+
+    // Two `.loop`s under different globals are two labels, not a redefinition.
+    let bytes = cpclib_asm::assemble(source).expect("assembles");
+    assert_eq!(bytes.len(), 4, "two 2-byte jr");
+}
+
+/// `snainit "inner://cpc6128.sna"` starts from a booted machine without the
+/// project having to carry a copy of one.
+///
+/// A program that calls the firmware needs the firmware set up, and requiring a
+/// binary blob beside the source made every such build depend on a file nothing
+/// in the repository produced.
+#[test]
+fn snainit_can_start_from_an_embedded_snapshot() {
+    let source = "\tsnainit \"inner://cpc6128.sna\"\n\
+                  \torg 0x8000\n\
+                  \trun $\n\
+                  \tcall 0xBB5A\n\
+                  \tjp $\n";
+
+    let listing = cpclib_asm::parser::parse_z80_str(source).expect("parses");
+    let mut parse = cpclib_asm::parser::context::ParserOptions::default();
+    parse.set_quiet(true);
+    let (_, env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(
+        &listing,
+        cpclib_asm::EnvOptions::new(
+            parse,
+            cpclib_asm::AssemblingOptions::default(),
+            Arc::new(DiscardObserver)
+        )
+    )
+    .expect("assembles from the embedded snapshot");
+
+    // The machine it started from is a real one: the firmware ROM is paged in
+    // and its memory is the size the header claims.
+    let sna = env.sna();
+    assert!(sna.memory_dump().len() >= 0x1_0000, "a whole machine");
+}
+
+/// A name that is not embedded says which ones are, rather than reporting a
+/// missing file that was never on disc.
+#[test]
+fn an_unknown_embedded_snapshot_lists_the_real_ones() {
+    let source = "\tsnainit \"inner://nope.sna\"\n\torg 0x8000\n\tnop\n";
+    let listing = cpclib_asm::parser::parse_z80_str(source).expect("parses");
+    let mut parse = cpclib_asm::parser::context::ParserOptions::default();
+    parse.set_quiet(true);
+    let outcome = cpclib_asm::assembler::visit_tokens_all_passes_with_options(
+        &listing,
+        cpclib_asm::EnvOptions::new(
+            parse,
+            cpclib_asm::AssemblingOptions::default(),
+            Arc::new(DiscardObserver)
+        )
+    );
+
+    let (_, _, problem) = outcome.err().expect("refused");
+    let problem = problem.to_string();
+    assert!(problem.contains("inner://cpc6128.sna"), "{problem}");
+    assert!(problem.contains("inner://cpc6128_v2.sna"), "{problem}");
+}

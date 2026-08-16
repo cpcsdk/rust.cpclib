@@ -38,10 +38,26 @@ The extension provides comprehensive support for Z80 assembly files (`.asm`, `.z
 - **Embedded BASIC**: Full support for LOCOMOTIVE BASIC blocks within assembly files
 - **Breakpoints**: clicking the editor gutter (the red dot) writes a basm `breakpoint` directive in front of that line's instruction, and clearing it takes the directive back out - so the breakpoint travels into the snapshot and the emulator honours it. It works both ways: opening a file that already contains directives shows their red dots, wherever on the line they sit (`ld a,0 : breakpoint` counts as much as the other order), and removing one takes the statement separator from whichever side has it. Disable with `cpclib.breakpointDirective` if you would rather your sources were never edited on your behalf. (VS Code only lets you click the gutter for languages an extension declares as breakpoint-capable; this extension declares `basm`. If the dot still refuses to appear in some other file type, turn on VS Code's own `debug.allowBreakpointsEverywhere`.)
 
+#### Running
+- **▶ Run in emulator** and **🐞 Debug** at the top of every `.asm` file. Same
+  build behind both - the second stops where you asked instead of running to
+  completion, and starts a VS Code debug session on that file.
+  The program is built
+  *exactly* as `F5` builds it - same assemble, same `-D` definitions from the
+  project's build rules, same snapshot - and then handed to the emulator the
+  project names (`[asm] run_emulator`, `ace` by default) rather than to the
+  debuggable one. Running and debugging differ in what happens afterwards, not
+  in what is built.
+- **Firmware from the start**: `snainit "inner://cpc6128.sna"` begins from a
+  booted machine, so `call TXT_OUTPUT` works, without the project carrying a
+  binary snapshot beside its source. `inner://cpc6128_v2.sna` is the 128K one.
+
 #### Code Actions & Refactoring
 - **Extract to macro**: Convert code selection into a reusable macro
 - **Wrap in repetition block**: Convert code selection into a repeat directive
 - **Quick fixes** for common errors and optimizations
+- **Firmware addresses**: every raw `0xBB5A` in the file is warned about and
+  offers to become `TXT_OUTPUT`, adding the `include once` the symbol needs
 - **Code stabilization**: Convert an unstable code to a stable one (only handle simple cases ATM)
 - **Inline macro**: Replace macro call with its expanded content (**Not yet implemented**)
 
@@ -101,7 +117,16 @@ code, and steps through your *source* rather than through addresses.
   a screenful of opcodes, and self-modifying code means the bytes running are
   not the bytes that were assembled. `-chips` prints the CRTC, Gate Array, PSG
   and PPI; `-timer add raster` starts a stopwatch counted in **NOPs**.
+  Disassembly rows carry `file:line:column` and clicking one jumps to that
+  *instruction*, not to the start of its line; addresses in operands are named
+  when a label matches.
   `-help` lists the commands.
+- **Sound needs a browser.** A VS Code webview does not hand the page a user
+  gesture Chromium accepts for audio - asking directly, asking on resume and a
+  click-to-enable button all fail - so the emulator is silent in the editor
+  tab. **CPClib: Open the emulator in a browser** opens the same machine (it is
+  served over loopback) with its sound, and the debugger keeps working while
+  you listen.
 - **A bare screen.** In the VS Code tab the emulator shows its picture and
   nothing else - no keyboard, tape deck or monitor panel, all of which the
   debugger does better. Open the URL in a browser for the full machine.

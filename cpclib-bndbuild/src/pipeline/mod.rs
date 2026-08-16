@@ -78,6 +78,29 @@ pub fn launch_emulator_with_auto_run<E: BndBuilderObserver + 'static>(
     task.execute(observer)
 }
 
+/// Launch an emulator on a snapshot, without waiting for it to close.
+///
+/// The "run this program" half of what `debug` does: the same build, handed to
+/// whichever emulator the project names rather than to the one that speaks the
+/// Debug Adapter Protocol. `--background` for the same reason as
+/// [`launch_emulator_with_auto_run`] - the caller is an editor request handler,
+/// and blocking it until the user closes the emulator would hang it for the
+/// rest of the session.
+pub fn launch_emulator_with_snapshot<E: BndBuilderObserver + 'static>(
+    snapshot: &Utf8Path,
+    emulator: &str,
+    observer: &Arc<E>
+) -> Result<(), String> {
+    let task: Task = InnerTask::Emulator(
+        Emulator::EmulatorFacade,
+        StandardTaskArguments::new(format!(
+            "--emulator {emulator} --snapshot {snapshot} --background run"
+        ))
+    )
+    .into();
+    task.execute(observer)
+}
+
 /// Sanitizes `hint` into an AMSDOS-safe filename stem: uppercase, only
 /// alphanumeric characters, at most 8 of them, falling back to `"PROG"` if
 /// nothing survives the filter.
