@@ -362,7 +362,14 @@ impl AssemblyAnalyzer {
                     crate::common::firmware_docs::lookup_by_value(value)
                         .map(|fw| (text, value, start, fw))
                 })
-                .or_else(|| Self::firmware_number_on_line(&line_text))?;
+                .or_else(|| {
+                    // The line-wide fallback follows the same rule as the
+                    // warning it hangs off: a firmware address is a routine
+                    // only where control is transferred to it.
+                    crate::basm::diagnostics::targets_a_routine(&line_text)
+                        .then(|| Self::firmware_number_on_line(&line_text))
+                        .flatten()
+                })?;
         let _ = value;
 
         let start_char = byte_offset_to_utf16_col(&line_text, byte_start) as u32;

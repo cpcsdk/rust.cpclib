@@ -320,6 +320,21 @@ pub(super) fn collect_assembler_warnings(
     }
 }
 
+/// Whether this line's instruction transfers control - the only place a
+/// firmware address is a *routine* rather than a number.
+pub(super) fn targets_a_routine(code: &str) -> bool {
+    // The mnemonic is the first word after any label, and a label is either
+    // flush left or ends in `:`. Testing every word covers `.loop call 0xBB5A`
+    // and `label: jp 0xBB18` without needing to know which word is the label.
+    code.split(|c: char| c.is_whitespace() || c == ':' || c == ',')
+        .any(|word| {
+            matches!(
+                word.to_ascii_uppercase().as_str(),
+                "CALL" | "JP" | "JR" | "RST"
+            )
+        })
+}
+
 /// One warning per raw firmware address written as a number.
 ///
 /// `call 0xBB5A` works, and says nothing about what it calls; `call TXT_OUTPUT`
@@ -340,6 +355,16 @@ pub(super) fn collect_firmware_literal_warnings(document: &Document, out: &mut V
             Some(at) => &line[..at],
             None => line
         };
+
+        // Only where the number is being *used as a routine*. `CALL &BB5A` is
+        // a firmware call written the hard way; `defb 0xBB5A` is data that
+        // happens to collide with one, and offering to rewrite it as
+        // `TXT_OUTPUT` would be wrong. A jump can enter a routine too - `JP` to
+        // a firmware entry is the tail-call idiom - so those count, and nothing
+        // else does.
+        if !targets_a_routine(code) {
+            continue;
+        }
 
         let mut at = 0usize;
         while at < code.len() {
@@ -1603,6 +1628,33 @@ mod firmware_literal_warning_tests {
             "{}",
             found[0].message
         );
+    }
+
+    /// A firmware address is only a *routine* where control is transferred to
+    /// it. In a `defb` it is data that happens to collide with one, and
+    /// offering to rewrite it as `TXT_OUTPUT` would be wrong.
+    #[test]
+    fn only_control_transfers_are_flagged() {
+        assert_eq!(warnings("\tcall 0xBB5A\n").len(), 1);
+        assert_eq!(warnings("\tjp 0xBB5A\n").len(), 1);
+        assert_eq!(warnings("\tjr 0xBB5A\n").len(), 1);
+        assert_eq!(
+            warnings("\tcall nz, 0xBB5A\n").len(),
+            1,
+            "a condition is still a call"
+        );
+        assert_eq!(
+            warnings(".loop\tcall 0xBB5A\n").len(),
+            1,
+            "a label is not in the way"
+        );
+
+        // Data is data.
+        assert!(warnings("\tdefb 0xBB5A\n").is_empty());
+        assert!(warnings("\tdb 0xBB5A\n").is_empty());
+        assert!(warnings("\tdefw 0xBB5A, 0xBB06\n").is_empty());
+        assert!(warnings("\tld hl, 0xBB5A\n").is_empty());
+        assert!(warnings("value equ 0xBB5A\n").is_empty());
     }
 
     /// A number that is not a firmware address is left alone, and so is a

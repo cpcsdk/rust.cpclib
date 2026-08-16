@@ -294,7 +294,7 @@ impl SourceMap {
     /// Which source line an address belongs to, or `None` when it belongs to
     /// none - which is a real answer, not a failure.
     ///
-    /// Also `None` when several banks claim the address: see
+    /// Also `None` when more than one page claim the address: see
     /// [`Self::resolution_at`] for the distinction. Returning a line from an
     /// arbitrary bank would be worse than returning nothing, because the
     /// editor would highlight it and the user would believe it.
@@ -363,7 +363,7 @@ impl SourceMap {
     /// Which source line a *long* address belongs to - a page plus the 16-bit
     /// address the Z80 sees.
     ///
-    /// This is the question `location_at` cannot answer on a banked program.
+    /// This is the question `location_at` cannot answer on a paged program.
     /// Nothing reports banking to us yet, but the map holds the answer for
     /// when something does, and the disassembly path can use it whenever the
     /// page is known from where the bytes were read.
