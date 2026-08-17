@@ -384,3 +384,100 @@ fn an_unknown_embedded_snapshot_lists_the_real_ones() {
     assert!(problem.contains("inner://cpc6128.sna"), "{problem}");
     assert!(problem.contains("inner://cpc6128_v2.sna"), "{problem}");
 }
+
+/// An `enum` emits no bytes, so no address can belong to one.
+///
+/// Reported from real use: a breakpoint on `ld a, ANIMATION_STATE_FINISHED`
+/// opened the `endenum` line of the enum that *defines* that symbol, in another
+/// file. Same broken rule as the `function` case - an instruction's location is
+/// the instruction's, never that of what its operands refer to.
+#[test]
+fn an_enum_claims_no_address() {
+    let source = r#"    enum WRITTER_STATE
+        CLEAR  ; clear the buffer
+        DRAW   ; draw in the buffer
+        COPY   ; copy the buffer to visible screen space
+        WAIT   ; wait before switching to the next page
+    endenum
+    org 0x4000
+    ld a, WRITTER_STATE_COPY
+    nop
+"#;
+
+    let (_, rows) = rows(source);
+
+    // Lines 1..6 are the enum. Nothing may be attributed to them.
+    let inside: Vec<_> = rows.iter().filter(|r| (1..=6).contains(&r.line)).collect();
+    assert!(inside.is_empty(), "the enum claimed rows: {inside:?}");
+
+    // The instruction owns its own bytes, at its own line.
+    let ld = rows
+        .iter()
+        .find(|r| r.logical == 0x4000)
+        .unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!(
+        ld.line, 8,
+        "the instruction, not the symbol it uses: {rows:?}"
+    );
+}
+
+/// The same, with the enum in an included file - the shape the real report has.
+///
+/// This **passes**, and is kept for what it rules out. The reported failure has
+/// an `enum` in `writter.asm` and the instruction using its symbol in
+/// `animate.asm`, and the row came out pointing at the enum. Neither a single
+/// file nor a plain two-file include reproduces that, so the trigger is
+/// something else in that project's structure - a deeper include chain, or the
+/// symbol being used before its definition is reached. Worth knowing before the
+/// next attempt, which should start from a cut-down copy of those two files.
+#[test]
+fn an_enum_in_an_included_file_claims_no_address() {
+    let directory = std::env::temp_dir().join(format!("cpclib-enum-probe-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&directory);
+    std::fs::write(
+        directory.join("states.asm"),
+        "    enum WRITTER_STATE\n        CLEAR\n        DRAW\n        COPY\n    endenum\n"
+    )
+    .unwrap();
+    let main = directory.join("main.asm");
+    std::fs::write(
+        &main,
+        "    include \"states.asm\"\n    org 0x4000\n    nop\n    ld a, WRITTER_STATE_COPY\n"
+    )
+    .unwrap();
+
+    let text = std::fs::read_to_string(&main).unwrap();
+    let mut parse = cpclib_asm::parser::context::ParserOptions::default();
+    parse.set_quiet(true);
+    let _ = parse.add_search_path(&directory);
+    let builder = parse
+        .clone()
+        .context_builder()
+        .set_current_filename(main.to_str().unwrap());
+    let listing =
+        cpclib_asm::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+    let mut assemble = cpclib_asm::AssemblingOptions::default();
+    assemble.record_source_map();
+    let (_, mut env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(
+        &listing,
+        cpclib_asm::EnvOptions::new(parse, assemble, Arc::new(DiscardObserver))
+    )
+    .expect("assembles");
+    env.handle_post_actions(&listing).expect("post actions");
+    let map = env.source_map().expect("a source map was requested");
+
+    // The `ld a,` is the only two-byte row, and it belongs to `main.asm`.
+    let ld = map
+        .rows
+        .iter()
+        .find(|row| row.len == 2)
+        .unwrap_or_else(|| panic!("{:?}", map.rows));
+    let file = &map.files[ld.file as usize];
+    assert!(
+        file.ends_with("main.asm"),
+        "the instruction's file, not the symbol's: {file} {:?}",
+        map.rows
+    );
+    assert_eq!(ld.line, 4, "{:?}", map.rows);
+}
