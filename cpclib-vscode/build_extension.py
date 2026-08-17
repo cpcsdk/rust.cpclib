@@ -60,6 +60,9 @@ class ExtensionBuilder:
         
         # Detect current OS
         self.detected_os = self._detect_os()
+        
+        # Check Node.js version
+        self._check_node_version()
 
     def _detect_os(self) -> str:
         """Detect the current operating system"""
@@ -72,6 +75,36 @@ class ExtensionBuilder:
             return "macosx"
         else:
             self.error(f"Unsupported OS: {system}")
+            sys.exit(1)
+
+    def _check_node_version(self):
+        """Check if Node.js version is compatible with @vscode/vsce"""
+        try:
+            result = subprocess.run(
+                ["node", "--version"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            version_str = result.stdout.strip().lstrip('v')
+            major_version = int(version_str.split('.')[0])
+            
+            if major_version < 20:
+                self.error(f"Node.js v{version_str} is too old!")
+                print(f"\n{Color.YELLOW}@vscode/vsce requires Node.js v20 or later.{Color.END}")
+                print(f"\n{Color.BOLD}To upgrade Node.js on Ubuntu:{Color.END}")
+                print(f"  1. Using NodeSource repository:")
+                print(f"     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -")
+                print(f"     sudo apt-get install -y nodejs")
+                print(f"\n  2. Using snap:")
+                print(f"     sudo snap install node --classic --channel=20")
+                print(f"\n  3. Using nvm (Node Version Manager):")
+                print(f"     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash")
+                print(f"     nvm install 20")
+                sys.exit(1)
+                
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
+            self.error(f"Could not check Node.js version: {e}")
             sys.exit(1)
 
     def info(self, message: str):

@@ -4,6 +4,7 @@
   "description": "Language support for Amstrad CPC development: Z80 assembly (basm), bndbuild, Locomotive BASIC",
   "version": "0.0.1",
   "publisher": "krusty-benediction",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
