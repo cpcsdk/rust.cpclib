@@ -196,8 +196,9 @@ pub const ACE_CMDS: &[&str] = &[ACE_CMD, "acedl"];
 pub const WINAPE_CMDS: &[&str] = &[WINAPE_CMD];
 pub const CPCEC_CMDS: &[&str] = &[CPCEC_CMD];
 pub const AMSPIRIT_CMDS: &[&str] = &[AMSPIRIT_CMD];
-pub const AMSPIRITLITE_CMDS: &[&str] =
-    &[AMSPIRIT_LITE_CMD, "amspirit-lite", "amspiritlite", "lite"];
+// `AMSPIRIT_LITE_CMD` *is* "amspiritlite", so listing it again as a literal
+// made the name appear twice in `TASK_TYPES`.
+pub const AMSPIRITLITE_CMDS: &[&str] = &[AMSPIRIT_LITE_CMD, "amspirit-lite", "lite"];
 pub const SUGARBOX_CMDS: &[&str] = &[SUGARBOX_V2_CMD];
 pub const CPCEMU_CMDS: &[&str] = &[CPCEMU_CMD, "cpc-emu"];
 pub const CPCEMUPOWER_CMDS: &[&str] = &[CPCEMUPOWER_CMD];

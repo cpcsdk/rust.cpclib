@@ -73,6 +73,7 @@ enum Backend {
 
 impl peer::DapPeer for Backend {
     fn send(&mut self, message: Value) -> std::io::Result<()> {
+        transcript().record("-> emulator", &message);
         match self {
             Self::Served(peer) => peer.send(message),
             Self::AmspiritLite(peer) => peer.send(message)
@@ -113,6 +114,19 @@ impl peer::DapPeer for Backend {
 /// - and a setting that has to be repeated in each of them is a setting nobody
 /// turns on when they need it.
 struct Transcript(Option<std::sync::Mutex<std::fs::File>>);
+
+/// The one transcript, reachable from the backend as well as from the loop.
+///
+/// The loop sees editor traffic in both directions but only the *answers* the
+/// emulator gives - what we ask it goes out from inside the session, several
+/// call frames down. That half-blind log cost three rounds of diagnosis on a
+/// question the transcript should have answered outright ("which breakpoints
+/// were actually armed?"), so the backend writes to it too.
+static TRANSCRIPT: std::sync::OnceLock<Transcript> = std::sync::OnceLock::new();
+
+fn transcript() -> &'static Transcript {
+    TRANSCRIPT.get_or_init(Transcript::open)
+}
 
 impl Transcript {
     /// Read `[dap] log` from the project the adapter was started in.
@@ -204,7 +218,7 @@ pub fn run_stdio() -> std::io::Result<()> {
     let mut output = std::io::stdout();
     let mut seq = 1i64;
     let mut session: Option<session::Session<Backend>> = None;
-    let transcript = Transcript::open();
+    let transcript = transcript();
 
     // stdin on its own thread so the emulator can be polled while the editor is
     // quiet, and vice versa.
@@ -355,6 +369,10 @@ fn start_session(
     request: &Value
 ) -> Result<(session::Session<Backend>, String, Vec<String>), String> {
     let arguments = request.get("arguments").cloned().unwrap_or(json!({}));
+    // Problems found while working out what to debug, said in the console once
+    // the session exists. Degrading quietly is what made a broken build look
+    // like a working one.
+    let mut early_notices: Vec<String> = Vec::new();
 
     let (snapshot, source_map, program_breakpoints, image, entry_point) = if let Some(rule) =
         arguments.get("rule").and_then(Value::as_str)
@@ -386,24 +404,32 @@ fn start_session(
         // assemble as the map; a build we did not drive cannot report them.
         let (map, breakpoints, image, entry_point) = match &launched.entry {
             Some(entry) => {
-                launch::assemble_for_debug(entry, &config)
-                    .map(|built| {
-                        (
-                            built.source_map,
-                            built.breakpoints,
-                            built.image,
-                            built.entry_point
-                        )
-                    })
-                    .unwrap_or_default()
+                // A failed assemble ends the launch, and says why.
+                //
+                // It used to be swallowed here, which was the worst of both
+                // worlds: the emulator started anyway on whatever snapshot
+                // happened to be on disc - *the previous build's* - with an
+                // empty source map, so nothing mapped, no breakpoint worked,
+                // and the program that ran was not the program on screen.
+                // Reported as "the process did not stop with an error and
+                // launched the previously generated artefact".
+                let built = launch::assemble_for_debug(entry, &config).map_err(|problem| {
+                    format!(
+                        "{entry} could not be assembled, so there is nothing to debug:\n\
+                         {problem}"
+                    , entry = entry.display())
+                })?;
+                (
+                    built.source_map,
+                    built.breakpoints,
+                    built.image,
+                    built.entry_point
+                )
             },
             None => {
-                (
-                    source_map_for_project(&build_file, &config),
-                    Vec::new(),
-                    Vec::new(),
-                    None
-                )
+                let (map, problem) = source_map_for_project(&build_file, &config);
+                early_notices.extend(problem);
+                (map, Vec::new(), Vec::new(), None)
             },
         };
         (snapshot, map, breakpoints, image, entry_point)
@@ -565,6 +591,7 @@ fn start_session(
     // is reported rather than quietly placing breakpoints at stale addresses.
     session.record_source_state();
     let mut notices = session.adopt_program_breakpoints(&program_breakpoints);
+    notices.splice(0..0, early_notices);
 
     // Banking is the one limitation that shows up as *silence* - a stop with
     // no source line - so it is said up front rather than left to be puzzled
@@ -678,7 +705,7 @@ fn nearest_build_file() -> Option<PathBuf> {
 fn source_map_for_project(
     build_file: &std::path::Path,
     config: &cpclib_project::config::AsmConfig
-) -> cpclib_project::srcmap::SourceMap {
+) -> (cpclib_project::srcmap::SourceMap, Option<String>) {
     let Some(root) = cpclib_project::root::project_root_or_own_dir(build_file)
     else {
         return Default::default();
@@ -699,7 +726,21 @@ fn source_map_for_project(
             }
         },
     };
-    launch::assemble_for_debug(&path, config)
-        .map(|built| built.source_map)
-        .unwrap_or_default()
+    // Still best-effort - this branch has no entry of its own to insist on, and
+    // the snapshot the rule built is debuggable without a map - but the reason
+    // is handed back so the console can say why nothing maps, instead of
+    // leaving "my breakpoints do nothing" to be puzzled over.
+    match launch::assemble_for_debug(&path, config) {
+        Ok(built) => (built.source_map, None),
+        Err(problem) => {
+            (
+                Default::default(),
+                Some(format!(
+                    "no source map: {} could not be assembled, so lines and \
+                     breakpoints will not resolve.\n{problem}",
+                    path.display()
+                ))
+            )
+        },
+    }
 }

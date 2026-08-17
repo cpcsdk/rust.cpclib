@@ -1729,6 +1729,31 @@ mod inactive_region_hint_tests {
         assert_eq!(faded, vec![(1, 3)]);
     }
 
+    /// A block directive fades whole, not just its opening line.
+    ///
+    /// An `ENUM ... ENDENUM` is one token whose span runs from `enum` to
+    /// `endenum`, so keeping only the line it *starts* on left the members and
+    /// the closing keyword looking live inside a branch that is not assembled
+    /// at all. Reported from real code: "the whole content is supposed to be
+    /// disabled. At the moment, you only disable the first lines".
+    #[test]
+    fn a_multi_line_directive_fades_all_of_its_lines() {
+        let faded = faded_lines(
+            "    if false\n\
+             \t// seems to not work ATM\n\
+             enum ANIMATION_STATE\n\
+             \tPLAYING\n\
+             \tFINISHED\n\
+             endenum\n\
+             \telse\n\
+             ANIMATION_STATE_PLAYING equ 0\n\
+             \tendif\n"
+        );
+        // Lines 1..5 are the dead branch: the comment, and the enum from its
+        // keyword through `endenum`.
+        assert_eq!(faded, vec![(1, 5)], "{faded:?}");
+    }
+
     /// Nothing to fade when the condition cannot be decided.
     #[test]
     fn an_undecidable_condition_fades_nothing() {

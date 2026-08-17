@@ -183,6 +183,28 @@ pub(super) fn span_line<T: cpclib_asm::parser::obtained::MayHaveSpan>(token: &T)
     line_1based.saturating_sub(1) as u32
 }
 
+/// Every 0-based line `token`'s span covers, not only the line it starts on.
+///
+/// A one-instruction token is one line and this is `span_line`. A block
+/// directive is not: an `ENUM ... ENDENUM`, a `MACRO ... ENDM` or a nested
+/// `IF` is a single token whose span really does run from its opening keyword
+/// to its closing one, so anything reasoning about "which lines does this
+/// token occupy" (dimming an inactive branch, say) has to walk the whole
+/// extent or it greys the first line and leaves the body looking live.
+///
+/// The trailing newline is trimmed first: some parsers consume the line ending
+/// into the span, which would otherwise dim one line too many.
+pub(super) fn span_lines<T: cpclib_asm::parser::obtained::MayHaveSpan>(
+    token: &T
+) -> std::ops::RangeInclusive<u32> {
+    let start = span_line(token);
+    let extra = {
+        use cpclib_asm::SourceString;
+        token.span().as_str().trim_end().matches('\n').count() as u32
+    };
+    start..=start + extra
+}
+
 /// `token`'s own span as a precise LSP `Range` (start and end line +
 /// character) - generalizes `span_line` to the full span, not just its
 /// start line. Assumes a single-line span (true for any one instruction

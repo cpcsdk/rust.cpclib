@@ -716,7 +716,13 @@ impl<P: DapPeer> Session<P> {
             // Disassembly is still a request away: `-dv` opens it, in a panel
             // that can show the source column and name the addresses in
             // operands, neither of which the built-in view can do.
-            "supportsSteppingGranularity": true,
+            // `supportsSteppingGranularity` is deliberately absent, for the
+            // same reason as `supportsDisassembleRequest` below: it exists so
+            // an editor can ask for *instruction* stepping, which is what the
+            // Disassembly view does - and a step that answers in instructions
+            // rather than in source lines is the thing this adapter is built
+            // to avoid. `-dv` is where disassembly lives.
+
             "supportsEvaluateForHovers": true,
             // Watchpoints, with the caveat spelled out in the description
             // `dataBreakpointInfo` hands back: the emulator's watch channels
@@ -738,8 +744,19 @@ impl<P: DapPeer> Session<P> {
         match command {
             "setBreakpoints" => self.set_breakpoints(message),
             // Stepping off an address that has a breakpoint on it needs the
-            // breakpoint lifted first, or the emulator stops on it again
-            // without having moved.
+            // breakpoint lifted first, on *every* emulator tried so far: the
+            // machine resumes, immediately re-detects the breakpoint at the
+            // address it has not left yet, and stops again - reporting a
+            // completed step with the program counter unmoved.
+            //
+            // Once made conditional, on the reasoning that 1984js builds its
+            // step from a temporary breakpoint channel that re-arming would
+            // tear down. That reasoning was wrong twice over: its
+            // `_setInstructionBreakpoints` clears only the *user* slots, and
+            // the lift happens *before* the step, when no temporary channel
+            // exists. A transcript settled it - six consecutive `stepIn`s at
+            // `0x0403`, each answered "Instruction step completed", with `PC`
+            // never leaving `0x0403`.
             "next" | "stepIn" | "stepOut" => {
                 self.lift_breakpoint_under_pc()?;
                 self.peer.send(message.clone())?;
@@ -3527,6 +3544,35 @@ impl<P: DapPeer> Session<P> {
         self.annotate_stack_trace(&response)
     }
 
+    /// Say where the program stopped, in a message of our own.
+    ///
+    /// The stack trace already carries the file and line, and the editor is
+    /// meant to open them - but whether it *reveals* that file depends on what
+    /// happens to hold the editor area at the time (a webview with the
+    /// emulator in it, a panel, a view restored from last session), and the
+    /// answer had become "sometimes". The extension listens for this and opens
+    /// the line itself, which does not depend on any of that.
+    fn announce_where_we_stopped(&mut self, answer: &Value) -> Option<Value> {
+        let top = answer
+            .get("body")
+            .and_then(|body| body.get("stackFrames"))
+            .and_then(Value::as_array)
+            .and_then(|frames| frames.first())?;
+        let source = top.get("source")?.get("path")?.as_str()?;
+        let line = top.get("line").and_then(Value::as_i64).filter(|line| *line > 0)?;
+        let seq = self.next_seq();
+        Some(protocol::event(
+            "cpclib/stoppedAt",
+            json!({
+                "path": source,
+                "line": line,
+                "column": top.get("column").cloned().unwrap_or(json!(1)),
+                "endColumn": top.get("endColumn").cloned().unwrap_or(Value::Null)
+            }),
+            seq
+        ))
+    }
+
     /// Put the file and line back into a stack trace the emulator answered with
     /// addresses only.
     fn annotate_stack_trace(&mut self, response: &Value) -> Vec<Value> {
@@ -3666,6 +3712,10 @@ impl<P: DapPeer> Session<P> {
                 )
             })
             .collect();
+        // Before the response, not after: every caller reads the stack trace as
+        // the last message, and an event of ours must not displace it.
+        let announcement = self.announce_where_we_stopped(&annotated);
+        out.extend(announcement);
         out.push(annotated);
         out
     }

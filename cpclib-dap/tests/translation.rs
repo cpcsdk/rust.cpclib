@@ -146,7 +146,8 @@ fn a_stack_trace_gets_its_source_back() {
         }
     });
     let out = session.on_emulator_message(&from_emulator);
-    let frame = &out[0]["body"]["stackFrames"][0];
+    // The answer is last; a `cpclib/stoppedAt` event may precede it.
+    let frame = &out.last().unwrap()["body"]["stackFrames"][0];
     assert_eq!(frame["line"], json!(12));
     assert_eq!(frame["source"]["name"], json!("main.asm"));
 }
@@ -160,7 +161,10 @@ fn a_stack_trace_inside_an_instruction_resolves_to_its_line() {
         "body": {"stackFrames": [{"instructionPointerReference": "0x4001"}]}
     });
     let out = session.on_emulator_message(&from_emulator);
-    assert_eq!(out[0]["body"]["stackFrames"][0]["line"], json!(10));
+    assert_eq!(
+        out.last().unwrap()["body"]["stackFrames"][0]["line"],
+        json!(10)
+    );
 }
 
 /// An address belonging to no source line is left alone rather than attributed

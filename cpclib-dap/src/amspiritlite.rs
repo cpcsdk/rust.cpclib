@@ -412,25 +412,18 @@ fn gate_array_pane(body: &Value) -> Vec<Value> {
         }
     }
 
-    let inks = body.get("ink_idx").and_then(Value::as_array);
-    let rgbs = body.get("ink_rgb").and_then(Value::as_array);
-    if let Some(inks) = inks {
+    if let Some(inks) = body.get("ink_idx").and_then(Value::as_array) {
         out.extend((0..inks.len()).map(|pen| {
             colour(
                 &format!("pen {pen}"),
-                inks.get(pen).and_then(Value::as_u64),
-                rgbs.and_then(|list| list.get(pen)).and_then(Value::as_u64)
+                inks.get(pen).and_then(Value::as_u64)
             )
         }));
     }
     // The border is a pen like any other, and reads better named for what it
     // is than as "pen 16".
     if let Some(border) = body.get("border_idx").and_then(Value::as_u64) {
-        out.push(colour(
-            "border",
-            Some(border),
-            body.get("border_rgb").and_then(Value::as_u64)
-        ));
+        out.push(colour("border", Some(border)));
     }
 
     out.extend(flat_pane(
@@ -451,34 +444,23 @@ fn gate_array_pane(body: &Value) -> Vec<Value> {
 
 /// A pen, shown as the colour it holds.
 ///
-/// The value is a coloured square and the exact RGB - reading a palette as
-/// numbers is work a picture does for free. The byte a program would *write*
-/// for this colour goes in the description, because that is the form you would
-/// look for in your own source, and it would only be noise beside the colour.
-fn colour(name: &str, ink: Option<u64>, rgb: Option<u64>) -> Value {
+/// `ink_idx` is the Gate Array's own five-bit colour selector, not an ink
+/// number - the emulator reports values up to 31, and there are only 27 inks -
+/// so the byte a program writes is `0x40 | idx`, and the ink number is looked
+/// up from that. Rendered by the same formatter as the snapshot-based backend,
+/// so the two panes read identically whichever emulator is underneath.
+fn colour(name: &str, ink: Option<u64>) -> Value {
     let written = ink.map(|ink| 0x40 | (ink as u8 & 0x1F));
-    let value = match rgb {
-        Some(rgb) => {
-            let (r, g, b) = (
-                ((rgb >> 16) & 0xFF) as u8,
-                ((rgb >> 8) & 0xFF) as u8,
-                (rgb & 0xFF) as u8
-            );
-            format!(
-                "{} #{:06X}",
-                crate::inspect::swatch_for_rgb(r, g, b),
-                rgb & 0xFF_FFFF
-            )
+    let (value, meaning) = match written {
+        Some(written) => {
+            crate::inspect::gate_array_pen(written).unwrap_or_else(|| {
+                (
+                    format!("0x{written:02X}"),
+                    "not a colour the Gate Array can produce".to_string()
+                )
+            })
         },
-        None => {
-            written
-                .map(|written| format!("0x{written:02X}"))
-                .unwrap_or_default()
-        },
-    };
-    let meaning = match written {
-        Some(written) => format!("write 0x{written:02X} to &7Fxx for this colour"),
-        None => String::new()
+        None => (String::new(), String::new())
     };
     json!({
         "name": name,
@@ -1814,7 +1796,7 @@ mod tests {
         assert!(names.contains(&"rasterline".to_string()), "{names:?}");
     }
 
-    /// The palette arrives with its colours already resolved.
+    /// The palette reads as ink numbers and the bytes that set them.
     #[test]
     fn the_gate_array_pane_reads_as_pens_with_colours() {
         let body = json!({
@@ -1833,26 +1815,21 @@ mod tests {
                 .to_string()
         };
 
-        // A colour, shown as one: reading a palette as numbers is work a
-        // picture does for free. The exact RGB stays beside it, since nine
-        // squares cannot be twenty-seven colours.
+        // `ink_idx` 20 is the Gate Array's own selector, so the byte to write
+        // is 0x54 - which is ink 0, black. Both numbers are worth having; the
+        // sRGB triple behind them is not, and no longer appears.
         let pen0 = of("pen 0");
-        assert!(pen0.contains("#000201"), "{pen0}");
+        assert_eq!(pen0, "\u{2B1B} ink 0 (GA 0x54)", "{pen0}");
         assert!(
-            pen0.chars()
-                .any(|c| c == '\u{2B1B}' || c == '\u{2B1C}' || c > '\u{1F7E0}'),
-            "a coloured box: {pen0}"
+            !pen0.contains('#'),
+            "the RGB is what picks the square, not what is printed: {pen0}"
         );
-        assert!(
-            !pen0.contains("0x54"),
-            "the ink number is not the colour: {pen0}"
-        );
-        // ...and the byte to write is still there, as the description.
+        // ...and the description says what to do with that byte.
         let described = pane.iter().find(|v| v["name"] == json!("pen 0")).unwrap()["type"]
             .as_str()
             .unwrap()
             .to_string();
-        assert!(described.contains("0x54"), "{described}");
+        assert!(described.contains("write 0x54 to &7Fxx"), "{described}");
         assert_eq!(of("mode"), "0x00 (0)");
 
         // The banking register belongs here too: it decides which page sits in

@@ -387,7 +387,14 @@ pub fn swatch_for_rgb(r: u8, g: u8, b: u8) -> char {
         .unwrap_or('\u{2B1B}')
 }
 
-fn gate_array_colour(written: u8) -> Option<(char, String)> {
+/// How a pen reads: the colour it holds, by number and by the byte that sets it.
+///
+/// The RGB decides the swatch and is then dropped. What a demo coder needs from
+/// a palette entry is which *ink* it is and what to write to `&7Fxx` for it -
+/// the exact sRGB triple of ink 20 answers no question anyone was asking.
+///
+/// `None` for a byte that is not a colour the Gate Array can produce.
+pub fn gate_array_pen(written: u8) -> Option<(String, String)> {
     // `gate_array_value()` is the byte a program *writes* - bit 6 already set -
     // and so is what a snapshot stores, so the comparison is against that form
     // rather than against a bare colour number.
@@ -395,32 +402,11 @@ fn gate_array_colour(written: u8) -> Option<(char, String)> {
         .iter()
         .find(|ink| ink.gate_array_value() == written)?;
     let rgb = ink.color();
-    let (r, g, b) = (rgb[0], rgb[1], rgb[2]);
-
-    // Nine squares is all the character set offers, so this is the nearest of
-    // them rather than the colour itself - which is why the hex is printed
-    // beside it rather than instead of it.
-    const SWATCHES: [(char, (u8, u8, u8)); 9] = [
-        ('\u{2B1B}', (0, 0, 0)),
-        ('\u{2B1C}', (255, 255, 255)),
-        ('\u{1F7E5}', (255, 0, 0)),
-        ('\u{1F7E9}', (0, 255, 0)),
-        ('\u{1F7E6}', (0, 0, 255)),
-        ('\u{1F7E8}', (255, 255, 0)),
-        ('\u{1F7EA}', (255, 0, 255)),
-        ('\u{1F7E7}', (255, 128, 0)),
-        ('\u{1F7EB}', (128, 64, 0))
-    ];
-    let nearest = SWATCHES
-        .iter()
-        .min_by_key(|(_, (sr, sg, sb))| {
-            let d = |a: u8, b: u8| (a as i32 - b as i32).pow(2);
-            d(r, *sr) + d(g, *sg) + d(b, *sb)
-        })
-        .map(|(square, _)| *square)
-        .unwrap_or('\u{2B1B}');
-
-    Some((nearest, format!("#{r:02X}{g:02X}{b:02X}")))
+    let square = swatch_for_rgb(rgb[0], rgb[1], rgb[2]);
+    Some((
+        format!("{square} ink {} (GA 0x{written:02X})", ink.number()),
+        format!("write 0x{written:02X} to &7Fxx for this colour")
+    ))
 }
 
 /// The symbols any address-shaped operand in `text` could stand for.
@@ -603,20 +589,12 @@ pub fn chip_variables(reference: i64, sna: &cpclib_sna::Snapshot) -> Option<Vec<
                 else {
                     name
                 };
-                let (value, meaning) = match gate_array_colour(written) {
-                    Some((square, hex)) => {
-                        (
-                            format!("{square} 0x{written:02X} {hex}"),
-                            format!("write 0x{written:02X} to &7Fxx for this colour")
-                        )
-                    },
-                    None => {
-                        (
-                            format!("0x{written:02X}"),
-                            "not a colour the Gate Array can produce".to_string()
-                        )
-                    },
-                };
+                let (value, meaning) = gate_array_pen(written).unwrap_or_else(|| {
+                    (
+                        format!("0x{written:02X}"),
+                        "not a colour the Gate Array can produce".to_string()
+                    )
+                });
                 json!({
                     "name": name,
                     "value": value,

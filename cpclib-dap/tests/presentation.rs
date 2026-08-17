@@ -822,11 +822,14 @@ fn the_palette_reads_as_pens_with_their_colours() {
             .to_string()
     };
     // The byte a program writes is the colour with bit 6 set, and that is the
-    // one to show: it is what you would look for in your own source.
+    // one to show: it is what you would look for in your own source. Beside it
+    // the ink number, which is how the colour is named everywhere else.
     let pen0 = value_of("pen 0");
-    assert!(pen0.contains("0x4B"), "the byte you would write: {pen0}");
-    // ...beside the colour it actually is, and a square to see it at a glance.
-    assert!(pen0.contains('#'), "with its RGB: {pen0}");
+    assert!(pen0.contains("GA 0x4B"), "the byte you would write: {pen0}");
+    assert!(pen0.contains("ink 26"), "and which ink that is: {pen0}");
+    // The exact sRGB triple answers no question anyone was asking, so it picks
+    // the square and is then dropped.
+    assert!(!pen0.contains('#'), "no RGB hex: {pen0}");
     assert!(
         pen0.chars()
             .any(|c| c == '\u{2B1C}' || c == '\u{2B1B}' || c > '\u{1F7E0}'),
@@ -834,7 +837,7 @@ fn the_palette_reads_as_pens_with_their_colours() {
     );
 
     let border = value_of("border");
-    assert!(border.contains("0x54"), "{border}");
+    assert!(border.contains("GA 0x54"), "{border}");
 }
 
 /// The CRTC register the next `&BDxx` write lands in is underlined too.

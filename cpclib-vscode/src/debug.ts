@@ -220,6 +220,33 @@ export function registerDebugging(
         }),
     );
 
+    // VS Code's own Disassembly view, shut before it can take the stop.
+    //
+    // This adapter deliberately does not advertise `supportsDisassembleRequest`
+    // - an editor told it can disassemble keeps stepping at instruction
+    // granularity and shows that view instead of your source, which is the
+    // opposite of what a source-level debugger is for. But the view is an
+    // *editor tab*: once it has been opened it is restored with the window,
+    // and it then sits there empty (this session will never fill it), takes
+    // the stop, and quietly turns stepping into instruction stepping. Closing
+    // it when a session starts is the only way to be rid of it; `-dv` opens a
+    // disassembly that actually has contents.
+    context.subscriptions.push(
+        vscode.debug.onDidStartDebugSession(async session => {
+            if (session.type === DEBUG_TYPE) { await closeBuiltInDisassemblyView(); }
+        }),
+        // ...and again whenever it comes back. Closing it once is not enough:
+        // once the editor has switched a session into instruction stepping it
+        // re-opens the view on the next step, so the tab has to be answered
+        // where it appears rather than where it was first opened.
+        vscode.window.tabGroups.onDidChangeTabs(async change => {
+            if (vscode.debug.activeDebugSession?.type !== DEBUG_TYPE) { return; }
+            if (change.opened.some(looksLikeDisassembly)) {
+                await closeBuiltInDisassemblyView();
+            }
+        }),
+    );
+
     // The emulator's own window, inside the editor.
     context.subscriptions.push(
         vscode.debug.onDidReceiveDebugSessionCustomEvent(async event => {
@@ -233,6 +260,9 @@ export function registerDebugging(
             }
             if (event.event === 'cpclib/disassemblyView') {
                 showDisassembly(event.session, event.body);
+            }
+            if (event.event === 'cpclib/stoppedAt') {
+                await revealStop(event.body);
             }
         }),
         vscode.debug.onDidTerminateDebugSession(session => {
@@ -330,6 +360,7 @@ function showMemory(session: vscode.DebugSession, dump: MemoryDump | undefined):
     if (!dump || !Array.isArray(dump.bytes)) { return; }
 
     let panel = memoryPanels.get(session.id);
+    const isNew = panel === undefined;
     if (!panel) {
         panel = vscode.window.createWebviewPanel(
             'cpclib.memory',
@@ -345,10 +376,10 @@ function showMemory(session: vscode.DebugSession, dump: MemoryDump | undefined):
     }
 
     panel.webview.html = memoryHtml(dump);
-    // `preserveFocus` on every reveal: the panel refreshes itself on every
-    // stop, and stealing focus from the editor on each step would make
-    // stepping unusable.
-    panel.reveal(vscode.ViewColumn.Beside, true);
+    // Only when it was just asked for. The panel refreshes itself on every
+    // stop, and revealing it each time pulls it in front of whatever shares
+    // its column - `preserveFocus` keeps the keyboard, not the view.
+    if (isNew) { panel.reveal(vscode.ViewColumn.Beside, true); }
 }
 
 const hex = (value: number, width: number) =>
@@ -482,6 +513,7 @@ function showDisassembly(session: vscode.DebugSession, dump: Disassembly | undef
     if (!dump || !Array.isArray(dump.instructions)) { return; }
 
     let panel = disassemblyPanels.get(session.id);
+    const isNew = panel === undefined;
     if (!panel) {
         panel = vscode.window.createWebviewPanel(
             'cpclib.disassembly',
@@ -524,7 +556,11 @@ function showDisassembly(session: vscode.DebugSession, dump: Disassembly | undef
     }
 
     panel.webview.html = disassemblyHtml(dump);
-    panel.reveal(vscode.ViewColumn.Beside, true);
+    // Brought to the front only when it was just asked for. A `PC`-following
+    // view refreshes on *every* stop, and revealing it each time pulls it over
+    // whatever shares its column - which is how a breakpoint in your own code
+    // ends up showing the disassembly instead of the line that stopped.
+    if (isNew) { panel.reveal(vscode.ViewColumn.Beside, true); }
 }
 
 /**
@@ -693,4 +729,79 @@ function emulatorHtml(url: string): string {
 </script>
 </body>
 </html>`;
+}
+
+/**
+ * Close VS Code's built-in Disassembly view, wherever it is.
+ *
+ * Identified by having no recognised editor input - it is not a file, a
+ * notebook, a diff or a webview - together with a label naming it. Both halves
+ * matter: the label alone would risk closing someone's file called
+ * "disassembly.asm", and the input alone would catch every exotic editor.
+ */
+function looksLikeDisassembly(tab: vscode.Tab): boolean {
+    const known =
+        tab.input instanceof vscode.TabInputText ||
+        tab.input instanceof vscode.TabInputTextDiff ||
+        tab.input instanceof vscode.TabInputCustom ||
+        tab.input instanceof vscode.TabInputWebview ||
+        tab.input instanceof vscode.TabInputNotebook ||
+        tab.input instanceof vscode.TabInputTerminal;
+    return !known && /disassembl|d\u00e9sassembl/i.test(tab.label);
+}
+
+async function closeBuiltInDisassemblyView(): Promise<void> {
+    const doomed = vscode.window.tabGroups.all
+        .flatMap(group => group.tabs)
+        .filter(looksLikeDisassembly);
+    if (doomed.length > 0) {
+        await vscode.window.tabGroups.close(doomed, false);
+    }
+}
+
+/** Where the program stopped, as the adapter reports it. */
+interface StopLocation {
+    path?: string;
+    line?: number;
+    column?: number;
+    endColumn?: number;
+}
+
+/**
+ * Open the line the program stopped on, and put the cursor on the instruction.
+ *
+ * The stack trace already carries this and the editor is meant to act on it,
+ * but whether it *reveals* the file turned out to depend on what happened to
+ * hold the editor area - the emulator's own webview, a panel, a view restored
+ * from a previous session - so the answer was "sometimes". Doing it here does
+ * not depend on any of that.
+ *
+ * `preserveFocus` is deliberately false: stopping at a breakpoint is exactly
+ * the moment you want the keyboard in the source.
+ */
+async function revealStop(where: StopLocation | undefined): Promise<void> {
+    if (!where?.path || !where.line) { return; }
+    let document: vscode.TextDocument;
+    try {
+        document = await vscode.workspace.openTextDocument(vscode.Uri.file(where.path));
+    } catch {
+        return; // a file we cannot open is not worth an error popup on every stop
+    }
+
+    const line = Math.max(0, where.line - 1);
+    // Columns are 1-based in the protocol and 0-based here. The range is the
+    // *instruction*, not the whole line: `ld e,(hl) : inc hl` is two of them,
+    // and landing on the first when the second is running is a wrong answer.
+    const from = Math.max(0, (where.column ?? 1) - 1);
+    const to = where.endColumn && where.endColumn > (where.column ?? 1)
+        ? where.endColumn - 1
+        : from;
+    const selection = new vscode.Range(line, from, line, to);
+
+    const editor = await vscode.window.showTextDocument(document, {
+        preserveFocus: false,
+        preview: false,
+        selection,
+    });
+    editor.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }

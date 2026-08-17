@@ -40,6 +40,8 @@ fn attached() -> Session<RecordingPeer> {
     session
 }
 
+
+
 fn execution(address: u16) -> AssembledBreakpoint {
     AssembledBreakpoint {
         address,
@@ -615,8 +617,8 @@ fn launching_does_not_touch_the_run_state() {
 /// The emulator cannot leave an address it has a breakpoint on: it resumes,
 /// re-detects the breakpoint at the address it has not left yet, and stops
 /// again - answering "Instruction step completed" with the program counter
-/// unmoved. Removing this once, on a mistaken reading of a log, immediately
-/// broke stepping off a breakpoint again.
+/// unmoved. Removed twice on mistaken readings, and restored both times by a
+/// transcript showing `PC` sitting still across six consecutive steps.
 #[test]
 fn stepping_lifts_the_breakpoint_under_the_program_counter() {
     let mut session = attached();

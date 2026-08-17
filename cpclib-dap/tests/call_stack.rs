@@ -233,8 +233,17 @@ fn a_session_without_an_image_asks_nothing_extra() {
     session.on_attached().unwrap();
 
     let out = session.on_emulator_message(&emulator_stack_trace());
-    assert_eq!(out.len(), 1, "answered straight through");
-    assert_eq!(out[0]["body"]["stackFrames"].as_array().unwrap().len(), 1);
+    // The stack trace, plus the "we stopped here" event the extension uses to
+    // open the line itself. Nothing was *asked of the emulator*, which is what
+    // this test is about.
+    let answer = out.last().unwrap();
+    assert_eq!(answer["command"], json!("stackTrace"), "answered straight through");
+    assert_eq!(answer["body"]["stackFrames"].as_array().unwrap().len(), 1);
+    assert!(
+        out.iter()
+            .all(|m| m["command"] == json!("stackTrace") || m["event"] == json!("cpclib/stoppedAt")),
+        "and nothing else was sent: {out:?}"
+    );
     assert!(!session.peer().commands().contains(&"scopes".to_string()));
 }
 

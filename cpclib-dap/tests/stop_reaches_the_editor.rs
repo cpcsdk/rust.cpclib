@@ -63,7 +63,8 @@ fn a_breakpoint_stop_becomes_a_usable_editor_state() {
             "instructionPointerReference": "0x4001"
         }]}
     }));
-    let frame = &stack[0]["body"]["stackFrames"][0];
+    // The stack trace is the answer; a `cpclib/stoppedAt` event may precede it.
+    let frame = &stack.last().unwrap()["body"]["stackFrames"][0];
     assert_eq!(
         frame["line"],
         json!(12),
@@ -84,4 +85,54 @@ fn a_breakpoint_stop_becomes_a_usable_editor_state() {
             "{button} reached the emulator"
         );
     }
+}
+
+/// Put the session where the program is stopped at `0x4000`.
+///
+/// `PC` is learned from the register pane rather than from the stack trace, so
+/// both have to arrive - which is what the editor really does on a stop.
+fn stopped_at_4000(session: &mut Session<RecordingPeer>) {
+    session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{
+            "id": 1, "name": "Z80 @ 0x4000", "line": 0,
+            "instructionPointerReference": "0x4000"
+        }]}
+    }));
+    session.on_emulator_message(&json!({
+        "type": "response", "command": "variables", "success": true,
+        "body": {"variables": [{"name": "PC", "value": "0x4000", "variablesReference": 0}]}
+    }));
+}
+
+/// Every emulator tried so far needs the breakpoint under `PC` out of the way
+/// before it can step off it - including the one this fixture stands in for.
+#[test]
+fn stepping_lifts_the_breakpoint_for_an_emulator_that_needs_it() {
+    let mut session = Session::new(RecordingPeer::new(), map());
+    session.on_attached().unwrap();
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "setBreakpoints",
+            "arguments": {
+                "source": {"path": "demo_code.asm"},
+                "breakpoints": [{"line": 12}]
+            }
+        }))
+        .unwrap();
+    stopped_at_4000(&mut session);
+
+    let before = session.peer().commands().len();
+    session
+        .on_editor_message(&json!({"seq": 2, "type": "request", "command": "next"}))
+        .unwrap();
+    let after: Vec<String> = session.peer().commands()[before..].to_vec();
+    assert_eq!(
+        after,
+        vec![
+            "setInstructionBreakpoints".to_string(),
+            "next".to_string()
+        ],
+        "the breakpoint under PC is lifted first: {after:?}"
+    );
 }
