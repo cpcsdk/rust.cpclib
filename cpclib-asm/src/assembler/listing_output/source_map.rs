@@ -66,28 +66,55 @@ impl SourceMapRow {
 /// The `:LINE:COL` is what makes this safe on Windows: a drive letter is `C:`
 /// followed by a separator, never by digits-colon-digits-space-`>`.
 fn real_file_name(name: &str) -> &str {
-    let Some(marker) = name.find(" > ")
+    split_expansion(name).map(|(path, _)| path).unwrap_or(name)
+}
+
+/// How far to move a line recorded inside an expansion to reach the file's own
+/// numbering.
+///
+/// A macro or struct body is re-parsed as a source of its own, so the lines in
+/// it count from the body rather than from the file - `0` for anything that is
+/// not an expansion, so an ordinary file is untouched.
+///
+/// The two differ by one, which is a fact about where each body's text starts
+/// rather than a choice: a `MACRO` body keeps the newline that ends its
+/// `macro` line, so its line 1 *is* the definition line; a `STRUCT` body does
+/// not, so its line 1 is the line after. Both are pinned by tests in
+/// `cpclib-asm/tests/source_map_probe.rs`.
+pub(crate) fn expansion_line_offset(name: &str) -> u32 {
+    let Some((_, line)) = split_expansion(name)
     else {
-        return name;
+        return 0;
     };
+    if name[..name.find(" > ").unwrap_or(0)].is_empty() {
+        return 0;
+    }
+    match name.contains(" > STRUCT ") {
+        true => line,
+        false => line.saturating_sub(1)
+    }
+}
+
+/// `main.asm:289:5 > MACRO SPRITE_BODY:` into `("main.asm", 289)`.
+///
+/// `None` for anything that is not a parser context of that shape - which is
+/// every ordinary file name, and is why this is safe to run over all of them.
+/// The `:LINE:COL` is what makes it safe on Windows: a drive letter is `C:`
+/// followed by a separator, never by digits-colon-digits-space-`>`.
+fn split_expansion(name: &str) -> Option<(&str, u32)> {
+    let marker = name.find(" > ")?;
     let head = &name[..marker];
 
     // Walk back over `:COL` then `:LINE`, both of which must be all digits.
-    let Some((rest, column)) = head.rsplit_once(':')
-    else {
-        return name;
-    };
+    let (rest, column) = head.rsplit_once(':')?;
     if column.is_empty() || !column.bytes().all(|b| b.is_ascii_digit()) {
-        return name;
+        return None;
     }
-    let Some((path, line)) = rest.rsplit_once(':')
-    else {
-        return name;
-    };
+    let (path, line) = rest.rsplit_once(':')?;
     if line.is_empty() || !line.bytes().all(|b| b.is_ascii_digit()) || path.is_empty() {
-        return name;
+        return None;
     }
-    path
+    Some((path, line.parse().ok()?))
 }
 
 /// The rows, plus the file table they index into.

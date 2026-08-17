@@ -977,6 +977,16 @@ impl ListingOutput {
                         .map(String::as_str)
                         .unwrap_or("");
                     let file = collector.file_id(name);
+                    // A macro or struct body is re-parsed as its own source, so
+                    // the lines the spans carry count from the body, not from
+                    // the file. The context name still says where the body was
+                    // written - and it must be consulted *here*, before
+                    // `file_id` collapses two different expansions of the same
+                    // file onto one id: `INNER` called from `OUTER`'s body
+                    // gives two rows both reading "line 2" that belong on
+                    // different lines of the file.
+                    let line_offset =
+                        super::source_map::expansion_line_offset(name);
                     // `current_offset` is already the physical position of
                     // these very bytes; the page is what distinguishes the
                     // same logical address in two banks.
@@ -1009,7 +1019,7 @@ impl ListingOutput {
                         // carries bytes but no token of its own.
                         collector.push(
                             file,
-                            line,
+                            line + line_offset,
                             logical,
                             current_offset,
                             page,
@@ -1023,7 +1033,7 @@ impl ListingOutput {
                         for (column, column_end, len) in emitting {
                             collector.push(
                                 file,
-                                line,
+                                line + line_offset,
                                 logical + offset,
                                 current_offset + offset,
                                 page,

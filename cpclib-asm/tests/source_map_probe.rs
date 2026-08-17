@@ -481,3 +481,118 @@ fn an_enum_in_an_included_file_claims_no_address() {
     );
     assert_eq!(ld.line, 4, "{:?}", map.rows);
 }
+
+/// An instruction inside a macro belongs to the line it is *written* on.
+///
+/// A macro body is re-parsed as a source of its own, so the spans inside it
+/// count from the body rather than from the file - and the body's line 1 is the
+/// `macro` line itself, so the file's line is `definition + body - 1`. Reported
+/// from real code: a breakpoint on `macros.asm:6` selected `macros.asm:4`,
+/// which is the `BREAKPOINT` two lines above the instruction it stopped on.
+///
+/// `a_macro_body_is_recorded_against_a_real_file` cannot catch this: its macro
+/// starts on line 1, which makes the offset zero.
+#[test]
+fn a_macro_body_is_recorded_against_the_files_own_lines() {
+    // 1 org / 2 blank / 3 macro / 4 nop / 5 ld bc / 6 endm / 7 call
+    let raw = named_map(
+        "macros.asm",
+        "\torg 0x4000\n\n\tmacro DEBUG, col\n\t\tnop\n\t\tld bc, 0x7f10\n\tendm\n\tDEBUG 1\n"
+    );
+    let lines: Vec<u32> = raw.rows.iter().map(|row| row.line).collect();
+    assert_eq!(lines, vec![4, 5], "the lines they are written on: {lines:?}");
+}
+
+/// A macro called from inside another macro's body.
+///
+/// The two bodies need *different* offsets, and both arrive claiming "line 2" -
+/// so the correction has to happen while each row still knows which expansion
+/// it came from, before the file name collapses them onto one id.
+#[test]
+fn a_macro_called_inside_another_macro_lands_in_both_bodies() {
+    // 3 macro INNER / 4 ld a / 5 endm / 7 macro OUTER / 8 nop / 9 INNER / 11 call
+    let raw = named_map(
+        "macros.asm",
+        "\torg 0x4000\n\n\tmacro INNER, n\n\t\tld a, {n}\n\tendm\n\n\tmacro OUTER, n\n\
+         \t\tnop\n\t\tINNER {n}\n\tendm\n\tOUTER 1\n"
+    );
+    let lines: Vec<u32> = raw.rows.iter().map(|row| row.line).collect();
+    assert_eq!(
+        lines,
+        vec![8, 4],
+        "OUTER's `nop` on line 8, INNER's `ld a` on line 4: {lines:?}"
+    );
+}
+
+/// A `\`-continued call site does not shift the body.
+///
+/// Arguments are substituted textually, so an argument carrying newlines would
+/// move every body line after it. A continuation is joined before the argument
+/// is taken, so it does not - which is worth pinning rather than assuming.
+#[test]
+fn a_multi_line_call_does_not_move_the_body() {
+    // 3 macro / 4 ld a / 5 ld b / 6 endm / 7-8 the call / 9 nop
+    let raw = named_map(
+        "macros.asm",
+        "\torg 0x4000\n\n\tmacro TWO, a, b\n\t\tld a, {a}\n\t\tld b, {b}\n\tendm\n\
+         \tTWO 1, \\\n\t\t2\n\tnop\n"
+    );
+    let lines: Vec<u32> = raw.rows.iter().map(|row| row.line).collect();
+    assert_eq!(lines, vec![4, 5, 9], "{lines:?}");
+}
+
+/// A `/* … */` comment inside a body is counted like any other lines.
+///
+/// The body is kept verbatim, so its newlines are real; this pins that the
+/// correction is a *shift* and never a re-count.
+#[test]
+fn a_multi_line_comment_in_a_body_is_counted() {
+    // 3 macro / 4 nop / 5-6 comment / 7 ld a / 8 endm / 9 call
+    let raw = named_map(
+        "macros.asm",
+        "\torg 0x4000\n\n\tmacro CMT, n\n\t\tnop\n/* one\n   two */\n\t\tld a, {n}\n\
+         \tendm\n\tCMT 2\n"
+    );
+    let lines: Vec<u32> = raw.rows.iter().map(|row| row.line).collect();
+    assert_eq!(lines, vec![4, 7], "{lines:?}");
+}
+
+/// A `STRUCT` is shifted too - by one more than a macro.
+///
+/// Its body text does not keep the newline that ends the `struct` line, so its
+/// line 1 is the line *after* the definition rather than the definition itself.
+#[test]
+fn a_struct_body_is_recorded_against_the_files_own_lines() {
+    // 3 struct / 4 x db / 5 y db / 6 endstruct / 7 use
+    let raw = named_map(
+        "macros.asm",
+        "\torg 0x4000\n\n\tstruct POINT\nx\tdb 0\ny\tdb 0\n\tendstruct\n\tPOINT 1, 2\n"
+    );
+    let lines: Vec<u32> = raw.rows.iter().map(|row| row.line).collect();
+    assert_eq!(lines, vec![4, 5], "the fields' own lines: {lines:?}");
+}
+
+/// The map for a source that has a real file name, the way a build does.
+fn named_map(
+    name: &str,
+    source: &str
+) -> cpclib_asm::assembler::listing_output::RawSourceMap {
+    let mut parse = cpclib_asm::parser::context::ParserOptions::default();
+    parse.set_quiet(true);
+    let builder = cpclib_asm::ParserContextBuilder::default()
+        .set_options(parse)
+        .set_current_filename(name);
+    let listing =
+        cpclib_asm::parser::parse_z80_with_context_builder(source, builder).expect("parses");
+    let mut assemble = cpclib_asm::AssemblingOptions::default();
+    assemble.record_source_map();
+    let mut parse = cpclib_asm::parser::context::ParserOptions::default();
+    parse.set_quiet(true);
+    let (_p, mut env) = cpclib_asm::assembler::visit_tokens_all_passes_with_options(
+        &listing,
+        cpclib_asm::EnvOptions::new(parse, assemble, Arc::new(DiscardObserver))
+    )
+    .expect("assembles");
+    env.handle_post_actions(&listing).expect("post actions");
+    env.source_map().expect("a source map was requested")
+}
