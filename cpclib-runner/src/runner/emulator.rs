@@ -1,5 +1,6 @@
 pub mod ace;
 pub mod amspirit;
+pub mod amspiritlite;
 pub mod cadence;
 pub mod caprice_forever;
 pub mod cpcec;
@@ -14,6 +15,7 @@ use std::path::absolute;
 
 pub use ace::*;
 pub use amspirit::*;
+pub use amspiritlite::*;
 use cadence::{CADENCE_CMD, CadenceVersion};
 use caprice_forever::{CAPRICEFOREVER_CMD, CapriceForeverVersion};
 pub use cpcec::*;
@@ -35,6 +37,7 @@ use crate::delegated::{
 pub enum Emulator {
     Ace(AceVersion),
     Amspirit(AmspiritVersion),
+    AmspiritLite(AmspiritLiteVersion),
     Cadence(CadenceVersion),
     CapriceForever(CapriceForeverVersion),
     CpcEmu(CpcEmuVersion),
@@ -88,6 +91,7 @@ impl Emulator {
         match self {
             Emulator::Ace(_) => ACE_CMD,
             Emulator::Amspirit(_) => AMSPIRIT_CMD,
+            Emulator::AmspiritLite(_) => AMSPIRIT_LITE_CMD,
             Emulator::Cadence(_) => CADENCE_CMD,
             Emulator::CapriceForever(_) => CAPRICEFOREVER_CMD,
             Emulator::CpcEmu(_) => CPCEMU_CMD,
@@ -108,6 +112,10 @@ impl Emulator {
             Emulator::Cpcec(_) => window_name.starts_with("CPCEC "),
             Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
             Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
+            // "AMSpiriT Lite 1.13.4 (SDL2)" and the Qt builds both lead with
+            // the product name, so the full one distinguishes it from its
+            // bigger sibling above.
+            Emulator::AmspiritLite(_) => window_name.starts_with("AMSpiriT Lite"),
             Emulator::Cadence(_) => window_name.starts_with("Cadence"),
             Emulator::SugarBoxV2(_) => unimplemented!(),
             Emulator::CpcEmuPower(_) => window_name.starts_with("CPCEPower"),
@@ -170,6 +178,7 @@ impl Emulator {
             Emulator::Cpcec(v) => v.configuration(),
             Emulator::Winape(v) => v.configuration(),
             Emulator::Amspirit(v) => v.configuration(),
+            Emulator::AmspiritLite(v) => v.configuration(),
             Emulator::Cadence(v) => v.configuration(),
             Emulator::Emulator1984(v) => v.configuration(),
             Emulator::SugarBoxV2(v) => v.configuration(),

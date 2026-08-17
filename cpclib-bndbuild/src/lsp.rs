@@ -165,6 +165,12 @@ pub const TASK_TYPES: &[TaskType] = &[
         example: ""
     },
     TaskType {
+        names: AMSPIRITLITE_CMDS,
+        description: "Run in AMSpiriT Lite, the portable AMSpiriT build",
+        synopsis: "amspiritlite [OPTIONS] <FILE>",
+        example: "amspiritlite --autorun demo.dsk"
+    },
+    TaskType {
         names: CPCEMU_CMDS,
         description: "Run in CPCEmu emulator",
         synopsis: "TODO",

@@ -623,6 +623,9 @@ impl EmulatorConf {
                 | Emulator::Cpcec(_)
                 | Emulator::RetroVm(_)
                 | Emulator::Cadence(_) => args.push(drive_a.to_string()),
+                // `amspirit-lite [OPTION...] [FILE]` - the medium is the
+                // trailing positional argument, whatever kind it is.
+                Emulator::AmspiritLite(_) => args.push(drive_a.to_string()),
                 Emulator::SugarBoxV2(_) => args.push(drive_a.to_string()),
                 Emulator::Winape(_) | Emulator::Amspirit(_) => {
                     args.push(emu.wine_compatible_fname(drive_a)?.to_string())
@@ -646,6 +649,7 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Winape(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::Amspirit(_) => return Err("Drive B not yet handled".to_owned()),
+                Emulator::AmspiritLite(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::SugarBoxV2(_) => return Err("Drive B not yet handled".to_owned()),
                 Emulator::CpcEmuPower(_cpc_emu_power_version) => {
                     args.push(format!("--dsk1={}", emu.wine_compatible_fname(drive_b)?))
@@ -671,6 +675,9 @@ impl EmulatorConf {
                     let fname = emu.wine_compatible_fname(sna)?;
                     args.push(format!("--file={fname}"));
                 },
+                // Not `--file=`: the Lite build takes the medium as its
+                // trailing positional argument and has no such option.
+                Emulator::AmspiritLite(_) => args.push(sna.to_string()),
                 Emulator::CpcEmuPower(_v) => {
                     args.push(format!("--sna={sna}"));
                 },
@@ -699,6 +706,14 @@ impl EmulatorConf {
                 Emulator::Cpcec(_) => todo!(),
                 Emulator::Winape(_) => todo!(),
                 Emulator::Amspirit(_) => todo!(),
+                Emulator::AmspiritLite(_) => {
+                    // `-R/--rom-path` points at a directory of ROMs rather than
+                    // naming them one by one, so a per-slot configuration has
+                    // nowhere to go.
+                    return Err("AMSpiriT Lite takes a ROM *directory* (--rom-path), not \
+                         individual ROM slots"
+                        .to_owned());
+                },
                 Emulator::SugarBoxV2(_) => todo!(),
                 Emulator::CpcEmuPower(_cpc_emu_power_version) => todo!(),
                 Emulator::CapriceForever(_caprice_forever_version) => todo!(),
@@ -805,6 +820,11 @@ impl EmulatorConf {
                     // is it automatic ?
                 },
                 Emulator::Amspirit(_) => {
+                    args.push(format!("--run={run}"));
+                },
+                // `-T/--run <name>` types `RUN"<name>`; the short `-A` form
+                // runs the first program on the medium instead.
+                Emulator::AmspiritLite(_) => {
                     args.push(format!("--run={run}"));
                 },
                 Emulator::SugarBoxV2(_) => unimplemented!(),
@@ -1438,6 +1458,11 @@ impl Robot {
             Emulator::Amspirit(_) => {
                 RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
             },
+            // Driven by the same window automation as its bigger sibling: the
+            // Lite build presents the same CPC screen and keyboard.
+            Emulator::AmspiritLite(_) => {
+                RobotImpl::<AmspiritUsedEmulator>::from((window, eventsManager, emu)).into()
+            },
             Emulator::SugarBoxV2(_) => {
                 RobotImpl::<SugarBoxV2UsedEmulator>::from((window, eventsManager, emu)).into()
             },
@@ -1886,6 +1911,9 @@ pub struct EmuCli {
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Emu {
     Ace,
+    /// The portable AMSpiriT build - a different emulator from `Amspirit`,
+    /// with its own releases and its own command line.
+    Amspiritlite,
     Winape,
     Cpcec,
     Amspirit,
@@ -2165,6 +2193,7 @@ pub fn handle_arguments<E: EventObserver + Clone + 'static>(
         Emu::Cpcec => Emulator::Cpcec(Default::default()),
         Emu::Caprice => Emulator::CapriceForever(Default::default()),
         Emu::Amspirit => Emulator::Amspirit(Default::default()),
+        Emu::Amspiritlite => Emulator::AmspiritLite(Default::default()),
         Emu::Sugarbox => Emulator::SugarBoxV2(Default::default()),
         Emu::Cpcemupower => Emulator::CpcEmuPower(Default::default()),
         Emu::Cpcemu => Emulator::CpcEmu(Default::default()),
@@ -2597,7 +2626,7 @@ mod tests {
         // Verify SnapshotLoad
         assert!(
             script.instructions().iter().any(|inst| {
-                matches!(inst, cpclib_csl::CslInstruction::SnapshotLoad(path) 
+                matches!(inst, cpclib_csl::CslInstruction::SnapshotLoad(path)
                     if path == &Utf8PathBuf::from("game.sna"))
             }),
             "Expected SnapshotLoad with game.sna"
