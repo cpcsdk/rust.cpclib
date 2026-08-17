@@ -68,6 +68,46 @@ fn macro_line_offset(filename: &str) -> usize {
     0
 }
 
+/// The part of a parser-context name an editor can open.
+///
+/// `events.asm:18:1 > MACRO REGISTER_EVENT:` is `events.asm`. Codespan appends
+/// `:LINE:COL` to whatever name it is given, so registering the whole context
+/// produced `events.asm:18:1 > MACRO REGISTER_EVENT::21:2` - a location no
+/// terminal or editor can follow, in a message whose whole purpose is to be
+/// followed. The lines are *already* absolute by then, thanks to the blank
+/// lines [`adjust_macro_source`] prepends, so the real name and those lines
+/// agree: `events.asm:21:2` opens exactly the failing line.
+///
+/// Only for a name whose lines have actually been shifted - stripping the
+/// context off a name that was left macro-local would point the editor at the
+/// right file and the wrong line, which is worse than an unclickable one.
+pub fn locatable_filename(filename: &str) -> &str {
+    if macro_line_offset(filename) == 0 {
+        return filename;
+    }
+    filename
+        .find(" > MACRO ")
+        .map(|at| &filename[..at])
+        .and_then(|head| head.rsplit_once(':'))
+        .and_then(|(without_col, _)| without_col.rsplit_once(':'))
+        .map(|(path, _)| path)
+        .filter(|path| !path.is_empty())
+        .unwrap_or(filename)
+}
+
+/// Which expansion a location came from, for the note that says so.
+///
+/// The macro's name used to be visible only because it was *part of the file
+/// name* - which is what made the location unclickable. It is worth keeping,
+/// so it moves to a note: the `-->` line stays a path an editor can open, and
+/// the message still says which macro you are inside.
+fn expansion_note(filename: &str) -> Option<String> {
+    let at = filename.find(" > MACRO ")?;
+    let name = filename[at + " > MACRO ".len()..].trim_end_matches(':');
+    let defined_at = &filename[..at];
+    Some(format!("inside MACRO {name}, expanded from {defined_at}"))
+}
+
 /// Adjust `source` and `offset` for a span that lives inside a macro body.
 /// See [`macro_line_offset`] for details.
 fn adjust_macro_source(filename: &str, source: &str, offset: usize) -> (String, usize) {
@@ -613,7 +653,12 @@ impl AssemblerError {
                                     e.0.state.complete_source(),
                                     raw_offset
                                 );
-                                let id = source_files.add(filename.clone(), adj_source);
+                                // Keyed on the full context name - two
+                                // expansions of one file are different sources
+                                // - but *shown* as the file itself, so the
+                                // location can be clicked.
+                                let id = source_files
+                                    .add(locatable_filename(&filename).to_owned(), adj_source);
                                 fname_to_id.insert(filename.clone(), id);
                                 id
                             }
@@ -1087,7 +1132,7 @@ fn build_simple_error_message_with_message(title: &str, message: &str, span: &Z8
     );
 
     let mut source_files = SimpleFiles::new();
-    let file = source_files.add(filename, source);
+    let file = source_files.add(locatable_filename(filename.as_ref()).to_owned(), source);
 
     let span_len = span.as_str().len();
     let end = if span_len > 1 {
@@ -1128,7 +1173,7 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
     );
 
     let mut source_files = SimpleFiles::new();
-    let file = source_files.add(filename, source);
+    let file = source_files.add(locatable_filename(filename.as_ref()).to_owned(), source);
 
     // TODO do it in a cleaner way. Here it is an ugly path !!!
     let end = if title.starts_with("Override ") {
@@ -1153,13 +1198,16 @@ pub fn build_simple_error_message(title: &str, span: &Z80Span, severity: Severit
 
     let sample_range = std::ops::Range { start: offset, end };
 
-    let diagnostic = Diagnostic::new(severity)
+    let mut diagnostic = Diagnostic::new(severity)
         .with_message(title)
         .with_labels(vec![Label::new(
             codespan_reporting::diagnostic::LabelStyle::Primary,
             file,
             sample_range
         )]);
+    if let Some(note) = expansion_note(filename.as_ref()) {
+        diagnostic = diagnostic.with_notes(vec![note]);
+    }
 
     let mut writer = buffer();
     let mut config = config();
@@ -1189,7 +1237,7 @@ fn build_simple_error_message_with_notes(
     );
 
     let mut source_files = SimpleFiles::new();
-    let file = source_files.add(filename, source);
+    let file = source_files.add(locatable_filename(filename.as_ref()).to_owned(), source);
 
     let span_len = span.as_str().len();
     let end = if span_len > 1 {
@@ -1371,5 +1419,57 @@ pub struct SimplerAssemblerError<'e>(pub(crate) &'e AssemblerError);
 impl Display for SimplerAssemblerError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.format(f, false)
+    }
+}
+
+#[cfg(test)]
+mod locatable_filename_tests {
+    use super::locatable_filename;
+
+    /// An error inside a macro must name a place an editor can open.
+    ///
+    /// Reported from a real session: ctrl-clicking the `-->` line of a `fail`
+    /// inside a macro did nothing, because the location read
+    /// `events.asm:18:1 > MACRO REGISTER_EVENT::21:2`. The `21` is already the
+    /// file's own line - `adjust_macro_source` pads the source so codespan
+    /// counts absolutely - so the file name is the only part that was wrong.
+    #[test]
+    fn a_macro_context_is_shown_as_the_file_it_came_from() {
+        assert_eq!(
+            locatable_filename("events.asm:18:1 > MACRO REGISTER_EVENT:"),
+            "events.asm"
+        );
+        assert_eq!(
+            locatable_filename("/home/me/src/events.asm:18:1 > MACRO R:"),
+            "/home/me/src/events.asm"
+        );
+    }
+
+    /// An ordinary file name is already what it should be.
+    #[test]
+    fn a_plain_file_name_is_untouched() {
+        for name in ["events.asm", "/home/me/src/events.asm", "no file", "<INLINE>"] {
+            assert_eq!(locatable_filename(name), name);
+        }
+    }
+
+    /// A macro defined on line 1 shifts nothing, so nothing is stripped.
+    ///
+    /// The name and the line numbers have to agree: a name whose lines were
+    /// left macro-local would send the editor to the right file and the wrong
+    /// line, which is worse than a location it cannot follow at all.
+    #[test]
+    fn a_name_whose_lines_were_not_shifted_keeps_its_context() {
+        let unshifted = "events.asm:1:1 > MACRO R:";
+        assert_eq!(super::macro_line_offset(unshifted), 0);
+        assert_eq!(locatable_filename(unshifted), unshifted);
+    }
+
+    /// A `STRUCT` expansion is left alone, because its lines are not shifted
+    /// either - `macro_line_offset` only recognises `> MACRO `.
+    #[test]
+    fn a_struct_context_is_left_alone() {
+        let name = "events.asm:18:1 > STRUCT POINT:";
+        assert_eq!(locatable_filename(name), name);
     }
 }
