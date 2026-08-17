@@ -33,12 +33,40 @@ pub struct DapConfig {
     /// otherwise guesswork - a pane that fails to appear says nothing about
     /// which message caused it - so this exists to turn a symptom into
     /// evidence. Relative paths are resolved against the project root.
-    pub log: String
+    pub log: String,
+    /// Which emulator a debug session uses.
+    ///
+    /// `1984js` runs in an editor tab and speaks the Debug Adapter Protocol
+    /// itself. `amspiritlite` runs in its own window and is driven through its
+    /// HTTP debug API - it knows its own banking, reports every chip directly
+    /// and keeps an instruction history, none of which the wasm emulator can
+    /// do.
+    ///
+    /// A launch configuration's own `emulator` attribute wins over this, so a
+    /// single rule can be debugged either way without editing the project.
+    pub emulator: String,
+    /// An emulator already running, to attach to instead of starting one.
+    ///
+    /// `http://127.0.0.1:8765` shaped. Empty means start one - which is what
+    /// you want unless you keep an emulator open with its window arranged how
+    /// you like it. Only `amspiritlite` can be attached to; the wasm emulator
+    /// is served by the session itself.
+    pub endpoint: String,
+    /// The port the started emulator serves its debug API on.
+    ///
+    /// Worth changing only to run two sessions at once, which would otherwise
+    /// fight over one server.
+    pub port: u16
 }
 
 impl Default for DapConfig {
     fn default() -> Self {
-        Self { log: String::new() }
+        Self {
+            log: String::new(),
+            emulator: "1984js".to_string(),
+            endpoint: String::new(),
+            port: 8765
+        }
     }
 }
 
@@ -566,6 +594,20 @@ catart_no_op = true
 # Useful when a debug session misbehaves: the log shows every message in both
 # directions, which turns "the panes are empty" into something diagnosable.
 log = ""
+# Which emulator a debug session uses.
+#   1984js       - runs in an editor tab, speaks DAP itself
+#   amspiritlite - runs in its own window, driven through its HTTP debug API;
+#                  knows its own banking, reports every chip directly and keeps
+#                  an instruction history
+# A launch configuration's own "emulator" attribute wins over this.
+emulator = "1984js"
+# Attach to an emulator you are already running instead of starting one.
+# Empty starts one, which is usually what you want. Only amspiritlite can be
+# attached to - the wasm emulator is served by the session itself.
+endpoint = ""
+# The port a started emulator serves its debug API on. Worth changing only to
+# run two debug sessions at once.
+port = 8765
 
 [bndbuild]
 warnings_as_errors = false
@@ -840,5 +882,56 @@ mod asm_run_emulator_tests {
         let loaded = load_config(Some(tmp.path().as_std_path()));
         assert!(loaded.error.is_none(), "{:?}", loaded.error);
         assert_eq!(loaded.config.asm.run_emulator, "winape");
+    }
+}
+
+#[cfg(test)]
+mod dap_settings_tests {
+    use super::*;
+
+    /// Everything a debug session needs is settable in the project's own file.
+    ///
+    /// A launch configuration can override any of it, but nobody should have to
+    /// edit JSON to choose an emulator.
+    #[test]
+    fn the_debug_session_is_configured_from_the_toml() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(CONFIG_FILE_NAME),
+            "[dap]\nemulator = \"amspiritlite\"\nport = 9000\n"
+        )
+        .unwrap();
+
+        let loaded = load_config(Some(tmp.path().as_std_path()));
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        assert_eq!(loaded.config.dap.emulator, "amspiritlite");
+        assert_eq!(loaded.config.dap.port, 9000);
+        // Not attaching: an empty endpoint means start one.
+        assert!(loaded.config.dap.endpoint.is_empty());
+    }
+
+    /// The defaults are the wasm emulator on its own port, which needs no
+    /// configuration at all.
+    #[test]
+    fn the_defaults_need_no_configuration() {
+        let dap = DapConfig::default();
+        assert_eq!(dap.emulator, "1984js");
+        assert_eq!(dap.port, 8765);
+        assert!(dap.endpoint.is_empty());
+        assert!(dap.log.is_empty());
+    }
+
+    /// An endpoint means attach to what is already running.
+    #[test]
+    fn an_endpoint_means_attach_rather_than_start() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(CONFIG_FILE_NAME),
+            "[dap]\nemulator = \"amspiritlite\"\nendpoint = \"http://127.0.0.1:8765\"\n"
+        )
+        .unwrap();
+
+        let loaded = load_config(Some(tmp.path().as_std_path()));
+        assert_eq!(loaded.config.dap.endpoint, "http://127.0.0.1:8765");
     }
 }
