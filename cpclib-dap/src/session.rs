@@ -341,6 +341,9 @@ pub struct Session<P: DapPeer> {
     /// The page the emulator turned out to have paged in at `PC`, for as long
     /// as the program is stopped there.
     pc_page: Option<u8>,
+    /// Which label each call site was found to name, so a stack walked on
+    /// every stop reads its few source lines once.
+    call_target_names: std::collections::HashMap<u16, String>,
     /// Where the program last stopped. What `-dv` with no argument means, and
     /// what a `PC`-following disassembly view re-anchors to on every step.
     last_pc: Option<u16>,
@@ -430,6 +433,7 @@ impl<P: DapPeer> Session<P> {
             pending_stack: None,
             pending_page_probe: None,
             pc_page: None,
+            call_target_names: std::collections::HashMap::new(),
             last_pc: None,
             timers: Vec::new(),
             last_registers: HashMap::new(),
@@ -3494,15 +3498,20 @@ impl<P: DapPeer> Session<P> {
                 // Naming the routine the `CALL` entered, not the address it
                 // returns to: "play_music" is what the user is looking at in
                 // the stack, "0x4003" is where they already are.
-                let name = match self.map.symbol_at(frame.called as u32) {
-                    Some(symbol) => symbol.to_string(),
-                    None => format!("0x{:04X}", frame.called)
-                };
                 // The page came out of the walk, so a paged frame resolves to
                 // exactly one line rather than being reported as ambiguous.
                 let located = frame
                     .page
                     .and_then(|page| self.map.location_at_long(page, frame.call_site));
+                // The address is always shown beside the name: labels share
+                // addresses, so the name is sometimes a choice between several
+                // and the number is what makes that visible rather than
+                // silently authoritative.
+                let name = match self.name_of_call_target(frame.called, frame.call_site, &located)
+                {
+                    Some(symbol) => format!("{symbol} @ 0x{:04X}", frame.called),
+                    None => format!("0x{:04X}", frame.called)
+                };
                 let locals = if frame.locals.is_empty() {
                     String::new()
                 }
@@ -3542,6 +3551,60 @@ impl<P: DapPeer> Session<P> {
         }
         self.synthetic_frames = frames;
         self.annotate_stack_trace(&response)
+    }
+
+    /// Which label the `call` at this site actually named.
+    ///
+    /// Several labels routinely share an address, and no rule about their
+    /// spelling reliably separates them - a real case named a frame
+    /// `PLY_AKG_DisarkWordRegionEnd_50` where the source plainly reads
+    /// `call spectral_sprite_move_along_curve`, because that name is *shorter*
+    /// and does not end in `_end`. The call site itself is the evidence: read
+    /// the line the call was made from, and prefer the candidate it names.
+    ///
+    /// Cached on the call site, because reading a source line is not free and
+    /// a stack is walked on every single stop, over the same few call sites.
+    fn name_of_call_target(
+        &mut self,
+        called: u16,
+        call_site: u16,
+        located: &Option<cpclib_project::srcmap::SourceLocation>
+    ) -> Option<String> {
+        if let Some(known) = self.call_target_names.get(&call_site) {
+            return known.clone().into();
+        }
+
+        // Owned, so the source line can be read while they are held.
+        let candidates: Vec<String> = self
+            .map
+            .symbols_at(called as u32)
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let best = match candidates.len() {
+            0 => None,
+            // Nothing to disambiguate; do not pay to read a line.
+            1 => Some(candidates[0].clone()),
+            _ => {
+                let named = located
+                    .as_ref()
+                    .and_then(|at| self.source_line(&at.file, at.line))
+                    .and_then(|text| {
+                        // The one this line actually mentions. Whole words
+                        // only: `draw` must not match `draw_sprite`.
+                        candidates
+                            .iter()
+                            .find(|name| mentions_word(&text, name))
+                            .cloned()
+                    });
+                named.or_else(|| candidates.first().cloned())
+            },
+        };
+
+        if let Some(best) = best.as_ref() {
+            self.call_target_names.insert(call_site, best.clone());
+        }
+        best
     }
 
     /// Say where the program stopped, in a message of our own.
@@ -3838,4 +3901,25 @@ pub(crate) fn decode_base64(encoded: &str) -> Vec<u8> {
         }
     }
     out
+}
+
+/// Whether `text` mentions `word` as a whole identifier.
+///
+/// `call draw` must not be taken as naming `draw_sprite`, and
+/// `call spectral_sprite_move_along_curve` must not be taken as naming
+/// `sprite` - so the characters either side have to be non-identifier ones.
+fn mentions_word(text: &str, word: &str) -> bool {
+    let is_part = |c: char| c.is_alphanumeric() || c == '_' || c == '.';
+    let mut from = 0;
+    while let Some(at) = text[from..].find(word) {
+        let start = from + at;
+        let end = start + word.len();
+        let before_ok = start == 0 || !text[..start].chars().next_back().is_some_and(is_part);
+        let after_ok = end == text.len() || !text[end..].chars().next().is_some_and(is_part);
+        if before_ok && after_ok {
+            return true;
+        }
+        from = start + 1;
+    }
+    false
 }

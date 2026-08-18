@@ -170,7 +170,15 @@ pub struct SourceMapFile {
     pub image: String,
     /// Where the program starts, when it says.
     #[serde(default)]
-    pub entry_point: Option<u16>
+    pub entry_point: Option<u16>,
+    /// Which of `symbols` are real addresses rather than `equ`/`=` values.
+    ///
+    /// Both are worth watching, so both are in `symbols`; only a label is
+    /// somewhere the program can *be*, so only a label should name a call
+    /// frame. Recorded here so a session that reads this file makes the same
+    /// distinction as one that assembled.
+    #[serde(default)]
+    pub address_symbols: std::collections::BTreeSet<String>
 }
 
 impl SourceMapFile {
@@ -189,7 +197,8 @@ impl SourceMapFile {
             definitions,
             breakpoints: Vec::new(),
             image: String::new(),
-            entry_point: None
+            entry_point: None,
+            address_symbols: std::collections::BTreeSet::new()
         }
     }
 
@@ -204,6 +213,15 @@ impl SourceMapFile {
         self.breakpoints = breakpoints;
         self.image = base64_encode(image);
         self.entry_point = entry_point;
+        self
+    }
+
+    /// Note which symbols are real addresses - see `address_symbols`.
+    pub fn with_address_symbols(
+        mut self,
+        addresses: std::collections::BTreeSet<String>
+    ) -> Self {
+        self.address_symbols = addresses;
         self
     }
 

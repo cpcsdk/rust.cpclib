@@ -106,10 +106,16 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
     // *expression*, and those are exactly the ones worth watching. Taking only
     // addresses silently loses them.
     let mut symbols = std::collections::HashMap::new();
+    // Which of them are a *place* rather than a value that equals one: only a
+    // label should ever name a call frame.
+    let mut address_symbols = std::collections::HashSet::new();
     for (name, _) in env.symbols().expression_symbol() {
         let symbol = name.value().to_string();
         let address = match env.symbols().address_value(name.value()) {
-            Ok(Some(address)) => Some(u32::from(address.address())),
+            Ok(Some(address)) => {
+                address_symbols.insert(symbol.clone());
+                Some(u32::from(address.address()))
+            },
             _ => {
                 env.symbols()
                     .int_value(name.value())
@@ -137,7 +143,8 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
         entry_point,
         source_map: SourceMap::from_raw(&raw)
             .resolved_against(entry)
-            .with_symbols(symbols),
+            .with_symbols(symbols)
+            .with_address_symbols(address_symbols),
         snapshot,
         entry: entry.to_path_buf()
     })
@@ -251,7 +258,8 @@ pub fn cached_for_debug(
         entry_point: file.entry_point,
         source_map: SourceMap::from_raw(&file.map)
             .resolved_against(entry)
-            .with_symbols(file.symbols.clone().into_iter().collect()),
+            .with_symbols(file.symbols.clone().into_iter().collect())
+            .with_address_symbols(file.address_symbols.iter().cloned().collect()),
         // The caller brings its own; this path exists for the launch that
         // already has one.
         snapshot: Vec::new(),

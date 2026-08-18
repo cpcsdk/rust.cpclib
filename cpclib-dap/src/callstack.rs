@@ -28,6 +28,20 @@
 /// hundred frames anyway.
 pub const MAX_STACK_ITEMS: usize = 100;
 
+/// How many unexplained words may sit between two frames before the walk stops
+/// believing what it finds below them.
+///
+/// A routine's locals are the registers it pushed: a handful, occasionally a
+/// dozen. Ninety-seven is not a call frame, it is the stack's older contents -
+/// and any word down there whose `value - 3` happens to be a `CALL` opcode
+/// becomes an invented frame with an invented name. That is exactly what
+/// produced `0xC4BA [97 pushed]` on every stop of a real session, under a
+/// perfectly good three-frame stack.
+///
+/// Generous rather than tight: this is the point past which the *evidence* is
+/// gone, not a claim about how many registers a routine may push.
+pub const MAX_LOCALS_BETWEEN_FRAMES: usize = 32;
+
 /// One reconstructed caller.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallFrame {
@@ -115,6 +129,13 @@ pub fn walk_paged(
         let Some((page, call)) = found
         else {
             pending_locals.push(value);
+            // Past this much unexplained stack, a `CALL` three bytes before a
+            // value is coincidence rather than evidence. Stop, keeping the
+            // frames found while there was still a chain to follow.
+            if pending_locals.len() > MAX_LOCALS_BETWEEN_FRAMES {
+                pending_locals.clear();
+                break;
+            }
             continue;
         };
 
@@ -295,5 +316,63 @@ mod tests {
             16,
             "and never past the end of the address space"
         );
+    }
+}
+
+#[cfg(test)]
+mod deep_stack_tests {
+    use super::*;
+
+    /// A `CALL`-shaped coincidence far down the stack is not a frame.
+    ///
+    /// Reported from a real session: three good frames, and beneath them
+    /// `0xC4BA [97 pushed]` - a name no symbol matched, at an address two pages
+    /// claimed, on every single stop. Ninety-seven words of older stack, and
+    /// one of them happened to have a `CALL` three bytes below it.
+    #[test]
+    fn a_coincidence_below_a_wall_of_stack_is_not_a_frame() {
+        let mut memory = vec![0u8; 0x1_0000];
+        // A real `call 0x5000` at 0x4000, returning to 0x4003.
+        memory[0x4000] = 0xCD;
+        memory[0x4002] = 0x50;
+        // ...and a coincidence: `call 0x9000` at 0x8000, "returning" to 0x8003.
+        memory[0x8000] = 0xCD;
+        memory[0x8002] = 0x90;
+
+        // The real return address, then a wall of unexplained words, then the
+        // coincidence.
+        let mut stack: Vec<u8> = vec![0x03, 0x40];
+        stack.extend(std::iter::repeat_n([0xEF, 0xBE], 40).flatten());
+        stack.extend([0x03, 0x80]);
+
+        let frames = walk(&stack, |address| Some(memory[address as usize]));
+        assert_eq!(frames.len(), 1, "only the one there is evidence for: {frames:?}");
+        assert_eq!(frames[0].called, 0x5000);
+        assert!(
+            frames[0].locals.len() <= MAX_LOCALS_BETWEEN_FRAMES,
+            "and it is not handed the whole wall: {:?}",
+            frames[0].locals.len()
+        );
+    }
+
+    /// A normal stack is untouched - a few locals between frames still chain.
+    #[test]
+    fn ordinary_frames_still_chain_through_their_locals() {
+        let mut memory = vec![0u8; 0x1_0000];
+        memory[0x4000] = 0xCD;
+        memory[0x4002] = 0x50;
+        memory[0x6000] = 0xCD;
+        memory[0x6002] = 0x70;
+
+        // Return address, four pushed registers, then the outer return address.
+        let mut stack: Vec<u8> = vec![0x03, 0x40];
+        stack.extend(std::iter::repeat_n([0xAD, 0xDE], 4).flatten());
+        stack.extend([0x03, 0x60]);
+
+        let frames = walk(&stack, |address| Some(memory[address as usize]));
+        assert_eq!(frames.len(), 2, "{frames:?}");
+        assert_eq!(frames[0].called, 0x5000);
+        assert_eq!(frames[1].called, 0x7000);
+        assert_eq!(frames[1].locals.len(), 4);
     }
 }

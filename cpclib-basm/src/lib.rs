@@ -505,18 +505,22 @@ fn save_source_map(
         });
     };
 
-    let symbols = env
-        .symbols()
-        .expression_symbol()
-        .iter()
-        .filter_map(|(name, value)| {
-            // `integer()` already answers for an address as well as for an
-            // `equ`, which is what a debugger wants: both are things you can
-            // type in a watch expression.
-            let address = value.integer().and_then(|v| u32::try_from(v).ok())?;
-            Some((name.value().to_string(), address))
-        })
-        .collect();
+    // `integer()` answers for an address as well as for an `equ`, which is what
+    // a debugger wants in a watch expression - but only a label is a *place*,
+    // so which is which is recorded alongside.
+    let mut symbols = std::collections::HashMap::new();
+    let mut address_symbols = std::collections::BTreeSet::new();
+    for (name, value) in env.symbols().expression_symbol().iter() {
+        let Some(address) = value.integer().and_then(|v| u32::try_from(v).ok())
+        else {
+            continue;
+        };
+        let name = name.value().to_string();
+        if value.address().is_some() {
+            address_symbols.insert(name.clone());
+        }
+        symbols.insert(name, address);
+    }
 
     // Recorded verbatim: the same source tree with different `-D` values is a
     // different program, and nothing else in the file would show it.
@@ -536,7 +540,9 @@ fn save_source_map(
         cpclib_sna::FlagValue::Byte(pc) => Some(pc as u16),
         _ => None
     };
-    let file = SourceMapFile::new(map, symbols, definitions).with_program(
+    let file = SourceMapFile::new(map, symbols, definitions)
+        .with_address_symbols(address_symbols)
+        .with_program(
         env.assembled_breakpoints(),
         &env.sna().memory_dump(),
         entry_point

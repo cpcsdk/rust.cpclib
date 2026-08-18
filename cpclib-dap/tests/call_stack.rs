@@ -169,7 +169,7 @@ fn a_return_address_on_the_stack_becomes_a_second_frame() {
     let caller = &frames[1];
     assert_eq!(
         caller["name"],
-        json!("play_music"),
+        json!("play_music @ 0x5000"),
         "named by the CALL target"
     );
     assert_eq!(
@@ -200,7 +200,7 @@ fn pushed_values_are_counted_not_invented() {
         .unwrap()
         .clone();
     assert_eq!(frames.len(), 2, "two words of data made no frames");
-    assert_eq!(frames[1]["name"], json!("play_music [2 pushed]"));
+    assert_eq!(frames[1]["name"], json!("play_music @ 0x5000 [2 pushed]"));
 }
 
 /// An emulator that cannot answer part of the chain still gets a stack trace
@@ -747,4 +747,62 @@ fn the_region_list_is_believed_over_the_page_number() {
         "page 1, not the page `ram_page` claimed: {frames:?}"
     );
     assert_eq!(frames[0]["line"], json!(242));
+}
+
+/// The `call` in the source says which label was meant.
+///
+/// Two labels at one address and no rule about their spelling separates them:
+/// a real stack named a frame `PLY_AKG_DisarkWordRegionEnd_50` where the source
+/// plainly read `call spectral_sprite_move_along_curve` - the wrong name being
+/// both *shorter* and not ending in `_end`. The line the call was made from is
+/// the evidence, and it is unambiguous.
+#[test]
+fn the_call_site_says_which_label_was_called() {
+    let source = std::env::temp_dir().join("cpclib-call-site-test.asm");
+    std::fs::write(
+        &source,
+        "\torg 0x4000\n\tnop\n\tcall spectral_sprite_move_along_curve\n\tret\n"
+    )
+    .unwrap();
+
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec![source.to_string_lossy().to_string()],
+        rows: vec![
+            SourceMapRow::flat(0, 2, 0x4000, 1),
+            // The `call`, on line 3, at 0x4001.
+            SourceMapRow::flat(0, 3, 0x4001, 3),
+        ]
+    })
+    .with_symbols(
+        [
+            ("PLY_AKG_DisarkWordRegionEnd_50".to_string(), 0x2E4Au32),
+            ("spectral_sprite_move_along_curve".to_string(), 0x2E4A)
+        ]
+        .into_iter()
+        .collect()
+    );
+
+    // The bytes have to *be* a `call 0x2E4A` at 0x4001, or the walk rightly
+    // refuses to believe 0x4004 is a return address.
+    let mut image = vec![0u8; 0x1_0000];
+    image[0x4001] = 0xCD;
+    image[0x4002] = 0x4A;
+    image[0x4003] = 0x2E;
+    let mut session = Session::new(RecordingPeer::new(), map).with_image(image);
+    session.on_attached().unwrap();
+
+    // A stack holding the return address just after that `call`.
+    let frames = frames_after_walk(&mut session, &[0x4004]);
+    let named = frames
+        .iter()
+        .map(|f| f["name"].as_str().unwrap_or_default().to_string())
+        .collect::<Vec<_>>();
+    assert!(
+        named
+            .iter()
+            .any(|name| name.starts_with("spectral_sprite_move_along_curve @ 0x2E4A")),
+        "the label the call names, not the shorter one: {named:?}"
+    );
+
+    let _ = std::fs::remove_file(&source);
 }

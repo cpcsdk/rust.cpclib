@@ -101,6 +101,14 @@ pub struct SourceMap {
     /// without re-assembling. Kept beside the line map because both come from
     /// the same build and are worthless if they come from different ones.
     symbols: HashMap<String, u32>,
+    /// Of those, the ones that are a *place in the program* rather than a
+    /// number that happens to equal one.
+    ///
+    /// A label has an address; `equ`/`=` defines a value, and a value equal to
+    /// 0x8F2A is not the routine at 0x8F2A. Both belong in `symbols` - you can
+    /// watch either - but only the first should ever name a call frame.
+    #[serde(default)]
+    address_symbols: std::collections::HashSet<String>,
     files: Vec<PathBuf>,
     /// `(file, line) -> every address that line occupies`, in assembly order.
     /// A macro body called five times has five.
@@ -154,6 +162,7 @@ impl SourceMap {
 
         Self {
             symbols: HashMap::new(),
+            address_symbols: std::collections::HashSet::new(),
             files,
             forward,
             spans,
@@ -192,6 +201,15 @@ impl SourceMap {
         self
     }
 
+    /// Which of the symbols are real addresses - see `address_symbols`.
+    pub fn with_address_symbols(
+        mut self,
+        addresses: std::collections::HashSet<String>
+    ) -> Self {
+        self.address_symbols = addresses;
+        self
+    }
+
     /// The address a label stands for, matched case-insensitively as a
     /// fallback - basm is case-sensitive by default but a user typing a watch
     /// expression is not thinking about that.
@@ -211,10 +229,53 @@ impl SourceMap {
     /// A linear scan: the reverse question is asked a few dozen times per stop
     /// against a table of a few thousand, which is nothing, and an index would
     /// have to be kept in step with `serde` round trips for no gain.
+    /// Every label at `address`, best guess first.
+    ///
+    /// More than one is the normal case, not an oddity: the end of a table is
+    /// the start of the routine after it. When the caller has evidence of
+    /// which one is meant - the text of the `call` that jumped there, say - it
+    /// should use this and decide for itself; `symbol_at` is the answer for
+    /// when there is no such evidence.
+    pub fn symbols_at(&self, address: u32) -> Vec<&str> {
+        let mut found: Vec<&str> = self
+            .symbols
+            .iter()
+            .filter(|(_, at)| **at == address)
+            .map(|(name, _)| name.as_str())
+            .collect();
+        found.sort_by_key(|name| self.preference(name));
+        found
+    }
+
+    /// How good a name this is for an address, lower being better.
+    fn preference(&self, name: &str) -> (bool, bool, usize, String) {
+        // A real label first: an `equ` equal to this address is a number, not
+        // a place, and naming a frame after one points the reader at something
+        // the program never entered.
+        let is_value =
+            !self.address_symbols.is_empty() && !self.address_symbols.contains(name);
+        let lowered = name.to_ascii_lowercase();
+        let is_end = lowered.ends_with("_end")
+            || lowered.ends_with(".end")
+            || lowered.ends_with("_fin");
+        (is_value, is_end, name.len(), name.to_owned())
+    }
+
     pub fn symbol_at(&self, address: u32) -> Option<&str> {
+        // Several labels routinely share one address: the end of a table is
+        // the start of the routine after it. `find` over a `HashMap` picked
+        // whichever the hasher happened to yield first, so a call frame was
+        // named `PLY_AKG_PeriodTable_End` instead of the routine actually
+        // entered - and differently between runs.
+        //
+        // Preferred, in order: a name that does not read as the *end* of
+        // something (an end marker names where code stops, never where it
+        // starts), then the shortest, then alphabetical so the answer is at
+        // least stable.
         self.symbols
             .iter()
-            .find(|(_, at)| **at == address)
+            .filter(|(_, at)| **at == address)
+            .min_by_key(|(name, _)| self.preference(name))
             .map(|(name, _)| name.as_str())
     }
 
@@ -403,6 +464,83 @@ impl SourceMap {
 
     pub fn is_empty(&self) -> bool {
         self.spans.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod symbol_at_tests {
+    use super::*;
+
+    fn map_with(symbols: &[(&str, u32)]) -> SourceMap {
+        SourceMap::default().with_symbols(
+            symbols
+                .iter()
+                .map(|(name, at)| (name.to_string(), *at))
+                .collect()
+        )
+    }
+
+    /// An `equ` is a number, not a place.
+    ///
+    /// `SPRITE_BASE equ 0x8F2A` and a routine that really starts at 0x8F2A are
+    /// both "symbols at 0x8F2A", but only one of them is somewhere the program
+    /// can be. Naming a call frame after the constant sends the reader to a
+    /// definition the program never entered.
+    #[test]
+    fn a_real_label_beats_a_value_that_equals_it() {
+        let map = map_with(&[("SPRITE_BASE", 0x8F2A), ("draw_sprite", 0x8F2A)])
+            .with_address_symbols(["draw_sprite".to_string()].into_iter().collect());
+        assert_eq!(map.symbol_at(0x8F2A), Some("draw_sprite"));
+    }
+
+    /// Being a real label outranks the other preferences, not the reverse.
+    #[test]
+    fn a_real_end_label_still_beats_a_value() {
+        let map = map_with(&[("SHORT", 0x8F2A), ("table_end", 0x8F2A)])
+            .with_address_symbols(["table_end".to_string()].into_iter().collect());
+        assert_eq!(map.symbol_at(0x8F2A), Some("table_end"));
+    }
+
+    /// Without the distinction recorded, the older preferences still apply -
+    /// a map from before this was carried is not made worse by it.
+    #[test]
+    fn nothing_recorded_means_nothing_is_demoted() {
+        let map = map_with(&[("PLY_Table_End", 0x8F2A), ("move_along_curve", 0x8F2A)]);
+        assert_eq!(map.symbol_at(0x8F2A), Some("move_along_curve"));
+    }
+
+    /// The end of a table is not the routine that starts there.
+    ///
+    /// Reported from a real call stack: the frame read
+    /// `PLY_AKG_PeriodTable_End` where the program had entered
+    /// `spectral_sprite_move_along_curve`. Both labels are at that address;
+    /// the arbitrary one won.
+    #[test]
+    fn a_routine_beats_the_end_of_whatever_precedes_it() {
+        let map = map_with(&[
+            ("PLY_AKG_PeriodTable_End", 0x8F2A),
+            ("spectral_sprite_move_along_curve", 0x8F2A)
+        ]);
+        assert_eq!(
+            map.symbol_at(0x8F2A),
+            Some("spectral_sprite_move_along_curve")
+        );
+    }
+
+    /// With nothing to tell them apart, the answer is at least the same every
+    /// time - an unstable name is a name nobody can report a bug about.
+    #[test]
+    fn the_choice_is_stable() {
+        let names = [("draw_sprite", 0x4000), ("draw_sprite_alias", 0x4000)];
+        for _ in 0..8 {
+            assert_eq!(map_with(&names).symbol_at(0x4000), Some("draw_sprite"));
+        }
+    }
+
+    /// An address nothing claims is still nothing.
+    #[test]
+    fn an_unclaimed_address_has_no_symbol() {
+        assert_eq!(map_with(&[("start", 0x4000)]).symbol_at(0x5000), None);
     }
 }
 
