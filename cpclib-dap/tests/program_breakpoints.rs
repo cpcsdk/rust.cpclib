@@ -660,3 +660,53 @@ fn stepping_lifts_the_breakpoint_under_the_program_counter() {
         "put back at the next stop"
     );
 }
+
+/// The directives are named in the console before the program runs.
+///
+/// Reported from a real session as "continue does not work properly - the
+/// emulator stopped at random locations without any breakpoint". Every one of
+/// those locations was a `BREAKPOINT` the program itself asked for: one written
+/// inside a macro body, armed once for each of the eight places the macro was
+/// used, in a file the user had never put a red dot in. The editor's gutter
+/// cannot show them, so the only way they are not invisible is to say so.
+#[test]
+fn the_directives_are_listed_before_the_program_runs() {
+    let mut session = attached();
+    session.adopt_program_breakpoints(&[execution(0x4000), execution(0x8000)]);
+
+    let notice = session
+        .program_breakpoint_notice()
+        .expect("the user is told what is armed");
+    assert!(notice.contains("main.asm:10"), "{notice}");
+    assert!(notice.contains("main.asm:20"), "{notice}");
+    assert!(
+        notice.contains("macro"),
+        "and why there are so many: {notice}"
+    );
+}
+
+/// Nothing to say about a program with no directives in it.
+#[test]
+fn a_program_without_directives_says_nothing() {
+    let session = attached();
+    assert!(session.program_breakpoint_notice().is_none());
+}
+
+/// A directive the editor has taken back is no longer armed, so it is no longer
+/// announced either - the notice describes what will stop the program, not what
+/// the assembler happened to emit.
+#[test]
+fn a_suppressed_directive_is_not_announced() {
+    let mut session = attached();
+    session.adopt_program_breakpoints(&[execution(0x4000), execution(0x8000)]);
+
+    // main.asm with no red dots at all takes both of them back.
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "setBreakpoints",
+            "arguments": {"source": {"path": "main.asm"}, "breakpoints": []}
+        }))
+        .unwrap();
+
+    assert!(session.program_breakpoint_notice().is_none());
+}

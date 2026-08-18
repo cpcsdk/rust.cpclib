@@ -548,11 +548,9 @@ impl ListingOutput {
         // Where this token sits on its line. `relative_line_and_column` is the
         // same computation the parser uses for error reporting, so the columns
         // agree with what a diagnostic would point at.
-        let (_, column) = token.span().relative_line_and_column();
-        self.current_token_column = column.max(1) as u16;
-        self.current_token_column_end = self
-            .current_token_column
-            .saturating_add(self.current_token_raw.trim_end().chars().count() as u16);
+        let (column, column_end) = Self::source_columns(token, &self.current_token_raw);
+        self.current_token_column = column;
+        self.current_token_column_end = column_end;
         self.current_token_expanded = if !Self::should_expand_source_for_token(token) {
             self.current_token_raw.clone()
         }
@@ -562,6 +560,41 @@ impl ListingOutput {
         self.current_token_bytes.clear();
         self.append_current_line_bytes(bytes, address_kind);
         self.update_repeat_depth(token);
+    }
+
+    /// The columns a token occupies, in the file the user has open.
+    ///
+    /// Outside an expansion the span's own columns are the file's, and columns
+    /// count bytes from the start of the line, so the token's byte length is
+    /// its width.
+    ///
+    /// Inside one they are not: a macro body is substituted textually and
+    /// re-parsed, so `({addr1})` has become `(0xc000)` and everything after it
+    /// on that line has moved. Only the map built while substituting can put
+    /// them back. Without it - an orgams-flavor macro, a struct - the whole
+    /// line is recorded instead of a guess, because a column pointing at the
+    /// wrong instruction is worse than one pointing at all of them, and one
+    /// past the end of the line selects nothing at all.
+    fn source_columns(token: &LocatedToken, raw: &str) -> (u16, u16) {
+        /// `column_end` no greater than `column` is how a row says it has no
+        /// columns worth trusting; the debugger then selects the line.
+        const WHOLE_LINE: (u16, u16) = (1, 1);
+
+        let span = token.span();
+        let (_, column) = span.relative_line_and_column();
+        let column = column.max(1);
+        let width = raw.trim_end().len();
+
+        let context = span.context();
+        if !context.is_expansion() {
+            let start = column as u16;
+            return (start, start.saturating_add(width as u16));
+        }
+
+        context
+            .expansion_columns()
+            .and_then(|columns| columns.source_columns(span.offset_from_start(), column, width))
+            .unwrap_or(WHOLE_LINE)
     }
 
     fn expand_symbol_with_listing_context(

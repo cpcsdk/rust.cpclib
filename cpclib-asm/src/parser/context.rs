@@ -147,7 +147,8 @@ impl ParserOptions {
             options: self,
             current_filename: None,
             context_name: None,
-            state: ParsingState::Standard
+            state: ParsingState::Standard,
+            expansion_columns: None
         }
     }
 }
@@ -156,7 +157,8 @@ pub struct ParserContextBuilder {
     options: ParserOptions,
     current_filename: Option<Utf8PathBuf>,
     context_name: Option<String>,
-    state: ParsingState
+    state: ParsingState,
+    expansion_columns: Option<ExpansionColumnMap>
 }
 
 impl Default for ParserContextBuilder {
@@ -171,7 +173,8 @@ impl From<ParserContext> for ParserContextBuilder {
             state: ctx.state,
             current_filename: ctx.current_filename,
             context_name: ctx.context_name,
-            options: ctx.options
+            options: ctx.options,
+            expansion_columns: ctx.expansion_columns
         }
     }
 }
@@ -202,6 +205,13 @@ impl ParserContextBuilder {
 
     pub fn set_state(mut self, state: ParsingState) -> Self {
         self.state = state;
+        self
+    }
+
+    /// Record where the text about to be parsed came from - see
+    /// [`ExpansionColumnMap`].
+    pub fn set_expansion_columns(mut self, columns: ExpansionColumnMap) -> Self {
+        self.expansion_columns = Some(columns);
         self
     }
 
@@ -236,7 +246,8 @@ impl ParserContextBuilder {
             context_name: self.context_name,
             state: self.state,
             source: str,
-            line_col_lut: Default::default()
+            line_col_lut: Default::default(),
+            expansion_columns: self.expansion_columns
         }
     }
 }
@@ -453,6 +464,92 @@ impl ParserOptions {
         self.assembler_flavor == AssemblerFlavor::Orgams
     }
 }
+/// Where each piece of an expanded macro body came from, well enough to put a
+/// column back where the user wrote it.
+///
+/// A macro body is substituted textually and re-parsed as a source of its own,
+/// so a span inside it carries columns of the *expanded* text: `({addr1})`
+/// becomes `(0xc000)`, and every instruction after it on that line has moved.
+/// Line numbers survive - substitution inserts no newlines - which is why they
+/// could be corrected by a simple shift; columns cannot, and a debugger handed
+/// them selects the wrong instruction, or one past the end of the line and so
+/// nothing at all.
+///
+/// One entry per piece of the body, in order, is enough to undo that: literal
+/// text runs in step with the body it was copied from, and a substituted
+/// argument stands, whole, at the placeholder it replaced.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExpansionColumnMap {
+    pieces: Vec<ExpansionPiece>
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ExpansionPiece {
+    /// Byte offset where this piece starts in the expanded text.
+    expanded: u32,
+    /// Byte offset where it starts in the body it was expanded from.
+    source: u32,
+    /// Whether the two advance together. True for body text copied verbatim;
+    /// false for a substituted argument, whose every byte maps back to the
+    /// single placeholder it replaced.
+    verbatim: bool
+}
+
+impl ExpansionColumnMap {
+    /// Note that the expanded text reaches `expanded` just as the body reaches
+    /// `source`. Called in expansion order, so the entries stay sorted.
+    pub fn push_piece(&mut self, expanded: usize, source: usize, verbatim: bool) {
+        self.pieces.push(ExpansionPiece {
+            expanded: expanded as u32,
+            source: source as u32,
+            verbatim
+        });
+    }
+
+    /// Where `expanded` sits in the body, and whether the piece holding it runs
+    /// in step with the body.
+    fn source_offset(&self, expanded: usize) -> Option<(usize, bool)> {
+        let expanded = expanded as u32;
+        let index = self
+            .pieces
+            .partition_point(|piece| piece.expanded <= expanded)
+            .checked_sub(1)?;
+        let piece = self.pieces[index];
+        let offset = if piece.verbatim {
+            piece.source + (expanded - piece.expanded)
+        }
+        else {
+            piece.source
+        };
+        Some((offset as usize, piece.verbatim))
+    }
+
+    /// The columns, on the body's own line, of a token that the expanded text
+    /// reports at `column` of the line starting `column - 1` bytes before
+    /// `offset`, and that is `width` bytes long.
+    ///
+    /// `None` when the answer cannot be trusted - which is the useful outcome,
+    /// because the caller then records no columns rather than wrong ones. The
+    /// only way in is a substituted argument that carried a newline: the line
+    /// the token is on then began inside an argument value, and nothing about
+    /// it can be attributed to the body.
+    pub fn source_columns(&self, offset: usize, column: usize, width: usize) -> Option<(u16, u16)> {
+        let line_start = offset.checked_sub(column.checked_sub(1)?)?;
+        let (line_start, verbatim) = self.source_offset(line_start)?;
+        if !verbatim {
+            return None;
+        }
+        let (start, _) = self.source_offset(offset)?;
+        let (end, _) = self.source_offset(offset + width)?;
+        let start = start.checked_sub(line_start)? + 1;
+        let end = end.checked_sub(line_start)? + 1;
+        if end < start {
+            return None;
+        }
+        Some((u16::try_from(start).ok()?, u16::try_from(end).ok()?))
+    }
+}
+
 /// Context information that can guide the parser
 /// TODO add assembling flags
 #[derive(Debug)]
@@ -467,7 +564,10 @@ pub struct ParserContext {
     pub options: ParserOptions,
     /// Full source code of the parsing state
     pub source: &'static BStr,
-    pub line_col_lut: RwLock<Option<LineColLookup<'static>>>
+    pub line_col_lut: RwLock<Option<LineColLookup<'static>>>,
+    /// Set when `source` is a macro expansion rather than text the user wrote -
+    /// see [`ExpansionColumnMap`].
+    pub expansion_columns: Option<ExpansionColumnMap>
 }
 
 impl Eq for ParserContext {}
@@ -513,7 +613,8 @@ impl ParserContext {
             source: self.source,
             options: self.options.clone(),
             line_col_lut: Default::default(), // no need to duplicate the structure
-            state
+            state,
+            expansion_columns: self.expansion_columns.clone()
         }
     }
 }
@@ -523,6 +624,24 @@ impl ParserContext {
     #[inline]
     pub fn context_name(&self) -> Option<&str> {
         self.context_name.as_deref()
+    }
+
+    /// Whether `source` is a macro or struct body re-parsed as a source of its
+    /// own rather than text the user wrote in a file.
+    ///
+    /// The context name is what says so - `main.asm:289:5 > MACRO DRAW:` - and
+    /// it is set nowhere else in that shape.
+    #[inline]
+    pub fn is_expansion(&self) -> bool {
+        self.context_name
+            .as_deref()
+            .is_some_and(crate::assembler::listing_output::source_map::is_expansion_context)
+    }
+
+    /// Where the text of this expansion came from, when that is known.
+    #[inline]
+    pub fn expansion_columns(&self) -> Option<&ExpansionColumnMap> {
+        self.expansion_columns.as_ref()
     }
 
     #[inline]
@@ -611,5 +730,53 @@ mod test_super {
 
     fn test_normal_state() {
         assert!(!Token::Return(0.into()).is_accepted(&ParsingState::Standard));
+    }
+}
+
+#[cfg(test)]
+mod expansion_column_tests {
+    use super::*;
+
+    /// `\tld hl, ({a}) : nop` expanded with `a` = `0x1234`, as a map: literal
+    /// up to the placeholder, the argument, then the rest.
+    fn map() -> ExpansionColumnMap {
+        let mut map = ExpansionColumnMap::default();
+        map.push_piece(0, 0, true); // "\tld hl, ("
+        map.push_piece(9, 9, false); // "0x1234" standing in for "{a}"
+        map.push_piece(15, 12, true); // ") : nop"
+        map.push_piece(22, 19, true); // the end of both texts
+        map
+    }
+
+    /// The whole point: the second instruction is reported where it is
+    /// *written*, not where the substitution pushed it.
+    #[test]
+    fn a_column_after_a_substitution_comes_back_to_the_body() {
+        // "nop" starts at offset 19 of the expansion, column 20 of its line.
+        assert_eq!(map().source_columns(19, 20, 3), Some((17, 20)));
+        // ...and the instruction before it is untouched, though it *contains*
+        // the substitution: it ends where "({a})" ends, not where "(0x1234)"
+        // does.
+        assert_eq!(map().source_columns(1, 2, 14), Some((2, 13)));
+    }
+
+    /// Anything inside the substituted text answers with the placeholder it
+    /// replaced - there is no column in the body for the middle of `0x1234`.
+    #[test]
+    fn a_column_inside_a_substitution_is_the_placeholder() {
+        assert_eq!(map().source_columns(11, 12, 0), Some((10, 10)));
+    }
+
+    /// An argument carrying a newline moves the *lines* as well, and then
+    /// nothing on the line can be attributed to the body. Saying so is what
+    /// makes the caller record no columns rather than wrong ones.
+    #[test]
+    fn a_line_beginning_inside_an_argument_has_no_answer() {
+        let mut map = ExpansionColumnMap::default();
+        map.push_piece(0, 0, true);
+        map.push_piece(4, 4, false); // an argument spelled over two lines
+        map.push_piece(20, 7, true);
+        // Offset 12 is on a line that began at 10, inside the argument.
+        assert_eq!(map.source_columns(12, 3, 2), None);
     }
 }

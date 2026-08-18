@@ -770,6 +770,13 @@ pub struct AmspiritLitePeer {
     /// during each one. Without this the poller would catch it mid-walk and
     /// announce a stop that has not happened.
     stepping: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Raised to ask a walk in progress to stop where it stands.
+    ///
+    /// A walk has no clock on it - a routine takes as long as it takes - so
+    /// what ends one that wandered into the main loop is the user: pause,
+    /// disconnect or terminate. A stopwatch could only ever be wrong in one
+    /// direction or the other, and was wrong in both.
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// The addresses the editor last armed.
     ///
     /// A step-over walks over its instruction; a breakpoint *inside* what it
@@ -779,19 +786,26 @@ pub struct AmspiritLitePeer {
     /// How far a step-over walks before it gives up; `STEP_OVER_BUDGET` unless
     /// a caller says otherwise.
     step_over_budget: usize,
-    /// And how long, which is usually what stops it first.
-    step_over_time: std::time::Duration,
+    /// How long a walk goes on before it says so in the console;
+    /// `ANNOUNCE_AFTER` unless a caller says otherwise.
+    announce_after: std::time::Duration,
+    /// How long a resume is given to become visible; `RESUME_CONFIRMATION`
+    /// unless a caller says otherwise.
+    resume_confirmation: std::time::Duration,
     /// Where an interrupted walk was heading: the address it gave up at, and
     /// the address it was walking to.
     ///
     /// So that pressing step over again *carries on* rather than starting a
     /// fresh walk over whatever instruction the routine happened to stop on -
     /// which is what "step over again to carry on" has to mean to be true.
-    unfinished: Option<(u16, u16)>,
+    /// Shared, because the walk that fills it in runs on its own thread.
+    unfinished: std::sync::Arc<std::sync::Mutex<Option<(u16, u16)>>>,
     /// Answers waiting for the next `drain`.
     pending: std::sync::mpsc::Receiver<Value>,
     outgoing: std::sync::mpsc::Sender<Value>,
-    seq: i64
+    /// Shared with the walk, which answers the editor while `send` is off
+    /// answering something else.
+    seq: std::sync::Arc<std::sync::atomic::AtomicI64>
 }
 
 impl AmspiritLitePeer {
@@ -838,14 +852,16 @@ impl AmspiritLitePeer {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             expecting_stop,
             stepping,
+            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             armed: Vec::new(),
             step_over_budget: Self::STEP_OVER_BUDGET,
-            step_over_time: Self::STEP_OVER_TIME,
-            unfinished: None,
+            announce_after: Self::ANNOUNCE_AFTER,
+            resume_confirmation: Self::RESUME_CONFIRMATION,
+            unfinished: std::sync::Arc::new(std::sync::Mutex::new(None)),
             launched: None,
             pending,
             outgoing,
-            seq: 0
+            seq: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0))
         })
     }
 
@@ -856,41 +872,58 @@ impl AmspiritLitePeer {
         self
     }
 
-    fn next_seq(&mut self) -> i64 {
-        self.seq += 1;
-        self.seq
+    fn next_seq(&self) -> i64 {
+        next_seq(&self.seq)
     }
 
-    /// How long a step-over will walk before it gives up and says where it got
-    /// to.
+    /// How long a walk goes on before it explains itself in the console.
     ///
-    /// The real bound, because the adapter is busy for every one of those HTTP
-    /// round trips: while a walk runs, nothing else is answered and the editor
-    /// looks dead. A step count cannot bound that - the same number of steps
-    /// is a blink or a minute depending on the machine underneath.
-    const STEP_OVER_TIME: std::time::Duration = std::time::Duration::from_secs(2);
+    /// Long enough that an ordinary step over says nothing, short enough that a
+    /// walk into a routine that runs for a minute is visible while it happens
+    /// rather than mysterious.
+    const ANNOUNCE_AFTER: std::time::Duration = std::time::Duration::from_secs(1);
 
-    /// A hard ceiling on the same walk, for a machine fast enough to make the
-    /// clock the wrong limit.
+    /// A hard ceiling on a walk, so a step over aimed at an address control
+    /// never reaches ends by itself rather than stepping until the session
+    /// does.
+    ///
+    /// Not a time limit: the walk no longer holds the adapter, so a long
+    /// routine is merely slow rather than a freeze, and the thing that ends one
+    /// early is the user pressing pause.
     const STEP_OVER_BUDGET: usize = 200_000;
 
-    /// Everything the machine has to say about itself right now.
-    fn machine(&self) -> std::io::Result<Value> {
-        let body = perform(&self.endpoint, &Call::get("/api/state"))?;
-        serde_json::from_str(&body)
-            .map_err(|why| std::io::Error::new(std::io::ErrorKind::InvalidData, why))
-    }
+    /// How long a resume is given to become visible before the editor is told
+    /// to expect a stop anyway.
+    ///
+    /// Six times the worst lag measured against a real 1.13.4, so it is
+    /// normally over in a millisecond or two. Waiting out the whole of it means
+    /// the machine resumed and stopped again without a single look catching it
+    /// running - a breakpoint one instruction away - and a stop is then exactly
+    /// what to expect.
+    const RESUME_CONFIRMATION: std::time::Duration = std::time::Duration::from_millis(60);
 
-    /// The bytes at `address`, however the emulator is paged right now.
-    fn bytes_at(&self, address: u16, count: u16) -> std::io::Result<Vec<u8>> {
-        let call = Call::get("/api/ram")
-            .query("addr", address)
-            .query("len", count);
-        let body = perform(&self.endpoint, &call)?;
-        let answer: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
-        Ok(bytes_from_hex(
-            answer.get("hex").and_then(Value::as_str).unwrap_or_default()
-        ))
+    /// Wait for the machine to say it is running again, briefly.
+    ///
+    /// Asking it to resume and having it resume are not the same instant, and
+    /// the difference is what turned a continue into a stop that never
+    /// happened. Looked at every couple of milliseconds, so a machine that
+    /// resumes and hits a breakpoint a frame later is still caught running in
+    /// between - the one observation that tells the two cases apart.
+    fn wait_until_it_is_really_running(&self) {
+        let deadline = std::time::Instant::now() + self.resume_confirmation;
+        while std::time::Instant::now() < deadline {
+            if let Ok(body) = perform(&self.endpoint, &Call::get("/api/ping"))
+                && let Ok(state) = serde_json::from_str::<Value>(&body)
+                && state
+                    .get("emu")
+                    .and_then(|emu| emu.get("paused"))
+                    .and_then(Value::as_bool)
+                    == Some(false)
+            {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
     }
 
     /// Step *over* the instruction at `PC`.
@@ -900,56 +933,129 @@ impl AmspiritLitePeer {
     /// started on. Which is not a workaround: it is what stepping over
     /// *means*, and it comes out right for a `call` and for a repeating `ldir`
     /// or `otir` without either being special-cased.
+    ///
+    /// The editor is answered at once and the walk goes on a thread of its
+    /// own, with the `stopped` event following when it ends. That is the DAP
+    /// order anyway - a step request is acknowledged, and the stop that comes
+    /// later says where it ended - and it is the only way the adapter stays
+    /// able to answer anything at all while a walk over a long routine runs.
     fn step_over(&mut self, message: &Value, out_of_this_one: bool) -> std::io::Result<()> {
-        self.stepping
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        // Answered first, whatever happens next: from here the editor knows
+        // the step was accepted and waits for the stop.
+        let seq = self.next_seq();
+        let _ = self
+            .outgoing
+            .send(crate::protocol::response(message, json!({}), seq));
+
+        // A walk already under way is not restarted. The editor has no reason
+        // to ask - it has not been told the last one finished - and two walks
+        // stepping one machine would each be counting the other's steps.
+        if self
+            .stepping
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
+            return Ok(());
+        }
+        self.cancelled
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+
+        let walk = Walk {
+            endpoint: self.endpoint.clone(),
+            armed: self.armed.clone(),
+            budget: self.step_over_budget,
+            announce_after: self.announce_after,
+            cancelled: self.cancelled.clone(),
+            stepping: self.stepping.clone(),
+            unfinished: self.unfinished.clone(),
+            outgoing: self.outgoing.clone(),
+            seq: self.seq.clone()
+        };
+        if std::thread::Builder::new()
+            .name("amspiritlite-stepover".into())
+            .spawn(move || walk.run(out_of_this_one))
+            .is_err()
+        {
+            // No walk, so nothing must be left muting the run-state poller -
+            // which is the only thing that notices a breakpoint being hit.
+            self.stepping
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+        }
+        Ok(())
+    }
+}
+
+/// A step-over walk, running off the peer's thread.
+///
+/// It owns copies of what it needs rather than borrowing the peer, which is
+/// the whole point: `send` goes on answering the editor while the walk runs,
+/// and it cannot do that while a walk holds the peer.
+struct Walk {
+    endpoint: String,
+    armed: Vec<u16>,
+    budget: usize,
+    announce_after: std::time::Duration,
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    stepping: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    unfinished: std::sync::Arc<std::sync::Mutex<Option<(u16, u16)>>>,
+    outgoing: std::sync::mpsc::Sender<Value>,
+    seq: std::sync::Arc<std::sync::atomic::AtomicI64>
+}
+
+/// How a walk ended: what to call the stop, and what the console is owed.
+struct Ending {
+    reason: &'static str,
+    note: Option<String>
+}
+
+impl Ending {
+    /// Where it was going, with nothing to explain.
+    fn arrived() -> Self {
+        Self {
+            reason: "step",
+            note: None
+        }
+    }
+}
+
+impl Walk {
+    fn run(self, out_of_this_one: bool) {
         let walked = if out_of_this_one {
             self.walk_out()
         }
         else {
             self.walk_over()
         };
-        self.stepping
-            .store(false, std::sync::atomic::Ordering::Relaxed);
 
         // A walk that failed halfway is still a stop: the machine is wherever
-        // it got to, and the editor is owed an answer either way. Letting the
-        // error out instead would end the whole session over one refused
-        // connection - and a debugger that disappears mid-step is a far worse
-        // failure than a step that did not finish.
-        let (state, note) = match walked {
-            Ok((state, None)) => (state, None),
-            Ok((state, Some(walked))) => {
-                let pc = register(&state, "PC").unwrap_or(0);
-                let note = format!(
-                    "step over gave up after {walked} instructions without coming back; \
-                     stopped at 0x{pc:04X} - step over again to carry on\n"
-                );
-                (state, Some(note))
-            },
-            Err(why) => {
-                (
-                    self.machine().unwrap_or(Value::Null),
-                    Some(format!("step over could not finish: {why}\n"))
-                )
-            },
-        };
-        if let Some(note) = note {
-            let seq = self.next_seq();
-            let _ = self.outgoing.send(crate::protocol::event(
-                "output",
-                json!({ "category": "console", "output": note }),
-                seq
-            ));
+        // it got to, and the editor is owed the stop either way. Letting the
+        // error end the session instead would be a far worse failure than a
+        // step that did not finish - a debugger that disappears mid-step.
+        let ending = walked.unwrap_or_else(|why| {
+            Ending {
+                reason: "step",
+                note: Some(format!("step over could not finish: {why}\n"))
+            }
+        });
+        if let Some(note) = ending.note {
+            self.say(&note);
         }
 
         // The walk is over and the machine is paused; now the editor may hear
-        // about it.
-        self.expecting_stop
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-        let seq = self.next_seq();
-        let _ = self.outgoing.send(response_for(message, &state, seq));
-        Ok(())
+        // about it. The poller is unmuted only afterwards, so it cannot squeeze
+        // a stop of its own in front of this one.
+        let seq = next_seq(&self.seq);
+        let _ = self.outgoing.send(crate::protocol::event(
+            "stopped",
+            json!({
+                "reason": ending.reason,
+                "description": "Execution stopped",
+                "threadId": 1,
+                "allThreadsStopped": true
+            }),
+            seq
+        ));
+        self.stepping
+            .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Step *out* of the routine we are in, by the same walk: the address to
@@ -958,94 +1064,182 @@ impl AmspiritLitePeer {
     /// A guess, and unavoidably so - `SP` points at a return address only
     /// because that is what being inside a subroutine means, and nothing on a
     /// Z80 says so. The budget is what keeps a wrong guess from running away.
-    fn walk_out(&mut self) -> std::io::Result<(Value, Option<usize>)> {
-        let state = self.machine()?;
+    fn walk_out(&self) -> std::io::Result<Ending> {
+        let state = machine(&self.endpoint)?;
         let Some(sp) = register(&state, "SP").map(|sp| sp as u16)
         else {
-            return Ok((state, None));
+            return Ok(Ending::arrived());
         };
-        let stacked = self.bytes_at(sp, 2)?;
+        let stacked = bytes_at(&self.endpoint, sp, 2)?;
         let [low, high] = stacked[..] else {
-            return Ok((state, None));
+            return Ok(Ending::arrived());
         };
-        self.walk_to(u16::from(low) | (u16::from(high) << 8))
+        let target = u16::from(low) | (u16::from(high) << 8);
+        self.walk_to(target, &format!("stepping out to 0x{target:04X}"))
     }
 
-    /// The walk itself. A step count alongside the state means it gave up
-    /// after that many, rather than arriving.
-    fn walk_over(&mut self) -> std::io::Result<(Value, Option<usize>)> {
-        let state = self.machine()?;
+    /// The walk itself, aimed at the instruction after the one at `PC`.
+    fn walk_over(&self) -> std::io::Result<Ending> {
+        let state = machine(&self.endpoint)?;
         let Some(pc) = register(&state, "PC").map(|pc| pc as u16)
         else {
             // No idea where we are, so nothing to walk back to. One step is
             // still a step.
             perform(&self.endpoint, &Call::post("/api/step"))?;
-            return Ok((self.machine()?, None));
+            return Ok(Ending::arrived());
         };
 
-        // Picking up a walk that ran out of time, from exactly where it ran
-        // out. Anywhere else and this is a new step over, whatever was pending.
-        if let Some((gave_up_at, target)) = self.unfinished.take()
+        // Picking up a walk that was interrupted, from exactly where it
+        // stopped. Anywhere else and this is a new step over, whatever was
+        // pending.
+        let pending = self
+            .unfinished
+            .lock()
+            .ok()
+            .and_then(|mut held| held.take());
+        if let Some((gave_up_at, target)) = pending
             && gave_up_at == pc
         {
-            return self.walk_to(target);
+            return self.walk_to(target, &format!("carrying on to 0x{target:04X}"));
         }
 
         // Four bytes is the longest a Z80 instruction gets.
-        let bytes = self.bytes_at(pc, 4)?;
+        let bytes = bytes_at(&self.endpoint, pc, 4)?;
         if !comes_back_to_the_next_instruction(&bytes) {
             // A jump, a return, or an ordinary instruction: the address after
             // it is either where one step lands anyway or somewhere control
             // never returns to. Walking towards it would run the program to
             // its budget.
             perform(&self.endpoint, &Call::post("/api/step"))?;
-            return Ok((self.machine()?, None));
+            return Ok(Ending::arrived());
         }
 
-        let length = crate::disassemble::decode(pc, &bytes, 1)
+        let decoded = crate::disassemble::decode(pc, &bytes, 1);
+        let length = decoded
             .first()
             .map(|instruction| instruction.bytes.len() as u16)
             .unwrap_or(1);
-        self.walk_to(pc.wrapping_add(length))
+        let what = decoded
+            .first()
+            .map(|instruction| format!("stepping over `{}`", instruction.text.trim()))
+            .unwrap_or_else(|| format!("stepping over the instruction at 0x{pc:04X}"));
+        self.walk_to(pc.wrapping_add(length), &what)
     }
 
     /// Step until `PC` is `target`, or until something better to stop for.
-    fn walk_to(&mut self, target: u16) -> std::io::Result<(Value, Option<usize>)> {
+    ///
+    /// There is no time limit. A routine is as long as it is, and a clock can
+    /// only ever be wrong in one direction or the other: short enough not to
+    /// annoy is short enough to cut a legitimate walk in half. What ends a walk
+    /// that has gone somewhere unexpected is the user, through `cancelled`.
+    fn walk_to(&self, target: u16, what: &str) -> std::io::Result<Ending> {
         let started = std::time::Instant::now();
-        for walked in 0..self.step_over_budget {
-            // Checked before each step rather than after the lot: the editor is
-            // frozen for the whole walk, so how long that lasts is the thing
-            // being limited.
-            if started.elapsed() > self.step_over_time {
-                let state = self.machine()?;
-                if let Some(now) = register(&state, "PC").map(|pc| pc as u16) {
-                    self.unfinished = Some((now, target));
-                }
-                return Ok((state, Some(walked)));
+        let mut announced = false;
+        for walked in 0..self.budget {
+            // Checked before the step rather than after it, so pressing pause
+            // during a walk that is going nowhere is answered by the next round
+            // trip rather than by the budget.
+            if self
+                .cancelled
+                .load(std::sync::atomic::Ordering::Relaxed)
+            {
+                let pc = self.give_up_at(target)?;
+                return Ok(Ending {
+                    reason: "pause",
+                    note: Some(format!(
+                        "step over stopped after {walked} instructions, at {pc} - \
+                         step over again to carry on\n"
+                    ))
+                });
+            }
+            // A walk long enough to be noticed is a walk worth explaining, or
+            // it is indistinguishable from a debugger that has hung.
+            if !announced && started.elapsed() >= self.announce_after {
+                announced = true;
+                self.say(&format!(
+                    "{what}: {walked} instructions so far, still going - \
+                     press pause to stop where it is\n"
+                ));
             }
             perform(&self.endpoint, &Call::post("/api/step"))?;
-            let state = self.machine()?;
+            let state = machine(&self.endpoint)?;
             let Some(now) = register(&state, "PC").map(|pc| pc as u16)
             else {
-                return Ok((state, None));
+                return Ok(Ending::arrived());
             };
             // Back from whatever we stepped over...
             if now == target {
-                return Ok((state, None));
+                return Ok(Ending::arrived());
             }
             // ...or somewhere the user asked to stop, which outranks finishing
             // the walk: a breakpoint inside a routine must still be a
             // breakpoint when you step over the call to it.
             if self.armed.contains(&now) {
-                return Ok((state, None));
+                return Ok(Ending {
+                    reason: "breakpoint",
+                    note: None
+                });
             }
         }
-        let state = self.machine()?;
-        if let Some(now) = register(&state, "PC").map(|pc| pc as u16) {
-            self.unfinished = Some((now, target));
-        }
-        Ok((state, Some(self.step_over_budget)))
+        let pc = self.give_up_at(target)?;
+        Ok(Ending {
+            reason: "step",
+            note: Some(format!(
+                "step over gave up after {} instructions without coming back; \
+                 stopped at {pc} - step over again to carry on\n",
+                self.budget
+            ))
+        })
     }
+
+    /// Remember where an interrupted walk stopped and where it was heading, so
+    /// the next step over carries on instead of starting again, and say where
+    /// that was.
+    fn give_up_at(&self, target: u16) -> std::io::Result<String> {
+        let state = machine(&self.endpoint)?;
+        let now = register(&state, "PC").map(|pc| pc as u16);
+        if let Some(now) = now
+            && let Ok(mut held) = self.unfinished.lock()
+        {
+            *held = Some((now, target));
+        }
+        Ok(format!("0x{:04X}", now.unwrap_or(0)))
+    }
+
+    /// One line in the Debug Console.
+    fn say(&self, note: &str) {
+        let seq = next_seq(&self.seq);
+        let _ = self.outgoing.send(crate::protocol::event(
+            "output",
+            json!({ "category": "console", "output": note }),
+            seq
+        ));
+    }
+}
+
+/// The next sequence number, shared between the peer and whatever walk it has
+/// running.
+fn next_seq(seq: &std::sync::atomic::AtomicI64) -> i64 {
+    seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
+}
+
+/// Everything the machine has to say about itself right now.
+fn machine(endpoint: &str) -> std::io::Result<Value> {
+    let body = perform(endpoint, &Call::get("/api/state"))?;
+    serde_json::from_str(&body)
+        .map_err(|why| std::io::Error::new(std::io::ErrorKind::InvalidData, why))
+}
+
+/// The bytes at `address`, however the emulator is paged right now.
+fn bytes_at(endpoint: &str, address: u16, count: u16) -> std::io::Result<Vec<u8>> {
+    let call = Call::get("/api/ram")
+        .query("addr", address)
+        .query("len", count);
+    let body = perform(endpoint, &call)?;
+    let answer: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+    Ok(bytes_from_hex(
+        answer.get("hex").and_then(Value::as_str).unwrap_or_default()
+    ))
 }
 
 /// Whether the instruction encoded here hands control back to the address
@@ -1102,6 +1296,15 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 .unwrap_or_default();
         }
 
+        // Pause, disconnect and terminate all mean "stop what you are doing",
+        // and while a step-over walks that is the walk. It has no clock on it,
+        // so this is the only thing that ends one that went into the main loop
+        // - and the walk it is not running is nothing this costs.
+        if matches!(command.as_str(), "pause" | "disconnect" | "terminate") {
+            self.cancelled
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+
         // Step over and step out are not one request here but many - see
         // `step_over`.
         if command == "next" || command == "stepOut" {
@@ -1119,17 +1322,6 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 .send(crate::protocol::response(&message, json!({}), seq));
             return Ok(());
         };
-
-        // A continue leaves the machine running and nothing else will announce
-        // where it ends up, so the editor is owed a stop from here on.
-        //
-        // A step is over by the time `perform` returns, so its flag is set
-        // *afterwards*: set first, the poller can catch the machine still
-        // paused from before and announce a stop that has not happened.
-        if command == "continue" {
-            self.expecting_stop
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-        }
 
         let body = perform(&self.endpoint, &call)?;
         let mut state: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
@@ -1149,7 +1341,28 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 }
             }
         }
-        if matches!(command.as_str(), "stepIn" | "stepOut") {
+        // A resume is asked for here and happens over there, a moment later:
+        // measured against 1.13.4, `/api/config` answers in well under a
+        // millisecond and `/api/ping` goes on reporting the machine paused for
+        // another 0.5 to 11 after that. Nothing is owed a stop until it has
+        // really gone.
+        if command == "continue" {
+            self.wait_until_it_is_really_running();
+        }
+
+        // From here the editor is owed a stop: a continue leaves the machine
+        // running and nothing else will announce where it ends up, and a step
+        // ends paused with no transition for the poller to notice.
+        //
+        // Raised *after* the machine has moved, never before it is asked to.
+        // The poller looks ten times a second, so a flag raised while the
+        // machine is still paused from the stop it is leaving gives it a window
+        // in which to find the machine paused, consume the flag and announce a
+        // stop that has not happened. The editor then believes a machine that
+        // is really running, and every register and stack frame it goes on to
+        // ask for is sampled from a program in flight: a stop at a random
+        // address, with no breakpoint anywhere near it.
+        if matches!(command.as_str(), "continue" | "stepIn" | "stepOut") {
             self.expecting_stop
                 .store(true, std::sync::atomic::Ordering::Relaxed);
         }
@@ -1974,6 +2187,19 @@ mod tests {
         bytes: Vec<u8>,
         script: Vec<u16>
     ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        // Running, as far as `/api/ping` is concerned. The run-state poller
+        // then has no transition to report, so the only `stopped` event a walk
+        // test sees is the one the walk itself sent - which is the event these
+        // tests wait on. A machine reporting itself paused has its own test.
+        fake_machine_reporting(bytes, script, false)
+    }
+
+    /// The same, saying whether the machine is paused when anyone asks.
+    fn fake_machine_reporting(
+        bytes: Vec<u8>,
+        script: Vec<u16>,
+        paused: bool
+    ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         use std::io::{Read, Write};
         use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -2004,7 +2230,7 @@ mod tests {
                     json!({ "addr": 0, "len": bytes.len(), "hex": hex }).to_string()
                 }
                 else if line.starts_with("GET /api/ping") {
-                    json!({ "emu": { "paused": true } }).to_string()
+                    json!({ "emu": { "paused": paused } }).to_string()
                 }
                 else {
                     "{}".to_string()
@@ -2022,6 +2248,30 @@ mod tests {
         (format!("http://127.0.0.1:{port}"), steps)
     }
 
+    /// Everything the peer produced, up to and including the `stopped` event
+    /// that ends a walk.
+    ///
+    /// The walk runs on a thread of its own, so where the machine ended up is
+    /// only a fair question once the stop has been announced - anything read
+    /// before that is a race with the walk.
+    fn until_stopped(peer: &mut AmspiritLitePeer) -> Vec<Value> {
+        use crate::peer::DapPeer;
+
+        let mut seen = Vec::new();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            seen.extend(peer.drain());
+            if seen
+                .iter()
+                .any(|message| message["event"] == json!("stopped"))
+            {
+                return seen;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        panic!("the walk never said it had stopped: {seen:?}");
+    }
+
     /// Where a step-over left the machine, and how many steps it took to get
     /// there.
     fn stepped_over(
@@ -2036,16 +2286,23 @@ mod tests {
         prepare(&mut peer);
         peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
 
-        let answered = peer
-            .drain()
-            .into_iter()
-            .find(|message| message["type"] == json!("response"))
+        let seen = until_stopped(&mut peer);
+        let answered = seen
+            .iter()
+            .position(|message| message["command"] == json!("next"))
             .expect("the editor is answered");
-        assert_eq!(answered["command"], json!("next"));
+        let stopped = seen
+            .iter()
+            .position(|message| message["event"] == json!("stopped"))
+            .expect("and told where it stopped");
+        assert!(
+            answered < stopped,
+            "the answer comes first and the stop follows it: {seen:?}"
+        );
 
         // Asked afresh rather than remembered: a `GET` does not step, so this
         // is where the machine really is.
-        let state = peer.machine().unwrap();
+        let state = machine(&peer.endpoint).unwrap();
         (
             register(&state, "PC").unwrap() as u16,
             steps.load(std::sync::atomic::Ordering::Relaxed)
@@ -2118,13 +2375,13 @@ mod tests {
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         peer.send(request("stepOut", json!({ "threadId": 1 })))
             .unwrap();
+        let seen = until_stopped(&mut peer);
 
         assert_eq!(steps.load(std::sync::atomic::Ordering::Relaxed), 3);
-        let state = peer.machine().unwrap();
+        let state = machine(&peer.endpoint).unwrap();
         assert_eq!(register(&state, "PC").unwrap(), 0x8003);
         assert!(
-            peer.drain()
-                .iter()
+            seen.iter()
                 .any(|message| message["command"] == json!("stepOut")),
             "and the editor is answered"
         );
@@ -2144,7 +2401,7 @@ mod tests {
         peer.step_over_budget = 4;
         peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
 
-        let drained = peer.drain();
+        let drained = until_stopped(&mut peer);
         let note = drained
             .iter()
             .find(|message| message["event"] == json!("output"))
@@ -2175,15 +2432,116 @@ mod tests {
         peer.step_over_budget = 2;
 
         peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        until_stopped(&mut peer);
         assert_eq!(steps.load(std::sync::atomic::Ordering::Relaxed), 2);
-        assert_eq!(peer.unfinished, Some((0x9001, 0x8003)), "where it was going");
+        assert_eq!(
+            *peer.unfinished.lock().unwrap(),
+            Some((0x9001, 0x8003)),
+            "where it was going"
+        );
 
         // Pressing it again does not step over `0x9002` - it goes on to
         // `0x8003`, which is what was being stepped over in the first place.
         peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
-        let state = peer.machine().unwrap();
+        until_stopped(&mut peer);
+        let state = machine(&peer.endpoint).unwrap();
         assert_eq!(register(&state, "PC").unwrap(), 0x8003);
-        assert_eq!(peer.unfinished, None, "and it arrived");
+        assert_eq!(*peer.unfinished.lock().unwrap(), None, "and it arrived");
+    }
+
+    /// A walk with no clock on it is ended by the user, not by a stopwatch.
+    ///
+    /// Which is the whole point of dropping the time limit: a step over that
+    /// walked into the main loop used to be cut short after two seconds
+    /// whatever it was doing, and a routine that legitimately took longer was
+    /// cut short with it.
+    #[test]
+    fn a_walk_is_stopped_by_pressing_pause() {
+        use crate::peer::DapPeer;
+
+        // A `call` into a routine that never comes back, so nothing but the
+        // user is ever going to end this walk.
+        let (endpoint, steps) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
+            0x8000, 0x9000, 0x9001, 0x9002,
+        ]);
+        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
+        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+
+        // Answered while the walk is still walking - the adapter is not the
+        // thing doing the walking any more, so it is still listening.
+        let answered = peer.drain();
+        assert!(
+            answered
+                .iter()
+                .any(|message| message["command"] == json!("next")),
+            "the editor is answered before the walk ends: {answered:?}"
+        );
+
+        peer.send(request("pause", json!({ "threadId": 1 })))
+            .unwrap();
+        let seen = until_stopped(&mut peer);
+
+        let stopped = seen
+            .iter()
+            .find(|message| message["event"] == json!("stopped"))
+            .unwrap();
+        assert_eq!(stopped["body"]["reason"], json!("pause"));
+        let note = seen
+            .iter()
+            .find(|message| message["event"] == json!("output"))
+            .expect("and says where it stopped");
+        let text = note["body"]["output"].as_str().unwrap();
+        assert!(text.contains("step over again"), "{text}");
+
+        // Still heading for the address after the `call`, so pressing step over
+        // again carries on rather than stepping over whatever the routine
+        // happened to be on.
+        assert_eq!(
+            peer.unfinished
+                .lock()
+                .unwrap()
+                .map(|(_, target)| target),
+            Some(0x8003)
+        );
+
+        // And it really has stopped: a stop event with the walk still stepping
+        // underneath it would be a lie the editor cannot see through.
+        let counted = steps.load(std::sync::atomic::Ordering::Relaxed);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert_eq!(counted, steps.load(std::sync::atomic::Ordering::Relaxed));
+    }
+
+    /// A walk long enough to be noticed says what it is doing and how far it
+    /// has got.
+    ///
+    /// Without it a step over into something slow is indistinguishable from a
+    /// debugger that has hung - and now that there is no time limit, that
+    /// silence could last for ever.
+    #[test]
+    fn a_long_walk_says_how_far_it_has_got() {
+        use crate::peer::DapPeer;
+
+        let (endpoint, _) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
+            0x8000, 0x9000, 0x9001, 0x8003,
+        ]);
+        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
+        // "Long" brought forward to no time at all, rather than spending a real
+        // second in a test to prove what a timer does.
+        peer.announce_after = std::time::Duration::ZERO;
+        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+
+        let seen = until_stopped(&mut peer);
+        let note = seen
+            .iter()
+            .find(|message| message["event"] == json!("output"))
+            .expect("it says what it is up to");
+        let text = note["body"]["output"].as_str().unwrap();
+        assert!(
+            text.to_lowercase().contains("call"),
+            "and what it is stepping over: {text}"
+        );
+        assert!(text.contains("instructions so far"), "{text}");
+        assert!(text.contains("pause"), "and how to stop it: {text}");
     }
 
     /// A machine found already stopped is reported, not swallowed.
@@ -2197,7 +2555,7 @@ mod tests {
     #[test]
     fn a_machine_already_stopped_when_we_first_look_is_still_reported() {
         // The stand-in answers `/api/ping` as paused from the very first poll.
-        let (endpoint, _) = fake_machine(vec![0x00], vec![0x8000]);
+        let (endpoint, _) = fake_machine_reporting(vec![0x00], vec![0x8000], true);
         let peer = AmspiritLitePeer::connect(&endpoint).unwrap();
 
         // Two poll intervals, so the first look has certainly happened.
@@ -2207,6 +2565,127 @@ mod tests {
             seen.iter()
                 .any(|message| message["event"] == json!("stopped")),
             "the editor is told the program is stopped: {seen:?}"
+        );
+    }
+
+    /// A stand-in that takes a moment to act on a resume, and answers other
+    /// callers while it does.
+    ///
+    /// Which is what the real one is like: it serves its HTTP requests from the
+    /// same loop that draws frames, so `POST /api/config` is not instantaneous
+    /// and a `GET /api/ping` can be answered in the middle of one.
+    fn fake_machine_slow_to_resume(delay: std::time::Duration) -> String {
+        use std::io::{Read, Write};
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let running = std::sync::Arc::new(AtomicBool::new(false));
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream
+                else {
+                    return;
+                };
+                let running = running.clone();
+                // A thread per connection, or the resume would block the poll
+                // that has to happen during it - and the window being tested
+                // would not exist.
+                std::thread::spawn(move || {
+                    let reported = running.clone();
+                    let mut buffer = [0u8; 1024];
+                    let read = stream.read(&mut buffer).unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..read]).to_string();
+                    let line = request.lines().next().unwrap_or_default().to_string();
+
+                    let body = if line.starts_with("POST /api/config") {
+                        // Answered at once and acted on later, which is what
+                        // the real one does: `/api/config` returns in under a
+                        // millisecond and `/api/ping` goes on saying "paused"
+                        // for several more.
+                        std::thread::spawn(move || {
+                            std::thread::sleep(delay);
+                            running.store(true, Ordering::Relaxed);
+                        });
+                        "{}".to_string()
+                    }
+                    else if line.starts_with("GET /api/ping") {
+                        json!({ "emu": { "paused": !reported.load(Ordering::Relaxed) } }).to_string()
+                    }
+                    else if line.starts_with("GET /api/state") {
+                        json!({ "z80": { "PC": 0x8000, "SP": 0xBFF0 } }).to_string()
+                    }
+                    else {
+                        "{}".to_string()
+                    };
+                    let _ = stream.write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                            body.len()
+                        )
+                        .as_bytes()
+                    );
+                    let _ = stream.flush();
+                });
+            }
+        });
+        format!("http://127.0.0.1:{port}")
+    }
+
+    /// A continue does not produce a stop of its own.
+    ///
+    /// Reported as "continue does not work properly - the emulator stopped at
+    /// random locations without any breakpoint", and this is the only thing in
+    /// here that can invent a stop. `expecting_stop` used to be raised *before*
+    /// the resume was asked for, so a poll landing in between found the machine
+    /// still paused from the stop it was leaving, consumed the flag and called
+    /// it a stop. The editor then believed a machine that was really running,
+    /// and every register and frame it went on to ask for came from a program
+    /// in flight - a stop at an address no breakpoint was ever set on.
+    #[test]
+    fn a_continue_does_not_announce_a_stop_that_has_not_happened() {
+        use crate::peer::DapPeer;
+
+        // Three poll intervals wide, so a poll certainly lands inside the gap
+        // between asking for the resume and the machine reporting one.
+        let endpoint = fake_machine_slow_to_resume(std::time::Duration::from_millis(300));
+        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
+        // A stand-in six times slower than the real one to come back, so the
+        // real one's allowance is scaled with it rather than the test being
+        // written to whatever the current constant happens to be.
+        peer.resume_confirmation = AmspiritLitePeer::RESUME_CONFIRMATION * 10;
+
+        // The machine starts paused, and being told so is right - that is the
+        // stop the continue is about to leave.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < deadline {
+            if peer
+                .drain()
+                .iter()
+                .any(|message| message["event"] == json!("stopped"))
+            {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        peer.send(request("continue", json!({ "threadId": 1 })))
+            .unwrap();
+
+        // Long enough for the resume to have finished and several polls to have
+        // run on the machine it left running.
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        let seen = peer.drain();
+        assert!(
+            !seen
+                .iter()
+                .any(|message| message["event"] == json!("stopped")),
+            "nothing stopped, so nothing says it did: {seen:?}"
+        );
+        assert!(
+            seen.iter()
+                .any(|message| message["event"] == json!("continued")),
+            "and the machine is reported running: {seen:?}"
         );
     }
 
@@ -2230,7 +2709,7 @@ mod tests {
         peer.send(request("next", json!({ "threadId": 1 })))
             .expect("a failed walk is not a failed session");
 
-        let drained = peer.drain();
+        let drained = until_stopped(&mut peer);
         assert!(
             drained
                 .iter()
@@ -2263,14 +2742,16 @@ mod tests {
             endpoint: DEFAULT_ENDPOINT.to_string(),
             expecting_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             stepping: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             armed: Vec::new(),
             step_over_budget: AmspiritLitePeer::STEP_OVER_BUDGET,
-            step_over_time: AmspiritLitePeer::STEP_OVER_TIME,
-            unfinished: None,
+            announce_after: AmspiritLitePeer::ANNOUNCE_AFTER,
+            resume_confirmation: AmspiritLitePeer::RESUME_CONFIRMATION,
+            unfinished: std::sync::Arc::new(std::sync::Mutex::new(None)),
             launched: None,
             pending,
             outgoing,
-            seq: 0
+            seq: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0))
         };
 
         // Everything claimed is also mapped - claiming a request with no

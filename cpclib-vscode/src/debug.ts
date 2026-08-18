@@ -263,6 +263,37 @@ export function registerDebugging(
         }),
     );
 
+    // The resolved-instruction hint describes the address the program is sitting
+    // on, so it has to go the moment it is no longer sitting there. `continued`
+    // is the only message that says so - the request that caused it may not have
+    // been the editor's (a breakpoint hit is resumed by the emulator itself).
+    context.subscriptions.push(
+        vscode.debug.registerDebugAdapterTrackerFactory(DEBUG_TYPE, {
+            createDebugAdapterTracker(): vscode.DebugAdapterTracker {
+                return {
+                    onDidSendMessage(message: unknown) {
+                        const event = (message as { event?: string })?.event;
+                        if (event === 'continued') { clearInstructionHint(); }
+                    },
+                };
+            },
+        }),
+        // A hint set in a file that is then hidden cannot be taken out of an
+        // editor nobody can see, so it is caught on the way back: every visible
+        // editor but the one the hint currently belongs to is cleared.
+        vscode.window.onDidChangeVisibleTextEditors(editors => {
+            if (!instructionHint) { return; }
+            for (const editor of editors) {
+                if (editor.document.uri.toString() !== hintedFile) {
+                    editor.setDecorations(instructionHint, []);
+                }
+            }
+        }),
+        // The decoration type outlives any one session, so it is the extension
+        // that owns it.
+        { dispose: () => instructionHint?.dispose() },
+    );
+
     // The emulator's own window, inside the editor.
     context.subscriptions.push(
         vscode.debug.onDidReceiveDebugSessionCustomEvent(async event => {
@@ -291,6 +322,7 @@ export function registerDebugging(
                 disassemblyPanels.delete(session.id);
                 emulatorUrls.delete(session.id);
                 lastStop = undefined;
+                clearInstructionHint();
             }
         }),
     );
@@ -808,6 +840,73 @@ interface StopLocation {
     line?: number;
     column?: number;
     endColumn?: number;
+    /**
+     * The instruction the machine really holds there, when it is not what the
+     * line says - `ld a,0x01` for a line reading `ld a,ANIMATION_STATE_FINISHED`.
+     * Absent when the source already spells it out, and there is nothing to
+     * disambiguate.
+     */
+    instruction?: string | null;
+}
+
+/**
+ * The dimmed text after the stopped line, made on first use.
+ *
+ * One type for the whole extension: a decoration type is how VS Code addresses
+ * a set of decorations, so making a second one would leave the first one's text
+ * on screen with no way left to remove it.
+ */
+let instructionHint: vscode.TextEditorDecorationType | undefined;
+
+/** The document the hint is on, so every other one can be known to be stale. */
+let hintedFile: string | undefined;
+
+function instructionHintType(): vscode.TextEditorDecorationType {
+    instructionHint ??= vscode.window.createTextEditorDecorationType({
+        after: {
+            margin: '0 0 0 2em',
+            color: new vscode.ThemeColor('editorCodeLens.foreground'),
+            fontStyle: 'italic',
+        },
+        // The hint describes one address, so it must not be dragged along by an
+        // edit above it.
+        rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+    });
+    return instructionHint;
+}
+
+/**
+ * Show, after the line, what the bytes at `PC` decode to.
+ *
+ * Written as a comment (`; ld a,0x01`) because that is what it is: the source
+ * beside it is the program, and this is the assembler's own spelling of what
+ * the machine ended up holding there.
+ */
+function showInstructionHint(editor: vscode.TextEditor, line: number, text: string): void {
+    clearInstructionHint();
+    if (line >= editor.document.lineCount) { return; }
+    const end = editor.document.lineAt(line).range.end;
+    editor.setDecorations(instructionHintType(), [{
+        range: new vscode.Range(end, end),
+        renderOptions: { after: { contentText: `; ${text}` } },
+    }]);
+    hintedFile = editor.document.uri.toString();
+}
+
+/**
+ * Take the hint away, everywhere.
+ *
+ * A hint left over from the previous stop is worse than no hint at all: it
+ * describes an address the program has already left, in a spelling that looks
+ * authoritative. So it goes on continue, on the next stop, and when the session
+ * ends - and from every editor, since the stop may since have moved file.
+ */
+function clearInstructionHint(): void {
+    hintedFile = undefined;
+    if (!instructionHint) { return; }
+    for (const editor of vscode.window.visibleTextEditors) {
+        editor.setDecorations(instructionHint, []);
+    }
 }
 
 /**
@@ -847,4 +946,10 @@ async function revealStop(where: StopLocation | undefined): Promise<void> {
         selection,
     });
     editor.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+
+    if (where.instruction) {
+        showInstructionHint(editor, line, where.instruction);
+    } else {
+        clearInstructionHint();
+    }
 }

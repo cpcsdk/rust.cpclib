@@ -611,6 +611,9 @@ fn start_session(
     session.record_source_state();
     let mut notices = session.adopt_program_breakpoints(&program_breakpoints);
     notices.splice(0..0, early_notices);
+    // Said before the program runs, because after it has run it is too late:
+    // an unexplained stop is the thing being prevented.
+    notices.extend(session.program_breakpoint_notice());
 
     // Banking is the one limitation that shows up as *silence* - a stop with
     // no source line - so it is said up front rather than left to be puzzled

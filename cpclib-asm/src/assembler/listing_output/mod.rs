@@ -1,7 +1,7 @@
 mod core;
 mod format;
 mod render;
-mod source_map;
+pub(crate) mod source_map;
 
 pub use self::core::*;
 pub use self::format::{

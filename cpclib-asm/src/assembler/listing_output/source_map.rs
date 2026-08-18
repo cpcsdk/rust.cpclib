@@ -95,6 +95,15 @@ pub(crate) fn expansion_line_offset(name: &str) -> u32 {
     }
 }
 
+/// Whether a parser context name is one of an expansion rather than a file.
+///
+/// The `:LINE:COL > ` shape is set only when a macro or struct body is
+/// re-parsed as a source of its own, so it is also what says the spans in it
+/// count from the body rather than from the file.
+pub(crate) fn is_expansion_context(name: &str) -> bool {
+    split_expansion(name).is_some()
+}
+
 /// `main.asm:289:5 > MACRO SPRITE_BODY:` into `("main.asm", 289)`.
 ///
 /// `None` for anything that is not a parser context of that shape - which is

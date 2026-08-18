@@ -937,21 +937,21 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
 
             // get the generated code
             // TODO handle some errors there
-            let (source, code, _flavor) = if let Some(r#macro) = &r#macro {
+            let (source, code, columns, _flavor) = if let Some(r#macro) = &r#macro {
                 let source = r#macro.source();
                 let flavor = r#macro.flavor();
-                let code = r#macro.expand(env)?;
-                (source, code, flavor)
+                let (code, columns) = r#macro.expand_with_columns(env)?;
+                (source, code, columns, flavor)
             }
             else {
                 let r#struct = r#struct
                     .as_ref()
                     .expect("BUG: r#struct should be Some when r#macro is None");
-                (
-                    r#struct.source(),
-                    r#struct.expand(env)?,
-                    AssemblerFlavor::Basm
-                )
+                // A struct's expansion is written from scratch - `DB`/`DW`
+                // lines built from its fields - rather than substituted into
+                // its body, so no column in it corresponds to one in the file.
+                let (code, columns) = r#struct.expand_with_columns(env)?;
+                (r#struct.source(), code, columns, AssemblerFlavor::Basm)
             };
 
             // Tokenize with the same parsing  parameters and context when possible
@@ -959,7 +959,7 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
             match self.token.possible_span() {
                 Some(span) => {
                     use crate::ParserContextBuilder;
-                    let ctx_builder = ParserContextBuilder::default() // nothing is specified
+                    let mut ctx_builder = ParserContextBuilder::default() // nothing is specified
                         //                    from(span.state.clone())
                         .set_state(span.state.state)
                         .set_options(span.state.options.clone())
@@ -971,6 +971,9 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
                             if r#macro.is_some() { "MACRO" } else { "STRUCT" },
                             name,
                         ));
+                    if let Some(columns) = columns {
+                        ctx_builder = ctx_builder.set_expansion_columns(columns);
+                    }
                     parse_z80_with_context_builder(code, ctx_builder)?
                 },
                 _ => {

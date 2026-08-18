@@ -596,3 +596,154 @@ fn named_map(
     env.handle_post_actions(&listing).expect("post actions");
     env.source_map().expect("a source map was requested")
 }
+
+/// The text a row's columns select, so a test can say what the debugger would
+/// highlight rather than repeat two numbers.
+fn selected<'s>(source: &'s str, row: &cpclib_asm::assembler::listing_output::SourceMapRow) -> &'s str {
+    let line = source.lines().nth(row.line as usize - 1).expect("a real line");
+    if row.column_end <= row.column {
+        return line;
+    }
+    &line[(row.column as usize - 1)..(row.column_end as usize - 1).min(line.len())]
+}
+
+/// Each instruction of a `:`-separated line inside a macro gets the columns it
+/// occupies **in the file**, not in the expanded body.
+///
+/// Reported from real use: stepping through this macro selected the whole first
+/// line, then nothing, then the whole second line, then nothing. The body is
+/// re-parsed after the arguments are substituted textually, so `({addr1})` had
+/// become `(very_long_symbol_name_here)` and every column after it on the line
+/// had moved - the second instruction's columns landed past the end of the line
+/// the user is looking at, which selects nothing at all.
+#[test]
+fn a_macro_line_of_several_instructions_keeps_each_instructions_columns() {
+    // Arguments deliberately of a different length from the placeholders they
+    // replace: equal lengths would make every column coincide by luck.
+    let source = "\torg 0x4000\n\
+                  \tmacro SWITCH_VALUES addr1, addr2\n\
+                  \tld hl, ({addr1}) : ld de, ({addr2})\n\
+                  \tld ({addr1}), de : ld ({addr2}), hl\n\
+                  \tendm\n\
+                  very_long_symbol_name_here equ 0xc000\n\
+                  \tSWITCH_VALUES very_long_symbol_name_here, 1\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    assert_eq!(rows.len(), 4, "one row per instruction: {rows:?}");
+    let picked: Vec<&str> = rows.iter().map(|row| selected(source, row)).collect();
+    assert_eq!(
+        picked,
+        vec![
+            "ld hl, ({addr1})",
+            "ld de, ({addr2})",
+            "ld ({addr1}), de",
+            "ld ({addr2}), hl"
+        ],
+        "{rows:?}"
+    );
+
+    // ...at four consecutive addresses, so stepping walks them one at a time.
+    let lines: Vec<u32> = rows.iter().map(|row| row.line).collect();
+    assert_eq!(lines, vec![3, 3, 4, 4], "{rows:?}");
+    assert_eq!(
+        rows.iter().map(|row| row.logical).collect::<Vec<_>>(),
+        vec![0x4000, 0x4003, 0x4007, 0x400B],
+        "{rows:?}"
+    );
+}
+
+/// The same when the substitution is *shorter* than the placeholder, which
+/// displaces the rest of the line the other way.
+#[test]
+fn a_macro_argument_shorter_than_its_placeholder_shifts_the_columns_back() {
+    let source = "\torg 0x4000\n\
+                  \tmacro PAIR value_a, value_b\n\
+                  \tld a, {value_a} : ld b, {value_b}\n\
+                  \tendm\n\
+                  \tPAIR 1, 2\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    let picked: Vec<&str> = rows.iter().map(|row| selected(source, row)).collect();
+    assert_eq!(picked, vec!["ld a, {value_a}", "ld b, {value_b}"], "{rows:?}");
+}
+
+/// An instruction whose operand is *entirely* a substitution still starts where
+/// it is written.
+#[test]
+fn an_operand_that_is_only_a_placeholder_keeps_its_instructions_columns() {
+    let source = "\torg 0x4000\n\
+                  \tmacro LOAD, n\n\
+                  \t\tnop : ld hl, {n}\n\
+                  \tendm\n\
+                  \tLOAD 0x123456\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    let picked: Vec<&str> = rows.iter().map(|row| selected(source, row)).collect();
+    assert_eq!(picked, vec!["nop", "ld hl, {n}"], "{rows:?}");
+}
+
+/// A macro called from another macro's body: each expansion is mapped through
+/// its own substitutions, not the outer one's.
+#[test]
+fn a_nested_macro_call_keeps_the_inner_bodys_columns() {
+    let source = "\torg 0x4000\n\
+                  \tmacro INNER, n\n\
+                  \t\tld a, {n} : nop\n\
+                  \tendm\n\
+                  \tmacro OUTER, n\n\
+                  \t\tnop : INNER {n}\n\
+                  \tendm\n\
+                  \tOUTER 0x40\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    let picked: Vec<&str> = rows.iter().map(|row| selected(source, row)).collect();
+    assert_eq!(picked, vec!["nop", "ld a, {n}", "nop"], "{rows:?}");
+    assert_eq!(
+        rows.iter().map(|row| row.line).collect::<Vec<_>>(),
+        vec![6, 3, 3],
+        "{rows:?}"
+    );
+}
+
+/// A `STRUCT` body is rewritten rather than substituted into, so no column in
+/// its expansion answers to one in the file - and the whole line is recorded
+/// rather than a guess.
+///
+/// A debugger then selects the field's line, which is confusing but true; the
+/// expansion's own columns would select some other part of the file, or nothing
+/// at all, which is worse.
+#[test]
+fn a_struct_field_selects_its_whole_line() {
+    let source = "\torg 0x4000\n\
+                  \tstruct POINT\n\
+                  x\tdb 0\n\
+                  y\tdb 0\n\
+                  \tendstruct\n\
+                  \tPOINT 1, 2\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    assert_eq!(
+        rows.iter().map(|row| row.line).collect::<Vec<_>>(),
+        vec![3, 4],
+        "{rows:?}"
+    );
+    for row in &rows {
+        assert!(
+            row.column_end <= row.column,
+            "no columns worth trusting: {row:?}"
+        );
+    }
+    let picked: Vec<&str> = rows.iter().map(|row| selected(source, row)).collect();
+    assert_eq!(picked, vec!["x\tdb 0", "y\tdb 0"], "{rows:?}");
+}
+
+/// Outside any macro the columns are the span's own, unchanged - the correction
+/// must not reach code the user wrote directly.
+#[test]
+fn an_ordinary_line_keeps_the_columns_it_always_had() {
+    let source = "\torg 0x4000\n\tld a,l : inc a : nop\n";
+    let rows = named_map("main.asm", source).rows;
+
+    let picked: Vec<&str> = rows.iter().map(|row| selected(source, row)).collect();
+    assert_eq!(picked, vec!["ld a,l", "inc a", "nop"], "{rows:?}");
+}

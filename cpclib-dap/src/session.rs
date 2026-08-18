@@ -582,19 +582,7 @@ impl<P: DapPeer> Session<P> {
             let where_ = breakpoint
                 .name
                 .clone()
-                .or_else(|| {
-                    self.map.location_at(breakpoint.address as u32).map(|l| {
-                        format!(
-                            "{}:{}",
-                            l.file
-                                .file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_default(),
-                            l.line
-                        )
-                    })
-                })
-                .unwrap_or_else(|| address_reference(breakpoint.address as u32));
+                .unwrap_or_else(|| self.address_in_source(breakpoint.address as u32));
 
             let (watch, unsupported) = match breakpoint.kind {
                 Kind::Execution => (None, breakpoint.extra.clone()),
@@ -636,6 +624,72 @@ impl<P: DapPeer> Session<P> {
             });
         }
         notices
+    }
+
+    /// Where an address is in the source, as a human would say it.
+    fn address_in_source(&self, address: u32) -> String {
+        self.map
+            .location_at(address)
+            .map(|l| {
+                format!(
+                    "{}:{}",
+                    l.file
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                    l.line
+                )
+            })
+            .unwrap_or_else(|| address_reference(address))
+    }
+
+    /// What the program's own `BREAKPOINT` directives will do, said before
+    /// they do it.
+    ///
+    /// The editor's gutter cannot show these - it does not know they exist -
+    /// so a program that stops at one looks like a program that stopped at
+    /// nothing, which is exactly what it was reported as: "the emulator
+    /// stopped at random locations without any breakpoint". The addresses were
+    /// eight expansions of one `BREAKPOINT` written inside a macro body, in a
+    /// file the user had never put a red dot in. One directive, one address is
+    /// the assumption the red-dot-writes-the-directive design rests on, and a
+    /// macro breaks it, so the set has to be spelled out instead.
+    pub fn program_breakpoint_notice(&self) -> Option<String> {
+        // As many as fit in a console line anyone will actually read; the
+        // count carries the rest.
+        const LISTED: usize = 8;
+
+        let addresses: Vec<u32> = self
+            .program_breakpoints
+            .iter()
+            .filter(|bp| {
+                bp.watch.is_none() && !bp.one_shot && !self.suppressed.contains(&bp.address)
+            })
+            .map(|bp| bp.address)
+            .collect();
+        if addresses.is_empty() {
+            return None;
+        }
+
+        let mut where_: Vec<String> = addresses
+            .iter()
+            .take(LISTED)
+            .map(|address| self.address_in_source(*address))
+            .collect();
+        if addresses.len() > LISTED {
+            where_.push(format!("and {} more", addresses.len() - LISTED));
+        }
+        let count = addresses.len();
+        let plural = if count == 1 { "" } else { "s" };
+        Some(format!(
+            "{count} BREAKPOINT directive{plural} in the program {} armed alongside the editor's \
+             red dots, at {}. The gutter cannot show a directive, so stopping at one looks like \
+             stopping at nothing - and a directive written inside a macro body is armed once for \
+             every place the macro is used. Setting a red dot anywhere in a file and clearing it \
+             again takes that file's directives back for this session.",
+            if count == 1 { "is" } else { "are" },
+            where_.join(", ")
+        ))
     }
 
     /// The memory watches the program asked for, for a peer that has watch
@@ -2446,15 +2500,7 @@ impl<P: DapPeer> Session<P> {
     /// The NOP cost of the instruction at `previous`, if the program simply
     /// stepped over it.
     fn step_cost(&self, previous: u16, now: u16) -> Option<usize> {
-        self.image.as_ref()?;
-        // Four bytes is the Z80's longest instruction.
-        let window: Vec<u8> = (0..4)
-            .filter_map(|offset| {
-                self.image_byte(self.pc_page.unwrap_or(0), previous.wrapping_add(offset))
-            })
-            .collect();
-        let decoded = crate::disassemble::decode(previous, &window, 1);
-        let instruction = decoded.first()?;
+        let instruction = self.instruction_in_image(previous)?;
         if now != previous.wrapping_add(instruction.bytes.len() as u16) {
             return None;
         }
@@ -2462,6 +2508,26 @@ impl<P: DapPeer> Session<P> {
         // spelling - so a timer and the build agree about what an instruction
         // costs.
         crate::inspect::nops_of_source_line(&instruction.text)
+    }
+
+    /// The instruction the machine really holds at `address`, decoded from the
+    /// assembled program.
+    ///
+    /// Read from the image rather than from the emulator: a stop already costs
+    /// several round trips, and one more on every stop is exactly what made
+    /// earlier panes feel slow. Code that rewrites itself is the price, and it
+    /// is the price the call stack and the timers already pay.
+    fn instruction_in_image(&self, address: u16) -> Option<crate::disassemble::Instruction> {
+        self.image.as_ref()?;
+        // Four bytes is the Z80's longest instruction.
+        let window: Vec<u8> = (0..4)
+            .filter_map(|offset| {
+                self.image_byte(self.pc_page.unwrap_or(0), address.wrapping_add(offset))
+            })
+            .collect();
+        crate::disassemble::decode(address, &window, 1)
+            .into_iter()
+            .next()
     }
 
     /// `-timer ...` - the stopwatches.
@@ -3689,6 +3755,29 @@ impl<P: DapPeer> Session<P> {
             .and_then(|frames| frames.first())?;
         let source = top.get("source")?.get("path")?.as_str()?;
         let line = top.get("line").and_then(Value::as_i64).filter(|line| *line > 0)?;
+
+        // The source says `ld a,ANIMATION_STATE_FINISHED`; the machine holds
+        // `ld a,0x01`. Carrying the resolved form lets the editor show it
+        // beside the line the program is stopped on, so what is running and
+        // what is written can be told apart.
+        let address = top
+            .get("instructionPointerReference")
+            .and_then(Value::as_str)
+            .and_then(parse_address_reference)
+            .and_then(|address| u16::try_from(address).ok())
+            .or(self.last_pc);
+        let resolved = address.and_then(|address| self.instruction_in_image(address));
+        let written = u32::try_from(line)
+            .ok()
+            .and_then(|line| self.source_line(Path::new(source), line));
+        // A hint that repeats the line it sits on is noise, so it is only sent
+        // when it says something the source does not.
+        let instruction = resolved.map(|instruction| instruction.text).filter(|text| {
+            written
+                .as_deref()
+                .is_none_or(|written| !line_already_says(written, text))
+        });
+
         let seq = self.next_seq();
         Some(protocol::event(
             "cpclib/stoppedAt",
@@ -3696,7 +3785,8 @@ impl<P: DapPeer> Session<P> {
                 "path": source,
                 "line": line,
                 "column": top.get("column").cloned().unwrap_or(json!(1)),
-                "endColumn": top.get("endColumn").cloned().unwrap_or(Value::Null)
+                "endColumn": top.get("endColumn").cloned().unwrap_or(Value::Null),
+                "instruction": instruction
             }),
             seq
         ))
@@ -3867,6 +3957,85 @@ impl<P: DapPeer> Session<P> {
             .map(|bp| (bp.requested_line, bp.line))
             .collect()
     }
+}
+
+/// Whether the line as written already spells out the instruction decoded from
+/// memory.
+///
+/// The hint exists to resolve a symbol into the value the machine holds, so a
+/// line that already reads the same has nothing to disambiguate. Compared
+/// loosely, because the two spellings come from different places: case and
+/// spacing differ, and a label or a comment routinely shares the line with the
+/// instruction - hence "contains" rather than "equals".
+fn line_already_says(written: &str, decoded: &str) -> bool {
+    let decoded = squash_instruction(decoded);
+    !decoded.is_empty() && squash_instruction(written).contains(&decoded)
+}
+
+/// An instruction reduced to what it means: no comment, no spacing, no case,
+/// and every literal written in one base.
+///
+/// The base matters as much as the spacing. Source says `ld a,1`, the
+/// disassembler says `LD A, 0x1`, and the machine holds the same byte - a hint
+/// repeating that would be noise on most lines of a demo.
+fn squash_instruction(text: &str) -> String {
+    let text: Vec<char> = text
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .to_lowercase()
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+
+    let mut out = String::new();
+    let mut at = 0;
+    while at < text.len() {
+        // Only where a name cannot be starting: `label1` is one word, and the
+        // `1` in it is not a literal.
+        let opens_a_word = at == 0 || !matches!(text[at - 1], 'a'..='z' | '0'..='9' | '_' | '.');
+        match literal_at(&text[at..]).filter(|_| opens_a_word) {
+            Some((value, length)) => {
+                out.push_str(&value.to_string());
+                at += length;
+            },
+            None => {
+                out.push(text[at]);
+                at += 1;
+            }
+        }
+    }
+    out
+}
+
+/// A number written the way anyone here writes one - `0x1F`, `&1f`, `#1f`,
+/// `%0001`, `31` - as its value, with the length it occupied.
+fn literal_at(text: &[char]) -> Option<(u32, usize)> {
+    let (radix, prefix) = match text {
+        ['0', 'x', ..] => (16, 2),
+        ['&' | '#', ..] => (16, 1),
+        ['%', ..] => (2, 1),
+        [digit, ..] if digit.is_ascii_digit() => (10, 0),
+        _ => return None
+    };
+    let digits: String = text[prefix..]
+        .iter()
+        .take_while(|c| c.is_digit(radix))
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let length = prefix + digits.len();
+    // `12ab` is a name, not a decimal followed by letters.
+    if text
+        .get(length)
+        .is_some_and(|c| matches!(c, 'a'..='z' | '0'..='9' | '_'))
+    {
+        return None;
+    }
+    u32::from_str_radix(&digits, radix)
+        .ok()
+        .map(|value| (value, length))
 }
 
 /// Base64, as DAP encodes memory contents.

@@ -136,3 +136,124 @@ fn stepping_lifts_the_breakpoint_for_an_emulator_that_needs_it() {
         "the breakpoint under PC is lifted first: {after:?}"
     );
 }
+
+/// 64K holding `ld a,0x01` at 0x4000 - two bytes, the whole of the program
+/// these tests stop in.
+fn image_holding_ld_a_1() -> Vec<u8> {
+    let mut memory = vec![0u8; 0x1_0000];
+    memory[0x4000] = 0x3E;
+    memory[0x4001] = 0x01;
+    memory
+}
+
+/// Stop the program at 0x4000, over a source file whose line 3 reads `written`,
+/// and hand back the `cpclib/stoppedAt` event the extension acts on.
+///
+/// The walk over the stack has to be answered when there is an image, because
+/// having one is what makes the adapter attempt it: `SP` at the top of stack
+/// means there is nothing pushed to walk, which ends it immediately.
+fn stop_over(written: &str, image: Option<Vec<u8>>) -> serde_json::Value {
+    let directory = camino_tempfile::tempdir().unwrap();
+    let file = directory.path().join("resolved.asm");
+    std::fs::write(&file, format!("\torg 0x4000\nSTATE equ 1\n{written}\n")).unwrap();
+
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec![file.to_string()],
+        rows: vec![SourceMapRow::flat(0, 3, 0x4000, 2)]
+    });
+    let mut session = Session::new(RecordingPeer::new(), map).with_top_of_stack(0xBFF0);
+    if let Some(image) = image {
+        session = session.with_image(image);
+    }
+    session.on_attached().unwrap();
+
+    let mut out = session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{
+            "id": 1, "name": "Z80 @ 0x4000", "line": 0,
+            "instructionPointerReference": "0x4000"
+        }]}
+    }));
+    if out.is_empty() {
+        answer(
+            &mut session,
+            "scopes",
+            json!({"scopes": [{
+                "name": "Registers", "presentationHint": "registers",
+                "variablesReference": 18
+            }]})
+        );
+        out = answer(
+            &mut session,
+            "variables",
+            json!({"variables": [
+                {"name": "SP", "value": "0xBFF0", "variablesReference": 0},
+                {"name": "PC", "value": "0x4000", "variablesReference": 0}
+            ]})
+        );
+    }
+
+    out.into_iter()
+        .find(|message| message["event"] == json!("cpclib/stoppedAt"))
+        .expect("the stop is announced")
+}
+
+/// Answer the last request the adapter sent with `command`.
+fn answer(
+    session: &mut Session<RecordingPeer>,
+    command: &str,
+    body: serde_json::Value
+) -> Vec<serde_json::Value> {
+    let seq = session.peer().last(command).unwrap()["seq"]
+        .as_i64()
+        .unwrap();
+    session.on_emulator_message(&json!({
+        "type": "response", "command": command, "request_seq": seq,
+        "success": true, "body": body
+    }))
+}
+
+/// The source names a constant; the machine holds its value. Saying which is
+/// the whole point of the hint.
+#[test]
+fn the_stop_carries_the_instruction_really_in_memory() {
+    let stop = stop_over("\tld a,STATE", Some(image_holding_ld_a_1()));
+
+    let instruction = stop["body"]["instruction"]
+        .as_str()
+        .unwrap_or_default()
+        .to_lowercase();
+    assert!(
+        instruction.starts_with("ld a") && instruction.contains('1'),
+        "the resolved instruction: {stop}"
+    );
+}
+
+/// A line already written as the machine holds it has nothing to disambiguate,
+/// and a hint repeating it is noise - including when only the base, the case
+/// or the spacing differ.
+#[test]
+fn a_line_that_already_says_it_gets_no_hint() {
+    for written in ["\tLD A, 0x01", "\tld a,1", ".here\tld a,0x1 ; the state"] {
+        let stop = stop_over(written, Some(image_holding_ld_a_1()));
+        assert_eq!(
+            stop["body"]["instruction"],
+            json!(null),
+            "`{written}` says it already: {stop}"
+        );
+    }
+}
+
+/// Without the program's image there are no bytes to decode, and asking the
+/// emulator for them would cost a round trip on every single stop.
+#[test]
+fn no_image_means_no_hint_rather_than_a_round_trip() {
+    let stop = stop_over("\tld a,STATE", None);
+
+    assert_eq!(stop["body"]["instruction"], json!(null), "{stop}");
+    assert_eq!(
+        stop["body"]["line"],
+        json!(3),
+        "the stop still reaches the editor"
+    );
+}
