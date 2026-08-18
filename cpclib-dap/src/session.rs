@@ -107,7 +107,13 @@ struct ProgramBreakpoint {
     /// `stopOnEntry` means *entry*, once. Left armed it would stop again every
     /// time a main loop came back past the entry address, and it would hold one
     /// of the emulator's scarce breakpoint channels for the whole session.
-    one_shot: bool
+    one_shot: bool,
+    /// Where the `BREAKPOINT` directive is written, when the assembler knew.
+    ///
+    /// Not the same place as `address`: a directive arms the instruction that
+    /// follows it, so one written inside a macro body stops the program
+    /// wherever the macro was *used*.
+    written_at: Option<cpclib_asm::assembler::delayed_command::BreakpointSource>
 }
 
 /// A memory watch, in the form the emulator's watch slots take.
@@ -144,6 +150,9 @@ enum Purpose {
     MemoryView,
     /// Bytes at `PC`, to work out which page is selected.
     PageProbe,
+    /// Bytes at `PC`, to decode the instruction the machine really holds
+    /// there.
+    StopHint,
     /// Instructions for the disassembly view.
     DisassemblyView,
     /// A snapshot of the whole machine, for the chip scopes.
@@ -169,6 +178,34 @@ struct PendingStack {
     response: Value,
     /// Where `SP` pointed, once known.
     sp: Option<u16>
+}
+
+/// A stop whose instruction hint is waiting for the bytes at `PC`.
+///
+/// The reveal is not held up for it: the editor is told where the program
+/// stopped as soon as the stack trace is annotated, and the hint follows as a
+/// message of its own a round trip later.
+#[derive(Debug, Clone)]
+struct PendingStopHint {
+    path: String,
+    line: i64,
+    /// The instruction's own columns, carried so the hint can be placed just
+    /// after it.
+    ///
+    /// Without these the extension can only fall back to the end of the line,
+    /// which looks right exactly when the executing instruction happens to be
+    /// the last one on it - and wrong on every other statement of a
+    /// `ld hl,(x) : ld de,(y)` line. They are already known: they are the same
+    /// columns the stop selects.
+    column: i64,
+    end_column: i64,
+    /// The source line as written, to compare the decoded instruction against.
+    written: Option<String>,
+    address: u16,
+    /// The read this is waiting for. An editor that asks for a stack trace
+    /// twice puts two reads in flight, and the first answer must not be
+    /// dressed up as the second one's.
+    request_seq: i64
 }
 
 /// A watch waiting for the emulator to report the bytes at its label.
@@ -338,6 +375,11 @@ pub struct Session<P: DapPeer> {
     pending_stack: Option<PendingStack>,
     /// A stack trace held while the page at `PC` is worked out.
     pending_page_probe: Option<(Value, Vec<crate::callstack::CallFrame>, u16)>,
+    /// The stop whose instruction hint is still being fetched.
+    pending_stop_hint: Option<PendingStopHint>,
+    /// Why the emulator last stopped, so a stop caused by a breakpoint can be
+    /// told from one caused by a step.
+    last_stop_reason: Option<String>,
     /// The page the emulator turned out to have paged in at `PC`, for as long
     /// as the program is stopped there.
     pc_page: Option<u8>,
@@ -432,6 +474,8 @@ impl<P: DapPeer> Session<P> {
             top_of_stack: None,
             pending_stack: None,
             pending_page_probe: None,
+            pending_stop_hint: None,
+            last_stop_reason: None,
             pc_page: None,
             call_target_names: std::collections::HashMap::new(),
             last_pc: None,
@@ -620,7 +664,8 @@ impl<P: DapPeer> Session<P> {
             self.program_breakpoints.push(ProgramBreakpoint {
                 address: breakpoint.address as u32,
                 watch,
-                one_shot: false
+                one_shot: false,
+                written_at: breakpoint.written_at.clone()
             });
         }
         notices
@@ -944,6 +989,7 @@ impl<P: DapPeer> Session<P> {
                 Purpose::WatchArm => return self.report_armed_watches(message),
                 Purpose::MemoryView => return self.complete_memory_view(message),
                 Purpose::PageProbe => return self.stack_step_page_probe(message),
+                Purpose::StopHint => return self.complete_stop_hint(message),
                 Purpose::DisassemblyView => return self.complete_disassembly_view(message),
                 Purpose::MachineState => return self.complete_machine_state(message),
                 Purpose::EditorDisassembly => {
@@ -1230,6 +1276,11 @@ impl<P: DapPeer> Session<P> {
     /// The `stopped` event goes out first: it is what turns the toolbar on, and
     /// the housekeeping behind it must never be able to delay or lose it.
     fn on_stopped(&mut self, message: &Value) -> Vec<Value> {
+        self.last_stop_reason = message
+            .get("body")
+            .and_then(|body| body.get("reason"))
+            .and_then(Value::as_str)
+            .map(str::to_owned);
         let mut out = vec![self.enrich_stopped(message)];
 
         // `stopOnEntry` has now happened. Leaving it armed would stop again
@@ -3048,7 +3099,9 @@ impl<P: DapPeer> Session<P> {
         self.program_breakpoints.push(ProgramBreakpoint {
             address: address as u32,
             watch: None,
-            one_shot: true
+            one_shot: true,
+            // No directive to point at: this one is the launch configuration's.
+            written_at: None
         });
     }
 
@@ -3747,14 +3800,27 @@ impl<P: DapPeer> Session<P> {
     /// emulator in it, a panel, a view restored from last session), and the
     /// answer had become "sometimes". The extension listens for this and opens
     /// the line itself, which does not depend on any of that.
-    fn announce_where_we_stopped(&mut self, answer: &Value) -> Option<Value> {
-        let top = answer
+    fn announce_where_we_stopped(&mut self, answer: &Value) -> Vec<Value> {
+        self.pending_stop_hint = None;
+        let Some(top) = answer
             .get("body")
             .and_then(|body| body.get("stackFrames"))
             .and_then(Value::as_array)
-            .and_then(|frames| frames.first())?;
-        let source = top.get("source")?.get("path")?.as_str()?;
-        let line = top.get("line").and_then(Value::as_i64).filter(|line| *line > 0)?;
+            .and_then(|frames| frames.first())
+        else {
+            return Vec::new();
+        };
+        let Some(source) = top
+            .get("source")
+            .and_then(|source| source.get("path"))
+            .and_then(Value::as_str)
+        else {
+            return Vec::new();
+        };
+        let Some(line) = top.get("line").and_then(Value::as_i64).filter(|line| *line > 0)
+        else {
+            return Vec::new();
+        };
 
         // The source says `ld a,ANIMATION_STATE_FINISHED`; the machine holds
         // `ld a,0x01`. Carrying the resolved form lets the editor show it
@@ -3766,20 +3832,34 @@ impl<P: DapPeer> Session<P> {
             .and_then(parse_address_reference)
             .and_then(|address| u16::try_from(address).ok())
             .or(self.last_pc);
-        let resolved = address.and_then(|address| self.instruction_in_image(address));
         let written = u32::try_from(line)
             .ok()
             .and_then(|line| self.source_line(Path::new(source), line));
-        // A hint that repeats the line it sits on is noise, so it is only sent
-        // when it says something the source does not.
-        let instruction = resolved.map(|instruction| instruction.text).filter(|text| {
-            written
-                .as_deref()
-                .is_none_or(|written| !line_already_says(written, text))
-        });
+
+        // The emulator's memory is the only honest source for this. An
+        // instruction can have been modified in place; a written one can be
+        // several real ones (`ld ix,de` is three); and a routine generated at
+        // run time occupies a line that reads `defs`, whose assembled bytes
+        // say nothing whatever about what is executing there. Asking costs one
+        // read - ~0.2ms on AMSpiriT Lite - and it is *not* waited for: the
+        // reveal goes out now and the hint follows as its own message.
+        // The columns the stop selects are the columns the hint belongs after,
+        // so they travel with it rather than being worked out twice.
+        let column = top.get("column").and_then(Value::as_i64).unwrap_or(1);
+        let end_column = top.get("endColumn").and_then(Value::as_i64).unwrap_or(column);
+        let asked = address
+            .is_some_and(|address| self.ask_what_is_at(address, source, line, column, end_column));
+        let instruction = match asked {
+            true => None,
+            // Nothing to ask, or nobody to ask: the assembled image is what is
+            // left, and a hint from it beats no hint at all.
+            false => {
+                self.image_hint(address, written.as_deref())
+            }
+        };
 
         let seq = self.next_seq();
-        Some(protocol::event(
+        let mut out = vec![protocol::event(
             "cpclib/stoppedAt",
             json!({
                 "path": source,
@@ -3789,7 +3869,203 @@ impl<P: DapPeer> Session<P> {
                 "instruction": instruction
             }),
             seq
-        ))
+        )];
+        out.extend(self.directive_behind_the_stop(address, source, line));
+        out
+    }
+
+    /// Ask the emulator what it holds at `address`, for this stop's hint.
+    ///
+    /// Whether the question went out: `false` means the caller has to make do
+    /// with the assembled image.
+    fn ask_what_is_at(
+        &mut self,
+        address: u16,
+        source: &str,
+        line: i64,
+        column: i64,
+        end_column: i64
+    ) -> bool {
+        if !self.peer.supports("readMemory") {
+            return false;
+        }
+        let written = u32::try_from(line)
+            .ok()
+            .and_then(|line| self.source_line(Path::new(source), line));
+        self.pending_stop_hint = Some(PendingStopHint {
+            path: source.to_string(),
+            line,
+            column,
+            end_column,
+            written,
+            address,
+            request_seq: self.own_seq
+        });
+        let sent = self.send_own(
+            "readMemory",
+            json!({
+                "memoryReference": address_reference(address as u32),
+                // The Z80's longest instruction; anything past it belongs to
+                // the next one.
+                "count": 4
+            }),
+            Purpose::StopHint
+        );
+        if sent.is_err() {
+            self.pending_stop_hint = None;
+            return false;
+        }
+        true
+    }
+
+    /// The hint the assembled program's own bytes give, when the emulator
+    /// cannot be asked.
+    fn image_hint(&self, address: Option<u16>, written: Option<&str>) -> Option<String> {
+        let decoded = address.and_then(|address| self.instruction_in_image(address))?;
+        Self::hint_worth_showing(decoded.text, written)
+    }
+
+    /// A hint that repeats the line it sits on is noise, so it is only sent
+    /// when it says something the source does not.
+    fn hint_worth_showing(decoded: String, written: Option<&str>) -> Option<String> {
+        written
+            .is_none_or(|written| !line_already_says(written, &decoded))
+            .then_some(decoded)
+    }
+
+    /// The bytes at `PC` came back; say what they decode to.
+    ///
+    /// A message of its own rather than a second `cpclib/stoppedAt`: the reveal
+    /// has already happened and the user may have moved the cursor since, so
+    /// re-announcing the stop would drag them back for a decoration.
+    fn complete_stop_hint(&mut self, response: &Value) -> Vec<Value> {
+        let Some(pending) = self
+            .pending_stop_hint
+            .take_if(|pending| {
+                response.get("request_seq").and_then(Value::as_i64) == Some(pending.request_seq)
+            })
+        else {
+            return Vec::new();
+        };
+        let bytes = response
+            .get("body")
+            .and_then(|body| body.get("data"))
+            .and_then(Value::as_str)
+            .map(decode_base64)
+            .unwrap_or_default();
+
+        let decoded = crate::disassemble::decode(pending.address, &bytes, 1)
+            .into_iter()
+            .next()
+            .map(|instruction| instruction.text);
+        let instruction = match decoded {
+            Some(decoded) => Self::hint_worth_showing(decoded, pending.written.as_deref()),
+            // The read failed or came back empty; the image is the fallback,
+            // and it is still better than nothing.
+            None => self.image_hint(Some(pending.address), pending.written.as_deref())
+        };
+
+        let seq = self.next_seq();
+        vec![protocol::event(
+            "cpclib/stoppedInstruction",
+            json!({
+                "path": pending.path,
+                "line": pending.line,
+                "column": pending.column,
+                "endColumn": pending.end_column,
+                "instruction": instruction
+            }),
+            seq
+        )]
+    }
+
+    /// A link to the `BREAKPOINT` directive that stopped the program, when it
+    /// is not written where the program stopped.
+    ///
+    /// That is the macro case and only the macro case: a directive arms the
+    /// address of the instruction *after* it, so one written inside a macro
+    /// body stops the program on a line of whichever file used the macro -
+    /// with no red dot in the gutter and nothing on the line to explain it.
+    /// A directive on the line the program stopped on needs no link; it is
+    /// already on screen.
+    fn directive_behind_the_stop(
+        &mut self,
+        address: Option<u16>,
+        source: &str,
+        line: i64
+    ) -> Vec<Value> {
+        // Only a stop the emulator attributes to a breakpoint. Stepping onto
+        // an armed address is the user walking there themselves, and saying so
+        // on every step through a macro-heavy demo would be noise.
+        let stopped_at_one = self
+            .last_stop_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("breakpoint"));
+        let Some(address) = address.filter(|_| stopped_at_one)
+        else {
+            return Vec::new();
+        };
+
+        let written_at = self
+            .program_breakpoints
+            .iter()
+            .find(|breakpoint| {
+                breakpoint.address == address as u32
+                    && breakpoint.watch.is_none()
+                    && !self.suppressed.contains(&breakpoint.address)
+            })
+            .and_then(|breakpoint| breakpoint.written_at.clone());
+        let Some(written_at) = written_at
+        else {
+            return Vec::new();
+        };
+
+        let file = self.known_path(&written_at.file);
+        if same_file(&file, Path::new(source)) && written_at.line as i64 == line {
+            return Vec::new();
+        }
+
+        // `file:line:column` is what VS Code turns into a link in the debug
+        // console, so the jump costs no protocol of its own.
+        let seq = self.next_seq();
+        vec![protocol::event(
+            "output",
+            json!({
+                "category": "console",
+                "output": format!(
+                    "stopped on a BREAKPOINT directive written at {}:{}:{} - the directive \
+                     breaks on the instruction that follows it, which is why the stop is on \
+                     another line.\n",
+                    file.display(),
+                    written_at.line,
+                    written_at.column
+                )
+            }),
+            seq
+        )]
+    }
+
+    /// The path the source map uses for `file`, when it knows it.
+    ///
+    /// A macro body's parser context names its file however the `include` that
+    /// pulled it in did - `macros.asm`, on the project this was built for -
+    /// and a relative path is not a link: the editor has no directory to
+    /// resolve it against. The source map holds the same file as the absolute
+    /// path the assembler canonicalised, so the tail is matched against it.
+    fn known_path(&self, file: &str) -> PathBuf {
+        let candidate = Path::new(file);
+        if candidate.is_absolute() {
+            return candidate.to_path_buf();
+        }
+        self.map
+            .files()
+            .iter()
+            // Whole components, so `writter.asm` does not match
+            // `sprite_writter.asm`. More of the relative path than just the
+            // name is used when the directive gave more.
+            .find(|known| known.ends_with(candidate))
+            .cloned()
+            .unwrap_or_else(|| candidate.to_path_buf())
     }
 
     /// Put the file and line back into a stack trace the emulator answered with

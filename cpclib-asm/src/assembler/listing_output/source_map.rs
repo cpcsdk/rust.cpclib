@@ -65,7 +65,7 @@ impl SourceMapRow {
 ///
 /// The `:LINE:COL` is what makes this safe on Windows: a drive letter is `C:`
 /// followed by a separator, never by digits-colon-digits-space-`>`.
-fn real_file_name(name: &str) -> &str {
+pub(crate) fn real_file_name(name: &str) -> &str {
     split_expansion(name).map(|(path, _)| path).unwrap_or(name)
 }
 

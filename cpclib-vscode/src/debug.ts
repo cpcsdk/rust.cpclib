@@ -312,6 +312,20 @@ export function registerDebugging(
                 lastStop = event.body;
                 await revealStop(event.body);
             }
+            // The hint the adapter read out of the emulator's own memory, which
+            // it could only send once the read came back. Deliberately a second
+            // message: re-announcing the stop would drag the cursor back to it
+            // for the sake of a decoration.
+            if (event.event === 'cpclib/stoppedInstruction') {
+                const where = event.body as StopLocation | undefined;
+                // `lastStop` is the very object `revealStop` was handed, so
+                // updating it here also settles the case where this arrives
+                // while that reveal is still opening the document.
+                if (lastStop && lastStop.path === where?.path && lastStop.line === where?.line) {
+                    lastStop.instruction = where?.instruction ?? null;
+                }
+                applyInstructionHint(where);
+            }
         }),
         vscode.debug.onDidTerminateDebugSession(session => {
             if (session.type === DEBUG_TYPE) {
@@ -845,6 +859,14 @@ interface StopLocation {
      * line says - `ld a,0x01` for a line reading `ld a,ANIMATION_STATE_FINISHED`.
      * Absent when the source already spells it out, and there is nothing to
      * disambiguate.
+     *
+     * Decoded from the *emulator's* memory, so it is also the answer for an
+     * instruction that has modified itself, for one written instruction that
+     * became several real ones, and for a line reading `defs` whose code was
+     * generated at run time. It therefore arrives a round trip after the stop,
+     * in `cpclib/stoppedInstruction`, and is null on the `cpclib/stoppedAt`
+     * that revealed the line - except where there was no emulator to ask, when
+     * the assembled image answers immediately instead.
      */
     instruction?: string | null;
 }
@@ -865,8 +887,17 @@ function instructionHintType(): vscode.TextEditorDecorationType {
     instructionHint ??= vscode.window.createTextEditorDecorationType({
         after: {
             margin: '0 0 0 2em',
-            color: new vscode.ThemeColor('editorCodeLens.foreground'),
-            fontStyle: 'italic',
+            // Ghost text: the colour VS Code already uses for code-shaped text
+            // that is not in the file. Exactly this hint's status, and lighter
+            // than real code in every theme.
+            //
+            // One colour for the whole hint, not one per token as the `-dv`
+            // panel gives it. An `after` decoration is a single text
+            // attachment and takes a single `color`; the only way to colour
+            // its words separately is several decoration types at the same
+            // position, whose rendering order VS Code does not define - and a
+            // hint that comes out as `a, ld 0x01)(` is worse than a plain one.
+            color: new vscode.ThemeColor('editorGhostText.foreground'),
         },
         // The hint describes one address, so it must not be dragged along by an
         // edit above it.
@@ -878,19 +909,54 @@ function instructionHintType(): vscode.TextEditorDecorationType {
 /**
  * Show, after the line, what the bytes at `PC` decode to.
  *
- * Written as a comment (`; ld a,0x01`) because that is what it is: the source
- * beside it is the program, and this is the assembler's own spelling of what
- * the machine ended up holding there.
+ * Written as an instruction rather than as a comment - it *is* one, in the
+ * assembler's own spelling - and parenthesised so it cannot be mistaken for
+ * code that is in the file.
  */
-function showInstructionHint(editor: vscode.TextEditor, line: number, text: string): void {
+function showInstructionHint(
+    editor: vscode.TextEditor,
+    line: number,
+    text: string,
+    endColumn?: number,
+): void {
     clearInstructionHint();
     if (line >= editor.document.lineCount) { return; }
-    const end = editor.document.lineAt(line).range.end;
+
+    // Just after the instruction, not at the end of the line. A line can hold
+    // several instructions (`ld a,l : inc a : ld (hl),a`), and a hint parked at
+    // the far right would sit beside whichever came last rather than beside the
+    // one being executed. `endColumn` is where the selection ends, so the hint
+    // lands where the caret already is.
+    const lineRange = editor.document.lineAt(line).range;
+    const at = endColumn && endColumn > 1
+        ? lineRange.start.translate(0, Math.min(endColumn - 1, lineRange.end.character))
+        : lineRange.end;
     editor.setDecorations(instructionHintType(), [{
-        range: new vscode.Range(end, end),
-        renderOptions: { after: { contentText: `; ${text}` } },
+        range: new vscode.Range(at, at),
+        renderOptions: { after: { contentText: `(${text})` } },
     }]);
     hintedFile = editor.document.uri.toString();
+}
+
+/**
+ * Put the hint on the editor already showing the stop, without disturbing it.
+ *
+ * Separate from `revealStop` because it arrives separately: the adapter reads
+ * the bytes at `PC` from the emulator, which costs a round trip it refuses to
+ * make the reveal wait for.
+ */
+function applyInstructionHint(where: StopLocation | undefined): void {
+    if (!where?.path || !where.line) { return; }
+    const line = Math.max(0, where.line - 1);
+    const editor = vscode.window.visibleTextEditors.find(
+        candidate => candidate.document.uri.fsPath === where.path,
+    );
+    if (!editor) { return; }
+    if (where.instruction) {
+        showInstructionHint(editor, line, where.instruction, where.endColumn);
+    } else {
+        clearInstructionHint();
+    }
 }
 
 /**
@@ -948,7 +1014,7 @@ async function revealStop(where: StopLocation | undefined): Promise<void> {
     editor.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 
     if (where.instruction) {
-        showInstructionHint(editor, line, where.instruction);
+        showInstructionHint(editor, line, where.instruction, where.endColumn);
     } else {
         clearInstructionHint();
     }

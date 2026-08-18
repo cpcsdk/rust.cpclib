@@ -747,3 +747,168 @@ fn an_ordinary_line_keeps_the_columns_it_always_had() {
     let picked: Vec<&str> = rows.iter().map(|row| selected(source, row)).collect();
     assert_eq!(picked, vec!["ld a,l", "inc a", "nop"], "{rows:?}");
 }
+
+/// What a debugger would highlight, one entry per instruction.
+///
+/// A long byte run is written to the listing in chunks, and an instruction
+/// straddling a chunk boundary is recorded as two rows carrying the same
+/// columns - both true, and both selecting the same text. Collapsing them
+/// keeps these tests about the columns rather than about where the chunks
+/// happen to fall.
+fn selections<'s>(
+    source: &'s str,
+    rows: &[cpclib_asm::assembler::listing_output::SourceMapRow]
+) -> Vec<&'s str> {
+    let mut picked = Vec::new();
+    let mut previous: Option<(u32, u16, u16)> = None;
+    for row in rows {
+        let here = (row.line, row.column, row.column_end);
+        if previous == Some(here) {
+            continue;
+        }
+        previous = Some(here);
+        picked.push(selected(source, row));
+    }
+    picked
+}
+
+/// The macro this was reported from, verbatim, called once with an argument
+/// far longer than the placeholder and once with one far shorter.
+///
+/// Every instruction of both lines has text after its substitution - `, de`,
+/// or another statement - so its end column is as much in need of mapping as
+/// its start, and the `BREAKPOINT` opening the first line displaces everything
+/// after it without emitting a byte. All of it must come back to the text as
+/// written, whichever direction the substitution moved the expansion in.
+#[test]
+fn every_instruction_of_a_substituted_line_comes_back_to_the_written_text() {
+    let source = "\torg 0x4000\n\
+                  \tmacro SWITCH_VALUES addr1, addr2\n\
+                  \tBREAKPOINT : ld hl, ({addr1}) : ld de, ({addr2})\n\
+                  \tld ({addr1}), de : ld ({addr2}), hl\n\
+                  \tendm\n\
+                  very_long_symbol_name_here equ 0xc000\n\
+                  \tSWITCH_VALUES very_long_symbol_name_here, 1\n\
+                  \tSWITCH_VALUES 1, very_long_symbol_name_here\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    let one_call = vec![
+        "ld hl, ({addr1})",
+        "ld de, ({addr2})",
+        "ld ({addr1}), de",
+        "ld ({addr2}), hl",
+    ];
+    let mut both = one_call.clone();
+    both.extend(one_call);
+    assert_eq!(selections(source, &rows), both, "{rows:?}");
+
+    // The lines are the ones they are written on, twice over - a row with the
+    // right columns on the wrong line points just as far from the instruction.
+    assert_eq!(
+        rows.iter().map(|row| row.line).collect::<Vec<_>>(),
+        vec![3, 3, 4, 4, 3, 3, 4, 4],
+        "{rows:?}"
+    );
+}
+
+/// The same macro's second line on its own, with no directive in front of it.
+///
+/// `BREAKPOINT` emits nothing, and pinning the line without it says that the
+/// substitution is what the mapping has to undo rather than the directive.
+#[test]
+fn a_substituted_line_maps_without_a_directive_in_front_of_it() {
+    let source = "\torg 0x4000\n\
+                  \tmacro SWITCH_VALUES addr1, addr2\n\
+                  \tld ({addr1}), de : ld ({addr2}), hl\n\
+                  \tendm\n\
+                  very_long_symbol_name_here equ 0xc000\n\
+                  \tSWITCH_VALUES very_long_symbol_name_here, 1\n\
+                  \tSWITCH_VALUES 1, very_long_symbol_name_here\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    assert_eq!(
+        selections(source, &rows),
+        vec![
+            "ld ({addr1}), de",
+            "ld ({addr2}), hl",
+            "ld ({addr1}), de",
+            "ld ({addr2}), hl"
+        ],
+        "{rows:?}"
+    );
+}
+
+/// A placeholder in the middle of a line, with another statement after it -
+/// the `DEBUG` macro from the same file, `if` block and all.
+///
+/// The `if` is what makes this worth its own test: the instructions are two
+/// levels in, and the conditional is evaluated in the expansion, so a body
+/// that reaches the listing through a different path still has to answer with
+/// the file's own columns.
+#[test]
+fn a_placeholder_mid_line_leaves_the_statement_after_it_where_it_is_written() {
+    let source = "SHOW_DEBUG equ 1\n\
+                  \tmacro DEBUG col\n\
+                  \t\tBREAKPOINT\n\
+                  \t\tif SHOW_DEBUG\n\
+                  \t\t\tld bc, 0x7f10 : out (c), c\n\
+                  \t\t\tld a, {col} : out (c), a\n\
+                  \t\tendif\n\
+                  \tendm\n\
+                  \torg 0x4000\n\
+                  very_long_symbol_name_here equ 0xc000\n\
+                  \tDEBUG 0x54\n\
+                  \tDEBUG very_long_symbol_name_here\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    let one_call = vec!["ld bc, 0x7f10", "out (c), c", "ld a, {col}", "out (c), a"];
+    let mut both = one_call.clone();
+    both.extend(one_call);
+    assert_eq!(selections(source, &rows), both, "{rows:?}");
+}
+
+/// An operand that is *only* a placeholder, substituted both ways.
+///
+/// `an_operand_that_is_only_a_placeholder_keeps_its_instructions_columns`
+/// pins one call; this pins that the answer does not depend on which way the
+/// substitution moved the text, which is the whole difficulty.
+#[test]
+fn a_placeholder_only_operand_maps_whichever_way_the_text_moved() {
+    let source = "\torg 0x4000\n\
+                  \tmacro LOAD, n\n\
+                  \t\tnop : ld hl, {n} : nop\n\
+                  \tendm\n\
+                  very_long_symbol_name_here equ 0xc000\n\
+                  \tLOAD 1\n\
+                  \tLOAD very_long_symbol_name_here\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    assert_eq!(
+        selections(source, &rows),
+        vec!["nop", "ld hl, {n}", "nop", "nop", "ld hl, {n}", "nop"],
+        "{rows:?}"
+    );
+}
+
+/// A statement that *begins* with a substitution.
+///
+/// Nothing in the body answers for a column inside an argument's value, so the
+/// map answers with the placeholder that value replaced - and the instruction
+/// still selects exactly as it is written, because the placeholder is where it
+/// starts.
+#[test]
+fn a_statement_beginning_with_a_substitution_starts_at_its_placeholder() {
+    let source = "\torg 0x4000\n\
+                  \tmacro OP, mnemonic\n\
+                  \t\t{mnemonic} a, 1 : nop\n\
+                  \tendm\n\
+                  \tOP add\n\
+                  \tOP sub\n";
+    let rows = named_map("macros.asm", source).rows;
+
+    assert_eq!(
+        selections(source, &rows),
+        vec!["{mnemonic} a, 1", "nop", "{mnemonic} a, 1", "nop"],
+        "{rows:?}"
+    );
+}

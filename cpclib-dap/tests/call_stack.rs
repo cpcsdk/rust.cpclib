@@ -273,6 +273,25 @@ fn synthetic_frames_get_ids_of_their_own() {
     assert!(frames[1]["id"].as_i64().unwrap() > 0x1000_0000);
 }
 
+/// The reads that are not this stop's instruction hint.
+///
+/// Every stop asks the emulator for the four bytes at `PC`: what is really
+/// executing there is not always what was assembled, and only the emulator
+/// knows. That read is not what any of these tests is about.
+fn reads_beyond_the_stop_hint(session: &Session<RecordingPeer>, pc: u16) -> usize {
+    session
+        .peer()
+        .sent
+        .iter()
+        .filter(|message| message["command"] == json!("readMemory"))
+        .filter(|message| {
+            let arguments = &message["arguments"];
+            !(arguments["count"] == json!(4)
+                && arguments["memoryReference"] == json!(format!("0x{pc:04x}")))
+        })
+        .count()
+}
+
 /// A top of stack below SP means the stack is empty; nothing is read, and the
 /// single frame goes out rather than the whole address space being walked.
 #[test]
@@ -288,12 +307,7 @@ fn an_empty_stack_reads_no_memory() {
     let variables = seq_of(&session, "variables");
     let out = session.on_emulator_message(&registers_answer(variables, 0xBFF0));
 
-    assert!(
-        !session
-            .peer()
-            .commands()
-            .contains(&"readMemory".to_string())
-    );
+    assert_eq!(reads_beyond_the_stop_hint(&session, 0x5001), 0);
     assert_eq!(
         out.last().unwrap()["body"]["stackFrames"]
             .as_array()
@@ -562,11 +576,9 @@ fn an_address_only_one_page_claims_needs_no_disambiguation() {
 
     assert_eq!(frames[0]["line"], json!(40), "{out:?}");
     assert_eq!(frames[0]["source"]["name"], json!("lib.asm"));
-    assert!(
-        !session
-            .peer()
-            .commands()
-            .contains(&"readMemory".to_string()),
+    assert_eq!(
+        reads_beyond_the_stop_hint(&session, 0x04A5),
+        0,
         "nothing to tell apart, so nothing is read"
     );
 }
@@ -659,11 +671,9 @@ fn without_an_image_the_report_names_the_real_problem() {
         .expect("says why");
     let text = note["body"]["output"].as_str().unwrap();
     assert!(text.contains("not available to this session"), "{text}");
-    assert!(
-        !session
-            .peer()
-            .commands()
-            .contains(&"readMemory".to_string()),
+    assert_eq!(
+        reads_beyond_the_stop_hint(&session, 0x5C3A),
+        0,
         "and does not spend a read to learn nothing"
     );
 }

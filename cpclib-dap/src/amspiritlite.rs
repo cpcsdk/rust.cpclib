@@ -763,49 +763,104 @@ pub struct AmspiritLitePeer {
     /// program instead. An emulator the user started is left alone - it is
     /// theirs, and they arranged its window.
     launched: Option<std::process::Child>,
-    /// Set while this adapter is driving the machine one instruction at a
-    /// time, so the run-state poller keeps quiet.
+    /// What a step over armed and is waiting to come back to.
     ///
-    /// A step-over is a *sequence* of steps, and the machine is briefly running
-    /// during each one. Without this the poller would catch it mid-walk and
-    /// announce a stop that has not happened.
-    stepping: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// Raised to ask a walk in progress to stop where it stands.
+    /// Shared with the run-state poller, which is the thread that notices the
+    /// stop and therefore the thread that has to recognise it as the end of a
+    /// step over rather than a breakpoint.
+    stepping_over: std::sync::Arc<std::sync::Mutex<Option<StepTarget>>>,
+    /// The breakpoints the editor armed, and the ones a step over left behind.
     ///
-    /// A walk has no clock on it - a routine takes as long as it takes - so
-    /// what ends one that wandered into the main loop is the user: pause,
-    /// disconnect or terminate. A stopwatch could only ever be wrong in one
-    /// direction or the other, and was wrong in both.
-    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// The addresses the editor last armed.
-    ///
-    /// A step-over walks over its instruction; a breakpoint *inside* what it
-    /// walks over still has to stop it, or stepping over a `call` is a way of
-    /// silently disarming every breakpoint in the routine.
-    armed: Vec<u16>,
-    /// How far a step-over walks before it gives up; `STEP_OVER_BUDGET` unless
-    /// a caller says otherwise.
-    step_over_budget: usize,
-    /// How long a walk goes on before it says so in the console;
-    /// `ANNOUNCE_AFTER` unless a caller says otherwise.
-    announce_after: std::time::Duration,
+    /// Shared for the same reason: the poller takes a temporary breakpoint back
+    /// out again when the step over it belongs to arrives.
+    breakpoints: std::sync::Arc<std::sync::Mutex<Breakpoints>>,
     /// How long a resume is given to become visible; `RESUME_CONFIRMATION`
     /// unless a caller says otherwise.
     resume_confirmation: std::time::Duration,
-    /// Where an interrupted walk was heading: the address it gave up at, and
-    /// the address it was walking to.
-    ///
-    /// So that pressing step over again *carries on* rather than starting a
-    /// fresh walk over whatever instruction the routine happened to stop on -
-    /// which is what "step over again to carry on" has to mean to be true.
-    /// Shared, because the walk that fills it in runs on its own thread.
-    unfinished: std::sync::Arc<std::sync::Mutex<Option<(u16, u16)>>>,
     /// Answers waiting for the next `drain`.
     pending: std::sync::mpsc::Receiver<Value>,
     outgoing: std::sync::mpsc::Sender<Value>,
-    /// Shared with the walk, which answers the editor while `send` is off
+    /// Shared with the poller, which answers the editor while `send` is off
     /// answering something else.
     seq: std::sync::Arc<std::sync::atomic::AtomicI64>
+}
+
+/// Where a step over is heading, and what to undo when it gets there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct StepTarget {
+    /// The instruction after the one being stepped over, or the return address
+    /// a step out is aiming at.
+    address: u16,
+    /// Whether the editor already had a breakpoint there.
+    ///
+    /// If it did, the breakpoint is the user's and stays; only one this
+    /// adapter armed is taken back out.
+    was_the_editors: bool
+}
+
+/// Every address this session has asked the emulator to break on.
+///
+/// The emulator takes the whole set in one request, so the two halves have to
+/// be written together: the editor's red dots, and whatever a step over has
+/// armed behind them.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct Breakpoints {
+    /// The addresses the editor last armed. These are the only ones it knows
+    /// about, and the only ones its gutter can show.
+    editors: Vec<u16>,
+    /// Addresses a step over armed and has not taken back.
+    ///
+    /// One entry while a step over is in flight; more if a step over never
+    /// arrived, which happens when the routine stepped over does not return to
+    /// the instruction after the call. That is a bug in the program being
+    /// debugged rather than something to recover from, so the address simply
+    /// stays armed - invisible, which is why a stop on one is explained in the
+    /// console.
+    temporary: Vec<u16>
+}
+
+impl Breakpoints {
+    /// The whole set, as the emulator wants it.
+    fn all(&self) -> Vec<u16> {
+        let mut all = self.editors.clone();
+        for address in &self.temporary {
+            if !all.contains(address) {
+                all.push(*address);
+            }
+        }
+        all
+    }
+
+    /// Whether `address` carries a breakpoint the editor put there.
+    fn is_the_editors(&self, address: u16) -> bool {
+        self.editors.contains(&address)
+    }
+
+    fn arm_temporary(&mut self, address: u16) {
+        if !self.temporary.contains(&address) {
+            self.temporary.push(address);
+        }
+    }
+
+    fn disarm_temporary(&mut self, address: u16) {
+        self.temporary.retain(|armed| *armed != address);
+    }
+}
+
+/// Write the whole breakpoint set to the emulator.
+///
+/// `/api/z80_bp` replaces everything it is given, so the temporaries have to go
+/// out with the editor's dots or the next `setBreakpoints` would silently
+/// disarm a step over in flight.
+fn push_breakpoints(endpoint: &str, set: &Breakpoints) -> std::io::Result<()> {
+    let body = set
+        .all()
+        .iter()
+        .map(|address| format!("0x{address:04X}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    perform(endpoint, &Call::post("/api/z80_bp").body(body))?;
+    Ok(())
 }
 
 impl AmspiritLitePeer {
@@ -832,36 +887,30 @@ impl AmspiritLitePeer {
         // state is polled, several times a second, and a change is what the
         // editor hears about.
         let expecting_stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let watched = outgoing.clone();
-        let watched_endpoint = endpoint.trim_end_matches('/').to_string();
-        let watched_expecting = expecting_stop.clone();
-        let stepping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let watched_stepping = stepping.clone();
+        let stepping_over = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let breakpoints = std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default()));
+        let seq = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
+        let watching = Stops {
+            endpoint: endpoint.trim_end_matches('/').to_string(),
+            out: outgoing.clone(),
+            expecting_stop: expecting_stop.clone(),
+            stepping_over: stepping_over.clone(),
+            breakpoints: breakpoints.clone()
+        };
         std::thread::Builder::new()
             .name("amspiritlite-runstate".into())
-            .spawn(move || {
-                watch_run_state(
-                    &watched_endpoint,
-                    &watched,
-                    &watched_expecting,
-                    &watched_stepping
-                )
-            })?;
+            .spawn(move || watch_run_state(&watching))?;
 
         Ok(Self {
             endpoint: endpoint.trim_end_matches('/').to_string(),
             expecting_stop,
-            stepping,
-            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            armed: Vec::new(),
-            step_over_budget: Self::STEP_OVER_BUDGET,
-            announce_after: Self::ANNOUNCE_AFTER,
+            stepping_over,
+            breakpoints,
             resume_confirmation: Self::RESUME_CONFIRMATION,
-            unfinished: std::sync::Arc::new(std::sync::Mutex::new(None)),
             launched: None,
             pending,
             outgoing,
-            seq: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0))
+            seq
         })
     }
 
@@ -875,22 +924,6 @@ impl AmspiritLitePeer {
     fn next_seq(&self) -> i64 {
         next_seq(&self.seq)
     }
-
-    /// How long a walk goes on before it explains itself in the console.
-    ///
-    /// Long enough that an ordinary step over says nothing, short enough that a
-    /// walk into a routine that runs for a minute is visible while it happens
-    /// rather than mysterious.
-    const ANNOUNCE_AFTER: std::time::Duration = std::time::Duration::from_secs(1);
-
-    /// A hard ceiling on a walk, so a step over aimed at an address control
-    /// never reaches ends by itself rather than stepping until the session
-    /// does.
-    ///
-    /// Not a time limit: the walk no longer holds the adapter, so a long
-    /// routine is merely slow rather than a freeze, and the thing that ends one
-    /// early is the user pressing pause.
-    const STEP_OVER_BUDGET: usize = 200_000;
 
     /// How long a resume is given to become visible before the editor is told
     /// to expect a stop anyway.
@@ -926,299 +959,191 @@ impl AmspiritLitePeer {
         }
     }
 
-    /// Step *over* the instruction at `PC`.
+    /// Step *over* the instruction at `PC`, or *out* of the routine we are in.
     ///
-    /// This emulator has no such request - it steps, and that is all - so the
-    /// step is repeated until `PC` reaches the instruction after the one we
-    /// started on. Which is not a workaround: it is what stepping over
-    /// *means*, and it comes out right for a `call` and for a repeating `ldir`
-    /// or `otir` without either being special-cased.
+    /// The emulator has no request for either, but it does not need one: put a
+    /// breakpoint on the address control comes back to, let the machine run,
+    /// and take the breakpoint out again when it arrives. One round trip
+    /// instead of one per instruction executed, which is what stepping over a
+    /// `call` into a decompressor used to cost.
     ///
-    /// The editor is answered at once and the walk goes on a thread of its
-    /// own, with the `stopped` event following when it ends. That is the DAP
-    /// order anyway - a step request is acknowledged, and the stop that comes
-    /// later says where it ended - and it is the only way the adapter stays
-    /// able to answer anything at all while a walk over a long routine runs.
+    /// Only instructions that *mean* something different when stepped over get
+    /// this treatment - see `returns_to_the_next_instruction`. Everything else
+    /// is a plain single step, because for everything else "step over" and
+    /// "step into" are the same thing.
     fn step_over(&mut self, message: &Value, out_of_this_one: bool) -> std::io::Result<()> {
-        // Answered first, whatever happens next: from here the editor knows
-        // the step was accepted and waits for the stop.
+        let target = if out_of_this_one {
+            self.address_to_return_to()
+        }
+        else {
+            self.address_after_the_instruction_at_pc()
+        };
+        let Some(target) = target
+        else {
+            // Nothing worth running to, so this is an ordinary step.
+            return self.step_once(message);
+        };
+
+        // Answered before the machine moves, so the response cannot arrive
+        // after the `stopped` event it is supposed to precede.
         let seq = self.next_seq();
         let _ = self
             .outgoing
             .send(crate::protocol::response(message, json!({}), seq));
 
-        // A walk already under way is not restarted. The editor has no reason
-        // to ask - it has not been told the last one finished - and two walks
-        // stepping one machine would each be counting the other's steps.
-        if self
-            .stepping
-            .swap(true, std::sync::atomic::Ordering::Relaxed)
-        {
-            return Ok(());
-        }
-        self.cancelled
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-
-        let walk = Walk {
-            endpoint: self.endpoint.clone(),
-            armed: self.armed.clone(),
-            budget: self.step_over_budget,
-            announce_after: self.announce_after,
-            cancelled: self.cancelled.clone(),
-            stepping: self.stepping.clone(),
-            unfinished: self.unfinished.clone(),
-            outgoing: self.outgoing.clone(),
-            seq: self.seq.clone()
-        };
-        if std::thread::Builder::new()
-            .name("amspiritlite-stepover".into())
-            .spawn(move || walk.run(out_of_this_one))
-            .is_err()
-        {
-            // No walk, so nothing must be left muting the run-state poller -
-            // which is the only thing that notices a breakpoint being hit.
-            self.stepping
-                .store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Err(why) = self.run_to(target) {
+            // An emulator that has stopped answering is a bad step, not a dead
+            // session: letting the error travel up out of `send` ends the
+            // session instead, and a debugger that disappears mid-step is far
+            // worse than a step that did not happen.
+            self.say(&format!("step over could not finish: {why}\n"));
+            self.announce_a_stop_anyway();
         }
         Ok(())
     }
-}
 
-/// A step-over walk, running off the peer's thread.
-///
-/// It owns copies of what it needs rather than borrowing the peer, which is
-/// the whole point: `send` goes on answering the editor while the walk runs,
-/// and it cannot do that while a walk holds the peer.
-struct Walk {
-    endpoint: String,
-    armed: Vec<u16>,
-    budget: usize,
-    announce_after: std::time::Duration,
-    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    stepping: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    unfinished: std::sync::Arc<std::sync::Mutex<Option<(u16, u16)>>>,
-    outgoing: std::sync::mpsc::Sender<Value>,
-    seq: std::sync::Arc<std::sync::atomic::AtomicI64>
-}
-
-/// How a walk ended: what to call the stop, and what the console is owed.
-struct Ending {
-    reason: &'static str,
-    note: Option<String>
-}
-
-impl Ending {
-    /// Where it was going, with nothing to explain.
-    fn arrived() -> Self {
-        Self {
-            reason: "step",
-            note: None
-        }
-    }
-}
-
-impl Walk {
-    fn run(self, out_of_this_one: bool) {
-        let walked = if out_of_this_one {
-            self.walk_out()
-        }
-        else {
-            self.walk_over()
+    /// Arm the address to come back to and let the machine run to it.
+    fn run_to(&mut self, target: u16) -> std::io::Result<()> {
+        // A breakpoint the user put there is theirs: it stays afterwards, and
+        // stopping on it is a breakpoint stop rather than the end of a step.
+        let was_the_editors = {
+            let mut set = self
+                .breakpoints
+                .lock()
+                .unwrap_or_else(|held| held.into_inner());
+            let known = set.is_the_editors(target);
+            if !known {
+                set.arm_temporary(target);
+            }
+            push_breakpoints(&self.endpoint, &set)?;
+            known
         };
-
-        // A walk that failed halfway is still a stop: the machine is wherever
-        // it got to, and the editor is owed the stop either way. Letting the
-        // error end the session instead would be a far worse failure than a
-        // step that did not finish - a debugger that disappears mid-step.
-        let ending = walked.unwrap_or_else(|why| {
-            Ending {
-                reason: "step",
-                note: Some(format!("step over could not finish: {why}\n"))
-            }
-        });
-        if let Some(note) = ending.note {
-            self.say(&note);
+        if let Ok(mut heading) = self.stepping_over.lock() {
+            *heading = Some(StepTarget {
+                address: target,
+                was_the_editors
+            });
         }
 
-        // The walk is over and the machine is paused; now the editor may hear
-        // about it. The poller is unmuted only afterwards, so it cannot squeeze
-        // a stop of its own in front of this one.
-        let seq = next_seq(&self.seq);
-        let _ = self.outgoing.send(crate::protocol::event(
-            "stopped",
-            json!({
-                "reason": ending.reason,
-                "description": "Execution stopped",
-                "threadId": 1,
-                "allThreadsStopped": true
-            }),
-            seq
-        ));
-        self.stepping
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+        perform(
+            &self.endpoint,
+            &Call::post("/api/config").body(json!({ "paused": false }).to_string())
+        )?;
+        // A resume is asked for here and happens over there, a moment later, so
+        // nothing is owed a stop until the machine has really gone.
+        self.wait_until_it_is_really_running();
+        self.expecting_stop
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
     }
 
-    /// Step *out* of the routine we are in, by the same walk: the address to
-    /// come back to is the one the `call` pushed, which is on top of the stack.
-    ///
-    /// A guess, and unavoidably so - `SP` points at a return address only
-    /// because that is what being inside a subroutine means, and nothing on a
-    /// Z80 says so. The budget is what keeps a wrong guess from running away.
-    fn walk_out(&self) -> std::io::Result<Ending> {
-        let state = machine(&self.endpoint)?;
-        let Some(sp) = register(&state, "SP").map(|sp| sp as u16)
-        else {
-            return Ok(Ending::arrived());
-        };
-        let stacked = bytes_at(&self.endpoint, sp, 2)?;
-        let [low, high] = stacked[..] else {
-            return Ok(Ending::arrived());
-        };
-        let target = u16::from(low) | (u16::from(high) << 8);
-        self.walk_to(target, &format!("stepping out to 0x{target:04X}"))
-    }
-
-    /// The walk itself, aimed at the instruction after the one at `PC`.
-    fn walk_over(&self) -> std::io::Result<Ending> {
-        let state = machine(&self.endpoint)?;
-        let Some(pc) = register(&state, "PC").map(|pc| pc as u16)
-        else {
-            // No idea where we are, so nothing to walk back to. One step is
-            // still a step.
-            perform(&self.endpoint, &Call::post("/api/step"))?;
-            return Ok(Ending::arrived());
-        };
-
-        // Picking up a walk that was interrupted, from exactly where it
-        // stopped. Anywhere else and this is a new step over, whatever was
-        // pending.
-        let pending = self
-            .unfinished
-            .lock()
-            .ok()
-            .and_then(|mut held| held.take());
-        if let Some((gave_up_at, target)) = pending
-            && gave_up_at == pc
-        {
-            return self.walk_to(target, &format!("carrying on to 0x{target:04X}"));
-        }
-
-        // Four bytes is the longest a Z80 instruction gets.
-        let bytes = bytes_at(&self.endpoint, pc, 4)?;
-        if !comes_back_to_the_next_instruction(&bytes) {
-            // A jump, a return, or an ordinary instruction: the address after
-            // it is either where one step lands anyway or somewhere control
-            // never returns to. Walking towards it would run the program to
-            // its budget.
-            perform(&self.endpoint, &Call::post("/api/step"))?;
-            return Ok(Ending::arrived());
-        }
-
-        let decoded = crate::disassemble::decode(pc, &bytes, 1);
-        let length = decoded
-            .first()
-            .map(|instruction| instruction.bytes.len() as u16)
-            .unwrap_or(1);
-        let what = decoded
-            .first()
-            .map(|instruction| format!("stepping over `{}`", instruction.text.trim()))
-            .unwrap_or_else(|| format!("stepping over the instruction at 0x{pc:04X}"));
-        self.walk_to(pc.wrapping_add(length), &what)
-    }
-
-    /// Step until `PC` is `target`, or until something better to stop for.
-    ///
-    /// There is no time limit. A routine is as long as it is, and a clock can
-    /// only ever be wrong in one direction or the other: short enough not to
-    /// annoy is short enough to cut a legitimate walk in half. What ends a walk
-    /// that has gone somewhere unexpected is the user, through `cancelled`.
-    fn walk_to(&self, target: u16, what: &str) -> std::io::Result<Ending> {
-        let started = std::time::Instant::now();
-        let mut announced = false;
-        for walked in 0..self.budget {
-            // Checked before the step rather than after it, so pressing pause
-            // during a walk that is going nowhere is answered by the next round
-            // trip rather than by the budget.
-            if self
-                .cancelled
-                .load(std::sync::atomic::Ordering::Relaxed)
-            {
-                let pc = self.give_up_at(target)?;
-                return Ok(Ending {
-                    reason: "pause",
-                    note: Some(format!(
-                        "step over stopped after {walked} instructions, at {pc} - \
-                         step over again to carry on\n"
-                    ))
-                });
-            }
-            // A walk long enough to be noticed is a walk worth explaining, or
-            // it is indistinguishable from a debugger that has hung.
-            if !announced && started.elapsed() >= self.announce_after {
-                announced = true;
-                self.say(&format!(
-                    "{what}: {walked} instructions so far, still going - \
-                     press pause to stop where it is\n"
-                ));
-            }
-            perform(&self.endpoint, &Call::post("/api/step"))?;
-            let state = machine(&self.endpoint)?;
-            let Some(now) = register(&state, "PC").map(|pc| pc as u16)
-            else {
-                return Ok(Ending::arrived());
-            };
-            // Back from whatever we stepped over...
-            if now == target {
-                return Ok(Ending::arrived());
-            }
-            // ...or somewhere the user asked to stop, which outranks finishing
-            // the walk: a breakpoint inside a routine must still be a
-            // breakpoint when you step over the call to it.
-            if self.armed.contains(&now) {
-                return Ok(Ending {
-                    reason: "breakpoint",
-                    note: None
-                });
+    /// One instruction, which is what stepping over anything else means.
+    fn step_once(&mut self, message: &Value) -> std::io::Result<()> {
+        let stepped = perform(&self.endpoint, &Call::post("/api/step"));
+        let seq = self.next_seq();
+        let _ = self
+            .outgoing
+            .send(crate::protocol::response(message, json!({}), seq));
+        match stepped {
+            Ok(_) => {
+                self.expecting_stop
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            },
+            Err(why) => {
+                self.say(&format!("step over could not finish: {why}\n"));
+                self.announce_a_stop_anyway();
             }
         }
-        let pc = self.give_up_at(target)?;
-        Ok(Ending {
-            reason: "step",
-            note: Some(format!(
-                "step over gave up after {} instructions without coming back; \
-                 stopped at {pc} - step over again to carry on\n",
-                self.budget
-            ))
-        })
-    }
-
-    /// Remember where an interrupted walk stopped and where it was heading, so
-    /// the next step over carries on instead of starting again, and say where
-    /// that was.
-    fn give_up_at(&self, target: u16) -> std::io::Result<String> {
-        let state = machine(&self.endpoint)?;
-        let now = register(&state, "PC").map(|pc| pc as u16);
-        if let Some(now) = now
-            && let Ok(mut held) = self.unfinished.lock()
-        {
-            *held = Some((now, target));
-        }
-        Ok(format!("0x{:04X}", now.unwrap_or(0)))
+        Ok(())
     }
 
     /// One line in the Debug Console.
     fn say(&self, note: &str) {
-        let seq = next_seq(&self.seq);
+        let seq = self.next_seq();
         let _ = self.outgoing.send(crate::protocol::event(
             "output",
             json!({ "category": "console", "output": note }),
             seq
         ));
     }
+
+    /// Tell the editor the program is stopped when nothing else will.
+    ///
+    /// Used only when a step failed outright: the machine never moved, so the
+    /// poller has no transition to notice, and an editor left believing the
+    /// program is running has a dead toolbar and no way back.
+    fn announce_a_stop_anyway(&self) {
+        let seq = self.next_seq();
+        let _ = self.outgoing.send(crate::protocol::event(
+            "stopped",
+            json!({
+                "reason": "step",
+                "description": "Execution stopped",
+                "threadId": 1,
+                "allThreadsStopped": true
+            }),
+            seq
+        ));
+    }
+
+    /// The address after the instruction at `PC`, when running to it is what
+    /// stepping over means; `None` when a plain step would do.
+    fn address_after_the_instruction_at_pc(&self) -> Option<u16> {
+        let state = machine(&self.endpoint).ok()?;
+        let pc = register(&state, "PC")? as u16;
+        // Four bytes is the longest a Z80 instruction gets.
+        let bytes = bytes_at(&self.endpoint, pc, 4).ok()?;
+        if !returns_to_the_next_instruction(&bytes) {
+            return None;
+        }
+        let length = crate::disassemble::decode(pc, &bytes, 1)
+            .first()
+            .map(|instruction| instruction.bytes.len() as u16)
+            .unwrap_or(1);
+        Some(pc.wrapping_add(length))
+    }
+
+    /// The address on top of the stack: where a `call` said to come back to.
+    ///
+    /// A guess, and unavoidably so - `SP` points at a return address only
+    /// because that is what being inside a subroutine means, and nothing on a
+    /// Z80 says so. A wrong guess arms a breakpoint that is never reached,
+    /// which is the same harmless outcome as stepping over a routine that
+    /// never returns.
+    fn address_to_return_to(&self) -> Option<u16> {
+        let state = machine(&self.endpoint).ok()?;
+        let sp = register(&state, "SP")? as u16;
+        let stacked = bytes_at(&self.endpoint, sp, 2).ok()?;
+        let [low, high] = stacked[..]
+        else {
+            return None;
+        };
+        Some(u16::from(low) | (u16::from(high) << 8))
+    }
+
+    /// Take every breakpoint this adapter armed by itself back out.
+    ///
+    /// A step over that never arrived leaves one behind on purpose - the
+    /// program did not do what stepping over it assumed, and guessing at a
+    /// recovery would be worse than leaving it - but the session must not hand
+    /// the emulator on with them still set.
+    fn forget_temporary_breakpoints(&mut self) {
+        if let Ok(mut heading) = self.stepping_over.lock() {
+            *heading = None;
+        }
+        let Ok(mut set) = self.breakpoints.lock()
+        else {
+            return;
+        };
+        if set.temporary.is_empty() {
+            return;
+        }
+        set.temporary.clear();
+        let _ = push_breakpoints(&self.endpoint, &set);
+    }
 }
 
-/// The next sequence number, shared between the peer and whatever walk it has
-/// running.
+/// The next sequence number, shared between the peer and the poller.
 fn next_seq(seq: &std::sync::atomic::AtomicI64) -> i64 {
     seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
 }
@@ -1242,14 +1167,16 @@ fn bytes_at(endpoint: &str, address: u16, count: u16) -> std::io::Result<Vec<u8>
     ))
 }
 
-/// Whether the instruction encoded here hands control back to the address
-/// after it.
+/// Whether stepping *over* this instruction means anything more than stepping
+/// into it.
 ///
-/// The only case where "step until `PC` is the next instruction" terminates.
-/// For everything else the address after the instruction is either where a
-/// single step lands anyway, or - for a jump or a return - somewhere control
-/// may never come back to at all.
-fn comes_back_to_the_next_instruction(bytes: &[u8]) -> bool {
+/// Only these hand control back to the address after themselves after doing
+/// work you may not want to watch, so only these are worth running to. For
+/// everything else - a jump, a return, an ordinary instruction - the address
+/// after the instruction is either where one step lands anyway or somewhere
+/// control never comes back to, and arming a breakpoint on it would be a
+/// breakpoint that is never hit.
+pub(crate) fn returns_to_the_next_instruction(bytes: &[u8]) -> bool {
     match bytes {
         // The repeating block instructions, which re-execute themselves until
         // they are done: `ldir`, `lddr`, `cpir`, `cpdr`, `inir`, `indr`,
@@ -1257,6 +1184,10 @@ fn comes_back_to_the_next_instruction(bytes: &[u8]) -> bool {
         // makes no visible progress - stepping *over* one is the only way to
         // get past it without holding the key down.
         [0xED, second, ..] if matches!(second, 0xB0..=0xB3 | 0xB8..=0xBB) => true,
+        // `djnz`, which is a loop written as one instruction: stepping over it
+        // is the only way to say "run the loop out" without setting a
+        // breakpoint by hand on the line below it.
+        [0x10, ..] => true,
         // `call nn`, and its eight conditional forms.
         [opcode, ..] if *opcode == 0xCD || opcode & 0b1100_0111 == 0b1100_0100 => true,
         // `rst n`.
@@ -1275,10 +1206,14 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
             .unwrap_or_default()
             .to_string();
 
-        // Noted as it goes past. Only this side ever sees the walk a step-over
-        // makes, so only this side can stop it on a breakpoint inside.
+        // The editor's set is remembered rather than merely forwarded: it has
+        // to go out again alongside whatever a step over arms behind it, since
+        // `/api/z80_bp` replaces the whole set every time it is written.
+        //
+        // Answered from here too, so a step over in flight cannot be disarmed
+        // by the editor changing a red dot.
         if command == "setInstructionBreakpoints" {
-            self.armed = message
+            let editors: Vec<u16> = message
                 .get("arguments")
                 .and_then(|a| a.get("breakpoints"))
                 .and_then(Value::as_array)
@@ -1294,19 +1229,30 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                         .collect()
                 })
                 .unwrap_or_default();
+            {
+                let mut set = self
+                    .breakpoints
+                    .lock()
+                    .unwrap_or_else(|held| held.into_inner());
+                set.editors = editors;
+                push_breakpoints(&self.endpoint, &set)?;
+            }
+            let seq = self.next_seq();
+            let _ = self
+                .outgoing
+                .send(crate::protocol::response(&message, json!({}), seq));
+            return Ok(());
         }
 
-        // Pause, disconnect and terminate all mean "stop what you are doing",
-        // and while a step-over walks that is the walk. It has no clock on it,
-        // so this is the only thing that ends one that went into the main loop
-        // - and the walk it is not running is nothing this costs.
-        if matches!(command.as_str(), "pause" | "disconnect" | "terminate") {
-            self.cancelled
-                .store(true, std::sync::atomic::Ordering::Relaxed);
+        // A session that ends must not hand the emulator back with breakpoints
+        // on addresses nobody can see. A step over that arrived cleans up after
+        // itself; one that never arrived is left alone until here.
+        if matches!(command.as_str(), "disconnect" | "terminate") {
+            self.forget_temporary_breakpoints();
         }
 
-        // Step over and step out are not one request here but many - see
-        // `step_over`.
+        // Step over and step out are the same trick, aimed at different
+        // addresses - see `step_over`.
         if command == "next" || command == "stepOut" {
             return self.step_over(&message, command == "stepOut");
         }
@@ -1362,7 +1308,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
         // is really running, and every register and stack frame it goes on to
         // ask for is sampled from a program in flight: a stop at a random
         // address, with no breakpoint anywhere near it.
-        if matches!(command.as_str(), "continue" | "stepIn" | "stepOut") {
+        if matches!(command.as_str(), "continue" | "stepIn") {
             self.expecting_stop
                 .store(true, std::sync::atomic::Ordering::Relaxed);
         }
@@ -1417,6 +1363,13 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
 
 impl Drop for AmspiritLitePeer {
     fn drop(&mut self) {
+        // An emulator the user keeps running must not be handed back with
+        // breakpoints on addresses nothing can show them. A `disconnect` does
+        // this too; this catches a session that ended some other way.
+        if self.launched.is_none() {
+            self.forget_temporary_breakpoints();
+        }
+
         // Only one we started. Leaving it running holds the port, and the next
         // session would attach to the previous program without saying so.
         if let Some(child) = self.launched.as_mut() {
@@ -1482,29 +1435,28 @@ fn body_of(response: &str) -> &str {
     }
 }
 
+/// What the run-state poller watches, and what it answers into.
+pub(crate) struct Stops {
+    pub(crate) endpoint: String,
+    pub(crate) out: std::sync::mpsc::Sender<Value>,
+    pub(crate) expecting_stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) stepping_over: std::sync::Arc<std::sync::Mutex<Option<StepTarget>>>,
+    pub(crate) breakpoints: std::sync::Arc<std::sync::Mutex<Breakpoints>>
+}
+
 /// Ask the emulator whether it is running, and report every change.
 ///
 /// Ten times a second: fast enough that a stop feels immediate, cheap enough
 /// that it is one small request on loopback. The alternative - waiting for an
 /// event - does not work, for the reasons in `connect`.
-fn watch_run_state(
-    endpoint: &str,
-    out: &std::sync::mpsc::Sender<Value>,
-    expecting_stop: &std::sync::atomic::AtomicBool,
-    stepping: &std::sync::atomic::AtomicBool
-) {
+fn watch_run_state(watched: &Stops) {
+    let endpoint = watched.endpoint.as_str();
     let mut running: Option<bool> = None;
     let mut seq = 1_000_000i64;
     let mut misses = 0u32;
 
     loop {
         std::thread::sleep(std::time::Duration::from_millis(100));
-
-        // A walk in progress reports itself when it ends. Whatever the machine
-        // looks like in the middle of one is not news.
-        if stepping.load(std::sync::atomic::Ordering::Relaxed) {
-            continue;
-        }
 
         let body = match perform(endpoint, &Call::get("/api/ping")) {
             Ok(body) => {
@@ -1541,20 +1493,13 @@ fn watch_run_state(
         // to notice - a step ends paused, and a continue that hits the same
         // breakpoint a frame later resumes and stops inside one poll interval -
         // but the editor is waiting to hear about it either way.
-        if paused && expecting_stop.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if paused
+            && watched
+                .expecting_stop
+                .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
             running = Some(false);
-            seq += 1;
-            let finished = crate::protocol::event(
-                "stopped",
-                json!({
-                    "reason": "breakpoint",
-                    "description": "Execution stopped",
-                    "threadId": 1,
-                    "allThreadsStopped": true
-                }),
-                seq
-            );
-            if out.send(finished).is_err() {
+            if !watched.announce_stop(&mut seq) {
                 return;
             }
             continue;
@@ -1576,31 +1521,143 @@ fn watch_run_state(
             continue;
         }
 
-        seq += 1;
-        let event = if paused {
-            crate::protocol::event(
-                "stopped",
-                json!({
-                    "reason": "breakpoint",
-                    "description": "Execution stopped",
-                    "threadId": 1,
-                    "allThreadsStopped": true
-                }),
-                seq
-            )
+        if paused {
+            if !watched.announce_stop(&mut seq) {
+                return;
+            }
         }
         else {
-            crate::protocol::event(
+            seq += 1;
+            let event = crate::protocol::event(
                 "continued",
                 json!({ "threadId": 1, "allThreadsContinued": true }),
                 seq
-            )
-        };
-        if out.send(event).is_err() {
-            return; // the session is gone
+            );
+            if watched.out.send(event).is_err() {
+                return; // the session is gone
+            }
         }
     }
 }
+
+impl Stops {
+    /// Tell the editor the machine has stopped, having first worked out
+    /// whether this is the end of a step over.
+    ///
+    /// Returns false when the session is gone.
+    fn announce_stop(&self, seq: &mut i64) -> bool {
+        let notice = self.settle(self.stopped_at());
+        if let Some(text) = notice.as_ref().and_then(|notice| notice.text.clone()) {
+            *seq += 1;
+            let said = crate::protocol::event(
+                "output",
+                json!({ "category": "console", "output": text }),
+                *seq
+            );
+            if self.out.send(said).is_err() {
+                return false;
+            }
+        }
+        *seq += 1;
+        let stopped = crate::protocol::event(
+            "stopped",
+            json!({
+                "reason": notice.map(|notice| notice.reason).unwrap_or("breakpoint"),
+                "description": "Execution stopped",
+                "threadId": 1,
+                "allThreadsStopped": true
+            }),
+            *seq
+        );
+        self.out.send(stopped).is_ok()
+    }
+
+    /// Where the machine is, when anything depends on knowing.
+    ///
+    /// Only asked for when a step over is in flight or a temporary breakpoint
+    /// has been left behind - otherwise this is a round trip nobody reads.
+    fn stopped_at(&self) -> Option<u16> {
+        let interested = self
+            .stepping_over
+            .lock()
+            .map(|heading| heading.is_some())
+            .unwrap_or(false)
+            || self
+                .breakpoints
+                .lock()
+                .map(|set| !set.temporary.is_empty())
+                .unwrap_or(false);
+        if !interested {
+            return None;
+        }
+        let state = machine(&self.endpoint).ok()?;
+        register(&state, "PC").map(|pc| pc as u16)
+    }
+
+    /// Account for the stop: retire a step over that arrived, and explain a
+    /// stop on a breakpoint the editor cannot show.
+    fn settle(&self, pc: Option<u16>) -> Option<Stop> {
+        let pc = pc?;
+        let heading = self
+            .stepping_over
+            .lock()
+            .ok()
+            .and_then(|mut heading| heading.take())?;
+
+        if heading.address == pc {
+            // Arrived. The breakpoint that brought us here was ours, so it goes
+            // away again; one the editor had armed there is the user's and
+            // stays, and stopping on it is a breakpoint stop like any other.
+            if !heading.was_the_editors
+                && let Ok(mut set) = self.breakpoints.lock()
+            {
+                set.disarm_temporary(pc);
+                let _ = push_breakpoints(&self.endpoint, &set);
+            }
+            return Some(Stop {
+                reason: if heading.was_the_editors {
+                    "breakpoint"
+                }
+                else {
+                    "step"
+                },
+                text: None
+            });
+        }
+
+        // Something else stopped us first - a breakpoint inside the routine
+        // being stepped over, or the user pressing pause. The step over is
+        // abandoned where it stands and its breakpoint is left armed: the
+        // program may still come back to it, and if it never does that is a
+        // bug in the program rather than something to recover from here.
+        let orphan = self
+            .breakpoints
+            .lock()
+            .map(|set| set.temporary.contains(&pc) && !set.is_the_editors(pc))
+            .unwrap_or(false);
+        if orphan {
+            // A temporary breakpoint has no red dot beside it, so a stop on one
+            // looks like a stop at nothing at all - which is exactly how this
+            // was reported the last time an invisible breakpoint fired.
+            return Some(Stop {
+                reason: "breakpoint",
+                text: Some(format!(
+                    "Stopped at 0x{pc:04X}, where an earlier step over put a breakpoint and \
+                     never came back to it. It has no red dot because the editor was never \
+                     told about it. It stays armed until the session ends.\n"
+                ))
+            });
+        }
+        None
+    }
+}
+
+/// What to call a stop, and what the console is owed about it.
+struct Stop {
+    reason: &'static str,
+    text: Option<String>
+}
+
 
 /// Read `/api/events` forever, turning each event into a DAP one.
 fn read_events(host: &str, out: &std::sync::mpsc::Sender<Value>) {

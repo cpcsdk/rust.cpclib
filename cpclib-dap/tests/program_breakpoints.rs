@@ -48,7 +48,8 @@ fn execution(address: u16) -> AssembledBreakpoint {
         page: 0,
         kind: AssembledBreakpointKind::Execution,
         extra: None,
-        name: None
+        name: None,
+        written_at: None
     }
 }
 
@@ -161,7 +162,8 @@ fn a_condition_is_reported_as_unsupported() {
         page: 0,
         kind: AssembledBreakpointKind::Execution,
         extra: Some("condition A==3".to_string()),
-        name: None
+        name: None,
+        written_at: None
     }]);
 
     assert_eq!(notices.len(), 1);
@@ -190,7 +192,8 @@ fn a_memory_watchpoint_becomes_a_watch_not_a_breakpoint() {
             write: true
         },
         extra: None,
-        name: Some("animation_state".to_string())
+        name: Some("animation_state".to_string()),
+        written_at: None
     }]);
 
     let watches = session.watch_requests();
@@ -215,7 +218,8 @@ fn an_io_breakpoint_is_reported_as_impossible() {
         page: 0,
         kind: AssembledBreakpointKind::Io,
         extra: None,
-        name: None
+        name: None,
+        written_at: None
     }]);
     assert_eq!(notices.len(), 1);
     assert!(notices[0].contains("I/O breakpoint"), "{}", notices[0]);
@@ -235,7 +239,8 @@ fn watches_are_armed_when_the_emulator_attaches() {
             write: true
         },
         extra: None,
-        name: Some("animation_state".to_string())
+        name: Some("animation_state".to_string()),
+        written_at: None
     }]);
     session.on_attached().unwrap();
 
@@ -304,7 +309,8 @@ fn a_watch_that_did_not_fit_is_reported() {
             write: true
         },
         extra: None,
-        name: Some("animation_state".to_string())
+        name: Some("animation_state".to_string()),
+        written_at: None
     }]);
     session.on_attached().unwrap();
 
@@ -709,4 +715,186 @@ fn a_suppressed_directive_is_not_announced() {
         .unwrap();
 
     assert!(session.program_breakpoint_notice().is_none());
+}
+
+/// A directive written in a macro body, armed at the address of the
+/// instruction the expansion put after it.
+fn from_a_macro(address: u16, file: &str, line: u32) -> AssembledBreakpoint {
+    AssembledBreakpoint {
+        address,
+        page: 0,
+        kind: AssembledBreakpointKind::Execution,
+        extra: None,
+        name: None,
+        written_at: Some(
+            cpclib_asm::assembler::delayed_command::BreakpointSource {
+                file: file.to_string(),
+                line,
+                column: 2
+            }
+        )
+    }
+}
+
+/// Stop the program at `address` on a breakpoint, and hand back everything the
+/// adapter said.
+fn stop_on_a_breakpoint(
+    session: &mut Session<RecordingPeer>,
+    address: u16
+) -> Vec<serde_json::Value> {
+    session.on_emulator_message(&json!({
+        "type": "event", "event": "stopped",
+        "body": {"reason": "breakpoint", "threadId": 1}
+    }));
+    session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{
+            "id": 1, "name": format!("Z80 @ 0x{address:04X}"), "line": 0,
+            "instructionPointerReference": format!("0x{address:04X}")
+        }]}
+    }))
+}
+
+/// The whole reason a per-stop link is needed: the directive is in one file
+/// and the stop is in another, with no red dot anywhere to explain it.
+#[test]
+fn a_stop_on_a_macro_directive_links_to_where_it_is_written() {
+    let mut session = attached();
+    session.adopt_program_breakpoints(&[from_a_macro(0x4000, "macros.asm", 4)]);
+
+    let out = stop_on_a_breakpoint(&mut session, 0x4000);
+    let note = out
+        .iter()
+        .find(|message| {
+            message["event"] == json!("output")
+                && message["body"]["output"]
+                    .as_str()
+                    .is_some_and(|text| text.contains("BREAKPOINT"))
+        })
+        .unwrap_or_else(|| panic!("{out:#?}"));
+
+    let text = note["body"]["output"].as_str().unwrap();
+    assert!(
+        text.contains("macros.asm:4:2"),
+        "a location an editor turns into a link: {text}"
+    );
+}
+
+/// A directive on the line the program stopped on is already on screen; a link
+/// to it would be noise.
+#[test]
+fn a_directive_on_the_stopped_line_gets_no_link() {
+    let mut session = attached();
+    // `main.asm:10` is what `0x4000` resolves to in this map.
+    session.adopt_program_breakpoints(&[from_a_macro(0x4000, "main.asm", 10)]);
+
+    let out = stop_on_a_breakpoint(&mut session, 0x4000);
+    assert!(
+        !out.iter().any(|message| {
+            message["body"]["output"]
+                .as_str()
+                .is_some_and(|text| text.contains("BREAKPOINT"))
+        }),
+        "{out:#?}"
+    );
+}
+
+/// Stepping onto an armed address is the user walking there themselves, and
+/// saying so on every step through a macro-heavy demo would be noise.
+#[test]
+fn a_step_onto_a_directive_says_nothing() {
+    let mut session = attached();
+    session.adopt_program_breakpoints(&[from_a_macro(0x4000, "macros.asm", 4)]);
+
+    session.on_emulator_message(&json!({
+        "type": "event", "event": "stopped",
+        "body": {"reason": "step", "threadId": 1}
+    }));
+    let out = session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{
+            "id": 1, "name": "Z80 @ 0x4000", "line": 0,
+            "instructionPointerReference": "0x4000"
+        }]}
+    }));
+    assert!(
+        !out.iter().any(|message| {
+            message["body"]["output"]
+                .as_str()
+                .is_some_and(|text| text.contains("BREAKPOINT"))
+        }),
+        "{out:#?}"
+    );
+}
+
+/// A stop that no program directive armed says nothing about directives.
+#[test]
+fn a_stop_at_an_unarmed_address_gets_no_link() {
+    let mut session = attached();
+    session.adopt_program_breakpoints(&[from_a_macro(0x8000, "macros.asm", 4)]);
+
+    let out = stop_on_a_breakpoint(&mut session, 0x4000);
+    assert!(
+        !out.iter().any(|message| {
+            message["body"]["output"]
+                .as_str()
+                .is_some_and(|text| text.contains("BREAKPOINT"))
+        }),
+        "{out:#?}"
+    );
+}
+
+/// A directive names its file the way the `include` that pulled it in did,
+/// which is routinely a bare name - and a bare name is not a link. The source
+/// map holds the same file as an absolute path, and that is what goes out.
+#[test]
+fn a_relative_directive_file_is_resolved_against_the_source_map() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["/somewhere/src/main.asm".into()],
+        rows: vec![SourceMapRow::flat(0, 10, 0x4000, 3)]
+    });
+    let mut session = Session::new(RecordingPeer::new(), map);
+    session.on_attached().unwrap();
+    session.adopt_program_breakpoints(&[from_a_macro(0x4000, "macros.asm", 4)]);
+
+    let out = stop_on_a_breakpoint(&mut session, 0x4000);
+    let note = out
+        .iter()
+        .find(|message| {
+            message["body"]["output"]
+                .as_str()
+                .is_some_and(|text| text.contains("BREAKPOINT"))
+        })
+        .unwrap_or_else(|| panic!("{out:#?}"));
+    let text = note["body"]["output"].as_str().unwrap();
+    // `macros.asm` is not in this map at all, so it stays as the directive
+    // spelled it - there is nothing better to say.
+    assert!(text.contains("macros.asm:4:2"), "{text}");
+}
+
+/// The same, for a file the map does know: the absolute path wins.
+#[test]
+fn a_known_relative_file_becomes_the_path_the_editor_can_open() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["/somewhere/src/main.asm".into(), "/somewhere/src/macros.asm".into()],
+        rows: vec![
+            SourceMapRow::flat(0, 10, 0x4000, 3),
+            SourceMapRow::flat(1, 6, 0x8000, 1),
+        ]
+    });
+    let mut session = Session::new(RecordingPeer::new(), map);
+    session.on_attached().unwrap();
+    session.adopt_program_breakpoints(&[from_a_macro(0x4000, "macros.asm", 5)]);
+
+    let out = stop_on_a_breakpoint(&mut session, 0x4000);
+    let note = out
+        .iter()
+        .find(|message| {
+            message["body"]["output"]
+                .as_str()
+                .is_some_and(|text| text.contains("BREAKPOINT"))
+        })
+        .unwrap_or_else(|| panic!("{out:#?}"));
+    let text = note["body"]["output"].as_str().unwrap();
+    assert!(text.contains("/somewhere/src/macros.asm:5:2"), "{text}");
 }

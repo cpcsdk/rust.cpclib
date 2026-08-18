@@ -229,7 +229,70 @@ impl PrintOrPauseCommand {
 #[derive(Debug, Clone)]
 pub struct BreakpointCommand {
     pub(crate) brk: InnerBreakpointCommand,
-    pub(crate) info: AssemblerError
+    pub(crate) info: AssemblerError,
+    /// Where the directive itself is written.
+    ///
+    /// Kept apart from `info`: that one is rendered to a string as soon as it
+    /// is built, and rendering is what loses the span. A debugger stopping at
+    /// this breakpoint needs the location back - a `BREAKPOINT` inside a macro
+    /// body stops the program on the line *after* every expansion, in a file
+    /// the user never marked, and only this says where it was actually asked
+    /// for.
+    pub(crate) written_at: Option<BreakpointSource>
+}
+
+/// Where a `BREAKPOINT` directive is written, in the file's own numbering.
+///
+/// A macro body is re-parsed as a source of its own, so the span's line counts
+/// from the body rather than from the file; the conversion happens here, once,
+/// rather than being left for every reader to get wrong.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BreakpointSource {
+    pub file: String,
+    /// 1-based.
+    pub line: u32,
+    /// 1-based, and `1` whenever the expansion cannot be mapped back onto a
+    /// column of the file - pointing at the start of the line is honest, a
+    /// column inside the substituted text is not.
+    pub column: u32
+}
+
+impl BreakpointSource {
+    /// The location of the directive, from the span the parser gave it.
+    fn of_span(span: &Z80Span) -> Self {
+        let context = span.context();
+        let (line, column) = span.relative_line_and_column();
+        let (line, column) = (line.max(1) as u32, column.max(1) as u32);
+
+        let Some(name) = context
+            .context_name()
+            .filter(|_| context.filename().is_none() && context.is_expansion())
+        else {
+            let file = context
+                .filename()
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| span.filename().to_owned());
+            return Self { file, line, column };
+        };
+
+        // Inside an expansion the columns belong to the substituted text - the
+        // map built while substituting is the only thing that can put them
+        // back, and a struct expansion has none at all.
+        let column = context
+            .expansion_columns()
+            .and_then(|columns| {
+                // Width zero: only the start is wanted, and a `BREAKPOINT`
+                // span reaches further than the directive itself.
+                columns.source_columns(span.offset_from_start(), column as usize, 0)
+            })
+            .map(|(start, _)| start as u32)
+            .unwrap_or(1);
+        Self {
+            file: crate::assembler::listing_output::source_map::real_file_name(name).to_owned(),
+            line: line + crate::assembler::listing_output::source_map::expansion_line_offset(name),
+            column
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -273,15 +336,21 @@ impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointC
         let brk = value.0.into();
         let repr = brk.info_repr();
 
+        let span = value.1.unwrap();
+        let written_at = Some(BreakpointSource::of_span(&span));
         let info = AssemblerError::RelocatedInfo {
             info: Box::new(AssemblerError::AssemblingError {
                 msg: format!("Add a breakpoint: {} ", repr)
             }),
-            span: value.1.unwrap()
+            span
         }
         .render();
 
-        Self { brk, info }
+        Self {
+            brk,
+            info,
+            written_at
+        }
     }
 }
 
@@ -302,7 +371,15 @@ pub struct AssembledBreakpoint {
     /// condition, a size, a mask. Held as text because its only use is telling
     /// the user what an emulator could not honour.
     pub extra: Option<String>,
-    pub name: Option<String>
+    pub name: Option<String>,
+    /// Where the directive is written, when the assembler knew.
+    ///
+    /// Only interesting when it differs from the line the program stops on,
+    /// which is exactly the macro case: `BREAKPOINT` in a macro body arms the
+    /// address of the next real instruction, so the stop lands wherever the
+    /// macro was *used*.
+    #[serde(default)]
+    pub written_at: Option<BreakpointSource>
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -326,7 +403,8 @@ impl BreakpointCommand {
                     page: brk.page,
                     kind: AssembledBreakpointKind::Execution,
                     extra: None,
-                    name: None
+                    name: None,
+                    written_at: self.written_at.clone()
                 }
             },
             InnerBreakpointCommand::Advanced(brk) => {
@@ -374,7 +452,8 @@ impl BreakpointCommand {
                     name: brk
                         .name
                         .as_ref()
-                        .map(|n| AsRef::<str>::as_ref(n).to_string())
+                        .map(|n| AsRef::<str>::as_ref(n).to_string()),
+                    written_at: self.written_at.clone()
                 }
             }
         }

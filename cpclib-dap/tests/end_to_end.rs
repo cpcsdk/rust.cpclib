@@ -176,3 +176,48 @@ fn map_at_the_contested_address() {
         }
     }
 }
+
+/// Where a real project's `BREAKPOINT` directives are written.
+///
+/// The one that matters is written inside `macros.asm`'s `DEBUG` macro and
+/// arms an address in whichever file used the macro - the stop the user
+/// reported as "the emulator stopped at random locations". Run with a copy of
+/// birthtro at /tmp/bt, its `DEBUG` macro holding a `breakpoint`:
+/// `cargo test -p cpclib-dap --test end_to_end directives_ -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn directives_say_where_they_are_written() {
+    let entry = std::path::Path::new("/tmp/bt/src/sna.asm");
+    if !entry.exists() {
+        eprintln!("no /tmp/bt; copy the project there first");
+        return;
+    }
+    let config = cpclib_project::config::load_config(Some(std::path::Path::new("/tmp/bt")))
+        .config
+        .asm;
+    let built = match cpclib_dap::launch::assemble_for_debug(entry, &config) {
+        Ok(built) => built,
+        Err(problem) => {
+            eprintln!("assembling failed: {problem}");
+            return;
+        }
+    };
+
+    for breakpoint in built.breakpoints.iter().take(20) {
+        let written = breakpoint
+            .written_at
+            .as_ref()
+            .map(|at| format!("{}:{}:{}", at.file, at.line, at.column))
+            .unwrap_or_else(|| "unknown".to_string());
+        let stops_at = built
+            .source_map
+            .location_at(breakpoint.address as u32)
+            .map(|at| format!("{}:{}", at.file.display(), at.line))
+            .unwrap_or_else(|| "nowhere".to_string());
+        eprintln!("0x{:04X}: written {written}, stops at {stops_at}", breakpoint.address);
+    }
+    assert!(
+        built.breakpoints.iter().all(|b| b.written_at.is_some()),
+        "every directive knows where it was written"
+    );
+}
