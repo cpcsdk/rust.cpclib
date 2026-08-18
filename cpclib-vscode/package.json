@@ -197,6 +197,21 @@
         "command": "cpclib.runAsm",
         "title": "CPClib: Run this assembly file",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.openDisassembly",
+        "title": "CPClib: Open the disassembly view",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.openMemoryView",
+        "title": "CPClib: Open the memory view",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.revealProgramCounter",
+        "title": "CPClib: Reveal the program counter in the source",
+        "category": "CPClib"
       }
     ],
     "menus": {
@@ -225,6 +240,20 @@
           "command": "cpclib.debugThisFile",
           "when": "editorLangId == basm",
           "group": "9_cutcopypaste"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "cpclib.openDisassembly",
+          "when": "inDebugMode"
+        },
+        {
+          "command": "cpclib.openMemoryView",
+          "when": "inDebugMode"
+        },
+        {
+          "command": "cpclib.revealProgramCounter",
+          "when": "inDebugMode"
         }
       ]
     },
@@ -359,7 +388,7 @@
             "message": 2
           },
           {
-            "regexp": "^(?:\\[[^\\]]*\\]\\s*)?\\s*(?:┌─|-->)\\s+(.*):(\\d+):(\\d+)$",
+            "regexp": "^(?:\\[[^\\]]*\\]\\s*)?\\s*(?:\u250c\u2500|-->)\\s+(.*):(\\d+):(\\d+)$",
             "file": 1,
             "line": 2,
             "column": 3

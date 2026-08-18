@@ -7,6 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
+use cpclib_asm::assembler::listing_output::SourceMapFile;
 use cpclib_project::config::AsmConfig;
 use cpclib_project::srcmap::SourceMap;
 use cpclib_tokens::symbols::SymbolsTableTrait;
@@ -138,6 +139,122 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
             .resolved_against(entry)
             .with_symbols(symbols),
         snapshot,
+        entry: entry.to_path_buf()
+    })
+}
+
+/// Everything a debug session needs, read from `basm --sourcemap` instead of
+/// assembled again.
+///
+/// The whole reason a debug launch is slow: the project's build already
+/// assembled this program, and the adapter assembled it a second time to learn
+/// where the lines went. If the build wrote the map, that second assemble is
+/// pure waste - 32 seconds of it, on a real demo, against sixteen milliseconds
+/// to read the file.
+///
+/// `None` whenever anything is not certainly right. A map that does not match
+/// the program is far worse than a slow launch: every line it reports looks
+/// plausible and is wrong, and nothing says so.
+///
+/// The snapshot is **not** in it, so this is only for the caller that has the
+/// snapshot already - a rule-based launch, where the bytes come from the rule's
+/// own output.
+pub fn cached_for_debug(
+    entry: &Path,
+    config: &AsmConfig,
+    why: &mut Vec<String>
+) -> Option<Launched> {
+    // Where the build says it writes the map, not where we would have guessed.
+    // The name is the user's - `sna.map`, `birthtro.map`, `build/sna.map` - and
+    // it is written in the same command as the `-D` values, so both are read
+    // from there. Falling back to the entry's own name only helps someone who
+    // happened to pick it.
+    let build = cpclib_project::build_defs::definitions_for_entry(entry);
+    let path = build
+        .source_map
+        .clone()
+        .unwrap_or_else(|| entry.with_extension("map"));
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(problem) => {
+            why.push(format!(
+                "no source map at {} ({problem}), so the program is assembled again. \
+                 Add `--sourcemap {}` to the basm command in your build file to skip that.",
+                path.display(),
+                path.file_name().unwrap_or_default().to_string_lossy()
+            ));
+            return None;
+        }
+    };
+    let Some(file) = SourceMapFile::from_json(&text)
+    else {
+        why.push(format!(
+            "{} was written by another version of basm, so it is ignored and the \
+             program is assembled again.",
+            path.display()
+        ));
+        return None;
+    };
+
+    // Assembled from other `-D` values is another program under the same file
+    // names - the one difference nothing else here could notice.
+    let wanted: std::collections::BTreeMap<String, String> = build
+        .values
+        .iter()
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    if !file.assembled_with(&wanted) {
+        why.push(format!(
+            "{} was assembled with different -D definitions ({:?}) than this build passes \
+             ({:?}), so it describes another program and is ignored.",
+            path.display(),
+            file.definitions,
+            wanted
+        ));
+        return None;
+    }
+
+    // Older than any source it describes means the sources moved on.
+    let written = std::fs::metadata(&path).ok()?.modified().ok()?;
+    let entry_is_older = std::fs::metadata(entry)
+        .ok()?
+        .modified()
+        .ok()
+        .is_some_and(|source| source <= written);
+    if !entry_is_older {
+        why.push(format!(
+            "{} is older than {}, so it is ignored.",
+            path.display(),
+            entry.display()
+        ));
+        return None;
+    }
+    for name in &file.map.files {
+        let Some(source) = std::fs::metadata(name).ok().and_then(|m| m.modified().ok())
+        else {
+            why.push(format!("{name} is named by the source map but cannot be read."));
+            return None;
+        };
+        if source > written {
+            why.push(format!(
+                "{name} is newer than {}, so the map is stale and is ignored.",
+                path.display()
+            ));
+            return None;
+        }
+    }
+
+    let _ = config;
+    Some(Launched {
+        breakpoints: file.breakpoints.clone(),
+        image: file.image_bytes(),
+        entry_point: file.entry_point,
+        source_map: SourceMap::from_raw(&file.map)
+            .resolved_against(entry)
+            .with_symbols(file.symbols.clone().into_iter().collect()),
+        // The caller brings its own; this path exists for the launch that
+        // already has one.
+        snapshot: Vec::new(),
         entry: entry.to_path_buf()
     })
 }

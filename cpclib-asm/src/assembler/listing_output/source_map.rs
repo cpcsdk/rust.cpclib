@@ -10,10 +10,10 @@
 //! times naturally produces five rows for the same source line. That is
 //! correct and load-bearing: each is a distinct address the line occupies.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// One emitted run of bytes, and the source line it came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceMapRow {
     /// Index into [`RawSourceMap::files`].
     pub file: u16,
@@ -118,10 +118,147 @@ fn split_expansion(name: &str) -> Option<(&str, u32)> {
 }
 
 /// The rows, plus the file table they index into.
-#[derive(Debug, Clone, Default)]
+///
+/// Serialisable so an assemble can be *kept*: a build that already produced
+/// this can hand it to a debugger instead of making it assemble the whole
+/// program a second time to learn the same thing. See `basm --sourcemap`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct RawSourceMap {
     pub files: Vec<String>,
     pub rows: Vec<SourceMapRow>
+}
+
+/// A source map as a file: the map itself, and the symbol table a debugger
+/// needs beside it to turn a label into an address.
+///
+/// Written by `basm --sourcemap`, read by anything that would otherwise
+/// re-assemble the program to rebuild both.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct SourceMapFile {
+    /// What produced it, so a reader can refuse a file from another version
+    /// rather than mis-parse it.
+    pub version: String,
+    pub map: RawSourceMap,
+    /// Label to address, as `Env` knows them at the end of the assemble.
+    pub symbols: HashMap<String, u32>,
+    /// The `-D` definitions the program was assembled with, verbatim and
+    /// sorted.
+    ///
+    /// A map is only valid for the program that produced it, and `-D` is
+    /// exactly how one source tree produces *different* programs - a demo
+    /// assembled with another picture, another music, another sprite size is a
+    /// different binary with the same file names. Nothing else in this file
+    /// would notice: the version matches, the paths match, every line looks
+    /// plausible and every address is wrong. So they are recorded, and a
+    /// reader that knows which definitions it wants can check.
+    #[serde(default)]
+    pub definitions: BTreeMap<String, String>,
+    /// The `BREAKPOINT` directives the program itself carries.
+    ///
+    /// Here because a debugger that has this file must not have to assemble
+    /// the program again to learn them - which is the whole point - and
+    /// because they are the one thing it cannot recover from the snapshot: an
+    /// emulator does not adopt the breakpoints a `.sna` carries.
+    #[serde(default)]
+    pub breakpoints: Vec<crate::assembler::delayed_command::AssembledBreakpoint>,
+    /// The assembled bytes, base64, for telling two pages apart by what is
+    /// really in memory.
+    ///
+    /// Base64 rather than an array of numbers: 128K of JSON integers is half a
+    /// megabyte of text and slow to parse, for bytes nobody reads by eye.
+    #[serde(default)]
+    pub image: String,
+    /// Where the program starts, when it says.
+    #[serde(default)]
+    pub entry_point: Option<u16>
+}
+
+impl SourceMapFile {
+    /// The version this build of the assembler writes and accepts.
+    pub const VERSION: &'static str = "cpclib-source-map-1";
+
+    pub fn new(
+        map: RawSourceMap,
+        symbols: HashMap<String, u32>,
+        definitions: BTreeMap<String, String>
+    ) -> Self {
+        Self {
+            version: Self::VERSION.to_string(),
+            map,
+            symbols,
+            definitions,
+            breakpoints: Vec::new(),
+            image: String::new(),
+            entry_point: None
+        }
+    }
+
+    /// Everything else a debugger would otherwise assemble the program to
+    /// learn: its `BREAKPOINT` directives, its bytes, and where it starts.
+    pub fn with_program(
+        mut self,
+        breakpoints: Vec<crate::assembler::delayed_command::AssembledBreakpoint>,
+        image: &[u8],
+        entry_point: Option<u16>
+    ) -> Self {
+        self.breakpoints = breakpoints;
+        self.image = base64_encode(image);
+        self.entry_point = entry_point;
+        self
+    }
+
+    /// The assembled bytes, decoded.
+    pub fn image_bytes(&self) -> Vec<u8> {
+        base64_decode(&self.image)
+    }
+
+    /// Whether this map was made with exactly these definitions.
+    ///
+    /// Exactly: a definition the reader does not know about is as much of a
+    /// mismatch as one it has and the file does not, because either way the
+    /// program on disc is not the program this map describes.
+    pub fn assembled_with(&self, definitions: &BTreeMap<String, String>) -> bool {
+        // Both sides unquoted at comparison time, not merely on the way in.
+        // `-DFACE=\"face3\"` reaches the assembler as `"face3"` and reaches a
+        // build-file reader as `face3`; they are the same definition, and a
+        // map written before this was normalised is still a valid map. Doing
+        // it here means the check does not depend on which version wrote the
+        // file - it depends only on what the definitions mean.
+        let bare = |values: &BTreeMap<String, String>| -> BTreeMap<String, String> {
+            values
+                .iter()
+                .map(|(name, value)| (name.clone(), unquoted(value).to_string()))
+                .collect()
+        };
+        bare(&self.definitions) == bare(definitions)
+    }
+
+    /// The `-D` arguments a command line carries, in this file's shape.
+    ///
+    /// `NAME=value`, or `NAME` alone for the bare form basm reads as `1`.
+    pub fn definitions_from_arguments<I, S>(arguments: I) -> BTreeMap<String, String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>
+    {
+        arguments
+            .into_iter()
+            .map(|argument| {
+                let argument = argument.as_ref();
+                match argument.split_once('=') {
+                    Some((name, value)) => (name.to_string(), unquoted(value).to_string()),
+                    None => (argument.to_string(), "1".to_string())
+                }
+            })
+            .collect()
+    }
+
+    /// `None` for a file written by a different version - re-assembling is
+    /// slow, and a map that does not match the program is worse than slow.
+    pub fn from_json(text: &str) -> Option<Self> {
+        let parsed: Self = serde_json::from_str(text).ok()?;
+        (parsed.version == Self::VERSION).then_some(parsed)
+    }
 }
 
 /// Accumulates rows during the listing pass.
@@ -262,4 +399,244 @@ mod tests {
         assert_eq!(outer, inside);
         assert_eq!(collector.snapshot().files, vec!["demo.asm".to_string()]);
     }
+}
+
+#[cfg(test)]
+mod source_map_file_tests {
+    use super::*;
+
+    fn a_map() -> RawSourceMap {
+        RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![SourceMapRow {
+                file: 0,
+                line: 12,
+                logical: 0x4000,
+                physical: 0x4000,
+                page: 0,
+                column: 2,
+                column_end: 9,
+                len: 3
+            }]
+        }
+    }
+
+    /// The whole point: an assemble that has been done once can be read back
+    /// instead of done again.
+    #[test]
+    fn a_written_map_reads_back_the_same() {
+        let mut symbols = HashMap::new();
+        symbols.insert("start".to_string(), 0x4000u32);
+        let definitions = SourceMapFile::definitions_from_arguments(["FACE=\"face3\"", "DEBUG"]);
+        let written =
+            serde_json::to_string(&SourceMapFile::new(a_map(), symbols, definitions)).unwrap();
+
+        let read = SourceMapFile::from_json(&written).expect("reads back");
+        assert_eq!(read.map.files, vec!["main.asm".to_string()]);
+        assert_eq!(read.map.rows.len(), 1);
+        assert_eq!(read.map.rows[0].line, 12);
+        assert_eq!(read.map.rows[0].logical, 0x4000);
+        assert_eq!(read.map.rows[0].column_end, 9);
+        assert_eq!(read.symbols.get("start"), Some(&0x4000));
+        // The *value*, not the quoting the shell carried it in - that is the
+        // form whoever reads this back has.
+        assert_eq!(read.definitions.get("FACE").map(String::as_str), Some("face3"));
+        assert_eq!(
+            read.definitions.get("DEBUG").map(String::as_str),
+            Some("1"),
+            "a bare -D is the 1 basm reads it as"
+        );
+    }
+
+    /// Quoting is not a difference, whichever side carries it.
+    ///
+    /// A map written before the values were normalised still holds
+    /// `"\"face3\""` where a build file reader has `face3`. Those are the same
+    /// definition, and refusing the map over it sends the user to re-assemble
+    /// a program that was perfectly well described.
+    #[test]
+    fn quoting_is_not_a_difference() {
+        let mut quoted = BTreeMap::new();
+        quoted.insert("FACE".to_string(), "\"face3\"".to_string());
+        quoted.insert("WIDTH".to_string(), "24".to_string());
+        let file = SourceMapFile {
+            definitions: quoted,
+            ..SourceMapFile::new(a_map(), HashMap::new(), BTreeMap::new())
+        };
+
+        let mut bare = BTreeMap::new();
+        bare.insert("FACE".to_string(), "face3".to_string());
+        bare.insert("WIDTH".to_string(), "24".to_string());
+        assert!(file.assembled_with(&bare), "same definitions, other quoting");
+
+        bare.insert("FACE".to_string(), "face4".to_string());
+        assert!(!file.assembled_with(&bare), "and a real difference still is one");
+    }
+
+    /// A map made with other `-D` values describes another program.
+    ///
+    /// The same sources with `-DFACE=\"face4\"` assemble to different bytes at
+    /// different addresses, under the same file names - so every line in the
+    /// map looks plausible and every address is wrong. Nothing else in the
+    /// file would catch it: the version matches and the paths match.
+    #[test]
+    fn a_map_made_with_other_definitions_is_recognised() {
+        let file = SourceMapFile::new(
+            a_map(),
+            HashMap::new(),
+            SourceMapFile::definitions_from_arguments(["FACE=\"face3\"", "SPRITE_WIDTH=24"])
+        );
+
+        assert!(file.assembled_with(&SourceMapFile::definitions_from_arguments([
+            "FACE=\"face3\"",
+            "SPRITE_WIDTH=24"
+        ])));
+        // Order is not a difference; the values are.
+        assert!(file.assembled_with(&SourceMapFile::definitions_from_arguments([
+            "SPRITE_WIDTH=24",
+            "FACE=\"face3\""
+        ])));
+        assert!(
+            !file.assembled_with(&SourceMapFile::definitions_from_arguments([
+                "FACE=\"face4\"",
+                "SPRITE_WIDTH=24"
+            ])),
+            "another picture is another program"
+        );
+        // One missing on either side is still a mismatch.
+        assert!(
+            !file.assembled_with(&SourceMapFile::definitions_from_arguments([
+                "FACE=\"face3\""
+            ]))
+        );
+        assert!(
+            !file.assembled_with(&SourceMapFile::definitions_from_arguments([
+                "FACE=\"face3\"",
+                "SPRITE_WIDTH=24",
+                "EXTRA=1"
+            ]))
+        );
+    }
+
+    /// A file from another version is refused rather than half-understood.
+    ///
+    /// Re-assembling is slow, which is the whole reason this file exists - but
+    /// a map that does not match the program is worse than slow, because every
+    /// line it reports is wrong and nothing says so.
+    #[test]
+    fn a_map_from_another_version_is_refused() {
+        let mut file = SourceMapFile::new(a_map(), HashMap::new(), BTreeMap::new());
+        file.version = "cpclib-source-map-0".into();
+        let written = serde_json::to_string(&file).unwrap();
+        assert!(SourceMapFile::from_json(&written).is_none());
+    }
+
+    /// The program travels with the map, so a debugger needs nothing else.
+    #[test]
+    fn the_program_itself_survives_the_round_trip() {
+        let file = SourceMapFile::new(a_map(), HashMap::new(), BTreeMap::new()).with_program(
+            vec![],
+            &[0x3E, 0x01, 0x00, 0xC9, 0xFF],
+            Some(0x4000)
+        );
+        let read =
+            SourceMapFile::from_json(&serde_json::to_string(&file).unwrap()).expect("reads back");
+        assert_eq!(read.image_bytes(), vec![0x3E, 0x01, 0x00, 0xC9, 0xFF]);
+        assert_eq!(read.entry_point, Some(0x4000));
+    }
+
+    /// Base64 of every length, since the padding is where it goes wrong.
+    #[test]
+    fn every_length_of_image_comes_back_unchanged() {
+        for len in 0..40usize {
+            let bytes: Vec<u8> = (0..len).map(|i| (i * 7 + 3) as u8).collect();
+            let file = SourceMapFile::new(a_map(), HashMap::new(), BTreeMap::new())
+                .with_program(vec![], &bytes, None);
+            assert_eq!(file.image_bytes(), bytes, "length {len}");
+        }
+    }
+
+    /// And so is anything that is not one of these at all.
+    #[test]
+    fn nonsense_is_refused() {
+        assert!(SourceMapFile::from_json("{}").is_none());
+        assert!(SourceMapFile::from_json("not json").is_none());
+    }
+}
+
+/// A definition's *value*, without the shell quoting around it.
+///
+/// `-DFACE=\"face3\"` reaches the assembler as `"face3"` and means the string
+/// `face3`. Whoever reads this file back has the value, not the command line
+/// that carried it, so storing the quotes made every comparison fail - which
+/// is worse than not comparing at all, because it looks like a mismatch.
+fn unquoted(value: &str) -> &str {
+    let bytes = value.as_bytes();
+    if bytes.len() >= 2
+        && (bytes[0] == b'"' || bytes[0] == b'\'')
+        && bytes[bytes.len() - 1] == bytes[0]
+    {
+        &value[1..value.len() - 1]
+    }
+    else {
+        value
+    }
+}
+
+/// Base64, without a dependency for sixty lines of table lookup.
+fn base64_encode(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        out.push(ALPHABET[(n >> 18) as usize & 0x3F] as char);
+        out.push(ALPHABET[(n >> 12) as usize & 0x3F] as char);
+        out.push(if chunk.len() > 1 {
+            ALPHABET[(n >> 6) as usize & 0x3F] as char
+        }
+        else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ALPHABET[n as usize & 0x3F] as char
+        }
+        else {
+            '='
+        });
+    }
+    out
+}
+
+fn base64_decode(text: &str) -> Vec<u8> {
+    let value = |c: u8| -> Option<u32> {
+        match c {
+            b'A'..=b'Z' => Some(u32::from(c - b'A')),
+            b'a'..=b'z' => Some(u32::from(c - b'a') + 26),
+            b'0'..=b'9' => Some(u32::from(c - b'0') + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None
+        }
+    };
+    // The `=` padding needs no counting: a trailing chunk of 2 or 3 digits is
+    // itself how many bytes it carries, and subtracting the padding on top of
+    // that removed real bytes.
+    let digits: Vec<u32> = text.bytes().filter_map(value).collect();
+    let mut out = Vec::with_capacity(digits.len() / 4 * 3);
+    for chunk in digits.chunks(4) {
+        let mut n = 0u32;
+        for (i, digit) in chunk.iter().enumerate() {
+            n |= digit << (18 - 6 * i);
+        }
+        out.push((n >> 16) as u8);
+        if chunk.len() > 2 {
+            out.push((n >> 8) as u8);
+        }
+        if chunk.len() > 3 {
+            out.push(n as u8);
+        }
+    }
+    out
 }

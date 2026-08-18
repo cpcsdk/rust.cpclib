@@ -88,6 +88,14 @@ pub struct ListingOutput {
     /// listing when a caller asked for a source map. Independent of the
     /// writer: both, either or neither can be wanted.
     source_map: Option<super::SourceMapCollector>,
+    /// Nobody is reading the rendered listing, so do not render it.
+    ///
+    /// Asking for a source map installs one of these over `io::sink()`, which
+    /// used to format every line of the program - twice per line, character by
+    /// character, through `qualify_locals_in_line` - and throw the result
+    /// away. On a real demo that is tens of megabytes of text nobody will ever
+    /// see, and it dominated the time to start a debug session.
+    map_only: bool,
     /// Where in the source the last token of the current line group started,
     /// so a re-executed token (a new `REPEAT` iteration) is recognised rather
     /// than glued onto the previous one. See `token_is_on_same_line`.
@@ -165,6 +173,7 @@ impl ListingOutput {
             renderer,
             current_file_index: 0,
             source_map: None,
+            map_only: false,
             current_line_last_offset: None,
             file_indices: HashMap::new(),
             file_order: Vec::new(),
@@ -936,28 +945,6 @@ impl ListingOutput {
 
             // missing instruction must be added manually using TokenKind
             if self.has_current_line_output() {
-                let fallback_source_expanded = current_inner_line_expanded
-                    .map(|line| line.trim_end())
-                    .unwrap_or("");
-                let fallback_source_raw = current_inner_line_raw
-                    .map(|line| line.trim_end())
-                    .unwrap_or("");
-                let fallback_bytes = current_inner_data.cloned().unwrap_or_default();
-                let token_renders = token_chunks
-                    .get(idx)
-                    .into_iter()
-                    .flat_map(|tokens| tokens.iter())
-                    .map(|token| {
-                        ListingTokenRender {
-                            token_id: token.token_id,
-                            raw_text: token.raw.as_str(),
-                            expanded_text: token.expanded.as_str(),
-                            bytes: token.bytes.as_slice(),
-                            token_kind: &token.token_kind
-                        }
-                    })
-                    .collect_vec();
-
                 // A long byte run (`defs 16`, an `incbin`) renders as several
                 // chunks, and only the first carries the source line - the
                 // continuations are the *same* line's bytes, so they must be
@@ -1046,6 +1033,36 @@ impl ListingOutput {
                     }
                 }
 
+                // The map has been collected above; everything below is for
+                // the text, which nobody asked for when only the map was
+                // wanted - so it is not built either, not merely not written.
+                if self.map_only {
+                    byte_offset += current_data_len;
+                    continue;
+                }
+
+                let fallback_source_expanded = current_inner_line_expanded
+                    .map(|line| line.trim_end())
+                    .unwrap_or("");
+                let fallback_source_raw = current_inner_line_raw
+                    .map(|line| line.trim_end())
+                    .unwrap_or("");
+                let fallback_bytes = current_inner_data.cloned().unwrap_or_default();
+                let token_renders = token_chunks
+                    .get(idx)
+                    .into_iter()
+                    .flat_map(|tokens| tokens.iter())
+                    .map(|token| {
+                        ListingTokenRender {
+                            token_id: token.token_id,
+                            raw_text: token.raw.as_str(),
+                            expanded_text: token.expanded.as_str(),
+                            bytes: token.bytes.as_slice(),
+                            token_kind: &token.token_kind
+                        }
+                    })
+                    .collect_vec();
+
                 self.renderer.render_line(
                     &mut *self.writer,
                     &self.format,
@@ -1126,6 +1143,12 @@ impl ListingOutput {
     /// listing.
     pub fn collect_source_map(&mut self) {
         self.source_map = Some(super::SourceMapCollector::new());
+    }
+
+    /// Collect the map and render nothing.
+    pub fn collect_source_map_only(&mut self) {
+        self.collect_source_map();
+        self.map_only = true;
     }
 
     /// The collected rows, if any were asked for.

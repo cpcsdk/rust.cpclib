@@ -16,6 +16,7 @@ Options:
       --inline <INLINE>                Z80 code is provided inline
       --db                             Write a db list on screen (usefull to get the value of an opcode)
       --lst <LISTING_OUTPUT>           Filename of the listing output.
+      --sourcemap <SOURCE_MAP_OUTPUT>  Filename of the source map output (JSON).
       --remu <REMU_OUTPUT>             Filename to store the remu file used by Ace to import label and debug information
       --wabp <WABP_OUTPUT>             Filename to stare the WABP file use to provide Winape breakpoints
       --breakpoint-as-opcode           Breakpoints are stored as opcodes (mainly interesting for winape emulation)
@@ -48,3 +49,45 @@ Options:
 
 Still a Work In Progress assembler
 ```
+
+## `--sourcemap`: making the debugger start instantly
+
+`--sourcemap <FILE>` writes, as JSON, everything a debugger needs to know about
+the program that was just assembled: which address every source line went to
+(with its columns and its page), the symbol table, the `BREAKPOINT` directives
+the program itself carries, the assembled bytes, the entry point, and the `-D`
+definitions it was all built with.
+
+**Why it is worth adding to a build file.** Without it, starting a debug session
+assembles the program a *second* time, purely to learn where the lines went - the
+build has just done exactly that work and thrown it away. On a real demo
+(`birthtro`) that second assemble takes **14.4 s**; reading this file instead
+takes **22.6 ms**, which is **99.8% of that stage removed**.
+
+In a `bndbuild` rule, name the file as an output so the build tracks it, and
+pass the flag:
+
+```yaml
+- tgt: birthtro.sna sna.lst sna.map      # sna.map among the outputs
+  dep:
+    - "*.asm"
+  cmd: |
+    basm --snapshot sna.asm -o birthtro.sna
+        -DFACE_SCR=\"../data/face3_cpc.scr\"
+        --lst sna.lst
+        --sourcemap sna.map
+```
+
+The debug adapter finds the file by reading **that same command line** - it does
+not guess the name from the source file, so `sna.map`, `birthtro.map` or
+`build/sna.map` all work. Nothing else has to be configured.
+
+**It is used only when it certainly matches**, and falls back to assembling
+otherwise. The map is refused if it was written by another version of basm, if
+the `-D` definitions differ from the ones the build passes today (the same
+sources with `-DFACE=\"face4\"` are a *different* program under the same file
+names), or if any source it names is newer than the map itself. A map that does
+not match the program is worse than a slow launch: every line it reports looks
+plausible and is wrong.
+
+`--sourcemap` composes with `--lst`; asking for both gives both.

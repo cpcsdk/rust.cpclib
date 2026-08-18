@@ -307,13 +307,26 @@ impl AssemblingOptions {
     /// under `dry_run`, because nothing is written anywhere: the rows are read
     /// back out of the `Env` afterwards.
     pub fn record_source_map(&mut self) -> &mut Self {
-        let builder = self
-            .output_builder
-            .get_or_insert_with(|| Arc::new(RwLock::new(ListingOutput::new(std::io::sink()))));
+        // Whether this call is what put a listing here decides how much work
+        // it costs. If a real listing was already asked for, the text is going
+        // somewhere and gets rendered as usual; if this created one over
+        // `io::sink()`, rendering it would be tens of megabytes of formatting
+        // written to nowhere - which is what made starting a debug session
+        // take ten seconds.
+        let mut ours = false;
+        let builder = self.output_builder.get_or_insert_with(|| {
+            ours = true;
+            Arc::new(RwLock::new(ListingOutput::new(std::io::sink())))
+        });
         {
             let mut output = builder.write().unwrap();
             output.on();
-            output.collect_source_map();
+            if ours {
+                output.collect_source_map_only();
+            }
+            else {
+                output.collect_source_map();
+            }
         }
         self
     }

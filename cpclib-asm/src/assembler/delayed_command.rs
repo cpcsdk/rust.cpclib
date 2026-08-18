@@ -291,7 +291,7 @@ impl<T: Into<InnerBreakpointCommand>> From<(T, Option<Z80Span>)> for BreakpointC
 /// The assembler's own representation is shaped for the snapshot chunks it
 /// writes; this is the same information without that commitment, so a debug
 /// adapter can decide for itself what its emulator is able to honour.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AssembledBreakpoint {
     pub address: u16,
     pub page: u8,
@@ -305,7 +305,7 @@ pub struct AssembledBreakpoint {
     pub name: Option<String>
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AssembledBreakpointKind {
     Execution,
     /// A memory watchpoint, with the accesses it watches for.

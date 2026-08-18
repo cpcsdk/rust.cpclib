@@ -30,7 +30,10 @@ pub struct BuildDefinitions {
     /// `(symbol, value)` exactly as written after `-D`, value unquoted.
     pub values: Vec<(String, String)>,
     /// The build file they came from - for telling the user where to look.
-    pub source: Option<PathBuf>
+    pub source: Option<PathBuf>,
+    /// The `--sourcemap` file that same command writes, resolved against the
+    /// build file's own directory.
+    pub source_map: Option<PathBuf>
 }
 
 impl BuildDefinitions {
@@ -84,10 +87,17 @@ pub fn definitions_for_entry(entry: &Path) -> BuildDefinitions {
 
         let values = definitions_in_rule_building(&build_file, entry)
             .unwrap_or_else(|| definitions_in_command_for(&expanded, entry_name));
-        if !values.is_empty() {
+        let source_map = source_map_in_command_for(&expanded, entry_name).map(|name| {
+            build_file
+                .parent()
+                .map(|dir| dir.join(&name))
+                .unwrap_or_else(|| PathBuf::from(&name))
+        });
+        if !values.is_empty() || source_map.is_some() {
             return BuildDefinitions {
                 values,
-                source: Some(build_file)
+                source: Some(build_file),
+                source_map
             };
         }
     }
@@ -152,13 +162,46 @@ fn definitions_in_rule_building(build_file: &Path, entry: &Path) -> Option<Vec<(
 /// invocation up to the next rule (`- tgt:`) or blank-line-separated block
 /// rather than to end of line.
 fn definitions_in_command_for(text: &str, entry_name: &str) -> Vec<(String, String)> {
+    command_for(text, entry_name)
+        .map(|command| parse_definitions(&command))
+        .unwrap_or_default()
+}
+
+/// The `--sourcemap` file the build writes for `entry`, if it writes one.
+///
+/// Recovered from the same command line as the `-D` values, deliberately: the
+/// map and the definitions describe one assemble, and reading them from one
+/// place is what keeps them describing the same one. Guessing the name from
+/// the entry's instead - `sna.asm` -> `sna.map` - works only for as long as
+/// nobody renames it, and fails by silently assembling again.
+fn source_map_in_command_for(text: &str, entry_name: &str) -> Option<String> {
+    let command = command_for(text, entry_name)?;
+    let mut words = command.split_whitespace();
+    while let Some(word) = words.next() {
+        if let Some(value) = word.strip_prefix("--sourcemap=") {
+            return Some(unquote(value));
+        }
+        if word == "--sourcemap" {
+            return words.next().map(unquote);
+        }
+    }
+    None
+}
+
+fn unquote(value: &str) -> String {
+    value.trim_matches(['"', '\'', '\\']).to_string()
+}
+
+/// The whole `basm` command a build file runs for `entry`, joined into one
+/// line - it is routinely written across several with `|` and indentation.
+fn command_for(text: &str, entry_name: &str) -> Option<String> {
     let lines: Vec<&str> = text.lines().collect();
     let Some(start) = lines.iter().position(|line| {
         let lowered = line.to_lowercase();
         lowered.contains("basm") && line.contains(entry_name)
     })
     else {
-        return Vec::new();
+        return None;
     };
 
     let mut command = String::new();
@@ -178,7 +221,7 @@ fn definitions_in_command_for(text: &str, entry_name: &str) -> Vec<(String, Stri
         }
     }
 
-    parse_definitions(&command)
+    Some(command)
 }
 
 /// Pull `-DNAME=VALUE` / `--define NAME=VALUE` out of a command line.

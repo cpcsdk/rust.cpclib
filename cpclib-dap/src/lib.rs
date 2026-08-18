@@ -413,6 +413,24 @@ fn start_session(
                 // and the program that ran was not the program on screen.
                 // Reported as "the process did not stop with an error and
                 // launched the previously generated artefact".
+                // The build may have left the map behind (`basm --sourcemap`),
+                // in which case the program does not have to be assembled a
+                // second time to say where its lines went.
+                if let Some(cached) =
+                    launch::cached_for_debug(entry, &config, &mut early_notices)
+                {
+                    early_notices.push(
+                        "source map read from the file the build wrote                          (basm --sourcemap) - the program was not assembled again"
+                            .to_string()
+                    );
+                    (
+                        cached.source_map,
+                        cached.breakpoints,
+                        cached.image,
+                        cached.entry_point
+                    )
+                }
+                else {
                 let built = launch::assemble_for_debug(entry, &config).map_err(|problem| {
                     format!(
                         "{entry} could not be assembled, so there is nothing to debug:\n\
@@ -425,6 +443,7 @@ fn start_session(
                     built.image,
                     built.entry_point
                 )
+                }
             },
             None => {
                 let (map, problem) = source_map_for_project(&build_file, &config);

@@ -182,6 +182,22 @@ export function registerDebugging(
             // debugging, since it is served over loopback.
             await vscode.env.openExternal(vscode.Uri.parse(url.replace(/\/debug$/, '/')));
         }),
+        // The two views, from the palette as well as from the debug console.
+        // They are the same `-dv` and `-mv` the console takes, sent the same
+        // way - one implementation, so the panel that opens is the one that
+        // knows how to follow `PC` and how to be clicked back into the source.
+        vscode.commands.registerCommand('cpclib.openDisassembly', () => consoleCommand('-dv')),
+        vscode.commands.registerCommand('cpclib.openMemoryView', () => consoleCommand('-mv')),
+        vscode.commands.registerCommand('cpclib.revealProgramCounter', async () => {
+            const where = lastStop;
+            if (!where) {
+                void vscode.window.showWarningMessage(
+                    'The program has not stopped yet, so there is no line to go to.',
+                );
+                return;
+            }
+            await revealStop(where);
+        }),
     );
 
     context.subscriptions.push(
@@ -262,6 +278,7 @@ export function registerDebugging(
                 showDisassembly(event.session, event.body);
             }
             if (event.event === 'cpclib/stoppedAt') {
+                lastStop = event.body;
                 await revealStop(event.body);
             }
         }),
@@ -273,6 +290,7 @@ export function registerDebugging(
                 disassemblyPanels.get(session.id)?.dispose();
                 disassemblyPanels.delete(session.id);
                 emulatorUrls.delete(session.id);
+                lastStop = undefined;
             }
         }),
     );
@@ -758,6 +776,31 @@ async function closeBuiltInDisassemblyView(): Promise<void> {
         await vscode.window.tabGroups.close(doomed, false);
     }
 }
+
+/**
+ * Type a debug-console command for the user.
+ *
+ * `-dv` and `-mv` answer with a `cpclib/*View` event, which opens the panel -
+ * so the palette entries are the console entries, not a second way of doing
+ * the same thing that could drift from it.
+ */
+async function consoleCommand(expression: string): Promise<void> {
+    const session = vscode.debug.activeDebugSession;
+    if (!session) {
+        void vscode.window.showWarningMessage(
+            'No debug session is running. Start one first.',
+        );
+        return;
+    }
+    try {
+        await session.customRequest('evaluate', { expression, context: 'repl' });
+    } catch (error) {
+        void vscode.window.showErrorMessage(`${expression} failed: ${error}`);
+    }
+}
+
+/** The last stop, so it can be returned to on demand. */
+let lastStop: StopLocation | undefined;
 
 /** Where the program stopped, as the adapter reports it. */
 interface StopLocation {
