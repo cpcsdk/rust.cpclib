@@ -2555,10 +2555,7 @@ impl<P: DapPeer> Session<P> {
         if now != previous.wrapping_add(instruction.bytes.len() as u16) {
             return None;
         }
-        // Priced by the assembler's own table, from the assembler's own
-        // spelling - so a timer and the build agree about what an instruction
-        // costs.
-        crate::inspect::nops_of_source_line(&instruction.text)
+        instruction.cost
     }
 
     /// The instruction the machine really holds at `address`, decoded from the
@@ -3181,11 +3178,6 @@ impl<P: DapPeer> Session<P> {
     }
 
     /// The NOP cost of the source line the program counter is on.
-    ///
-    /// Looked up from the source rather than disassembled: what the user wants
-    /// priced is the line they wrote, and for a line holding several
-    /// instructions - `ld a,0 : ld b,0`, which basm allows and demos use - the
-    /// line's cost is what matters, not the first opcode's.
     fn cost_at_pc(&mut self, variables: &[Value]) -> Option<usize> {
         let pc = variables
             .iter()
@@ -3198,13 +3190,44 @@ impl<P: DapPeer> Session<P> {
         // asked for a stack trace - so this is the reliable place to learn
         // where the program is, and a session with no program image (and thus
         // no stack walk) still gets a working `-dv`.
-        if let Ok(pc) = u16::try_from(pc) {
-            self.note_program_counter(pc);
-        }
+        let pc = u16::try_from(pc).ok()?;
+        self.note_program_counter(pc);
+        self.line_cost(pc)
+    }
 
-        let location = self.map.location_at(pc)?;
-        let text = self.source_line(&location.file, location.line)?;
-        crate::inspect::nops_of_source_line(&text)
+    /// What the source line covering `address` costs to execute, in NOPs.
+    ///
+    /// Priced from the program's own bytes, not from its text. The bytes are
+    /// what the Z80 fetches, so this answers for a line the parser could not
+    /// have answered for at all: a macro call, a `defs` run - which executes
+    /// as `NOP`s and is how a demo pads a raster line - or a region built at
+    /// runtime that has no source text anywhere.
+    ///
+    /// The line rather than the single instruction, because one basm line is
+    /// routinely several instructions (`ld a,0 : ld b,0`) and it is the line
+    /// the user is looking at. The source map gives the run of addresses that
+    /// line occupies; the assembler prices each instruction in it.
+    ///
+    /// Falls back to the instruction at `address` alone when no line claims it
+    /// - generated code, or a jump into the firmware - where one instruction
+    /// is the only honest unit left.
+    fn line_cost(&self, address: u16) -> Option<usize> {
+        let page = self.pc_page.unwrap_or(0);
+        let Some(extent) = self.map.line_extent_at(page, address)
+        else {
+            return self.instruction_in_image(address)?.cost;
+        };
+
+        let start = u16::try_from(extent.start).ok()?;
+        let bytes: Vec<u8> = (extent.start..extent.end)
+            .map(|at| {
+                u16::try_from(at)
+                    .ok()
+                    .and_then(|at| self.image_byte(page, at))
+            })
+            .collect::<Option<Vec<u8>>>()?;
+
+        crate::disassemble::nops(&crate::disassemble::decode(start, &bytes, bytes.len()))
     }
 
     /// One line of a source file, from a cache.

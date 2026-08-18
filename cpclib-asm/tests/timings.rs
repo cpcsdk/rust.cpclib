@@ -734,3 +734,48 @@ fn estimated_duration_matches_documented_timings() {
         );
     }
 }
+
+/// A *located* listing - the kind `parse_z80_str` produces, and the kind every
+/// editor-facing consumer holds - must be priceable whatever directive it
+/// contains.
+///
+/// `defs` was the hole: its conversion to an owned `Token` fell through to a
+/// `todo!()`, so asking a located listing what a `defs` line costs panicked.
+/// A debugger stopped inside `defs 64 - duration(djnz $)-1` - the raster-timing
+/// idiom - therefore died mid-step instead of printing a number.
+#[test]
+fn a_located_defs_line_is_priced_rather_than_panicking() {
+    for (source, expected) in [
+        ("  defs 59", 59),
+        ("  defs 64 - 6", 58),
+        // The count may itself be an expression calling `duration`, which is
+        // how a demo pads a raster line to an exact width.
+        ("  defs 64 - duration(djnz $) - 1", 60)
+    ] {
+        let listing = parse_z80_str(source).expect(source);
+        assert_eq!(listing.estimated_duration().ok(), Some(expected), "{source}");
+    }
+}
+
+/// Pricing runs on whatever line the user is on, so no directive may take the
+/// process down with it. Anything the owned-token table cannot price is an
+/// `Err`, never a panic.
+#[test]
+fn a_located_directive_with_no_duration_is_an_error_not_a_panic() {
+    for source in [
+        "  align 4",
+        "  incbin \"nothing.bin\"",
+        "  limit 0x8000",
+        "  bankset 0",
+        "  export foo",
+        "  map 4",
+        "  section foo",
+        "  even",
+        "  str \"hello\"",
+        "  push bc, hl"
+    ] {
+        let listing = parse_z80_str(source).expect(source);
+        // The value does not matter; not aborting the process does.
+        let _ = listing.estimated_duration();
+    }
+}

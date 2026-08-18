@@ -84,34 +84,21 @@ pub fn annotate_registers(variables: &mut Vec<Value>, flags_reference: i64) {
     annotate_registers_with(variables, flags_reference, None)
 }
 
-/// What the instruction on `text` costs, in NOPs.
+/// Add the NOP cost of the line the program counter is on.
 ///
 /// A CPC demo's budget is NOPs per raster line, so "how much does this line
 /// cost" is a question asked constantly while stepping, and answering it by
-/// hand means leaving the debugger.
-///
-/// The answer comes from the assembler rather than from a table of our own:
-/// `estimated_duration` is what `basm` itself uses, so the number in the pane
-/// and the number the build reports cannot drift apart. `None` for anything it
-/// declines to price - a macro call, a directive, an unparseable line - which
-/// is a better answer than a confident wrong one.
-pub fn nops_of_source_line(text: &str) -> Option<usize> {
-    use cpclib_asm::implementation::listing::ListingExt;
-
-    let listing = cpclib_asm::parser::parse_z80_str(text).ok()?;
-    listing.estimated_duration().ok()
-}
-
-/// Add the NOP cost of the line the program counter is on.
+/// hand means leaving the debugger. The number itself is worked out in
+/// `Session::line_cost`, from the program's own bytes.
 pub fn annotate_cost(variables: &mut Vec<Value>, nops: usize) {
-    // Right at the top: it is about the instruction that is *about* to run,
-    // which is what the whole pane is describing.
+    // Right at the top: it is about the code that is *about* to run, which is
+    // what the whole pane is describing.
     variables.insert(
         0,
         json!({
             "name": "cost",
             "value": format!("{nops} NOP{}", if nops == 1 { "" } else { "s" }),
-            "type": "what the instruction at PC costs",
+            "type": "what the source line at PC costs",
             "variablesReference": 0
         })
     );

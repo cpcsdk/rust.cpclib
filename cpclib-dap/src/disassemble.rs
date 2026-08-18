@@ -9,6 +9,12 @@
 //! and decoded here with `cpclib-asm`'s own disassembler, the same tables the
 //! assembler uses. What you read is then what `basm` would have written, which
 //! is the point: this view exists to be compared against your source.
+//!
+//! Decoding produces real `cpclib_tokens::Token`s, so what an instruction
+//! *costs* comes out of the same pass - from the assembler's own table, on the
+//! bytes the Z80 will actually fetch. That is the honest answer for code a
+//! macro expanded, code the program wrote itself, and a `defs` run that has no
+//! instruction text to read at all.
 
 use cpclib_asm::disass::disassemble;
 use cpclib_asm::implementation::tokens::TokenExt;
@@ -19,7 +25,18 @@ use serde_json::{Value, json};
 pub struct Instruction {
     pub address: u16,
     pub bytes: Vec<u8>,
-    pub text: String
+    pub text: String,
+    /// What it costs to execute, in NOPs.
+    ///
+    /// Kept here because this is the only place that holds the decoded
+    /// `Token`, and the token is what the assembler prices. Anything reading
+    /// the cost back off `text` would be re-parsing the string this module
+    /// just printed, and would then be pricing a spelling rather than the
+    /// bytes the Z80 will actually fetch.
+    ///
+    /// `None` for bytes that decode to no instruction - a `DB` left by a
+    /// truncated read - which have no execution cost to report.
+    pub cost: Option<usize>
 }
 
 /// Decode `bytes`, which were read starting at `address`.
@@ -47,7 +64,8 @@ pub fn decode(address: u16, bytes: &[u8], limit: usize) -> Vec<Instruction> {
         out.push(Instruction {
             address: address.wrapping_add(offset as u16),
             bytes: bytes[offset..offset + length].to_vec(),
-            text: render(token)
+            text: render(token),
+            cost: token.estimated_duration().ok()
         });
         offset += length;
     }
@@ -60,6 +78,17 @@ pub fn decode(address: u16, bytes: &[u8], limit: usize) -> Vec<Instruction> {
 /// view wants: the same spelling as the source it sits beside.
 fn render(token: &cpclib_tokens::Token) -> String {
     token.to_string().trim().to_string()
+}
+
+/// What a decoded run costs to execute, in NOPs.
+///
+/// `None` as soon as one instruction has no cost: a run that is partly
+/// unpriceable has no total, and reporting the sum of the rest would be a
+/// number that is quietly too small.
+pub fn nops(instructions: &[Instruction]) -> Option<usize> {
+    instructions
+        .iter()
+        .try_fold(0usize, |total, instruction| Some(total + instruction.cost?))
 }
 
 /// The DAP shape of a decoded run, ready to be annotated with source lines.

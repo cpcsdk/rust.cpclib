@@ -542,6 +542,17 @@ fn start_session(
                 let (endpoint, child) =
                     amspiritlite::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?;
                 started = Some(child);
+                // Said out loud, because the emulator left behind is still on
+                // screen and still running the previous build: without this the
+                // user has two windows and no way to tell which one this
+                // session is driving.
+                if !endpoint.ends_with(&format!(":{port}")) {
+                    early_notices.push(format!(
+                        "port {port} was already answering - an emulator left behind by an \
+                         earlier session, most likely - so this one serves on {endpoint} \
+                         instead. The older window is not the one being debugged; close it."
+                    ));
+                }
                 endpoint
             }
         };

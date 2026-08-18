@@ -280,11 +280,15 @@ export function registerDebugging(
         }),
         // A hint set in a file that is then hidden cannot be taken out of an
         // editor nobody can see, so it is caught on the way back: every visible
-        // editor but the one the hint currently belongs to is cleared.
+        // editor showing something other than the hinted file is cleared. The
+        // other half is the split made *after* the stop - an editor that was
+        // never there to be decorated - which is given the hint here instead.
         vscode.window.onDidChangeVisibleTextEditors(editors => {
             if (!instructionHint) { return; }
             for (const editor of editors) {
-                if (editor.document.uri.toString() !== hintedFile) {
+                if (currentHint && editor.document.uri.toString() === currentHint.uri) {
+                    drawInstructionHint(editor, currentHint);
+                } else {
                     editor.setDecorations(instructionHint, []);
                 }
             }
@@ -608,10 +612,17 @@ function showDisassembly(session: vscode.DebugSession, dump: Disassembly | undef
                 // place.
                 const from = Math.max(0, (message.column ?? 1) - 1);
                 const to = Math.max(from, (message.endColumn ?? message.column ?? 1) - 1);
-                await vscode.window.showTextDocument(document, {
+                const opened = await vscode.window.showTextDocument(document, {
                     viewColumn: vscode.ViewColumn.One,
                     selection: new vscode.Range(line, from, line, to),
                 });
+                // Backwards, as on a stop: a click usually lands on the row the
+                // program is sitting on, where the caret would otherwise share
+                // its position with the hint and be drawn the width of it.
+                opened.selection = new vscode.Selection(
+                    new vscode.Position(line, to),
+                    new vscode.Position(line, from),
+                );
             } catch {
                 vscode.window.showWarningMessage(`Cannot open ${message.path}`);
             }
@@ -880,8 +891,23 @@ interface StopLocation {
  */
 let instructionHint: vscode.TextEditorDecorationType | undefined;
 
-/** The document the hint is on, so every other one can be known to be stale. */
-let hintedFile: string | undefined;
+/**
+ * What the hint says and where it belongs.
+ *
+ * Kept rather than only written into an editor because the same file can be
+ * open in more than one group, and a group can be split *after* the stop: an
+ * editor that appears later has to be given the hint it never saw, and one
+ * showing anything else can be known to be stale.
+ */
+interface InstructionHint {
+    /** The hinted document, as `Uri.toString()` - what editors are matched on. */
+    uri: string;
+    line: number;
+    text: string;
+    endColumn?: number;
+}
+
+let currentHint: InstructionHint | undefined;
 
 function instructionHintType(): vscode.TextEditorDecorationType {
     instructionHint ??= vscode.window.createTextEditorDecorationType({
@@ -914,28 +940,48 @@ function instructionHintType(): vscode.TextEditorDecorationType {
  * code that is in the file.
  */
 function showInstructionHint(
-    editor: vscode.TextEditor,
+    document: vscode.TextDocument,
     line: number,
     text: string,
     endColumn?: number,
 ): void {
     clearInstructionHint();
-    if (line >= editor.document.lineCount) { return; }
+    if (line >= document.lineCount) { return; }
 
+    currentHint = { uri: document.uri.toString(), line, text, endColumn };
+    for (const editor of editorsShowing(currentHint.uri)) {
+        drawInstructionHint(editor, currentHint);
+    }
+}
+
+/**
+ * Every visible editor showing one document.
+ *
+ * Not `find`: a decoration belongs to an *editor*, not to a document, so the
+ * same file open in two groups is two editors and decorating the first one
+ * leaves the second showing the stopped line with nothing beside it.
+ */
+function editorsShowing(uri: string): vscode.TextEditor[] {
+    return vscode.window.visibleTextEditors.filter(
+        editor => editor.document.uri.toString() === uri,
+    );
+}
+
+/** Put the hint into one editor. */
+function drawInstructionHint(editor: vscode.TextEditor, hint: InstructionHint): void {
+    if (hint.line >= editor.document.lineCount) { return; }
     // Just after the instruction, not at the end of the line. A line can hold
     // several instructions (`ld a,l : inc a : ld (hl),a`), and a hint parked at
     // the far right would sit beside whichever came last rather than beside the
-    // one being executed. `endColumn` is where the selection ends, so the hint
-    // lands where the caret already is.
-    const lineRange = editor.document.lineAt(line).range;
-    const at = endColumn && endColumn > 1
-        ? lineRange.start.translate(0, Math.min(endColumn - 1, lineRange.end.character))
+    // one being executed.
+    const lineRange = editor.document.lineAt(hint.line).range;
+    const at = hint.endColumn && hint.endColumn > 1
+        ? lineRange.start.translate(0, Math.min(hint.endColumn - 1, lineRange.end.character))
         : lineRange.end;
     editor.setDecorations(instructionHintType(), [{
         range: new vscode.Range(at, at),
-        renderOptions: { after: { contentText: `(${text})` } },
+        renderOptions: { after: { contentText: `(${hint.text})` } },
     }]);
-    hintedFile = editor.document.uri.toString();
 }
 
 /**
@@ -948,12 +994,14 @@ function showInstructionHint(
 function applyInstructionHint(where: StopLocation | undefined): void {
     if (!where?.path || !where.line) { return; }
     const line = Math.max(0, where.line - 1);
-    const editor = vscode.window.visibleTextEditors.find(
+    // Any editor showing the file will do to name the document; the hint then
+    // goes to all of them.
+    const document = vscode.window.visibleTextEditors.find(
         candidate => candidate.document.uri.fsPath === where.path,
-    );
-    if (!editor) { return; }
+    )?.document;
+    if (!document) { return; }
     if (where.instruction) {
-        showInstructionHint(editor, line, where.instruction, where.endColumn);
+        showInstructionHint(document, line, where.instruction, where.endColumn);
     } else {
         clearInstructionHint();
     }
@@ -968,7 +1016,7 @@ function applyInstructionHint(where: StopLocation | undefined): void {
  * ends - and from every editor, since the stop may since have moved file.
  */
 function clearInstructionHint(): void {
-    hintedFile = undefined;
+    currentHint = undefined;
     if (!instructionHint) { return; }
     for (const editor of vscode.window.visibleTextEditors) {
         editor.setDecorations(instructionHint, []);
@@ -1011,10 +1059,18 @@ async function revealStop(where: StopLocation | undefined): Promise<void> {
         preview: false,
         selection,
     });
+    // Selected backwards, so the caret lands on the *first* character of the
+    // instruction rather than just past its last one. `showTextDocument` leaves
+    // the caret at the end of the selection, which is exactly where the hint's
+    // `after` decoration sits; the editor measures a caret across the whole DOM
+    // box at that position, and that box carries the hint's text, so the caret
+    // came out as wide as the hint. Nothing about the selection changes but
+    // which of its ends the caret is on.
+    editor.selection = new vscode.Selection(selection.end, selection.start);
     editor.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 
     if (where.instruction) {
-        showInstructionHint(editor, line, where.instruction, where.endColumn);
+        showInstructionHint(document, line, where.instruction, where.endColumn);
     } else {
         clearInstructionHint();
     }

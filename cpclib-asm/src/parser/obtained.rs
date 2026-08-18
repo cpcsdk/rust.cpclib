@@ -1842,6 +1842,25 @@ impl ListingElement for LocatedTokenInner {
                     exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
                 ))
             },
+            // `defs` sat in the catch-all below while its siblings `defb` and
+            // `defw` were converted, so anything asking a located listing what
+            // it costs - the debugger pricing the line at PC, a hover pricing
+            // the line under the cursor - panicked on the raster-timing idiom
+            // `defs 64 - duration(djnz $)-1`. The pair is (count, fill value),
+            // and the fill is optional.
+            Self::Defs(pairs) => {
+                Cow::Owned(Token::Defs(
+                    pairs
+                        .iter()
+                        .map(|(count, fill)| {
+                            (
+                                count.to_expr().into_owned(),
+                                fill.as_ref().map(|e| e.to_expr().into_owned())
+                            )
+                        })
+                        .collect_vec()
+                ))
+            },
             Self::Str(exprs) => {
                 Cow::Owned(Token::Str(
                     exprs.iter().map(|e| e.to_expr().into_owned()).collect_vec()
@@ -2411,6 +2430,37 @@ impl LocatedToken {
             either::Right((token, _)) => token.inner_mut()
         }
     }
+
+    /// Whether `estimated_duration` may hand this token to `to_token()`.
+    ///
+    /// `to_token()` ends in a `todo!()`, so asking it to convert a shape it
+    /// does not cover is a panic rather than an error. Timing is asked for on
+    /// arbitrary source - the line a debugger has stopped on, the line under an
+    /// editor's cursor - so the set is stated positively here: exactly the
+    /// shapes `Token::estimated_duration` knows how to price. A directive
+    /// outside it has no duration to report anyway, so refusing it loses
+    /// nothing and costs no panic.
+    fn can_be_priced_as_a_token(&self) -> bool {
+        match &self.inner {
+            either::Right((token, _)) => token.can_be_priced_as_a_token(),
+            either::Left(inner) => {
+                matches!(
+                    inner,
+                    LocatedTokenInner::OpCode(..)
+                        | LocatedTokenInner::Defb(..)
+                        | LocatedTokenInner::Defw(..)
+                        | LocatedTokenInner::Defs(..)
+                        | LocatedTokenInner::Repeat(..)
+                        | LocatedTokenInner::Assert(..)
+                        | LocatedTokenInner::Breakpoint { .. }
+                        | LocatedTokenInner::Comment(..)
+                        | LocatedTokenInner::Label(..)
+                        | LocatedTokenInner::Equ { .. }
+                        | LocatedTokenInner::Protect(..)
+                )
+            },
+        }
+    }
 }
 
 impl LocatedToken {
@@ -2516,6 +2566,21 @@ impl TokenExt for LocatedToken {
             )
         {
             return Ok(duration as usize);
+        }
+        // Everything else needs the owned tree, and `to_token` is not total:
+        // its catch-all is a `todo!()`. Reaching it turns "what does this line
+        // cost?" - a question the debugger and the editor ask about whatever
+        // line the user happens to be on - into a process-ending panic, and no
+        // `catch_unwind` can help since the release profile aborts. So the
+        // conversion is only attempted for the shapes `Token::estimated_duration`
+        // can actually price; anything else is refused as an error, which every
+        // caller of a `Result` already knows how to survive.
+        if !self.can_be_priced_as_a_token() {
+            return Err(Box::new(AssemblerError::BugInAssembler {
+                file: file!(),
+                line: line!(),
+                msg: format!("Duration computation for {self:?} not yet coded")
+            }));
         }
         self.to_token().estimated_duration()
     }

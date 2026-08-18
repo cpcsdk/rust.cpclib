@@ -648,6 +648,27 @@ where E: cpclib_common::event::EventObserver + 'static {
     std::fs::write(&path, snapshot)
         .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
 
+    // The port has to be one nothing else is holding, and the configured one
+    // frequently is not.
+    //
+    // An emulator this session starts is closed with the session - but a
+    // session that is killed outright never gets that far, and the emulator it
+    // started goes on listening on the configured port for as long as the
+    // machine is up. The next session then starts an emulator that finds the
+    // port taken, and this one does not fail: it says "Web debug server:
+    // 127.0.0.1:8765 busy or unavailable, disabled" and runs on without a debug
+    // server. The port goes on answering all the while - from the *previous*
+    // session's emulator, holding the previous build and stopped wherever that
+    // session left it - so everything below arms its breakpoints in a machine
+    // nobody is looking at, while the window in front of the user runs free.
+    // Reported as "amspirit does not detect the breakpoint any more", which is
+    // exactly what it looks like: every arming is answered, and nothing ever
+    // stops.
+    //
+    // So a port that already answers belongs to somebody else, whoever they
+    // are, and ours is started somewhere it can really serve.
+    let port = port_to_serve_on(port);
+
     let executable = configuration.exec_fname();
     let child = std::process::Command::new(executable.as_str())
         .arg(path.as_os_str())
@@ -663,6 +684,37 @@ where E: cpclib_common::event::EventObserver + 'static {
     let endpoint = format!("http://127.0.0.1:{port}");
     wait_until_listening(&endpoint, std::time::Duration::from_secs(30))?;
     Ok((endpoint, child))
+}
+
+/// Where to start an emulator that was asked to serve on `asked`.
+///
+/// `asked` itself whenever it is free, and a port the operating system says is
+/// free when it is not. Returned rather than merely checked, so the caller
+/// connects to the emulator it started rather than to whatever else is there.
+pub fn port_to_serve_on(asked: u16) -> u16 {
+    if !something_is_listening(asked) {
+        return asked;
+    }
+    a_free_port().unwrap_or(asked)
+}
+
+/// Whether anything at all answers on this port of the loopback interface.
+fn something_is_listening(port: u16) -> bool {
+    let address = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+    std::net::TcpStream::connect_timeout(&address, std::time::Duration::from_millis(200)).is_ok()
+}
+
+/// A port nothing is using - asked of the operating system rather than guessed
+/// at, since a guess is how this went wrong in the first place.
+///
+/// Free at the moment it is answered and not reserved: the emulator binds it a
+/// moment later. Nothing can close that gap without holding the socket for the
+/// emulator, which is not something one process can hand another.
+fn a_free_port() -> Option<u16> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").ok()?;
+    let port = listener.local_addr().ok()?.port();
+    drop(listener);
+    Some(port)
 }
 
 /// Block until the debug server answers, or give up saying so.
@@ -1602,34 +1654,38 @@ impl Stops {
             .stepping_over
             .lock()
             .ok()
-            .and_then(|mut heading| heading.take())?;
+            .and_then(|mut heading| heading.take());
 
-        if heading.address == pc {
+        if let Some(heading) = heading {
             // Arrived. The breakpoint that brought us here was ours, so it goes
             // away again; one the editor had armed there is the user's and
             // stays, and stopping on it is a breakpoint stop like any other.
-            if !heading.was_the_editors
-                && let Ok(mut set) = self.breakpoints.lock()
-            {
-                set.disarm_temporary(pc);
-                let _ = push_breakpoints(&self.endpoint, &set);
-            }
-            return Some(Stop {
-                reason: if heading.was_the_editors {
-                    "breakpoint"
+            if heading.address == pc {
+                if !heading.was_the_editors
+                    && let Ok(mut set) = self.breakpoints.lock()
+                {
+                    set.disarm_temporary(pc);
+                    let _ = push_breakpoints(&self.endpoint, &set);
                 }
-                else {
-                    "step"
-                },
-                text: None
-            });
+                return Some(Stop {
+                    reason: if heading.was_the_editors {
+                        "breakpoint"
+                    }
+                    else {
+                        "step"
+                    },
+                    text: None
+                });
+            }
+            // Something else stopped us first - a breakpoint inside the routine
+            // being stepped over, or the user pressing pause. The step over is
+            // abandoned where it stands and its breakpoint is left armed: the
+            // program may still come back to it, and if it never does that is a
+            // bug in the program rather than something to recover from here.
         }
 
-        // Something else stopped us first - a breakpoint inside the routine
-        // being stepped over, or the user pressing pause. The step over is
-        // abandoned where it stands and its breakpoint is left armed: the
-        // program may still come back to it, and if it never does that is a
-        // bug in the program rather than something to recover from here.
+        // A stop on one of those left-behind breakpoints, whenever it finally
+        // comes.
         let orphan = self
             .breakpoints
             .lock()
@@ -2233,37 +2289,76 @@ mod tests {
         assert_eq!(body_of("garbage with no headers"), "");
     }
 
-    /// A stand-in emulator: enough of one to be stepped, and no more.
+    /// What the stand-in emulator did, so a test can ask.
+    #[derive(Default)]
+    struct Machine {
+        /// How many single steps it was asked for.
+        steps: std::sync::atomic::AtomicUsize,
+        /// How many times it was let go.
+        resumes: std::sync::atomic::AtomicUsize,
+        /// Every breakpoint set it was given, in order.
+        armed: std::sync::Mutex<Vec<Vec<u16>>>
+    }
+
+    impl Machine {
+        fn steps(&self) -> usize {
+            self.steps.load(std::sync::atomic::Ordering::Relaxed)
+        }
+
+        fn resumes(&self) -> usize {
+            self.resumes.load(std::sync::atomic::Ordering::Relaxed)
+        }
+
+        /// The breakpoints it is holding right now.
+        fn breakpoints(&self) -> Vec<u16> {
+            self.armed
+                .lock()
+                .unwrap()
+                .last()
+                .cloned()
+                .unwrap_or_default()
+        }
+
+        /// Every set it was ever given.
+        fn every_breakpoint_set(&self) -> Vec<Vec<u16>> {
+            self.armed.lock().unwrap().clone()
+        }
+    }
+
+    /// A stand-in emulator: enough of one to be stepped and to break, no more.
     ///
-    /// It answers `/api/state` from a script of program counters - what `PC`
-    /// reads after each step - and `/api/ram` with the bytes the walk starts
-    /// on. Being able to run the walk against it is the whole point: a loop
-    /// that drives a machine is exactly the code that should not first be tried
-    /// on a real one.
-    fn fake_machine(
-        bytes: Vec<u8>,
-        script: Vec<u16>
-    ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
-        // Running, as far as `/api/ping` is concerned. The run-state poller
-        // then has no transition to report, so the only `stopped` event a walk
-        // test sees is the one the walk itself sent - which is the event these
-        // tests wait on. A machine reporting itself paused has its own test.
+    /// It answers `/api/state` from a script of program counters and `/api/ram`
+    /// with one blob of bytes. A single step advances the script by one; a
+    /// resume runs it forward until it reaches a program counter someone has
+    /// armed a breakpoint on, or the end of the script. That is exactly the
+    /// contract the new step over rests on, so it is the contract to test
+    /// against - a real machine is not needed to find out whether the right
+    /// breakpoint was armed and taken away again.
+    fn fake_machine(bytes: Vec<u8>, script: Vec<u16>) -> (String, std::sync::Arc<Machine>) {
         fake_machine_reporting(bytes, script, false)
     }
 
-    /// The same, saying whether the machine is paused when anyone asks.
+    /// The same, saying whether the machine is paused before anyone runs it.
     fn fake_machine_reporting(
         bytes: Vec<u8>,
         script: Vec<u16>,
-        paused: bool
-    ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        paused_at_rest: bool
+    ) -> (String, std::sync::Arc<Machine>) {
         use std::io::{Read, Write};
-        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::atomic::Ordering;
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
-        let steps = std::sync::Arc::new(AtomicUsize::new(0));
-        let counted = steps.clone();
+        let machine = std::sync::Arc::new(Machine::default());
+        let served = machine.clone();
+        // Where the script is, and whether the machine is stopped there.
+        //
+        // It starts running - a machine that reported itself paused from the
+        // very first poll would be announced as a stop before any test had
+        // asked for one, which is a real behaviour with a test of its own.
+        let at = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+        let paused = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(paused_at_rest));
+
         std::thread::spawn(move || {
             let hex: String = bytes.iter().map(|b| format!("{b:02X}")).collect();
             for stream in listener.incoming() {
@@ -2271,46 +2366,98 @@ mod tests {
                 else {
                     return;
                 };
-                let mut buffer = [0u8; 1024];
-                let read = stream.read(&mut buffer).unwrap_or(0);
-                let request = String::from_utf8_lossy(&buffer[..read]).to_string();
-                let line = request.lines().next().unwrap_or_default().to_string();
-
-                if line.starts_with("POST /api/step") {
-                    counted.fetch_add(1, Ordering::Relaxed);
-                }
-                let at = script[counted.load(Ordering::Relaxed).min(script.len() - 1)];
-                let body = if line.starts_with("GET /api/state") {
-                    json!({ "z80": { "PC": at, "SP": 0xBFF0 } }).to_string()
-                }
-                else if line.starts_with("GET /api/ram") {
-                    json!({ "addr": 0, "len": bytes.len(), "hex": hex }).to_string()
-                }
-                else if line.starts_with("GET /api/ping") {
-                    json!({ "emu": { "paused": paused } }).to_string()
-                }
-                else {
-                    "{}".to_string()
-                };
-                let _ = stream.write_all(
-                    format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
-                        body.len()
-                    )
-                    .as_bytes()
+                let (machine, at, paused, script, hex) = (
+                    served.clone(),
+                    at.clone(),
+                    paused.clone(),
+                    script.clone(),
+                    hex.clone()
                 );
-                let _ = stream.flush();
+                // A thread per connection: the run-state poller asks while a
+                // resume is being answered, and serialising the two would hide
+                // every race this backend exists to get right.
+                std::thread::spawn(move || {
+                    let mut buffer = [0u8; 2048];
+                    let read = stream.read(&mut buffer).unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buffer[..read]).to_string();
+                    let line = request.lines().next().unwrap_or_default().to_string();
+                    let body = request.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
+
+                    if line.starts_with("POST /api/step") {
+                        let mut at = at.lock().unwrap();
+                        *at = (*at + 1).min(script.len() - 1);
+                        machine.steps.fetch_add(1, Ordering::Relaxed);
+                        paused.store(true, Ordering::Relaxed);
+                    }
+                    else if line.starts_with("POST /api/z80_bp") {
+                        let addresses: Vec<u16> = body
+                            .split(',')
+                            .filter_map(|entry| {
+                                crate::protocol::parse_address_reference(entry.trim())
+                            })
+                            .map(|address| address as u16)
+                            .collect();
+                        machine.armed.lock().unwrap().push(addresses);
+                    }
+                    else if line.starts_with("POST /api/config") && body.contains("false") {
+                        machine.resumes.fetch_add(1, Ordering::Relaxed);
+                        paused.store(false, Ordering::Relaxed);
+                        let armed = machine.breakpoints();
+                        let (at, paused, script) = (at.clone(), paused.clone(), script.clone());
+                        // Answered at once and acted on a moment later, which
+                        // is what the real one does.
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                            let mut at = at.lock().unwrap();
+                            // A machine leaves the address it is sitting on
+                            // before it starts breaking on anything, or a
+                            // breakpoint under `PC` would stop it where it
+                            // already is. Both real emulators need the same
+                            // thing, which is why the session lifts it.
+                            *at = (*at + 1).min(script.len() - 1);
+                            while *at + 1 < script.len() && !armed.contains(&script[*at]) {
+                                *at += 1;
+                            }
+                            paused.store(true, Ordering::Relaxed);
+                        });
+                    }
+                    else if line.starts_with("POST /api/config") {
+                        paused.store(true, Ordering::Relaxed);
+                    }
+
+                    let here = script[*at.lock().unwrap()];
+                    let body = if line.starts_with("GET /api/state") {
+                        json!({ "z80": { "PC": here, "SP": 0xBFF0 } }).to_string()
+                    }
+                    else if line.starts_with("GET /api/ram") {
+                        json!({ "addr": 0, "len": hex.len() / 2, "hex": hex }).to_string()
+                    }
+                    else if line.starts_with("GET /api/ping") {
+                        json!({ "emu": { "paused": paused.load(Ordering::Relaxed) } }).to_string()
+                    }
+                    else {
+                        "{}".to_string()
+                    };
+                    let _ = stream.write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}",
+                            body.len()
+                        )
+                        .as_bytes()
+                    );
+                    let _ = stream.flush();
+                });
             }
         });
-        (format!("http://127.0.0.1:{port}"), steps)
+        (format!("http://127.0.0.1:{port}"), machine)
     }
 
     /// Everything the peer produced, up to and including the `stopped` event
-    /// that ends a walk.
+    /// that ends a step.
     ///
-    /// The walk runs on a thread of its own, so where the machine ended up is
-    /// only a fair question once the stop has been announced - anything read
-    /// before that is a race with the walk.
+    /// The stop is noticed by the run-state poller on its own thread, so where
+    /// the machine ended up is only a fair question once the stop has been
+    /// announced - anything read before that is a race with the poller.
     fn until_stopped(peer: &mut AmspiritLitePeer) -> Vec<Value> {
         use crate::peer::DapPeer;
 
@@ -2322,23 +2469,27 @@ mod tests {
                 .iter()
                 .any(|message| message["event"] == json!("stopped"))
             {
+                // The poller takes the temporary breakpoint back out *before*
+                // it says so; a moment's grace and the emulator has been told.
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                seen.extend(peer.drain());
                 return seen;
             }
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
-        panic!("the walk never said it had stopped: {seen:?}");
+        panic!("nothing ever said the program had stopped: {seen:?}");
     }
 
-    /// Where a step-over left the machine, and how many steps it took to get
-    /// there.
+    /// Step over the instruction the stand-in is sitting on, and report what
+    /// happened.
     fn stepped_over(
         bytes: Vec<u8>,
         script: Vec<u16>,
         prepare: impl FnOnce(&mut AmspiritLitePeer)
-    ) -> (u16, usize) {
+    ) -> (AmspiritLitePeer, u16, std::sync::Arc<Machine>, Vec<Value>) {
         use crate::peer::DapPeer;
 
-        let (endpoint, steps) = fake_machine(bytes, script);
+        let (endpoint, machine) = fake_machine(bytes, script);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         prepare(&mut peer);
         peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
@@ -2359,51 +2510,182 @@ mod tests {
 
         // Asked afresh rather than remembered: a `GET` does not step, so this
         // is where the machine really is.
-        let state = machine(&peer.endpoint).unwrap();
+        let state = machine_state(&peer.endpoint);
+        // The peer is handed back rather than dropped here: dropping it takes
+        // its temporary breakpoints away, and some of these tests are about
+        // exactly which ones are still armed.
         (
+            peer,
             register(&state, "PC").unwrap() as u16,
-            steps.load(std::sync::atomic::Ordering::Relaxed)
+            machine,
+            seen
         )
     }
 
-    /// A `call` is walked over: step until control comes back to the
-    /// instruction after it.
+    fn machine_state(endpoint: &str) -> Value {
+        machine(endpoint).unwrap()
+    }
+
+    /// Which instructions are worth stepping *over* at all.
+    ///
+    /// Everything else means the same thing stepped over as stepped into, so
+    /// offering to run to the address after it would only ever arm a breakpoint
+    /// nothing reaches.
     #[test]
-    fn a_call_is_stepped_over_by_stepping_until_it_comes_back() {
+    fn only_instructions_that_come_back_are_stepped_over() {
+        // `call nn` and all eight conditional forms.
+        assert!(returns_to_the_next_instruction(&[0xCD, 0x00, 0x90]));
+        for condition in [0xC4, 0xCC, 0xD4, 0xDC, 0xE4, 0xEC, 0xF4, 0xFC] {
+            assert!(
+                returns_to_the_next_instruction(&[condition, 0x00, 0x90]),
+                "{condition:02X}"
+            );
+        }
+        // `rst n`, all eight.
+        for rst in [0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF] {
+            assert!(returns_to_the_next_instruction(&[rst]), "{rst:02X}");
+        }
+        // The repeating block instructions.
+        for block in [0xB0, 0xB1, 0xB2, 0xB3, 0xB8, 0xB9, 0xBA, 0xBB] {
+            assert!(
+                returns_to_the_next_instruction(&[0xED, block]),
+                "ED {block:02X}"
+            );
+        }
+        // `halt`, which sits there until an interrupt moves it on.
+        assert!(returns_to_the_next_instruction(&[0x76]));
+        // `djnz`, a loop written as one instruction - the case that started
+        // this: stepping *into* it walks back up the loop one iteration at a
+        // time, which is never what was meant.
+        assert!(returns_to_the_next_instruction(&[0x10, 0xFD]));
+
+        // And everything that does not come back.
+        for other in [
+            vec![0x00],             // nop
+            vec![0x3E, 0x01],       // ld a,1
+            vec![0x18, 0xFE],       // jr -2
+            vec![0xC3, 0x00, 0x90], // jp nn
+            vec![0xC9],             // ret
+            vec![0xED, 0xA0],       // ldi, which does not repeat
+            vec![0xCB, 0xC7],       // set 0,a - not an `rst` despite the byte
+            vec![0xDD, 0x21],       // ld ix,nn
+        ] {
+            assert!(!returns_to_the_next_instruction(&other), "{other:02X?}");
+        }
+    }
+
+    /// A `call` is stepped over with one breakpoint and one continue.
+    ///
+    /// Not by stepping until it comes back, which is what this used to do: a
+    /// routine of any size cost one HTTP round trip per instruction executed.
+    #[test]
+    fn a_call_is_stepped_over_by_running_to_the_instruction_after_it() {
         // `call 0x9000` at 0x8000, so the address to come back to is 0x8003.
-        let (pc, steps) = stepped_over(
+        let (_peer, pc, machine, _) = stepped_over(
             vec![0xCD, 0x00, 0x90],
             vec![0x8000, 0x9000, 0x9001, 0x8003],
             |_| {}
         );
         assert_eq!(pc, 0x8003);
-        assert_eq!(steps, 3, "it stopped as soon as it was back, not later");
-    }
-
-    /// And so is a repeating block instruction, for free: `PC` sits on the
-    /// `ldir` until it is finished, so the same rule gets past it.
-    #[test]
-    fn a_repeating_instruction_is_walked_to_its_end() {
-        let (pc, steps) = stepped_over(
-            vec![0xED, 0xB0],
-            vec![0x8000, 0x8000, 0x8000, 0x8002],
-            |_| {}
+        assert_eq!(machine.steps(), 0, "nothing was stepped one at a time");
+        assert_eq!(machine.resumes(), 1, "it ran, once");
+        assert!(
+            machine
+                .every_breakpoint_set()
+                .iter()
+                .any(|set| set.contains(&0x8003)),
+            "the address after the call was armed: {:?}",
+            machine.every_breakpoint_set()
         );
-        assert_eq!(pc, 0x8002);
-        assert_eq!(steps, 3);
+        assert!(
+            !machine.breakpoints().contains(&0x8003),
+            "and taken back out on arrival: {:?}",
+            machine.breakpoints()
+        );
     }
 
-    /// Anything that does not come back is one step and no walk.
+    /// `djnz` is a loop, so stepping over it runs the loop out.
     ///
-    /// A `jr` never reaches the address after itself, so walking towards it
-    /// would run the program to the end of the budget.
+    /// Reported as "step over on djnz does not work properly": it was not in
+    /// the list of instructions worth stepping over, so it got a plain single
+    /// step - which walks *backwards* into the loop body, one iteration per
+    /// press, for however many iterations the loop has.
+    #[test]
+    fn a_djnz_is_stepped_over_to_the_instruction_after_the_loop() {
+        // `djnz -3` at 0x8000: two bytes, so the loop is left at 0x8002.
+        let (_peer, pc, machine, _) = stepped_over(vec![0x10, 0xFD], vec![
+            0x8000, 0x7FFD, 0x8000, 0x7FFD, 0x8000, 0x8002,
+        ], |_| {});
+        assert_eq!(pc, 0x8002, "past the loop, not back into it");
+        assert_eq!(machine.steps(), 0);
+        assert_eq!(machine.resumes(), 1);
+    }
+
+    /// And so does a repeating block instruction, which cannot be stepped past
+    /// at all: `PC` sits on the `ldir` until it is finished.
+    #[test]
+    fn a_repeating_instruction_is_run_to_its_end() {
+        let (_peer, pc, machine, _) = stepped_over(vec![0xED, 0xB0], vec![
+            0x8000, 0x8000, 0x8000, 0x8002,
+        ], |_| {});
+        assert_eq!(pc, 0x8002);
+        assert_eq!(machine.resumes(), 1);
+    }
+
+    /// Anything else is one step and no breakpoint.
+    ///
+    /// A `jr` never reaches the address after itself, so arming it would be a
+    /// breakpoint nothing ever hits and a program that runs away.
     #[test]
     fn an_ordinary_instruction_is_a_single_step() {
         for bytes in [vec![0x3E, 0x01], vec![0x18, 0xFE], vec![0xC9]] {
-            let (pc, steps) = stepped_over(bytes.clone(), vec![0x8000, 0x4000], |_| {});
-            assert_eq!(steps, 1, "{bytes:02X?}");
+            let (_peer, pc, machine, _) = stepped_over(bytes.clone(), vec![0x8000, 0x4000], |_| {});
+            assert_eq!(machine.steps(), 1, "{bytes:02X?}");
+            assert_eq!(machine.resumes(), 0, "{bytes:02X?}");
             assert_eq!(pc, 0x4000, "{bytes:02X?}");
+            assert!(
+                machine.breakpoints().is_empty(),
+                "nothing armed for {bytes:02X?}: {:?}",
+                machine.breakpoints()
+            );
         }
+    }
+
+    /// A breakpoint the user already put on the address after the call is
+    /// theirs, and survives the step over.
+    ///
+    /// Taking it away would be a step over that quietly deletes a red dot, and
+    /// the gutter would go on showing one that no longer exists.
+    #[test]
+    fn a_breakpoint_the_editor_already_set_there_is_kept() {
+        use crate::peer::DapPeer;
+
+        let (endpoint, machine) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
+            0x8000, 0x9000, 0x8003,
+        ]);
+        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
+        peer.send(request(
+            "setInstructionBreakpoints",
+            json!({ "breakpoints": [{ "instructionReference": "0x8003" }] })
+        ))
+        .unwrap();
+        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        let seen = until_stopped(&mut peer);
+
+        assert_eq!(
+            machine.breakpoints(),
+            vec![0x8003],
+            "the user's breakpoint is still there"
+        );
+        let stopped = seen
+            .iter()
+            .find(|message| message["event"] == json!("stopped"))
+            .unwrap();
+        assert_eq!(
+            stopped["body"]["reason"],
+            json!("breakpoint"),
+            "and stopping on it is a breakpoint stop"
+        );
     }
 
     /// A breakpoint inside what is being stepped over still stops.
@@ -2411,32 +2693,116 @@ mod tests {
     /// Otherwise stepping over a `call` is a way of silently disarming every
     /// breakpoint in the routine it calls.
     #[test]
-    fn a_breakpoint_inside_the_call_wins_over_finishing_the_walk() {
-        let (pc, steps) = stepped_over(
+    fn a_breakpoint_inside_the_call_stops_the_step_over() {
+        let (_peer, pc, machine, _) = stepped_over(
             vec![0xCD, 0x00, 0x90],
             vec![0x8000, 0x9000, 0x9001, 0x8003],
-            |peer| peer.armed = vec![0x9001]
+            |peer| {
+                peer.breakpoints
+                    .lock()
+                    .unwrap()
+                    .editors = vec![0x9001];
+            }
         );
         assert_eq!(pc, 0x9001, "stopped where the user asked");
-        assert_eq!(steps, 2);
+        assert!(
+            machine.breakpoints().contains(&0x8003),
+            "and the abandoned one is left armed rather than guessed about: {:?}",
+            machine.breakpoints()
+        );
     }
 
-    /// Step out is the same walk, aimed at the address the `call` pushed.
+    /// A stop on a breakpoint the editor cannot show is explained.
+    ///
+    /// A temporary breakpoint has no red dot, so stopping on one looks exactly
+    /// like stopping at nothing at all - which is how an invisible breakpoint
+    /// was reported the last time one fired.
     #[test]
-    fn a_step_out_walks_to_the_address_on_top_of_the_stack() {
+    fn a_stop_on_a_left_behind_temporary_says_where_it_came_from() {
+        use crate::peer::DapPeer;
+
+        // A `call` whose routine goes off somewhere else, so 0x8003 is armed
+        // and never reached; the user's own breakpoint at 0x9001 stops it.
+        let (endpoint, _) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
+            0x8000, 0x9000, 0x9001, 0x8003,
+        ]);
+        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
+        peer.send(request(
+            "setInstructionBreakpoints",
+            json!({ "breakpoints": [{ "instructionReference": "0x9001" }] })
+        ))
+        .unwrap();
+        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        until_stopped(&mut peer);
+
+        // Carrying on now walks into the breakpoint the abandoned step over
+        // left behind.
+        peer.send(request("continue", json!({ "threadId": 1 })))
+            .unwrap();
+        let seen = until_stopped(&mut peer);
+        let note = seen
+            .iter()
+            .find(|message| message["event"] == json!("output"))
+            .expect("the invisible stop is explained");
+        let text = note["body"]["output"].as_str().unwrap();
+        assert!(text.contains("0x8003"), "{text}");
+        assert!(text.contains("step over"), "{text}");
+        assert!(text.contains("no red dot"), "{text}");
+    }
+
+    /// Nothing the adapter armed by itself is ever reported to the editor.
+    ///
+    /// The gutter must show the user's breakpoints and only those, or they end
+    /// up able to clear one the adapter is relying on - and to wonder where the
+    /// other one came from.
+    #[test]
+    fn a_temporary_breakpoint_never_reaches_the_editor() {
+        let (_peer, _, machine, seen) = stepped_over(
+            vec![0xCD, 0x00, 0x90],
+            vec![0x8000, 0x9000, 0x8003],
+            |_| {}
+        );
+        assert!(
+            machine
+                .every_breakpoint_set()
+                .iter()
+                .any(|set| set.contains(&0x8003)),
+            "it really was armed"
+        );
+        for message in &seen {
+            assert!(
+                message.get("body").and_then(|b| b.get("breakpoints")).is_none(),
+                "nothing the editor could paint a gutter from: {message:?}"
+            );
+            assert!(
+                !message.to_string().contains("0x8003"),
+                "and the address is never mentioned: {message:?}"
+            );
+        }
+    }
+
+    /// Step out is the same trick, aimed at the address the `call` pushed.
+    #[test]
+    fn a_step_out_runs_to_the_address_on_top_of_the_stack() {
         use crate::peer::DapPeer;
 
         // The two bytes at `SP` are the return address, little-endian: 0x8003.
-        let (endpoint, steps) =
-            fake_machine(vec![0x03, 0x80], vec![0x9000, 0x9001, 0x9002, 0x8003]);
+        let (endpoint, machine) = fake_machine(vec![0x03, 0x80], vec![
+            0x9000, 0x9001, 0x9002, 0x8003,
+        ]);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         peer.send(request("stepOut", json!({ "threadId": 1 })))
             .unwrap();
         let seen = until_stopped(&mut peer);
 
-        assert_eq!(steps.load(std::sync::atomic::Ordering::Relaxed), 3);
-        let state = machine(&peer.endpoint).unwrap();
+        assert_eq!(machine.steps(), 0, "not walked out one instruction at a time");
+        assert_eq!(machine.resumes(), 1);
+        let state = machine_state(&peer.endpoint);
         assert_eq!(register(&state, "PC").unwrap(), 0x8003);
+        assert!(
+            !machine.breakpoints().contains(&0x8003),
+            "and its breakpoint is gone again"
+        );
         assert!(
             seen.iter()
                 .any(|message| message["command"] == json!("stepOut")),
@@ -2444,161 +2810,223 @@ mod tests {
         );
     }
 
-    /// A walk that never comes back gives up and says so, rather than running
-    /// for ever.
-    #[test]
-    fn a_walk_that_never_returns_gives_up_out_loud() {
-        use crate::peer::DapPeer;
-
-        // A `call` into a routine that never returns: `PC` just goes up.
-        let (endpoint, _) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x9001, 0x9002, 0x9003, 0x9004,
-        ]);
-        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
-        peer.step_over_budget = 4;
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
-
-        let drained = until_stopped(&mut peer);
-        let note = drained
-            .iter()
-            .find(|message| message["event"] == json!("output"))
-            .expect("says it gave up");
-        let text = note["body"]["output"].as_str().unwrap();
-        assert!(text.contains("gave up after 4"), "{text}");
-        assert!(text.contains("step over again"), "and what to do: {text}");
-        assert!(text.contains("0x9003"), "and where it got to: {text}");
-        assert!(
-            drained
-                .iter()
-                .any(|message| message["command"] == json!("next")),
-            "and still answers the editor"
-        );
-    }
-
-    /// A walk that ran out of time is resumed by the next one, towards the
-    /// same address.
-    #[test]
-    fn a_second_step_over_carries_on_towards_the_same_address() {
-        use crate::peer::DapPeer;
-
-        // `call 0x9000` at 0x8000: back at 0x8003 on the fourth step.
-        let (endpoint, steps) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x9001, 0x9002, 0x8003,
-        ]);
-        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
-        peer.step_over_budget = 2;
-
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
-        until_stopped(&mut peer);
-        assert_eq!(steps.load(std::sync::atomic::Ordering::Relaxed), 2);
-        assert_eq!(
-            *peer.unfinished.lock().unwrap(),
-            Some((0x9001, 0x8003)),
-            "where it was going"
-        );
-
-        // Pressing it again does not step over `0x9002` - it goes on to
-        // `0x8003`, which is what was being stepped over in the first place.
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
-        until_stopped(&mut peer);
-        let state = machine(&peer.endpoint).unwrap();
-        assert_eq!(register(&state, "PC").unwrap(), 0x8003);
-        assert_eq!(*peer.unfinished.lock().unwrap(), None, "and it arrived");
-    }
-
-    /// A walk with no clock on it is ended by the user, not by a stopwatch.
+    /// A step over that never arrives leaves its breakpoint armed - and the
+    /// session takes it away on the way out.
     ///
-    /// Which is the whole point of dropping the time limit: a step over that
-    /// walked into the main loop used to be cut short after two seconds
-    /// whatever it was doing, and a routine that legitimately took longer was
-    /// cut short with it.
+    /// Leaving it is deliberate: a routine that does not return to the
+    /// instruction after the call is a bug in the program (or a deliberate
+    /// trick), and there is nothing useful to guess. Handing the emulator back
+    /// with it still set is another matter.
     #[test]
-    fn a_walk_is_stopped_by_pressing_pause() {
+    fn temporary_breakpoints_are_cleared_when_the_session_ends() {
         use crate::peer::DapPeer;
 
-        // A `call` into a routine that never comes back, so nothing but the
-        // user is ever going to end this walk.
-        let (endpoint, steps) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x9001, 0x9002,
+        let (endpoint, machine) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
+            0x8000, 0x9000, 0x9001,
+        ]);
+        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
+        peer.send(request(
+            "setInstructionBreakpoints",
+            json!({ "breakpoints": [{ "instructionReference": "0x9001" }] })
+        ))
+        .unwrap();
+        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        until_stopped(&mut peer);
+        assert!(
+            machine.breakpoints().contains(&0x8003),
+            "left armed while the session runs"
+        );
+
+        peer.send(request("disconnect", json!({}))).unwrap();
+        assert_eq!(
+            machine.breakpoints(),
+            vec![0x9001],
+            "and only the editor's are left behind"
+        );
+    }
+
+    /// The editor changing a red dot does not disarm a step over in flight.
+    ///
+    /// `/api/z80_bp` replaces the whole set, so a `setInstructionBreakpoints`
+    /// that spoke only for the editor would take the temporary with it - and
+    /// the step over would run to the end of the program.
+    #[test]
+    fn arming_the_editors_breakpoints_keeps_the_temporary_one() {
+        use crate::peer::DapPeer;
+
+        let (endpoint, machine) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
+            0x8000, 0x9000, 0x9001,
         ]);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        peer.send(request(
+            "setInstructionBreakpoints",
+            json!({ "breakpoints": [{ "instructionReference": "0x4000" }] })
+        ))
+        .unwrap();
 
-        // Answered while the walk is still walking - the adapter is not the
-        // thing doing the walking any more, so it is still listening.
-        let answered = peer.drain();
-        assert!(
-            answered
-                .iter()
-                .any(|message| message["command"] == json!("next")),
-            "the editor is answered before the walk ends: {answered:?}"
-        );
+        let armed = machine.breakpoints();
+        assert!(armed.contains(&0x4000), "the editor's: {armed:?}");
+        assert!(armed.contains(&0x8003), "and ours: {armed:?}");
+    }
 
-        peer.send(request("pause", json!({ "threadId": 1 })))
-            .unwrap();
+    /// And the step over arrives anyway, leaving the editor's new breakpoint
+    /// behind it.
+    ///
+    /// The other half of the same interaction: the merge must not lose the
+    /// temporary on the way in, *and* retiring the temporary on arrival must
+    /// not take the editor's breakpoint out with it. Losing it there is the
+    /// worse of the two, because nothing says so - the red dot stays in the
+    /// gutter over an address the emulator is no longer watching.
+    #[test]
+    fn a_step_over_arrives_after_the_editor_arms_another_breakpoint() {
+        use crate::peer::DapPeer;
+
+        // `call 0x9000` at 0x8000, coming back to 0x8003.
+        let (endpoint, machine) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
+            0x8000, 0x9000, 0x8003,
+        ]);
+        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
+        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        // Mid-flight: the user puts a red dot somewhere else entirely.
+        peer.send(request(
+            "setInstructionBreakpoints",
+            json!({ "breakpoints": [{ "instructionReference": "0x4000" }] })
+        ))
+        .unwrap();
+
         let seen = until_stopped(&mut peer);
-
         let stopped = seen
             .iter()
             .find(|message| message["event"] == json!("stopped"))
-            .unwrap();
-        assert_eq!(stopped["body"]["reason"], json!("pause"));
-        let note = seen
-            .iter()
-            .find(|message| message["event"] == json!("output"))
-            .expect("and says where it stopped");
-        let text = note["body"]["output"].as_str().unwrap();
-        assert!(text.contains("step over again"), "{text}");
-
-        // Still heading for the address after the `call`, so pressing step over
-        // again carries on rather than stepping over whatever the routine
-        // happened to be on.
+            .expect("the step over ends in a stop");
         assert_eq!(
-            peer.unfinished
-                .lock()
-                .unwrap()
-                .map(|(_, target)| target),
-            Some(0x8003)
+            stopped["body"]["reason"],
+            json!("step"),
+            "and it is the step over that ended, not a breakpoint"
         );
-
-        // And it really has stopped: a stop event with the walk still stepping
-        // underneath it would be a lie the editor cannot see through.
-        let counted = steps.load(std::sync::atomic::Ordering::Relaxed);
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        assert_eq!(counted, steps.load(std::sync::atomic::Ordering::Relaxed));
+        assert_eq!(
+            machine.breakpoints(),
+            vec![0x4000],
+            "ours is retired and the editor's is left armed"
+        );
     }
 
-    /// A walk long enough to be noticed says what it is doing and how far it
-    /// has got.
+    /// The whole chain: a red dot in the editor arms the emulator, and the stop
+    /// it causes reaches the editor.
     ///
-    /// Without it a step over into something slow is indistinguishable from a
-    /// debugger that has hung - and now that there is no time limit, that
-    /// silence could last for ever.
+    /// Every other breakpoint test here speaks to the peer directly, which is
+    /// not how a breakpoint is ever set. The editor says `setBreakpoints` for
+    /// one file; the session turns that into addresses and hands the peer the
+    /// *whole* set, every time; the peer merges it with whatever a step over
+    /// has armed and writes the result to `/api/z80_bp`. A break anywhere along
+    /// that chain looks identical from outside - "the breakpoint does not stop
+    /// anything" - and so does a stop that is noticed by nobody, which is why
+    /// this walks the arming and the noticing in one go.
     #[test]
-    fn a_long_walk_says_how_far_it_has_got() {
+    fn a_breakpoint_set_in_the_editor_arms_the_emulator_and_its_stop_comes_back() {
+        use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
+        use cpclib_project::srcmap::SourceMap;
+
+        // Line 10 is where the program is; line 20, at 0x8000, is the red dot.
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![
+                SourceMapRow::flat(0, 10, 0x4000, 3),
+                SourceMapRow::flat(0, 20, 0x8000, 1),
+            ]
+        });
+        let (endpoint, machine) = fake_machine(vec![0x00], vec![0x4000, 0x8000]);
+        let peer = AmspiritLitePeer::connect(&endpoint).unwrap();
+        let mut session = crate::session::Session::new(peer, map);
+        session.on_attached().unwrap();
+
+        session
+            .on_editor_message(&json!({
+                "seq": 1, "type": "request", "command": "setBreakpoints",
+                "arguments": {
+                    "source": { "path": "main.asm" },
+                    "breakpoints": [{ "line": 20 }]
+                }
+            }))
+            .unwrap();
+        assert_eq!(
+            machine.breakpoints(),
+            vec![0x8000],
+            "the emulator is really holding the address behind the red dot"
+        );
+
+        session
+            .on_editor_message(&json!({
+                "seq": 2, "type": "request", "command": "continue",
+                "arguments": { "threadId": 1 }
+            }))
+            .unwrap();
+
+        let told = until_the_editor_hears_a_stop(&mut session);
+        assert_eq!(
+            told["body"]["reason"],
+            json!("breakpoint"),
+            "and the stop is reported as one: {told}"
+        );
+        let state = machine_state(&endpoint);
+        assert_eq!(
+            register(&state, "PC").unwrap(),
+            0x8000,
+            "stopped where the red dot is"
+        );
+    }
+
+    /// Pump the session until it tells the editor the program stopped.
+    ///
+    /// The stop travels editor-ward in two steps - the peer's poller notices it
+    /// and the session translates it - and only the second one is what the
+    /// editor acts on, so that is what a test about breakpoints has to wait
+    /// for.
+    fn until_the_editor_hears_a_stop(
+        session: &mut crate::session::Session<AmspiritLitePeer>
+    ) -> Value {
         use crate::peer::DapPeer;
 
-        let (endpoint, _) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x9001, 0x8003,
-        ]);
-        let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
-        // "Long" brought forward to no time at all, rather than spending a real
-        // second in a test to prove what a timer does.
-        peer.announce_after = std::time::Duration::ZERO;
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        let mut seen: Vec<Value> = Vec::new();
+        for _ in 0..1000 {
+            for message in session.peer_mut().drain() {
+                seen.extend(session.on_emulator_message(&message));
+            }
+            if let Some(stopped) = seen
+                .iter()
+                .find(|message| message["event"] == json!("stopped"))
+            {
+                return stopped.clone();
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        panic!("the editor was never told the program had stopped: {seen:?}");
+    }
 
-        let seen = until_stopped(&mut peer);
-        let note = seen
-            .iter()
-            .find(|message| message["event"] == json!("output"))
-            .expect("it says what it is up to");
-        let text = note["body"]["output"].as_str().unwrap();
-        assert!(
-            text.to_lowercase().contains("call"),
-            "and what it is stepping over: {text}"
+    /// An emulator is started on a port nothing else is holding.
+    ///
+    /// Starting it on a busy one does not fail: this emulator says "Web debug
+    /// server busy or unavailable, disabled" and runs on without a debug
+    /// server, while the port goes on answering from whatever was already there
+    /// - an emulator a killed session left behind, holding the previous build.
+    /// The session then arms its breakpoints in a machine nobody is watching.
+    #[test]
+    fn an_emulator_is_started_where_it_can_really_serve() {
+        let held = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let taken = held.local_addr().unwrap().port();
+        assert_ne!(
+            port_to_serve_on(taken),
+            taken,
+            "a port something else answers on is not ours to use"
         );
-        assert!(text.contains("instructions so far"), "{text}");
-        assert!(text.contains("pause"), "and how to stop it: {text}");
+
+        let free = a_free_port().expect("the machine has a spare port");
+        assert_eq!(
+            port_to_serve_on(free),
+            free,
+            "and a free one is used as asked"
+        );
     }
 
     /// A machine found already stopped is reported, not swallowed.
@@ -2753,7 +3181,7 @@ mod tests {
     /// travels up out of `send`, the session ends, and every button goes dead
     /// with no stop event and no explanation.
     #[test]
-    fn a_walk_against_a_dead_emulator_still_answers_the_editor() {
+    fn a_step_over_against_a_dead_emulator_still_answers_the_editor() {
         use crate::peer::DapPeer;
 
         // A port nothing is listening on: bound to find a free one, then let
@@ -2764,7 +3192,7 @@ mod tests {
 
         let mut peer = AmspiritLitePeer::connect(&format!("http://127.0.0.1:{port}")).unwrap();
         peer.send(request("next", json!({ "threadId": 1 })))
-            .expect("a failed walk is not a failed session");
+            .expect("a failed step is not a failed session");
 
         let drained = until_stopped(&mut peer);
         assert!(
@@ -2798,13 +3226,9 @@ mod tests {
         let peer = AmspiritLitePeer {
             endpoint: DEFAULT_ENDPOINT.to_string(),
             expecting_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            stepping: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            armed: Vec::new(),
-            step_over_budget: AmspiritLitePeer::STEP_OVER_BUDGET,
-            announce_after: AmspiritLitePeer::ANNOUNCE_AFTER,
+            stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
             resume_confirmation: AmspiritLitePeer::RESUME_CONFIRMATION,
-            unfinished: std::sync::Arc::new(std::sync::Mutex::new(None)),
             launched: None,
             pending,
             outgoing,
@@ -2845,8 +3269,8 @@ mod tests {
         }
 
         // `stepOut` is the exception that proves the rule: claimed, and
-        // deliberately *not* one call - it is a walk of many steps, which
-        // `send` intercepts before `call_for` is ever consulted.
+        // deliberately *not* one call - it is a breakpoint plus a continue,
+        // which `send` intercepts before `call_for` is ever consulted.
         assert!(peer.supports("stepOut"));
         assert!(call_for(&json!({ "command": "stepOut", "arguments": {} })).is_none());
 
@@ -2867,12 +3291,25 @@ mod tests {
 mod live_tests {
     use super::*;
 
+    /// Which emulator to talk to.
+    ///
+    /// The default port belongs to whichever instance happens to be running,
+    /// which is rarely the one a check wants; `CPCLIB_DAP_LIVE_ENDPOINT` names
+    /// a different one without touching it.
+    fn endpoint() -> String {
+        std::env::var("CPCLIB_DAP_LIVE_ENDPOINT").unwrap_or_else(|_| DEFAULT_ENDPOINT.to_string())
+    }
+
     fn reachable() -> bool {
-        std::net::TcpStream::connect_timeout(
-            &"127.0.0.1:8765".parse().unwrap(),
-            std::time::Duration::from_millis(300)
-        )
-        .is_ok()
+        let Ok(host) = host_of(&endpoint())
+        else {
+            return false;
+        };
+        let Ok(address) = host.parse()
+        else {
+            return false;
+        };
+        std::net::TcpStream::connect_timeout(&address, std::time::Duration::from_millis(300)).is_ok()
     }
 
     #[test]
@@ -2880,7 +3317,7 @@ mod live_tests {
     fn live_state_carries_every_pane() {
         assert!(reachable(), "start AMSpiriT Lite with --web-server first");
 
-        let body = perform(DEFAULT_ENDPOINT, &Call::get("/api/state")).unwrap();
+        let body = perform(&endpoint(), &Call::get("/api/state")).unwrap();
         let state: Value = serde_json::from_str(&body).unwrap();
 
         // Everything the panes need, in one call, while the machine runs.
@@ -2907,7 +3344,7 @@ mod live_tests {
             "seq": 1, "type": "request", "command": "readMemory",
             "arguments": { "memoryReference": "0x0000", "count": 8 }
         });
-        let body = perform(DEFAULT_ENDPOINT, &call_for(&read).unwrap()).unwrap();
+        let body = perform(&endpoint(), &call_for(&read).unwrap()).unwrap();
         let answer: Value = serde_json::from_str(&body).unwrap();
 
         assert_eq!(answer["len"], json!(8), "asked in decimal: {answer}");
@@ -2921,7 +3358,7 @@ mod live_tests {
     fn live_memmap_names_the_page_at_each_region() {
         assert!(reachable(), "start AMSpiriT Lite with --web-server first");
 
-        let body = perform(DEFAULT_ENDPOINT, &Call::get("/api/memmap")).unwrap();
+        let body = perform(&endpoint(), &Call::get("/api/memmap")).unwrap();
         let map: Value = serde_json::from_str(&body).unwrap();
         let regions = map["regions"].as_array().expect("regions");
 
@@ -2930,6 +3367,108 @@ mod live_tests {
         assert!(
             map.get("rmr").is_some(),
             "the banking register itself: {map}"
+        );
+    }
+
+    /// A `djnz` loop is stepped over in one go, on a real machine.
+    ///
+    /// The case that started this: stepping *into* a `djnz` walks back up the
+    /// loop one iteration per press, so a loop of 36 takes 36 presses to leave.
+    /// A breakpoint on the instruction after it and a continue leaves it once,
+    /// and the loop counter proves the loop really ran.
+    ///
+    /// Writes a five-byte program into RAM at 0x8000 and runs it, so it says
+    /// nothing about whatever was loaded - which is why it is not run by
+    /// default.
+    #[test]
+    #[ignore]
+    fn live_a_djnz_loop_is_left_in_one_continue() {
+        assert!(reachable(), "start AMSpiriT Lite with --web-server first");
+        let endpoint = endpoint();
+
+        // ld b,5 / nop / djnz -3 / jr self
+        perform(
+            &endpoint,
+            &Call::post("/api/ram")
+                .body(json!({ "addr": 0x8000, "data": "06050010FD18FE" }).to_string())
+        )
+        .unwrap();
+
+        // Stopped on the `djnz` itself, with the loop still to run.
+        perform(&endpoint, &Call::post("/api/z80_bp").body("0x8003")).unwrap();
+        perform(
+            &endpoint,
+            &Call::post("/api/exec").body(json!({ "addr": 0x8000 }).to_string())
+        )
+        .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let state = machine(&endpoint).unwrap();
+        assert_eq!(register(&state, "PC").unwrap(), 0x8003);
+        assert_eq!(state["z80"]["B"], json!(5), "the loop has not run yet");
+
+        // And over it: one breakpoint on the instruction after, one continue.
+        perform(&endpoint, &Call::post("/api/z80_bp").body("0x8005")).unwrap();
+        perform(
+            &endpoint,
+            &Call::post("/api/config").body(json!({ "paused": false }).to_string())
+        )
+        .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        let state = machine(&endpoint).unwrap();
+        assert_eq!(register(&state, "PC").unwrap(), 0x8005, "past the loop");
+        assert_eq!(state["z80"]["B"], json!(0), "and it really ran it out");
+        perform(&endpoint, &Call::post("/api/z80_bp").body("")).unwrap();
+    }
+
+    /// `POST /api/step` is asynchronous: the state read straight after it can
+    /// still be the state *before* it.
+    ///
+    /// Which is why "step until `PC` reaches the address after this
+    /// instruction" cannot be trusted on this emulator, however long it is
+    /// given: a walk that reads a stale `PC` at the wrong moment walks past its
+    /// own target and then runs until it gives up. Measured here rather than
+    /// argued about.
+    #[test]
+    #[ignore]
+    fn live_a_step_is_not_finished_when_it_is_answered() {
+        assert!(reachable(), "start AMSpiriT Lite with --web-server first");
+        let endpoint = endpoint();
+
+        // jr $ at 0x8000, so `PC` is 0x8000 whenever a step has landed and the
+        // register file changes on nothing else.
+        perform(
+            &endpoint,
+            &Call::post("/api/ram").body(json!({ "addr": 0x8000, "data": "18FE" }).to_string())
+        )
+        .unwrap();
+        perform(&endpoint, &Call::post("/api/z80_bp").body("0x8000")).unwrap();
+        perform(
+            &endpoint,
+            &Call::post("/api/exec").body(json!({ "addr": 0x8000 }).to_string())
+        )
+        .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        perform(&endpoint, &Call::post("/api/z80_bp").body("")).unwrap();
+
+        // `R` counts refreshes, so it moves with every instruction executed and
+        // nothing else. Read twice around a step: if the step were finished by
+        // the time it answers, the immediate reading and the settled one would
+        // always agree.
+        let mut disagreed = 0;
+        for _ in 0..40 {
+            perform(&endpoint, &Call::post("/api/step")).unwrap();
+            let straight_away = machine(&endpoint).unwrap()["z80"]["R"].clone();
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            let settled = machine(&endpoint).unwrap()["z80"]["R"].clone();
+            if straight_away != settled {
+                disagreed += 1;
+            }
+        }
+        assert!(
+            disagreed > 0,
+            "the emulator answered every step before doing it, which would make \
+             a stepping walk trustworthy after all"
         );
     }
 }

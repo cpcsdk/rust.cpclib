@@ -5,9 +5,9 @@
 //! makes them readable while stepping.
 
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
-use cpclib_dap::inspect;
 use cpclib_dap::peer::RecordingPeer;
 use cpclib_dap::session::Session;
+use cpclib_dap::{disassemble, inspect};
 use cpclib_project::srcmap::SourceMap;
 use serde_json::{Value, json};
 
@@ -32,6 +32,15 @@ fn base64(bytes: &[u8]) -> String {
         }
     }
     out
+}
+
+/// The assembled program as the session is handed it: the whole 64K, with
+/// `bytes` sitting where they were assembled to.
+fn image_with(address: u16, bytes: &[u8]) -> Vec<u8> {
+    let mut image = vec![0u8; 0x1_0000];
+    let at = address as usize;
+    image[at..at + bytes.len()].copy_from_slice(bytes);
+    image
 }
 
 fn map_with(symbols: &[(&str, u32)]) -> SourceMap {
@@ -104,42 +113,60 @@ fn af_is_never_labelled() {
     assert_eq!(value_of(&variables, "AF"), "0xC000");
 }
 
-/// Costs come from the assembler's own table, so the pane and the build cannot
-/// disagree about what an instruction costs.
+/// Costs come from the assembler's own table, applied to the program's own
+/// bytes - so the pane and the build cannot disagree about what code costs.
+///
+/// The bytes are the point. What runs at `PC` is whatever is in memory there,
+/// which is the only thing that stays true for code a macro expanded, code the
+/// program wrote itself, or a `defs` run that has no instruction text at all.
 #[test]
-fn a_source_line_is_priced_in_nops() {
-    assert_eq!(inspect::nops_of_source_line("  nop"), Some(1));
-    assert_eq!(inspect::nops_of_source_line("  ld a,0"), Some(2));
+fn the_bytes_of_a_line_are_priced_in_nops() {
+    let priced = |bytes: &[u8]| disassemble::nops(&disassemble::decode(0x4000, bytes, bytes.len()));
+
+    assert_eq!(priced(&[0x00]), Some(1), "nop");
+    assert_eq!(priced(&[0x3E, 0x00]), Some(2), "ld a,0");
     // `ldir` is the assembler's own answer: 5, the cost of a single pass. A
     // repeating instruction has no one cost - it is 6 per iteration except the
     // last - and this deliberately reports what `basm` reports rather than a
     // second opinion the build would disagree with.
-    assert_eq!(inspect::nops_of_source_line("  ldir"), Some(5));
+    assert_eq!(priced(&[0xED, 0xB0]), Some(5), "ldir");
     // Several instructions on one line is what the line costs, which is the
-    // question actually being asked.
-    assert_eq!(inspect::nops_of_source_line("  nop : nop : nop"), Some(3));
+    // question actually being asked. `nop : nop : nop` is three bytes.
+    assert_eq!(priced(&[0x00, 0x00, 0x00]), Some(3));
+    // `defs N` is N zero bytes, which run as N `NOP`s - what a demo uses it
+    // for on a raster line. No directive is involved by the time it is bytes.
+    assert_eq!(priced(&vec![0u8; 59]), Some(59));
 }
 
-/// A line that is not an instruction is priced at nothing rather than wrongly.
+/// Pricing runs on whatever the program stopped in, so no byte may be able to
+/// end the session. Bytes that decode to no instruction have no cost, and say
+/// so; they do not take the debugger down.
 #[test]
-fn a_line_with_no_instruction_costs_nothing() {
-    assert_eq!(inspect::nops_of_source_line("; just a comment"), Some(0));
-    assert_eq!(inspect::nops_of_source_line("label:"), Some(0));
+fn bytes_that_are_not_an_instruction_are_declined_not_fatal() {
+    for bytes in [
+        vec![0xEDu8, 0x00],           // an ED prefix that leads nowhere
+        vec![0xDD, 0xDD, 0xDD, 0xDD], // stacked index prefixes
+        vec![0x21, 0x56]              // `ld hl,` with one of its two address bytes
+    ] {
+        let decoded = disassemble::decode(0x4000, &bytes, bytes.len());
+        assert_eq!(
+            disassemble::nops(&decoded),
+            None,
+            "a run that is partly unpriceable has no total: {decoded:?}"
+        );
+    }
 }
 
 /// The cost of the line at `PC` reaches the pane.
 #[test]
 fn the_register_pane_reports_the_cost_of_the_current_line() {
-    let directory = camino_tempfile::tempdir().unwrap();
-    let file = directory.path().join("main.asm");
-    std::fs::write(&file, "  org 0x4000\n\n  ld a,0\n  nop\n").unwrap();
-
     let map = SourceMap::from_raw(&RawSourceMap {
-        files: vec![file.to_string()],
+        files: vec!["main.asm".into()],
         // Line 3 is `ld a,0`, two bytes at 0x4000 - and two NOPs.
         rows: vec![SourceMapRow::flat(0, 3, 0x4000, 2)]
     });
-    let mut session = Session::new(RecordingPeer::new(), map);
+    let mut session =
+        Session::new(RecordingPeer::new(), map).with_image(image_with(0x4000, &[0x3E, 0x00]));
 
     let out = session.on_emulator_message(&json!({
         "seq": 4, "type": "response", "request_seq": 2, "success": true,
@@ -152,6 +179,167 @@ fn the_register_pane_reports_the_cost_of_the_current_line() {
 
     let variables = out[0]["body"]["variables"].as_array().unwrap();
     assert_eq!(value_of(variables, "cost"), "2 NOPs");
+}
+
+/// Stepping into a `defs` run must not end the session.
+///
+/// `defs N` assembles to N zero bytes, which run as N `NOP`s - the way a demo
+/// pads a raster line to an exact width. Landing on that line used to ask the
+/// *assembler's parser* what the source text cost, which panicked, which took
+/// the adapter's process with it: from the editor's side the toolbar simply
+/// vanished part-way through the run. The pane is priced from the run's own
+/// bytes now, so there is no directive left to fail to parse - and every
+/// address in the run is still checked, because the first stop inside it was
+/// the one that killed the session.
+#[test]
+fn stepping_through_a_defs_run_prices_it_instead_of_crashing() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["demo_code.asm".into()],
+        // The raster-timing idiom `defs 64 - duration(djnz $)-1`: one row
+        // covering the whole 60-byte run, which is how the assembler records
+        // it.
+        rows: vec![SourceMapRow::flat(0, 4, 0x4002, 60)]
+    });
+    let mut session =
+        Session::new(RecordingPeer::new(), map).with_image(image_with(0x4002, &[0u8; 60]));
+
+    for pc in [0x4002u32, 0x4003, 0x4020, 0x403D] {
+        let out = session.on_emulator_message(&json!({
+            "seq": 4, "type": "response", "request_seq": 2, "success": true,
+            "command": "variables",
+            "body": {"variables": [
+                {"name": "AF", "value": "0x0044", "variablesReference": 0},
+                {"name": "PC", "value": format!("0x{pc:04X}"), "variablesReference": 0}
+            ]}
+        }));
+
+        let variables = out[0]["body"]["variables"]
+            .as_array()
+            .unwrap_or_else(|| panic!("the pane still reaches the editor at 0x{pc:04X}"));
+        assert_eq!(
+            value_of(variables, "cost"),
+            "60 NOPs",
+            "the whole run is what the line costs, at 0x{pc:04X}"
+        );
+    }
+}
+
+/// A line is priced whole even when it is several instructions, because one
+/// basm line routinely is: `ld a,0 : ld b,0` is one line the user reads and
+/// two rows the assembler recorded.
+#[test]
+fn a_line_holding_several_instructions_is_priced_whole() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["main.asm".into()],
+        rows: vec![
+            SourceMapRow::flat(0, 3, 0x4000, 2),
+            SourceMapRow::flat(0, 3, 0x4002, 2),
+        ]
+    });
+    let mut session = Session::new(RecordingPeer::new(), map)
+        .with_image(image_with(0x4000, &[0x3E, 0x00, 0x06, 0x00]));
+
+    // Stopped on the *second* of the two: the line is still the line.
+    let out = session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [
+            {"name": "PC", "value": "0x4002", "variablesReference": 0}
+        ]}
+    }));
+
+    let variables = out[0]["body"]["variables"].as_array().unwrap();
+    assert_eq!(value_of(variables, "cost"), "4 NOPs");
+}
+
+/// The line before and the line after are not this line.
+///
+/// The same source line inside a macro body or a `repeat` emits at several
+/// unrelated addresses, and only the run being executed may be summed - so the
+/// run is grown by adjacency, not by looking the line up and adding everything
+/// it ever emitted.
+#[test]
+fn a_neighbouring_line_is_not_added_to_this_one() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["main.asm".into()],
+        rows: vec![
+            SourceMapRow::flat(0, 3, 0x4000, 1),
+            SourceMapRow::flat(0, 4, 0x4001, 1),
+            SourceMapRow::flat(0, 5, 0x4002, 1),
+            // Line 4 again, from a second expansion further along.
+            SourceMapRow::flat(0, 4, 0x4100, 1),
+        ]
+    });
+    let mut session =
+        Session::new(RecordingPeer::new(), map).with_image(image_with(0x4000, &[0x00, 0x00, 0x00]));
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [
+            {"name": "PC", "value": "0x4001", "variablesReference": 0}
+        ]}
+    }));
+
+    let variables = out[0]["body"]["variables"].as_array().unwrap();
+    assert_eq!(value_of(variables, "cost"), "1 NOP");
+}
+
+/// Code with no source line at all is still priced, one instruction at a time.
+///
+/// A routine built at runtime, or a jump into the firmware, has nothing in the
+/// source map - and used to get no cost row, because the answer came from a
+/// source file. The bytes are there either way.
+#[test]
+fn code_the_source_map_does_not_know_is_still_priced() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["main.asm".into()],
+        rows: vec![SourceMapRow::flat(0, 3, 0x4000, 2)]
+    });
+    // `ldir` at an address no row covers.
+    let mut session =
+        Session::new(RecordingPeer::new(), map).with_image(image_with(0x9000, &[0xED, 0xB0]));
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [
+            {"name": "PC", "value": "0x9000", "variablesReference": 0}
+        ]}
+    }));
+
+    let variables = out[0]["body"]["variables"].as_array().unwrap();
+    assert_eq!(value_of(variables, "cost"), "5 NOPs");
+}
+
+/// A line the assembler cannot price is worth no answer, and never worth the
+/// session. The pane goes out without a `cost` row rather than not at all.
+#[test]
+fn a_line_that_cannot_be_priced_still_yields_a_register_pane() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["main.asm".into()],
+        rows: vec![SourceMapRow::flat(0, 2, 0x4000, 4)]
+    });
+    // Four bytes that decode to no instruction at all - what an `incbin` of
+    // data looks like once it is bytes.
+    let mut session = Session::new(RecordingPeer::new(), map)
+        .with_image(image_with(0x4000, &[0xED, 0x00, 0xED, 0x01]));
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [
+            {"name": "AF", "value": "0x0044", "variablesReference": 0},
+            {"name": "PC", "value": "0x4001", "variablesReference": 0}
+        ]}
+    }));
+
+    let variables = out[0]["body"]["variables"].as_array().unwrap();
+    assert_eq!(value_of(variables, "PC"), "0x4001");
+    assert!(
+        !variables.iter().any(|v| v["name"] == json!("cost")),
+        "no cost is claimed for a line that has none: {variables:?}"
+    );
 }
 
 /// `-mv` reads memory and hands the dump to a panel, with a receipt in the

@@ -443,6 +443,54 @@ impl SourceMap {
         })
     }
 
+    /// The unbroken run of bytes the source line covering `address` occupies.
+    ///
+    /// A line is not one instruction and not one row: `ld a,l : inc a` is two
+    /// rows, and `defs 59` is one row 59 bytes long. Both are still *the line*,
+    /// so anything asking what the line at `PC` costs has to see the whole run
+    /// rather than the row `PC` happens to sit in.
+    ///
+    /// Contiguity is what keeps this honest. The same line inside a macro body
+    /// or a `repeat` emits at several unrelated addresses, and only the run
+    /// containing `address` is the one being executed - the others belong to
+    /// other iterations and summing them would price a loop as if it ran once
+    /// per copy.
+    pub fn line_extent_at(&self, page: u8, address: u16) -> Option<std::ops::Range<u32>> {
+        let address = address as u32;
+        let anchor = self
+            .spans
+            .iter()
+            .find(|s| s.page == page && address >= s.start && address < s.end)?;
+        let (file, line) = (anchor.file, anchor.line);
+        let mut extent = anchor.start..anchor.end;
+
+        // Grow to a fixpoint rather than in one pass: rows of one line are not
+        // required to appear in address order, so a row that does not touch
+        // the run yet may touch it once another row has widened it.
+        let mut growing = true;
+        while growing {
+            growing = false;
+            for span in &self.spans {
+                if span.page != page || span.file != file || span.line != line {
+                    continue;
+                }
+                // `end` is exclusive, so touching includes merely abutting.
+                if span.end < extent.start || span.start > extent.end {
+                    continue;
+                }
+                if span.start < extent.start {
+                    extent.start = span.start;
+                    growing = true;
+                }
+                if span.end > extent.end {
+                    extent.end = span.end;
+                    growing = true;
+                }
+            }
+        }
+        Some(extent)
+    }
+
     /// Whether this program puts code from different pages at the same logical
     /// address - the condition under which `location_at` has to give up.
     pub fn has_banked_ambiguity(&self) -> bool {
@@ -558,6 +606,55 @@ mod tests {
                 .map(|&(file, line, logical, len)| SourceMapRow::flat(file, line, logical, len))
                 .collect()
         })
+    }
+
+    /// A line's extent is the whole unbroken run it emitted, not the one row
+    /// the address happens to land in.
+    #[test]
+    fn a_lines_extent_covers_every_row_it_emitted() {
+        // `ld a,0 : ld b,0` on line 3: two rows, one line.
+        let map = map(&[(0, 3, 0x4000, 2), (0, 3, 0x4002, 2), (0, 4, 0x4004, 1)]);
+
+        assert_eq!(map.line_extent_at(0, 0x4000), Some(0x4000..0x4004));
+        assert_eq!(map.line_extent_at(0, 0x4003), Some(0x4000..0x4004));
+        assert_eq!(map.line_extent_at(0, 0x4004), Some(0x4004..0x4005));
+    }
+
+    /// One row 59 bytes long - a `defs` run - is one extent, from anywhere
+    /// inside it.
+    #[test]
+    fn an_address_inside_a_long_row_still_finds_the_whole_row() {
+        let map = map(&[(0, 4, 0x4002, 60)]);
+
+        assert_eq!(map.line_extent_at(0, 0x4020), Some(0x4002..0x403E));
+    }
+
+    /// A line emitted twice - a macro body, a `repeat` - has one extent per
+    /// copy, and only the copy being executed is it.
+    #[test]
+    fn a_line_emitted_twice_does_not_merge_its_copies() {
+        let map = map(&[(0, 3, 0x4000, 1), (0, 3, 0x5000, 1)]);
+
+        assert_eq!(map.line_extent_at(0, 0x4000), Some(0x4000..0x4001));
+        assert_eq!(map.line_extent_at(0, 0x5000), Some(0x5000..0x5001));
+    }
+
+    /// A line in another page is another line, however identical its address.
+    #[test]
+    fn an_extent_never_crosses_a_page() {
+        let map = banked_map(&[(0, 3, 0x4000, 0, 2), (0, 3, 0x4002, 5, 2)]);
+
+        assert_eq!(map.line_extent_at(0, 0x4000), Some(0x4000..0x4002));
+        assert_eq!(map.line_extent_at(5, 0x4002), Some(0x4002..0x4004));
+    }
+
+    /// An address no row covers has no extent - which is a real answer, not a
+    /// failure.
+    #[test]
+    fn an_unmapped_address_has_no_extent() {
+        let map = map(&[(0, 3, 0x4000, 2)]);
+
+        assert_eq!(map.line_extent_at(0, 0x9000), None);
     }
 
     /// Same shape, but each row also says which page it was assembled into.
