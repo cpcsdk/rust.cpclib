@@ -734,7 +734,12 @@ impl<P: DapPeer> Session<P> {
             // capability is still right - it is the only way to reach the
             // channels from the UI rather than from launch.json - but the
             // limitation is named where the user reads it, not hidden.
-            "supportsDataBreakpoints": true
+            "supportsDataBreakpoints": true,
+            // Only `PC` is really settable, and only on an emulator that
+            // offers it - but the capability is what puts an edit box on the
+            // register pane at all, and a refusal that says *why* is worth
+            // more than a pane that looks read-only for no stated reason.
+            "supportsSetVariable": true
         })
     }
 
@@ -792,6 +797,7 @@ impl<P: DapPeer> Session<P> {
             // ambiguous. That one is still the emulator's to answer, which is
             // no worse than before.
             "disassemble" => self.editor_disassembly(message),
+            "setVariable" => self.set_variable(message),
             "dataBreakpointInfo" => self.data_breakpoint_info(message),
             "setDataBreakpoints" => self.set_data_breakpoints(message),
             // Answered here rather than forwarded: the editor asks for threads
@@ -3551,6 +3557,66 @@ impl<P: DapPeer> Session<P> {
         }
         self.synthetic_frames = frames;
         self.annotate_stack_trace(&response)
+    }
+
+    /// Change a register, when the emulator can.
+    ///
+    /// Only the program counter, and only where the emulator offers a way to
+    /// move it: AMSpiriT Lite has `POST /api/exec`, and 1984js exposes no
+    /// register write at all. Everything else is refused *by name*, because an
+    /// edit that is silently ignored is worse than one that is declined - the
+    /// pane would show the value you typed while the machine kept the old one.
+    fn set_variable(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        let arguments = request.get("arguments");
+        let name = arguments
+            .and_then(|a| a.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let wanted = arguments
+            .and_then(|a| a.get("value"))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+
+        let seq = self.next_seq();
+        if !name.eq_ignore_ascii_case("pc") {
+            return Ok(vec![protocol::failure(
+                request,
+                &format!(
+                    "this emulator cannot set {name}; only PC can be moved, and only                      where the emulator offers it"
+                ),
+                seq
+            )]);
+        }
+        if !self.peer.supports("cpclib/setPc") {
+            return Ok(vec![protocol::failure(
+                request,
+                "this emulator offers no way to move PC",
+                seq
+            )]);
+        }
+
+        let Some(address) = parse_number(&wanted)
+            .or_else(|| self.map.address_of_symbol(&wanted))
+            .and_then(|address| u16::try_from(address).ok())
+        else {
+            return Ok(vec![protocol::failure(
+                request,
+                &format!("{wanted} is neither an address nor a known label"),
+                seq
+            )]);
+        };
+
+        self.send_own("cpclib/setPc", json!({ "address": address }), Purpose::Plain)?;
+        self.note_program_counter(address);
+        let seq = self.next_seq();
+        Ok(vec![protocol::response(
+            request,
+            json!({ "value": format!("0x{address:04X}") }),
+            seq
+        )])
     }
 
     /// Which label the `call` at this site actually named.

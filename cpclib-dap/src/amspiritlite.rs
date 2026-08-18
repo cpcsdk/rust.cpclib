@@ -150,6 +150,16 @@ pub fn call_for(request: &Value) -> Option<Call> {
             Call::post("/api/z80_bp").body(addresses.join(","))
         },
 
+        // Moving the program counter without writing to RAM - the only
+        // register this emulator lets anything set. There is no endpoint for
+        // `A`, `HL` or the rest, documented or otherwise.
+        "cpclib/setPc" => {
+            let address = arguments
+                .and_then(|a| a.get("address"))
+                .and_then(Value::as_u64)?;
+            Call::post("/api/exec").body(json!({ "addr": address }).to_string())
+        },
+
         // Which page is mapped where. The whole reason this backend is worth
         // having: 1984js cannot answer it at all, which is what forced the
         // byte-matching heuristic and the "most likely line" fallback.
@@ -1181,6 +1191,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 | "readMemory"
                 | "writeMemory"
                 | "setInstructionBreakpoints"
+                | "cpclib/setPc"
                 | "cpclib/memmap"
                 | "cpclib/crtc"
                 | "cpclib/ga"

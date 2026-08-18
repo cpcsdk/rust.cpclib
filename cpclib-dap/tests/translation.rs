@@ -388,10 +388,15 @@ fn advertised_capabilities_match_what_the_emulator_supports() {
     // should land on your source; `-dv` opens disassembly when you want it.
     assert!(capabilities.get("supportsDisassembleRequest").is_none());
 
+    // Claimed, and answered here rather than forwarded: only `PC` can really
+    // be set, and only on an emulator that offers it - but the capability is
+    // what puts an edit box on the register pane, and a refusal naming the
+    // register beats a pane that looks read-only for no stated reason.
+    assert_eq!(capabilities.get("supportsSetVariable"), Some(&json!(true)));
+
     // Still not claimed: nothing here implements them, and claiming one would
     // put a button in the UI that answers with a protocol error.
     for absent in [
-        "supportsSetVariable",
         "supportsRestartRequest",
         "supportsConditionalBreakpoints",
         "supportsHitConditionalBreakpoints",
@@ -1046,4 +1051,59 @@ fn a_contested_address_still_names_its_most_likely_line() {
         .expect("explained");
     let text = note["body"]["output"].as_str().unwrap();
     assert!(text.contains("most likely line"), "{text}");
+}
+
+/// `PC` can be moved where the emulator offers it, and only `PC`.
+#[test]
+fn only_the_program_counter_can_be_set() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/setPc"]),
+        fixture()
+    );
+    session.on_attached().unwrap();
+
+    let set = |name: &str, value: &str| {
+        json!({
+            "seq": 9, "type": "request", "command": "setVariable",
+            "arguments": {"variablesReference": 1, "name": name, "value": value}
+        })
+    };
+
+    let out = session.on_editor_message(&set("PC", "0x4000")).unwrap();
+    assert_eq!(out[0]["success"], json!(true), "{out:?}");
+    assert_eq!(out[0]["body"]["value"], json!("0x4000"));
+    assert!(
+        session.peer().commands().contains(&"cpclib/setPc".to_string()),
+        "the emulator was told: {:?}",
+        session.peer().commands()
+    );
+
+    // Every other register is refused by name rather than silently ignored.
+    let out = session.on_editor_message(&set("HL", "0x1234")).unwrap();
+    assert_eq!(out[0]["success"], json!(false));
+    let why = out[0]["message"].as_str().unwrap_or_default();
+    assert!(why.contains("HL"), "says which one: {why}");
+}
+
+/// An emulator with no register write at all says so.
+#[test]
+fn an_emulator_that_cannot_move_pc_says_so() {
+    let mut session = Session::new(RecordingPeer::new(), fixture());
+    session.on_attached().unwrap();
+
+    let out = session
+        .on_editor_message(&json!({
+            "seq": 9, "type": "request", "command": "setVariable",
+            "arguments": {"variablesReference": 1, "name": "PC", "value": "0x4000"}
+        }))
+        .unwrap();
+    assert_eq!(out[0]["success"], json!(false));
+    assert!(
+        out[0]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no way to move PC"),
+        "{:?}",
+        out[0]["message"]
+    );
 }
