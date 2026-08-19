@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use cpclib_project::srcmap::{AddressResolution, SourceMap};
 use serde_json::{Value, json};
 
-use crate::peer::DapPeer;
+use crate::peer::{DapPeer, LineAtPc};
 
 /// The Z80 has one thread of execution, and the emulator numbers it 1.
 pub const THREAD_ID: i64 = 1;
@@ -867,6 +867,13 @@ impl<P: DapPeer> Session<P> {
             // never leaving `0x0403`.
             "next" | "stepIn" | "stepOut" => {
                 self.lift_breakpoint_under_pc()?;
+                // Only a step *over* asks about the source. Stepping *into*
+                // is an instruction by definition, and stepping *out* is aimed
+                // at a return address no source line describes.
+                if command == "next" {
+                    let line = self.line_at_pc();
+                    self.peer.note_line_at_pc(line);
+                }
                 self.peer.send(message.clone())?;
                 Ok(Vec::new())
             },
@@ -3195,6 +3202,52 @@ impl<P: DapPeer> Session<P> {
         self.line_cost(pc)
     }
 
+    /// What the source says about the line the program is standing on.
+    ///
+    /// The one thing about a step over the emulator cannot work out for
+    /// itself. `defs 60` - the raster-timing idiom - assembles to sixty
+    /// `NOP`s, and sixty `NOP`s are exactly what a hand-written `nop` looks
+    /// like; only the source text tells the two apart, and the source lives on
+    /// this side of the seam. The run itself comes from the source map, which
+    /// already grows a line's extent by adjacency so a line a macro or a
+    /// `repeat` emitted several times yields only the copy being executed.
+    ///
+    /// Three answers rather than two, because "this line is not a `defs`" and
+    /// "there is no line" are different things to the emulator: the first says
+    /// step one instruction, the second leaves it to fall back on the bytes.
+    fn line_at_pc(&mut self) -> LineAtPc {
+        let Some(pc) = self.last_pc
+        else {
+            return LineAtPc::Unknown;
+        };
+        let page = self.pc_page.unwrap_or(0);
+        let Some(at) = self.map.location_at_long(page, pc)
+        else {
+            return LineAtPc::Unknown;
+        };
+        let Some(text) = self.source_line(&at.file, at.line)
+        else {
+            // The map named a line and the file it is in cannot be read: the
+            // listing is describing a program whose source has moved or gone,
+            // so there is nothing to consult after all.
+            return LineAtPc::Unknown;
+        };
+        if !is_a_defs_directive(&text) {
+            return LineAtPc::Ordinary;
+        }
+        let Some(run) = self
+            .map
+            .line_extent_at(page, pc)
+            .and_then(|run| Some(u16::try_from(run.start).ok()?..u16::try_from(run.end).ok()?))
+        else {
+            // A run reaching the very top of memory has no address after it to
+            // stop on. The line is still a `defs`, so it is not for the bytes
+            // to guess at either.
+            return LineAtPc::Ordinary;
+        };
+        LineAtPc::Defs(run)
+    }
+
     /// What the source line covering `address` costs to execute, in NOPs.
     ///
     /// Priced from the program's own bytes, not from its text. The bytes are
@@ -4437,6 +4490,22 @@ pub(crate) fn decode_base64(encoded: &str) -> Vec<u8> {
     out
 }
 
+/// Whether a source line is a `defs` directive - the only line a step over
+/// treats as a repetition.
+///
+/// basm accepts four spellings of the same thing (`DEFS`, `DS`, `RMEM`,
+/// `FILL`), any of which may be preceded by a label and followed by an
+/// expression. The comment is dropped first, so a line that merely mentions
+/// one in prose is not mistaken for one, and whole words only, so
+/// `defs_table` and `.ds` are labels rather than directives.
+fn is_a_defs_directive(text: &str) -> bool {
+    let code = text.split(';').next().unwrap_or_default();
+    let code = code.split("//").next().unwrap_or_default().to_lowercase();
+    ["defs", "ds", "rmem", "fill"]
+        .iter()
+        .any(|spelling| mentions_word(&code, spelling))
+}
+
 /// Whether `text` mentions `word` as a whole identifier.
 ///
 /// `call draw` must not be taken as naming `draw_sprite`, and
@@ -4456,4 +4525,36 @@ fn mentions_word(text: &str, word: &str) -> bool {
         from = start + 1;
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_a_defs_directive;
+
+    /// The one thing that decides whether a run of `NOP`s is stepped over
+    /// whole, so its edges are worth pinning.
+    #[test]
+    fn a_defs_line_is_recognised_and_nothing_else_is() {
+        for line in [
+            "\tdefs 64 - duration(djnz $)-1",
+            "\tDEFS 60",
+            "wait\tds 40",
+            "\trmem 10",
+            "\tfill 8, 0",
+        ] {
+            assert!(is_a_defs_directive(line), "{line}");
+        }
+
+        for line in [
+            "\tnop",
+            // A label is not a directive, whichever way it is spelled.
+            "defs_table\tdb 0",
+            ".ds\tnop",
+            // Nor is prose about one.
+            "\tnop ; padded like a defs run",
+            "\tnop // ds here would be neater"
+        ] {
+            assert!(!is_a_defs_directive(line), "{line}");
+        }
+    }
 }

@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
-use cpclib_dap::peer::RecordingPeer;
+use cpclib_dap::peer::{LineAtPc, RecordingPeer};
 use cpclib_dap::protocol;
 use cpclib_dap::session::Session;
 use cpclib_project::srcmap::SourceMap;
@@ -1105,5 +1105,167 @@ fn an_emulator_that_cannot_move_pc_says_so() {
             .contains("no way to move PC"),
         "{:?}",
         out[0]["message"]
+    );
+}
+
+/// The raster-timing idiom, as a program on disk with a source map to match.
+///
+/// ```text
+///     ld b, 20                       ; line 2, 0x4000
+/// .wait_lines                        ; line 3, no bytes
+///     defs 64 - duration(djnz $)-1   ; line 4, 60 bytes at 0x4002
+///     djnz .wait_lines               ; line 5, 0x403E
+///     nop                            ; line 6, 0x4040
+/// ```
+///
+/// In its own directory, and the directory is handed back: these tests run in
+/// parallel in one process, and a fixture written to a shared path is a
+/// fixture another test can be reading while this one truncates it.
+fn defs_program() -> (camino_tempfile::Utf8TempDir, SourceMap) {
+    let directory = camino_tempfile::tempdir().unwrap();
+    let source = directory.path().join("demo_code.asm");
+    std::fs::write(
+        &source,
+        "\torg 0x4000\n\tld b, 20\n.wait_lines\n\tdefs 64 - duration(djnz $)-1\n\tdjnz \
+         .wait_lines\n\tnop\n"
+    )
+    .unwrap();
+
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec![source.as_str().into()],
+        rows: vec![
+            SourceMapRow::flat(0, 2, 0x4000, 2),
+            SourceMapRow::flat(0, 4, 0x4002, 60),
+            SourceMapRow::flat(0, 5, 0x403E, 2),
+            SourceMapRow::flat(0, 6, 0x4040, 1),
+        ]
+    });
+    (directory, map)
+}
+
+/// Where the program stopped, learned the way it really is - from the register
+/// pane the editor asks for on every stop.
+fn stopped_at(session: &mut Session<RecordingPeer>, pc: u16) {
+    session.on_emulator_message(&json!({
+        "type": "response", "command": "variables", "success": true,
+        "body": {"variables": [
+            {"name": "PC", "value": format!("0x{pc:04X}"), "variablesReference": 0}
+        ]}
+    }));
+}
+
+/// What the session told the emulator about the source before the last step
+/// over.
+fn the_line_offered(session: &mut Session<RecordingPeer>) -> LineAtPc {
+    session
+        .on_editor_message(&json!({"seq": 2, "type": "request", "command": "next"}))
+        .unwrap();
+    session
+        .peer()
+        .lines_at_pc
+        .last()
+        .cloned()
+        .expect("a step over asks about the source")
+}
+
+/// Stepping over a `defs` hands the emulator the whole run.
+///
+/// `defs 60` runs as sixty `NOP`s, so stepping it one instruction at a time is
+/// sixty presses to reach the `djnz` under it. Only the source says this is a
+/// `defs` rather than sixty hand-written `nop`s, which is why the answer is
+/// worked out here and not from the bytes at `PC`.
+#[test]
+fn stepping_over_a_defs_offers_the_whole_run() {
+    let (_directory, map) = defs_program();
+    let mut session = Session::new(RecordingPeer::new(), map);
+    stopped_at(&mut session, 0x4002);
+
+    assert_eq!(the_line_offered(&mut session), LineAtPc::Defs(0x4002..0x403E));
+}
+
+/// From the middle of the run, the answer is the same run.
+///
+/// The deliberate choice: a `defs` is a repetition, and stepping over a
+/// repetition from inside it finishes it. Running to the next instruction
+/// instead would be one `NOP` - which is exactly the hand-stepping this was
+/// asked for to replace.
+#[test]
+fn stepping_over_from_inside_a_defs_run_offers_the_rest_of_it() {
+    let (_directory, map) = defs_program();
+    let mut session = Session::new(RecordingPeer::new(), map);
+    stopped_at(&mut session, 0x4020);
+
+    assert_eq!(the_line_offered(&mut session), LineAtPc::Defs(0x4002..0x403E));
+}
+
+/// The `djnz` written under the `defs` is a `djnz`, not part of the run.
+///
+/// It is the address the step over lands on, and stepping over *it* is the
+/// emulator's own business - a loop it runs out by the rules it already had.
+#[test]
+fn the_line_after_a_defs_run_is_not_part_of_it() {
+    let (_directory, map) = defs_program();
+    let mut session = Session::new(RecordingPeer::new(), map);
+    stopped_at(&mut session, 0x403E);
+
+    assert_eq!(the_line_offered(&mut session), LineAtPc::Ordinary);
+}
+
+/// A `nop` somebody wrote is an ordinary line, said in so many words.
+///
+/// It assembles to the same byte a `defs` does, so "not a `defs`" has to be a
+/// different answer from "no idea": the emulator falls back on the bytes only
+/// for the second, and would otherwise swallow a `nop` the user meant to step.
+#[test]
+fn a_hand_written_nop_line_is_called_ordinary() {
+    let (_directory, map) = defs_program();
+    let mut session = Session::new(RecordingPeer::new(), map);
+    stopped_at(&mut session, 0x4040);
+
+    assert_eq!(the_line_offered(&mut session), LineAtPc::Ordinary);
+}
+
+/// An address no source line claims leaves it to the bytes.
+///
+/// A snapshot debugged without its listing, the firmware, code the program
+/// wrote itself: there is nothing to consult, and the emulator is told so
+/// rather than being told the line is ordinary.
+#[test]
+fn an_address_with_no_source_line_is_unknown() {
+    let (_directory, map) = defs_program();
+    let mut session = Session::new(RecordingPeer::new(), map);
+    stopped_at(&mut session, 0x9000);
+
+    assert_eq!(the_line_offered(&mut session), LineAtPc::Unknown);
+}
+
+/// A listing whose source has moved is no source at all.
+#[test]
+fn a_line_whose_file_cannot_be_read_is_unknown() {
+    let (directory, map) = defs_program();
+    let mut session = Session::new(RecordingPeer::new(), map);
+    stopped_at(&mut session, 0x4002);
+    drop(directory); // the file the map names is gone
+
+    assert_eq!(the_line_offered(&mut session), LineAtPc::Unknown);
+}
+
+/// Only a step *over* asks. Stepping in is an instruction by definition, and
+/// stepping out is aimed at a return address no line describes.
+#[test]
+fn stepping_in_and_out_ask_nothing_about_the_source() {
+    let (_directory, map) = defs_program();
+    let mut session = Session::new(RecordingPeer::new(), map);
+    stopped_at(&mut session, 0x4002);
+
+    for button in ["stepIn", "stepOut"] {
+        session
+            .on_editor_message(&json!({"seq": 2, "type": "request", "command": button}))
+            .unwrap();
+    }
+    assert!(
+        session.peer().lines_at_pc.is_empty(),
+        "{:?}",
+        session.peer().lines_at_pc
     );
 }

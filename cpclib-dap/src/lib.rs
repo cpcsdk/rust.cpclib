@@ -55,6 +55,11 @@ impl peer::DapPeer for ServedPeer {
         }
         protocol::decode(&mut self.buffer)
     }
+
+    /// Nothing to do with it: 1984js implements `next` itself, and decides
+    /// what a step over means inside the emulator where we cannot reach.
+    /// Stepping over a `defs` there is still one `NOP` per press.
+    fn note_line_at_pc(&mut self, _line: peer::LineAtPc) {}
 }
 
 /// Which emulator a session is talking to.
@@ -84,6 +89,19 @@ impl peer::DapPeer for Backend {
         match self {
             Self::Served(peer) => peer.drain(),
             Self::AmspiritLite(peer) => peer.drain()
+        }
+    }
+
+    // Every arm of this trait has to be forwarded by hand, and the one that
+    // was not is what made a step over on a `defs` go on stepping one `NOP` at
+    // a time in the real editor while the tests were green: the session's
+    // answer reached this enum and stopped here, at a defaulted no-op nobody
+    // had noticed inheriting. `note_line_at_pc` has no default any more, so
+    // the next one cannot be forgotten silently.
+    fn note_line_at_pc(&mut self, line: peer::LineAtPc) {
+        match self {
+            Self::Served(peer) => peer.note_line_at_pc(line),
+            Self::AmspiritLite(peer) => peer.note_line_at_pc(line)
         }
     }
 

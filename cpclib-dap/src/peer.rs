@@ -36,6 +36,21 @@ impl Default for Quirks {
     }
 }
 
+/// What the source says about the line the program is stopped on, which is
+/// the one thing about a step over an emulator cannot work out for itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LineAtPc {
+    /// A `defs` directive, occupying this run of bytes. Stepping over it means
+    /// running to the end of the run.
+    Defs(std::ops::Range<u16>),
+    /// A line that is not a `defs`: an ordinary instruction, priced and
+    /// stepped by the ordinary rules.
+    Ordinary,
+    /// Nothing to consult - no source map row for `PC`, or no listing at all.
+    /// The bytes are then the only evidence there is.
+    Unknown
+}
+
 /// A peer that speaks DAP.
 pub trait DapPeer: Send {
     /// Send one message to the emulator.
@@ -45,6 +60,25 @@ pub trait DapPeer: Send {
     fn quirks(&self) -> Quirks {
         Quirks::default()
     }
+
+    /// What the source says about the line at `PC`, told to the peer just
+    /// before a `next`.
+    ///
+    /// `defs 60` assembles to sixty zero bytes, which the Z80 runs as sixty
+    /// `NOP`s - the way a demo pads a raster line to an exact width. Stepping
+    /// over one is meant to be like stepping over a repetition: one press and
+    /// the run is done. Nothing in the bytes at `PC` can say so, because they
+    /// are `NOP`s and so is a hand-written `nop`; only the source says which of
+    /// the two this is, and the source map lives on this side of the seam while
+    /// running to an address lives on the other.
+    ///
+    /// Deliberately **not** a defaulted method. It was one, and the enum that
+    /// picks between the two backends forwards `DapPeer` arm by arm - so the
+    /// arm nobody wrote fell back to the default, the hint was dropped on the
+    /// way to the emulator, and stepping over a real `defs` went on advancing
+    /// one `NOP` at a time while every test passed. Required here, the compiler
+    /// asks each peer what it does with this.
+    fn note_line_at_pc(&mut self, line: LineAtPc);
 
     /// Whether this peer implements `command`.
     ///
@@ -99,7 +133,10 @@ pub struct RecordingPeer {
     /// than 1984js does.
     pub also_supports: Vec<String>,
     pub sent: Vec<Value>,
-    pub incoming: Vec<Value>
+    pub incoming: Vec<Value>,
+    /// Everything the session said about the line at `PC`, in order, so a
+    /// test can ask what a step over was told about the source.
+    pub lines_at_pc: Vec<LineAtPc>
 }
 
 impl RecordingPeer {
@@ -145,6 +182,10 @@ impl DapPeer for RecordingPeer {
 
     fn drain(&mut self) -> Vec<Value> {
         std::mem::take(&mut self.incoming)
+    }
+
+    fn note_line_at_pc(&mut self, line: LineAtPc) {
+        self.lines_at_pc.push(line);
     }
 
     fn supports(&self, command: &str) -> bool {

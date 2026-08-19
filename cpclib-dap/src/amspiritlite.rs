@@ -829,6 +829,10 @@ pub struct AmspiritLitePeer {
     /// How long a resume is given to become visible; `RESUME_CONFIRMATION`
     /// unless a caller says otherwise.
     resume_confirmation: std::time::Duration,
+    /// What the session says the source line at `PC` is, for the step over
+    /// about to arrive. Not shared with the poller: it is written and read on
+    /// the request thread, between one `next` and the address it works out.
+    line_at_pc: crate::peer::LineAtPc,
     /// Answers waiting for the next `drain`.
     pending: std::sync::mpsc::Receiver<Value>,
     outgoing: std::sync::mpsc::Sender<Value>,
@@ -959,6 +963,7 @@ impl AmspiritLitePeer {
             stepping_over,
             breakpoints,
             resume_confirmation: Self::RESUME_CONFIRMATION,
+            line_at_pc: crate::peer::LineAtPc::Unknown,
             launched: None,
             pending,
             outgoing,
@@ -1024,11 +1029,15 @@ impl AmspiritLitePeer {
     /// is a plain single step, because for everything else "step over" and
     /// "step into" are the same thing.
     fn step_over(&mut self, message: &Value, out_of_this_one: bool) -> std::io::Result<()> {
+        // Taken rather than read: what the session said about the line at `PC`
+        // describes the stop we are leaving, and is worth nothing once the
+        // machine has moved.
+        let line = std::mem::replace(&mut self.line_at_pc, crate::peer::LineAtPc::Unknown);
         let target = if out_of_this_one {
             self.address_to_return_to()
         }
         else {
-            self.address_after_the_instruction_at_pc()
+            self.address_after_the_instruction_at_pc(&line)
         };
         let Some(target) = target
         else {
@@ -1140,11 +1149,44 @@ impl AmspiritLitePeer {
 
     /// The address after the instruction at `PC`, when running to it is what
     /// stepping over means; `None` when a plain step would do.
-    fn address_after_the_instruction_at_pc(&self) -> Option<u16> {
+    fn address_after_the_instruction_at_pc(
+        &self,
+        line: &crate::peer::LineAtPc
+    ) -> Option<u16> {
         let state = machine(&self.endpoint).ok()?;
         let pc = register(&state, "PC")? as u16;
         // Four bytes is the longest a Z80 instruction gets.
         let bytes = bytes_at(&self.endpoint, pc, 4).ok()?;
+
+        match line {
+            // A `defs` is a repetition written as a directive, so stepping over
+            // it runs it out - from wherever inside it the program happens to
+            // be, not one `NOP` at a time from there. Both halves of the
+            // session's claim are checked against the machine before it is
+            // believed: `PC` really is in the run, and the byte there really is
+            // a `NOP`. A `defs` filled with something other than zero is code
+            // we cannot promise comes back, so it keeps the ordinary rules.
+            crate::peer::LineAtPc::Defs(run)
+                if run.contains(&pc)
+                    && bytes.first() == Some(&0x00)
+                    // Nothing to run past on the last byte of a run, or on a
+                    // `defs 1`: a single step already lands there, without
+                    // arming anything.
+                    && run.end > pc.wrapping_add(1) =>
+            {
+                return Some(run.end);
+            },
+            // No source to consult - a snapshot debugged without its listing,
+            // or an address no line claims. The bytes are the only evidence
+            // left, so a run of zeroes is read as one padded wait.
+            crate::peer::LineAtPc::Unknown => {
+                if let Some(after) = self.end_of_a_run_of_zeroes(pc) {
+                    return Some(after);
+                }
+            },
+            _ => {}
+        }
+
         if !returns_to_the_next_instruction(&bytes) {
             return None;
         }
@@ -1153,6 +1195,33 @@ impl AmspiritLitePeer {
             .map(|instruction| instruction.bytes.len() as u16)
             .unwrap_or(1);
         Some(pc.wrapping_add(length))
+    }
+
+    /// The address after an unbroken run of zero bytes at `pc`, if there is
+    /// one worth running past.
+    ///
+    /// A deliberate approximation, and only used where the source cannot
+    /// answer: several zero bytes in a row are treated as one padded wait and
+    /// stepped over in a single press. It disagrees with the source in exactly
+    /// two ways, both accepted knowingly - a `defs` filled with a value other
+    /// than zero is *not* recognised, and a genuine run of hand-written `nop`s
+    /// *is* run out rather than stepped one at a time. A single `nop` between
+    /// real instructions is untouched: one zero byte is one step, as it always
+    /// was.
+    ///
+    /// Bounded, because the guess gets less honest the longer it runs: past a
+    /// couple of hundred bytes this is more likely a program that has crashed
+    /// into empty memory than a raster pad, and running to the far end of that
+    /// is not what stepping over means.
+    fn end_of_a_run_of_zeroes(&self, pc: u16) -> Option<u16> {
+        const MOST_OF_A_PAD: u16 = 256;
+
+        let bytes = bytes_at(&self.endpoint, pc, MOST_OF_A_PAD).ok()?;
+        let zeroes = bytes.iter().take_while(|byte| **byte == 0).count();
+        if zeroes < 2 || zeroes >= bytes.len() {
+            return None;
+        }
+        Some(pc.wrapping_add(zeroes as u16))
     }
 
     /// The address on top of the stack: where a `call` said to come back to.
@@ -1251,6 +1320,10 @@ pub(crate) fn returns_to_the_next_instruction(bytes: &[u8]) -> bool {
 }
 
 impl crate::peer::DapPeer for AmspiritLitePeer {
+    fn note_line_at_pc(&mut self, line: crate::peer::LineAtPc) {
+        self.line_at_pc = line;
+    }
+
     fn send(&mut self, message: Value) -> std::io::Result<()> {
         let command = message
             .get("command")
@@ -2632,6 +2705,164 @@ mod tests {
         assert_eq!(machine.resumes(), 1);
     }
 
+    /// A `defs` run is stepped over in one go, because it is a repetition.
+    ///
+    /// `defs 60` pads a raster line with sixty `NOP`s. Stepping over it one
+    /// `NOP` at a time is sixty presses to reach the `djnz` below it, and the
+    /// bytes cannot say so - only the source can, which is why the session
+    /// hands the run over before the step.
+    #[test]
+    fn a_defs_run_is_stepped_over_in_one_go() {
+        use crate::peer::DapPeer;
+
+        let (_peer, pc, machine, _) = stepped_over(vec![0x00; 60], vec![
+            0x4002, 0x4003, 0x4004, 0x403E,
+        ], |peer| {
+            peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+        });
+        assert_eq!(pc, 0x403E, "on the line after the run, not one NOP along");
+        assert_eq!(machine.steps(), 0, "nothing was stepped one at a time");
+        assert_eq!(machine.resumes(), 1);
+        assert!(
+            !machine.breakpoints().contains(&0x403E),
+            "and the temporary is taken back out on arrival: {:?}",
+            machine.breakpoints()
+        );
+    }
+
+    /// From the middle of the run, stepping over finishes the run.
+    ///
+    /// The other reading - "run to the next instruction" - would be one `NOP`,
+    /// which is what the user was already doing by hand when they asked for
+    /// this. A repetition stepped over from inside it is still a repetition.
+    #[test]
+    fn a_step_over_from_inside_a_defs_run_finishes_the_run() {
+        use crate::peer::DapPeer;
+
+        let (_peer, pc, machine, _) = stepped_over(vec![0x00; 60], vec![
+            0x4020, 0x4021, 0x403E,
+        ], |peer| {
+            peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+        });
+        assert_eq!(pc, 0x403E);
+        assert_eq!(machine.steps(), 0);
+        assert_eq!(machine.resumes(), 1);
+    }
+
+    /// The run ends where the next line begins, so a `djnz` written under a
+    /// `defs` is exactly where the step over lands - even though that `djnz`
+    /// jumps straight back into the run.
+    ///
+    /// The loop is the reason the idiom exists (`ld b,20` / `defs 64 -
+    /// duration(djnz $)-1` / `djnz`), and stepping over the padding must show
+    /// the `djnz` of *this* iteration rather than run the whole loop out.
+    #[test]
+    fn a_defs_run_under_a_loop_stops_on_the_djnz_below_it() {
+        use crate::peer::DapPeer;
+
+        // The script loops back into the run twice before the breakpoint on
+        // the `djnz` line catches it, the way the machine really would.
+        let (_peer, pc, machine, _) = stepped_over(vec![0x00; 60], vec![
+            0x4002, 0x4003, 0x403E, 0x4002, 0x4003, 0x403E,
+        ], |peer| {
+            peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+        });
+        assert_eq!(pc, 0x403E, "the djnz of this iteration");
+        assert_eq!(
+            machine.every_breakpoint_set().last().map(Vec::len),
+            Some(0),
+            "and nothing of ours is left armed: {:?}",
+            machine.every_breakpoint_set()
+        );
+    }
+
+    /// A `nop` the source really wrote is still a single step, even in a row
+    /// of them.
+    ///
+    /// The source said this line is not a `defs`, and that is a *different*
+    /// answer from having no source at all: what the user wrote as `nop` is
+    /// what they meant to step.
+    #[test]
+    fn a_hand_written_nop_is_still_a_single_step() {
+        use crate::peer::DapPeer;
+
+        let (_peer, pc, machine, _) = stepped_over(vec![0x00; 8], vec![0x4002, 0x4003], |peer| {
+            peer.note_line_at_pc(crate::peer::LineAtPc::Ordinary);
+        });
+        assert_eq!(machine.steps(), 1);
+        assert_eq!(machine.resumes(), 0);
+        assert_eq!(pc, 0x4003);
+        assert!(machine.breakpoints().is_empty());
+    }
+
+    /// With no source at all, a run of zeroes is read as one padded wait.
+    ///
+    /// The owner's own fallback for a program debugged without its listing:
+    /// consecutive zero bytes belong to the same fake instruction, so the step
+    /// resumes after the last of them. It is a guess, and it is only made
+    /// where there is nothing better to go on.
+    #[test]
+    fn with_no_source_a_run_of_zeroes_is_stepped_over_whole() {
+        use crate::peer::DapPeer;
+
+        // Sixteen zeroes and then something else, so the run has an end to
+        // find: the stand-in answers every read with the same blob.
+        let mut bytes = vec![0x00; 16];
+        bytes.push(0xC9);
+        let (_peer, pc, machine, _) = stepped_over(bytes, vec![0x4002, 0x4003, 0x4012], |peer| {
+            peer.note_line_at_pc(crate::peer::LineAtPc::Unknown);
+        });
+        assert_eq!(pc, 0x4012, "after the last zero");
+        assert_eq!(machine.steps(), 0);
+        assert_eq!(machine.resumes(), 1);
+    }
+
+    /// One `NOP` between real instructions is one step, source or no source.
+    ///
+    /// The fallback is about *runs*; a single zero byte is an instruction like
+    /// any other, and swallowing it would make stepping unpredictable in
+    /// ordinary code.
+    #[test]
+    fn with_no_source_a_single_zero_byte_is_still_one_step() {
+        use crate::peer::DapPeer;
+
+        let (_peer, _, machine, _) =
+            stepped_over(vec![0x00, 0x3E, 0x01], vec![0x4002, 0x4003], |peer| {
+                peer.note_line_at_pc(crate::peer::LineAtPc::Unknown);
+            });
+        assert_eq!(machine.steps(), 1);
+        assert_eq!(machine.resumes(), 0);
+    }
+
+    /// A run the machine disagrees with is refused rather than believed.
+    ///
+    /// The session names the run from the last stop it heard about; the peer
+    /// holds the live `PC` and the live bytes. When they do not agree - a
+    /// `defs` filled with something other than zero, or a `PC` that has moved
+    /// on - the ordinary rules apply, which is one step here.
+    #[test]
+    fn a_defs_run_that_does_not_match_the_machine_is_refused() {
+        use crate::peer::DapPeer;
+
+        // `PC` outside the run it was told about. One zero byte and then
+        // something else, so the run-of-zeroes fallback has nothing to say
+        // either.
+        let (_peer, _, machine, _) =
+            stepped_over(vec![0x00, 0x3E, 0x01], vec![0x5000, 0x5001], |peer| {
+                peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+            });
+        assert_eq!(machine.steps(), 1, "PC is not in the run");
+        assert_eq!(machine.resumes(), 0);
+
+        // The run is there, but it is not made of `NOP`s.
+        let (_peer, _, machine, _) =
+            stepped_over(vec![0x3E, 0x01], vec![0x4002, 0x4004], |peer| {
+                peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+            });
+        assert_eq!(machine.steps(), 1, "the byte at PC is not a NOP");
+        assert_eq!(machine.resumes(), 0);
+    }
+
     /// Anything else is one step and no breakpoint.
     ///
     /// A `jr` never reaches the address after itself, so arming it would be a
@@ -3229,6 +3460,7 @@ mod tests {
             stepping_over: std::sync::Arc::new(std::sync::Mutex::new(None)),
             breakpoints: std::sync::Arc::new(std::sync::Mutex::new(Breakpoints::default())),
             resume_confirmation: AmspiritLitePeer::RESUME_CONFIRMATION,
+            line_at_pc: crate::peer::LineAtPc::Unknown,
             launched: None,
             pending,
             outgoing,
