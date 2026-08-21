@@ -90,13 +90,13 @@ pub enum Transformation<C: AmstradColor> {
     },
 
     /// Replace one C by another one
-    ReplaceInk {
+    ReplaceColor {
         from: C,
         to: C
     },
 
-    /// Create a mask from the background C MaskFromBackgroundInk
-    MaskFromBackgroundInk(C)
+    /// Create a mask from the background C MaskFromBackgroundColor
+    MaskFromBackgroundColor(C)
 }
 
 impl<C: AmstradColor> Transformation<C> {
@@ -187,12 +187,12 @@ impl<C: AmstradColor> Transformation<C> {
                 res
             },
 
-            Transformation::ReplaceInk { from, to } => {
+            Transformation::ReplaceColor { from, to } => {
                 let mut res = matrix.clone();
                 res.replace_color(*from, *to);
                 res
             },
-            Transformation::MaskFromBackgroundInk(ink) => {
+            Transformation::MaskFromBackgroundColor(ink) => {
                 let mut res = matrix.clone();
                 res.convert_to_mask(*ink);
                 res
@@ -275,13 +275,13 @@ impl<C: AmstradColor> TransformationsList<C> {
 
     pub fn replace(mut self, from: C, to: C) -> Self {
         self.transformations
-            .push(Transformation::ReplaceInk { from, to });
+            .push(Transformation::ReplaceColor { from, to });
         self
     }
 
     pub fn build_mask_from_background_ink(mut self, background: C) -> Self {
         self.transformations
-            .push(Transformation::MaskFromBackgroundInk(background));
+            .push(Transformation::MaskFromBackgroundColor(background));
         self
     }
 
@@ -1267,6 +1267,7 @@ impl<C: AmstradColor> ImageConverter<C> {
         missing_pen: Option<Pen>,
         o: &dyn EventObserver
     ) -> anyhow::Result<SpriteOutput<C>> {
+        println!("Converting to sprite with encoding and palette {:?} {}", encoding, &palette.to_ansi_string());
         match &encoding {
             SpriteEncoding::Linear => {
                 let mut converter = ImageConverter {
@@ -1435,6 +1436,8 @@ impl<C: AmstradColor> ImageConverter<C> {
                 o
             )?;
 
+            println!("Handling mask");
+
             let mask_transformations = transformations
                 .clone()
                 .build_mask_from_background_ink(*mask_ink);
@@ -1492,6 +1495,8 @@ impl<C: AmstradColor> ImageConverter<C> {
         let matrix = self.load_color_matrix(input_file);
         let sprite = matrix.as_sprite(self.mode, self.palette.clone(), missing_pen);
         self.palette = LockablePalette::<C>::locked(sprite.palette().unwrap());
+
+        println!("The locked palette {}", self.palette.to_ansi_string());
 
         sprite
     }
@@ -1830,8 +1835,8 @@ mod tests {
             vec![bg_, bg_, bg_, bg_],
         ]);
 
-        let transformation_sprite = Transformation::ReplaceInk { from: bg_, to: rep };
-        let transformation_mask = Transformation::MaskFromBackgroundInk(bg_);
+        let transformation_sprite = Transformation::ReplaceColor { from: bg_, to: rep };
+        let transformation_mask = Transformation::MaskFromBackgroundColor(bg_);
 
         let sprite = transformation_sprite.apply(&sprite_with_mask);
         let mask = transformation_mask.apply(&sprite_with_mask);

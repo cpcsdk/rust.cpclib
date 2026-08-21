@@ -3,6 +3,8 @@ use std::fmt::{Debug, Display, Formatter, Result};
 use image as im;
 use nutype::nutype;
 
+use crate::color::AmstradColor;
+
 use self::im::Pixel;
 
 /// Number of inks managed by the system. Do not take into account the few duplicates
@@ -383,11 +385,6 @@ impl Ink {
 
             _ => None
         }
-    }
-
-    /// Get the RGB color value of the ink
-    pub fn color(&self) -> im::Rgb<u8> {
-        INKS_RGB_VALUES[self.firmware_number() as usize]
     }
 
     /// Give the quantity of red for the given color

@@ -20,7 +20,7 @@ use cpclib::image::image::Mode;
 // The Plus path is a *choice made at the command line* and travels as an
 // `AnyLockablePalette`, so it is spelled out where it matters rather than
 // making every signature here generic.
-type Palette = cpclib::image::ga::Palette<Ink>;
+type PaletteInk = cpclib::image::ga::Palette<Ink>;
 type LockablePalette = cpclib::image::ga::LockablePalette<Ink>;
 type ColorMatrix = cpclib::image::image::ColorMatrix<Ink>;
 type AsicPalette = cpclib::image::ga::Palette<AsicColor>;
@@ -30,10 +30,11 @@ use cpclib::image::color::AmstradColor;
 use cpclib::image::ga::{AnyLockablePalette, AnyPalette};
 use cpclib::image::kit::Kit;
 use cpclib::image::ocp::{self, OcpPalette};
-use cpclib::sna::*;
+use cpclib::{Palette, sna::*};
 #[cfg(feature = "xferlib")]
 use cpclib::xfer::CpcXfer;
 use cpclib::{ExtendedDsk, Ink, Pen, sna};
+use cpclib_image::color::AnyColor;
 use fs_err::File;
 #[cfg(feature = "watch")]
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
@@ -43,13 +44,35 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-pub fn clap_parse_ink(arg: &str) -> Result<Ink, String> {
-    let nb = clap_parse_any_positive_number(arg)?;
-    if nb > 27 {
-        Err(format!("{nb} is not a valid ink value"))
+pub fn clap_parse_ink_or_color(arg: &str) -> Result<AnyColor, String> {
+    let nb = dbg!(clap_parse_any_positive_number(arg))?;
+
+    if let Some('&' | '0' | '#') = arg.chars().next() {
+        if nb > 0xfff {
+            Err(format!("{nb} is not a valid 12-bit colour value for Amstrad plus"))
+        } else {
+                        let red = ((nb >> 8) & 0xf) as u8;
+            let green = ((nb >> 4) & 0xf) as u8;
+            let blue = (nb & 0xf) as u8;
+            Ok(AsicColor::new(red, green, blue).into())
+        }
+    } else {
+        if nb > 27 {
+            Err(format!("{nb} is not a valid ink value for CPC"))
+        }
+        else {
+            Ok(Ink::from(nb).into())
+        }
     }
-    else {
-        Ok(nb.into())
+}
+
+fn any_color_to_amstrad_color<C>(color: AnyColor) -> Result<C, String>
+where
+    C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String>,
+{
+    match color {
+        AnyColor::GateArray(ink) if C::is_plus() => Ok(C::from(ink)),
+        color => C::try_from(color),
     }
 }
 
@@ -292,12 +315,12 @@ pub fn get_requested_palette(matches: &ArgMatches) -> Result<AnyLockablePalette,
         let mut buffer: Vec<u8> = Vec::new();
         file.read_to_end(&mut buffer)
             .expect("Unable to read the gate array palette file");
-        let pal = Palette::from_iter(buffer);
+        let pal = PaletteInk::from_iter(buffer);
         Ok(LockablePalette::unlocked(pal).into())
     }
     else {
         let mut one_pen_set = false;
-        let mut palette = Palette::empty();
+        let mut palette = PaletteInk::empty();
         for i in 0..16 {
             let key = format!("PEN{i}");
             if matches.contains_id(&key) {
@@ -690,8 +713,11 @@ fn parse_int(repr: &str) -> usize {
 }
 
 #[allow(clippy::if_same_then_else)] // false positive
-fn get_output_format<C: AmstradColor>(matches: &ArgMatches) -> OutputFormat<C> {
-    if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
+fn get_output_format<C>(matches: &ArgMatches) -> Result<OutputFormat<C>, String>
+where
+    C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String>,
+{
+    let res = if let Some(sprite_matches) = matches.subcommand_matches("sprite") {
         // Get the format for the sprite encoding
         let sprite_format = match sprite_matches.get_one::<String>("FORMAT").unwrap().as_ref() {
             "linear" => SpriteEncoding::Linear,
@@ -703,17 +729,14 @@ fn get_output_format<C: AmstradColor>(matches: &ArgMatches) -> OutputFormat<C> {
 
         // eventually handle sprite masking
         if sprite_matches.contains_id("MASK_FNAME") {
+            let mask_color = sprite_matches.get_one::<AnyColor>("MASK_COLOR").cloned().unwrap();
+            let replacement_color = sprite_matches
+                .get_one::<AnyColor>("REPLACEMENT_COLOR").cloned().unwrap();
+
             OutputFormat::MaskedSprite {
                 sprite_format,
-                mask_ink: C::from(
-                    sprite_matches.get_one::<Ink>("MASK_INK").cloned().unwrap()
-                ),
-                replacement_ink: C::from(
-                    sprite_matches
-                        .get_one::<Ink>("REPLACEMENT_INK")
-                        .cloned()
-                        .unwrap()
-                )
+                mask_ink: any_color_to_amstrad_color::<C>(mask_color)?,
+                replacement_ink: any_color_to_amstrad_color::<C>(replacement_color)?
             }
         }
         else {
@@ -780,7 +803,8 @@ fn get_output_format<C: AmstradColor>(matches: &ArgMatches) -> OutputFormat<C> {
                 display_address: DisplayCRTCAddress::new_standard_from_page(3)
             }
         }
-    }
+    };
+    Ok(res)
 }
 
 // TODO - Add the ability to import a target palette
@@ -796,11 +820,27 @@ fn convert(matches: &ArgMatches, o: &dyn EventObserver) -> anyhow::Result<()> {
     }
 }
 
-fn convert_with_palette<C: AmstradColor>(
+fn convert_with_palette<C>(
     matches: &ArgMatches,
     palette: cpclib::image::ga::LockablePalette<C>,
     o: &dyn EventObserver
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    C: AmstradColor + std::convert::TryFrom<AnyColor, Error = String>,
+{
+
+    println!("Loading palette: ({}) {}", 
+    
+        if palette.is_plus() {
+            "Amstrad Plus"
+        }
+        else {
+            "Amstrad CPC"
+        },
+        palette_ansi_colors_repr(&palette));
+
+
+
     let input_file = matches.get_one::<Utf8PathBuf>("SOURCE").unwrap();
     let output_mode = matches
         .get_one::<String>("MODE")
@@ -863,7 +903,7 @@ fn convert_with_palette<C: AmstradColor>(
     let missing_pen = matches.get_one::<u8>("MISSING_PEN").map(|v| Pen::from(*v));
 
     let crop_if_too_large = matches.get_flag("CROP_IF_TOO_LARGE");
-    let output_format = get_output_format(matches);
+    let output_format = get_output_format(matches).map_err(anyhow::Error::msg)?;
     let conversion = ImageConverter::convert(
         input_file,
         palette,
@@ -1468,8 +1508,8 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                             .long("code")
                             .help("Filename where to store the Z80 display code")
                             .required_unless_present("SPRITE_FNAME")
-                            .requires("MASK_INK")
-                            .requires("REPLACEMENT_INK")
+                            .requires("MASK_COLOR")
+                            .requires("REPLACEMENT_COLOR")
                         )
 
                         .arg(
@@ -1494,21 +1534,24 @@ pub fn build_img2cpc_args_parser() -> clap::Command {
                             .long("mask")
                             .short('m')
                             .help("Filename where the mask is stored")
-                            .requires("MASK_INK")
-                            .requires("REPLACEMENT_INK")
+                            .requires("MASK_COLOR")
+                            .requires("REPLACEMENT_COLOR")
                         )
 
+                        //TODO fix the documentation as the parameters has been renamed to allow asic color
                         .arg(
-                            Arg::new("MASK_INK")
-                            .long("mask-ink")
-                            .help("Ink that represents the mask in the input image")
-                            .value_parser(clap_parse_ink)
+                            Arg::new("MASK_COLOR")
+                            .long("mask-color")
+                            .alias("mask-ink")
+                            .help("Color that represents the mask in the input image (ink for Amstrad CPC, hexcolor for Amstrad Plus)")
+                            .value_parser(clap_parse_ink_or_color)
                         )
                         .arg(
-                            Arg::new("REPLACEMENT_INK")
-                            .long("replacement-ink")
-                            .help("Ink that relace the mask ink in the sprite data")
-                            .value_parser(clap_parse_ink)
+                            Arg::new("REPLACEMENT_COLOR")
+                            .long("replacement-color")
+                            .alias("replacement-ink")
+                            .help("Color that replaces the mask color in the sprite data (ink for Amstrad CPC, hexcolor for Amstrad Plus)")
+                            .value_parser(clap_parse_ink_or_color)
                         )
                     ))
 
@@ -1641,7 +1684,7 @@ pub fn process_cpc2img(matches: &ArgMatches, _args: Command) -> anyhow::Result<(
             data.chunks(17)
                 .map(|p| {
                     let inks = p.iter().map(|b| Ink::from(*b));
-                    Palette::from_iter(inks)
+                    PaletteInk::from_iter(inks)
                 })
                 .collect_vec()
         }
@@ -1857,7 +1900,7 @@ impl FadePaletteArgs {
             Ok(LockablePalette::unlocked(pal.palette(0).clone()))
         }
         else {
-            let mut palette = Palette::empty();
+            let mut palette = PaletteInk::empty();
             let mut one_pen_set = false;
             let pen_values = [
                 self.pen0, self.pen1, self.pen2, self.pen3, self.pen4, self.pen5, self.pen6,
@@ -1950,7 +1993,7 @@ pub fn fade_build_args() -> Command {
         .subcommand_required(false)
 }
 
-fn fade_output_ga_assembly(palettes: &[Palette]) -> String {
+fn fade_output_ga_assembly(palettes: &[PaletteInk]) -> String {
     palettes
         .iter()
         .map(|palette| {
@@ -1966,7 +2009,7 @@ fn fade_output_ga_assembly(palettes: &[Palette]) -> String {
         + "\n"
 }
 
-fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
+fn fade_output_symbols_assembly(palettes: &[PaletteInk]) -> String {
     palettes
         .iter()
         .map(|palette| {
@@ -1981,13 +2024,26 @@ fn fade_output_symbols_assembly(palettes: &[Palette]) -> String {
         + "\n"
 }
 
-fn fade_display_preview(palettes: &[Palette]) {
+fn palette_ansi_colors<C: AmstradColor>(palette: &Palette<C>) -> Vec<DynColors> {
+    palette
+        .colors()
+        .into_iter()
+        .map(|color| {
+            color.owo_color()
+        })
+        .collect_vec()
+}
+
+fn palette_ansi_colors_repr<C: AmstradColor>(palette: &Palette<C>) -> String {
+    palette_ansi_colors(palette)
+        .into_iter()
+        .map(|color| format!("{}", "   ".on_color(color)))
+        .join(" ")
+}
+
+fn fade_display_preview<C: AmstradColor>(palettes: &[Palette<C>]) {
     for palette in palettes {
-        for ink in palette.inks() {
-            let dyncolor = DynColors::Rgb(ink.color()[0], ink.color()[1], ink.color()[2]);
-            print!("{}", "   ".on_color(dyncolor));
-        }
-        println!()
+        println!("{}", palette_ansi_colors_repr(palette));
     }
 }
 

@@ -8,6 +8,7 @@ use cpclib_common::itertools::Itertools;
 #[cfg(all(not(target_arch = "wasm32"), feature = "rayon"))]
 use cpclib_common::rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use image as im;
+use owo_colors::{DynColors, OwoColorize};
 
 use crate::asic::AsicColor;
 use crate::color::AmstradColor;
@@ -311,6 +312,15 @@ impl<C: AmstradColor> ColorMatrix<C> {
         Self {
             data: vec![vec![C::default(); width]; height]
         }
+    }
+
+    pub fn to_ansi_string(&self) ->String{
+        self.data.iter().map(|line| {
+            line.iter().map(|ink| {
+                let color = ink.owo_color();
+                format!("{}", "   ".on_color(color))
+            }).join("")
+        }).join("\n")
     }
 
     /// The matrix represents both the mask (with an unexpected color), and the sprite (<ith the expected color).
@@ -671,6 +681,11 @@ impl<C: AmstradColor> ColorMatrix<C> {
         palette: LockablePalette<C>,
         missing_pen: Option<Pen>
     ) -> Sprite<C> {
+
+        println!("image\n{}\n", self.to_ansi_string());
+        println!("provided palette\n{}\n", palette.to_ansi_string());
+
+
         // Extract the palette is not provided as an argument
         let palette = if palette.is_locked() {
             palette.into_palette()
@@ -678,6 +693,9 @@ impl<C: AmstradColor> ColorMatrix<C> {
         else {
             self.extract_palette_with_hint(mode, palette).unwrap()
         };
+
+        println!("obtained palette in as_sprite\n{}\n", palette.to_ansi_string());
+
 
         // Really make the conversion
         let pens = colors_to_pens(&self.data, &palette);
@@ -689,6 +707,7 @@ impl<C: AmstradColor> ColorMatrix<C> {
             data: encode(&pens, mode, missing_pen)
         }
     }
+
 }
 
 impl ColorMatrix<Ink> {

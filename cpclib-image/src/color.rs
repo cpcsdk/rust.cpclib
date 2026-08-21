@@ -8,7 +8,10 @@
 //! enum - one runtime seam, at the container.
 
 use crate::asic::AsicColor;
+use crate::ga::INKS_RGB_VALUES;
 use crate::ink::Ink;
+use image as im;
+use delegate::delegate;
 
 pub trait AmstradColor:
     Default
@@ -55,6 +58,16 @@ pub trait AmstradColor:
     fn mask_foreground() -> Self;
     /// The colour marking a pixel outside the mask entirely.
     fn not_in_mask() -> Self;
+
+    /// Get the RGB color value of the ink
+    fn color(&self) -> im::Rgb<u8>;
+
+    fn owo_color(&self) -> owo_colors::DynColors {
+        let color = self.color();
+        owo_colors::DynColors::Rgb(color.0[0], color.0[1], color.0[2])
+    }
+
+    fn is_plus() -> bool;
 }
 
 impl AmstradColor for Ink {
@@ -81,6 +94,17 @@ impl AmstradColor for Ink {
     fn white() -> Self {
         Ink::BRIGHTWHITE
     }
+
+
+    /// Get the RGB color value of the ink
+    fn color(&self) -> im::Rgb<u8> {
+        INKS_RGB_VALUES[self.firmware_number() as usize]
+    }
+
+    fn is_plus() -> bool {
+        false
+    }
+
 }
 
 /// The ASIC's answers are the Gate Array's, converted - the mask conventions
@@ -109,5 +133,58 @@ impl AmstradColor for AsicColor {
 
     fn white() -> Self {
         Ink::white().into()
+    }
+
+    fn color(&self) -> im::Rgb<u8> {
+        im::Rgb([
+            self.get_red().value()<<4,
+            self.get_green().value()<<4,
+            self.get_blue().value()<<4,
+        ])
+    }
+
+    fn is_plus() -> bool {
+        true
+    }
+}
+
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AnyColor {
+    GateArray(Ink),
+    Asic(AsicColor),
+}
+
+impl From<Ink> for AnyColor {
+    fn from(ink: Ink) -> Self {
+        AnyColor::GateArray(ink)
+    }
+}
+
+impl From<AsicColor> for AnyColor {
+    fn from(asic: AsicColor) -> Self {
+        AnyColor::Asic(asic)
+    }
+}
+
+impl TryFrom<AnyColor> for Ink {
+    type Error = String;
+
+    fn try_from(value: AnyColor) -> Result<Self, Self::Error> {
+        match value {
+            AnyColor::GateArray(ink) => Ok(ink),
+            AnyColor::Asic(_) => Err("Cannot convert AsicColor to Ink".to_owned()),
+        }
+    }
+}
+
+impl TryFrom<AnyColor> for AsicColor {
+    type Error = String;
+
+    fn try_from(value: AnyColor) -> Result<Self, Self::Error> {
+        match value {
+            AnyColor::GateArray(ink) => Err(format!("Cannot convert Ink ({ink:?}) to AsicColor")),
+            AnyColor::Asic(asic) => Ok(asic),
+        }
     }
 }

@@ -3,6 +3,7 @@ use std::fmt::{Debug, Formatter, Result};
 use std::ops::Deref;
 
 use cpclib_common::itertools::Itertools;
+use owo_colors::OwoColorize;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -522,7 +523,24 @@ impl<C: AmstradColor> Palette<C> {
     pub fn nb_pens_used(&self) -> usize {
         self.values.len()
     }
+
+
+    pub fn to_ansi_string(&self) -> String {
+        self.values
+            .iter()
+            .sorted_by(|a, b| Ord::cmp(&a.0.number(), &b.0.number()))
+            .map(|(p, c)| {
+                let color = c.owo_color();
+                format!("{:<2} => {} {}", p.number(), "   ".on_color(color), c)
+            })
+            .join("\n")
+    }
+
+      pub fn is_plus(&self) -> bool {
+        C::is_plus()
+    }
 }
+
 
 impl From<&Palette<Ink>> for Vec<u8> {
     fn from(val: &Palette<Ink>) -> Self {

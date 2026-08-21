@@ -13,29 +13,28 @@
 //! 0-3, with bits 4-7 unused. This is the layout `.kit` palette files use (see
 //! [`crate::kit`]).
 
-use std::fmt::{Debug, Formatter, Result};
+use std::{fmt::{Debug, Formatter, Result}, hash::Hash};
 
 use image as im;
+use owo_colors::OwoColorize;
 
-use crate::ink::{Ink, InkComponentQuantity};
+use crate::{color::AmstradColor, ink::{Ink, InkComponentQuantity}};
 
 /// One 4-bit colour component, 0 (off) to 15 (full).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct AsicColorComponent(u8);
 
 impl AsicColorComponent {
-    /// The largest value a component can hold.
-    pub const MAX: u8 = 0xF;
-
+    pub  const MAX: u8 = 0xf;
     pub fn value(self) -> u8 {
         self.0
     }
 }
 
+
+
 impl From<u8> for AsicColorComponent {
-    /// Values wider than 4 bits are truncated: the hardware has nowhere to put
-    /// them, and silently keeping the low nibble is what writing to the ASIC
-    /// would do anyway.
+    /// This is from a real rgb componenet
     fn from(value: u8) -> Self {
         AsicColorComponent(value & Self::MAX)
     }
@@ -64,8 +63,26 @@ impl From<InkComponentQuantity> for AsicColorComponent {
 /// Written by hand rather than with `bitfield!`: three nibbles at fixed offsets
 /// is less code this way than the macro's conversion syntax, and it keeps the
 /// packing visible right next to the layout it documents.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Clone, Copy, Eq,  Ord, Default)]
 pub struct AsicColor(u16);
+
+impl PartialEq for AsicColor {
+    fn eq(&self, other: &Self) -> bool {
+        AmstradColor::color(self) == AmstradColor::color(other)
+    }
+}
+
+impl PartialOrd for AsicColor {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        AmstradColor::color(self).0.partial_cmp(&AmstradColor::color(other).0)
+    }
+}
+
+impl Hash for AsicColor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        AmstradColor::color(self).hash(state)
+    }
+}
 
 impl AsicColor {
     /// The bits the hardware actually uses - 4-7 are unused.
@@ -144,7 +161,7 @@ impl From<im::Rgb<u8>> for AsicColor {
     /// across a whole image.
     fn from(color: im::Rgb<u8>) -> Self {
         fn quantise(component: u8) -> u8 {
-            (((component as u16 * AsicColorComponent::MAX as u16) + 127) / 255) as u8
+            component >> 4
         }
         AsicColor::new(
             quantise(color[0]),
@@ -159,7 +176,7 @@ impl From<AsicColor> for im::Rgb<u8> {
     /// that 0 stays 0 and 15 becomes 255.
     fn from(color: AsicColor) -> Self {
         fn expand(component: AsicColorComponent) -> u8 {
-            ((component.value() as u16 * 255) / AsicColorComponent::MAX as u16) as u8
+            component.value() << 4
         }
         im::Rgb([
             expand(color.get_red()),

@@ -7,6 +7,8 @@
 
 use std::path::Path;
 
+use cpclib_common::camino::Utf8Path;
+
 use crate::asic::AsicColor;
 use crate::ink::Ink;
 use crate::palette::Palette;
@@ -43,17 +45,15 @@ impl Kit {
     /// A file of the wrong length is refused rather than padded or truncated:
     /// a short read here would silently produce black pens, which looks like a
     /// conversion bug rather than a wrong file.
-    pub fn from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let content = std::fs::read(path.as_ref())?;
+    pub fn from_file<P: AsRef<Utf8Path>>(path: P) -> Result<Self, String> {
+        let path = path.as_ref();
+        let content = cpclib_files::load_content(path)?;
         let bytes: [u8; Self::BYTE_SIZE] = content.as_slice().try_into().map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
+            format!(
                     "{} is {} bytes; a .kit palette is exactly {}",
-                    path.as_ref().display(),
+                    path,
                     content.len(),
                     Self::BYTE_SIZE
-                )
             )
         })?;
         Ok(Self::from_bytes(bytes))
