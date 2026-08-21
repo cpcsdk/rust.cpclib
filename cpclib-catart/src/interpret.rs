@@ -1,3 +1,4 @@
+
 //! The aim of this file is to ease debuggin of the conversion from Basic commands to Char commands
 //! by simulating an Amstrad CPC screen and interpreting the char commands to produce a visual output.
 //! This is mainly useful for tests.
@@ -63,7 +64,9 @@ use std::fmt::{self, Display};
 use crate::basic_chars::ACK;
 use crate::basic_command::{BasicCommand, BasicCommandList, PrintArgument};
 use crate::char_command::CharCommand;
+ use cpclib_image::color::AmstradColor;
 
+ 
 /// Locale/Language for character font
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Locale {
@@ -1240,8 +1243,7 @@ impl Display for Interpreter {
         let screen_width = self.screen.buffer[0].len();
         let _screen_height = self.screen.buffer.len();
         let border_ink = self.palette.get_border();
-        let border_rgb = border_ink.color();
-        let border_color = DynColors::Rgb(border_rgb[0], border_rgb[1], border_rgb[2]);
+        let border_color = border_ink.owo_color();
 
         // Top border
         for _ in 0..border {
@@ -1270,10 +1272,8 @@ impl Display for Interpreter {
                 };
                 let pen_ink = self.palette.get(&pen);
                 let paper_ink = self.palette.get(&paper);
-                let pen_rgb = pen_ink.color();
-                let paper_rgb = paper_ink.color();
-                let fg = DynColors::Rgb(pen_rgb[0], pen_rgb[1], pen_rgb[2]);
-                let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
+                let fg = pen_ink.owo_color();
+                let bg = paper_ink.owo_color();
                 write!(f, "{}", ch.color(fg).on_color(bg))?;
             }
             // Right border
@@ -1341,12 +1341,10 @@ pub fn display_screen_diff(
 
     // Border thickness
     let border_ink1 = palette1.get_border();
-    let border_rgb1 = border_ink1.color();
-    let border_color1 = DynColors::Rgb(border_rgb1[0], border_rgb1[1], border_rgb1[2]);
+    let border_color1 = border_ink1.owo_color();
 
     let border_ink2 = palette2.get_border();
-    let border_rgb2 = border_ink2.color();
-    let border_color2 = DynColors::Rgb(border_rgb2[0], border_rgb2[1], border_rgb2[2]);
+    let border_color2 = border_ink2.owo_color();
 
     // Top borders
     for _ in 0..border {
@@ -1375,10 +1373,8 @@ pub fn display_screen_diff(
         for cell in row1.iter() {
             let pen_ink = palette1.get(&cell.pen);
             let paper_ink = palette1.get(&cell.paper);
-            let pen_rgb = pen_ink.color();
-            let paper_rgb = paper_ink.color();
-            let fg = DynColors::Rgb(pen_rgb[0], pen_rgb[1], pen_rgb[2]);
-            let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
+            let fg = pen_ink.owo_color();
+            let bg = paper_ink.owo_color();
             output.push_str(&format!("{}", (cell.ch as char).color(fg).on_color(bg)));
         }
 
@@ -1420,10 +1416,8 @@ pub fn display_screen_diff(
         for cell in row2.iter() {
             let pen_ink = palette2.get(&cell.pen);
             let paper_ink = palette2.get(&cell.paper);
-            let pen_rgb = pen_ink.color();
-            let paper_rgb = paper_ink.color();
-            let fg = DynColors::Rgb(pen_rgb[0], pen_rgb[1], pen_rgb[2]);
-            let bg = DynColors::Rgb(paper_rgb[0], paper_rgb[1], paper_rgb[2]);
+            let fg = pen_ink.owo_color();
+            let bg = paper_ink.owo_color();
             output.push_str(&format!("{}", (cell.ch as char).color(fg).on_color(bg)));
         }
 

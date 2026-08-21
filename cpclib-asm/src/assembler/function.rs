@@ -24,7 +24,7 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::list::{list_extend, list_filter, list_map, list_reverse, string_filter, string_get, string_len, string_map};
+use crate::list::{list_extend, list_filter, list_fold, list_map, list_reverse, string_filter, string_get, string_len, string_map};
 use crate::matrix::matrix_from_list;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
@@ -237,6 +237,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "list_extend": Function::HardCoded(HardCodedFunction::ListExtend),
         "list_filter": Function::HardCoded(HardCodedFunction::ListFilter),
         "list_map": Function::HardCoded(HardCodedFunction::ListMap),
+        "list_fold": Function::HardCoded(HardCodedFunction::ListFold),
 
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
@@ -342,6 +343,7 @@ pub enum HardCodedFunction {
     ListReverse,
     ListFilter,
     ListMap,
+    ListFold,
 
     MatrixNew,
     MatrixSet,
@@ -532,6 +534,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListArgsort => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListExtend => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListFilter => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListFold => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::ListGet => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListLen => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListMap => ExpectedNbArgs::Fixed(2),
@@ -718,6 +721,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListReverse => list_reverse(params[0].as_ref().clone()),
             HardCodedFunction::ListFilter => list_filter(env, params[0].as_ref(), params[1].as_ref()),
             HardCodedFunction::ListMap => list_map(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::ListFold => list_fold(env, params[0].as_ref(), params[1].as_ref(), params[2].as_ref()),
             HardCodedFunction::ListSublist => {
                 list_sublist(params[0].as_ref(), params[1].as_ref().int()? as _, params[2].as_ref().int()? as _)
             },

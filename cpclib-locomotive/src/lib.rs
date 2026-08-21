@@ -12,7 +12,7 @@
 )]
 #![deny(clippy::pedantic)]
 
-use std::io::{Read, Write};
+use std::{io::{Read, Write}};
 
 pub use clap::{CommandFactory, Parser, Subcommand};
 use cpclib_basic::BasicProgram;
@@ -59,7 +59,7 @@ pub enum Commands {
     }
 }
 
-pub fn handle_locomotive_arguments(cli: Cli) -> std::io::Result<()> {
+pub fn handle_locomotive_arguments(cli: Cli) -> Result<(), String>{
     match cli.command {
         Commands::Encode {
             input,
@@ -80,29 +80,27 @@ fn encode_command(
     input: &Utf8PathBuf,
     output: &Utf8PathBuf,
     with_header: bool
-) -> std::io::Result<()> {
+) -> Result<(), String> {
     // Read the ASCII source file
     // TODO aad the ability to read files from supports
     let basic_content: String = {
-        let mut f = File::open(input)?;
+        let mut f = File::open(input).map_err(|e| format!("Error opening input file: {e}"))?;
         let mut content = String::new();
-        f.read_to_string(&mut content)?;
+        f.read_to_string(&mut content).map_err(|e| e.to_string())?;
         content
     };
 
     // Parse the BASIC program
     let basic_tokens = BasicProgram::parse(basic_content).map_err(|msg| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Unable to parse BASIC: {msg}")
-        )
+        format!("Unable to parse BASIC: {msg}")
+        
     })?;
 
     // Get the bytes of the BASIC program
     let basic_bytes = basic_tokens.as_bytes();
 
     // Write to output file
-    let mut f = File::create(output)?;
+    let mut f = File::create(output).map_err(|e| e.to_string())?;
 
     // Add Amsdos header if requested
     if with_header {
@@ -117,41 +115,37 @@ fn encode_command(
         // `TryFrom<&str>` (`user:name.extension` syntax, defaulting to
         // user 0) instead.
         let basename = output.file_name().unwrap_or_else(|| output.as_str());
-        let amsdos_name = AmsdosFileName::try_from(basename).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
+        let amsdos_name = AmsdosFileName::try_from(basename).map_err(|e| 
+
                 format!("Invalid Amsdos filename {basename:?}: {e}")
-            )
-        })?;
+        
+        )?;
         let header = AmsdosHeader::compute_basic_header(&amsdos_name, &basic_bytes);
-        f.write_all(header.as_bytes().as_ref())?;
+        f.write_all(header.as_bytes().as_ref()).map_err(|e| format!("Error writing header to output file: {e}"))?;
     }
 
-    f.write_all(&basic_bytes)?;
+    f.write_all(&basic_bytes).map_err(|e| format!("Error writing to output file: {e}"))?;
 
     Ok(())
 }
 
-fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> std::io::Result<()> {
+fn decode_command(input: &Utf8PathBuf, output: Option<&Utf8PathBuf>) -> Result<(), String>{
     // Read the BASIC binary file (with potential Amsdos header)
-    let file = FileAndSupport::build(input);
+    let file = FileAndSupport::build(input)?;
     let content = file.content();
 
     // Decode the BASIC program
-    let tokens = BasicProgram::decode(content.as_ref()).map_err(|msg| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Error in the BASIC file: {msg}")
-        )
-    })?;
+    let tokens = BasicProgram::decode(content.as_ref()).map_err(|msg| 
+        format!("Error in the BASIC file: {msg}") 
+    )?;
 
     // Convert to ASCII representation
     let repr = tokens.to_string();
 
     // Write to output file or stdout
     if let Some(output_path) = output {
-        let mut f = File::create(output_path)?;
-        f.write_all(repr.as_bytes())?;
+        let mut f = File::create(output_path).map_err(|e| format!("Error creating output file: {e}"))?;
+        f.write_all(repr.as_bytes()).map_err(|e| format!("Error writing to output file: {e}"))?;
     }
     else {
         println!("{repr}");
