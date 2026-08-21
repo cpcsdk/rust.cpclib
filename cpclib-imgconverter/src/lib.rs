@@ -577,7 +577,21 @@ fn palette_installation_code(palette: &AnyPalette) -> (String, String) {
                 .expect("an ASIC palette must produce its 32 bytes");
             (
                 "
-        ld bc, 0x7fb8 ; unlock the ASIC
+            LD         HL,tasic
+            LD         D,17
+delock      LD         BC,#BC00
+            LD         A,(HL)
+            OUT        (C),A
+            INC        HL
+            DEC        D
+            JP         NZ,delock 
+            jp continue 
+
+tasic       DB         255,0,255,119,179,81,168,212,98,57,156,70,43,21,138,205,238
+        
+        continue
+
+        ld bc, 0x7fb8 ; connect the ASIC
         out (c), c
         ld hl, palette_tab
         ld de, 0x6400
