@@ -6,7 +6,8 @@
 //! address does not say which line of yours it came from. Everything here turns
 //! one into the other on the way past.
 
-use cpclib_project::srcmap::SourceMap;
+use cpclib_image::color::AmstradColor;
+use cpclib_project::srcmap::{SourceLocation, SourceMap};
 use serde_json::{Value, json};
 
 /// Variable references we answer ourselves, chosen far from the emulator's own
@@ -207,13 +208,41 @@ fn parse_hex_value(raw: &str) -> Option<u32> {
     u32::from_str_radix(digits, 16).ok()
 }
 
+/// An operand this pass could not name on its own: several labels share the
+/// address, and nothing here has the evidence to prefer one.
+///
+/// `annotate_disassembly` writes its usual best guess anyway (today's
+/// behaviour, unchanged), but also hands this back so a caller that *can*
+/// read source text - `Session`, which owns the file cache `source_line`
+/// needs - gets a chance to do better. Keeping that resolution outside this
+/// function is not a style choice: `annotate_disassembly` takes `&SourceMap`
+/// while disambiguating needs `&mut self` for `source_line`, and the two
+/// borrows cannot both be live in one call.
+pub(crate) struct AmbiguousOperand {
+    pub index: usize,
+    pub location: SourceLocation,
+    /// Preference-sorted, as `SourceMap::symbols_at` returns them. Always
+    /// more than one - a single candidate is not ambiguous and is handled
+    /// inline instead of being reported here.
+    pub candidates: Vec<String>
+}
+
 /// Put each disassembled instruction back on the line it came from.
 ///
 /// This is what lets the disassembly view show your source beside the opcodes,
 /// and what makes "which line is actually executing" answerable by reading
 /// rather than by counting instructions.
-pub fn annotate_disassembly(instructions: &mut [Value], map: &SourceMap, page: Option<u8>) {
-    for instruction in instructions.iter_mut() {
+///
+/// Returns the operands where more than one label shared an address, so a
+/// caller with access to source text can try to do better than the guess
+/// written here - see [`AmbiguousOperand`].
+pub(crate) fn annotate_disassembly(
+    instructions: &mut [Value],
+    map: &SourceMap,
+    page: Option<u8>
+) -> Vec<AmbiguousOperand> {
+    let mut ambiguous = Vec::new();
+    for (index, instruction) in instructions.iter_mut().enumerate() {
         let address = instruction
             .get("address")
             .and_then(Value::as_str)
@@ -223,12 +252,26 @@ pub fn annotate_disassembly(instructions: &mut [Value], map: &SourceMap, page: O
             continue;
         };
 
+        // An address belonging to no line stays bare: the view then shows the
+        // instruction alone, which is the honest answer for firmware or data.
+        //
+        // In a banked program the page has to come from somewhere, since the
+        // logical address alone is claimed by more than one; `page` is what the
+        // bytes at `PC` turned out to match.
+        //
+        // Hoisted above the operand block below: disambiguating an operand
+        // needs this row's own location to read the source line from.
+        let located = page
+            .and_then(|page| u16::try_from(address).ok().map(|address| (page, address)))
+            .and_then(|(page, address)| map.location_at_long(page, address))
+            .or_else(|| map.location_at(address));
+
         // The addresses in the operands, named. `CALL 0xBB5A` is a routine you
         // have to look up; `CALL 0xBB5A ; TXT_OUTPUT` is one you can read. The
         // same for your own labels - a jump target is a name in the source and
         // should be one here too.
         if let Some(text) = instruction.get("instruction").and_then(Value::as_str) {
-            let named = name_operand_addresses(text, map);
+            let named = name_operand_addresses(text, map, &located, index, &mut ambiguous);
             if !named.is_empty() {
                 instruction["symbols"] = json!(named);
             }
@@ -238,20 +281,18 @@ pub fn annotate_disassembly(instructions: &mut [Value], map: &SourceMap, page: O
         // here than anywhere else: a screenful of macro-generated opcodes all
         // carry the same source line, and the labels are the only thing that
         // says where one thing ends and the next begins.
-        if let Some(symbol) = map.symbol_at(address) {
+        //
+        // No source-line evidence exists for a heading - nothing "mentions"
+        // it, the way a call site mentions its target - so an ambiguity here
+        // is shown rather than silently resolved to a guess.
+        let symbols = map.symbols_at(address);
+        if let Some(symbol) = symbols.first() {
             instruction["symbol"] = json!(symbol);
+            if symbols.len() > 1 {
+                instruction["symbolAlternatives"] = json!(symbols[1..]);
+            }
         }
 
-        // An address belonging to no line stays bare: the view then shows the
-        // instruction alone, which is the honest answer for firmware or data.
-        //
-        // In a banked program the page has to come from somewhere, since the
-        // logical address alone is claimed by more than one; `page` is what the
-        // bytes at `PC` turned out to match.
-        let located = page
-            .and_then(|page| u16::try_from(address).ok().map(|address| (page, address)))
-            .and_then(|(page, address)| map.location_at_long(page, address))
-            .or_else(|| map.location_at(address));
         let Some(location) = located
         else {
             continue;
@@ -271,6 +312,7 @@ pub fn annotate_disassembly(instructions: &mut [Value], map: &SourceMap, page: O
             instruction["endColumn"] = json!(location.column_end);
         }
     }
+    ambiguous
 }
 
 /// The scopes we add beside the emulator's registers.
@@ -401,7 +443,20 @@ pub fn gate_array_pen(written: u8) -> Option<(String, String)> {
 /// Only exact matches: an operand that is a label's address is that label, and
 /// an operand that is three bytes into one is left alone. A guess here would be
 /// read as fact, and the whole point of this column is to be trusted.
-fn name_operand_addresses(text: &str, map: &SourceMap) -> Vec<String> {
+///
+/// When several labels share an operand's address, the top-preference one is
+/// still written here - today's default, unchanged - but the ambiguity is
+/// also recorded into `ambiguous` (when this row resolved to a source
+/// `location`; with none, there is no line to disambiguate against, so the
+/// guess stands as-is). `index` identifies this instruction within the slice
+/// `annotate_disassembly` is walking, for the caller to write back into.
+fn name_operand_addresses(
+    text: &str,
+    map: &SourceMap,
+    location: &Option<SourceLocation>,
+    index: usize,
+    ambiguous: &mut Vec<AmbiguousOperand>
+) -> Vec<String> {
     let mut named = Vec::new();
     for piece in text.split(|c: char| !c.is_ascii_alphanumeric() && c != 'x' && c != 'X') {
         let value = piece
@@ -418,10 +473,23 @@ fn name_operand_addresses(text: &str, map: &SourceMap) -> Vec<String> {
         else {
             continue;
         };
-        if let Some(symbol) = map.symbol_at(value)
-            && !named.iter().any(|n| n == symbol)
+        let candidates = map.symbols_at(value);
+        let Some(symbol) = candidates.first()
+        else {
+            continue;
+        };
+        if named.iter().any(|n| n == symbol) {
+            continue;
+        }
+        named.push(symbol.to_string());
+        if candidates.len() > 1
+            && let Some(location) = location
         {
-            named.push(symbol.to_string());
+            ambiguous.push(AmbiguousOperand {
+                index,
+                location: location.clone(),
+                candidates: candidates.into_iter().map(str::to_owned).collect()
+            });
         }
     }
     named
@@ -659,6 +727,8 @@ pub fn chip_placeholder(reference: i64, why: &str) -> Option<Vec<Value>> {
 
 #[cfg(test)]
 mod tests {
+    use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
+
     use super::*;
 
     #[test]
@@ -732,5 +802,116 @@ mod tests {
             "the emulator's own references are its own"
         );
         assert!(chip_placeholder(1, "x").is_none());
+    }
+
+    /// A single label at an operand's address is named directly, with nothing
+    /// to disambiguate - today's behaviour, unchanged by C.
+    #[test]
+    fn a_single_operand_candidate_is_named_as_before() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![SourceMapRow::flat(0, 2, 0x4000, 3)]
+        })
+        .with_symbols(
+            [("table_data".to_string(), 0x5000u32)]
+                .into_iter()
+                .collect()
+        );
+
+        let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None);
+
+        assert_eq!(instructions[0]["symbols"], json!(["table_data"]));
+        assert!(ambiguous.is_empty(), "nothing to disambiguate");
+    }
+
+    /// A heading with several labels shows the top-preference one, as before,
+    /// and lists the rest in `symbolAlternatives`, preference-sorted - the
+    /// same order `symbols_at` already returns them in. No evidence exists
+    /// for a heading, so this is the honest answer rather than a guess.
+    #[test]
+    fn an_ambiguous_heading_lists_its_alternatives_in_order() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![SourceMapRow::flat(0, 2, 0x4000, 3)]
+        })
+        .with_symbols(
+            [
+                ("b".to_string(), 0x4000u32),
+                ("cd".to_string(), 0x4000u32),
+                ("table_data".to_string(), 0x4000u32)
+            ]
+            .into_iter()
+            .collect()
+        );
+
+        let mut instructions = vec![json!({"address": "0x4000", "instruction": "NOP"})];
+        annotate_disassembly(&mut instructions, &map, None);
+
+        assert_eq!(instructions[0]["symbol"], json!("b"), "shortest first");
+        assert_eq!(
+            instructions[0]["symbolAlternatives"],
+            json!(["cd", "table_data"]),
+            "the rest, in the same preference order"
+        );
+    }
+
+    /// Several labels at an operand's address, and this row resolved to a
+    /// source location: the top-preference guess is still written (today's
+    /// default), and the ambiguity is handed back so a caller that can read
+    /// that location's source line - `Session::resolve_ambiguous_operand_symbols`
+    /// - gets a chance to prefer the one actually named.
+    #[test]
+    fn an_ambiguous_operand_with_a_location_is_reported() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![SourceMapRow::flat(0, 2, 0x4000, 3)]
+        })
+        .with_symbols(
+            [
+                ("b".to_string(), 0x5000u32),
+                ("table_data".to_string(), 0x5000u32)
+            ]
+            .into_iter()
+            .collect()
+        );
+
+        let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None);
+
+        // The default guess still stands until a caller overrides it.
+        assert_eq!(instructions[0]["symbols"], json!(["b"]));
+
+        assert_eq!(ambiguous.len(), 1);
+        assert_eq!(ambiguous[0].index, 0);
+        assert_eq!(ambiguous[0].location.line, 2);
+        assert_eq!(ambiguous[0].candidates, vec!["b".to_string(), "table_data".to_string()]);
+    }
+
+    /// The same ambiguity, but this row resolves to no source location at
+    /// all (firmware, or an address the source map has nothing to say
+    /// about). There is no line to read, so nothing is reported - the guess
+    /// stands, undisturbed, rather than being flagged with no way to ever
+    /// resolve it.
+    #[test]
+    fn an_ambiguous_operand_without_a_location_is_not_reported() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![]
+        })
+        .with_symbols(
+            [
+                ("b".to_string(), 0x5000u32),
+                ("table_data".to_string(), 0x5000u32)
+            ]
+            .into_iter()
+            .collect()
+        );
+
+        let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None);
+
+        assert_eq!(instructions[0]["symbols"], json!(["b"]));
+        assert!(ambiguous.is_empty(), "no location, nothing to disambiguate against");
     }
 }

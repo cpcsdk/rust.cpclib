@@ -24,7 +24,7 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::list::{list_extend, list_filter, list_fold, list_map, list_reverse, string_filter, string_get, string_len, string_map};
+use crate::list::{list_extend, list_filter, list_fold, list_map, list_position_predicate, list_position_value, list_reverse, string_filter, string_get, string_len, string_map};
 use crate::matrix::matrix_from_list;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
@@ -238,6 +238,8 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "list_filter": Function::HardCoded(HardCodedFunction::ListFilter),
         "list_map": Function::HardCoded(HardCodedFunction::ListMap),
         "list_fold": Function::HardCoded(HardCodedFunction::ListFold),
+        "list_position_predicate": Function::HardCoded(HardCodedFunction::ListPositionPredicate),
+        "list_position_value": Function::HardCoded(HardCodedFunction::ListPositionValue),
 
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
@@ -344,6 +346,8 @@ pub enum HardCodedFunction {
     ListFilter,
     ListMap,
     ListFold,
+    ListPositionPredicate,
+    ListPositionValue,
 
     MatrixNew,
     MatrixSet,
@@ -539,6 +543,8 @@ impl HardCodedFunction {
             HardCodedFunction::ListLen => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListMap => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListNew => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListPositionPredicate => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::ListPositionValue => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListPush => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::ListReverse => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListSet => ExpectedNbArgs::Fixed(3),
@@ -722,6 +728,11 @@ impl HardCodedFunction {
             HardCodedFunction::ListFilter => list_filter(env, params[0].as_ref(), params[1].as_ref()),
             HardCodedFunction::ListMap => list_map(env, params[0].as_ref(), params[1].as_ref()),
             HardCodedFunction::ListFold => list_fold(env, params[0].as_ref(), params[1].as_ref(), params[2].as_ref()),
+            HardCodedFunction::ListPositionPredicate => list_position_predicate(env, params[0].as_ref(), params[1].as_ref()),
+            HardCodedFunction::ListPositionValue => {
+                list_position_value(env, params[0].as_ref(), params[1].as_ref())
+            },  
+            
             HardCodedFunction::ListSublist => {
                 list_sublist(params[0].as_ref(), params[1].as_ref().int()? as _, params[2].as_ref().int()? as _)
             },

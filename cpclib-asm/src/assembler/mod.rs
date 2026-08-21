@@ -575,6 +575,13 @@ impl Default for Env {
     }
 }
 
+
+impl AsRef<Env> for Env {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 impl Clone for Env {
     fn clone(&self) -> Self {
         Self {
@@ -4159,10 +4166,10 @@ impl Env {
         }
     }
 
-    pub fn eval_any_function<'res>(
+    pub fn eval_any_function<'res, E:AsRef<ExprResult>+Clone>(
         &'res mut self,
         name: &'res str,
-        params: &[ExprResult]
+        params: &[E]
     ) -> Result<ExprResult, Box<AssemblerError>> {
         let f = match HardCodedFunction::by_name(name) {
             Some(f) => Ok(f),
@@ -5698,25 +5705,9 @@ impl Env {
 
         let backup_address = env.logical_output_address();
         for exp in exprs.iter() {
-            if exp.is_string() {
-                let s = exp.string();
-                let bytes = env.charset_encoding.transform_string(s);
-                for b in &bytes {
-                    output(env, *b as _, delta, mask)?
-                }
-                env.update_dollar();
-            }
-            else if exp.is_char() {
-                let c = exp.char();
-                let b = env.charset_encoding.transform_char(c);
-                output(env, b as _, delta, mask)?;
-                env.update_dollar();
-            }
-            else {
-                let val = env.resolve_expr_may_fail_in_first_pass(exp)?;
-                output_expr_result(env, &val, delta, mask)?;
-                env.update_dollar();
-            }
+            let exp = env.resolve_expr_may_fail_in_first_pass(exp)?;
+            output_expr_result(env, &exp, delta, mask)?;
+            env.update_dollar();
         }
 
         // Patch the last char of a str

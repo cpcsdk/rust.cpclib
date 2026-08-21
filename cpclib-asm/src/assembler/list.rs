@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use cpclib_common::itertools::Itertools;
 use cpclib_common::smol_str::SmolStr;
-use cpclib_tokens::{ExprFormat, ExprResult};
+use cpclib_tokens::{Expr, ExprFormat, ExprResult};
 use substring::Substring;
 
 use crate::{Env, error::{AssemblerError, ExpressionError}};
@@ -56,6 +56,80 @@ pub fn list_set(
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
+                }))
+            )))
+        },
+    }
+}
+
+
+
+pub fn list_position_value(env: &mut Env, list: &ExprResult, value: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    match list {
+        ExprResult::List(l) => {
+            for (i, item) in l.iter().enumerate() {
+                if item == value {
+                    return Ok(ExprResult::Value(i as _));
+                }
+            }
+            Ok(ExprResult::Value(-1))
+        },
+
+        ExprResult::String(s) => {
+            let value = value.char()?;
+            for (i, c) in s.chars().enumerate() {
+                if c == value as u8 as char {
+                    return Ok(ExprResult::Value(i as _));
+                }       
+            }
+            Ok(ExprResult::Value(-1))
+        },
+
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a list or a string")
+                }))
+            )))
+        },
+    }
+}
+
+pub fn list_position_predicate(env: &mut Env, list: &ExprResult, predicate: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    let predicate = match predicate {
+        ExprResult::String(f) => f,
+        _ => {
+            return Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{predicate} is not a function name stored in a string")
+                }))
+            )));
+        }
+    };
+
+    match list {
+        ExprResult::List(l) => {
+            for (i, item) in l.iter().enumerate() {
+                if item ==  &env.eval_any_function(predicate, &[item])? {
+                    return Ok(ExprResult::Value(i as _));
+                }
+            }
+            Ok(ExprResult::Value(-1))
+        },
+
+        ExprResult::String(s) => {
+            for (i, c) in s.chars().enumerate() {
+                if ExprResult::Char(c as _) ==  env.eval_any_function(predicate, &[&ExprResult::Char(c as _)])? {
+                    return Ok(ExprResult::Value(i as _));
+                }       
+            }
+            Ok(ExprResult::Value(-1))
+        },
+
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a list or a string")
                 }))
             )))
         },

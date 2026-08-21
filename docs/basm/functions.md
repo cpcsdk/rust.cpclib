@@ -102,6 +102,10 @@ This page documents all built-in functions available in basm expressions.
 - **`list_argsort(list)`** - Return indices that would sort the list
 - **`list_push(list, element)`** - Append element to list (returns new list)
 - **`list_extend(list1, list2)`** - Concatenate two lists (returns new list)
+- **`list_filer(list, predicate`)** - Return a list containing the elements that matchs the predicate is provided as a string that is the name of a function that takes an expression and returns a boolean
+- **`list_map(list, transform)`**
+- **`list_position(list, predicate)`** (-1 if not found, predicate)
+- **`list_position_value(list, value)`** (-1 if not found, value)
 
 ## Matrix Functions
 
