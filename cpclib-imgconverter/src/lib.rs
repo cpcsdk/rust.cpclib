@@ -559,8 +559,10 @@ fn standard_display_code(mode: u8, palette: &AnyPalette) -> String {
 
     format!(
         "
-        org 0x4000
+        org 0x1000
         di
+
+        BREAKPOINT
     
 
         {palette_code}
@@ -644,7 +646,9 @@ fn fullscreen_display_code(mode: u8, crtc_width: usize, palette: &AnyPalette) ->
 
     format!(
         "
-        org 0x4000
+        org 0x1000
+
+        BREAKPOINT
 
         di
         ld hl, 0xc9fb
@@ -1162,14 +1166,14 @@ where
                 _ => unreachable!()
             };
 
-            sna.add_data(&code, 0x4000).unwrap();
-            sna.set_value(SnapshotFlag::Z80_PC, 0x4000).unwrap();
+            sna.add_data(&code, 0x1000).unwrap();
+            sna.set_value(SnapshotFlag::Z80_PC, 0x1000).unwrap();
 
             // The ASIC has its own 6845, and an emulator has to be told to use
             // it - the display code we just generated talks to hardware a plain
             // CPC does not have. Both fields only exist from version 3 of the
             // snapshot format, so a Plus snapshot is saved as V3.
-            let is_plus = matches!(palette, AnyPalette::Asic(_));
+            let is_plus = dbg!(matches!(palette, AnyPalette::Asic(_)));
             let sna_version = if is_plus {
                 sna.set_value(SnapshotFlag::CPC_TYPE, 4).unwrap(); // 6128 Plus
                 sna.set_value(SnapshotFlag::CRTC_TYPE, 3).unwrap();
