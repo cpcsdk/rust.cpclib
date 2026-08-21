@@ -31,3 +31,23 @@ data2 = list_sublist( \
 	1, \
 	3\
 	)
+
+function is_even n
+	return (({n} % 2) == 0)
+endfunction
+
+function multiply_3_add_1 n
+	return ({n} * 3 + 1)
+endfunction
+
+function sum a, b
+	return {a} + {b}
+endfunction
+
+data5 equ [2, 1, 0]
+data6 = list_fold(
+	list_map(list_filter(data, "is_even"), "multiply_3_add_1"),
+	10, 
+	"sum") ; TODO allow use of names instead of strings
+
+	assert data6 == 18

@@ -5,7 +5,7 @@ use cpclib_common::smol_str::SmolStr;
 use cpclib_tokens::{ExprFormat, ExprResult};
 use substring::Substring;
 
-use crate::error::{AssemblerError, ExpressionError};
+use crate::{Env, error::{AssemblerError, ExpressionError}};
 
 pub fn fix_string<S: Borrow<str>>(s: S) -> SmolStr {
     s.borrow().replace("\\n", "\n").into()
@@ -86,6 +86,39 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
             Err(Box::new(AssemblerError::ExpressionError(
                 ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
                     msg: format!("{list} is not a list")
+                }))
+            )))
+        },
+    }
+}
+
+
+pub fn string_get(
+    list: &ExprResult,
+    index: usize
+) -> Result<ExprResult, Box<AssemblerError>> {
+    match list {
+        ExprResult::String(s) => {
+            list_get(list, index)
+        },
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a string")
+                }))
+            )))
+        },
+    }
+}
+
+
+pub fn string_len(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    match list {
+        ExprResult::String(s) => list_len(list),
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a string")
                 }))
             )))
         },
@@ -256,6 +289,170 @@ pub fn list_argsort(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>
     }
 }
 
+
+pub fn list_filter(
+    env: &mut Env,
+    list: &ExprResult,
+    predicate: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
+    let predicate = match predicate {
+        ExprResult::String(f) => f,
+        _ => {
+            return Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{predicate} is not a function name stored in a string")
+                }))
+            )));
+        }
+    };
+
+    match list {
+        ExprResult::List(l)=> {
+            let mut result = Vec::with_capacity(l.len());
+            for item in l.into_iter() {
+                let keep = env.eval_any_function(predicate, &[item])?;
+                if keep.bool()? {
+                    result.push(item.clone());
+                }
+            }
+            Ok(ExprResult::List(result))
+        },
+        ExprResult::String(s) => {
+            let mut result = String::with_capacity(s.len());
+            for c in s.chars() {
+                let keep = env.eval_any_function(predicate, &[ExprResult::Char(c as _ )])?;
+                if keep.bool()? {
+                    result.push(c);}
+                }
+                Ok(ExprResult::String(result.into()))
+            },       
+             _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a list or a string")
+                }))
+            )))
+        },
+    }
+}
+
+
+pub fn string_filter(
+    env: &mut Env,
+    list: &ExprResult,
+    predicate: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
+    match list {
+        ExprResult::String(s) => list_filter(env, list, predicate),
+        _ => {
+            return Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a string")
+                }))
+            )));
+        }
+    }
+}
+
+
+pub fn list_map(
+    env: &mut Env,
+    list: &ExprResult,
+    mapper: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
+    let mapper = match mapper {
+        ExprResult::String(f) => f,
+        _ => {
+            return Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{mapper} is not a function name stored in a string")
+                }))
+            )));
+        }
+    };
+
+    match list {
+        ExprResult::List(l)=> {
+            let mut result = Vec::with_capacity(l.len());
+            for item in l.into_iter() {
+                let mapped = env.eval_any_function(mapper, &[item])?;
+                result.push(mapped);
+            }
+            Ok(ExprResult::List(result))
+        },
+        ExprResult::String(s) => {
+            let mut result = String::with_capacity(s.len());
+            for c in s.chars() {
+                let mapped = env.eval_any_function(mapper, &[ExprResult::Char(c as _ )])?;
+                let mapped_char = mapped.char()?;
+                result.push(mapped_char as char);
+            }
+            Ok(ExprResult::String(result.into()))
+        },
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a list or a string")
+                }))
+            )))
+        },
+    }
+}
+
+
+pub fn list_fold(
+    env: &mut Env,
+    list: &ExprResult,
+    initial: &ExprResult,
+    folder: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
+    let folder = match folder {
+        ExprResult::String(f) => f,
+        _ => {
+            return Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{folder} is not a function name stored in a string")
+                }))
+            )));
+        }
+    };
+
+    match list {
+        ExprResult::List(l)=> {
+            let mut acc = initial.clone();
+            for item in l.into_iter() {
+                acc = env.eval_any_function(folder, &[&acc, item.as_ref()])?;
+            }
+            Ok(acc)
+        },
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a list")
+                }))
+            )))
+        },
+    }
+}
+
+
+pub fn string_map(
+    env: &mut Env,
+    list: &ExprResult,
+    mapper: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
+    match list {
+        ExprResult::String(s) => list_map(env, list, mapper),
+        _ => {
+            return Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a string")
+                }))
+            )));
+        }
+    }
+}
+
 /// BUG bytes must be enced in utf8
 pub fn string_from_list(s1: ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
     match s1 {
@@ -361,8 +558,8 @@ fn parse_format_spec(spec: &str) -> Option<ExprFormat> {
 /// (`hex`/`hex2`/`hex4`/`hex8`/`bin`/`bin8`/`bin16`/`bin32`/`int`) - the
 /// argument must then resolve to an integer, or it's a hard error the same
 /// way an out-of-range index is.
-pub fn string_format(params: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
-    let template = match &params[0] {
+pub fn string_format<E: AsRef<ExprResult>>(params: &[E]) -> Result<ExprResult, Box<AssemblerError>> {
+    let template = match params[0].as_ref() {
         ExprResult::String(s) => s.to_string(),
         other => {
             return Err(string_format_error(format!(
@@ -410,14 +607,15 @@ pub fn string_format(params: &[ExprResult]) -> Result<ExprResult, Box<AssemblerE
                 )));
             };
             let rendered = match spec_str {
-                None => string_format_arg(arg),
+                None => string_format_arg(arg.as_ref()),
                 Some(spec) => {
                     let format = parse_format_spec(spec).ok_or_else(|| {
                         string_format_error(format!(
                             "string_format: unknown format spec '{spec}' in placeholder '{{{inner}}}' in template {template:?} - expected one of hex, hex2, hex4, hex8, bin, bin8, bin16, bin32, int"
                         ))
                     })?;
-                    let value = arg.int().map_err(|_| {
+                    let value = arg.as_ref().int().map_err(|_| {
+                        let arg = arg.as_ref();
                         string_format_error(format!(
                             "string_format: placeholder {{{inner}}} needs a numeric argument for format '{spec}', got {arg}"
                         ))
