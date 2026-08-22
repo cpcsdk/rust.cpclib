@@ -312,9 +312,24 @@ export function registerDebugging(
             if (event.event === 'cpclib/disassemblyView') {
                 showDisassembly(event.session, event.body);
             }
+            // The adapter opened a disassembly view by itself because the
+            // program had left the source, and the program is back on a line it
+            // was built from. The view has done its job.
+            if (event.event === 'cpclib/closeDisassemblyView') {
+                disassemblyPanels.get(event.session.id)?.dispose();
+            }
             if (event.event === 'cpclib/stoppedAt') {
                 lastStop = event.body;
                 await revealStop(event.body);
+            }
+            // Stopped where no source line exists - inside the firmware, most
+            // often. There is nothing to reveal, and leaving the previous stop
+            // decorated says the program is on a line it left several
+            // instructions ago. The disassembly view the adapter opens is what
+            // shows where it really is.
+            if (event.event === 'cpclib/stoppedWithoutSource') {
+                lastStop = undefined;
+                clearInstructionHint();
             }
             // The hint the adapter read out of the emulator's own memory, which
             // it could only send once the read came back. Deliberately a second
@@ -540,6 +555,12 @@ interface DisassembledInstruction {
     endColumn?: number;
     /** Labels the addresses in this instruction's operands stand for. */
     symbols?: string[];
+    /**
+     * Other labels that share this row's own address with `symbol`. No
+     * source line names a heading the way a call names its target, so there
+     * is no evidence to pick between them - shown rather than guessed at.
+     */
+    symbolAlternatives?: string[];
     location?: { name?: string; path?: string };
 }
 
@@ -697,8 +718,11 @@ function disassemblyHtml(dump: Disassembly): string {
             : '';
         // Rows for one source line repeat it; that repetition *is* the
         // information when a macro produced twenty opcodes from one line.
+        const alternatives = (entry.symbolAlternatives ?? []).length
+            ? ` <span class="operand-symbol">(also ${escapeHtml((entry.symbolAlternatives ?? []).join(', '))})</span>`
+            : '';
         const heading = entry.symbol
-            ? `<tr><td colspan="4" class="symbol">${escapeHtml(entry.symbol)}:</td></tr>`
+            ? `<tr><td colspan="4" class="symbol">${escapeHtml(entry.symbol)}:${alternatives}</td></tr>`
             : '';
         return heading + `<tr class="${[path ? 'linked' : '', atPc ? 'at-pc' : ''].filter(Boolean).join(' ')}"` +
             (path

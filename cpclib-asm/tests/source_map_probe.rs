@@ -500,7 +500,11 @@ fn a_macro_body_is_recorded_against_the_files_own_lines() {
         "\torg 0x4000\n\n\tmacro DEBUG, col\n\t\tnop\n\t\tld bc, 0x7f10\n\tendm\n\tDEBUG 1\n"
     );
     let lines: Vec<u32> = raw.rows.iter().map(|row| row.line).collect();
-    assert_eq!(lines, vec![4, 5], "the lines they are written on: {lines:?}");
+    assert_eq!(
+        lines,
+        vec![4, 5],
+        "the lines they are written on: {lines:?}"
+    );
 }
 
 /// A macro called from inside another macro's body.
@@ -573,10 +577,7 @@ fn a_struct_body_is_recorded_against_the_files_own_lines() {
 }
 
 /// The map for a source that has a real file name, the way a build does.
-fn named_map(
-    name: &str,
-    source: &str
-) -> cpclib_asm::assembler::listing_output::RawSourceMap {
+fn named_map(name: &str, source: &str) -> cpclib_asm::assembler::listing_output::RawSourceMap {
     let mut parse = cpclib_asm::parser::context::ParserOptions::default();
     parse.set_quiet(true);
     let builder = cpclib_asm::ParserContextBuilder::default()
@@ -599,8 +600,14 @@ fn named_map(
 
 /// The text a row's columns select, so a test can say what the debugger would
 /// highlight rather than repeat two numbers.
-fn selected<'s>(source: &'s str, row: &cpclib_asm::assembler::listing_output::SourceMapRow) -> &'s str {
-    let line = source.lines().nth(row.line as usize - 1).expect("a real line");
+fn selected<'s>(
+    source: &'s str,
+    row: &cpclib_asm::assembler::listing_output::SourceMapRow
+) -> &'s str {
+    let line = source
+        .lines()
+        .nth(row.line as usize - 1)
+        .expect("a real line");
     if row.column_end <= row.column {
         return line;
     }
@@ -664,7 +671,11 @@ fn a_macro_argument_shorter_than_its_placeholder_shifts_the_columns_back() {
     let rows = named_map("macros.asm", source).rows;
 
     let picked: Vec<&str> = rows.iter().map(|row| selected(source, row)).collect();
-    assert_eq!(picked, vec!["ld a, {value_a}", "ld b, {value_b}"], "{rows:?}");
+    assert_eq!(
+        picked,
+        vec!["ld a, {value_a}", "ld b, {value_b}"],
+        "{rows:?}"
+    );
 }
 
 /// An instruction whose operand is *entirely* a substitution still starts where
@@ -909,6 +920,62 @@ fn a_statement_beginning_with_a_substitution_starts_at_its_placeholder() {
     assert_eq!(
         selections(source, &rows),
         vec!["{mnemonic} a, 1", "nop", "{mnemonic} a, 1", "nop"],
+        "{rows:?}"
+    );
+}
+
+/// `is_data` is what lets `-dv` show a `db` string as data instead of
+/// guessing fake instructions from its bytes - so a `db` row must say so, and
+/// a plain instruction row on the same line must not, or the two would be
+/// indistinguishable to a debugger reading this map.
+#[test]
+fn a_db_directive_is_marked_data_and_an_adjacent_opcode_is_not() {
+    let (_emitted, rows) = rows("\torg 0x4000\n\tdb 1, 2, 3\n\tnop\n");
+
+    let db_row = rows
+        .iter()
+        .find(|r| r.line == 2 && r.len > 0)
+        .expect("the db row exists");
+    assert!(db_row.is_data, "{rows:?}");
+
+    let nop_row = rows
+        .iter()
+        .find(|r| r.line == 3 && r.len > 0)
+        .expect("the nop row exists");
+    assert!(!nop_row.is_data, "{rows:?}");
+}
+
+/// A line mixing a data token and a code token - `nop : db 1,2,3` - must keep
+/// the two apart rather than merging them into one classification. This is
+/// exactly the case `SourceMap::line_extent_at` would get wrong were it
+/// reused here: it fixpoints across every row sharing a line.
+#[test]
+fn a_mixed_line_keeps_its_data_and_code_tokens_distinct() {
+    let (_emitted, rows) = rows("\torg 0x4000\n\tnop : db 1, 2, 3\n");
+
+    let line: Vec<_> = rows.iter().filter(|r| r.line == 2 && r.len > 0).collect();
+    assert_eq!(line.len(), 2, "one row per token: {rows:?}");
+    assert!(!line[0].is_data, "the opcode token: {rows:?}");
+    assert!(line[1].is_data, "the data token: {rows:?}");
+}
+
+/// A long run (`defs`) can split across several byte-per-line chunks, each of
+/// which is a continuation with no token of its own - `is_data` must carry
+/// forward across those continuations exactly as `last_mapped_line` already
+/// does, or only the first chunk of a long data run would be marked.
+#[test]
+fn a_long_defs_run_carries_is_data_across_every_continuation_chunk() {
+    let (_emitted, rows) = rows("\torg 0x4000\n\tdefs 20, 0xff\n");
+
+    let defs_rows: Vec<_> = rows.iter().filter(|r| r.line == 2 && r.len > 0).collect();
+    assert!(defs_rows.len() > 1, "should span several chunks: {rows:?}");
+    assert!(
+        defs_rows.iter().all(|r| r.is_data),
+        "every continuation chunk must still say data: {rows:?}"
+    );
+    assert_eq!(
+        defs_rows.iter().map(|r| r.len as u32).sum::<u32>(),
+        20,
         "{rows:?}"
     );
 }

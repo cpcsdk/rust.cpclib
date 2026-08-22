@@ -169,6 +169,11 @@ fn a_stack_trace_inside_an_instruction_resolves_to_its_line() {
 
 /// An address belonging to no source line is left alone rather than attributed
 /// to whatever is nearest - the editor then shows disassembly, which is honest.
+///
+/// The frame is the last message, not the first: such a stop is now also
+/// *announced*, so the editor stops decorating the line the program left. The
+/// property being pinned here is the frame's, and it is unchanged - a firmware
+/// address keeps `line: 0` and no source rather than borrowing a nearby one.
 #[test]
 fn a_stack_trace_outside_the_program_is_left_unannotated() {
     let mut session = session();
@@ -177,9 +182,14 @@ fn a_stack_trace_outside_the_program_is_left_unannotated() {
         "body": {"stackFrames": [{"instructionPointerReference": "0xbb5a", "line": 0}]}
     });
     let out = session.on_emulator_message(&from_emulator);
-    let frame = &out[0]["body"]["stackFrames"][0];
+    let frame = &out.last().unwrap()["body"]["stackFrames"][0];
     assert_eq!(frame["line"], json!(0), "not invented");
     assert!(frame.get("source").is_none());
+    assert!(
+        out.iter()
+            .any(|message| message["event"] == json!("cpclib/stoppedWithoutSource")),
+        "and the editor is told there is no line, rather than left on the old one"
+    );
 }
 
 /// Everything that is not source-shaped goes straight through, unchanged -
@@ -429,6 +439,53 @@ fn disassembled_instructions_carry_their_source_line() {
     assert_eq!(instructions[1]["line"], json!(11));
     // Firmware is not ours; leaving it bare is the honest answer.
     assert!(instructions[2].get("location").is_none());
+}
+
+/// The editor's own built-in disassembly (the raw `"disassemble"` response,
+/// answered here rather than forwarded) runs through the same
+/// `annotate_disassembly` as `-dv`'s panel - so the same-address-ambiguity
+/// fix (`Session::resolve_ambiguous_operand_symbols`, generalising
+/// `name_of_call_target`'s call-stack fix to any operand) applies here too,
+/// not only to the `-dv` surface `presentation.rs` covers.
+#[test]
+fn a_contested_operand_is_named_from_the_line_here_too() {
+    let source = std::env::temp_dir().join("cpclib-editor-disasm-ambiguous.asm");
+    std::fs::write(&source, "\torg 0x4000\n\tjp table_data\n").unwrap();
+
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec![source.to_string_lossy().to_string()],
+        // The `jp`, on line 2, at 0x4000.
+        rows: vec![SourceMapRow::flat(0, 2, 0x4000, 3)]
+    })
+    .with_symbols(
+        // "b" is shorter, so it is the plain preference-order guess; the
+        // source line names "table_data" instead.
+        [
+            ("b".to_string(), 0x5000u32),
+            ("table_data".to_string(), 0x5000u32)
+        ]
+        .into_iter()
+        .collect()
+    );
+    let mut session = Session::new(RecordingPeer::new(), map);
+    session.on_attached().unwrap();
+
+    let from_emulator = json!({
+        "type": "response", "command": "disassemble", "success": true,
+        "body": {"instructions": [
+            {"address": "0x4000", "instruction": "jp 0x5000"}
+        ]}
+    });
+    let out = session.on_emulator_message(&from_emulator);
+    let instructions = out[0]["body"]["instructions"].as_array().unwrap();
+
+    assert_eq!(
+        instructions[0]["symbols"],
+        json!(["table_data"]),
+        "the line says table_data, not the shorter b: {instructions:?}"
+    );
+
+    let _ = std::fs::remove_file(&source);
 }
 
 /// `AF` is one hex word. The flags inside it are what gets read while stepping.
@@ -1006,7 +1063,8 @@ fn a_contested_address_still_names_its_most_likely_line() {
                 page: 0,
                 column: 2,
                 column_end: 5,
-                len: 1
+                len: 1,
+                is_data: false
             },
             SourceMapRow {
                 file: 0,
@@ -1016,7 +1074,8 @@ fn a_contested_address_still_names_its_most_likely_line() {
                 page: 1,
                 column: 2,
                 column_end: 5,
-                len: 1
+                len: 1,
+                is_data: false
             },
         ]
     });
@@ -1073,7 +1132,10 @@ fn only_the_program_counter_can_be_set() {
     assert_eq!(out[0]["success"], json!(true), "{out:?}");
     assert_eq!(out[0]["body"]["value"], json!("0x4000"));
     assert!(
-        session.peer().commands().contains(&"cpclib/setPc".to_string()),
+        session
+            .peer()
+            .commands()
+            .contains(&"cpclib/setPc".to_string()),
         "the emulator was told: {:?}",
         session.peer().commands()
     );
@@ -1180,7 +1242,10 @@ fn stepping_over_a_defs_offers_the_whole_run() {
     let mut session = Session::new(RecordingPeer::new(), map);
     stopped_at(&mut session, 0x4002);
 
-    assert_eq!(the_line_offered(&mut session), LineAtPc::Defs(0x4002..0x403E));
+    assert_eq!(
+        the_line_offered(&mut session),
+        LineAtPc::Defs(0x4002..0x403E)
+    );
 }
 
 /// From the middle of the run, the answer is the same run.
@@ -1195,7 +1260,10 @@ fn stepping_over_from_inside_a_defs_run_offers_the_rest_of_it() {
     let mut session = Session::new(RecordingPeer::new(), map);
     stopped_at(&mut session, 0x4020);
 
-    assert_eq!(the_line_offered(&mut session), LineAtPc::Defs(0x4002..0x403E));
+    assert_eq!(
+        the_line_offered(&mut session),
+        LineAtPc::Defs(0x4002..0x403E)
+    );
 }
 
 /// The `djnz` written under the `defs` is a `djnz`, not part of the run.

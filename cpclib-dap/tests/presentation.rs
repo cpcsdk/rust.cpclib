@@ -571,6 +571,212 @@ fn the_disassembly_command_annotates_what_it_reads() {
     );
 }
 
+/// The reported symptom: `db "Hello, World!"` used to come back from `-dv`
+/// as a screenful of fake opcodes (`0x48` decodes to `LD C,B`, and so on) -
+/// bytes that were never instructions to begin with. The source map marks
+/// this row as data, so it must come back as the one `DB ...` line it really
+/// is.
+#[test]
+fn a_data_row_overlays_as_db_not_fake_opcodes() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["hello.asm".into()],
+        rows: vec![SourceMapRow {
+            is_data: true,
+            ..SourceMapRow::flat(0, 5, 0x4000, 13)
+        }]
+    });
+    let mut session = Session::new(RecordingPeer::new(), map);
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-dv 0x4000 20", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("readMemory").unwrap().clone();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "readMemory",
+        "body": {"address": "0x4000", "data": base64(b"Hello, World!")}
+    }));
+
+    let instructions = out[0]["body"]["instructions"].as_array().unwrap();
+    assert_eq!(
+        instructions.len(),
+        1,
+        "the whole row comes back as one line, not one per fake opcode: {instructions:?}"
+    );
+    let text = instructions[0]["instruction"].as_str().unwrap();
+    assert!(
+        text.to_uppercase().starts_with("DB"),
+        "the source map's own claim, not a guess: {text}"
+    );
+    assert!(
+        text.contains("0x48"),
+        "the actual bytes ('H' is 0x48), not decoded mnemonics: {text}"
+    );
+    assert_eq!(
+        instructions[0]["instructionBytes"],
+        json!("48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21")
+    );
+}
+
+/// The row used to be data, but the live bytes at that address no longer
+/// match what was assembled there - the program patched itself. Showing a
+/// `DB` for bytes that are not there any more would be exactly the kind of
+/// lie this feature exists to fix, so normal disassembly of the live bytes
+/// must stand instead.
+#[test]
+fn self_modified_data_is_not_shown_as_a_stale_db() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["hello.asm".into()],
+        rows: vec![SourceMapRow {
+            is_data: true,
+            ..SourceMapRow::flat(0, 5, 0x4000, 13)
+        }]
+    });
+    // The image matches the source map's claim exactly...
+    let mut session =
+        Session::new(RecordingPeer::new(), map).with_image(image_with(0x4000, b"Hello, World!"));
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-dv 0x4000 20", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("readMemory").unwrap().clone();
+    // ...but what is actually there now is 13 NOPs: the program overwrote
+    // its own former data.
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "readMemory",
+        "body": {"address": "0x4000", "data": base64(&[0x00; 13])}
+    }));
+
+    let instructions = out[0]["body"]["instructions"].as_array().unwrap();
+    assert_eq!(
+        instructions.len(),
+        13,
+        "left as decode()'s own guess, not merged into one stale DB: {instructions:?}"
+    );
+    for instruction in instructions {
+        assert!(
+            instruction["instruction"]
+                .as_str()
+                .unwrap()
+                .eq_ignore_ascii_case("nop"),
+            "the live bytes are shown honestly: {instructions:?}"
+        );
+    }
+}
+
+/// A `JR` whose target has a label gets that label through the *existing*
+/// annotation pipeline - `decode()` only had to stop emitting a raw signed
+/// offset and start emitting the resolved absolute address; labelling it was
+/// already `name_operand_addresses`'s job, unchanged.
+#[test]
+fn a_resolved_jr_target_is_labelled_by_the_existing_pipeline() {
+    let map = map_with(&[("loop_start", 0x4000)]);
+    let mut session = Session::new(RecordingPeer::new(), map);
+
+    let held = session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-dv loop_start 2", "context": "repl"}
+        }))
+        .unwrap();
+    assert!(held.is_empty(), "the answer waits for the instructions");
+
+    let asked = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(asked["arguments"]["memoryReference"], json!("0x4000"));
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "readMemory",
+        // nop ; jr loop_start (back to 0x4000)
+        "body": {"address": "0x4000", "data": base64(&[0x00, 0x18, 0xFD])}
+    }));
+
+    let instructions = out[0]["body"]["instructions"].as_array().unwrap();
+    assert!(
+        instructions[1]["instruction"]
+            .as_str()
+            .unwrap()
+            .to_uppercase()
+            .contains("JR"),
+        "{instructions:?}"
+    );
+    assert!(
+        instructions[1]["instruction"]
+            .as_str()
+            .unwrap()
+            .contains("0x4000"),
+        "the resolved target address, not the raw signed offset: {instructions:?}"
+    );
+    assert_eq!(
+        instructions[1]["symbols"],
+        json!(["loop_start"]),
+        "the resolved address composes with the pre-existing labelling pipeline: {instructions:?}"
+    );
+}
+
+/// Two labels can share an address - the end of a table is the start of the
+/// routine after it - and the shorter one wins the plain preference order
+/// with no other evidence. When the operand's own row has a source line, that
+/// line is read and the label it actually names wins instead, the same class
+/// of fix `Session::name_of_call_target` already applied to the call stack,
+/// generalised here to any operand `-dv` shows.
+#[test]
+fn the_disassembly_view_prefers_the_label_the_line_names() {
+    let source = std::env::temp_dir().join("cpclib-dv-ambiguous-operand.asm");
+    std::fs::write(&source, "\torg 0x4000\n\tjp table_data\n").unwrap();
+
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec![source.to_string_lossy().to_string()],
+        // The `jp`, on line 2, at 0x4000.
+        rows: vec![SourceMapRow::flat(0, 2, 0x4000, 3)]
+    })
+    .with_symbols(
+        // "b" is shorter, so it is the plain preference-order guess; the
+        // source line names "table_data" instead.
+        [
+            ("b".to_string(), 0x5000u32),
+            ("table_data".to_string(), 0x5000u32)
+        ]
+        .into_iter()
+        .collect()
+    );
+    let mut session = Session::new(RecordingPeer::new(), map);
+    session.on_attached().unwrap();
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-dv 0x4000 1", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("readMemory").unwrap().clone();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "readMemory",
+        // jp 0x5000
+        "body": {"address": "0x4000", "data": base64(&[0xC3, 0x00, 0x50])}
+    }));
+
+    let instructions = out[0]["body"]["instructions"].as_array().unwrap();
+    assert_eq!(
+        instructions[0]["symbols"],
+        json!(["table_data"]),
+        "the line says table_data, not the shorter b: {instructions:?}"
+    );
+
+    let _ = std::fs::remove_file(&source);
+}
+
 /// `-dv` on nothing recognisable is refused with a suggestion, not forwarded.
 #[test]
 fn the_disassembly_command_refuses_an_unknown_place() {
@@ -1294,12 +1500,14 @@ fn an_unknown_timer_action_lists_the_real_ones() {
     assert!(message.contains("-timer add"), "{message}");
 }
 
-/// A stop lands on your source, not on a disassembly view.
+/// A stop that has a source line lands on it, not on a disassembly view.
 ///
-/// The panel is opened by `-dv` when you want it, never on your behalf: an
-/// editor told the adapter can disassemble opens that view the moment any frame
-/// lacks a source line - and a reconstructed frame in firmware legitimately
-/// does - then switches stepping to instruction granularity and stays there.
+/// The editor's *own* disassembly view is what this guards against: told the
+/// adapter can disassemble, it opens that view the moment any frame lacks a
+/// source line - and a reconstructed frame in firmware legitimately does - then
+/// switches stepping to instruction granularity and stays there. Our own panel
+/// is a different thing: it does open by itself, but only when the stop itself
+/// has no line to show, and it goes away again when one does.
 #[test]
 fn nothing_is_disassembled_unless_asked_for() {
     let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
@@ -1350,5 +1558,157 @@ fn an_open_view_is_not_hijacked_by_the_next_stop() {
         asked["arguments"]["memoryReference"],
         json!("0x4000"),
         "still where it was pointed"
+    );
+}
+
+/// Stopping where the program has no source opens a disassembly view, and
+/// returning to source takes it away again.
+///
+/// This is the ordinary shape of stepping into `call TXT_OUTPUT`: the machine
+/// spends a few dozen instructions in firmware nobody assembled, where there is
+/// no line to put a cursor on, and then comes back to the instruction after the
+/// call. The panel exists for exactly that stretch.
+#[test]
+fn a_stop_outside_the_source_opens_a_disassembly_view_and_closes_it_on_return() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+
+    // Into the firmware.
+    report_pc(&mut session, 0xBB5A);
+    let out = session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{"instructionPointerReference": "0xbb5a", "line": 0}]}
+    }));
+    assert!(
+        out.iter()
+            .any(|message| message["event"] == json!("cpclib/stoppedWithoutSource")),
+        "the editor is told there is no line: {out:?}"
+    );
+    let asked = session.peer().last("readMemory").unwrap();
+    assert_eq!(
+        asked["arguments"]["memoryReference"],
+        json!("0xbb5a"),
+        "and a view is opened where the program really is"
+    );
+    let out = answer_disassembly(&mut session);
+    assert_eq!(out[0]["event"], json!("cpclib/disassemblyView"));
+    assert_eq!(
+        out[0]["body"]["followsPc"],
+        json!(true),
+        "so it keeps up by itself for the rest of the firmware call"
+    );
+
+    // Back on the instruction after the call.
+    report_pc(&mut session, 0x4000);
+    let out = session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{"instructionPointerReference": "0x4000", "line": 0}]}
+    }));
+    assert!(
+        out.iter()
+            .any(|message| message["event"] == json!("cpclib/closeDisassemblyView")),
+        "the view is no longer needed: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .any(|message| message["event"] == json!("cpclib/stoppedAt")),
+        "and the stop is announced on its line again: {out:?}"
+    );
+}
+
+/// The read that was in flight when the view closed does not bring it back.
+///
+/// A `PC`-following view is refreshed the moment the new `PC` is known, which
+/// is *before* the stack trace says whether that `PC` has a source line. So the
+/// last refresh of a firmware view is always still on its way when the view is
+/// closed, and delivering it would re-open the panel over the source line the
+/// program just returned to.
+#[test]
+fn a_late_refresh_does_not_re_open_a_closed_automatic_view() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    report_pc(&mut session, 0xBB5A);
+    session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{"instructionPointerReference": "0xbb5a", "line": 0}]}
+    }));
+    answer_disassembly(&mut session);
+
+    // The step that returns to source refreshes the view before anyone knows
+    // it is going away.
+    report_pc(&mut session, 0x4000);
+    let refresh = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(refresh["arguments"]["memoryReference"], json!("0x4000"));
+    session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{"instructionPointerReference": "0x4000", "line": 0}]}
+    }));
+
+    let out = session.on_emulator_message(&json!({
+        "seq": 99, "type": "response", "request_seq": refresh["seq"], "success": true,
+        "command": "readMemory",
+        "body": {
+            "address": refresh["arguments"]["memoryReference"],
+            "data": base64(&[0x00])
+        }
+    }));
+    assert!(
+        out.iter()
+            .all(|message| message["event"] != json!("cpclib/disassemblyView")),
+        "the panel stays closed: {out:?}"
+    );
+}
+
+/// A view you asked for is yours: returning to source does not close it.
+#[test]
+fn returning_to_source_does_not_close_a_view_you_asked_for() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[("draw_sprite", 0x4000)]));
+    report_pc(&mut session, 0x9000);
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-dv draw_sprite", "context": "repl"}
+        }))
+        .unwrap();
+    answer_disassembly(&mut session);
+
+    report_pc(&mut session, 0x4000);
+    let out = session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{"instructionPointerReference": "0x4000", "line": 0}]}
+    }));
+    assert!(
+        out.iter()
+            .all(|message| message["event"] != json!("cpclib/closeDisassemblyView")),
+        "nothing the adapter opened, nothing for it to close: {out:?}"
+    );
+}
+
+/// `-dv` during a firmware call takes the panel over, and keeps it afterwards.
+#[test]
+fn asking_for_a_view_while_outside_the_source_makes_it_yours() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[("draw_sprite", 0x4000)]));
+    report_pc(&mut session, 0xBB5A);
+    session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{"instructionPointerReference": "0xbb5a", "line": 0}]}
+    }));
+    answer_disassembly(&mut session);
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-dv draw_sprite", "context": "repl"}
+        }))
+        .unwrap();
+    answer_disassembly(&mut session);
+
+    report_pc(&mut session, 0x4000);
+    let out = session.on_emulator_message(&json!({
+        "type": "response", "command": "stackTrace", "success": true,
+        "body": {"stackFrames": [{"instructionPointerReference": "0x4000", "line": 0}]}
+    }));
+    assert!(
+        out.iter()
+            .all(|message| message["event"] != json!("cpclib/closeDisassemblyView")),
+        "it stopped being the adapter's the moment it was aimed by hand: {out:?}"
     );
 }

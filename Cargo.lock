@@ -3004,12 +3004,15 @@ dependencies = [
  "anyhow",
  "as-slice",
  "cpclib-common",
+ "cpclib-files",
+ "delegate",
  "fs-err",
  "gif",
  "gif-dispose",
  "image",
  "log",
  "nutype",
+ "owo-colors",
  "rayon",
  "serde",
 ]
@@ -3147,6 +3150,7 @@ dependencies = [
  "ignore",
  "minijinja",
  "serde",
+ "serde_json",
  "toml 0.8.2",
  "toml_edit 0.20.2",
 ]

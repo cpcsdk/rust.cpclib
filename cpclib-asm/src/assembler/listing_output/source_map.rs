@@ -38,7 +38,18 @@ pub struct SourceMapRow {
     /// How many bytes this row emitted. Zero for a line that produced none
     /// (an `EQU`, a comment) - kept, because "this line exists but has no
     /// address" is a different answer from "unknown line".
-    pub len: u16
+    pub len: u16,
+    /// Whether this row is a data directive (`db`/`defs`/`defw`/`incbin`/a
+    /// string) rather than an instruction.
+    ///
+    /// `#[serde(default)]` rather than a `VERSION` bump: an old map missing
+    /// this field is not wrong, it is simply silent on a question it never
+    /// asked - it reads back as `false`, today's existing behaviour, rather
+    /// than forcing every cached `--sourcemap` file to be thrown away for a
+    /// purely additive piece of information. Direct precedent in this crate:
+    /// `SourceMapFile::address_symbols`.
+    #[serde(default)]
+    pub is_data: bool
 }
 
 impl SourceMapRow {
@@ -53,7 +64,8 @@ impl SourceMapRow {
             page: 0,
             column: 1,
             column_end: 1,
-            len
+            len,
+            is_data: false
         }
     }
 }
@@ -226,10 +238,7 @@ impl SourceMapFile {
     }
 
     /// Note which symbols are real addresses - see `address_symbols`.
-    pub fn with_address_symbols(
-        mut self,
-        addresses: std::collections::BTreeSet<String>
-    ) -> Self {
+    pub fn with_address_symbols(mut self, addresses: std::collections::BTreeSet<String>) -> Self {
         self.address_symbols = addresses;
         self
     }
@@ -345,7 +354,8 @@ impl SourceMapCollector {
         page: u8,
         column: u16,
         column_end: u16,
-        len: u16
+        len: u16,
+        is_data: bool
     ) {
         self.rows.push(SourceMapRow {
             file,
@@ -355,7 +365,8 @@ impl SourceMapCollector {
             page,
             column,
             column_end,
-            len
+            len,
+            is_data
         });
     }
 
@@ -443,7 +454,8 @@ mod source_map_file_tests {
                 page: 0,
                 column: 2,
                 column_end: 9,
-                len: 3
+                len: 3,
+                is_data: false
             }]
         }
     }
@@ -467,7 +479,10 @@ mod source_map_file_tests {
         assert_eq!(read.symbols.get("start"), Some(&0x4000));
         // The *value*, not the quoting the shell carried it in - that is the
         // form whoever reads this back has.
-        assert_eq!(read.definitions.get("FACE").map(String::as_str), Some("face3"));
+        assert_eq!(
+            read.definitions.get("FACE").map(String::as_str),
+            Some("face3")
+        );
         assert_eq!(
             read.definitions.get("DEBUG").map(String::as_str),
             Some("1"),
@@ -494,10 +509,16 @@ mod source_map_file_tests {
         let mut bare = BTreeMap::new();
         bare.insert("FACE".to_string(), "face3".to_string());
         bare.insert("WIDTH".to_string(), "24".to_string());
-        assert!(file.assembled_with(&bare), "same definitions, other quoting");
+        assert!(
+            file.assembled_with(&bare),
+            "same definitions, other quoting"
+        );
 
         bare.insert("FACE".to_string(), "face4".to_string());
-        assert!(!file.assembled_with(&bare), "and a real difference still is one");
+        assert!(
+            !file.assembled_with(&bare),
+            "and a real difference still is one"
+        );
     }
 
     /// A map made with other `-D` values describes another program.
@@ -514,15 +535,19 @@ mod source_map_file_tests {
             SourceMapFile::definitions_from_arguments(["FACE=\"face3\"", "SPRITE_WIDTH=24"])
         );
 
-        assert!(file.assembled_with(&SourceMapFile::definitions_from_arguments([
-            "FACE=\"face3\"",
-            "SPRITE_WIDTH=24"
-        ])));
+        assert!(
+            file.assembled_with(&SourceMapFile::definitions_from_arguments([
+                "FACE=\"face3\"",
+                "SPRITE_WIDTH=24"
+            ]))
+        );
         // Order is not a difference; the values are.
-        assert!(file.assembled_with(&SourceMapFile::definitions_from_arguments([
-            "SPRITE_WIDTH=24",
-            "FACE=\"face3\""
-        ])));
+        assert!(
+            file.assembled_with(&SourceMapFile::definitions_from_arguments([
+                "SPRITE_WIDTH=24",
+                "FACE=\"face3\""
+            ]))
+        );
         assert!(
             !file.assembled_with(&SourceMapFile::definitions_from_arguments([
                 "FACE=\"face4\"",
@@ -577,8 +602,11 @@ mod source_map_file_tests {
     fn every_length_of_image_comes_back_unchanged() {
         for len in 0..40usize {
             let bytes: Vec<u8> = (0..len).map(|i| (i * 7 + 3) as u8).collect();
-            let file = SourceMapFile::new(a_map(), HashMap::new(), BTreeMap::new())
-                .with_program(vec![], &bytes, None);
+            let file = SourceMapFile::new(a_map(), HashMap::new(), BTreeMap::new()).with_program(
+                vec![],
+                &bytes,
+                None
+            );
             assert_eq!(file.image_bytes(), bytes, "length {len}");
         }
     }
@@ -612,11 +640,14 @@ fn unquoted(value: &str) -> &str {
 
 /// Base64, without a dependency for sixty lines of table lookup.
 fn base64_encode(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0)
+        ];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         out.push(ALPHABET[(n >> 18) as usize & 0x3F] as char);
         out.push(ALPHABET[(n >> 12) as usize & 0x3F] as char);

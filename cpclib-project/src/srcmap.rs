@@ -46,7 +46,22 @@ pub struct SourceLocation {
     #[serde(default)]
     pub column: u32,
     #[serde(default)]
-    pub column_end: u32
+    pub column_end: u32,
+    /// Whether the assembler recorded this row as data (`db`/`defs`/`defw`/
+    /// `incbin`/a string) rather than an instruction - see
+    /// `cpclib_asm::SourceMapRow::is_data`.
+    #[serde(default)]
+    pub is_data: bool,
+    /// How many bytes this row's span covers - `span.end - span.start`, an
+    /// exact 1:1 reconstruction since `from_raw` builds one `Span` per
+    /// `SourceMapRow`.
+    ///
+    /// Not `line_extent_at`: that fixpoints across every row sharing a line,
+    /// which would fuse a line mixing a code token and a data token
+    /// (`nop: db 1,2,3`) into one extent - exactly what `is_data` needs kept
+    /// apart, per-row.
+    #[serde(default)]
+    pub len: u32
 }
 
 /// Where a breakpoint actually went.
@@ -87,7 +102,8 @@ struct Span {
     line: u32,
     page: u8,
     column: u16,
-    column_end: u16
+    column_end: u16,
+    is_data: bool
 }
 
 /// Bidirectional line/address mapping for one assembled program.
@@ -148,7 +164,8 @@ impl SourceMap {
                 line: row.line,
                 page: row.page,
                 column: row.column,
-                column_end: row.column_end
+                column_end: row.column_end,
+                is_data: row.is_data
             });
         }
         spans.sort_unstable_by_key(|s| (s.start, s.end, s.page));
@@ -202,10 +219,7 @@ impl SourceMap {
     }
 
     /// Which of the symbols are real addresses - see `address_symbols`.
-    pub fn with_address_symbols(
-        mut self,
-        addresses: std::collections::HashSet<String>
-    ) -> Self {
+    pub fn with_address_symbols(mut self, addresses: std::collections::HashSet<String>) -> Self {
         self.address_symbols = addresses;
         self
     }
@@ -252,12 +266,10 @@ impl SourceMap {
         // A real label first: an `equ` equal to this address is a number, not
         // a place, and naming a frame after one points the reader at something
         // the program never entered.
-        let is_value =
-            !self.address_symbols.is_empty() && !self.address_symbols.contains(name);
+        let is_value = !self.address_symbols.is_empty() && !self.address_symbols.contains(name);
         let lowered = name.to_ascii_lowercase();
-        let is_end = lowered.ends_with("_end")
-            || lowered.ends_with(".end")
-            || lowered.ends_with("_fin");
+        let is_end =
+            lowered.ends_with("_end") || lowered.ends_with(".end") || lowered.ends_with("_fin");
         (is_value, is_end, name.len(), name.to_owned())
     }
 
@@ -398,7 +410,9 @@ impl SourceMap {
                     file: file.clone(),
                     line: span.line,
                     column: span.column as u32,
-                    column_end: span.column_end as u32
+                    column_end: span.column_end as u32,
+                    is_data: span.is_data,
+                    len: span.end - span.start
                 }
             ));
         }
@@ -439,7 +453,9 @@ impl SourceMap {
             file: self.files.get(span.file as usize)?.clone(),
             line: span.line,
             column: span.column as u32,
-            column_end: span.column_end as u32
+            column_end: span.column_end as u32,
+            is_data: span.is_data,
+            len: span.end - span.start
         })
     }
 
@@ -672,7 +688,8 @@ mod tests {
                         page,
                         column: 1,
                         column_end: 1,
-                        len
+                        len,
+                        is_data: false
                     }
                 })
                 .collect()
@@ -754,7 +771,9 @@ mod tests {
                 file: PathBuf::from("main.asm"),
                 line: 10,
                 column: 1,
-                column_end: 1
+                column_end: 1,
+                is_data: false,
+                len: 3
             }
         );
     }

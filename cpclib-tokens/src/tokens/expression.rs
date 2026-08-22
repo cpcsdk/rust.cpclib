@@ -1229,6 +1229,12 @@ impl<T: Into<ExprResult> + Clone> From<&[T]> for ExprResult {
     }
 }
 
+impl AsRef<ExprResult> for ExprResult {
+    fn as_ref(&self) -> &ExprResult {
+        self
+    }
+}
+
 impl ExprResult {
     pub fn is_float(&self) -> bool {
         matches!(self, Self::Float(_))
@@ -1556,12 +1562,6 @@ impl std::ops::Neg for ExprResult {
             ExprResult::Bool(b) => Ok((!b).into()),
             _ => Err(ExpressionTypeError(format!("Try to substract {self}")))
         }
-    }
-}
-
-impl AsRef<ExprResult> for ExprResult {
-    fn as_ref(&self) -> &ExprResult {
-        self
     }
 }
 

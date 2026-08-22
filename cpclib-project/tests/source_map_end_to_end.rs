@@ -6,6 +6,7 @@
 
 use std::path::Path;
 
+use cpclib_asm::assembler::listing_output::RawSourceMap;
 use cpclib_project::srcmap::SourceMap;
 
 /// Assemble `source` (written to a real file, since the map is keyed by file)
@@ -314,4 +315,83 @@ fn instructions_of_different_lengths_share_a_line_correctly() {
     let lda = map.location_at(0x4004).unwrap();
     assert!(nop.column < lda.column, "{nop:?} then {lda:?}");
     assert_eq!(map.location_at(0x4006).unwrap().line, 3, "the next line");
+}
+
+/// `is_data` and `len` survive `from_raw`, `location_at` and
+/// `location_at_long` unchanged - the plumbing `-dv` relies on to tell a `db`
+/// row from a real instruction.
+#[test]
+fn is_data_and_len_are_pinned_through_location_at() {
+    let (map, tmp) =
+        map_of("\torg 0x4000\n\tdb \"HELLO, WORLD!\", 10, 13, 0\n\tnop\n\tnop\n\tnop\n");
+    let file = tmp.path().join("main.asm");
+    let file = Path::new(file.as_str());
+
+    // The listing's own `bytes_per_line` chunking can split one `db` token
+    // into several rows - existing, unrelated behaviour this test must not
+    // assume away. What matters here is that every row the db line produced
+    // is marked data, and the last one's span reaches the line's last byte.
+    let db_addresses = map.addresses_at(file, 2);
+    assert!(!db_addresses.is_empty(), "the db line occupies addresses");
+    let first_address = db_addresses[0];
+    let mut last_end = first_address;
+    for address in db_addresses {
+        let location = map.location_at(*address).expect("the db row resolves");
+        assert!(location.is_data, "{location:?}");
+        last_end = last_end.max(*address + location.len);
+    }
+    let bytes_emitted = "HELLO, WORLD!".len() as u32 + 3; // the string, then 10, 13, 0
+    assert_eq!(
+        last_end,
+        first_address + bytes_emitted,
+        "the rows together cover the whole directive"
+    );
+
+    let nop_address = map.addresses_at(file, 3)[0];
+    let nop_location = map.location_at(nop_address).expect("the nop row resolves");
+    assert!(!nop_location.is_data, "{nop_location:?}");
+    assert_eq!(nop_location.len, 1);
+
+    // The paged lookup answers the same way.
+    let long_location = map
+        .location_at_long(0, nop_address as u16)
+        .expect("resolves by page too");
+    assert!(!long_location.is_data);
+}
+
+/// A source map from before `is_data` existed still loads, and its rows read
+/// back as "not marked" - `is_data: false`, today's existing behaviour -
+/// rather than being rejected outright.
+///
+/// This is the concrete proof of the `#[serde(default)]` compatibility
+/// decision behind `SourceMapRow::is_data`: bumping `SourceMapFile::VERSION`
+/// for a purely additive field would force every cached `--sourcemap` file a
+/// user already has to be thrown away and re-assembled, defeating the point
+/// of that cache. `#[serde(default)]` has direct precedent in this exact
+/// struct family already (`SourceMapFile::address_symbols`).
+#[test]
+fn a_v1_row_missing_is_data_still_loads_and_reads_as_not_data() {
+    let v1_json = r#"{
+        "files": ["main.asm"],
+        "rows": [
+            {
+                "file": 0,
+                "line": 2,
+                "logical": 16384,
+                "physical": 16384,
+                "page": 0,
+                "column": 1,
+                "column_end": 1,
+                "len": 3
+            }
+        ]
+    }"#;
+    let raw: RawSourceMap =
+        serde_json::from_str(v1_json).expect("a v1 map without is_data still parses");
+    assert!(!raw.rows[0].is_data, "a missing field defaults to false");
+
+    let map = SourceMap::from_raw(&raw);
+    let location = map.location_at(0x4000).expect("the row still resolves");
+    assert!(!location.is_data, "and so does the location built from it");
+    assert_eq!(location.len, 3);
 }

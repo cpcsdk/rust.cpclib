@@ -16,8 +16,10 @@
 //! macro expanded, code the program wrote itself, and a `defs` run that has no
 //! instruction text to read at all.
 
-use cpclib_asm::disass::disassemble;
+use cpclib_asm::disass::{disassemble, resolve_jr_djnz_target};
 use cpclib_asm::implementation::tokens::TokenExt;
+use cpclib_tokens::builder::defb_elements;
+use cpclib_tokens::{DataAccess, Expr, Mnemonic, Token};
 use serde_json::{Value, json};
 
 /// One decoded instruction.
@@ -46,14 +48,33 @@ pub struct Instruction {
 /// instruction, and showing that half as though it were whole is how a
 /// disassembly view starts lying.
 pub fn decode(address: u16, bytes: &[u8], limit: usize) -> Vec<Instruction> {
-    let listing = disassemble(bytes);
+    let mut listing = disassemble(bytes);
 
     let mut out = Vec::new();
     let mut offset = 0usize;
-    for token in listing.listing().iter() {
+    for i in 0..listing.listing().len() {
         if out.len() >= limit {
             break;
         }
+        let this_address = address.wrapping_add(offset as u16);
+
+        // JR/DJNZ decode with a relative offset that renders as raw
+        // two's-complement hex (`JR 0xfffffff8`) or, worse, as an
+        // indistinguishable-from-absolute forward offset (`JR 0x8`). Rewrite
+        // the operand to the absolute target address before number_of_bytes/
+        // render/estimated_duration read it - none of those depend on the
+        // operand's value, only its shape, so this changes neither the byte
+        // length nor the timing.
+        if let Token::OpCode(Mnemonic::Djnz, Some(DataAccess::Expression(e)), ..)
+        | Token::OpCode(Mnemonic::Jr, _, Some(DataAccess::Expression(e)), _) =
+            &mut listing.listing_mut()[i]
+        {
+            if let Some(target) = resolve_jr_djnz_target(e, Some(this_address)) {
+                *e = Expr::Value(target as i32);
+            }
+        }
+
+        let token = &listing.listing()[i];
         let Ok(length) = token.number_of_bytes()
         else {
             break;
@@ -62,7 +83,7 @@ pub fn decode(address: u16, bytes: &[u8], limit: usize) -> Vec<Instruction> {
             break;
         }
         out.push(Instruction {
-            address: address.wrapping_add(offset as u16),
+            address: this_address,
             bytes: bytes[offset..offset + length].to_vec(),
             text: render(token),
             cost: token.estimated_duration().ok()
@@ -78,6 +99,100 @@ pub fn decode(address: u16, bytes: &[u8], limit: usize) -> Vec<Instruction> {
 /// view wants: the same spelling as the source it sits beside.
 fn render(token: &cpclib_tokens::Token) -> String {
     token.to_string().trim().to_string()
+}
+
+/// Replace decode()'s guessed instructions with the real `DB ...` for any
+/// span the assembler recorded as data - using live bytes, never the
+/// assembled image, so self-modified data still shows what is actually
+/// there rather than what was assembled.
+///
+/// `current_pc` overrides everything else: whatever the source map says, the
+/// row the program is actually stopped on is what the CPU is about to fetch
+/// as an opcode, and showing it as inert data would be a lie of a different
+/// kind than the one this function exists to fix. This is not a heuristic -
+/// if `PC` is on a byte, that byte is being executed, full stop.
+pub fn overlay_data_rows(
+    instructions: Vec<Instruction>,
+    data_span_at: impl Fn(u16) -> Option<(u16, u16)>,
+    live_bytes: impl Fn(u16, usize) -> Option<Vec<u8>>,
+    current_pc: Option<u16>
+) -> Vec<Instruction> {
+    let mut out = Vec::with_capacity(instructions.len());
+    let mut i = 0;
+    while i < instructions.len() {
+        let address = instructions[i].address;
+
+        // The current_pc check comes first, before the data-span lookup even
+        // runs for this row - stronger than and independent of every check
+        // below it.
+        if current_pc == Some(address) {
+            out.push(instructions[i].clone());
+            i += 1;
+            continue;
+        }
+
+        let overlay = data_span_at(address).and_then(|(row_start, row_len)| {
+            let row_end = row_start.wrapping_add(row_len);
+
+            // PC might sit further into the row than its first byte. Folding
+            // the whole row into one data line would hide the very row
+            // execution is standing on, so the row is left alone rather than
+            // overlaid.
+            if current_pc.is_some_and(|pc| pc >= row_start && pc < row_end) {
+                return None;
+            }
+
+            // Gather every already-decoded instruction inside the row - the
+            // live bytes, exactly as read from the emulator, with no second
+            // read needed.
+            let mut j = i;
+            let mut bytes = Vec::with_capacity(row_len as usize);
+            while j < instructions.len() && instructions[j].address < row_end {
+                bytes.extend_from_slice(&instructions[j].bytes);
+                j += 1;
+            }
+            // A window that ends mid-row, or a decoded instruction that
+            // overruns the row's end, both fail this check - the honest
+            // answer is decode()'s own guess for that partial span, not an
+            // invented partial data row.
+            if bytes.len() != row_len as usize {
+                return None;
+            }
+
+            // Self-modifying code: only overlay when every live byte still
+            // matches what was assembled there. No image at all means no way
+            // to detect staleness, so the source map's claim is still the
+            // best available evidence and the overlay proceeds.
+            if let Some(assembled) = live_bytes(row_start, row_len as usize) {
+                if assembled != bytes {
+                    return None;
+                }
+            }
+
+            let text = render(&defb_elements::<u8>(&bytes));
+            Some((
+                j,
+                Instruction {
+                    address: row_start,
+                    bytes,
+                    text,
+                    cost: None
+                }
+            ))
+        });
+
+        match overlay {
+            Some((next, instruction)) => {
+                out.push(instruction);
+                i = next;
+            },
+            None => {
+                out.push(instructions[i].clone());
+                i += 1;
+            }
+        }
+    }
+    out
 }
 
 /// What a decoded run costs to execute, in NOPs.
@@ -168,6 +283,45 @@ mod tests {
         assert!(decode(0x4000, &[], 32).is_empty());
     }
 
+    /// A forward `JR` used to print `JR 0x8`, indistinguishable from a real
+    /// absolute address. It must now read as the resolved target, not the
+    /// raw offset byte.
+    #[test]
+    fn a_forward_jr_shows_its_resolved_target() {
+        // JR +5 at 0x4000: target = 0x4000 + 2 (instruction length) + 5.
+        let decoded = decode(0x4000, &[0x18, 0x05], 32);
+        assert_eq!(decoded.len(), 1);
+        assert!(decoded[0].text.contains("0x4007"), "{:?}", decoded[0]);
+    }
+
+    /// A backward `JR` used to print raw two's-complement hex
+    /// (`JR 0xfffffff8`) instead of the address it actually targets.
+    #[test]
+    fn a_backward_jr_shows_its_resolved_target() {
+        // JR -8 at 0x4000: target = 0x4000 + 2 - 8 = 0x3ffa.
+        let decoded = decode(0x4000, &[0x18, 0xF8], 32);
+        assert_eq!(decoded.len(), 1);
+        assert!(decoded[0].text.contains("0x3ffa"), "{:?}", decoded[0]);
+    }
+
+    /// `JR $` targets the instruction itself - offset zero once the +2 bias
+    /// is folded in.
+    #[test]
+    fn jr_dollar_shows_its_own_address() {
+        let decoded = decode(0x4000, &[0x18, 0xFE], 32);
+        assert_eq!(decoded.len(), 1);
+        assert!(decoded[0].text.contains("0x4000"), "{:?}", decoded[0]);
+    }
+
+    /// `DJNZ` is resolved exactly like `JR` - same relative addressing.
+    #[test]
+    fn djnz_shows_its_resolved_target() {
+        // DJNZ +5 at 0x4000: target = 0x4000 + 2 + 5 = 0x4007.
+        let decoded = decode(0x4000, &[0x10, 0x05], 32);
+        assert_eq!(decoded.len(), 1);
+        assert!(decoded[0].text.contains("0x4007"), "{:?}", decoded[0]);
+    }
+
     /// The DAP form carries the bytes as hex, which is what the panel prints
     /// beside the mnemonic so it can be checked against the source.
     #[test]
@@ -183,6 +337,96 @@ mod tests {
                 .to_lowercase()
                 .contains("ld"),
             "{dap:?}"
+        );
+    }
+
+    /// The owner's own scenario, and the more fundamental rule: `PC` sitting
+    /// on a byte means that byte is being executed, even when those same
+    /// live bytes are exactly what the source map says was assembled as
+    /// data at that address. The row must still decode as a real
+    /// instruction, not `DB ...`.
+    #[test]
+    fn pc_on_a_data_span_still_decodes_as_a_real_instruction() {
+        // `ld hl,0x3456` - bytes that also happen to be exactly what the
+        // source map claims is a `db` row at the same address.
+        let decoded = decode(0x4000, &[0x21, 0x56, 0x34], 32);
+        let overlaid = overlay_data_rows(
+            decoded,
+            |address| (address == 0x4000).then_some((0x4000, 3)),
+            |_, _| None,
+            Some(0x4000)
+        );
+
+        assert_eq!(overlaid.len(), 1);
+        assert!(
+            overlaid[0].text.to_lowercase().starts_with("ld hl"),
+            "PC's own row must stay a real instruction: {overlaid:?}"
+        );
+    }
+
+    /// The same bytes, but with `PC` elsewhere: nothing protects this row
+    /// any more, so it becomes the `DB ...` the source actually wrote.
+    #[test]
+    fn an_ordinary_data_span_overlays_as_db() {
+        let decoded = decode(0x4000, &[0x21, 0x56, 0x34], 32);
+        let overlaid = overlay_data_rows(
+            decoded,
+            |address| (address == 0x4000).then_some((0x4000, 3)),
+            |_, _| None,
+            Some(0x9000)
+        );
+
+        assert_eq!(overlaid.len(), 1);
+        assert_eq!(overlaid[0].address, 0x4000);
+        assert_eq!(overlaid[0].bytes, vec![0x21, 0x56, 0x34]);
+        assert!(
+            overlaid[0].text.to_uppercase().starts_with("DB"),
+            "{overlaid:?}"
+        );
+        assert_eq!(
+            overlaid[0].cost, None,
+            "a data row has no execution cost to report"
+        );
+    }
+
+    /// Self-modifying code: the live bytes no longer match what was
+    /// assembled there, so the overlay is refused and normal disassembly of
+    /// the live bytes stands - the honest answer for data that used to be
+    /// data but isn't any more.
+    #[test]
+    fn stale_bytes_are_not_overlaid() {
+        let decoded = decode(0x4000, &[0x21, 0x56, 0x34], 32);
+        let overlaid = overlay_data_rows(
+            decoded,
+            |address| (address == 0x4000).then_some((0x4000, 3)),
+            |_, _| Some(vec![0x00, 0x00, 0x00]), // the assembled image disagrees
+            None
+        );
+
+        assert_eq!(overlaid.len(), 1);
+        assert!(
+            overlaid[0].text.to_lowercase().starts_with("ld hl"),
+            "stale bytes must not be shown as inert data: {overlaid:?}"
+        );
+    }
+
+    /// A row only partially inside the already-read window is left exactly
+    /// as `decode()` guessed it, rather than inventing a partial `DB` row.
+    #[test]
+    fn a_partially_windowed_row_is_left_as_decodes_guess() {
+        // The source map claims a 3-byte data row at 0x4000, but only the
+        // first byte was actually read - the window ends mid-row.
+        let decoded = decode(0x4000, &[0x00], 32);
+        let overlaid = overlay_data_rows(
+            decoded.clone(),
+            |address| (address == 0x4000).then_some((0x4000, 3)),
+            |_, _| None,
+            None
+        );
+
+        assert_eq!(
+            overlaid, decoded,
+            "an incomplete row is left exactly as decode() guessed it"
         );
     }
 }

@@ -239,7 +239,9 @@ pub fn cached_for_debug(
     for name in &file.map.files {
         let Some(source) = std::fs::metadata(name).ok().and_then(|m| m.modified().ok())
         else {
-            why.push(format!("{name} is named by the source map but cannot be read."));
+            why.push(format!(
+                "{name} is named by the source map but cannot be read."
+            ));
             return None;
         };
         if source > written {

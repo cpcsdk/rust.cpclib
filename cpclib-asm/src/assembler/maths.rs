@@ -107,10 +107,10 @@ use crate::error::{AssemblerError, ExpressionError};
 
 macro_rules! min_max {
     ($name:ident) => {
-        pub fn $name(args: &[ExprResult]) -> Result<ExprResult, Box<AssemblerError>> {
+        pub fn $name<E: AsRef<ExprResult>>(args: &[E]) -> Result<ExprResult, Box<AssemblerError>> {
             if args.len() < 2 {
-                if args.len() == 1 && args[0].is_list() {
-                    return $name(args[0].list_content());
+                if args.len() == 1 && args[0].as_ref().is_list() {
+                    return $name(args[0].as_ref().list_content());
                 }
 
                 return Err(Box::new(AssemblerError::InvalidArgument {
@@ -121,9 +121,9 @@ macro_rules! min_max {
                 }));
             }
 
-            let mut result = &args[0];
+            let mut result = args[0].as_ref();
             for arg in &args[1..] {
-                result = result.$name(arg);
+                result = result.$name(arg.as_ref());
             }
             Ok(result.clone())
         }

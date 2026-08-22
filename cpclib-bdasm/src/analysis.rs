@@ -21,36 +21,20 @@ pub struct DisassemblyStats {
 
 /// Resolves the absolute target address of a JR or DJNZ instruction.
 ///
-/// The disassembler writes the offset already adjusted (+2 bias removed), so target = PC + offset.
+/// The arithmetic itself now lives in `cpclib_asm::disass`, shared with
+/// `cpclib-dap`'s live decoder - this is just this crate's own error
+/// wrapping around it, kept local because `BdAsmError` is bdasm-specific.
 fn resolve_jr_djnz_target(
     offset_expr: &Expr,
     current_address: Option<u16>,
     instruction: &Token
 ) -> Result<u16> {
-    if let Expr::Label(l) = offset_expr
-        && l == "$"
-    {
-        current_address.ok_or_else(|| {
-            BdAsmError::UnknownAssemblerAddress {
-                instruction: instruction.clone(),
-                bytes: 0
-            }
-        })
-    }
-    else {
-        let value = offset_expr
-            .eval()
-            .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?
-            .int()
-            .map_err(|e| BdAsmError::ExprEvaluation(e.to_string()))?;
-        let base_addr = current_address.ok_or_else(|| {
-            BdAsmError::UnknownAssemblerAddress {
-                instruction: instruction.clone(),
-                bytes: 0
-            }
-        })? as i32;
-        Ok((base_addr + value) as u16)
-    }
+    cpclib_asm::disass::resolve_jr_djnz_target(offset_expr, current_address).ok_or_else(|| {
+        BdAsmError::UnknownAssemblerAddress {
+            instruction: instruction.clone(),
+            bytes: 0
+        }
+    })
 }
 
 /// Collects all address references from jump/load instructions.

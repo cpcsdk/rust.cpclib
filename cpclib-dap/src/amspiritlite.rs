@@ -178,7 +178,6 @@ pub fn call_for(request: &Value) -> Option<Call> {
     })
 }
 
-
 /// The RAM page mapped at `address`, from an `/api/memmap` body.
 ///
 /// The regions are 16K and reported in order, each naming the bank behind it.
@@ -252,7 +251,6 @@ fn physical_from_mmr(memmap: &Value, address: u16) -> Option<u32> {
 pub fn page_at(memmap: &Value, address: u16) -> Option<u8> {
     physical_of(memmap, address).map(|physical| (physical >> 16) as u8)
 }
-
 
 /// Which request answers a chip scope on this emulator.
 ///
@@ -423,12 +421,10 @@ fn gate_array_pane(body: &Value) -> Vec<Value> {
     }
 
     if let Some(inks) = body.get("ink_idx").and_then(Value::as_array) {
-        out.extend((0..inks.len()).map(|pen| {
-            colour(
-                &format!("pen {pen}"),
-                inks.get(pen).and_then(Value::as_u64)
-            )
-        }));
+        out.extend(
+            (0..inks.len())
+                .map(|pen| colour(&format!("pen {pen}"), inks.get(pen).and_then(Value::as_u64)))
+        );
     }
     // The border is a pen like any other, and reads better named for what it
     // is than as "pen 16".
@@ -585,9 +581,8 @@ fn register(state: &Value, name: &str) -> Option<u32> {
             _ => None
         }
     };
-    let pair = |high: &str, low: &str| -> Option<u32> {
-        Some((raw(high)? << 8) | (raw(low)? & 0xFF))
-    };
+    let pair =
+        |high: &str, low: &str| -> Option<u32> { Some((raw(high)? << 8) | (raw(low)? & 0xFF)) };
 
     match name {
         "AF" => pair("A", "F"),
@@ -605,8 +600,8 @@ fn register(state: &Value, name: &str) -> Option<u32> {
 /// The register pane, in the order a Z80 programmer reads them.
 fn registers_of(state: &Value) -> Vec<Value> {
     const ORDER: [&str; 17] = [
-        "AF", "BC", "DE", "HL", "IX", "IY", "SP", "PC", "AF'", "BC'", "DE'", "HL'", "I", "R",
-        "IM", "IFF1", "IFF2"
+        "AF", "BC", "DE", "HL", "IX", "IY", "SP", "PC", "AF'", "BC'", "DE'", "HL'", "I", "R", "IM",
+        "IFF1", "IFF2"
     ];
     ORDER
         .iter()
@@ -633,7 +628,9 @@ pub fn launch<E>(
     port: u16,
     observer: &E
 ) -> Result<(String, std::process::Child), String>
-where E: cpclib_common::event::EventObserver + 'static {
+where
+    E: cpclib_common::event::EventObserver + 'static
+{
     use cpclib_runner::runner::emulator::{AmspiritLiteVersion, Emulator};
 
     let emulator = Emulator::AmspiritLite(AmspiritLiteVersion::default());
@@ -645,8 +642,7 @@ where E: cpclib_common::event::EventObserver + 'static {
     // The snapshot has to land on disc: this emulator takes a file, unlike the
     // wasm one which is served the bytes over loopback.
     let path = std::env::temp_dir().join(format!("cpclib-dap-{}.sna", std::process::id()));
-    std::fs::write(&path, snapshot)
-        .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    std::fs::write(&path, snapshot).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
 
     // The port has to be one nothing else is holding, and the configured one
     // frequently is not.
@@ -718,10 +714,7 @@ fn a_free_port() -> Option<u16> {
 }
 
 /// Block until the debug server answers, or give up saying so.
-pub fn wait_until_listening(
-    endpoint: &str,
-    patience: std::time::Duration
-) -> Result<(), String> {
+pub fn wait_until_listening(endpoint: &str, patience: std::time::Duration) -> Result<(), String> {
     let host = host_of(endpoint).map_err(|e| e.to_string())?;
     let address: std::net::SocketAddr = host
         .parse()
@@ -729,11 +722,8 @@ pub fn wait_until_listening(
 
     let deadline = std::time::Instant::now() + patience;
     while std::time::Instant::now() < deadline {
-        if std::net::TcpStream::connect_timeout(
-            &address,
-            std::time::Duration::from_millis(200)
-        )
-        .is_ok()
+        if std::net::TcpStream::connect_timeout(&address, std::time::Duration::from_millis(200))
+            .is_ok()
         {
             return Ok(());
         }
@@ -747,11 +737,14 @@ pub fn wait_until_listening(
 
 /// Bytes as DAP carries them: the emulator answers hex, DAP asks for base64.
 fn encode_base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let block = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let block = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0)
+        ];
         let packed = ((block[0] as u32) << 16) | ((block[1] as u32) << 8) | block[2] as u32;
         for index in 0..4 {
             if index <= chunk.len() {
@@ -920,6 +913,16 @@ fn push_breakpoints(endpoint: &str, set: &Breakpoints) -> std::io::Result<()> {
 }
 
 impl AmspiritLitePeer {
+    /// How long a resume is given to become visible before the editor is told
+    /// to expect a stop anyway.
+    ///
+    /// Six times the worst lag measured against a real 1.13.4, so it is
+    /// normally over in a millisecond or two. Waiting out the whole of it means
+    /// the machine resumed and stopped again without a single look catching it
+    /// running - a breakpoint one instruction away - and a stop is then exactly
+    /// what to expect.
+    const RESUME_CONFIRMATION: std::time::Duration = std::time::Duration::from_millis(60);
+
     /// Connect to an emulator already serving at `endpoint`.
     pub fn connect(endpoint: &str) -> std::io::Result<Self> {
         let (outgoing, pending) = std::sync::mpsc::channel();
@@ -981,16 +984,6 @@ impl AmspiritLitePeer {
     fn next_seq(&self) -> i64 {
         next_seq(&self.seq)
     }
-
-    /// How long a resume is given to become visible before the editor is told
-    /// to expect a stop anyway.
-    ///
-    /// Six times the worst lag measured against a real 1.13.4, so it is
-    /// normally over in a millisecond or two. Waiting out the whole of it means
-    /// the machine resumed and stopped again without a single look catching it
-    /// running - a breakpoint one instruction away - and a stop is then exactly
-    /// what to expect.
-    const RESUME_CONFIRMATION: std::time::Duration = std::time::Duration::from_millis(60);
 
     /// Wait for the machine to say it is running again, briefly.
     ///
@@ -1149,10 +1142,7 @@ impl AmspiritLitePeer {
 
     /// The address after the instruction at `PC`, when running to it is what
     /// stepping over means; `None` when a plain step would do.
-    fn address_after_the_instruction_at_pc(
-        &self,
-        line: &crate::peer::LineAtPc
-    ) -> Option<u16> {
+    fn address_after_the_instruction_at_pc(&self, line: &crate::peer::LineAtPc) -> Option<u16> {
         let state = machine(&self.endpoint).ok()?;
         let pc = register(&state, "PC")? as u16;
         // Four bytes is the longest a Z80 instruction gets.
@@ -1284,7 +1274,10 @@ fn bytes_at(endpoint: &str, address: u16, count: u16) -> std::io::Result<Vec<u8>
     let body = perform(endpoint, &call)?;
     let answer: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
     Ok(bytes_from_hex(
-        answer.get("hex").and_then(Value::as_str).unwrap_or_default()
+        answer
+            .get("hex")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
     ))
 }
 
@@ -1787,7 +1780,6 @@ struct Stop {
     text: Option<String>
 }
 
-
 /// Read `/api/events` forever, turning each event into a DAP one.
 fn read_events(host: &str, out: &std::sync::mpsc::Sender<Value>) {
     use std::io::{BufRead, BufReader, Write};
@@ -2143,7 +2135,11 @@ mod tests {
                 { "base": 49152, "rom": false, "ram_bank": 3 }
             ]
         });
-        assert_eq!(page_at(&banked, 0x79F3), Some(1), "the address we fought over");
+        assert_eq!(
+            page_at(&banked, 0x79F3),
+            Some(1),
+            "the address we fought over"
+        );
         assert_eq!(physical_of(&banked, 0x79F3), Some(0x179F3), "as in sna.lst");
         assert_eq!(page_at(&banked, 0x04A5), Some(0));
     }
@@ -2288,10 +2284,26 @@ mod tests {
     fn a_remapped_bank_moves_the_physical_address_too() {
         let mmr = |mode: u64| json!({ "ram_mode": mode, "ram_page": 1 });
 
-        assert_eq!(physical_of(&mmr(5), 0x79F3), Some(0x179F3), "bank 1 of the page");
-        assert_eq!(physical_of(&mmr(4), 0x79F3), Some(0x139F3), "bank 0 of the page");
-        assert_eq!(physical_of(&mmr(6), 0x79F3), Some(0x1B9F3), "bank 2 of the page");
-        assert_eq!(physical_of(&mmr(7), 0x79F3), Some(0x1F9F3), "bank 3 of the page");
+        assert_eq!(
+            physical_of(&mmr(5), 0x79F3),
+            Some(0x179F3),
+            "bank 1 of the page"
+        );
+        assert_eq!(
+            physical_of(&mmr(4), 0x79F3),
+            Some(0x139F3),
+            "bank 0 of the page"
+        );
+        assert_eq!(
+            physical_of(&mmr(6), 0x79F3),
+            Some(0x1B9F3),
+            "bank 2 of the page"
+        );
+        assert_eq!(
+            physical_of(&mmr(7), 0x79F3),
+            Some(0x1F9F3),
+            "bank 3 of the page"
+        );
 
         // Outside #4000-#7FFF nothing is remapped, whatever the mode.
         assert_eq!(physical_of(&mmr(5), 0xC000), Some(0xC000));
@@ -2565,7 +2577,8 @@ mod tests {
         let (endpoint, machine) = fake_machine(bytes, script);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         prepare(&mut peer);
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        peer.send(request("next", json!({ "threadId": 1 })))
+            .unwrap();
 
         let seen = until_stopped(&mut peer);
         let answered = seen
@@ -2587,12 +2600,7 @@ mod tests {
         // The peer is handed back rather than dropped here: dropping it takes
         // its temporary breakpoints away, and some of these tests are about
         // exactly which ones are still armed.
-        (
-            peer,
-            register(&state, "PC").unwrap() as u16,
-            machine,
-            seen
-        )
+        (peer, register(&state, "PC").unwrap() as u16, machine, seen)
     }
 
     fn machine_state(endpoint: &str) -> Value {
@@ -2641,7 +2649,7 @@ mod tests {
             vec![0xC9],             // ret
             vec![0xED, 0xA0],       // ldi, which does not repeat
             vec![0xCB, 0xC7],       // set 0,a - not an `rst` despite the byte
-            vec![0xDD, 0x21],       // ld ix,nn
+            vec![0xDD, 0x21]        // ld ix,nn
         ] {
             assert!(!returns_to_the_next_instruction(&other), "{other:02X?}");
         }
@@ -2686,9 +2694,11 @@ mod tests {
     #[test]
     fn a_djnz_is_stepped_over_to_the_instruction_after_the_loop() {
         // `djnz -3` at 0x8000: two bytes, so the loop is left at 0x8002.
-        let (_peer, pc, machine, _) = stepped_over(vec![0x10, 0xFD], vec![
-            0x8000, 0x7FFD, 0x8000, 0x7FFD, 0x8000, 0x8002,
-        ], |_| {});
+        let (_peer, pc, machine, _) = stepped_over(
+            vec![0x10, 0xFD],
+            vec![0x8000, 0x7FFD, 0x8000, 0x7FFD, 0x8000, 0x8002],
+            |_| {}
+        );
         assert_eq!(pc, 0x8002, "past the loop, not back into it");
         assert_eq!(machine.steps(), 0);
         assert_eq!(machine.resumes(), 1);
@@ -2698,9 +2708,11 @@ mod tests {
     /// at all: `PC` sits on the `ldir` until it is finished.
     #[test]
     fn a_repeating_instruction_is_run_to_its_end() {
-        let (_peer, pc, machine, _) = stepped_over(vec![0xED, 0xB0], vec![
-            0x8000, 0x8000, 0x8000, 0x8002,
-        ], |_| {});
+        let (_peer, pc, machine, _) = stepped_over(
+            vec![0xED, 0xB0],
+            vec![0x8000, 0x8000, 0x8000, 0x8002],
+            |_| {}
+        );
         assert_eq!(pc, 0x8002);
         assert_eq!(machine.resumes(), 1);
     }
@@ -2715,11 +2727,13 @@ mod tests {
     fn a_defs_run_is_stepped_over_in_one_go() {
         use crate::peer::DapPeer;
 
-        let (_peer, pc, machine, _) = stepped_over(vec![0x00; 60], vec![
-            0x4002, 0x4003, 0x4004, 0x403E,
-        ], |peer| {
-            peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
-        });
+        let (_peer, pc, machine, _) = stepped_over(
+            vec![0x00; 60],
+            vec![0x4002, 0x4003, 0x4004, 0x403E],
+            |peer| {
+                peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+            }
+        );
         assert_eq!(pc, 0x403E, "on the line after the run, not one NOP along");
         assert_eq!(machine.steps(), 0, "nothing was stepped one at a time");
         assert_eq!(machine.resumes(), 1);
@@ -2739,11 +2753,10 @@ mod tests {
     fn a_step_over_from_inside_a_defs_run_finishes_the_run() {
         use crate::peer::DapPeer;
 
-        let (_peer, pc, machine, _) = stepped_over(vec![0x00; 60], vec![
-            0x4020, 0x4021, 0x403E,
-        ], |peer| {
-            peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
-        });
+        let (_peer, pc, machine, _) =
+            stepped_over(vec![0x00; 60], vec![0x4020, 0x4021, 0x403E], |peer| {
+                peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+            });
         assert_eq!(pc, 0x403E);
         assert_eq!(machine.steps(), 0);
         assert_eq!(machine.resumes(), 1);
@@ -2762,11 +2775,13 @@ mod tests {
 
         // The script loops back into the run twice before the breakpoint on
         // the `djnz` line catches it, the way the machine really would.
-        let (_peer, pc, machine, _) = stepped_over(vec![0x00; 60], vec![
-            0x4002, 0x4003, 0x403E, 0x4002, 0x4003, 0x403E,
-        ], |peer| {
-            peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
-        });
+        let (_peer, pc, machine, _) = stepped_over(
+            vec![0x00; 60],
+            vec![0x4002, 0x4003, 0x403E, 0x4002, 0x4003, 0x403E],
+            |peer| {
+                peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+            }
+        );
         assert_eq!(pc, 0x403E, "the djnz of this iteration");
         assert_eq!(
             machine.every_breakpoint_set().last().map(Vec::len),
@@ -2855,10 +2870,9 @@ mod tests {
         assert_eq!(machine.resumes(), 0);
 
         // The run is there, but it is not made of `NOP`s.
-        let (_peer, _, machine, _) =
-            stepped_over(vec![0x3E, 0x01], vec![0x4002, 0x4004], |peer| {
-                peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
-            });
+        let (_peer, _, machine, _) = stepped_over(vec![0x3E, 0x01], vec![0x4002, 0x4004], |peer| {
+            peer.note_line_at_pc(crate::peer::LineAtPc::Defs(0x4002..0x403E));
+        });
         assert_eq!(machine.steps(), 1, "the byte at PC is not a NOP");
         assert_eq!(machine.resumes(), 0);
     }
@@ -2891,16 +2905,16 @@ mod tests {
     fn a_breakpoint_the_editor_already_set_there_is_kept() {
         use crate::peer::DapPeer;
 
-        let (endpoint, machine) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x8003,
-        ]);
+        let (endpoint, machine) =
+            fake_machine(vec![0xCD, 0x00, 0x90], vec![0x8000, 0x9000, 0x8003]);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         peer.send(request(
             "setInstructionBreakpoints",
             json!({ "breakpoints": [{ "instructionReference": "0x8003" }] })
         ))
         .unwrap();
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        peer.send(request("next", json!({ "threadId": 1 })))
+            .unwrap();
         let seen = until_stopped(&mut peer);
 
         assert_eq!(
@@ -2929,10 +2943,7 @@ mod tests {
             vec![0xCD, 0x00, 0x90],
             vec![0x8000, 0x9000, 0x9001, 0x8003],
             |peer| {
-                peer.breakpoints
-                    .lock()
-                    .unwrap()
-                    .editors = vec![0x9001];
+                peer.breakpoints.lock().unwrap().editors = vec![0x9001];
             }
         );
         assert_eq!(pc, 0x9001, "stopped where the user asked");
@@ -2954,16 +2965,16 @@ mod tests {
 
         // A `call` whose routine goes off somewhere else, so 0x8003 is armed
         // and never reached; the user's own breakpoint at 0x9001 stops it.
-        let (endpoint, _) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x9001, 0x8003,
-        ]);
+        let (endpoint, _) =
+            fake_machine(vec![0xCD, 0x00, 0x90], vec![0x8000, 0x9000, 0x9001, 0x8003]);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         peer.send(request(
             "setInstructionBreakpoints",
             json!({ "breakpoints": [{ "instructionReference": "0x9001" }] })
         ))
         .unwrap();
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        peer.send(request("next", json!({ "threadId": 1 })))
+            .unwrap();
         until_stopped(&mut peer);
 
         // Carrying on now walks into the breakpoint the abandoned step over
@@ -2988,11 +2999,8 @@ mod tests {
     /// other one came from.
     #[test]
     fn a_temporary_breakpoint_never_reaches_the_editor() {
-        let (_peer, _, machine, seen) = stepped_over(
-            vec![0xCD, 0x00, 0x90],
-            vec![0x8000, 0x9000, 0x8003],
-            |_| {}
-        );
+        let (_peer, _, machine, seen) =
+            stepped_over(vec![0xCD, 0x00, 0x90], vec![0x8000, 0x9000, 0x8003], |_| {});
         assert!(
             machine
                 .every_breakpoint_set()
@@ -3002,7 +3010,10 @@ mod tests {
         );
         for message in &seen {
             assert!(
-                message.get("body").and_then(|b| b.get("breakpoints")).is_none(),
+                message
+                    .get("body")
+                    .and_then(|b| b.get("breakpoints"))
+                    .is_none(),
                 "nothing the editor could paint a gutter from: {message:?}"
             );
             assert!(
@@ -3018,15 +3029,18 @@ mod tests {
         use crate::peer::DapPeer;
 
         // The two bytes at `SP` are the return address, little-endian: 0x8003.
-        let (endpoint, machine) = fake_machine(vec![0x03, 0x80], vec![
-            0x9000, 0x9001, 0x9002, 0x8003,
-        ]);
+        let (endpoint, machine) =
+            fake_machine(vec![0x03, 0x80], vec![0x9000, 0x9001, 0x9002, 0x8003]);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         peer.send(request("stepOut", json!({ "threadId": 1 })))
             .unwrap();
         let seen = until_stopped(&mut peer);
 
-        assert_eq!(machine.steps(), 0, "not walked out one instruction at a time");
+        assert_eq!(
+            machine.steps(),
+            0,
+            "not walked out one instruction at a time"
+        );
         assert_eq!(machine.resumes(), 1);
         let state = machine_state(&peer.endpoint);
         assert_eq!(register(&state, "PC").unwrap(), 0x8003);
@@ -3052,16 +3066,16 @@ mod tests {
     fn temporary_breakpoints_are_cleared_when_the_session_ends() {
         use crate::peer::DapPeer;
 
-        let (endpoint, machine) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x9001,
-        ]);
+        let (endpoint, machine) =
+            fake_machine(vec![0xCD, 0x00, 0x90], vec![0x8000, 0x9000, 0x9001]);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
         peer.send(request(
             "setInstructionBreakpoints",
             json!({ "breakpoints": [{ "instructionReference": "0x9001" }] })
         ))
         .unwrap();
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        peer.send(request("next", json!({ "threadId": 1 })))
+            .unwrap();
         until_stopped(&mut peer);
         assert!(
             machine.breakpoints().contains(&0x8003),
@@ -3085,11 +3099,11 @@ mod tests {
     fn arming_the_editors_breakpoints_keeps_the_temporary_one() {
         use crate::peer::DapPeer;
 
-        let (endpoint, machine) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x9001,
-        ]);
+        let (endpoint, machine) =
+            fake_machine(vec![0xCD, 0x00, 0x90], vec![0x8000, 0x9000, 0x9001]);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        peer.send(request("next", json!({ "threadId": 1 })))
+            .unwrap();
         peer.send(request(
             "setInstructionBreakpoints",
             json!({ "breakpoints": [{ "instructionReference": "0x4000" }] })
@@ -3114,11 +3128,11 @@ mod tests {
         use crate::peer::DapPeer;
 
         // `call 0x9000` at 0x8000, coming back to 0x8003.
-        let (endpoint, machine) = fake_machine(vec![0xCD, 0x00, 0x90], vec![
-            0x8000, 0x9000, 0x8003,
-        ]);
+        let (endpoint, machine) =
+            fake_machine(vec![0xCD, 0x00, 0x90], vec![0x8000, 0x9000, 0x8003]);
         let mut peer = AmspiritLitePeer::connect(&endpoint).unwrap();
-        peer.send(request("next", json!({ "threadId": 1 }))).unwrap();
+        peer.send(request("next", json!({ "threadId": 1 })))
+            .unwrap();
         // Mid-flight: the user puts a red dot somewhere else entirely.
         peer.send(request(
             "setInstructionBreakpoints",
@@ -3326,7 +3340,8 @@ mod tests {
                         "{}".to_string()
                     }
                     else if line.starts_with("GET /api/ping") {
-                        json!({ "emu": { "paused": !reported.load(Ordering::Relaxed) } }).to_string()
+                        json!({ "emu": { "paused": !reported.load(Ordering::Relaxed) } })
+                            .to_string()
                     }
                     else if line.starts_with("GET /api/state") {
                         json!({ "z80": { "PC": 0x8000, "SP": 0xBFF0 } }).to_string()
@@ -3541,7 +3556,8 @@ mod live_tests {
         else {
             return false;
         };
-        std::net::TcpStream::connect_timeout(&address, std::time::Duration::from_millis(300)).is_ok()
+        std::net::TcpStream::connect_timeout(&address, std::time::Duration::from_millis(300))
+            .is_ok()
     }
 
     #[test]

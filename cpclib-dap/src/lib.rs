@@ -434,9 +434,7 @@ fn start_session(
                 // The build may have left the map behind (`basm --sourcemap`),
                 // in which case the program does not have to be assembled a
                 // second time to say where its lines went.
-                if let Some(cached) =
-                    launch::cached_for_debug(entry, &config, &mut early_notices)
-                {
+                if let Some(cached) = launch::cached_for_debug(entry, &config, &mut early_notices) {
                     early_notices.push(
                         "source map read from the file the build wrote                          (basm --sourcemap) - the program was not assembled again"
                             .to_string()
@@ -449,25 +447,26 @@ fn start_session(
                     )
                 }
                 else {
-                let built = launch::assemble_for_debug(entry, &config).map_err(|problem| {
-                    format!(
-                        "{entry} could not be assembled, so there is nothing to debug:\n\
-                         {problem}"
-                    , entry = entry.display())
-                })?;
-                (
-                    built.source_map,
-                    built.breakpoints,
-                    built.image,
-                    built.entry_point
-                )
+                    let built = launch::assemble_for_debug(entry, &config).map_err(|problem| {
+                        format!(
+                            "{entry} could not be assembled, so there is nothing to debug:\n\
+                         {problem}",
+                            entry = entry.display()
+                        )
+                    })?;
+                    (
+                        built.source_map,
+                        built.breakpoints,
+                        built.image,
+                        built.entry_point
+                    )
                 }
             },
             None => {
                 let (map, problem) = source_map_for_project(&build_file, &config);
                 early_notices.extend(problem);
                 (map, Vec::new(), Vec::new(), None)
-            },
+            }
         };
         (snapshot, map, breakpoints, image, entry_point)
     }

@@ -346,7 +346,11 @@ mod deep_stack_tests {
         stack.extend([0x03, 0x80]);
 
         let frames = walk(&stack, |address| Some(memory[address as usize]));
-        assert_eq!(frames.len(), 1, "only the one there is evidence for: {frames:?}");
+        assert_eq!(
+            frames.len(),
+            1,
+            "only the one there is evidence for: {frames:?}"
+        );
         assert_eq!(frames[0].called, 0x5000);
         assert!(
             frames[0].locals.len() <= MAX_LOCALS_BETWEEN_FRAMES,

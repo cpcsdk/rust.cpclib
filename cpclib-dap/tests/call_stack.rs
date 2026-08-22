@@ -237,11 +237,16 @@ fn a_session_without_an_image_asks_nothing_extra() {
     // open the line itself. Nothing was *asked of the emulator*, which is what
     // this test is about.
     let answer = out.last().unwrap();
-    assert_eq!(answer["command"], json!("stackTrace"), "answered straight through");
+    assert_eq!(
+        answer["command"],
+        json!("stackTrace"),
+        "answered straight through"
+    );
     assert_eq!(answer["body"]["stackFrames"].as_array().unwrap().len(), 1);
     assert!(
-        out.iter()
-            .all(|m| m["command"] == json!("stackTrace") || m["event"] == json!("cpclib/stoppedAt")),
+        out.iter().all(|m| {
+            m["command"] == json!("stackTrace") || m["event"] == json!("cpclib/stoppedAt")
+        }),
         "and nothing else was sent: {out:?}"
     );
     assert!(!session.peer().commands().contains(&"scopes".to_string()));
@@ -504,7 +509,8 @@ fn one_page_claims_it() -> SourceMap {
                 page: 0,
                 column: 2,
                 column_end: 5,
-                len: 1
+                len: 1,
+                is_data: false
             },
             // ...and page 1 has code, but somewhere else entirely.
             SourceMapRow {
@@ -515,7 +521,8 @@ fn one_page_claims_it() -> SourceMap {
                 page: 1,
                 column: 2,
                 column_end: 5,
-                len: 1
+                len: 1,
+                is_data: false
             },
             // Something both pages claim, so the program counts as banked.
             SourceMapRow {
@@ -526,7 +533,8 @@ fn one_page_claims_it() -> SourceMap {
                 page: 0,
                 column: 2,
                 column_end: 5,
-                len: 1
+                len: 1,
+                is_data: false
             },
             SourceMapRow {
                 file: 1,
@@ -536,7 +544,8 @@ fn one_page_claims_it() -> SourceMap {
                 page: 1,
                 column: 2,
                 column_end: 5,
-                len: 1
+                len: 1,
+                is_data: false
             },
         ]
     })

@@ -46,7 +46,12 @@ struct ListingTokenItem {
     /// the start of all three. These are what let it point at the one that is
     /// actually executing.
     column: u16,
-    column_end: u16
+    column_end: u16,
+    /// Whether this token is a data directive (`db`/`defs`/`defw`/`incbin`/a
+    /// string), as opposed to an instruction. Kept separate from `token_kind`,
+    /// which already collapses both onto `Hidden` for unrelated formatting
+    /// reasons - folding this in would break that collapse.
+    is_data: bool
 }
 
 pub struct ListingOutput {
@@ -69,6 +74,9 @@ pub struct ListingOutput {
     current_physical_address: PhysicalAddress,
     crunched_section_counter: usize,
     current_token_kind: TokenKind,
+    /// Whether the token currently being accumulated is a data directive -
+    /// see `ListingTokenItem::is_data`.
+    current_token_is_data: bool,
     current_token_bytes: Vec<u8>,
     current_token_raw: String,
     current_token_expanded: String,
@@ -158,6 +166,7 @@ impl ListingOutput {
             crunched_section_counter: 0,
             current_physical_address: MemoryPhysicalAddress::new(0, 0).into(),
             current_token_kind: TokenKind::Hidden,
+            current_token_is_data: false,
             current_token_bytes: Vec::new(),
             current_token_raw: String::new(),
             current_token_expanded: String::new(),
@@ -420,6 +429,18 @@ impl ListingOutput {
             | LocatedTokenInner::Repeat(..) => TokenKind::Displayable,
             _ => TokenKind::Hidden
         };
+        // A sibling classification, not folded into `token_kind` above: that
+        // enum already collapses data directives and opcodes onto the same
+        // `Hidden` arm for unrelated formatting reasons, so reusing it here
+        // would make data indistinguishable from code again.
+        self.current_token_is_data = matches!(
+            token.deref(),
+            LocatedTokenInner::Defb(..)
+                | LocatedTokenInner::Defs(..)
+                | LocatedTokenInner::Defw(..)
+                | LocatedTokenInner::Incbin { .. }
+                | LocatedTokenInner::Str(..)
+        );
     }
 
     fn flush_current_token(&mut self) {
@@ -444,7 +465,8 @@ impl ListingOutput {
             bytes: self.current_token_bytes.clone(),
             token_kind: self.current_token_kind.clone(),
             column: self.current_token_column,
-            column_end: self.current_token_column_end
+            column_end: self.current_token_column_end,
+            is_data: self.current_token_is_data
         });
         self.next_token_id = self.next_token_id.saturating_add(1);
         self.current_token_bytes.clear();
@@ -922,6 +944,10 @@ impl ListingOutput {
 
         // draw all lines that correspond to the instructions to output
         let mut last_mapped_line: Option<u32> = None;
+        // Parallel to `last_mapped_line`: carries whether the run being
+        // continued was data across a continuation chunk (a `defs`/`incbin`
+        // tail with no token of its own).
+        let mut last_mapped_is_data: Option<bool> = None;
         let mut byte_offset = 0usize;
         let render_lines = line_representation_raw.len().max(data_representation.len());
         for idx in 0..render_lines {
@@ -1005,8 +1031,7 @@ impl ListingOutput {
                     // file onto one id: `INNER` called from `OUTER`'s body
                     // gives two rows both reading "line 2" that belong on
                     // different lines of the file.
-                    let line_offset =
-                        super::source_map::expansion_line_offset(name);
+                    let line_offset = super::source_map::expansion_line_offset(name);
                     // `current_offset` is already the physical position of
                     // these very bytes; the page is what distinguishes the
                     // same logical address in two banks.
@@ -1021,14 +1046,19 @@ impl ListingOutput {
                     // second should say so rather than pointing at the start of
                     // the line. The tokens of this chunk already carry their own
                     // bytes and columns, so the split is a walk over them.
-                    let emitting: Vec<(u16, u16, u16)> = token_chunks
+                    let emitting: Vec<(u16, u16, u16, bool)> = token_chunks
                         .get(idx)
                         .map(|tokens| {
                             tokens
                                 .iter()
                                 .filter(|token| !token.bytes.is_empty())
                                 .map(|token| {
-                                    (token.column, token.column_end, token.bytes.len() as u16)
+                                    (
+                                        token.column,
+                                        token.column_end,
+                                        token.bytes.len() as u16,
+                                        token.is_data
+                                    )
                                 })
                                 .collect()
                         })
@@ -1036,7 +1066,9 @@ impl ListingOutput {
 
                     if emitting.is_empty() {
                         // A continuation chunk of a long run (`defs 16`), which
-                        // carries bytes but no token of its own.
+                        // carries bytes but no token of its own - inherit
+                        // whether the run it continues was data, the same way
+                        // `last_mapped_line` inherits which line it continues.
                         collector.push(
                             file,
                             line + line_offset,
@@ -1045,12 +1077,13 @@ impl ListingOutput {
                             page,
                             1,
                             1,
-                            current_chunk.len() as u16
+                            current_chunk.len() as u16,
+                            last_mapped_is_data.unwrap_or(false)
                         );
                     }
                     else {
                         let mut offset = 0u32;
-                        for (column, column_end, len) in emitting {
+                        for (column, column_end, len, is_data) in emitting {
                             collector.push(
                                 file,
                                 line + line_offset,
@@ -1059,9 +1092,11 @@ impl ListingOutput {
                                 page,
                                 column,
                                 column_end,
-                                len
+                                len,
+                                is_data
                             );
                             offset += len as u32;
+                            last_mapped_is_data = Some(is_data);
                         }
                     }
                 }
@@ -1911,7 +1946,8 @@ endm\n";
                 bytes: vec![0x3E],
                 token_kind: TokenKind::Displayable,
                 column: 1,
-                column_end: 1
+                column_end: 1,
+                is_data: false
             },
             ListingTokenItem {
                 token_id: 1,
@@ -1920,7 +1956,8 @@ endm\n";
                 bytes: vec![0x01],
                 token_kind: TokenKind::Displayable,
                 column: 1,
-                column_end: 1
+                column_end: 1,
+                is_data: false
             },
         ];
 
@@ -1981,7 +2018,8 @@ endm\n";
                 bytes: vec![0x01, 0x01, 0xBC],
                 token_kind: TokenKind::Displayable,
                 column: 1,
-                column_end: 1
+                column_end: 1,
+                is_data: false
             },
             ListingTokenItem {
                 token_id: 30,
@@ -1990,7 +2028,8 @@ endm\n";
                 bytes: vec![0xED, 0x49],
                 token_kind: TokenKind::Displayable,
                 column: 1,
-                column_end: 1
+                column_end: 1,
+                is_data: false
             },
             ListingTokenItem {
                 token_id: 31,
@@ -1999,7 +2038,8 @@ endm\n";
                 bytes: vec![0x01, 0x30, 0xBD],
                 token_kind: TokenKind::Displayable,
                 column: 1,
-                column_end: 1
+                column_end: 1,
+                is_data: false
             },
             ListingTokenItem {
                 token_id: 32,
@@ -2008,7 +2048,8 @@ endm\n";
                 bytes: vec![0xED, 0x49],
                 token_kind: TokenKind::Displayable,
                 column: 1,
-                column_end: 1
+                column_end: 1,
+                is_data: false
             },
         ];
 
@@ -2054,7 +2095,8 @@ endm\n";
             bytes: vec![0x19],
             token_kind: TokenKind::Displayable,
             column: 1,
-            column_end: 1
+            column_end: 1,
+            is_data: false
         }];
 
         output.finish();
@@ -2100,7 +2142,8 @@ endm\n";
             bytes: vec![0x00, 0x01],
             token_kind: TokenKind::Displayable,
             column: 1,
-            column_end: 1
+            column_end: 1,
+            is_data: false
         }];
 
         output.finish();

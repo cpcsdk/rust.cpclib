@@ -172,7 +172,11 @@ fn map_at_the_contested_address() {
         let candidates = built.source_map.candidates_at(address);
         eprintln!("--- 0x{address:04X}: {} candidate(s)", candidates.len());
         for (page, location) in &candidates {
-            eprintln!("    page {page}: {}:{}", location.file.display(), location.line);
+            eprintln!(
+                "    page {page}: {}:{}",
+                location.file.display(),
+                location.line
+            );
         }
     }
 }
@@ -214,7 +218,10 @@ fn directives_say_where_they_are_written() {
             .location_at(breakpoint.address as u32)
             .map(|at| format!("{}:{}", at.file.display(), at.line))
             .unwrap_or_else(|| "nowhere".to_string());
-        eprintln!("0x{:04X}: written {written}, stops at {stops_at}", breakpoint.address);
+        eprintln!(
+            "0x{:04X}: written {written}, stops at {stops_at}",
+            breakpoint.address
+        );
     }
     assert!(
         built.breakpoints.iter().all(|b| b.written_at.is_some()),

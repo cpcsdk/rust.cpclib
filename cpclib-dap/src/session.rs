@@ -58,6 +58,12 @@ const SYNTHETIC_RANGE: i64 = crate::callstack::MAX_STACK_ITEMS as i64;
 /// that it is one small read per stop and only for programs that need it.
 const PAGE_PROBE_BYTES: usize = 16;
 
+/// How much to disassemble in a view the adapter opens by itself.
+///
+/// A screenful is the point: it is read while stepping through firmware, so
+/// what matters is the handful of instructions around `PC`, not a listing.
+const AUTOMATIC_DISASSEMBLY_INSTRUCTIONS: i64 = 24;
+
 /// Why an outer frame has no registers, said once where the user is looking.
 ///
 /// This is a hard limit, not an omission. A Z80 `CALL` pushes the return
@@ -259,7 +265,11 @@ struct PendingDisassembly {
     /// refresh a stop triggers.
     request: Option<Value>,
     label: Option<String>,
-    address: u32
+    address: u32,
+    /// Whether it feeds a view the adapter opened by itself. Such a read can
+    /// still be in flight when the program returns to source and the view is
+    /// closed, and its answer must not re-open the panel behind it.
+    automatic: bool
 }
 
 /// Where a disassembly view is looking.
@@ -358,6 +368,12 @@ pub struct Session<P: DapPeer> {
     pending_editor_disassembly: Vec<(Value, u32, u32, usize, i64)>,
     /// The disassembly view that is open, if one is.
     open_disassembly_view: Option<OpenDisassemblyView>,
+    /// Whether the open disassembly view was opened by the adapter rather than
+    /// asked for with `-dv`.
+    ///
+    /// Only a view of our own is taken away again when the program comes back
+    /// to source: one the user asked for is theirs to close.
+    disassembly_view_is_ours: bool,
     /// The `F` byte from the last register read, so expanding the flags row
     /// does not need a second round trip to an emulator that may since have
     /// resumed.
@@ -468,6 +484,7 @@ impl<P: DapPeer> Session<P> {
             pending_disassembly: Vec::new(),
             pending_editor_disassembly: Vec::new(),
             open_disassembly_view: None,
+            disassembly_view_is_ours: false,
             last_flags: 0,
             attached: false,
             image: None,
@@ -1080,7 +1097,12 @@ impl<P: DapPeer> Session<P> {
                         .and_then(|b| b.get_mut("instructions"))
                         .and_then(Value::as_array_mut)
                     {
-                        crate::inspect::annotate_disassembly(instructions, &self.map, self.pc_page);
+                        let ambiguous = crate::inspect::annotate_disassembly(
+                            instructions,
+                            &self.map,
+                            self.pc_page
+                        );
+                        self.resolve_ambiguous_operand_symbols(instructions, ambiguous);
                     }
                     return vec![annotated];
                 },
@@ -1782,8 +1804,19 @@ impl<P: DapPeer> Session<P> {
             return Vec::new();
         };
 
+        let page = self.pc_page;
+        let last_pc = self.last_pc;
+        let decoded = crate::disassemble::overlay_data_rows(
+            decoded,
+            |address| self.data_span_at(page, address),
+            |address, len| self.image_bytes(page.unwrap_or(0), address, len),
+            last_pc
+        );
+
         let mut instructions = crate::disassemble::as_dap_instructions(&decoded);
-        crate::inspect::annotate_disassembly(&mut instructions, &self.map, self.pc_page);
+        let ambiguous =
+            crate::inspect::annotate_disassembly(&mut instructions, &self.map, self.pc_page);
+        self.resolve_ambiguous_operand_symbols(&mut instructions, ambiguous);
 
         let seq = self.next_seq();
         vec![protocol::response(
@@ -2435,6 +2468,9 @@ impl<P: DapPeer> Session<P> {
             label: label.clone(),
             fetched_at: Some(address)
         });
+        // Asked for by hand, so it stays until it is closed by hand - even if
+        // an automatic view was what was on screen a moment ago.
+        self.disassembly_view_is_ours = false;
         self.ask_for_disassembly(address, count, label, Some(request.clone()))?;
         Ok(Vec::new())
     }
@@ -2450,7 +2486,8 @@ impl<P: DapPeer> Session<P> {
         self.pending_disassembly.push(PendingDisassembly {
             request,
             label,
-            address
+            address,
+            automatic: self.disassembly_view_is_ours
         });
         // Bytes, not a disassembly. The emulator can decode them, but its
         // mnemonics are *its* mnemonics: swap the emulator and the view changes
@@ -2710,6 +2747,11 @@ impl<P: DapPeer> Session<P> {
             return Vec::new();
         }
         let view = self.pending_disassembly.remove(0);
+        // Its panel was closed while this read was in flight; delivering it now
+        // would open the panel again on a stop that has a source line.
+        if view.automatic && !self.disassembly_view_is_ours {
+            return Vec::new();
+        }
 
         let bytes = response
             .get("body")
@@ -2745,8 +2787,19 @@ impl<P: DapPeer> Session<P> {
             )];
         }
 
+        let page = self.pc_page;
+        let last_pc = self.last_pc;
+        let decoded = crate::disassemble::overlay_data_rows(
+            decoded,
+            |address| self.data_span_at(page, address),
+            |address, len| self.image_bytes(page.unwrap_or(0), address, len),
+            last_pc
+        );
+
         let mut instructions = crate::disassemble::as_dap_instructions(&decoded);
-        crate::inspect::annotate_disassembly(&mut instructions, &self.map, self.pc_page);
+        let ambiguous =
+            crate::inspect::annotate_disassembly(&mut instructions, &self.map, self.pc_page);
+        self.resolve_ambiguous_operand_symbols(&mut instructions, ambiguous);
 
         let seq = self.next_seq();
         let event = protocol::event(
@@ -3314,6 +3367,34 @@ impl<P: DapPeer> Session<P> {
         self.image.as_ref()?.get(offset).copied()
     }
 
+    /// Where the source map says `address` is a `db`/`defs`/`defw`/`incbin`
+    /// row, and how long the row is - the `data_span_at` primitive
+    /// `overlay_data_rows` needs to replace decode()'s guess with the real
+    /// data.
+    ///
+    /// Tries the known page first, since that is the accurate answer on a
+    /// paged program where the plain logical lookup cannot tell pages apart;
+    /// falls back to it for the common unpaged case where a page was never
+    /// pinned down.
+    fn data_span_at(&self, page: Option<u8>, address: u16) -> Option<(u16, u16)> {
+        let location = page
+            .and_then(|page| self.map.location_at_long(page, address))
+            .or_else(|| self.map.location_at(address as u32))?;
+        location.is_data.then_some((address, location.len as u16))
+    }
+
+    /// `len` consecutive bytes of the assembled image starting at `address`,
+    /// or `None` as soon as one is missing - no image at all, or a span that
+    /// runs past what was assembled.
+    ///
+    /// The primitive `overlay_data_rows` compares against to catch
+    /// self-modified data: this is what was written, not what is live.
+    fn image_bytes(&self, page: u8, address: u16, len: usize) -> Option<Vec<u8>> {
+        (0..len)
+            .map(|offset| self.image_byte(page, address.wrapping_add(offset as u16)))
+            .collect()
+    }
+
     /// Which page's assembled bytes look most like what is really at `address`.
     ///
     /// The heuristic for a paged program: the emulator cannot say which page
@@ -3708,8 +3789,7 @@ impl<P: DapPeer> Session<P> {
                 // addresses, so the name is sometimes a choice between several
                 // and the number is what makes that visible rather than
                 // silently authoritative.
-                let name = match self.name_of_call_target(frame.called, frame.call_site, &located)
-                {
+                let name = match self.name_of_call_target(frame.called, frame.call_site, &located) {
                     Some(symbol) => format!("{symbol} @ 0x{:04X}", frame.called),
                     None => format!("0x{:04X}", frame.called)
                 };
@@ -3804,7 +3884,11 @@ impl<P: DapPeer> Session<P> {
             )]);
         };
 
-        self.send_own("cpclib/setPc", json!({ "address": address }), Purpose::Plain)?;
+        self.send_own(
+            "cpclib/setPc",
+            json!({ "address": address }),
+            Purpose::Plain
+        )?;
         self.note_program_counter(address);
         let seq = self.next_seq();
         Ok(vec![protocol::response(
@@ -3859,13 +3943,36 @@ impl<P: DapPeer> Session<P> {
                             .cloned()
                     });
                 named.or_else(|| candidates.first().cloned())
-            },
+            }
         };
 
         if let Some(best) = best.as_ref() {
             self.call_target_names.insert(call_site, best.clone());
         }
         best
+    }
+
+    /// Where `annotate_disassembly` found more than one label at an operand's
+    /// address, read the row's own source line and prefer the candidate it
+    /// actually names - the same evidence `name_of_call_target` already uses
+    /// for the call stack, generalised to any operand.
+    fn resolve_ambiguous_operand_symbols(
+        &mut self,
+        instructions: &mut [Value],
+        ambiguous: Vec<crate::inspect::AmbiguousOperand>
+    ) {
+        for item in ambiguous {
+            let Some(text) = self.source_line(&item.location.file, item.location.line)
+            else {
+                continue;
+            };
+            if let Some(winner) = item.candidates.iter().find(|c| mentions_word(&text, c)) {
+                instructions[item.index]["symbols"] = json!([winner]);
+            }
+            // No candidate mentioned: the top-preference guess already written
+            // stands - declining to override rather than guessing among several
+            // unmentioned names.
+        }
     }
 
     /// Say where the program stopped, in a message of our own.
@@ -3886,17 +3993,27 @@ impl<P: DapPeer> Session<P> {
         else {
             return Vec::new();
         };
-        let Some(source) = top
+        let located = top
             .get("source")
             .and_then(|source| source.get("path"))
             .and_then(Value::as_str)
+            .zip(
+                top.get("line")
+                    .and_then(Value::as_i64)
+                    .filter(|line| *line > 0)
+            );
+        // A stop the program's own source cannot explain - inside the firmware,
+        // or in code written at run time. Saying nothing here is what made
+        // stepping through `call TXT_OUTPUT` look like a frozen `PC`: the editor
+        // kept the previous line highlighted for every step of the sixteen the
+        // machine really took.
+        let Some((source, line)) = located
         else {
-            return Vec::new();
+            return self.stopped_outside_source(top);
         };
-        let Some(line) = top.get("line").and_then(Value::as_i64).filter(|line| *line > 0)
-        else {
-            return Vec::new();
-        };
+        // Back on a line of the program: an automatic disassembly view has done
+        // its job and goes away again.
+        let closed = self.close_automatic_disassembly_view();
 
         // The source says `ld a,ANIMATION_STATE_FINISHED`; the machine holds
         // `ld a,0x01`. Carrying the resolved form lets the editor show it
@@ -3922,20 +4039,22 @@ impl<P: DapPeer> Session<P> {
         // The columns the stop selects are the columns the hint belongs after,
         // so they travel with it rather than being worked out twice.
         let column = top.get("column").and_then(Value::as_i64).unwrap_or(1);
-        let end_column = top.get("endColumn").and_then(Value::as_i64).unwrap_or(column);
+        let end_column = top
+            .get("endColumn")
+            .and_then(Value::as_i64)
+            .unwrap_or(column);
         let asked = address
             .is_some_and(|address| self.ask_what_is_at(address, source, line, column, end_column));
         let instruction = match asked {
             true => None,
             // Nothing to ask, or nobody to ask: the assembled image is what is
             // left, and a hint from it beats no hint at all.
-            false => {
-                self.image_hint(address, written.as_deref())
-            }
+            false => self.image_hint(address, written.as_deref())
         };
 
         let seq = self.next_seq();
-        let mut out = vec![protocol::event(
+        let mut out = closed;
+        out.push(protocol::event(
             "cpclib/stoppedAt",
             json!({
                 "path": source,
@@ -3945,9 +4064,105 @@ impl<P: DapPeer> Session<P> {
                 "instruction": instruction
             }),
             seq
-        )];
+        ));
         out.extend(self.directive_behind_the_stop(address, source, line));
         out
+    }
+
+    /// The program stopped somewhere its source cannot describe.
+    ///
+    /// `call TXT_OUTPUT` is the ordinary case, not an exotic one: a CPC program
+    /// spends most of its stepped instructions inside firmware nobody
+    /// assembled, and until it returns there is no line to put a cursor on.
+    /// Two things follow. The editor is told, so it stops showing the caller's
+    /// line as though the program were still on it; and a disassembly view is
+    /// opened on `PC` so there is *something* to read while the firmware runs.
+    /// The view follows `PC`, so it keeps up by itself, and it is taken away
+    /// again by `close_automatic_disassembly_view` on the first stop that lands
+    /// back in the source - which a call always eventually does.
+    fn stopped_outside_source(&mut self, top: &Value) -> Vec<Value> {
+        let address = top
+            .get("instructionPointerReference")
+            .and_then(Value::as_str)
+            .and_then(parse_address_reference)
+            .and_then(|address| u16::try_from(address).ok())
+            .or(self.last_pc);
+
+        let seq = self.next_seq();
+        let mut out = vec![protocol::event(
+            "cpclib/stoppedWithoutSource",
+            json!({
+                "address": address.map(|address| address_reference(address as u32)),
+                "label": address.and_then(|address| self.map.symbol_at(address as u32))
+            }),
+            seq
+        )];
+
+        let Some(address) = address
+        else {
+            return out;
+        };
+        // Nothing to disassemble from without a way to read memory, and an
+        // emulator that cannot be asked is not worth opening an empty panel
+        // for.
+        if self.open_disassembly_view.is_some() || !self.peer.supports("readMemory") {
+            return out;
+        }
+
+        let label = self.map.symbol_at(address as u32).map(str::to_owned);
+        self.open_disassembly_view = Some(OpenDisassemblyView {
+            anchor: DisassemblyAnchor::ProgramCounter,
+            count: AUTOMATIC_DISASSEMBLY_INSTRUCTIONS,
+            label: label.clone(),
+            fetched_at: Some(address as u32)
+        });
+        self.disassembly_view_is_ours = true;
+        // The bytes come back as their own message; a failure to ask leaves the
+        // stop itself intact, which matters more than the panel.
+        if self
+            .ask_for_disassembly(
+                address as u32,
+                AUTOMATIC_DISASSEMBLY_INSTRUCTIONS,
+                label,
+                None
+            )
+            .is_err()
+        {
+            self.open_disassembly_view = None;
+            self.disassembly_view_is_ours = false;
+            return out;
+        }
+        let seq = self.next_seq();
+        out.push(protocol::event(
+            "output",
+            json!({
+                "category": "console",
+                "output": format!(
+                    "stopped at {} - outside any assembled source, so a disassembly view \
+                     is open until the program returns to a line it was built from.\n",
+                    address_reference(address as u32)
+                )
+            }),
+            seq
+        ));
+        out
+    }
+
+    /// Take away a disassembly view the adapter opened by itself.
+    ///
+    /// A view asked for with `-dv` is left alone: it was asked for.
+    fn close_automatic_disassembly_view(&mut self) -> Vec<Value> {
+        if !self.disassembly_view_is_ours {
+            return Vec::new();
+        }
+        self.disassembly_view_is_ours = false;
+        self.open_disassembly_view = None;
+        let seq = self.next_seq();
+        vec![protocol::event(
+            "cpclib/closeDisassemblyView",
+            json!({}),
+            seq
+        )]
     }
 
     /// Ask the emulator what it holds at `address`, for this stop's hint.
@@ -4015,11 +4230,9 @@ impl<P: DapPeer> Session<P> {
     /// has already happened and the user may have moved the cursor since, so
     /// re-announcing the stop would drag them back for a decoration.
     fn complete_stop_hint(&mut self, response: &Value) -> Vec<Value> {
-        let Some(pending) = self
-            .pending_stop_hint
-            .take_if(|pending| {
-                response.get("request_seq").and_then(Value::as_i64) == Some(pending.request_seq)
-            })
+        let Some(pending) = self.pending_stop_hint.take_if(|pending| {
+            response.get("request_seq").and_then(Value::as_i64) == Some(pending.request_seq)
+        })
         else {
             return Vec::new();
         };
@@ -4511,7 +4724,7 @@ fn is_a_defs_directive(text: &str) -> bool {
 /// `call draw` must not be taken as naming `draw_sprite`, and
 /// `call spectral_sprite_move_along_curve` must not be taken as naming
 /// `sprite` - so the characters either side have to be non-identifier ones.
-fn mentions_word(text: &str, word: &str) -> bool {
+pub(crate) fn mentions_word(text: &str, word: &str) -> bool {
     let is_part = |c: char| c.is_alphanumeric() || c == '_' || c == '.';
     let mut from = 0;
     while let Some(at) = text[from..].find(word) {
@@ -4540,7 +4753,7 @@ mod tests {
             "\tDEFS 60",
             "wait\tds 40",
             "\trmem 10",
-            "\tfill 8, 0",
+            "\tfill 8, 0"
         ] {
             assert!(is_a_defs_directive(line), "{line}");
         }

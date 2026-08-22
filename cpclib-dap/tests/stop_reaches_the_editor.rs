@@ -129,10 +129,7 @@ fn stepping_lifts_the_breakpoint_for_an_emulator_that_needs_it() {
     let after: Vec<String> = session.peer().commands()[before..].to_vec();
     assert_eq!(
         after,
-        vec![
-            "setInstructionBreakpoints".to_string(),
-            "next".to_string()
-        ],
+        vec!["setInstructionBreakpoints".to_string(), "next".to_string()],
         "the breakpoint under PC is lifted first: {after:?}"
     );
 }
@@ -155,11 +152,7 @@ fn image_holding_ld_a_1() -> Vec<u8> {
 /// The walk over the stack has to be answered when there is an image, because
 /// having one is what makes the adapter attempt it: `SP` at the top of stack
 /// means there is nothing pushed to walk, which ends it immediately.
-fn stop_over(
-    written: &str,
-    image: Option<Vec<u8>>,
-    held: Option<&[u8]>
-) -> Vec<serde_json::Value> {
+fn stop_over(written: &str, image: Option<Vec<u8>>, held: Option<&[u8]>) -> Vec<serde_json::Value> {
     let directory = camino_tempfile::tempdir().unwrap();
     let file = directory.path().join("resolved.asm");
     std::fs::write(&file, format!("\torg 0x4000\nSTATE equ 1\n{written}\n")).unwrap();
@@ -274,7 +267,11 @@ fn answer(
 /// the whole point of the hint.
 #[test]
 fn the_stop_carries_the_instruction_really_in_memory() {
-    let out = stop_over("\tld a,STATE", Some(image_holding_ld_a_1()), Some(&[0x3E, 0x01]));
+    let out = stop_over(
+        "\tld a,STATE",
+        Some(image_holding_ld_a_1()),
+        Some(&[0x3E, 0x01])
+    );
 
     let instruction = hint(&out).as_str().unwrap_or_default().to_lowercase();
     assert!(
@@ -334,7 +331,11 @@ fn a_line_that_only_reserves_space_still_gets_a_hint() {
 fn a_line_that_already_says_it_gets_no_hint() {
     for written in ["\tLD A, 0x01", "\tld a,1", ".here\tld a,0x1 ; the state"] {
         let out = stop_over(written, Some(image_holding_ld_a_1()), Some(&[0x3E, 0x01]));
-        assert_eq!(hint(&out), json!(null), "`{written}` says it already: {out:?}");
+        assert_eq!(
+            hint(&out),
+            json!(null),
+            "`{written}` says it already: {out:?}"
+        );
     }
 }
 
@@ -355,7 +356,11 @@ fn an_unanswerable_read_falls_back_to_the_image() {
 /// program stopped before the bytes at `PC` have been asked for.
 #[test]
 fn the_stop_reaches_the_editor_before_the_hint_does() {
-    let out = stop_over("\tld a,STATE", Some(image_holding_ld_a_1()), Some(&[0x3E, 0x01]));
+    let out = stop_over(
+        "\tld a,STATE",
+        Some(image_holding_ld_a_1()),
+        Some(&[0x3E, 0x01])
+    );
 
     let reveal = out
         .iter()

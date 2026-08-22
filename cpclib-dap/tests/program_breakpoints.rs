@@ -40,8 +40,6 @@ fn attached() -> Session<RecordingPeer> {
     session
 }
 
-
-
 fn execution(address: u16) -> AssembledBreakpoint {
     AssembledBreakpoint {
         address,
@@ -529,7 +527,8 @@ fn banked_map() -> SourceMap {
                 page: 0,
                 column: 5,
                 column_end: 10,
-                len: 1
+                len: 1,
+                is_data: false
             },
             SourceMapRow {
                 file: 0,
@@ -539,7 +538,8 @@ fn banked_map() -> SourceMap {
                 page: 1,
                 column: 5,
                 column_end: 10,
-                len: 1
+                len: 1,
+                is_data: false
             },
         ]
     })
@@ -726,13 +726,11 @@ fn from_a_macro(address: u16, file: &str, line: u32) -> AssembledBreakpoint {
         kind: AssembledBreakpointKind::Execution,
         extra: None,
         name: None,
-        written_at: Some(
-            cpclib_asm::assembler::delayed_command::BreakpointSource {
-                file: file.to_string(),
-                line,
-                column: 2
-            }
-        )
+        written_at: Some(cpclib_asm::assembler::delayed_command::BreakpointSource {
+            file: file.to_string(),
+            line,
+            column: 2
+        })
     }
 }
 
@@ -876,7 +874,10 @@ fn a_relative_directive_file_is_resolved_against_the_source_map() {
 #[test]
 fn a_known_relative_file_becomes_the_path_the_editor_can_open() {
     let map = SourceMap::from_raw(&RawSourceMap {
-        files: vec!["/somewhere/src/main.asm".into(), "/somewhere/src/macros.asm".into()],
+        files: vec![
+            "/somewhere/src/main.asm".into(),
+            "/somewhere/src/macros.asm".into(),
+        ],
         rows: vec![
             SourceMapRow::flat(0, 10, 0x4000, 3),
             SourceMapRow::flat(1, 6, 0x8000, 1),
