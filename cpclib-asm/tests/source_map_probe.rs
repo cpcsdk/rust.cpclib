@@ -959,23 +959,56 @@ fn a_mixed_line_keeps_its_data_and_code_tokens_distinct() {
     assert!(line[1].is_data, "the data token: {rows:?}");
 }
 
-/// A long run (`defs`) can split across several byte-per-line chunks, each of
-/// which is a continuation with no token of its own - `is_data` must carry
-/// forward across those continuations exactly as `last_mapped_line` already
-/// does, or only the first chunk of a long data run would be marked.
+/// `defs` is deliberately *not* data, even though it shares the byte-per-line
+/// continuation machinery with `db`/`defw`/etc: a `defs` region is a
+/// shorthand for a run of bytes that genuinely executes every frame (a
+/// raster-timing pad decodes as `NOP`), unlike a string table or byte list,
+/// which is never meant to execute. `-dv` must keep showing it as real
+/// instructions, not fold it into the data-row overlay. This carries forward
+/// across every continuation chunk exactly as `last_mapped_line` already
+/// does, or only the first chunk of a long run would say so - here that
+/// means every chunk consistently says `false`.
 #[test]
-fn a_long_defs_run_carries_is_data_across_every_continuation_chunk() {
+fn a_long_defs_run_is_never_marked_as_data() {
     let (_emitted, rows) = rows("\torg 0x4000\n\tdefs 20, 0xff\n");
 
     let defs_rows: Vec<_> = rows.iter().filter(|r| r.line == 2 && r.len > 0).collect();
     assert!(defs_rows.len() > 1, "should span several chunks: {rows:?}");
     assert!(
-        defs_rows.iter().all(|r| r.is_data),
-        "every continuation chunk must still say data: {rows:?}"
+        defs_rows.iter().all(|r| !r.is_data),
+        "defs executes every frame - no continuation chunk may say data: {rows:?}"
     );
     assert_eq!(
         defs_rows.iter().map(|r| r.len as u32).sum::<u32>(),
         20,
         "{rows:?}"
     );
+}
+
+/// The fix above is scoped to `Defs` alone - every other data directive must
+/// still be marked `is_data: true`, or the `-dv` overlay would silently stop
+/// covering real byte/string tables.
+#[test]
+fn other_data_directives_are_still_marked_as_data() {
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/asm/basm1.o"
+    );
+
+    for (name, source) in [
+        ("db text", "\torg 0x4000\n\tdb \"Hello\"\n".to_string()),
+        ("defw", "\torg 0x4000\n\tdefw 0x1234\n".to_string()),
+        ("str", "\torg 0x4000\n\tstr \"Hello\"\n".to_string()),
+        (
+            "incbin",
+            format!("\torg 0x4000\n\tincbin \"{fixture}\"\n")
+        )
+    ] {
+        let (_emitted, rows) = rows(&source);
+        let data_row = rows
+            .iter()
+            .find(|r| r.line == 2 && r.len > 0)
+            .unwrap_or_else(|| panic!("{name}: the data row exists: {rows:?}"));
+        assert!(data_row.is_data, "{name}: {rows:?}");
+    }
 }

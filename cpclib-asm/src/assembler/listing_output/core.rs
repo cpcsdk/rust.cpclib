@@ -433,10 +433,16 @@ impl ListingOutput {
         // enum already collapses data directives and opcodes onto the same
         // `Hidden` arm for unrelated formatting reasons, so reusing it here
         // would make data indistinguishable from code again.
+        //
+        // `Defs` is deliberately excluded: unlike a string table or `db`
+        // list, which are never meant to execute, a `defs` region genuinely
+        // executes every frame (it's just a shorthand for a run of zero
+        // bytes, which decode as `NOP`). Folding it into the data overlay
+        // would hide that from `-dv`. Step-over already treats a `defs` run
+        // the same way, as a repetition of NOPs rather than inert data.
         self.current_token_is_data = matches!(
             token.deref(),
             LocatedTokenInner::Defb(..)
-                | LocatedTokenInner::Defs(..)
                 | LocatedTokenInner::Defw(..)
                 | LocatedTokenInner::Incbin { .. }
                 | LocatedTokenInner::Str(..)

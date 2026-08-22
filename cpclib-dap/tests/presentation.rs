@@ -622,6 +622,48 @@ fn a_data_row_overlays_as_db_not_fake_opcodes() {
     );
 }
 
+/// The other live symptom: a `DB` row's own byte values must not be read as
+/// operand-address references. A project happened to have a label at address
+/// 0 (`inks`), and every zero byte in a data-overlay row came back annotated
+/// `"symbols": ["inks"]` as if `0x0` were a reference to it, rather than the
+/// raw byte value it actually is.
+#[test]
+fn a_data_rows_own_zero_bytes_are_not_read_as_a_reference_to_the_label_at_zero() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["hello.asm".into()],
+        rows: vec![SourceMapRow {
+            is_data: true,
+            ..SourceMapRow::flat(0, 5, 0x4000, 8)
+        }]
+    })
+    .with_symbols([("inks".to_string(), 0x0000u32)].into_iter().collect());
+    let mut session = Session::new(RecordingPeer::new(), map);
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-dv 0x4000 20", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("readMemory").unwrap().clone();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "readMemory",
+        "body": {"address": "0x4000", "data": base64(&[0x00; 8])}
+    }));
+
+    let instructions = out[0]["body"]["instructions"].as_array().unwrap();
+    assert_eq!(instructions.len(), 1, "{instructions:?}");
+    let text = instructions[0]["instruction"].as_str().unwrap();
+    assert!(text.to_uppercase().starts_with("DB"), "{text}");
+    assert!(
+        instructions[0].get("symbols").is_none(),
+        "a data row's own byte values are not addresses, even when a label \
+         happens to sit at the value one of them carries: {instructions:?}"
+    );
+}
+
 /// The row used to be data, but the live bytes at that address no longer
 /// match what was assembled there - the program patched itself. Showing a
 /// `DB` for bytes that are not there any more would be exactly the kind of
@@ -669,6 +711,56 @@ fn self_modified_data_is_not_shown_as_a_stale_db() {
                 .unwrap()
                 .eq_ignore_ascii_case("nop"),
             "the live bytes are shown honestly: {instructions:?}"
+        );
+    }
+}
+
+/// The other reported symptom, the inverse of the one above: a `defs`
+/// raster-timing pad (a run of zero bytes that genuinely executes every
+/// frame) must NOT come back from `-dv` folded into a `DB ...` overlay row -
+/// it must decode as the `NOP`s it actually is. `defs` is deliberately
+/// excluded from `is_data` in the source map (see
+/// `cpclib-asm/src/assembler/listing_output/core.rs`), so a row like this one
+/// - `is_data: false` over a run of zero bytes - is exactly what a `defs`
+/// region produces, and `overlay_data_rows` must leave it alone.
+#[test]
+fn a_defs_filled_region_decodes_as_nop_not_db() {
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["hello.asm".into()],
+        rows: vec![SourceMapRow {
+            is_data: false,
+            ..SourceMapRow::flat(0, 5, 0x4000, 4)
+        }]
+    });
+    let mut session = Session::new(RecordingPeer::new(), map);
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-dv 0x4000 4", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("readMemory").unwrap().clone();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "readMemory",
+        "body": {"address": "0x4000", "data": base64(&[0x00; 4])}
+    }));
+
+    let instructions = out[0]["body"]["instructions"].as_array().unwrap();
+    assert_eq!(
+        instructions.len(),
+        4,
+        "one NOP per byte, not one DB row for the whole run: {instructions:?}"
+    );
+    for instruction in instructions {
+        assert!(
+            instruction["instruction"]
+                .as_str()
+                .unwrap()
+                .eq_ignore_ascii_case("nop"),
+            "a defs run executes every frame, so it decodes as real NOPs: {instructions:?}"
         );
     }
 }

@@ -1097,10 +1097,15 @@ impl<P: DapPeer> Session<P> {
                         .and_then(|b| b.get_mut("instructions"))
                         .and_then(Value::as_array_mut)
                     {
+                        // The emulator's own answer never went through our
+                        // `Instruction`/`cost` pipeline - there is no cost
+                        // information for it at all, so every row is scanned
+                        // exactly as before.
                         let ambiguous = crate::inspect::annotate_disassembly(
                             instructions,
                             &self.map,
-                            self.pc_page
+                            self.pc_page,
+                            None
                         );
                         self.resolve_ambiguous_operand_symbols(instructions, ambiguous);
                     }
@@ -1814,8 +1819,16 @@ impl<P: DapPeer> Session<P> {
         );
 
         let mut instructions = crate::disassemble::as_dap_instructions(&decoded);
-        let ambiguous =
-            crate::inspect::annotate_disassembly(&mut instructions, &self.map, self.pc_page);
+        // `decoded` came through `Instruction`, so its `cost` is the truth
+        // per row - `None` marks a `DB` the data overlay wrote, and that
+        // row's text must not be scanned for operand addresses.
+        let costs: Vec<Option<usize>> = decoded.iter().map(|i| i.cost).collect();
+        let ambiguous = crate::inspect::annotate_disassembly(
+            &mut instructions,
+            &self.map,
+            self.pc_page,
+            Some(&costs)
+        );
         self.resolve_ambiguous_operand_symbols(&mut instructions, ambiguous);
 
         let seq = self.next_seq();
@@ -2797,8 +2810,16 @@ impl<P: DapPeer> Session<P> {
         );
 
         let mut instructions = crate::disassemble::as_dap_instructions(&decoded);
-        let ambiguous =
-            crate::inspect::annotate_disassembly(&mut instructions, &self.map, self.pc_page);
+        // Same reasoning as `complete_editor_disassembly`: `decoded` carries
+        // real per-row cost, so a `DB` row (`cost: None`) is skipped rather
+        // than scanned for operand addresses.
+        let costs: Vec<Option<usize>> = decoded.iter().map(|i| i.cost).collect();
+        let ambiguous = crate::inspect::annotate_disassembly(
+            &mut instructions,
+            &self.map,
+            self.pc_page,
+            Some(&costs)
+        );
         self.resolve_ambiguous_operand_symbols(&mut instructions, ambiguous);
 
         let seq = self.next_seq();

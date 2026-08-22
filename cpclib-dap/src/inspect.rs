@@ -236,10 +236,22 @@ pub(crate) struct AmbiguousOperand {
 /// Returns the operands where more than one label shared an address, so a
 /// caller with access to source text can try to do better than the guess
 /// written here - see [`AmbiguousOperand`].
+///
+/// `costs`, when given, is one entry per instruction, straight from
+/// `Instruction::cost` - `None` at an index means that row is a `DB` the
+/// data overlay wrote, not a decoded instruction, and its rendered text is
+/// raw byte values rather than operands, so it is never scanned for embedded
+/// addresses. Passing `costs: None` altogether (rather than a list) means no
+/// cost information exists at all for this batch - the emulator-forwarded
+/// `disassemble` path never runs it through `Instruction`/`overlay_data_rows`
+/// in the first place - and every row is scanned exactly as before; that is
+/// a different thing from "this row's cost is known to be absent" and must
+/// not be treated the same way.
 pub(crate) fn annotate_disassembly(
     instructions: &mut [Value],
     map: &SourceMap,
-    page: Option<u8>
+    page: Option<u8>,
+    costs: Option<&[Option<usize>]>
 ) -> Vec<AmbiguousOperand> {
     let mut ambiguous = Vec::new();
     for (index, instruction) in instructions.iter_mut().enumerate() {
@@ -270,7 +282,16 @@ pub(crate) fn annotate_disassembly(
         // have to look up; `CALL 0xBB5A ; TXT_OUTPUT` is one you can read. The
         // same for your own labels - a jump target is a name in the source and
         // should be one here too.
-        if let Some(text) = instruction.get("instruction").and_then(Value::as_str) {
+        //
+        // A `DB` row is the exception: its text is raw byte values, not a
+        // decoded operand, so a zero byte must not be read as a reference to
+        // whatever label happens to sit at address 0. `costs[index] ==
+        // Some(None)` is that row saying so of itself, via the same signal
+        // `overlay_data_rows` already sets - see the doc comment above.
+        let is_data_row = matches!(costs.and_then(|c| c.get(index).copied()), Some(None));
+        if !is_data_row
+            && let Some(text) = instruction.get("instruction").and_then(Value::as_str)
+        {
             let named = name_operand_addresses(text, map, &located, index, &mut ambiguous);
             if !named.is_empty() {
                 instruction["symbols"] = json!(named);
@@ -819,7 +840,7 @@ mod tests {
         );
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
-        let ambiguous = annotate_disassembly(&mut instructions, &map, None);
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None);
 
         assert_eq!(instructions[0]["symbols"], json!(["table_data"]));
         assert!(ambiguous.is_empty(), "nothing to disambiguate");
@@ -846,7 +867,7 @@ mod tests {
         );
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "NOP"})];
-        annotate_disassembly(&mut instructions, &map, None);
+        annotate_disassembly(&mut instructions, &map, None, None);
 
         assert_eq!(instructions[0]["symbol"], json!("b"), "shortest first");
         assert_eq!(
@@ -877,7 +898,7 @@ mod tests {
         );
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
-        let ambiguous = annotate_disassembly(&mut instructions, &map, None);
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None);
 
         // The default guess still stands until a caller overrides it.
         assert_eq!(instructions[0]["symbols"], json!(["b"]));
@@ -909,9 +930,44 @@ mod tests {
         );
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
-        let ambiguous = annotate_disassembly(&mut instructions, &map, None);
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None);
 
         assert_eq!(instructions[0]["symbols"], json!(["b"]));
         assert!(ambiguous.is_empty(), "no location, nothing to disambiguate against");
+    }
+
+    /// A `DB` row's own byte values must never be read as operand-address
+    /// references. `inks` sitting at address 0 is the live symptom this
+    /// pins: an ordinary instruction whose rendered text mentions `0x0000`
+    /// still gets it named (cost known, and not `None`), but a data row with
+    /// the exact same text and address - `cost: None`, `overlay_data_rows`'s
+    /// own signal for "this is a DB, not a decoded instruction" - gets no
+    /// `symbols` at all, because there is no operand here to name.
+    #[test]
+    fn a_db_rows_bytes_are_not_read_as_operand_addresses() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![]
+        })
+        .with_symbols([("inks".to_string(), 0x0000u32)].into_iter().collect());
+
+        let mut instructions = vec![
+            json!({"address": "0x4000", "instruction": "DB 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0"}),
+            json!({"address": "0x4008", "instruction": "LD HL, 0x0"}),
+        ];
+        let costs: Vec<Option<usize>> = vec![None, Some(4)];
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None, Some(&costs));
+
+        assert!(
+            instructions[0].get("symbols").is_none(),
+            "a data row's own byte values are not addresses: {:?}",
+            instructions[0]
+        );
+        assert_eq!(
+            instructions[1]["symbols"],
+            json!(["inks"]),
+            "an ordinary instruction at the same address is still annotated"
+        );
+        assert!(ambiguous.is_empty());
     }
 }
