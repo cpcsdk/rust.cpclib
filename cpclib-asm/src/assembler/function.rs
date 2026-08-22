@@ -9,6 +9,7 @@ use cpclib_tokens::{
     CrunchType, Expr, ExprResult, ExpressionTypeError, ListingElement, TestKindElement,
     ToSimpleToken, Token
 };
+use cpclib_z80flow::regflag::Flag::H;
 use either::Either;
 
 use super::list::{
@@ -24,7 +25,7 @@ use crate::assembler::list::{list_new, list_set};
 use crate::assembler::matrix::{matrix_new, matrix_set};
 use crate::error::{AssemblerError, ExpressionError};
 use crate::implementation::expression::ExprEvaluationExt;
-use crate::list::{list_extend, list_filter, list_fold, list_map, list_position_predicate, list_position_value, list_reverse, string_filter, string_get, string_len, string_map};
+use crate::list::{list_extend, list_filter, list_fold, list_map, list_position_predicate, list_position_value, list_reverse, list_split_by_value, string_filter, string_get, string_len, string_map, string_upper_case};
 use crate::matrix::matrix_from_list;
 use crate::preamble::{LocatedExpr, LocatedToken, LocatedTokenInner, MayHaveSpan, ParsingState};
 use crate::section::*;
@@ -240,6 +241,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "list_fold": Function::HardCoded(HardCodedFunction::ListFold),
         "list_position_predicate": Function::HardCoded(HardCodedFunction::ListPositionPredicate),
         "list_position_value": Function::HardCoded(HardCodedFunction::ListPositionValue),
+        "list_split_by_value": Function::HardCoded(HardCodedFunction::ListSplitByValue),
 
         "string_new": Function::HardCoded(HardCodedFunction::StringNew),
         "string_push": Function::HardCoded(HardCodedFunction::StringPush),
@@ -250,6 +252,7 @@ static HARD_CODED_FUNCTIONS: LazyLock<HashMap<&'static str, Function>> = LazyLoc
         "string_get": Function::HardCoded(HardCodedFunction::StringGet),
         "string_map": Function::HardCoded(HardCodedFunction::StringMap),
         "string_filter": Function::HardCoded(HardCodedFunction::StringFilter),
+        "string_uppercase": Function::HardCoded(HardCodedFunction::StringUpperCase),
 
 
         "assemble": Function::HardCoded(HardCodedFunction::Assemble),
@@ -348,6 +351,7 @@ pub enum HardCodedFunction {
     ListFold,
     ListPositionPredicate,
     ListPositionValue,
+    ListSplitByValue,
 
     MatrixNew,
     MatrixSet,
@@ -374,6 +378,7 @@ pub enum HardCodedFunction {
     StringGet,
     StringMap,
     StringFilter,
+    StringUpperCase,
 
     Load,
     Assemble,
@@ -550,6 +555,7 @@ impl HardCodedFunction {
             HardCodedFunction::ListSet => ExpectedNbArgs::Fixed(3),
             HardCodedFunction::ListSort => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::ListSublist => ExpectedNbArgs::Fixed(3),
+            HardCodedFunction::ListSplitByValue => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::Load => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::MatrixCol => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::MatrixGet => ExpectedNbArgs::Fixed(3),
@@ -586,6 +592,7 @@ impl HardCodedFunction {
             HardCodedFunction::StringMap => ExpectedNbArgs::Fixed(2),
             HardCodedFunction::StringNew => ExpectedNbArgs::Fixed(0),
             HardCodedFunction::StringPush => ExpectedNbArgs::Fixed(2),
+            HardCodedFunction::StringUpperCase => ExpectedNbArgs::Fixed(1),
             HardCodedFunction::UnaryFunction(_) => ExpectedNbArgs::Fixed(1),
         }
     }
@@ -736,6 +743,9 @@ impl HardCodedFunction {
             HardCodedFunction::ListSublist => {
                 list_sublist(params[0].as_ref(), params[1].as_ref().int()? as _, params[2].as_ref().int()? as _)
             },
+            HardCodedFunction::ListSplitByValue => {
+                list_split_by_value( params[0].as_ref(), params[1].as_ref())
+            },
             HardCodedFunction::StringPush => string_push(params[0].as_ref().clone(), params[1].as_ref().clone()),
             HardCodedFunction::StringFromList => string_from_list(params[0].as_ref().clone()),
             HardCodedFunction::StringFormat => string_format(params),
@@ -755,7 +765,7 @@ impl HardCodedFunction {
             HardCodedFunction::StringMap => string_map(env, params[0].as_ref(), params[1].as_ref()),
             HardCodedFunction::StringLen => string_len(params[0].as_ref()),
             HardCodedFunction::StringGet => string_get(params[0].as_ref(), params[1].as_ref().int()? as _),
-
+            HardCodedFunction::StringUpperCase => string_upper_case(params[0].as_ref()),
             HardCodedFunction::MatrixNew => {
                 if nb_args == 3 {
                     Ok(matrix_new(

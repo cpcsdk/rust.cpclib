@@ -167,6 +167,38 @@ pub fn list_get(list: &ExprResult, index: usize) -> Result<ExprResult, Box<Assem
 }
 
 
+pub fn list_split_by_value(
+    list: &ExprResult,
+    value: &ExprResult
+) -> Result<ExprResult, Box<AssemblerError>> {
+    match list {
+        ExprResult::List(l) => {
+            let mut result = Vec::new();
+            let mut current = Vec::new();
+            for item in l.iter() {
+                if item == value {
+                    result.push(ExprResult::List(current));
+                    current = Vec::new();
+                } else {
+                    current.push(item.clone());
+                }
+            }
+            if !current.is_empty() {
+                result.push(ExprResult::List(current));
+            }
+            Ok(ExprResult::List(result))
+        },
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a list")
+                }))
+            )))
+        },
+    }
+}
+
+
 pub fn string_get(
     list: &ExprResult,
     index: usize
@@ -174,6 +206,22 @@ pub fn string_get(
     match list {
         ExprResult::String(s) => {
             list_get(list, index)
+        },
+        _ => {
+            Err(Box::new(AssemblerError::ExpressionError(
+                ExpressionError::OwnError(Box::new(AssemblerError::AssemblingError {
+                    msg: format!("{list} is not a string")
+                }))
+            )))
+        },
+    }
+}
+
+pub fn string_upper_case(list: &ExprResult) -> Result<ExprResult, Box<AssemblerError>> {
+    match list {
+        ExprResult::String(s) => {
+            let s = s.to_uppercase();
+            Ok(ExprResult::String(s.into()))
         },
         _ => {
             Err(Box::new(AssemblerError::ExpressionError(
