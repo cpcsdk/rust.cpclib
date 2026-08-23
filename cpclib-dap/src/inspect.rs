@@ -449,6 +449,53 @@ pub fn gate_array_pen(written: u8) -> Option<(String, String)> {
 /// `location`; with none, there is no line to disambiguate against, so the
 /// guess stands as-is). `index` identifies this instruction within the slice
 /// `annotate_disassembly` is walking, for the caller to write back into.
+/// Whether a numeric operand of `text` is plausibly an address, rather than a
+/// plain immediate that happens to equal one - `LD A,0` is not a reference to
+/// whatever label a program happens to define at address 0, `LD HL,0` (a
+/// buffer/table address, routinely) is.
+fn looks_like_an_address_operand(text: &str, value: u32) -> bool {
+    // Large enough that it is implausible as an 8-bit immediate, a bit
+    // index (0-7) or a port number: address it is, whatever the instruction
+    // turns out to be - a safety net for any shape not enumerated below.
+    if value > 0xFF {
+        return true;
+    }
+    let trimmed = text.trim_start();
+    let mnemonic = trimmed
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .to_ascii_uppercase();
+    // The whole point of these: their one numeric operand is where control
+    // goes, or (RST) a fixed low address - never a plain immediate.
+    if matches!(mnemonic.as_str(), "CALL" | "JP" | "JR" | "DJNZ" | "RST") {
+        return true;
+    }
+    // `(nn)` - a memory reference, not the byte value living at a small
+    // address. Z80 has no instruction mixing an indirect operand with an
+    // unrelated bare-immediate one, so "this text has parentheses at all"
+    // is enough without tracking which token sits inside them.
+    if text.contains('(') {
+        return true;
+    }
+    // `LD HL,0x4000` and its 16-bit-register siblings: routinely a
+    // buffer/table address. The matching 8-bit forms (`LD A,0`, `LD B,5`...)
+    // are not, and neither is any ALU immediate (`XOR 0`, `CP 10`...) or a
+    // bit index (`BIT 3,A`) - both fall through to `false` below.
+    if mnemonic == "LD" {
+        // Safe to slice at byte 2: `mnemonic == "LD"` only holds when
+        // `trimmed`'s first token really is two ASCII bytes.
+        let destination = trimmed[2..]
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_uppercase();
+        return matches!(destination.as_str(), "HL" | "DE" | "BC" | "IX" | "IY" | "SP" | "AF");
+    }
+    false
+}
+
 fn name_operand_addresses(
     text: &str,
     map: &SourceMap,
@@ -472,6 +519,9 @@ fn name_operand_addresses(
         else {
             continue;
         };
+        if !looks_like_an_address_operand(text, value) {
+            continue;
+        }
         let candidates = map.symbols_at(value);
         let Some(symbol) = candidates.first()
         else {
@@ -1103,5 +1153,83 @@ mod tests {
             "an ordinary instruction at the same address is still annotated"
         );
         assert!(ambiguous.is_empty());
+    }
+
+    /// `LD A,0` is not a reference to whatever label a program happens to
+    /// define at address 0 - unlike `LD HL,0` just above, an 8-bit register
+    /// load's immediate is a plain value, never an address. Reported from
+    /// real use: `ld a, 0 : .writer_enable equ $-1` (a self-modifying-code
+    /// idiom) disassembled with a spurious `; inks` because some unrelated
+    /// symbol happened to sit at address 0.
+    #[test]
+    fn an_8_bit_register_load_is_not_read_as_an_operand_address() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![]
+        })
+        .with_symbols([("inks".to_string(), 0x0000u32)].into_iter().collect());
+
+        let mut instructions = vec![json!({"address": "0x4000", "instruction": "LD A, 0x0"})];
+        annotate_disassembly(&mut instructions, &map, None, None);
+
+        assert!(
+            instructions[0].get("symbols").is_none(),
+            "an 8-bit immediate is not an address: {:?}",
+            instructions[0]
+        );
+    }
+
+    /// Nor is any ALU immediate, or a bit index - neither ever names an
+    /// address either.
+    #[test]
+    fn alu_immediates_and_bit_indices_are_not_read_as_operand_addresses() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![]
+        })
+        .with_symbols([("inks".to_string(), 0x0000u32)].into_iter().collect());
+
+        for text in ["XOR 0x0", "CP 0x0", "AND 0x0", "BIT 0x0, A"] {
+            let mut instructions = vec![json!({"address": "0x4000", "instruction": text})];
+            annotate_disassembly(&mut instructions, &map, None, None);
+            assert!(
+                instructions[0].get("symbols").is_none(),
+                "{text}: {:?}",
+                instructions[0]
+            );
+        }
+    }
+
+    /// A jump/call family instruction still names its target even when the
+    /// target's own value is small - `RST 0x00` is a real, meaningful
+    /// firmware entry point, not a coincidence.
+    #[test]
+    fn a_small_jump_target_is_still_named() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![]
+        })
+        .with_symbols([("reset".to_string(), 0x0000u32)].into_iter().collect());
+
+        let mut instructions = vec![json!({"address": "0x4000", "instruction": "RST 0x00"})];
+        annotate_disassembly(&mut instructions, &map, None, None);
+
+        assert_eq!(instructions[0]["symbols"], json!(["reset"]));
+    }
+
+    /// `LD (0x0),A` is a genuine memory reference even though the address is
+    /// small, unlike `LD A,0`.
+    #[test]
+    fn a_small_indirect_memory_reference_is_still_named() {
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".into()],
+            rows: vec![]
+        })
+        .with_symbols([("inks".to_string(), 0x0000u32)].into_iter().collect());
+
+        let mut instructions = vec![json!({"address": "0x4000", "instruction": "LD (0x0), A"})];
+        annotate_disassembly(&mut instructions, &map, None, None);
+
+        assert_eq!(instructions[0]["symbols"], json!(["inks"]));
     }
 }
