@@ -424,6 +424,7 @@ async function showEmulator(session: vscode.DebugSession, url: string | undefine
 }
 
 interface MemoryDump {
+    viewId?: string;
     address: number;
     label?: string | null;
     bytes: number[];
@@ -439,27 +440,31 @@ const memoryPanels = new Map<string, vscode.WebviewPanel>();
  * The *command* is typed in the debug console (`-mv 0xC000 0x20`) because that
  * is where your hands already are, but the dump belongs in a panel: it is
  * something you keep open and glance at while stepping, and console output
- * scrolls away the moment anything else is printed. One panel per session,
- * reused, so repeating the command refreshes what you are already looking at
- * rather than burying it under a new tab.
+ * scrolls away the moment anything else is printed. One panel per view - the
+ * adapter's own `viewId` (an address or a followed register) tells two open
+ * views apart, so `-mv HL,follow` and `-mv DE,follow` open two panels side by
+ * side rather than one replacing the other; repeating the same view's command
+ * still refreshes its own panel rather than opening a duplicate.
  */
 function showMemory(session: vscode.DebugSession, dump: MemoryDump | undefined): void {
     if (!dump || !Array.isArray(dump.bytes)) { return; }
 
-    let panel = memoryPanels.get(session.id);
+    const key = `${session.id}:${dump.viewId ?? 'default'}`;
+    let panel = memoryPanels.get(key);
     const isNew = panel === undefined;
     if (!panel) {
+        const title = dump.label ?? `&${hex(dump.address, 4)}`;
         panel = vscode.window.createWebviewPanel(
             'cpclib.memory',
-            `CPC memory — ${session.name}`,
+            `CPC memory: ${title} — ${session.name}`,
             { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
             { enableScripts: false, retainContextWhenHidden: true },
         );
         const owned = panel;
         panel.onDidDispose(() => {
-            if (memoryPanels.get(session.id) === owned) { memoryPanels.delete(session.id); }
+            if (memoryPanels.get(key) === owned) { memoryPanels.delete(key); }
         });
-        memoryPanels.set(session.id, panel);
+        memoryPanels.set(key, panel);
     }
 
     panel.webview.html = memoryHtml(dump);

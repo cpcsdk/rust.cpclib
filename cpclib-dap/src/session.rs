@@ -94,9 +94,12 @@ const OUTER_FRAME_NOTE: &str = "the CPU's registers belong to the innermost fram
 /// What `-help` prints.
 const CONSOLE_HELP: &str = "\
 CPC debug console commands:
-  -mv <address|label> [count]   open a memory view (count defaults to 64)
+  -mv [address|label] [count]   open a memory view (defaults to PC, and then
+                                follows it, like -dv; count defaults to 64)
   -mv <register>,follow [count] ...anchored to a register instead - HL,
-                                follow tracks wherever HL points, every stop
+                                follow tracks wherever HL points, every stop.
+                                Each address/register opens its own panel;
+                                asking again for one already open updates it
   -dv [address|label] [count]   disassemble memory (defaults to PC, and then
                                 follows it); rows link to your source
   -chips                        CRTC, Gate Array, PSG and PPI, with counters
@@ -280,6 +283,10 @@ struct PendingMemoryView {
     /// receipt for something nobody typed would fill the console with noise
     /// while stepping.
     request: Option<Value>,
+    /// Which of possibly several open views this answers - more than one can
+    /// be open and mid-read at once, so the address alone (which a
+    /// `Register` anchor moves) is not enough to find it again.
+    anchor: MemoryAnchor,
     label: Option<String>,
     address: u32
 }
@@ -330,6 +337,18 @@ enum MemoryAnchor {
     /// view of "what `HL` points at" that does not follow `HL` is a view of
     /// wherever `HL` happened to be when you asked.
     Register(String)
+}
+
+impl MemoryAnchor {
+    /// A stable identity for this anchor, sent to the editor so it can tell
+    /// two open panels apart - and reused as the same panel's key when this
+    /// view is refreshed rather than replaced.
+    fn view_id(&self) -> String {
+        match self {
+            MemoryAnchor::Fixed(address) => format!("fixed:{address:08x}"),
+            MemoryAnchor::Register(name) => format!("register:{name}")
+        }
+    }
 }
 
 /// A memory view that is open, so it can be kept current.
@@ -410,8 +429,13 @@ pub struct Session<P: DapPeer> {
     watch_arrays: Vec<WatchArray>,
     /// Memory views waiting on the same.
     pending_memory_views: Vec<PendingMemoryView>,
-    /// The memory view that is open, if one is.
-    open_memory_view: Option<OpenMemoryView>,
+    /// The memory views that are open - more than one at once, each its own
+    /// panel: `-mv HL,follow` and `-mv DE,follow` are two different questions
+    /// and a demo debugged with both registers pointing at unrelated buffers
+    /// wants to watch both without one replacing the other. Opening a view
+    /// whose anchor already has one open updates that one in place rather
+    /// than adding a duplicate.
+    open_memory_views: Vec<OpenMemoryView>,
     /// `-dv` requests waiting on the emulator.
     pending_disassembly: Vec<PendingDisassembly>,
     /// The editor's own `disassemble` requests, waiting for their bytes:
@@ -535,7 +559,7 @@ impl<P: DapPeer> Session<P> {
             pending_watches: Vec::new(),
             watch_arrays: Vec::new(),
             pending_memory_views: Vec::new(),
-            open_memory_view: None,
+            open_memory_views: Vec::new(),
             pending_disassembly: Vec::new(),
             pending_editor_disassembly: Vec::new(),
             open_disassembly_view: None,
@@ -1214,6 +1238,12 @@ impl<P: DapPeer> Session<P> {
                             self.last_flags = flags;
                         }
                         self.remember_registers(variables);
+                        // Now that this stop's registers are actually known,
+                        // a memory view anchored to one of them can be
+                        // re-anchored to catch up - `refresh_memory_view`
+                        // (already run once, from `on_stopped`) had nothing
+                        // but last stop's values to work with.
+                        self.refresh_register_anchored_memory_view();
                         // The register pane is asked for on every stop,
                         // whether or not anyone asked for a stack trace -
                         // `cost_at_pc` is still called here for that side
@@ -2663,29 +2693,36 @@ impl<P: DapPeer> Session<P> {
     /// right now rather than wherever it pointed when this was typed.
     fn memory_view(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
         let seq = self.next_seq();
-        let Some(where_) = arguments.first()
-        else {
-            return Ok(vec![protocol::failure(
-                request,
-                "-mv needs an address or a label: -mv 0xC000 0x20 (or -mv HL,follow to track a register)",
-                seq
-            )]);
+
+        // No argument means "where I am" - the same default `-dv` already
+        // has, and for the same reason: it is what you want nine times out
+        // of ten while stepping. `PC` is just another entry in
+        // `last_registers`, so this is the ordinary `,follow` path with the
+        // register named for you rather than a third anchor kind.
+        let register_to_follow = match arguments.first() {
+            None => Some("PC".to_string()),
+            Some(where_) => where_
+                .split_once(',')
+                .filter(|(_, suffix)| suffix.eq_ignore_ascii_case("follow"))
+                .map(|(name, _)| name.to_ascii_uppercase())
         };
 
-        let following = where_
-            .split_once(',')
-            .filter(|(_, suffix)| suffix.eq_ignore_ascii_case("follow"))
-            .map(|(name, _)| name);
-
-        let (anchor, address) = if let Some(register) = following {
-            let upper = register.to_ascii_uppercase();
+        let (anchor, address) = if let Some(upper) = register_to_follow {
             match self.last_registers.get(&upper) {
                 Some(&value) => (MemoryAnchor::Register(upper), value),
+                None if arguments.first().is_none() => {
+                    return Ok(vec![protocol::failure(
+                        request,
+                        "-mv with no address shows memory from PC, but the program has not \
+                         stopped yet. Give it a place to look: -mv 0xC000 0x20",
+                        seq
+                    )]);
+                },
                 None => {
                     return Ok(vec![protocol::failure(
                         request,
                         &format!(
-                            "'{register}' is not a known register yet - the program must stop at \
+                            "'{upper}' is not a known register yet - the program must stop at \
                              least once before its value is known"
                         ),
                         seq
@@ -2696,6 +2733,7 @@ impl<P: DapPeer> Session<P> {
         else {
             // A label is as good an answer as a number, and rather more
             // likely to be what someone wants to look at.
+            let where_ = arguments[0];
             let address = parse_number(where_).or_else(|| self.map.address_of_symbol(where_));
             let Some(address) = address
             else {
@@ -2719,18 +2757,32 @@ impl<P: DapPeer> Session<P> {
             MemoryAnchor::Register(name) => Some(name.clone()),
             MemoryAnchor::Fixed(_) => self.map.symbol_at(address).map(str::to_owned)
         };
-        // Replaces whatever was open: there is one panel, and `-mv` on a new
-        // address (or register) is a request to look at that instead.
-        self.open_memory_view = Some(OpenMemoryView {
-            anchor,
-            address,
-            count,
-            label: label.clone(),
-            previous: Vec::new(),
-            previous_address: None
-        });
+        // Each anchor is its own panel; asking again for one already open
+        // updates it in place (a new count, most likely) rather than opening
+        // a duplicate beside it.
+        match self
+            .open_memory_views
+            .iter_mut()
+            .find(|open| open.anchor == anchor)
+        {
+            Some(open) => {
+                open.count = count;
+                open.label = label.clone();
+            },
+            None => {
+                self.open_memory_views.push(OpenMemoryView {
+                    anchor: anchor.clone(),
+                    address,
+                    count,
+                    label: label.clone(),
+                    previous: Vec::new(),
+                    previous_address: None
+                });
+            }
+        }
         self.pending_memory_views.push(PendingMemoryView {
             request: Some(request.clone()),
+            anchor,
             label,
             address
         });
@@ -3218,12 +3270,21 @@ impl<P: DapPeer> Session<P> {
             )];
         }
 
+        // Which of possibly several open views this read belongs to - by
+        // anchor, not by address: a `Register` anchor's address moves, so it
+        // is the anchor that identifies the view, not wherever it last read
+        // from.
+        let open = self
+            .open_memory_views
+            .iter_mut()
+            .find(|open| open.anchor == view.anchor);
+
         // Which bytes moved since the last look. Empty on the first read, and
         // empty again whenever a `Register`-anchored view has moved between
         // two stops - bytes read from two different addresses are not a
         // meaningful diff, they would just mark the whole view "changed" for
         // no reason.
-        let changed: Vec<usize> = match self.open_memory_view.as_ref() {
+        let changed: Vec<usize> = match open.as_ref() {
             Some(open)
                 if open.previous.len() == bytes.len()
                     && open.previous_address == Some(view.address) =>
@@ -3234,7 +3295,7 @@ impl<P: DapPeer> Session<P> {
             },
             _ => Vec::new()
         };
-        if let Some(open) = self.open_memory_view.as_mut() {
+        if let Some(open) = open {
             open.previous = bytes.clone();
             open.previous_address = Some(view.address);
         }
@@ -3254,6 +3315,7 @@ impl<P: DapPeer> Session<P> {
         let event = protocol::event(
             "cpclib/memoryView",
             json!({
+                "viewId": view.anchor.view_id(),
                 "address": view.address,
                 "label": view.label,
                 "bytes": bytes,
@@ -3290,45 +3352,85 @@ impl<P: DapPeer> Session<P> {
     /// A memory view is something you keep open while stepping, and one that
     /// shows what memory looked like three steps ago is worse than no view at
     /// all - it looks current.
+    ///
+    /// Only a `Fixed` anchor: this runs from `on_stopped`, which fires the
+    /// instant the `stopped` event arrives - *before* the editor has even
+    /// asked for this stop's registers, let alone received them. A `Register`
+    /// anchor resolved here would still be showing wherever the register was
+    /// *last* stop; `refresh_register_anchored_memory_view` is where that one
+    /// gets refreshed instead, once fresh values are actually known.
     fn refresh_memory_view(&mut self) {
-        let Some(open) = self.open_memory_view.as_ref()
-        else {
-            return;
-        };
-        // A `Register` anchor is resolved fresh on every refresh - that is
-        // the difference between "a view of HL" and "a view of wherever HL
-        // was when you typed -mv". A register the pane has not reported yet
-        // (unusual, but not impossible right after attach) leaves the view
-        // where it last was rather than losing it.
-        let resolved = match &open.anchor {
-            MemoryAnchor::Fixed(address) => *address,
-            MemoryAnchor::Register(name) => {
-                self.last_registers.get(name).copied().unwrap_or(open.address)
-            }
-        };
-        if let Some(open) = self.open_memory_view.as_mut() {
-            open.address = resolved;
+        let fixed: Vec<(MemoryAnchor, u32, usize, Option<String>)> = self
+            .open_memory_views
+            .iter()
+            .filter(|open| matches!(open.anchor, MemoryAnchor::Fixed(_)))
+            .map(|open| (open.anchor.clone(), open.address, open.count, open.label.clone()))
+            .collect();
+        for (anchor, address, count, label) in fixed {
+            self.pending_memory_views.push(PendingMemoryView {
+                request: None,
+                anchor,
+                label,
+                address
+            });
+            // A failure here is not worth reporting: the panel simply keeps
+            // what it had, and the stop event must not be lost behind it.
+            let _ = self.send_own(
+                "readMemory",
+                json!({
+                    "memoryReference": address_reference(address),
+                    "count": count
+                }),
+                Purpose::MemoryView
+            );
         }
-        let Some(open) = self.open_memory_view.as_ref()
-        else {
-            return;
-        };
-        let (address, count, label) = (open.address, open.count, open.label.clone());
-        self.pending_memory_views.push(PendingMemoryView {
-            request: None,
-            label,
-            address
-        });
-        // A failure here is not worth reporting: the panel simply keeps what it
-        // had, and the stop event must not be lost behind it.
-        let _ = self.send_own(
-            "readMemory",
-            json!({
-                "memoryReference": address_reference(address),
-                "count": count
-            }),
-            Purpose::MemoryView
-        );
+    }
+
+    /// Re-anchor and re-read every `Register`-anchored memory view, now that
+    /// this stop's registers are actually known.
+    ///
+    /// Called once the emulator's own `variables` answer for the Registers
+    /// scope has been folded into `last_registers` - unlike
+    /// `refresh_memory_view` (called from `on_stopped`, before the editor has
+    /// asked for anything), this is the first point at which "wherever the
+    /// register is *this* stop" is a question with a real answer, rather than
+    /// last stop's.
+    fn refresh_register_anchored_memory_view(&mut self) {
+        let resolved: Vec<(MemoryAnchor, u32, usize, Option<String>)> = self
+            .open_memory_views
+            .iter()
+            .filter_map(|open| {
+                let MemoryAnchor::Register(name) = &open.anchor
+                else {
+                    return None;
+                };
+                let value = self.last_registers.get(name).copied()?;
+                Some((open.anchor.clone(), value, open.count, open.label.clone()))
+            })
+            .collect();
+        for (anchor, address, count, label) in resolved {
+            if let Some(open) = self
+                .open_memory_views
+                .iter_mut()
+                .find(|open| open.anchor == anchor)
+            {
+                open.address = address;
+            }
+            self.pending_memory_views.push(PendingMemoryView {
+                request: None,
+                anchor,
+                label,
+                address
+            });
+            let _ = self.send_own(
+                "readMemory",
+                json!({
+                    "memoryReference": address_reference(address),
+                    "count": count
+                }),
+                Purpose::MemoryView
+            );
+        }
     }
 
     /// Bring the suppressed set in line with what the editor just said about

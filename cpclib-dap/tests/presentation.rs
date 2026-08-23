@@ -254,6 +254,120 @@ fn the_memory_view_accepts_a_label() {
     );
 }
 
+/// `-mv` with no argument defaults to `PC`, the same "where I am" default
+/// `-dv` already has - and follows it, the same as `-mv PC,follow` would.
+#[test]
+fn a_bare_mv_defaults_to_and_follows_pc() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [{"name": "PC", "value": "0x4000", "variablesReference": 0}]}
+    }));
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-mv", "context": "repl"}
+        }))
+        .unwrap();
+    let read = session.peer().last("readMemory").unwrap();
+    assert_eq!(read["arguments"]["memoryReference"], json!("0x4000"));
+}
+
+/// Before the program has ever stopped there is no `PC` to default to, and
+/// saying so beats reading address zero.
+#[test]
+fn a_bare_mv_says_when_there_is_no_pc_yet() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    let out = session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-mv", "context": "repl"}
+        }))
+        .unwrap();
+
+    assert_eq!(out[0]["success"], json!(false));
+    let message = out[0]["message"].as_str().unwrap();
+    assert!(message.contains("has not stopped yet"), "{message}");
+    assert!(
+        !session
+            .peer()
+            .commands()
+            .contains(&"readMemory".to_string())
+    );
+}
+
+/// Two memory views open at once are two panels, not one replacing the
+/// other - each keeps its own bytes and refreshes independently.
+#[test]
+fn two_memory_views_stay_open_side_by_side() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [{"name": "HL", "value": "0xC000", "variablesReference": 0}]}
+    }));
+
+    // First view: a fixed address.
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-mv 0x9000 2", "context": "repl"}
+        }))
+        .unwrap();
+    let fixed_read = session.peer().last("readMemory").unwrap().clone();
+    session.on_emulator_message(&json!({
+        "seq": 5, "type": "response", "request_seq": fixed_read["seq"], "success": true,
+        "command": "readMemory", "body": {"address": "0x9000", "data": "AQI="}
+    }));
+
+    // Second view: HL, follow - a different anchor, so this must not replace
+    // the first.
+    session
+        .on_editor_message(&json!({
+            "seq": 2, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-mv HL,follow 2", "context": "repl"}
+        }))
+        .unwrap();
+    let follow_read = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(
+        follow_read["arguments"]["memoryReference"],
+        json!("0xc000"),
+        "the second view did not overwrite the first's read"
+    );
+    let follow_out = session.on_emulator_message(&json!({
+        "seq": 6, "type": "response", "request_seq": follow_read["seq"], "success": true,
+        "command": "readMemory", "body": {"address": "0xC000", "data": "AwQ="}
+    }));
+    assert_eq!(follow_out[0]["body"]["viewId"], json!("register:HL"));
+
+    // A stop refreshes both - the fixed one right away, the HL one once
+    // fresh registers arrive.
+    session.on_emulator_message(&json!({
+        "seq": 7, "type": "event", "event": "stopped", "body": {"reason": "step"}
+    }));
+    let refreshed_fixed = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(refreshed_fixed["arguments"]["memoryReference"], json!("0x9000"));
+
+    session.on_emulator_message(&json!({
+        "seq": 8, "type": "response", "request_seq": refreshed_fixed["seq"], "success": true,
+        "command": "readMemory", "body": {"address": "0x9000", "data": "AQI="}
+    }));
+
+    session.on_emulator_message(&json!({
+        "seq": 9, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [{"name": "HL", "value": "0xC010", "variablesReference": 0}]}
+    }));
+    let refreshed_follow = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(
+        refreshed_follow["arguments"]["memoryReference"],
+        json!("0xc010"),
+        "the HL view followed to its new address independently of the fixed one"
+    );
+}
+
 /// An unknown command says so and lists what there is, rather than being
 /// forwarded to an emulator that would answer "evaluate is not supported".
 #[test]
