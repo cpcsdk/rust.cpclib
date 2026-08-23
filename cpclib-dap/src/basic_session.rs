@@ -46,6 +46,11 @@ enum Purpose {
     Plain,
     /// The peer's own `attach` handshake, for a peer that needs one.
     Attach,
+    /// The very first `continue`, sent right after `configurationDone`. Its
+    /// answer is the earliest point the machine is confirmed genuinely
+    /// running (AMSpiritLite's own `continue` handling blocks on exactly
+    /// that) - the right moment to auto-type `RUN`, on a peer that can.
+    LaunchResumed,
     /// Reading [`basic::PTR_CURRENT_LINE_NUMBER_FIELD`] itself - its value
     /// is a pointer to dereference next, or the direct-mode sentinel.
     CurrentLinePointer,
@@ -201,9 +206,30 @@ impl<P: DapPeer> BasicSession<P> {
         if self.attached && self.configured && !self.started {
             self.started = true;
             self.resuming_as = Some(ResumeKind::Continue);
-            self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
+            self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::LaunchResumed)?;
         }
         Ok(())
+    }
+
+    /// Types `RUN` into the emulator, on a peer that can - the emulator's
+    /// own keyboard, not a firmware trick: AMSpiritLite exposes exactly this
+    /// as `POST /api/keytype` (confirmed against its bundled documentation
+    /// and its own web UI, which uses the identical call to auto-run an
+    /// injected BASIC program), and 1984js's bridge script drives the same
+    /// keyboard-matrix simulation its own UI's keydown handler uses. Neither
+    /// is a ROM-internals trick like jumping `PC` into `RUN_from_HL` or
+    /// forging its caller's stack - both were investigated and rejected
+    /// earlier for exactly that reason.
+    ///
+    /// Silently does nothing on a peer that answers neither: the launch
+    /// flow's own notice (`lib.rs`) covers that case by telling the user to
+    /// type it themselves, checked against this same `supports()` call so
+    /// the two do not disagree.
+    fn autotype_run(&mut self) -> std::io::Result<()> {
+        if !self.peer.supports("cpclib/autotype") {
+            return Ok(());
+        }
+        self.send_own("cpclib/autotype", json!({ "text": "RUN\n" }), Purpose::Plain)
     }
 
     pub fn on_editor_message(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
@@ -430,6 +456,15 @@ impl<P: DapPeer> BasicSession<P> {
                 Purpose::Plain => {},
                 Purpose::Attach => {
                     if let Err(problem) = self.on_attached() {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
+                },
+                Purpose::LaunchResumed => {
+                    if let Err(problem) = self.autotype_run() {
                         return vec![protocol::event(
                             "output",
                             json!({ "category": "stderr", "output": format!("{problem}\n") }),
@@ -708,6 +743,49 @@ mod tests {
         let commands = session.peer_mut().commands();
         assert!(commands.len() > before);
         assert_eq!(commands.last().unwrap(), "continue");
+    }
+
+    #[test]
+    fn the_first_resume_types_run_on_a_peer_that_supports_autotype() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/autotype"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            bytes.len()
+        );
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        // The peer answering the very first `continue` is what triggers the
+        // autotype - matching AMSpiritLite's own `continue` handling, which
+        // does not answer until the machine is genuinely running.
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+
+        let last = session.peer_mut().sent.last().unwrap();
+        assert_eq!(last["command"], "cpclib/autotype");
+        assert_eq!(last["arguments"]["text"], "RUN\n");
+    }
+
+    #[test]
+    fn the_first_resume_types_nothing_on_a_peer_without_autotype() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let continue_seq = last_sent_seq(&mut session);
+        let before = session.peer_mut().commands().len();
+        answer(&mut session, continue_seq, json!({ "success": true }));
+
+        // Plain RecordingPeer claims no cpclib/autotype support - nothing
+        // extra should have been sent for it to reject or misinterpret.
+        assert_eq!(session.peer_mut().commands().len(), before);
     }
 
     #[test]

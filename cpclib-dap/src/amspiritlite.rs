@@ -160,6 +160,15 @@ pub fn call_for(request: &Value) -> Option<Call> {
             Call::post("/api/exec").body(json!({ "addr": address }).to_string())
         },
 
+        // The emulator's own keyboard, not a firmware trick: `POST
+        // /api/keytype` is documented ("queue a string for autotype, injected
+        // as key events on the CPC") and is exactly what this emulator's own
+        // web UI calls to auto-run a BASIC program it just injected into RAM.
+        "cpclib/autotype" => {
+            let text = arguments.and_then(|a| a.get("text")).and_then(Value::as_str)?;
+            Call::post("/api/keytype").body(json!({ "text": text }).to_string())
+        },
+
         // Which page is mapped where. The whole reason this backend is worth
         // having: 1984js cannot answer it at all, which is what forced the
         // byte-matching heuristic and the "most likely line" fallback.
@@ -1471,6 +1480,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 | "writeMemory"
                 | "setInstructionBreakpoints"
                 | "cpclib/setPc"
+                | "cpclib/autotype"
                 | "cpclib/memmap"
                 | "cpclib/crtc"
                 | "cpclib/ga"
@@ -2359,6 +2369,19 @@ mod tests {
             assert_eq!(call.method, Method::Get, "{command}");
             assert_eq!(call.path, path, "{command}");
         }
+    }
+
+    /// `cpclib/autotype` reaches the same endpoint this emulator's own web UI
+    /// uses to auto-run an injected BASIC program.
+    #[test]
+    fn autotype_queues_a_keytype_call() {
+        let call = call_for(&request("cpclib/autotype", json!({ "text": "RUN\n" }))).unwrap();
+        assert_eq!(call.method, Method::Post);
+        assert_eq!(call.path, "/api/keytype");
+        assert_eq!(
+            call.body.as_deref(),
+            Some(json!({ "text": "RUN\n" }).to_string().as_str())
+        );
     }
 
     /// Their answers are handed on unchanged: the caller asked for that

@@ -898,11 +898,20 @@ fn start_basic_session(
         program_bytes.len()
     );
 
-    early_notices.push(
-        "the program is loaded but not yet running - type RUN in the emulator \
-         window to start it. Breakpoints and stepping work normally from there."
-            .to_string()
-    );
+    // Only on a peer that cannot type RUN for us: `BasicSession` checks this
+    // exact same `supports()` before deciding whether to auto-type it, so
+    // the two never disagree about which is true for a given launch.
+    let autotypes = {
+        use peer::DapPeer;
+        session.peer_mut().supports("cpclib/autotype")
+    };
+    if !autotypes {
+        early_notices.push(
+            "the program is loaded but not yet running - type RUN in the emulator \
+             window to start it. Breakpoints and stepping work normally from there."
+                .to_string()
+        );
+    }
 
     session.attach().map_err(|e| e.to_string())?;
 

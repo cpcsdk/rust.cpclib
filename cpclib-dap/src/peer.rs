@@ -117,6 +117,9 @@ pub trait DapPeer: Send {
                 // Answered by the page-side bridge rather than by `dap.js`,
                 // but it does reach a handler, which is what matters here.
                 | "cpclib/setWatches"
+                // Same: the bridge drives `_poc_key` itself, typing the
+                // requested text as key-matrix events.
+                | "cpclib/autotype"
         )
     }
 }

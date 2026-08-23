@@ -270,18 +270,15 @@ fn read_name(buffer: &[u8], mut idx: usize) -> Option<(String, usize)> {
 /// to the program's own entry point, because that is a value *we* chose
 /// when assembling it. BASIC's "RUN" has no such fixed entry point to jump
 /// to - the ROM's own `RUN_from_HL` routine expects a stack already primed
-/// by its caller (`ex (sp),hl` right at its start), so jumping `PC` there
-/// cold corrupts the stack instead of running the program. Simulating a
-/// typed "RUN" through the keyboard buffer was investigated and rejected
-/// too: the buffer holds raw key-matrix scan markers translated through a
-/// table, not characters, and the one documented character-level injection
-/// point (`KM_CHAR_RETURN`, &BB0C) holds exactly one pending character,
-/// nowhere near enough for a whole "RUN\r" line, and the buffer's own byte
-/// layout could not be confirmed against a primary source. Left as it is,
-/// the user runs the program themselves - via the `-basicrun` output hint,
-/// or the emulator's own window - and the debugger's breakpoints and
-/// stepping still work identically to a program launched any other way,
-/// which is the actual value here.
+/// by its caller (`ex (sp),hl` right at its start) and itself calls three
+/// more setup routines (`reset_variable_data`, `reset_exec_data`,
+/// `GRA_DEFAULT`) before ever reaching a line of the program, so jumping
+/// `PC` there cold corrupts the stack rather than replicating what a real
+/// `RUN` does. Actually running the program is [`crate::basic_session::BasicSession`]'s
+/// job instead, once attached: it types `RUN` through the emulator's own
+/// keyboard - `_poc_key` on 1984js, `POST /api/keytype` on AMSpiriT Lite -
+/// the same real input path a person at the keyboard uses, on a peer that
+/// offers one.
 ///
 /// The firmware pointers a freshly `LOAD`ed program actually needs updated
 /// are touched: [`PTR_PROGRAM_END`], [`PTR_VARIABLES_START`] and

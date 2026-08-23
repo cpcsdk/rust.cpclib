@@ -18,7 +18,7 @@ pub const PINNED_COMMIT: &str = "3c3044ba239ea81b87c4fd0b86264622543e45e0";
 /// It is part of the cache folder name because the installed-or-not check in
 /// `DelegateApplicationDescription` is folder existence alone: without this, a
 /// changed bridge would silently never be reinstalled.
-pub const PATCH_REVISION: u32 = 16;
+pub const PATCH_REVISION: u32 = 17;
 
 /// The files that make up the distribution.
 ///

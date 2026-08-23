@@ -272,6 +272,14 @@ mod tests {
                 "watches are armed through the module, not through dap.js"
             ),
             (
+                "cpclib/autotype",
+                "auto-running a launched BASIC program depends on this"
+            ),
+            (
+                "_poc_key",
+                "autotype presses real keys, the same call app.js's own keydown handler makes"
+            ),
+            (
                 "_poc_debug_watch_serial",
                 "without the write-event poll, watched labels report nothing"
             ),
