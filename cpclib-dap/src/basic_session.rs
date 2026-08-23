@@ -161,10 +161,27 @@ impl<P: DapPeer> BasicSession<P> {
         &mut self.peer
     }
 
-    /// Sends the peer's own `attach` handshake. Called once, right after
-    /// construction, regardless of whether this particular peer actually
-    /// needs it - one that does not just answers immediately.
+    /// Sends the peer's own `initialize`/`attach` handshake. Called once,
+    /// right after construction, regardless of whether this particular peer
+    /// actually needs either - one that does not just answers immediately.
+    ///
+    /// `initialize` first is not optional for 1984js: its embedded DAP
+    /// server (`dap.js`) is a real, independent DAP implementation with its
+    /// own protocol state machine, and refuses *every* request - including
+    /// `attach` itself - with "initialize must be the first request" until
+    /// it has seen one. `Session` (the Z80 launch flow, `lib.rs`) already
+    /// does this; missing it here left every peer-directed request this
+    /// session ever sends failing the same way, confirmed against a real
+    /// transcript - `attach`, `setInstructionBreakpoints` and `continue` all
+    /// rejected identically, with only `cpclib/autotype` appearing to work
+    /// because the bridge script answers that one itself, before it ever
+    /// reaches `dap.js`.
     pub fn attach(&mut self) -> std::io::Result<()> {
+        self.send_own(
+            "initialize",
+            json!({ "supportsMemoryEvent": true }),
+            Purpose::Plain
+        )?;
         self.send_own("attach", json!({}), Purpose::Attach)
     }
 
@@ -781,6 +798,20 @@ mod tests {
 
     fn read_memory_response(bytes: &[u8]) -> Value {
         json!({ "body": { "data": encode_base64(bytes) } })
+    }
+
+    #[test]
+    fn attach_sends_initialize_before_attach() {
+        // Regression test: 1984js's embedded DAP server refuses every
+        // request - `attach` included - with "initialize must be the first
+        // request" until it has seen one. Confirmed against a real
+        // transcript where this was missing: attach, setInstructionBreakpoints
+        // and continue all failed identically from message one.
+        let mut session = new_session(SOURCE);
+        session.attach().unwrap();
+
+        let commands = session.peer_mut().commands();
+        assert_eq!(commands, vec!["initialize", "attach"]);
     }
 
     #[test]
