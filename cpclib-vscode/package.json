@@ -194,6 +194,11 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.debugBasic",
+        "title": "CPClib: Debug this BASIC program",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.runAsm",
         "title": "CPClib: Run this assembly file",
         "category": "CPClib"
@@ -248,7 +253,7 @@
         },
         {
           "command": "cpclib.debugThisFile",
-          "when": "editorLangId == basm",
+          "when": "editorLangId == basm || editorLangId == locomotive-basic",
           "group": "9_cutcopypaste"
         }
       ],

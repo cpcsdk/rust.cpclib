@@ -2937,6 +2937,7 @@ dependencies = [
  "camino",
  "camino-tempfile",
  "cpclib-asm",
+ "cpclib-basic",
  "cpclib-bndbuild",
  "cpclib-common",
  "cpclib-image",
@@ -2946,6 +2947,7 @@ dependencies = [
  "cpclib-tokens",
  "serde",
  "serde_json",
+ "thiserror 2.0.19",
 ]
 
 [[package]]

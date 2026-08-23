@@ -28,11 +28,12 @@ export function isDebugSessionActive(): boolean {
  * `resolveAdapterPath` is passed in rather than imported so this file does not
  * duplicate the per-platform binary search the extension already does.
  */
-/** Start a debug session for one .asm file. */
+/** Start a debug session for one .asm or .bas file. */
 export async function debugActiveFile(): Promise<void> {
     const editor = vscode.window.activeTextEditor;
-    if (editor?.document.languageId !== 'basm') {
-        void vscode.window.showWarningMessage('Open a .asm file to debug it.');
+    const languageId = editor?.document.languageId;
+    if (!editor || (languageId !== 'basm' && languageId !== 'locomotive-basic')) {
+        void vscode.window.showWarningMessage('Open a .asm or .bas file to debug it.');
         return;
     }
     // Saving first is not politeness: the adapter assembles the file *on disk*,
@@ -112,6 +113,33 @@ export async function debugAssembly(fileName?: string): Promise<void> {
 }
 
 /**
+ * Debug a named `.bas` file - the "🐞 Debug in emulator" CodeLens at the top
+ * of it.
+ *
+ * Unlike {@link debugAssembly}, there is no entry-point resolution: a `.bas`
+ * file is never `#include`d into another, so the file the lens sits in is
+ * always the program to run.
+ */
+export async function debugBasic(fileName?: string): Promise<void> {
+    if (!fileName) {
+        await debugActiveFile();
+        return;
+    }
+    const uri = vscode.Uri.file(fileName);
+    // Saving first is not politeness: the adapter loads the file *on disk*,
+    // and an unsaved buffer would be debugged as its previous contents.
+    const open = vscode.workspace.textDocuments.find(d => d.uri.fsPath === uri.fsPath);
+    if (open?.isDirty) { await open.save(); }
+
+    await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), {
+        type: DEBUG_TYPE,
+        request: 'launch',
+        name: `Debug ${fileName}`,
+        program: fileName,
+    });
+}
+
+/**
  * Start a debug session from a bndbuild rule that launches an emulator.
  *
  * With no rule given, the server is asked which ones actually end in an
@@ -156,6 +184,8 @@ export function registerDebugging(
         vscode.commands.registerCommand('cpclib.debugThisFile', debugActiveFile),
         vscode.commands.registerCommand('cpclib.debugAssembly', (fileName?: string) =>
             debugAssembly(fileName)),
+        vscode.commands.registerCommand('cpclib.debugBasic', (fileName?: string) =>
+            debugBasic(fileName)),
         // The Run lens asks the same question before building: the file you are
         // looking at is usually not the program.
         vscode.commands.registerCommand('cpclib.runAsm', async (fileName?: string) => {
@@ -227,11 +257,12 @@ export function registerDebugging(
             resolveDebugConfiguration(_folder, config) {
                 if (!config.type && !config.request && !config.name) {
                     const editor = vscode.window.activeTextEditor;
-                    if (editor?.document.languageId === 'basm') {
+                    const languageId = editor?.document.languageId;
+                    if (editor && (languageId === 'basm' || languageId === 'locomotive-basic')) {
                         return {
                             type: DEBUG_TYPE,
                             request: 'launch',
-                            name: 'Debug this .asm file',
+                            name: `Debug this ${languageId === 'basm' ? '.asm' : '.bas'} file`,
                             program: editor.document.fileName,
                         };
                     }
