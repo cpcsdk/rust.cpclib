@@ -476,7 +476,22 @@ fn start_session(
         let config = cpclib_project::config::load_config(root.as_deref())
             .config
             .asm;
-        let built = launch::assemble_for_debug(&entry, &config)?;
+        // A direct-file launch has no build behind it, so nothing else was
+        // ever going to write a map for it - unlike the `rule` branch above,
+        // where the cache comes from the project's own build. This is
+        // cpclib-dap's own cache of its *previous* launch of this exact
+        // entry (see `launch::write_program_cache`), so re-launching an
+        // unmodified file does not re-assemble it.
+        let built = match launch::cached_program_for_debug(&entry, &config, &mut early_notices) {
+            Some(cached) => {
+                early_notices.push(
+                    "source map read from a previous debug launch of this file - it was not assembled again"
+                        .to_string()
+                );
+                cached
+            },
+            None => launch::assemble_for_debug(&entry, &config)?
+        };
         (
             built.snapshot,
             built.source_map,

@@ -137,6 +137,28 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
         _ => None
     };
 
+    // A direct-file launch has no build behind it, so nothing else will ever
+    // write a map or a snapshot for it - unlike the rule-based launch, whose
+    // cache is the project's own build output. Written here, best-effort, so
+    // the *next* unmodified launch of this same entry can skip this assemble
+    // entirely (see `cached_program_for_debug`).
+    let wanted_definitions: std::collections::BTreeMap<String, String> = definitions
+        .values
+        .iter()
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    write_program_cache(
+        entry,
+        &raw,
+        &symbols,
+        &wanted_definitions,
+        &breakpoints,
+        &image,
+        entry_point,
+        &address_symbols,
+        &snapshot
+    );
+
     Ok(Launched {
         breakpoints,
         image,
@@ -145,6 +167,122 @@ pub fn assemble_for_debug(entry: &Path, config: &AsmConfig) -> Result<Launched, 
             .resolved_against(entry)
             .with_symbols(symbols)
             .with_address_symbols(address_symbols),
+        snapshot,
+        entry: entry.to_path_buf()
+    })
+}
+
+/// Where cpclib-dap's own cache of a direct-file launch lives, keyed by the
+/// entry's canonical path so two projects with the same file name never
+/// collide, and named `.map.json`/`.sna` to match `cached_for_debug`'s
+/// terminology even though nothing here comes from a project build.
+fn program_cache_paths(entry: &Path) -> (PathBuf, PathBuf) {
+    use std::hash::{Hash, Hasher};
+    let canonical = std::fs::canonicalize(entry).unwrap_or_else(|_| entry.to_path_buf());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    canonical.hash(&mut hasher);
+    let key = hasher.finish();
+    let dir = std::env::temp_dir();
+    (
+        dir.join(format!("cpclib-dap-cache-{key:016x}.map.json")),
+        dir.join(format!("cpclib-dap-cache-{key:016x}.sna"))
+    )
+}
+
+/// Best-effort: a write failure here must never fail the launch that just
+/// succeeded, so every error is silently swallowed.
+#[allow(clippy::too_many_arguments)]
+fn write_program_cache(
+    entry: &Path,
+    raw: &cpclib_asm::assembler::listing_output::RawSourceMap,
+    symbols: &std::collections::HashMap<String, u32>,
+    definitions: &std::collections::BTreeMap<String, String>,
+    breakpoints: &[cpclib_asm::assembler::delayed_command::AssembledBreakpoint],
+    image: &[u8],
+    entry_point: Option<u16>,
+    address_symbols: &std::collections::HashSet<String>,
+    snapshot: &[u8]
+) {
+    let (map_path, snapshot_path) = program_cache_paths(entry);
+    let file = SourceMapFile::new(raw.clone(), symbols.clone(), definitions.clone())
+        .with_program(breakpoints.to_vec(), image, entry_point)
+        .with_address_symbols(address_symbols.iter().cloned().collect());
+    if let Ok(json) = serde_json::to_string(&file) {
+        let _ = std::fs::write(&map_path, json);
+        let _ = std::fs::write(&snapshot_path, snapshot);
+    }
+}
+
+/// Everything a *direct-file* debug launch needs, read from cpclib-dap's own
+/// cache of a previous launch of this exact entry - instead of assembled
+/// again.
+///
+/// Unlike `cached_for_debug` (which reads a map the project's own build
+/// wrote), a `program` launch has no build behind it at all: nothing else
+/// ever produces a source map for it, so nobody else can have cached one.
+/// This is written and read by cpclib-dap itself (see `write_program_cache`),
+/// keyed by the entry's canonical path, and invalidated the same way
+/// `cached_for_debug` is: version, `-D` definitions, and mtime.
+pub fn cached_program_for_debug(
+    entry: &Path,
+    _config: &AsmConfig,
+    why: &mut Vec<String>
+) -> Option<Launched> {
+    let (map_path, snapshot_path) = program_cache_paths(entry);
+    let text = std::fs::read_to_string(&map_path).ok()?;
+    let file = SourceMapFile::from_json(&text)?;
+
+    let build = cpclib_project::build_defs::definitions_for_entry(entry);
+    let wanted: std::collections::BTreeMap<String, String> = build
+        .values
+        .iter()
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    if !file.assembled_with(&wanted) {
+        why.push(
+            "the cached debug launch was assembled with different -D definitions, \
+             so it is ignored and the program is assembled again."
+                .to_string()
+        );
+        return None;
+    }
+
+    let written = std::fs::metadata(&map_path).ok()?.modified().ok()?;
+    let entry_is_older = std::fs::metadata(entry)
+        .ok()?
+        .modified()
+        .ok()
+        .is_some_and(|source| source <= written);
+    if !entry_is_older {
+        why.push(
+            "the source has changed since the last debug launch, so it is assembled again."
+                .to_string()
+        );
+        return None;
+    }
+    for name in &file.map.files {
+        let Some(source) = std::fs::metadata(name).ok().and_then(|m| m.modified().ok())
+        else {
+            return None;
+        };
+        if source > written {
+            why.push(format!(
+                "{name} changed since the last debug launch, so it is assembled again."
+            ));
+            return None;
+        }
+    }
+
+    let snapshot = std::fs::read(&snapshot_path).ok()?;
+
+    Some(Launched {
+        breakpoints: file.breakpoints.clone(),
+        image: file.image_bytes(),
+        entry_point: file.entry_point,
+        source_map: SourceMap::from_raw(&file.map)
+            .resolved_against(entry)
+            .with_symbols(file.symbols.clone().into_iter().collect())
+            .with_address_symbols(file.address_symbols.iter().cloned().collect()),
         snapshot,
         entry: entry.to_path_buf()
     })

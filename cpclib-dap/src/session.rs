@@ -1127,15 +1127,21 @@ impl<P: DapPeer> Session<P> {
                             self.last_flags = flags;
                         }
                         self.remember_registers(variables);
-                        let cost = self.cost_at_pc(variables);
+                        // The register pane is asked for on every stop,
+                        // whether or not anyone asked for a stack trace -
+                        // `cost_at_pc` is still called here for that side
+                        // effect (it calls `note_program_counter`, the
+                        // reliable place a session with no stack walk learns
+                        // where the program is); its NOP-cost result used to
+                        // be shown in this pane too but that read as noise
+                        // duplicating the cycle-count status bar, so it is no
+                        // longer displayed.
+                        self.cost_at_pc(variables);
                         crate::inspect::annotate_registers_with(
                             variables,
                             FLAGS_REFERENCE,
                             Some(&self.map)
                         );
-                        if let Some(nops) = cost {
-                            crate::inspect::annotate_cost(variables, nops);
-                        }
                     }
                     return vec![annotated];
                 },
@@ -4764,6 +4770,145 @@ pub(crate) fn mentions_word(text: &str, word: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::is_a_defs_directive;
+
+    /// `line_cost`'s own tricky cases.
+    ///
+    /// No longer shown in the register pane (removed as noise duplicating the
+    /// cycle-count status bar - see `note_program_counter`'s doc comment),
+    /// but it still drives the timers and the PC-following disassembly view,
+    /// so its adjacency/`defs`/whole-line-pricing behaviour stays covered
+    /// here directly rather than through the pane it used to be read from.
+    mod line_cost {
+        use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
+        use cpclib_project::srcmap::SourceMap;
+
+        use crate::peer::RecordingPeer;
+        use crate::session::Session;
+
+        fn image_with(address: u16, bytes: &[u8]) -> Vec<u8> {
+            let mut image = vec![0u8; 0x1_0000];
+            let at = address as usize;
+            image[at..at + bytes.len()].copy_from_slice(bytes);
+            image
+        }
+
+        /// Costs come from the assembler's own table, applied to the
+        /// program's own bytes - so pricing and the build cannot disagree
+        /// about what code costs.
+        #[test]
+        fn the_line_at_pc_is_priced() {
+            let map = SourceMap::from_raw(&RawSourceMap {
+                files: vec!["main.asm".into()],
+                // Line 3 is `ld a,0`, two bytes at 0x4000 - and two NOPs.
+                rows: vec![SourceMapRow::flat(0, 3, 0x4000, 2)]
+            });
+            let session = Session::new(RecordingPeer::new(), map)
+                .with_image(image_with(0x4000, &[0x3E, 0x00]));
+
+            assert_eq!(session.line_cost(0x4000), Some(2));
+        }
+
+        /// Stepping into a `defs` run must not end the session: `defs N`
+        /// assembles to N zero bytes, which run as N `NOP`s - the way a demo
+        /// pads a raster line to an exact width. Priced from the run's own
+        /// bytes, every address inside it gives the same answer.
+        #[test]
+        fn a_defs_run_is_priced_from_every_address_inside_it() {
+            let map = SourceMap::from_raw(&RawSourceMap {
+                files: vec!["demo_code.asm".into()],
+                // The raster-timing idiom `defs 64 - duration(djnz $)-1`: one
+                // row covering the whole 60-byte run, which is how the
+                // assembler records it.
+                rows: vec![SourceMapRow::flat(0, 4, 0x4002, 60)]
+            });
+            let session = Session::new(RecordingPeer::new(), map)
+                .with_image(image_with(0x4002, &[0u8; 60]));
+
+            for pc in [0x4002u16, 0x4003, 0x4020, 0x403D] {
+                assert_eq!(
+                    session.line_cost(pc),
+                    Some(60),
+                    "the whole run is what the line costs, at 0x{pc:04X}"
+                );
+            }
+        }
+
+        /// A line is priced whole even when it is several instructions,
+        /// because one basm line routinely is: `ld a,0 : ld b,0` is one line
+        /// the user reads and two rows the assembler recorded.
+        #[test]
+        fn a_line_holding_several_instructions_is_priced_whole() {
+            let map = SourceMap::from_raw(&RawSourceMap {
+                files: vec!["main.asm".into()],
+                rows: vec![
+                    SourceMapRow::flat(0, 3, 0x4000, 2),
+                    SourceMapRow::flat(0, 3, 0x4002, 2),
+                ]
+            });
+            let session = Session::new(RecordingPeer::new(), map)
+                .with_image(image_with(0x4000, &[0x3E, 0x00, 0x06, 0x00]));
+
+            // Stopped on the *second* of the two: the line is still the line.
+            assert_eq!(session.line_cost(0x4002), Some(4));
+        }
+
+        /// The line before and the line after are not this line: the same
+        /// source line inside a macro body or a `repeat` emits at several
+        /// unrelated addresses, and only the run being executed may be
+        /// summed - so the run is grown by adjacency, not by looking the
+        /// line up and adding everything it ever emitted.
+        #[test]
+        fn a_neighbouring_line_is_not_added_to_this_one() {
+            let map = SourceMap::from_raw(&RawSourceMap {
+                files: vec!["main.asm".into()],
+                rows: vec![
+                    SourceMapRow::flat(0, 3, 0x4000, 1),
+                    SourceMapRow::flat(0, 4, 0x4001, 1),
+                    SourceMapRow::flat(0, 5, 0x4002, 1),
+                    // Line 4 again, from a second expansion further along.
+                    SourceMapRow::flat(0, 4, 0x4100, 1),
+                ]
+            });
+            let session = Session::new(RecordingPeer::new(), map)
+                .with_image(image_with(0x4000, &[0x00, 0x00, 0x00]));
+
+            assert_eq!(session.line_cost(0x4001), Some(1));
+        }
+
+        /// Code with no source line at all is still priced, one instruction
+        /// at a time: a routine built at runtime, or a jump into the
+        /// firmware, has nothing in the source map, and the bytes are there
+        /// either way.
+        #[test]
+        fn code_the_source_map_does_not_know_is_still_priced() {
+            let map = SourceMap::from_raw(&RawSourceMap {
+                files: vec!["main.asm".into()],
+                rows: vec![SourceMapRow::flat(0, 3, 0x4000, 2)]
+            });
+            // `ldir` at an address no row covers.
+            let session = Session::new(RecordingPeer::new(), map)
+                .with_image(image_with(0x9000, &[0xED, 0xB0]));
+
+            assert_eq!(session.line_cost(0x9000), Some(5));
+        }
+
+        /// A line the assembler cannot price is worth no answer - and never
+        /// worth the session, which is what stepping into one used to cost
+        /// before this was priced from bytes rather than parsed from text.
+        #[test]
+        fn a_line_that_cannot_be_priced_yields_no_answer() {
+            let map = SourceMap::from_raw(&RawSourceMap {
+                files: vec!["main.asm".into()],
+                rows: vec![SourceMapRow::flat(0, 2, 0x4000, 4)]
+            });
+            // Four bytes that decode to no instruction at all - what an
+            // `incbin` of data looks like once it is bytes.
+            let session = Session::new(RecordingPeer::new(), map)
+                .with_image(image_with(0x4000, &[0xED, 0x00, 0xED, 0x01]));
+
+            assert_eq!(session.line_cost(0x4001), None);
+        }
+    }
 
     /// The one thing that decides whether a run of `NOP`s is stepped over
     /// whole, so its edges are worth pinning.

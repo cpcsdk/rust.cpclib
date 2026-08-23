@@ -85,26 +85,6 @@ pub fn annotate_registers(variables: &mut Vec<Value>, flags_reference: i64) {
     annotate_registers_with(variables, flags_reference, None)
 }
 
-/// Add the NOP cost of the line the program counter is on.
-///
-/// A CPC demo's budget is NOPs per raster line, so "how much does this line
-/// cost" is a question asked constantly while stepping, and answering it by
-/// hand means leaving the debugger. The number itself is worked out in
-/// `Session::line_cost`, from the program's own bytes.
-pub fn annotate_cost(variables: &mut Vec<Value>, nops: usize) {
-    // Right at the top: it is about the code that is *about* to run, which is
-    // what the whole pane is describing.
-    variables.insert(
-        0,
-        json!({
-            "name": "cost",
-            "value": format!("{nops} NOP{}", if nops == 1 { "" } else { "s" }),
-            "type": "what the source line at PC costs",
-            "variablesReference": 0
-        })
-    );
-}
-
 /// How far past a label a register may point and still be described by it.
 ///
 /// A pointer three bytes into `screen_buffer` is in `screen_buffer`. A pointer
