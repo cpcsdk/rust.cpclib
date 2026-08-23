@@ -107,6 +107,74 @@ impl CpcLspBackend {
             .await;
     }
 
+    /// Analyse `uri`@`version` in the background, after `delay` (zero for
+    /// `did_open`/`did_save`, `DID_CHANGE_DEBOUNCE` for `did_change`'s own
+    /// burst-of-keystrokes coalescing) - never on the caller's own task.
+    ///
+    /// `analyze_document` can mean a real, full, multi-pass assemble of the
+    /// document's whole include tree (`dry_run_env`, when the document looks
+    /// like a project's own entry point) - tens of seconds on a real demo,
+    /// the same cost `cached_for_debug`'s own doc comment describes for the
+    /// DAP side. Awaiting that inline on `did_open`/`did_save`'s own request-
+    /// handling task used to block the LSP entirely for the whole duration:
+    /// opening a project's main file (which restoring previous tabs, or just
+    /// opening the folder, routinely does first) made every other feature
+    /// look frozen until it finished.
+    ///
+    /// `pending_versions` is the one piece of shared state every caller must
+    /// set to `version` *before* calling this (`did_change` already did;
+    /// `did_open`/`did_save` do it right before spawning) - it is what lets
+    /// a second edit arriving mid-analysis make this run a no-op instead of
+    /// publishing stale diagnostics after the newer one's own analysis.
+    fn spawn_deferred_analysis(&self, uri: Url, version: i32, delay: Duration) {
+        let client = self.client.clone();
+        let documents = Arc::clone(&self.documents);
+        let pending_versions = Arc::clone(&self.pending_versions);
+        let asm_analyzer = Arc::clone(&self.asm_analyzer);
+        let build_analyzer = Arc::clone(&self.build_analyzer);
+        let basic_analyzer = Arc::clone(&self.basic_analyzer);
+        let workspace_roots = self.workspace_roots();
+        let build_error_diagnostics = Arc::clone(&self.build_error_diagnostics);
+        let embedded_bndbuild_index = Arc::clone(&self.embedded_bndbuild_index);
+
+        tokio::spawn(async move {
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+            }
+
+            // A newer edit/open/save arrived while this waited - that one's
+            // own (already-scheduled) task will publish instead.
+            if pending_versions.get(&uri).map(|v| *v) != Some(version) {
+                return;
+            }
+            let Some(document) = documents.get(&uri).map(|d| d.value().clone())
+            else {
+                return; // closed in the meantime
+            };
+            // Guards a close-then-reopen race: same URI, but the version
+            // sequence restarted.
+            if document.version != version {
+                return;
+            }
+
+            let diagnostics = compute_diagnostics(
+                &asm_analyzer,
+                &build_analyzer,
+                &basic_analyzer,
+                &document,
+                &workspace_roots,
+                &build_error_diagnostics
+            );
+            update_embedded_bndbuild_index(
+                &asm_analyzer,
+                &build_analyzer,
+                &document,
+                &embedded_bndbuild_index
+            );
+            client.publish_diagnostics(uri, diagnostics, None).await;
+        });
+    }
+
     /// Symbol defined in a file explicitly `INCLUDE`/`INCBIN`/`BINCLUDE`d by
     /// `document_text` (the document at `from_uri`), even when that file was
     /// never opened by the editor. Prefers the already-open in-memory
@@ -1043,6 +1111,10 @@ impl LanguageServer for CpcLspBackend {
         Ok(())
     }
 
+    /// Inserts the document immediately (needed right away by hover/
+    /// completion/etc., same as `did_change`), then defers analysis to
+    /// `spawn_deferred_analysis` - see its own doc comment for why this
+    /// must never be awaited inline here.
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         tracing::info!("Document opened: {}", params.text_document.uri);
 
@@ -1052,18 +1124,17 @@ impl LanguageServer for CpcLspBackend {
             params.text_document.version,
             Some(params.text_document.language_id.as_str())
         );
-
-        self.analyze_document(&document).await;
-        self.documents.insert(params.text_document.uri, document);
+        let uri = params.text_document.uri;
+        let version = document.version;
+        self.documents.insert(uri.clone(), document);
+        self.pending_versions.insert(uri.clone(), version);
+        self.spawn_deferred_analysis(uri, version, Duration::ZERO);
     }
 
     /// Applies the edit immediately (needed right away by hover/completion/
-    /// etc.), but defers the actual re-analysis + diagnostics publish by
-    /// `DID_CHANGE_DEBOUNCE` — a rapid burst of keystrokes would otherwise
-    /// re-run full analysis on every single one. `pending_versions` lets a
-    /// task scheduled by an edit that's since been superseded detect that
-    /// and no-op, rather than publish stale diagnostics after a newer edit's
-    /// own (possibly still-pending) analysis.
+    /// etc.), but defers the actual re-analysis + diagnostics publish (via
+    /// `spawn_deferred_analysis`) by `DID_CHANGE_DEBOUNCE` - a rapid burst of
+    /// keystrokes would otherwise re-run full analysis on every single one.
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         tracing::info!("Document changed: {}", params.text_document.uri);
 
@@ -1080,63 +1151,26 @@ impl LanguageServer for CpcLspBackend {
         }
 
         self.pending_versions.insert(uri.clone(), version);
-
-        let client = self.client.clone();
-        let documents = Arc::clone(&self.documents);
-        let pending_versions = Arc::clone(&self.pending_versions);
-        let asm_analyzer = Arc::clone(&self.asm_analyzer);
-        let build_analyzer = Arc::clone(&self.build_analyzer);
-        let basic_analyzer = Arc::clone(&self.basic_analyzer);
-        let workspace_roots = self.workspace_roots();
-        let build_error_diagnostics = Arc::clone(&self.build_error_diagnostics);
-        let embedded_bndbuild_index = Arc::clone(&self.embedded_bndbuild_index);
-
-        tokio::spawn(async move {
-            tokio::time::sleep(DID_CHANGE_DEBOUNCE).await;
-
-            // A newer edit arrived while we slept - that edit's own
-            // (already-scheduled) task will publish instead.
-            if pending_versions.get(&uri).map(|v| *v) != Some(version) {
-                return;
-            }
-
-            let Some(document) = documents.get(&uri).map(|d| d.value().clone())
-            else {
-                return; // closed in the meantime
-            };
-            // Guards a close-then-reopen race: same URI, but the version
-            // sequence restarted.
-            if document.version != version {
-                return;
-            }
-
-            let diagnostics = compute_diagnostics(
-                &asm_analyzer,
-                &build_analyzer,
-                &basic_analyzer,
-                &document,
-                &workspace_roots,
-                &build_error_diagnostics
-            );
-            update_embedded_bndbuild_index(
-                &asm_analyzer,
-                &build_analyzer,
-                &document,
-                &embedded_bndbuild_index
-            );
-            client.publish_diagnostics(uri, diagnostics, None).await;
-        });
+        self.spawn_deferred_analysis(uri, version, DID_CHANGE_DEBOUNCE);
     }
 
+    /// Same reason `did_open` no longer awaits its own analysis inline:
+    /// saving a project's entry file is exactly the case that can mean a
+    /// real, full assemble, and doing that on the request-handling task
+    /// made every other feature look frozen for however long it took.
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         tracing::info!("Document saved: {}", params.text_document.uri);
 
-        if let Some(entry) = self.documents.get(&params.text_document.uri) {
-            let document = entry.value().clone();
-            drop(entry);
+        let Some(entry) = self.documents.get(&params.text_document.uri)
+        else {
+            return;
+        };
+        let version = entry.value().version;
+        drop(entry);
+        let uri = params.text_document.uri;
 
-            self.analyze_document(&document).await;
-        }
+        self.pending_versions.insert(uri.clone(), version);
+        self.spawn_deferred_analysis(uri, version, Duration::ZERO);
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -4559,6 +4593,11 @@ ORG 0x8000\n";
                 }
             })
             .await;
+        // did_open only inserts the document and spawns its analysis now
+        // (see spawn_deferred_analysis) rather than awaiting it inline - the
+        // embedded-bndbuild index this test reads is populated by that
+        // spawned task, so it needs a moment to run.
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         let result = backend
             .execute_command(ExecuteCommandParams {
