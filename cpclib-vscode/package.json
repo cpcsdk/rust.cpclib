@@ -209,6 +209,11 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.openAllRegisterMemoryViews",
+        "title": "CPClib: Open memory views for every pointer register",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.openCrtcView",
         "title": "CPClib: Open the CRTC view",
         "category": "CPClib"
@@ -254,6 +259,10 @@
         },
         {
           "command": "cpclib.openMemoryView",
+          "when": "inDebugMode"
+        },
+        {
+          "command": "cpclib.openAllRegisterMemoryViews",
           "when": "inDebugMode"
         },
         {

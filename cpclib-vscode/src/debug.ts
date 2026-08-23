@@ -188,6 +188,10 @@ export function registerDebugging(
         // knows how to follow `PC` and how to be clicked back into the source.
         vscode.commands.registerCommand('cpclib.openDisassembly', () => consoleCommand('-dv')),
         vscode.commands.registerCommand('cpclib.openMemoryView', () => consoleCommand('-mv')),
+        vscode.commands.registerCommand(
+            'cpclib.openAllRegisterMemoryViews',
+            () => consoleCommand('-mv all,follow'),
+        ),
         vscode.commands.registerCommand('cpclib.openCrtcView', () => consoleCommand('-crtcview')),
         vscode.commands.registerCommand('cpclib.revealProgramCounter', async () => {
             const where = lastStop;

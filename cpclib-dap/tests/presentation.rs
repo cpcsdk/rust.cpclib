@@ -298,6 +298,48 @@ fn a_bare_mv_says_when_there_is_no_pc_yet() {
     );
 }
 
+/// `-mv all,follow` opens one view per known pointer register at once,
+/// rather than typing `-mv HL,follow` and friends by hand for each.
+#[test]
+fn mv_all_follow_opens_one_view_per_pointer_register() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [
+            {"name": "PC", "value": "0x4000", "variablesReference": 0},
+            {"name": "SP", "value": "0xC000", "variablesReference": 0},
+            {"name": "HL", "value": "0x8000", "variablesReference": 0},
+            {"name": "DE", "value": "0x9000", "variablesReference": 0},
+            {"name": "BC", "value": "0xA000", "variablesReference": 0}
+            // IX/IY deliberately absent, as an emulator that has not
+            // reported them yet.
+        ]}
+    }));
+
+    let out = session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-mv all,follow", "context": "repl"}
+        }))
+        .unwrap();
+    // Nothing synchronous yet: every read is in flight.
+    assert!(out.is_empty());
+
+    let reads: Vec<String> = session
+        .peer()
+        .commands()
+        .iter()
+        .filter(|c| *c == "readMemory")
+        .cloned()
+        .collect();
+    assert_eq!(
+        reads.len(),
+        5,
+        "one read per known pointer register, IX/IY silently skipped: {reads:?}"
+    );
+}
+
 /// Two memory views open at once are two panels, not one replacing the
 /// other - each keeps its own bytes and refreshes independently.
 #[test]

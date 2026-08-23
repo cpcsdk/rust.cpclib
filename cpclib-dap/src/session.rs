@@ -100,6 +100,8 @@ CPC debug console commands:
                                 follow tracks wherever HL points, every stop.
                                 Each address/register opens its own panel;
                                 asking again for one already open updates it
+  -mv all,follow [count]        ...one view per pointer register (PC, SP,
+                                HL, DE, BC, IX, IY) at once
   -dv [address|label] [count]   disassemble memory (defaults to PC, and then
                                 follows it); rows link to your source
   -chips                        CRTC, Gate Array, PSG and PPI, with counters
@@ -2708,6 +2710,76 @@ impl<P: DapPeer> Session<P> {
     /// right now rather than wherever it pointed when this was typed.
     fn memory_view(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
         let seq = self.next_seq();
+
+        // `-mv all,follow` - one view per pointer register at once, rather
+        // than typing `-mv HL,follow`, `-mv DE,follow`... by hand for each
+        // one you want to watch.
+        if let Some(where_) = arguments.first()
+            && let Some((keyword, suffix)) = where_.split_once(',')
+            && suffix.eq_ignore_ascii_case("follow")
+            && matches!(keyword.to_ascii_lowercase().as_str(), "all" | "registers")
+        {
+            const POINTER_REGISTERS: [&str; 7] = ["PC", "SP", "HL", "DE", "BC", "IX", "IY"];
+            let count = arguments
+                .get(1)
+                .and_then(|count| parse_number(count))
+                .unwrap_or(0x40)
+                .clamp(1, 0x1000) as usize;
+            let mut opened = 0;
+            for name in POINTER_REGISTERS {
+                let Some(&value) = self.last_registers.get(name)
+                else {
+                    continue;
+                };
+                let anchor = MemoryAnchor::Register(name.to_string());
+                match self
+                    .open_memory_views
+                    .iter_mut()
+                    .find(|open| open.anchor == anchor)
+                {
+                    Some(open) => {
+                        open.count = count;
+                    },
+                    None => self.open_memory_views.push(OpenMemoryView {
+                        anchor: anchor.clone(),
+                        address: value,
+                        count,
+                        label: Some(name.to_string()),
+                        previous: Vec::new(),
+                        previous_address: None
+                    })
+                }
+                // Only the first carries the request: DAP expects one
+                // response to the one `evaluate` request that asked for all
+                // of these, and complete_memory_view already treats a
+                // `None` request as a silent panel refresh - exactly right
+                // for the rest.
+                self.pending_memory_views.push(PendingMemoryView {
+                    request: (opened == 0).then(|| request.clone()),
+                    anchor,
+                    label: Some(name.to_string()),
+                    address: value
+                });
+                self.send_own(
+                    "readMemory",
+                    json!({
+                        "memoryReference": address_reference(value),
+                        "count": count
+                    }),
+                    Purpose::MemoryView
+                )?;
+                opened += 1;
+            }
+            if opened == 0 {
+                return Ok(vec![protocol::failure(
+                    request,
+                    "-mv all,follow needs the program to have stopped at least once, so \
+                     register values are known",
+                    seq
+                )]);
+            }
+            return Ok(Vec::new());
+        }
 
         // No argument means "where I am" - the same default `-dv` already
         // has, and for the same reason: it is what you want nine times out
