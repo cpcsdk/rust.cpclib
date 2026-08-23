@@ -557,9 +557,17 @@ fn start_session(
         .or_else(|| arguments.get("buildFile"))
         .and_then(Value::as_str)
         .map(PathBuf::from);
+    // `_or_own_dir`, not plain `project_root`: a lone `.asm` with no `.git`/
+    // `Makefile`/etc. anywhere above it - a scratch file, an example folder -
+    // made `project_root` return `None`, which skipped `find_config_file`
+    // entirely and silently defaulted to 1984js regardless of what the
+    // project's own `cpclib-lsp.toml` said, since that file was never even
+    // looked for. `find_config_file` itself already searches upward from
+    // whatever root it is given, so the fallback (the entry's own directory)
+    // is enough for it to find a `cpclib-lsp.toml` sitting right there.
     let dap_config = named_path
         .as_deref()
-        .and_then(cpclib_project::root::project_root)
+        .and_then(cpclib_project::root::project_root_or_own_dir)
         .map(|root| {
             cpclib_project::config::load_config(Some(root.as_path()))
                 .config
