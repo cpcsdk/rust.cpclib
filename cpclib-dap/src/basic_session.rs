@@ -585,6 +585,8 @@ fn line_index_from_source(source: &str) -> Vec<(u16, usize)> {
 
 #[cfg(test)]
 mod tests {
+    use crate::peer::RecordingPeer;
+
     use super::*;
 
     #[test]
@@ -599,5 +601,320 @@ mod tests {
         let source = "10 PRINT \"HI\"\n' a comment maybe\n20 GOTO 10\n";
         let index = line_index_from_source(source);
         assert_eq!(index, vec![(10, 0), (20, 2)]);
+    }
+
+    const SOURCE: &str = "10 PRINT \"HI\"\n20 GOTO 10\n";
+
+    fn encode_base64(bytes: &[u8]) -> String {
+        const ALPHABET: &[u8] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in bytes.chunks(3) {
+            let b0 = chunk[0] as u32;
+            let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+            let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+            let n = (b0 << 16) | (b1 << 8) | b2;
+            out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+            out.push(if chunk.len() > 1 {
+                ALPHABET[((n >> 6) & 0x3F) as usize] as char
+            }
+            else {
+                '='
+            });
+            out.push(if chunk.len() > 2 {
+                ALPHABET[(n & 0x3F) as usize] as char
+            }
+            else {
+                '='
+            });
+        }
+        out
+    }
+
+    fn new_session(source: &str) -> BasicSession<RecordingPeer> {
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
+        BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            bytes.len()
+        )
+    }
+
+    /// Sends `attach` and simulates the peer answering it successfully,
+    /// processing whatever that answer triggers (arming the breakpoint).
+    fn complete_attach(session: &mut BasicSession<RecordingPeer>) {
+        session.attach().unwrap();
+        let seq = last_sent_seq(session);
+        answer(session, seq, json!({ "success": true }));
+    }
+
+    fn last_sent_seq(session: &mut BasicSession<RecordingPeer>) -> i64 {
+        session
+            .peer_mut()
+            .sent
+            .last()
+            .unwrap()
+            .get("seq")
+            .and_then(Value::as_i64)
+            .unwrap()
+    }
+
+    /// Queues a response to request `seq` and processes it.
+    fn answer(session: &mut BasicSession<RecordingPeer>, seq: i64, extra: Value) -> Vec<Value> {
+        let mut response = json!({ "type": "response", "request_seq": seq, "success": true });
+        for (k, v) in extra.as_object().unwrap() {
+            response[k] = v.clone();
+        }
+        session.peer_mut().push_incoming(response);
+        let incoming = session.peer_mut().drain();
+        let mut out = Vec::new();
+        for message in incoming {
+            out.extend(session.on_emulator_message(&message));
+        }
+        out
+    }
+
+    fn read_memory_response(bytes: &[u8]) -> Value {
+        json!({ "body": { "data": encode_base64(bytes) } })
+    }
+
+    #[test]
+    fn attach_arms_the_execute_line_breakpoint() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+
+        let armed = session.peer_mut().last("setInstructionBreakpoints").unwrap();
+        assert_eq!(
+            armed["arguments"]["breakpoints"][0]["instructionReference"],
+            address_reference(EXECUTE_LINE_ENTRY as u32)
+        );
+    }
+
+    #[test]
+    fn configuration_done_starts_the_program_once_attached() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+
+        let before = session.peer_mut().commands().len();
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let commands = session.peer_mut().commands();
+        assert!(commands.len() > before);
+        assert_eq!(commands.last().unwrap(), "continue");
+    }
+
+    #[test]
+    fn set_breakpoints_verifies_a_line_that_starts_a_basic_line() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // "20 GOTO 10"
+            }))
+            .unwrap();
+
+        assert_eq!(response.len(), 1);
+        assert_eq!(response[0]["body"]["breakpoints"][0]["verified"], true);
+    }
+
+    #[test]
+    fn set_breakpoints_rejects_a_line_with_no_basic_line_number() {
+        // A trailing blank line (common in real files) starts no BASIC
+        // line of its own - built directly rather than through
+        // `new_session`, since the parser itself does not tolerate one
+        // (irrelevant here: `line_index_from_source` is a separate, plain
+        // text scan, and only it is under test).
+        let program_bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            "10 PRINT \"HI\"\n20 GOTO 10\n\n",
+            basic::PROGRAM_START,
+            program_bytes.len()
+        );
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 3 }] } // the blank line
+            }))
+            .unwrap();
+
+        assert_eq!(response[0]["body"]["breakpoints"][0]["verified"], false);
+    }
+
+    /// Drives one full breakpoint stop-or-continue cycle: `attach`, arm the
+    /// single Z80 breakpoint, then a `stopped` event from the peer, feeding
+    /// in `current_line`'s two bytes as the current BASIC line.
+    fn stop_at_line(session: &mut BasicSession<RecordingPeer>, current_line: u16) -> Vec<Value> {
+        complete_attach(session);
+        session.peer_mut().push_incoming(json!({
+            "type": "event",
+            "event": "stopped",
+            "body": {}
+        }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        // First round trip: PTR_CURRENT_LINE_NUMBER_FIELD -> a pointer.
+        let seq = last_sent_seq(session);
+        let field_target = 0x9000u16;
+        answer(
+            session,
+            seq,
+            read_memory_response(&field_target.to_le_bytes())
+        );
+
+        // Second round trip: dereferencing that pointer -> the line number.
+        let seq = last_sent_seq(session);
+        answer(session, seq, read_memory_response(&current_line.to_le_bytes()))
+    }
+
+    #[test]
+    fn a_stop_on_a_breakpoint_line_is_reported() {
+        let mut session = new_session(SOURCE);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        let events = stop_at_line(&mut session, 20);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    #[test]
+    fn a_stop_on_a_non_breakpoint_line_resumes_silently() {
+        let mut session = new_session(SOURCE);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20 only
+            }))
+            .unwrap();
+
+        let commands_before = session.peer_mut().commands().len();
+        let events = stop_at_line(&mut session, 10); // not a breakpoint
+
+        assert!(events.is_empty(), "no stopped event should reach the editor");
+        let commands = session.peer_mut().commands();
+        assert!(commands.len() > commands_before);
+        assert_eq!(commands.last().unwrap(), "continue");
+    }
+
+    #[test]
+    fn next_stops_at_the_next_line_even_with_no_breakpoint_there() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "next", "arguments": {} }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let field_target = 0x9000u16;
+        answer(
+            &mut session,
+            seq,
+            read_memory_response(&field_target.to_le_bytes())
+        );
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "step");
+    }
+
+    #[test]
+    fn direct_mode_after_a_stop_is_reported_as_entry() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&0u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "entry");
+    }
+
+    #[test]
+    fn stack_trace_reports_the_current_line_and_its_source_line() {
+        let mut session = new_session(SOURCE);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] }
+            }))
+            .unwrap();
+        stop_at_line(&mut session, 20);
+
+        let response = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+
+        assert_eq!(response.len(), 1);
+        let frame = &response[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["name"], "BASIC 20");
+        assert_eq!(frame["line"], 2);
+    }
+
+    #[test]
+    fn variables_request_decodes_a_chain_walk_from_two_reads() {
+        let mut session = new_session(SOURCE);
+
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": VARIABLES_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "waits on two reads before answering");
+
+        // 27 chain heads: 'I' (9th letter) points at offset 1.
+        let mut heads = vec![0u8; VARIABLE_CHAIN_HEADS_COUNT * 2 + 2];
+        heads[8 * 2] = 1;
+        heads[8 * 2 + 1] = 0;
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        answer(&mut session, seq, read_memory_response(&heads));
+
+        // One node: next=0, name "I" (bit 7 set on its one char), type
+        // 0x01 (integer), value 42.
+        let mut storage = vec![0u8, 0u8, b'I' | 0x80, 0x01, 42, 0];
+        storage.resize(64, 0);
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        let events = answer(&mut session, seq, read_memory_response(&storage));
+
+        assert_eq!(events.len(), 1);
+        let vars = &events[0]["body"]["variables"];
+        assert_eq!(vars[0]["name"], "I");
+        assert_eq!(vars[0]["value"], "42");
     }
 }
