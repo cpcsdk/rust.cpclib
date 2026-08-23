@@ -820,7 +820,25 @@ impl<P: DapPeer> Session<P> {
     pub fn capabilities() -> Value {
         json!({
             "supportsConfigurationDoneRequest": true,
-            "supportsStepBack": true,
+            // Not advertised. `initialize` runs before `launch` picks a peer
+            // (this associated function has no `&self` for exactly that
+            // reason - there is no session, let alone a peer, yet), so this
+            // cannot be made to depend on which emulator answers. Advertising
+            // it unconditionally used to enable the toolbar button against
+            // every peer regardless of whether anything behind it reverses
+            // execution: `AmspiritLitePeer::supports` never claimed
+            // `stepBack` and its `Quirks::rejects_unknown_requests` is
+            // false, so the request was forwarded with no handler at all -
+            // exactly the undefined behaviour a disabled button would have
+            // avoided. `DapPeer::supports`'s default (1984js-shaped) impl
+            // does claim `stepBack`, but nothing here demonstrates the
+            // emulator actually rewinds state rather than merely accepting
+            // the request - that claim is unverified. False for both peers
+            // until someone confirms 1984js really reverses execution; only
+            // then is it worth wiring a peer-aware `capabilities` event sent
+            // after `launch`, mirroring how `cpclib/emulatorReady` is sent
+            // once the peer is known.
+            "supportsStepBack": false,
             "supportsReadMemoryRequest": true,
             "supportsWriteMemoryRequest": true,
             // Deliberately *not* advertised.

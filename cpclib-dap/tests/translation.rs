@@ -378,13 +378,20 @@ fn a_conversation_round_trips_through_the_wire_format() {
 fn advertised_capabilities_match_what_the_emulator_supports() {
     let capabilities = Session::<RecordingPeer>::capabilities();
     for flag in [
-        "supportsStepBack",
         "supportsReadMemoryRequest",
         "supportsWriteMemoryRequest",
         "supportsConfigurationDoneRequest"
     ] {
         assert_eq!(capabilities[flag], json!(true), "{flag}");
     }
+
+    // Explicitly false, not merely absent: `initialize` runs before `launch`
+    // picks a peer, so this cannot yet know whether the emulator that will
+    // answer really reverses execution. Advertising it unconditionally used
+    // to enable the toolbar button against every peer regardless - forwarded
+    // blind, with no handler at all, on the one peer whose own `supports`
+    // never claimed it.
+    assert_eq!(capabilities["supportsStepBack"], json!(false));
     // Data breakpoints *are* claimed, even though the emulator has no such
     // request: they are answered here and turned into its write-watch
     // channels, which is the only way to reach those from the editor's own UI

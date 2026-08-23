@@ -73,7 +73,11 @@ fn it_answers_initialize_with_its_capabilities() {
     assert_eq!(messages.len(), 1, "{messages:?}");
     assert_eq!(messages[0]["command"], json!("initialize"));
     assert_eq!(messages[0]["success"], json!(true));
-    assert_eq!(messages[0]["body"]["supportsStepBack"], json!(true));
+    // False, not merely absent: `initialize` runs before a peer is chosen,
+    // so this cannot yet know whether an emulator that really reverses
+    // execution will be the one answering (see the capabilities() doc
+    // comment).
+    assert_eq!(messages[0]["body"]["supportsStepBack"], json!(false));
 }
 
 /// A request before any session is refused with a reason, not silence.
