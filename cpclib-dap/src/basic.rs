@@ -261,13 +261,30 @@ fn walk_chain(mut offset: u16, variables_base: u16, buffer: &[u8], out: &mut Vec
     }
 }
 
-/// Reads a variable name starting at `idx`: 7-bit ASCII chars, the last one
+/// Reads a variable name starting at `idx`: 7-bit chars, the last one
 /// flagged by bit 7. Returns the name and the index right after it.
+///
+/// Not plain ASCII once bit 7 is masked off: the ROM builds this name by
+/// uppercasing whatever the user typed, and it does that by unconditionally
+/// clearing bit 5 of every character - "The variable name is converted to
+/// upper case by simply clearing bit 5. This has the effect of also
+/// changing the ASCII codes for numbers and periods" (bread80.com's
+/// variable-storage write-up). For a letter that is a no-op (`A`-`Z` already
+/// have bit 5 clear), but a digit or `.` has bit 5 *set* in ASCII, so the
+/// stored byte is not the digit's own code - `'2'` (0x32) is stored as
+/// 0x12, `'0'` (0x30) as 0x10, `.` (0x2E) as 0x0E. Read literally, a name
+/// like `X2` decoded as `X` followed by a raw 0x12 control byte, which is
+/// exactly the "renders as a box" symptom this restores from.
 fn read_name(buffer: &[u8], mut idx: usize) -> Option<(String, usize)> {
     let mut name = String::new();
     loop {
         let byte = *buffer.get(idx)?;
-        name.push((byte & 0x7f) as char);
+        let masked = byte & 0x7f;
+        name.push(match masked {
+            0x10..=0x19 => (b'0' + (masked - 0x10)) as char,
+            0x0e => '.',
+            other => other as char
+        });
         idx += 1;
         if byte & 0x80 != 0 {
             break;
@@ -448,9 +465,19 @@ mod tests {
         assert_eq!(lines.len(), 1);
     }
 
+    /// Encodes `name` the way the ROM actually stores digits and `.` in a
+    /// variable name: bit 5 cleared (its "uppercase" step, a no-op on
+    /// `A`-`Z` but not on those two - see `read_name`'s doc comment), bit 7
+    /// set on the last character. Letters and any other test-only character
+    /// (existing tests use a bare sigil like `A$` as a label; whether a real
+    /// sigil goes through the same transform, or is not part of the name
+    /// bytes at all, is not this fix's question) pass through unchanged.
     fn node(next: u16, name: &str, type_byte: u8, value: &[u8]) -> Vec<u8> {
         let mut bytes = next.to_le_bytes().to_vec();
-        let chars: Vec<u8> = name.bytes().collect();
+        let chars: Vec<u8> = name
+            .bytes()
+            .map(|c| if c.is_ascii_digit() || c == b'.' { c & !0x20 } else { c })
+            .collect();
         for (i, &c) in chars.iter().enumerate() {
             let last = i == chars.len() - 1;
             bytes.push(if last { c | 0x80 } else { c });
@@ -458,6 +485,38 @@ mod tests {
         bytes.push(type_byte);
         bytes.extend_from_slice(value);
         bytes
+    }
+
+    #[test]
+    fn decodes_a_name_containing_a_digit() {
+        // Regression test: reported live as "X2"/"X0"/"Y2"/"Y0" all showing
+        // as "X"/"Y" followed by a box glyph in the Variables pane - the ROM
+        // stores a digit in a name with bit 5 cleared (0x32 -> 0x12 for
+        // '2'), which a naive `byte & 0x7f` decode leaves as a raw control
+        // byte instead of restoring it to '2'.
+        let mut buffer = node(0, "X2", 0x04, &BasicFloat::from_f64(3.5).as_bytes());
+        buffer.resize(buffer.len().max(64), 0);
+
+        let mut heads = [0u16; VARIABLE_CHAIN_HEADS_COUNT];
+        heads[23] = 1; // 'X' is the 24th letter
+
+        let vars = decode_variable_chains(&heads, 0, 0xAE70, &buffer);
+        assert_eq!(vars.len(), 1);
+        assert_eq!(vars[0].name, "X2");
+        assert_eq!(vars[0].value, BasicVariableValue::Real(3.5));
+    }
+
+    #[test]
+    fn decodes_a_name_containing_a_period() {
+        let mut buffer = node(0, "A.1", 0x01, &1i16.to_le_bytes());
+        buffer.resize(buffer.len().max(64), 0);
+
+        let mut heads = [0u16; VARIABLE_CHAIN_HEADS_COUNT];
+        heads[0] = 1;
+
+        let vars = decode_variable_chains(&heads, 0, 0xAE70, &buffer);
+        assert_eq!(vars.len(), 1);
+        assert_eq!(vars[0].name, "A.1");
     }
 
     #[test]
