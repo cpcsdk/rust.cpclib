@@ -280,14 +280,15 @@
         "type": "basm",
         "label": "Amstrad CPC (basm)",
         "languages": [
-          "basm"
+          "basm",
+          "locomotive-basic"
         ],
         "configurationAttributes": {
           "launch": {
             "properties": {
               "program": {
                 "type": "string",
-                "description": "The .asm file to assemble and debug.",
+                "description": "The .asm or .bas file to debug. A .bas file is tokenised and loaded but not auto-run - type RUN in the emulator once it opens.",
                 "default": "${file}"
               },
               "rule": {
@@ -356,6 +357,16 @@
               "name": "Debug the demo",
               "rule": "run"
             }
+          },
+          {
+            "label": "CPC: debug the current .bas file",
+            "description": "Tokenise the open BASIC file and load it for debugging",
+            "body": {
+              "type": "basm",
+              "request": "launch",
+              "name": "Debug this .bas file",
+              "program": "^\"\\${file}\""
+            }
           }
         ]
       }
@@ -363,6 +374,9 @@
     "breakpoints": [
       {
         "language": "basm"
+      },
+      {
+        "language": "locomotive-basic"
       }
     ],
     "taskDefinitions": [
