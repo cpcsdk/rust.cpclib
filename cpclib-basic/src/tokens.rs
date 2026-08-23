@@ -697,6 +697,40 @@ impl BasicTokenNoPrefix {
     pub fn char(&self) -> Option<char> {
         (*self).try_into().ok()
     }
+
+    /// The type sigil this token conveys when it introduces a variable
+    /// reference (any of the &02-&0D range - see `BasicToken::Variable`).
+    /// `None` for the default/real case, which carries no sigil.
+    pub fn variable_sigil(self) -> Option<char> {
+        match self {
+            Self::StringVariableDefinition => Some('$'),
+            Self::IntegerVariableDefinition => Some('%'),
+            _ => None
+        }
+    }
+
+    /// The variable-reference token to use for a given type sigil.
+    ///
+    /// `None` (no sigil) or `Some('!')` (the explicit-real sigil, which the
+    /// ROM does not store) both use the default, `VariableDefinition3` -
+    /// confirmed by both the CPCWiki tokenisation write-up and the BASIC
+    /// 1.1 ROM's own `reset_variable_types_and_pointers` routine, which
+    /// resets every variable reference in a program back to exactly this
+    /// marker ("&0d (real)").
+    ///
+    /// The codes used for `$`/`%` (`StringVariableDefinition`/
+    /// `IntegerVariableDefinition`) are this crate's pre-existing choice -
+    /// plausible given how the ROM disassembly names the &02-&0D range,
+    /// but *not* independently confirmed against a primary source the way
+    /// the bare/`VariableDefinition3` case is. Revisit if a `$`/`%`
+    /// variable is ever seen to tokenise incorrectly.
+    pub fn for_variable_sigil(sigil: Option<char>) -> Self {
+        match sigil {
+            Some('$') => Self::StringVariableDefinition,
+            Some('%') => Self::IntegerVariableDefinition,
+            _ => Self::VariableDefinition3
+        }
+    }
 }
 
 impl TryFrom<u8> for BasicTokenPrefixed {
@@ -1180,8 +1214,11 @@ pub enum BasicToken {
     PrefixedToken(BasicTokenPrefixed),
     /// Encode a RSX call
     Rsx(String),
-    /// Encode a variable set
-    Variable(String, BasicValue),
+    /// Encode a variable reference: which of the &02-&0D "variable"
+    /// tokens introduces it, its name, and the 2-byte runtime resolution
+    /// cache (initially 0 - the ROM fills it in on first use, see
+    /// `as_bytes`'s doc comment).
+    Variable(BasicTokenNoPrefix, String, BasicValue),
     /// Encode a constant. The first field can only take ValueIntegerDecimal8bits, ValueIntegerDecimal16bits, ValueIntegerBinary16bits, ValueIntegerHexadecimal16bits
     Constant(BasicTokenNoPrefix, BasicValue),
     /// Encode a comment or quoted string. The boolean indicates if the string should be closed with a quote when displayed.
@@ -1253,9 +1290,14 @@ impl fmt::Display for BasicToken {
                 };
                 write!(f, "{repr}")?;
             },
-            BasicToken::Variable(name, _value) => {
-                // Just write the variable name
+            BasicToken::Variable(kind, name, _value) => {
+                // The sigil is not part of the stored name bytes - the ROM
+                // conveys type purely through `kind` (see `as_bytes`'s doc
+                // comment) - so it is reattached here for display only.
                 write!(f, "{name}")?;
+                if let Some(sigil) = kind.variable_sigil() {
+                    write!(f, "{sigil}")?;
+                }
             },
             BasicToken::Rsx(name) => {
                 write!(f, "|{name}")?;
@@ -1292,6 +1334,27 @@ impl BasicToken {
                 data
             },
 
+            // https://www.cpcwiki.eu/index.php?title=Technical_information_about_Locomotive_BASIC
+            // "The variable name is stored in the program, with bit 7 of
+            // the last character set to 1"; "the 16-bit byte offset is
+            // initially set to 0, but is set up when the program is RUN" -
+            // confirmed independently by the BASIC 1.1 ROM disassembly at
+            // https://github.com/Bread80/Amstrad-CPC-BASIC-Source
+            // (`reset_variable_types_and_pointers`, which restores exactly
+            // this: token &0d, offset &0000). `kind` is the token that
+            // conveys type (see `BasicTokenNoPrefix::for_variable_sigil`);
+            // the sigil itself is never part of the name bytes.
+            BasicToken::Variable(kind, name, offset) => {
+                let mut data = vec![kind.value()];
+                data.extend_from_slice(&offset.as_bytes());
+                let mut name_bytes = name.as_bytes().to_vec();
+                if let Some(last) = name_bytes.last_mut() {
+                    *last |= 0b1000_0000;
+                }
+                data.extend_from_slice(&name_bytes);
+                data
+            },
+
             BasicToken::CommentOrString(comment_type, comment, closed) => {
                 let mut data = vec![comment_type.value()];
                 data.extend_from_slice(comment);
@@ -1300,9 +1363,7 @@ impl BasicToken {
                     data.push(0x22); // Closing quote byte
                 }
                 data
-            },
-
-            _ => unimplemented!()
+            }
         }
     }
 
@@ -1314,9 +1375,19 @@ impl BasicToken {
         }
     }
 
+    /// The variable's name bytes with bit 7 of the last character set -
+    /// exactly what `as_bytes` writes after the token/offset, kept as its
+    /// own method for callers that want the name alone (e.g. matching
+    /// against a runtime variable-chain entry decoded the same way).
     pub fn variable_encoded_name(&self) -> Option<Vec<u8>> {
         match self {
-            BasicToken::Variable(name, _) => Some(Self::encode_string(name)),
+            BasicToken::Variable(_kind, name, _offset) => {
+                let mut bytes = name.as_bytes().to_vec();
+                if let Some(last) = bytes.last_mut() {
+                    *last |= 0b1000_0000;
+                }
+                Some(bytes)
+            },
             _ => None
         }
     }
@@ -1355,5 +1426,107 @@ mod test {
 
         let token: BasicTokenNoPrefix = 0xF7.try_into().unwrap();
         assert_eq!(token, BasicTokenNoPrefix::Division);
+    }
+
+    // https://www.cpcwiki.eu/index.php?title=Technical_information_about_Locomotive_BASIC
+    // "The variable name is stored in the program, with bit 7 of the last
+    // character set to '1'". Before this fix, `BasicToken::Variable` had no
+    // `as_bytes` arm at all (`unimplemented!()`), and nothing in
+    // string_parser.rs ever constructed one - every parsed identifier fell
+    // through to one raw-ASCII `SimpleToken` per character instead, with no
+    // wrapping marker and no bit-7 terminator. A real CPC has no way to
+    // know where such a name ends, which is why a program with any
+    // variable reference showed "Syntax error" on almost every LISTed
+    // line - reported against real hello.bas/pendulum.bas/mandelbrot.bas
+    // fixtures, cross-checked byte-for-byte against a live emulator's RAM.
+    #[test]
+    fn variable_as_bytes_uses_the_marker_offset_name_wire_format() {
+        let token = BasicToken::Variable(
+            BasicTokenNoPrefix::VariableDefinition3,
+            "THETA".to_string(),
+            BasicValue::new_integer_by_bytes(0, 0)
+        );
+
+        assert_eq!(
+            token.as_bytes(),
+            vec![0x0D, 0x00, 0x00, b'T', b'H', b'E', b'T', b'A' | 0x80]
+        );
+    }
+
+    #[test]
+    fn variable_as_bytes_preserves_a_nonzero_runtime_cache_offset() {
+        // A decoded-then-re-encoded program (e.g. via `renum`) should not
+        // silently stomp an already-resolved runtime cache back to zero.
+        let token = BasicToken::Variable(
+            BasicTokenNoPrefix::VariableDefinition3,
+            "I".to_string(),
+            BasicValue::new_integer_by_bytes(0x09, 0x00)
+        );
+
+        assert_eq!(token.as_bytes(), vec![0x0D, 0x09, 0x00, b'I' | 0x80]);
+    }
+
+    #[test]
+    fn variable_as_bytes_respects_the_sigil_derived_kind() {
+        let string_var = BasicToken::Variable(
+            BasicTokenNoPrefix::for_variable_sigil(Some('$')),
+            "A".to_string(),
+            BasicValue::new_integer_by_bytes(0, 0)
+        );
+        assert_eq!(
+            string_var.as_bytes()[0],
+            BasicTokenNoPrefix::StringVariableDefinition.value()
+        );
+
+        let int_var = BasicToken::Variable(
+            BasicTokenNoPrefix::for_variable_sigil(Some('%')),
+            "A".to_string(),
+            BasicValue::new_integer_by_bytes(0, 0)
+        );
+        assert_eq!(
+            int_var.as_bytes()[0],
+            BasicTokenNoPrefix::IntegerVariableDefinition.value()
+        );
+    }
+
+    #[test]
+    fn for_variable_sigil_defaults_to_real_for_no_sigil_and_for_explicit_bang() {
+        // Confirmed both by the CPCWiki write-up and the BASIC 1.1 ROM's
+        // own `reset_variable_types_and_pointers`, which resets every
+        // variable reference in a program back to exactly this marker.
+        assert_eq!(
+            BasicTokenNoPrefix::for_variable_sigil(None),
+            BasicTokenNoPrefix::VariableDefinition3
+        );
+        assert_eq!(
+            BasicTokenNoPrefix::for_variable_sigil(Some('!')),
+            BasicTokenNoPrefix::VariableDefinition3
+        );
+    }
+
+    #[test]
+    fn a_variable_token_round_trips_through_decode() {
+        let token = BasicToken::Variable(
+            BasicTokenNoPrefix::VariableDefinition3,
+            "THETA".to_string(),
+            BasicValue::new_integer_by_bytes(0, 0)
+        );
+        let bytes = token.as_bytes();
+
+        use cpclib_common::winnow::Parser;
+        let mut input: &[u8] = &bytes;
+        let decoded = crate::binary_parser::parse_tokens
+            .parse_next(&mut input)
+            .expect("a fresh variable token should decode cleanly");
+
+        assert_eq!(decoded.len(), 1);
+        match &decoded[0] {
+            BasicToken::Variable(kind, name, offset) => {
+                assert_eq!(*kind, BasicTokenNoPrefix::VariableDefinition3);
+                assert_eq!(name, "THETA");
+                assert_eq!(*offset, BasicValue::new_integer_by_bytes(0, 0));
+            },
+            other => panic!("expected a Variable token, got {other:?}")
+        }
     }
 }

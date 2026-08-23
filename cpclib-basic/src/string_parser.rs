@@ -16,6 +16,20 @@ use crate::{BasicError, BasicLine, BasicProgram};
 type BasicSeveralTokensResult<'src> = ModalResult<Vec<BasicToken>, ContextError<StrContext>>;
 type BasicOneTokenResult<'src> = ModalResult<BasicToken, ContextError<StrContext>>;
 type BasicLineResult<'src> = ModalResult<BasicLine, ContextError<StrContext>>;
+type BasicNameResult<'src> = ModalResult<String, ContextError<StrContext>>;
+
+/// Builds the single token a variable reference actually is on the wire -
+/// never the character-by-character `SimpleToken`s a plain identifier would
+/// otherwise fall through to. See `BasicToken::Variable`'s doc comment for
+/// the wire format and `BasicTokenNoPrefix::for_variable_sigil` for how
+/// `sigil` picks the token byte.
+fn variable_token(name: String, sigil: Option<char>) -> BasicToken {
+    BasicToken::Variable(
+        BasicTokenNoPrefix::for_variable_sigil(sigil),
+        name,
+        BasicValue::new_integer_by_bytes(0, 0)
+    )
+}
 
 /// Macro to generate simple keyword parser functions.
 /// These functions parse a case-insensitive keyword and return a single token.
@@ -670,8 +684,7 @@ pub fn parse_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
 pub fn parse_string_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let name = terminated(parse_base_variable_name, '$').parse_next(input)?;
 
-    let mut tokens = name;
-    tokens.push(BasicToken::SimpleToken('$'.into()));
+    let mut tokens = vec![variable_token(name, Some('$'))];
 
     // Optional array indices: (expr[,expr,...])
     if let Some(_) = opt('(').parse_next(input)? {
@@ -706,8 +719,7 @@ pub fn parse_string_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensR
 pub fn parse_integer_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     let name = terminated(parse_base_variable_name, '%').parse_next(input)?;
 
-    let mut tokens = name;
-    tokens.push(BasicToken::SimpleToken('%'.into()));
+    let mut tokens = vec![variable_token(name, Some('%'))];
 
     // Optional array indices: (expr[,expr,...])
     if let Some(_) = opt('(').parse_next(input)? {
@@ -740,12 +752,12 @@ pub fn parse_integer_variable<'src>(input: &mut &'src str) -> BasicSeveralTokens
 }
 
 pub fn parse_float_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    let name = (parse_base_variable_name, opt('!')).parse_next(input)?;
+    // The explicit-real `!` sigil is consumed but not stored: it is not
+    // part of the wire format (see `BasicTokenNoPrefix::for_variable_sigil`
+    // - real is the default, sigil-less encoding).
+    let (name, _explicit_real) = (parse_base_variable_name, opt('!')).parse_next(input)?;
 
-    let mut tokens = name.0;
-    if name.1.is_some() {
-        tokens.push(BasicToken::SimpleToken('!'.into()));
-    }
+    let mut tokens = vec![variable_token(name, None)];
 
     // Optional array indices: (expr[,expr,...])
     if let Some(_) = opt('(').parse_next(input)? {
@@ -777,7 +789,7 @@ pub fn parse_float_variable<'src>(input: &mut &'src str) -> BasicSeveralTokensRe
     Ok(tokens)
 }
 
-pub fn parse_base_variable_name<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+pub fn parse_base_variable_name<'src>(input: &mut &'src str) -> BasicNameResult<'src> {
     let first = one_of(('a'..='z', 'A'..='Z')).parse_next(input)?;
 
     // Locomotive BASIC allows variable names up to 40 characters total
@@ -788,12 +800,13 @@ pub fn parse_base_variable_name<'src>(input: &mut &'src str) -> BasicSeveralToke
 
     // TODO check that it is valid
 
-    let mut tokens = vec![BasicToken::SimpleToken(first.into())];
+    let mut name = String::new();
+    name.push(first);
     if let Some(next) = next {
-        tokens.extend(next.chars().map(|c| BasicToken::SimpleToken(c.into())));
+        name.push_str(next);
     }
 
-    Ok(tokens)
+    Ok(name)
 }
 
 /// Parse a single expression of a print
@@ -1976,13 +1989,11 @@ pub fn parse_dim<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     // Parse array declaration: name(dim1[,dim2,...])
     let mut parse_array_decl = |input: &mut &'src str| {
         // Parse base name
-        let mut var_name = parse_base_variable_name.parse_next(input)?;
+        let var_name = parse_base_variable_name.parse_next(input)?;
 
         // Parse optional type suffix ($, %, !)
         let type_suffix = opt(one_of(['$', '%', '!'])).parse_next(input)?;
-        if let Some(suffix) = type_suffix {
-            var_name.push(BasicToken::SimpleToken(suffix.into()));
-        }
+        let var_name = variable_token(var_name, type_suffix);
 
         let _ = '('.parse_next(input)?;
         let mut dim1 =
@@ -2003,8 +2014,7 @@ pub fn parse_dim<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         .parse_next(input)?;
         let _ = ')'.parse_next(input)?;
 
-        let mut tokens = vec![];
-        tokens.append(&mut var_name);
+        let mut tokens = vec![var_name];
         tokens.push(BasicToken::SimpleToken(
             BasicTokenNoPrefix::CharOpenParenthesis
         ));
@@ -2710,8 +2720,14 @@ pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         '(',
         parse_basic_space0,
         opt((
-            parse_base_variable_name,
-            repeat(0.., (parse_comma, parse_base_variable_name))
+            parse_base_variable_name.map(|n| vec![variable_token(n, None)]),
+            repeat(
+                0..,
+                (
+                    parse_comma,
+                    parse_base_variable_name.map(|n| vec![variable_token(n, None)])
+                )
+            )
                 .map(|v: Vec<(Vec<BasicToken>, Vec<BasicToken>)>| v)
         )),
         parse_basic_space0,
@@ -2804,15 +2820,18 @@ pub fn parse_erase<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     .parse_next(input)?;
 
     let space = parse_basic_space1.parse_next(input)?;
-    let first_var = parse_base_variable_name.parse_next(input)?;
+    let first_var = vec![variable_token(
+        parse_base_variable_name.parse_next(input)?,
+        None
+    )];
 
     // Parse optional additional array names
     let rest_vars: Vec<Vec<BasicToken>> = repeat(
         0..,
-        (parse_comma, parse_base_variable_name).map(|(mut c, mut v)| {
+        (parse_comma, parse_base_variable_name).map(|(mut c, v)| {
             let mut tokens = vec![];
             tokens.append(&mut c);
-            tokens.append(&mut v);
+            tokens.push(variable_token(v, None));
             tokens
         })
     )
@@ -6008,5 +6027,89 @@ mod test {
         check_roundtrip(
             "1220 IF ps=1 THEN a$=\"\":FOR i=sx TO cols:LOCATE i,sy:a$=a$+COPYCHR$(#0):NEXT:PAPER cpuclr:PEN ctx:LOCATE sx,sy:PRINT a$:PAPER cbg:PEN cpuclr:CLEAR INPUT:CALL &BB18\n"
         );
+    }
+
+    // A variable reference used to fall through to one raw-ASCII
+    // `SimpleToken` per character (no wrapping marker, no bit-7
+    // terminator), which is not the real CPC wire format and made a real
+    // CPC report "Syntax error" while LISTing/RUNning almost any line with
+    // a variable in it - see tokens.rs's `variable_as_bytes_*` tests for
+    // the format itself. These lock in the *parsing* side: a bare
+    // identifier must become exactly one `BasicToken::Variable`, not N
+    // `SimpleToken`s.
+    #[test]
+    fn a_bare_variable_reference_is_one_variable_token_not_one_per_character() {
+        let line = check_line_tokenisation("10 theta=1\n");
+        let lhs = &line.tokens()[0];
+        match lhs {
+            BasicToken::Variable(kind, name, _offset) => {
+                assert_eq!(name, "theta");
+                assert_eq!(*kind, BasicTokenNoPrefix::VariableDefinition3);
+            },
+            other => panic!("expected a single Variable token, got {other:?}")
+        }
+    }
+
+    #[test]
+    fn a_string_variable_reference_uses_the_string_kind_with_no_sigil_in_the_name() {
+        let line = check_line_tokenisation("10 a$=\"hi\"\n");
+        match &line.tokens()[0] {
+            BasicToken::Variable(kind, name, _offset) => {
+                assert_eq!(name, "a");
+                assert_eq!(*kind, BasicTokenNoPrefix::StringVariableDefinition);
+            },
+            other => panic!("expected a single Variable token, got {other:?}")
+        }
+    }
+
+    #[test]
+    fn an_integer_variable_reference_uses_the_integer_kind_with_no_sigil_in_the_name() {
+        let line = check_line_tokenisation("10 i%=1\n");
+        match &line.tokens()[0] {
+            BasicToken::Variable(kind, name, _offset) => {
+                assert_eq!(name, "i");
+                assert_eq!(*kind, BasicTokenNoPrefix::IntegerVariableDefinition);
+            },
+            other => panic!("expected a single Variable token, got {other:?}")
+        }
+    }
+
+    // Regression test for the exact reported bug: real cpclib-basic output
+    // for pendulum.bas's line 20 (`20 theta=pi/2`), captured from a real
+    // emulator's RAM after our own fix, must match this wire format -
+    // marker &0d, offset &0000 (fresh, not yet runtime-resolved), then
+    // "theta" with bit 7 set on the last character.
+    #[test]
+    fn pendulum_bas_theta_assignment_encodes_to_the_real_wire_format() {
+        let prog = BasicProgram::parse("20 theta=pi/2\n").unwrap();
+        let bytes = prog.as_bytes();
+
+        // length(2) + line number(2) + THETA reference(8) + ...
+        assert_eq!(&bytes[4..12], &[0x0D, 0x00, 0x00, b't', b'h', b'e', b't', b'a' | 0x80]);
+    }
+
+    #[test]
+    fn a_program_with_repeated_variable_references_decodes_back_with_the_same_name() {
+        let prog = BasicProgram::parse("10 theta=1\n20 theta=theta+1\n").unwrap();
+        let bytes = prog.as_bytes();
+
+        let decoded = BasicProgram::decode(&bytes).expect(
+            "a program whose variable references carry the real wire format \
+             (marker + offset + bit-7-terminated name) must decode cleanly"
+        );
+
+        let names: Vec<&str> = decoded
+            .lines()
+            .iter()
+            .flat_map(|l| l.tokens())
+            .filter_map(|t| {
+                match t {
+                    BasicToken::Variable(_, name, _) => Some(name.as_str()),
+                    _ => None
+                }
+            })
+            .collect();
+
+        assert_eq!(names, vec!["theta", "theta", "theta"]);
     }
 }
