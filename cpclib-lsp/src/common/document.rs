@@ -180,6 +180,23 @@ impl Document {
             // Full document sync
             self.rope = Rope::from_str(&change.text);
         }
+
+        // Temporary: a user reported edits landing at the wrong offset,
+        // producing corrupted text that does not match the editor - static
+        // review of this function found nothing wrong (UTF-16 offset math
+        // checks out, ropey handles CRLF/LF natively), so the next
+        // reproduction needs to be captured live instead. `RUST_LOG=debug`
+        // (or `cpclib-lsp.trace.server` set to pull it into the client) turns
+        // this on; it is silent otherwise. Remove once the real cause is
+        // found.
+        tracing::debug!(
+            uri = %self.uri,
+            version,
+            range = ?change.range,
+            text = %change.text,
+            rope_after = %self.rope,
+            "apply_change"
+        );
     }
 
     pub fn text(&self) -> String {
