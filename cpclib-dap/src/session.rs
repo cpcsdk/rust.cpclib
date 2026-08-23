@@ -839,6 +839,13 @@ impl<P: DapPeer> Session<P> {
             // after `launch`, mirroring how `cpclib/emulatorReady` is sent
             // once the peer is known.
             "supportsStepBack": false,
+            // Assembling a program with no cached source map is a real
+            // build, driven a second time - on a real demo, tens of
+            // seconds with nothing on screen to say the adapter is doing
+            // anything. `progressStart`/`progressEnd` around that wait
+            // (sent from `run_stdio`, gated on the client's own
+            // `supportsProgressReporting`) is what this claims.
+            "supportsProgressReporting": true,
             "supportsReadMemoryRequest": true,
             "supportsWriteMemoryRequest": true,
             // Deliberately *not* advertised.

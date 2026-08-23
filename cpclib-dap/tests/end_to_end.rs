@@ -149,6 +149,96 @@ fn a_launch_of_a_missing_program_fails_with_a_reason() {
     );
 }
 
+/// `progressStart`/`progressEnd` bracket a `launch`, but only for a client
+/// that said in its own `initialize` arguments it accepts them - the DAP
+/// spec gates these two events on that, unlike every other event this
+/// adapter sends.
+#[test]
+fn a_client_that_accepts_progress_gets_it_around_launch() {
+    let mut child = adapter()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let mut stdin = child.stdin.take().unwrap();
+    stdin
+        .write_all(
+            frame(&json!({
+                "seq": 1, "type": "request", "command": "initialize",
+                "arguments": {"supportsProgressReporting": true}
+            }))
+            .as_bytes()
+        )
+        .unwrap();
+    stdin
+        .write_all(
+            frame(&json!({
+                "seq": 2, "type": "request", "command": "launch",
+                "arguments": {"program": "/nonexistent/nowhere.asm"}
+            }))
+            .as_bytes()
+        )
+        .unwrap();
+    stdin.flush().unwrap();
+
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    let messages = read_messages(&mut reader, 4);
+    let _ = child.kill();
+
+    assert_eq!(messages[0]["command"], json!("initialize"));
+    assert_eq!(messages[1]["event"], json!("progressStart"));
+    assert_eq!(messages[1]["body"]["progressId"], json!("launch"));
+    assert_eq!(messages[2]["event"], json!("progressEnd"));
+    assert_eq!(messages[2]["body"]["progressId"], json!("launch"));
+    assert_eq!(
+        messages[3]["success"], json!(false),
+        "the launch response itself still follows: {:?}",
+        messages[3]
+    );
+}
+
+/// A client that never said it accepts progress events gets none - sending
+/// them anyway would be a protocol violation, not just noise.
+#[test]
+fn a_client_that_never_said_so_gets_no_progress_events() {
+    let mut child = adapter()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let mut stdin = child.stdin.take().unwrap();
+    stdin
+        .write_all(
+            frame(&json!({"seq": 1, "type": "request", "command": "initialize"})).as_bytes()
+        )
+        .unwrap();
+    stdin
+        .write_all(
+            frame(&json!({
+                "seq": 2, "type": "request", "command": "launch",
+                "arguments": {"program": "/nonexistent/nowhere.asm"}
+            }))
+            .as_bytes()
+        )
+        .unwrap();
+    stdin.flush().unwrap();
+
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    let messages = read_messages(&mut reader, 2);
+    let _ = child.kill();
+
+    assert_eq!(messages[0]["command"], json!("initialize"));
+    assert_eq!(
+        messages[1]["success"], json!(false),
+        "no progressStart/progressEnd in between: {:?}",
+        messages
+    );
+}
+
 /// What the map really records for a contested address, on a real project.
 ///
 /// Run with a copy of birthtro at /tmp/bt:

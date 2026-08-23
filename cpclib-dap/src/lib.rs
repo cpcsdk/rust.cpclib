@@ -237,6 +237,14 @@ pub fn run_stdio() -> std::io::Result<()> {
     let mut seq = 1i64;
     let mut session: Option<session::Session<Backend>> = None;
     let transcript = transcript();
+    // The DAP spec only allows `progressStart`/`progressEnd` towards a
+    // client that declared it accepts them, in its own `initialize`
+    // arguments - unlike every other event this adapter sends, which no
+    // client capability gates. Learned once, at `initialize`, and used for
+    // every `launch` after: assembling a program with no cached source map
+    // is the one operation slow enough (a real demo's full build, driven a
+    // second time) to be worth saying anything about at all.
+    let mut client_accepts_progress = false;
 
     // stdin on its own thread so the emulator can be polled while the editor is
     // quiet, and vice versa.
@@ -274,6 +282,11 @@ pub fn run_stdio() -> std::io::Result<()> {
                 .unwrap_or_default();
             match command {
                 "initialize" => {
+                    client_accepts_progress = message
+                        .get("arguments")
+                        .and_then(|a| a.get("supportsProgressReporting"))
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
                     let answer = protocol::response(
                         &message,
                         session::Session::<peer::RecordingPeer>::capabilities(),
@@ -283,7 +296,34 @@ pub fn run_stdio() -> std::io::Result<()> {
                     emit(&answer, &mut output)?;
                 },
                 "launch" => {
-                    match start_session(&message) {
+                    if client_accepts_progress {
+                        seq += 1;
+                        emit(
+                            &protocol::event(
+                                "progressStart",
+                                json!({
+                                    "progressId": "launch",
+                                    "title": "CPC: preparing the debug session",
+                                    "message": "assembling…"
+                                }),
+                                seq
+                            ),
+                            &mut output
+                        )?;
+                    }
+                    let outcome = start_session(&message);
+                    if client_accepts_progress {
+                        seq += 1;
+                        emit(
+                            &protocol::event(
+                                "progressEnd",
+                                json!({ "progressId": "launch" }),
+                                seq
+                            ),
+                            &mut output
+                        )?;
+                    }
+                    match outcome {
                         Ok((started, url, notices)) => {
                             session = Some(started);
                             seq += 1;
