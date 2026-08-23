@@ -138,6 +138,19 @@ pub struct SourceMap {
     banked_ambiguity: bool
 }
 
+/// Whether `s` ends with `suffix`, ignoring ASCII case - without allocating a
+/// lowercased copy of `s` the way `s.to_ascii_lowercase().ends_with(...)`
+/// would, on a check made for every candidate name at every stop. Compared
+/// char by char from the end rather than byte-sliced, so a label with a
+/// multi-byte character near the end cannot panic on a mid-character split.
+fn ends_with_ignore_case(s: &str, suffix: &str) -> bool {
+    let mut chars = s.chars().rev();
+    suffix
+        .chars()
+        .rev()
+        .all(|want| chars.next().is_some_and(|have| have.eq_ignore_ascii_case(&want)))
+}
+
 impl SourceMap {
     /// Build the queryable form from what the assembler collected.
     pub fn from_raw(raw: &RawSourceMap) -> Self {
@@ -231,10 +244,12 @@ impl SourceMap {
         if let Some(address) = self.symbols.get(name) {
             return Some(*address);
         }
-        let wanted = name.to_ascii_uppercase();
+        // No allocation on either side: this is the common path for a
+        // mistyped watch expression, checked against every symbol in the
+        // program before giving up.
         self.symbols
             .iter()
-            .find(|(known, _)| known.to_ascii_uppercase() == wanted)
+            .find(|(known, _)| known.eq_ignore_ascii_case(name))
             .map(|(_, address)| *address)
     }
 
@@ -262,15 +277,19 @@ impl SourceMap {
     }
 
     /// How good a name this is for an address, lower being better.
-    fn preference(&self, name: &str) -> (bool, bool, usize, String) {
+    ///
+    /// Called on every candidate at every stop, so the tie-break is a
+    /// borrowed `&str` rather than an owned copy of the name - `min_by_key`/
+    /// `sort_by_key` below need only `Ord`, which `&str` gives them for free.
+    fn preference<'a>(&self, name: &'a str) -> (bool, bool, usize, &'a str) {
         // A real label first: an `equ` equal to this address is a number, not
         // a place, and naming a frame after one points the reader at something
         // the program never entered.
         let is_value = !self.address_symbols.is_empty() && !self.address_symbols.contains(name);
-        let lowered = name.to_ascii_lowercase();
-        let is_end =
-            lowered.ends_with("_end") || lowered.ends_with(".end") || lowered.ends_with("_fin");
-        (is_value, is_end, name.len(), name.to_owned())
+        let is_end = ends_with_ignore_case(name, "_end")
+            || ends_with_ignore_case(name, ".end")
+            || ends_with_ignore_case(name, "_fin");
+        (is_value, is_end, name.len(), name)
     }
 
     pub fn symbol_at(&self, address: u32) -> Option<&str> {
