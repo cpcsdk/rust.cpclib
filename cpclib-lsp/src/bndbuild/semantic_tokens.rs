@@ -682,11 +682,30 @@ mod tests {
             .iter()
             .filter(|l| l.command.as_ref().unwrap().command == "cpclib.runRuleInTerminal")
             .collect();
-        assert_eq!(run_rule_lenses.len(), 1, "{lenses:?}");
+        // One at the rule's own line, one more in the top-of-file summary -
+        // still exactly one per rule at each of those two places, not one
+        // per target name either place.
+        assert_eq!(run_rule_lenses.len(), 2, "{lenses:?}");
+        // The rule is declared on the file's very first line, so both lenses
+        // land on line 0 - the summary one is the exact-zero range, the
+        // per-rule one still spans the symbol's own selection range.
+        let zero = Range {
+            start: Position { line: 0, character: 0 },
+            end: Position { line: 0, character: 0 }
+        };
+        let at_rule = run_rule_lenses
+            .iter()
+            .find(|l| l.range != zero)
+            .unwrap_or_else(|| panic!("no per-rule lens: {lenses:?}"));
         assert_eq!(
-            run_rule_lenses[0].command.as_ref().unwrap().title,
+            at_rule.command.as_ref().unwrap().title,
             "▶ Run: a.asm, b.asm"
         );
+        let summary = run_rule_lenses
+            .iter()
+            .find(|l| l.range == zero)
+            .unwrap_or_else(|| panic!("no top-of-file summary lens: {lenses:?}"));
+        assert_eq!(summary.command.as_ref().unwrap().title, "Build: a.asm, b.asm");
 
         let task_lenses: Vec<_> = lenses
             .iter()
