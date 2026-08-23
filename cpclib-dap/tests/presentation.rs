@@ -363,6 +363,88 @@ fn a_stop_with_no_memory_view_reads_nothing() {
     );
 }
 
+/// `-mv <register>,follow` needs the register's value, which is only known
+/// once the program has stopped and reported its registers at least once.
+#[test]
+fn a_register_anchored_view_is_refused_before_the_register_is_known() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    let out = session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-mv HL,follow", "context": "repl"}
+        }))
+        .unwrap();
+
+    assert_eq!(out[0]["success"], json!(false));
+    let message = out[0]["message"].as_str().unwrap();
+    assert!(message.contains("HL"), "{message}");
+    assert!(
+        !session
+            .peer()
+            .commands()
+            .contains(&"readMemory".to_string())
+    );
+}
+
+/// A `,follow` view is re-anchored to the register's value on every stop -
+/// unlike a fixed address, it does not stay where it was when it was opened.
+#[test]
+fn a_register_anchored_view_follows_the_register() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [
+            {"name": "HL", "value": "0xC000", "variablesReference": 0}
+        ]}
+    }));
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-mv HL,follow 4", "context": "repl"}
+        }))
+        .unwrap();
+    let read = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(read["arguments"]["memoryReference"], json!("0xc000"));
+    session.on_emulator_message(&json!({
+        "seq": 5, "type": "response", "request_seq": read["seq"], "success": true,
+        "command": "readMemory", "body": {"address": "0xC000", "data": "AQIDBA=="}
+    }));
+
+    // HL moves before the next stop.
+    session.on_emulator_message(&json!({
+        "seq": 6, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [
+            {"name": "HL", "value": "0xC010", "variablesReference": 0}
+        ]}
+    }));
+    session.on_emulator_message(&json!({
+        "seq": 7, "type": "event", "event": "stopped", "body": {"reason": "step"}
+    }));
+
+    let read = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(
+        read["arguments"]["memoryReference"],
+        json!("0xc010"),
+        "the view moved to where HL is now, not where it was opened"
+    );
+
+    // The read completes at the new address: nothing carries over from the
+    // old one to diff against, so nothing is marked changed.
+    let out = session.on_emulator_message(&json!({
+        "seq": 8, "type": "response", "request_seq": read["seq"], "success": true,
+        "command": "readMemory", "body": {"address": "0xC010", "data": "BQYHCA=="}
+    }));
+    assert_eq!(out[0]["body"]["address"], json!(0xC010));
+    assert_eq!(
+        out[0]["body"]["changed"],
+        json!([]),
+        "a moved view has nothing to compare its new bytes against"
+    );
+}
+
 /// `-dv` disassembles memory and hands the instructions to a panel, each
 /// carrying the source line it came from.
 #[test]
