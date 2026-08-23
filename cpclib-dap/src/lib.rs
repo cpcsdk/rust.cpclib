@@ -20,6 +20,7 @@
 //! assembler during its listing pass.
 
 pub mod amspiritlite;
+pub mod basic;
 pub mod callstack;
 pub mod disassemble;
 pub mod inspect;
