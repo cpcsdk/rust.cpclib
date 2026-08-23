@@ -555,9 +555,21 @@ impl<P: DapPeer> BasicSession<P> {
     }
 
     pub fn on_emulator_message(&mut self, message: &Value) -> Vec<Value> {
-        if message.get("type").and_then(Value::as_str) == Some("response")
-            && let Some(own) = self.is_our_answer(message)
-        {
+        if message.get("type").and_then(Value::as_str) == Some("response") {
+            let Some(own) = self.is_our_answer(message)
+            else {
+                // Not one of this session's own tracked requests: the
+                // answer to something forwarded to the peer verbatim under
+                // the editor's *own* seq - `pause`, or anything the
+                // catch-all in `on_editor_message` passed straight through.
+                // Those never got acknowledged at all before this: the
+                // editor's request just sat there, which is what "pause
+                // does not seem to work" looks like from the outside.
+                let seq = self.next_seq();
+                let mut forwarded = message.clone();
+                forwarded["seq"] = json!(seq);
+                return vec![forwarded];
+            };
             match own.purpose {
                 Purpose::Plain => {},
                 Purpose::Attach => {
@@ -712,7 +724,7 @@ impl<P: DapPeer> BasicSession<P> {
 
     fn report_stopped(&mut self, reason: &str) -> Vec<Value> {
         let seq = self.next_seq();
-        vec![protocol::event(
+        let mut out = vec![protocol::event(
             "stopped",
             json!({
                 "reason": reason,
@@ -720,7 +732,39 @@ impl<P: DapPeer> BasicSession<P> {
                 "allThreadsStopped": true
             }),
             seq
-        )]
+        )];
+
+        // The standard `stopped` event alone gets a whole-line highlight
+        // from VS Code, not the precise statement `stackTrace`'s own
+        // column/endColumn describe - the Z80 session's editor-side
+        // `revealStop` (`cpclib-vscode/src/debug.ts`) is what actually
+        // narrows it to a span, and it is driven by this custom event, not
+        // by DAP's native stack-frame columns. `instruction` is left out
+        // entirely rather than sent as `null`: it is a Z80-only concept
+        // (the resolved byte pattern behind a line), and its absence is
+        // exactly what tells `revealStop` there is no hint to show.
+        if let Some(line) = self.current_line
+            && let Some(source_line) = self
+                .line_index
+                .iter()
+                .find(|(n, _)| *n == line)
+                .map(|(_, idx)| *idx as i64 + 1)
+        {
+            let seq = self.next_seq();
+            let (column, end_column) = self.current_statement_column.unwrap_or((1, 1));
+            out.push(protocol::event(
+                "cpclib/stoppedAt",
+                json!({
+                    "path": self.source_path.display().to_string(),
+                    "line": source_line,
+                    "column": column,
+                    "endColumn": end_column
+                }),
+                seq
+            ));
+        }
+
+        out
     }
 }
 
@@ -944,6 +988,46 @@ mod tests {
     }
 
     #[test]
+    fn pause_forwards_the_peers_answer_back_to_the_editor() {
+        // Regression test, reported live as "pause does not seem to work":
+        // `pause` is forwarded to the peer verbatim, under the *editor's*
+        // own seq rather than one of this session's own tracked requests -
+        // so when the peer's answer came back, `is_our_answer` never
+        // recognised it and `on_emulator_message` silently dropped it. The
+        // editor's own `pause` request never got a response at all.
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+
+        let response = session
+            .on_editor_message(&json!({ "seq": 7, "command": "pause", "arguments": { "threadId": 1 } }))
+            .unwrap();
+        assert!(
+            response.is_empty(),
+            "no immediate ack - the peer's own answer is what completes it"
+        );
+        assert_eq!(session.peer_mut().last("pause").unwrap()["seq"], 7);
+
+        // The peer answers using that same editor seq, since the request
+        // was forwarded unchanged.
+        session.peer_mut().push_incoming(json!({
+            "type": "response",
+            "request_seq": 7,
+            "success": true,
+            "command": "pause",
+            "body": {}
+        }));
+        let incoming = session.peer_mut().drain();
+        let mut events = Vec::new();
+        for message in incoming {
+            events.extend(session.on_emulator_message(&message));
+        }
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["request_seq"], 7);
+        assert_eq!(events[0]["success"], true);
+    }
+
+    #[test]
     fn configuration_done_starts_the_program_once_attached() {
         let mut session = new_session(SOURCE);
         complete_attach(&mut session);
@@ -1085,9 +1169,14 @@ mod tests {
             .unwrap();
 
         let events = stop_at_line(&mut session, 20);
-        assert_eq!(events.len(), 1);
+        assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "breakpoint");
+        // The custom event editor-side highlighting is driven by - see
+        // `report_stopped`'s doc comment for why the standard `stopped`
+        // event's own column/endColumn are not enough on their own.
+        assert_eq!(events[1]["event"], "cpclib/stoppedAt");
+        assert_eq!(events[1]["body"]["line"], 2);
     }
 
     #[test]
@@ -1131,9 +1220,10 @@ mod tests {
         let seq = last_sent_seq(&mut session);
         let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
 
-        assert_eq!(events.len(), 1);
+        assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "step");
+        assert_eq!(events[1]["event"], "cpclib/stoppedAt");
     }
 
     #[test]
@@ -1170,9 +1260,10 @@ mod tests {
         let seq = last_sent_seq(&mut session);
         let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
 
-        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "step");
+        assert_eq!(events[1]["event"], "cpclib/stoppedAt");
     }
 
     #[test]
@@ -1230,9 +1321,10 @@ mod tests {
         answer(&mut session, seq, read_memory_response(&response_bytes));
         let seq = last_sent_seq(&mut session);
         let events = answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
-        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "step");
+        assert_eq!(events[1]["event"], "cpclib/stoppedAt");
     }
 
     #[test]
