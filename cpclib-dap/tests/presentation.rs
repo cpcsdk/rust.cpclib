@@ -657,13 +657,16 @@ fn a_data_row_overlays_as_db_not_fake_opcodes() {
         text.to_uppercase().starts_with("DB"),
         "the source map's own claim, not a guess: {text}"
     );
+    // A long enough run of printable ASCII reads as a string, not a wall of
+    // hex - "Hello, World!" is what the source most likely wrote.
     assert!(
-        text.contains("0x48"),
-        "the actual bytes ('H' is 0x48), not decoded mnemonics: {text}"
+        text.contains("\"Hello, World!\""),
+        "the actual text, not a byte-by-byte guess: {text}"
     );
     assert_eq!(
         instructions[0]["instructionBytes"],
-        json!("48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21")
+        json!("48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21"),
+        "the raw bytes are still there for whatever reads this field, unaffected by how the text renders"
     );
 }
 

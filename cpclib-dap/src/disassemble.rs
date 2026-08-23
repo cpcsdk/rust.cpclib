@@ -18,7 +18,6 @@
 
 use cpclib_asm::disass::{disassemble, resolve_jr_djnz_target};
 use cpclib_asm::implementation::tokens::TokenExt;
-use cpclib_tokens::builder::defb_elements;
 use cpclib_tokens::{DataAccess, Expr, Mnemonic, Token};
 use serde_json::{Value, json};
 
@@ -101,6 +100,49 @@ fn render(token: &cpclib_tokens::Token) -> String {
     token.to_string().trim().to_string()
 }
 
+/// `DB` text for a run of data bytes, with any long enough run of printable
+/// ASCII shown as a quoted string instead of a wall of hex - `"HELLO, WORLD"`
+/// is what a demo's own source usually wrote for message text, and a string
+/// is what it reads like again, rather than eight bytes the reader has to
+/// decode by eye.
+fn render_data_bytes(bytes: &[u8]) -> String {
+    // Below this, a couple of coincidentally-printable bytes in otherwise
+    // binary data (padding, a table) is not worth turning into a string -
+    // it would just be a shorter wall of the same kind of noise.
+    const MIN_STRING_RUN: usize = 4;
+    let is_printable = |b: u8| (0x20..=0x7E).contains(&b);
+
+    let mut segments: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if is_printable(bytes[i]) {
+            let start = i;
+            while i < bytes.len() && is_printable(bytes[i]) {
+                i += 1;
+            }
+            if i - start >= MIN_STRING_RUN {
+                let mut quoted = String::from("\"");
+                for &b in &bytes[start..i] {
+                    match b as char {
+                        '"' => quoted.push_str("\\\""),
+                        '\\' => quoted.push_str("\\\\"),
+                        c => quoted.push(c)
+                    }
+                }
+                quoted.push('"');
+                segments.push(quoted);
+                continue;
+            }
+            // Short run: falls through to one byte at a time, from `start`,
+            // same as any non-printable byte.
+            i = start;
+        }
+        segments.push(format!("0x{:02x}", bytes[i]));
+        i += 1;
+    }
+    format!("DB {}", segments.join(","))
+}
+
 /// Replace decode()'s guessed instructions with the real `DB ...` for any
 /// span the assembler recorded as data - using live bytes, never the
 /// assembled image, so self-modified data still shows what is actually
@@ -169,7 +211,7 @@ pub fn overlay_data_rows(
                 }
             }
 
-            let text = render(&defb_elements::<u8>(&bytes));
+            let text = render_data_bytes(&bytes);
             Some((
                 j,
                 Instruction {
@@ -320,6 +362,54 @@ mod tests {
         let decoded = decode(0x4000, &[0x10, 0x05], 32);
         assert_eq!(decoded.len(), 1);
         assert!(decoded[0].text.contains("0x4007"), "{:?}", decoded[0]);
+    }
+
+    /// A long enough run of printable ASCII reads as a quoted string.
+    #[test]
+    fn a_run_of_printable_bytes_renders_as_a_string() {
+        assert_eq!(render_data_bytes(b"Hello, World!"), "DB \"Hello, World!\"");
+    }
+
+    /// Text followed by a terminator/newline: the string covers the
+    /// printable run, the rest stays numeric - matching how a demo's source
+    /// usually writes a message (`db "text", 0x0d, 0x0a, 0`).
+    #[test]
+    fn a_string_run_and_a_terminator_are_rendered_separately() {
+        let mut bytes = b"HELLO, WORLD".to_vec();
+        bytes.extend_from_slice(&[0x0a, 0x0d, 0x00]);
+        assert_eq!(
+            render_data_bytes(&bytes),
+            "DB \"HELLO, WORLD\",0x0a,0x0d,0x00"
+        );
+    }
+
+    /// A couple of coincidentally-printable bytes in otherwise-binary data is
+    /// not worth a string - it would just be a shorter wall of the same
+    /// noise, and might mislead about what the bytes actually are.
+    #[test]
+    fn a_short_printable_run_stays_numeric() {
+        assert_eq!(render_data_bytes(&[0x00, b'H', b'i', 0x00]), "DB 0x00,0x48,0x69,0x00");
+    }
+
+    /// A quote inside the run does not break the quoting.
+    #[test]
+    fn a_quote_in_the_run_is_escaped() {
+        let bytes: &[u8] = &[b'h', b'i', b'"', b't', b'h', b'e', b'r', b'e'];
+        assert_eq!(render_data_bytes(bytes), r#"DB "hi\"there""#);
+    }
+
+    /// Nor does a backslash.
+    #[test]
+    fn a_backslash_in_the_run_is_escaped() {
+        let bytes: &[u8] = &[b'p', b'a', b't', b'h', b'\\', b'h', b'e', b'r', b'e'];
+        assert_eq!(render_data_bytes(bytes), r#"DB "path\\here""#);
+    }
+
+    /// Non-printable bytes with no qualifying run anywhere stay entirely
+    /// numeric, exactly as before this feature existed.
+    #[test]
+    fn pure_binary_data_is_unaffected() {
+        assert_eq!(render_data_bytes(&[0x00, 0xFF, 0x01, 0x02]), "DB 0x00,0xff,0x01,0x02");
     }
 
     /// The DAP form carries the bytes as hex, which is what the panel prints
