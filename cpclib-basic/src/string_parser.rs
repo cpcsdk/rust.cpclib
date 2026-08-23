@@ -456,7 +456,7 @@ pub fn parse_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     let mut val = match var.0 {
         Kind::Float | Kind::Int => {
             cut_err(
-                parse_numeric_expression(NumericExpressionConstraint::None)
+                parse_numeric_expression(NumericExpressionConstraint::AssignmentValue)
                     .context(StrContext::Label("Numeric expression expected"))
             )
             .parse_next(input)?
@@ -471,7 +471,11 @@ pub fn parse_assign<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
 
     let mut res = var.1;
     res.append(&mut space.0);
-    res.push(BasicToken::SimpleToken(space.1.into()));
+    // `'='.into()` would give `CharEquals` (&3d, raw ASCII) - a real CPC
+    // tokenises assignment `=` the same way as comparison `=`, with the
+    // dedicated `Equal` token (&ef). Confirmed against a real emulator's
+    // own save of `theta=PI/2`.
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Equal));
     res.append(&mut space.2);
     res.append(&mut val);
     Ok(res)
@@ -1161,20 +1165,53 @@ keyword_expr_parser!(
     NumericExpressionConstraint::None,
     "MODE value expected (0-3)"
 );
-keyword_expr_parser!(
-    parse_goto,
-    "GOTO",
-    Goto,
-    NumericExpressionConstraint::Integer,
-    "Line number expected"
-);
-keyword_expr_parser!(
-    parse_gosub,
-    "GOSUB",
-    Gosub,
-    NumericExpressionConstraint::Integer,
-    "Line number expected"
-);
+/// GOTO/GOSUB's target: a bare decimal line number literal uses the
+/// dedicated `LineNumber` token, not the generic decimal-integer one -
+/// confirmed against a real CPC's own save of `GOTO 10`, which encodes
+/// &1e, not the &1a this crate previously emitted (the exact, otherwise
+/// invisible byte responsible for a real "Syntax error" on a program with
+/// no variables at all to blame instead). A computed target (a variable or
+/// a longer expression) has no fixed line number to tag at tokenisation
+/// time and falls back to the ordinary `Integer`-constrained expression.
+pub fn parse_line_number_expression<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    alt((
+        terminated(
+            dec_u16_inner,
+            peek(alt((eof.void(), one_of((' ', '\t', ':', '\r', '\n')).void())))
+        )
+        .map(|val| {
+            vec![BasicToken::Constant(
+                BasicTokenNoPrefix::LineNumber,
+                BasicValue::new_integer(val as i16)
+            )]
+        }),
+        parse_numeric_expression(NumericExpressionConstraint::Integer)
+    ))
+    .parse_next(input)
+}
+
+macro_rules! keyword_line_number_parser {
+    ($fn_name:ident, $keyword:expr, $token:ident, $error_msg:expr) => {
+        #[doc = concat!("Parse ", $keyword, " keyword followed by a line number")]
+        pub fn $fn_name<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+            let (_, space, expr) = (
+                Caseless($keyword),
+                parse_basic_space1,
+                cut_err(parse_line_number_expression.context(StrContext::Label($error_msg)))
+            )
+                .parse_next(input)?;
+
+            Ok(construct_token_list!(
+                BasicToken::SimpleToken(BasicTokenNoPrefix::$token),
+                space,
+                expr
+            ))
+        }
+    };
+}
+
+keyword_line_number_parser!(parse_goto, "GOTO", Goto, "Line number expected");
+keyword_line_number_parser!(parse_gosub, "GOSUB", Gosub, "Line number expected");
 keyword_expr_parser!(
     parse_error,
     "ERROR",
@@ -2780,7 +2817,7 @@ pub fn parse_def_fn<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
     }
 
     AppendToTokenList::append_to(space3, &mut res);
-    res.push(BasicToken::SimpleToken('='.into()));
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Equal));
     AppendToTokenList::append_to(space4, &mut res);
     AppendToTokenList::append_to(expression, &mut res);
 
@@ -3947,6 +3984,19 @@ pub fn parse_basic_value<'src>(input: &mut &'src str) -> BasicOneTokenResult<'sr
     .parse_next(input)
 }
 
+/// Like `parse_basic_value`, but a plain decimal literal uses the compact
+/// forms - see `parse_decimal_value_16bits_compact`.
+pub fn parse_basic_value_compact<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
+    alt((
+        parse_floating_point,
+        parse_binary_value_16bits,
+        parse_hexadecimal_value_16bits,
+        parse_decimal_value_16bits_compact,
+        parse_large_integer_as_float
+    ))
+    .parse_next(input)
+}
+
 /// Parse a general expression that could be numeric or string
 /// This is used for IF and WHILE conditions
 /// Handles: boolean_term [AND/OR/XOR boolean_term]*
@@ -4012,7 +4062,7 @@ fn parse_boolean_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
                     "<>".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)),
                     "<".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)),
                     ">".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)),
-                    "=".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals))
+                    "=".map(|_| BasicToken::SimpleToken(BasicTokenNoPrefix::Equal))
                 )),
                 parse_basic_space0
             )
@@ -4115,7 +4165,7 @@ fn parse_numeric_term<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
                 "<>".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::NotEqual)]),
                 "<".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::LessThan)]),
                 ">".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)]),
-                "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals)]),
+                "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Equal)]),
                 "^".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Power)]),
                 "\\".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::IntegerDivision)])
             )),
@@ -4260,7 +4310,21 @@ pub fn parse_string_expression<'src>(input: &mut &'src str) -> BasicSeveralToken
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum NumericExpressionConstraint {
     None,
-    Integer
+    Integer,
+    /// Like `None`, but small non-negative literals directly in this
+    /// expression use the compact `ConstantNumber0`..`10`/
+    /// `ValueIntegerDecimal8bits` encodings - confirmed correct only for a
+    /// `LET`/assignment's own right-hand side (`parse_assign` is the only
+    /// caller). A command argument (`MODE 1`, `PEN 0`) or a function
+    /// argument (`CHR$(231)`) always uses the generic 16-bit form even for
+    /// a small value - confirmed wrong to compact, against a real CPC's
+    /// own re-save of pendulum.bas. Nested parenthesised sub-expressions
+    /// and function arguments do not inherit this constraint (see
+    /// `parse_parenthesized_numeric_expression`/`parse_chr_dollar`, which
+    /// hardcode `None` for their own contents), which is exactly why this
+    /// mirrors `None` rather than threading a flag through every
+    /// expression-grammar function.
+    AssignmentValue
 }
 
 /// Parse an optional unary +/- operator
@@ -4306,6 +4370,7 @@ pub fn parse_numeric_expression<'code>(
                     )),
                     alt((
                         parse_parenthesized_numeric_expression,
+                        parse_pi,
                         parse_basic_value.map(|v| vec![v]),
                         parse_integer_variable,
                         parse_float_variable
@@ -4321,6 +4386,29 @@ pub fn parse_numeric_expression<'code>(
                     parse_all_generated_numeric_functions_int,
                     parse_integer_value_16bits.map(|v| vec![v]),
                     parse_integer_variable
+                ))
+                .parse_next(input)?
+            },
+            NumericExpressionConstraint::AssignmentValue => {
+                alt((
+                    alt((
+                        parse_asc,
+                        parse_val,
+                        parse_len,
+                        parse_min,
+                        parse_max,
+                        parse_round,
+                        parse_all_generated_numeric_functions_any,
+                        parse_all_generated_numeric_functions_any2,
+                        parse_all_generated_numeric_functions_int
+                    )),
+                    alt((
+                        parse_parenthesized_numeric_expression,
+                        parse_pi,
+                        parse_basic_value_compact.map(|v| vec![v]),
+                        parse_integer_variable,
+                        parse_float_variable
+                    ))
                 ))
                 .parse_next(input)?
             },
@@ -4352,7 +4440,7 @@ pub fn parse_numeric_expression<'code>(
                     ">".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::GreaterThan)])
                 )),
                 alt((
-                    "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::CharEquals)]),
+                    "=".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Equal)]),
                     "^".map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Power)]),
                     "\\".map(|_| {
                         vec![BasicToken::SimpleToken(BasicTokenNoPrefix::IntegerDivision)]
@@ -4402,6 +4490,7 @@ pub fn parse_numeric_expression<'code>(
                             parse_all_generated_numeric_functions_any2,
                             parse_all_generated_numeric_functions_int,
                             parse_parenthesized_numeric_expression,
+                            parse_pi,
                             parse_basic_value.map(|v| vec![v]),
                             parse_integer_variable,
                             parse_float_variable
@@ -4417,6 +4506,29 @@ pub fn parse_numeric_expression<'code>(
                         parse_all_generated_numeric_functions_int,
                         parse_integer_value_16bits.map(|v| vec![v]),
                         parse_integer_variable
+                    ))
+                    .parse_next(input)?
+                },
+                NumericExpressionConstraint::AssignmentValue => {
+                    alt((
+                        alt((
+                            parse_asc,
+                            parse_val,
+                            parse_len,
+                            parse_min,
+                            parse_max,
+                            parse_round
+                        )),
+                        alt((
+                            parse_all_generated_numeric_functions_any,
+                            parse_all_generated_numeric_functions_any2,
+                            parse_all_generated_numeric_functions_int,
+                            parse_parenthesized_numeric_expression,
+                            parse_pi,
+                            parse_basic_value_compact.map(|v| vec![v]),
+                            parse_integer_variable,
+                            parse_float_variable
+                        ))
                     ))
                     .parse_next(input)?
                 },
@@ -4932,6 +5044,26 @@ pub fn parse_round<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     )(input)
 }
 
+/// PI - the built-in constant, a niladic prefixed token (no parentheses,
+/// no argument) unlike every other numeric function here. Previously
+/// unrecognised entirely: with no keyword parser for it, "PI" fell through
+/// to being parsed as a bare variable reference, silently different from
+/// what a real CPC tokenises it as - confirmed against a real emulator's
+/// own re-save of `theta=PI/2`.
+pub fn parse_pi<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    (
+        Caseless("PI"),
+        peek(cpclib_common::winnow::combinator::not(one_of((
+            'a'..='z',
+            'A'..='Z',
+            '0'..='9',
+            '_'
+        ))))
+    )
+        .map(|_| vec![BasicToken::PrefixedToken(BasicTokenPrefixed::Pi)])
+        .parse_next(input)
+}
+
 macro_rules! generate_numeric_functions {
     ( $(
         $const:ty | $kind:ident => {
@@ -5146,6 +5278,45 @@ pub fn parse_decimal_value_16bits<'src>(input: &mut &'src str) -> BasicOneTokenR
         terminated(dec_u16_inner, cpclib_common::winnow::combinator::not('.'))
     )
         .map(|(neg, val)| {
+            let val = val as i16;
+            BasicToken::Constant(
+                BasicTokenNoPrefix::ValueIntegerDecimal16bits,
+                BasicValue::new_integer(if neg.is_some() { -val } else { val })
+            )
+        })
+        .parse_next(input)
+}
+
+/// Like `parse_decimal_value_16bits`, but a small non-negative literal uses
+/// the compact `ConstantNumber0`..`10`/`ValueIntegerDecimal8bits` encodings
+/// - confirmed against a real CPC's own re-tokenisation of pendulum.bas:
+/// `0`/`1` become the single-byte ConstantNumber0/1 (no value bytes at all
+/// - see `BasicTokenNoPrefix::is_small_constant`), `100`/`250` become
+/// `ValueIntegerDecimal8bits` (one value byte, not two). Only reachable via
+/// `NumericExpressionConstraint::AssignmentValue` - see its doc comment
+/// for why this can't simply replace `parse_decimal_value_16bits`
+/// everywhere. Left unscoped for negative values - there is no confirmed
+/// evidence yet for how the ROM encodes those (in practice the leading `-`
+/// is stripped by `parse_unary_operator` before this ever runs, so `neg`
+/// is always `None` on this call path regardless).
+pub fn parse_decimal_value_16bits_compact<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
+    (
+        opt('-'),
+        terminated(dec_u16_inner, cpclib_common::winnow::combinator::not('.'))
+    )
+        .map(|(neg, val)| {
+            if neg.is_none() {
+                if let Some(kind) = BasicTokenNoPrefix::for_small_value(val) {
+                    return BasicToken::Constant(kind, BasicValue::new_integer(val as i16));
+                }
+                if val <= 0xFF {
+                    return BasicToken::Constant(
+                        BasicTokenNoPrefix::ValueIntegerDecimal8bits,
+                        BasicValue::new_integer_by_bytes(val as u8, 0)
+                    );
+                }
+            }
+
             let val = val as i16;
             BasicToken::Constant(
                 BasicTokenNoPrefix::ValueIntegerDecimal16bits,

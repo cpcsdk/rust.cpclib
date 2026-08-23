@@ -731,6 +731,49 @@ impl BasicTokenNoPrefix {
             _ => Self::VariableDefinition3
         }
     }
+
+    /// Whether this token is one of `ConstantNumber0`..`ConstantNumber10` -
+    /// the value is carried in the marker byte itself, with no trailing
+    /// value bytes (see `BasicToken::as_bytes`'s `Constant` arm).
+    pub fn is_small_constant(self) -> bool {
+        matches!(
+            self,
+            Self::ConstantNumber0
+                | Self::ConstantNumber1
+                | Self::ConstantNumber2
+                | Self::ConstantNumber3
+                | Self::ConstantNumber4
+                | Self::ConstantNumber5
+                | Self::ConstantNumber6
+                | Self::ConstantNumber7
+                | Self::ConstantNumber8
+                | Self::ConstantNumber9
+                | Self::ConstantNumber10
+        )
+    }
+
+    /// The dedicated single-byte token for a non-negative literal in
+    /// `0..=10`, if one exists. Confirmed against a real CPC's own
+    /// tokenisation of `l=1`/`sp=0`: it is genuinely shorter than the
+    /// generic decimal-integer encoding, not just an equivalent
+    /// alternative, so a program re-tokenised without it will not match
+    /// what a real CPC itself writes.
+    pub fn for_small_value(value: u16) -> Option<Self> {
+        Some(match value {
+            0 => Self::ConstantNumber0,
+            1 => Self::ConstantNumber1,
+            2 => Self::ConstantNumber2,
+            3 => Self::ConstantNumber3,
+            4 => Self::ConstantNumber4,
+            5 => Self::ConstantNumber5,
+            6 => Self::ConstantNumber6,
+            7 => Self::ConstantNumber7,
+            8 => Self::ConstantNumber8,
+            9 => Self::ConstantNumber9,
+            10 => Self::ConstantNumber10,
+            _ => return None
+        })
+    }
 }
 
 impl TryFrom<u8> for BasicTokenPrefixed {
@@ -1275,7 +1318,8 @@ impl fmt::Display for BasicToken {
                         constant.int_hexdecimal_representation().unwrap()
                     },
                     BasicTokenNoPrefix::ValueIntegerDecimal16bits
-                    | BasicTokenNoPrefix::ValueIntegerDecimal8bits => {
+                    | BasicTokenNoPrefix::ValueIntegerDecimal8bits
+                    | BasicTokenNoPrefix::LineNumber => {
                         constant.int_decimal_representation().unwrap()
                     },
                     BasicTokenNoPrefix::ValueIntegerBinary16bits => {
@@ -1326,6 +1370,30 @@ impl BasicToken {
                 let mut data = vec![BasicTokenNoPrefix::Pipe.value(), encoded_name.len() as u8];
                 data.extend_from_slice(&encoded_name);
                 data
+            },
+
+            // `ConstantNumber0`..`ConstantNumber10` carry their value in the
+            // marker byte itself - one byte, nothing after it. Confirmed
+            // against a real CPC's own tokenisation of `l=1`/`sp=0`: the
+            // marker alone (&0f/&0e) is the *entire* encoding, not the
+            // generic [marker, value...] shape every other `Constant` uses.
+            BasicToken::Constant(kind, _constant) if kind.is_small_constant() => {
+                vec![kind.value()]
+            },
+
+            // The "8bits" in the name is not decorative: unlike its 16-bit
+            // sibling, this token's payload really is one byte, the high
+            // byte of `constant` (always 0 for a value that fit in 8 bits
+            // to begin with) is not stored. Using `constant.as_bytes()`
+            // unconditionally here silently wrote a spurious second byte
+            // and desynchronised the line's own length field from its
+            // actual content - caught by `roundtrip_print_string_and_number`
+            // once the encoder started using this token at all.
+            BasicToken::Constant(BasicTokenNoPrefix::ValueIntegerDecimal8bits, constant) => {
+                vec![
+                    BasicTokenNoPrefix::ValueIntegerDecimal8bits.value(),
+                    constant.as_bytes()[0],
+                ]
             },
 
             BasicToken::Constant(kind, constant) => {
