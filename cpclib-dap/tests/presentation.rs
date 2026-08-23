@@ -298,6 +298,48 @@ fn a_bare_mv_says_when_there_is_no_pc_yet() {
     );
 }
 
+/// `-mv HL` (no `,follow`) is a valid question too: a one-time snapshot of
+/// wherever HL points right now, same as typing HL's numeric value would
+/// give - it just does not track HL afterwards.
+#[test]
+fn a_bare_register_name_opens_a_fixed_snapshot_not_a_follow() {
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session.on_emulator_message(&json!({
+        "seq": 4, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [{"name": "HL", "value": "0xC000", "variablesReference": 0}]}
+    }));
+
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-mv HL 4", "context": "repl"}
+        }))
+        .unwrap();
+    let read = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(read["arguments"]["memoryReference"], json!("0xc000"));
+    session.on_emulator_message(&json!({
+        "seq": 5, "type": "response", "request_seq": read["seq"], "success": true,
+        "command": "readMemory", "body": {"address": "0xC000", "data": "AQIDBA=="}
+    }));
+
+    // HL moves; a snapshot does not follow it.
+    session.on_emulator_message(&json!({
+        "seq": 6, "type": "response", "request_seq": 2, "success": true,
+        "command": "variables",
+        "body": {"variables": [{"name": "HL", "value": "0xC010", "variablesReference": 0}]}
+    }));
+    session.on_emulator_message(&json!({
+        "seq": 7, "type": "event", "event": "stopped", "body": {"reason": "step"}
+    }));
+    let refreshed = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(
+        refreshed["arguments"]["memoryReference"],
+        json!("0xc000"),
+        "still the address HL had when the snapshot was taken"
+    );
+}
+
 /// `-mv all,follow` opens one view per known pointer register at once,
 /// rather than typing `-mv HL,follow` and friends by hand for each.
 #[test]
@@ -468,7 +510,12 @@ fn open_memory_view(session: &mut Session<RecordingPeer>, expression: &str, data
 #[test]
 fn the_memory_view_refreshes_itself_on_every_stop() {
     let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
-    open_memory_view(&mut session, "-mv 0xC000 4", "AQIDBA==");
+    let opened = open_memory_view(&mut session, "-mv 0xC000 4", "AQIDBA==");
+    assert_eq!(
+        opened["body"]["requested"],
+        json!(true),
+        "a person typed this one"
+    );
 
     let out = session.on_emulator_message(&json!({
         "seq": 5, "type": "event", "event": "stopped",
@@ -488,6 +535,11 @@ fn the_memory_view_refreshes_itself_on_every_stop() {
 
     assert_eq!(out.len(), 1, "a refresh nobody typed prints no receipt");
     assert_eq!(out[0]["event"], json!("cpclib/memoryView"));
+    assert_eq!(
+        out[0]["body"]["requested"],
+        json!(false),
+        "a stop's own silent refresh, not the panel being brought forward"
+    );
     assert_eq!(out[0]["body"]["bytes"], json!([1, 0x99, 3, 4]));
     assert_eq!(
         out[0]["body"]["changed"],

@@ -96,10 +96,13 @@ const CONSOLE_HELP: &str = "\
 CPC debug console commands:
   -mv [address|label] [count]   open a memory view (defaults to PC, and then
                                 follows it, like -dv; count defaults to 64)
-  -mv <register>,follow [count] ...anchored to a register instead - HL,
-                                follow tracks wherever HL points, every stop.
-                                Each address/register opens its own panel;
-                                asking again for one already open updates it
+  -mv <register> [count]        ...or a register name - a snapshot of where
+                                it points right now, e.g. -mv HL
+  -mv <register>,follow [count] ...add ,follow to track it instead - HL,
+                                follow moves with wherever HL points, every
+                                stop. Each address/register opens its own
+                                panel; asking again for one already open
+                                updates it and brings it to the front
   -mv all,follow [count]        ...one view per pointer register (PC, SP,
                                 HL, DE, BC, IX, IY) at once
   -dv [address|label] [count]   disassemble memory (defaults to PC, and then
@@ -2786,17 +2789,39 @@ impl<P: DapPeer> Session<P> {
         // of ten while stepping. `PC` is just another entry in
         // `last_registers`, so this is the ordinary `,follow` path with the
         // register named for you rather than a third anchor kind.
-        let register_to_follow = match arguments.first() {
-            None => Some("PC".to_string()),
-            Some(where_) => where_
-                .split_once(',')
-                .filter(|(_, suffix)| suffix.eq_ignore_ascii_case("follow"))
-                .map(|(name, _)| name.to_ascii_uppercase())
+        //
+        // `,follow` is only what decides *tracking*, not whether a register
+        // name is accepted at all: `-mv HL` alone is a perfectly good
+        // question ("what is HL pointing at, right now") and gets a `Fixed`
+        // snapshot at HL's current value, same as `-mv 0xC000` would - it
+        // just does not move after that. Only `-mv HL,follow` re-resolves
+        // the address on every stop.
+        enum RegisterUse {
+            Follow(String),
+            Snapshot(String)
+        }
+        let register_use = match arguments.first() {
+            None => Some(RegisterUse::Follow("PC".to_string())),
+            Some(where_) => match where_.split_once(',') {
+                Some((name, suffix)) if suffix.eq_ignore_ascii_case("follow") => {
+                    Some(RegisterUse::Follow(name.to_ascii_uppercase()))
+                },
+                Some(_) => None,
+                None if self.last_registers.contains_key(&where_.to_ascii_uppercase()) => {
+                    Some(RegisterUse::Snapshot(where_.to_ascii_uppercase()))
+                },
+                None => None
+            }
         };
 
-        let (anchor, address) = if let Some(upper) = register_to_follow {
-            match self.last_registers.get(&upper) {
-                Some(&value) => (MemoryAnchor::Register(upper), value),
+        let (anchor, address) = if let Some(use_) = register_use {
+            let (upper, following) = match &use_ {
+                RegisterUse::Follow(name) => (name, true),
+                RegisterUse::Snapshot(name) => (name, false)
+            };
+            match self.last_registers.get(upper) {
+                Some(&value) if following => (MemoryAnchor::Register(upper.clone()), value),
+                Some(&value) => (MemoryAnchor::Fixed(value), value),
                 None if arguments.first().is_none() => {
                     return Ok(vec![protocol::failure(
                         request,
@@ -3335,6 +3360,12 @@ impl<P: DapPeer> Session<P> {
             return Vec::new();
         }
         let view = self.pending_memory_views.remove(0);
+        // Whether a person typed this, rather than a stop silently
+        // refreshing an already-open panel - the editor uses this to decide
+        // whether to bring the panel to the front, same distinction
+        // `request` itself already draws for whether a console receipt is
+        // owed.
+        let requested = view.request.is_some();
         let bytes = response
             .get("body")
             .and_then(|b| b.get("data"))
@@ -3403,6 +3434,7 @@ impl<P: DapPeer> Session<P> {
             "cpclib/memoryView",
             json!({
                 "viewId": view.anchor.view_id(),
+                "requested": requested,
                 "address": view.address,
                 "label": view.label,
                 "bytes": bytes,

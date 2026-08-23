@@ -429,6 +429,9 @@ async function showEmulator(session: vscode.DebugSession, url: string | undefine
 
 interface MemoryDump {
     viewId?: string;
+    /** A person typed this, rather than a stop silently refreshing an
+     * already-open panel. */
+    requested?: boolean;
     address: number;
     label?: string | null;
     bytes: number[];
@@ -472,10 +475,12 @@ function showMemory(session: vscode.DebugSession, dump: MemoryDump | undefined):
     }
 
     panel.webview.html = memoryHtml(dump);
-    // Only when it was just asked for. The panel refreshes itself on every
-    // stop, and revealing it each time pulls it in front of whatever shares
-    // its column - `preserveFocus` keeps the keyboard, not the view.
-    if (isNew) { panel.reveal(vscode.ViewColumn.Beside, true); }
+    // New, or a person just typed the command that reused it (`-mv HL,follow`
+    // again brings the HL panel forward instead of leaving it wherever it
+    // was). A stop's own silent refresh does neither - revealing it every
+    // step would pull it in front of whatever shares its column.
+    // `preserveFocus` keeps the keyboard, not the view.
+    if (isNew || dump.requested) { panel.reveal(vscode.ViewColumn.Beside, true); }
 }
 
 const hex = (value: number, width: number) =>
@@ -591,7 +596,6 @@ function showCrtc(session: vscode.DebugSession, dump: CrtcDump | undefined): voi
     if (!dump || !Array.isArray(dump.registers)) { return; }
 
     let panel = crtcPanels.get(session.id);
-    const isNew = panel === undefined;
     if (!panel) {
         panel = vscode.window.createWebviewPanel(
             'cpclib.crtc',
@@ -607,7 +611,10 @@ function showCrtc(session: vscode.DebugSession, dump: CrtcDump | undefined): voi
     }
 
     panel.webview.html = crtcHtml(dump);
-    if (isNew) { panel.reveal(vscode.ViewColumn.Beside, true); }
+    // Unlike the memory view, -crtcview is never a silent per-stop refresh -
+    // every call is a person asking, so it always comes forward, not only
+    // when the panel is new.
+    panel.reveal(vscode.ViewColumn.Beside, true);
 }
 
 function crtcHtml(dump: CrtcDump): string {
