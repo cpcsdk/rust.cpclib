@@ -61,6 +61,15 @@ pub const EXECUTE_LINE_ENTRY: u16 = 0xDE77;
 /// [`EXECUTE_LINE_ENTRY`], fires on every `:`-separated statement too.
 pub const EXECUTE_STATEMENT_ENTRY: u16 = 0xDE60;
 
+/// Where a tokenised BASIC program lives once loaded, on a freshly booted
+/// machine with default memory configuration. Confirmed empirically, not
+/// folklore: `cpclib_sna::Snapshot::new_6128()`'s own
+/// [`PTR_END_OF_RESERVED_AREA`] reads &016F, i.e. this value + 1, on a
+/// fresh boot with no program loaded - this is what `build_launch_snapshot`
+/// builds on directly rather than re-deriving it from that pointer on every
+/// launch.
+pub const PROGRAM_START: u16 = 0x170;
+
 /// Given the 2 bytes read from [`PTR_CURRENT_LINE_NUMBER_FIELD`], the
 /// address to dereference next to get the actual line number - `None` if
 /// the program is not running (direct/immediate mode).
@@ -237,11 +246,102 @@ fn read_name(buffer: &[u8], mut idx: usize) -> Option<(String, usize)> {
     Some((name, idx))
 }
 
+/// Builds a boot snapshot with `program_bytes` (a tokenised program's own
+/// `as_bytes()`) already sitting at [`PROGRAM_START`], as if `LOAD`ed - the
+/// machine is otherwise left exactly as a fresh boot leaves it, idle at the
+/// Ready prompt, not mid-`RUN`.
+///
+/// Deliberately not further than that: getting a Z80 debugger to boot
+/// straight into "the program is already running" only needs setting `PC`
+/// to the program's own entry point, because that is a value *we* chose
+/// when assembling it. BASIC's "RUN" has no such fixed entry point to jump
+/// to - the ROM's own `RUN_from_HL` routine expects a stack already primed
+/// by its caller (`ex (sp),hl` right at its start), so jumping `PC` there
+/// cold corrupts the stack instead of running the program. Simulating a
+/// typed "RUN" through the keyboard buffer was investigated and rejected
+/// too: the buffer holds raw key-matrix scan markers translated through a
+/// table, not characters, and the one documented character-level injection
+/// point (`KM_CHAR_RETURN`, &BB0C) holds exactly one pending character,
+/// nowhere near enough for a whole "RUN\r" line, and the buffer's own byte
+/// layout could not be confirmed against a primary source. Left as it is,
+/// the user runs the program themselves - via the `-basicrun` output hint,
+/// or the emulator's own window - and the debugger's breakpoints and
+/// stepping still work identically to a program launched any other way,
+/// which is the actual value here.
+///
+/// Only the two firmware pointers a freshly `LOAD`ed program actually
+/// needs updated are touched: [`PTR_VARIABLES_START`] and
+/// [`PTR_ARRAYS_START`], both to right after `program_bytes` (matching a
+/// real `LOAD`'s effect: no variables exist yet, so both point to the same
+/// place). [`PTR_END_OF_RESERVED_AREA`] does *not* change - it marks the
+/// fixed workspace boundary the program area starts after, not the
+/// program's own end, so it already reads correctly on the base snapshot
+/// regardless of what gets loaded on top.
+pub fn build_launch_snapshot(program_bytes: &[u8]) -> Result<cpclib_sna::Snapshot, String> {
+    let mut sna = cpclib_sna::Snapshot::new_6128()?;
+    sna.unwrap_memory_chunks();
+    sna.add_data(program_bytes, PROGRAM_START as usize)
+        .map_err(|e| format!("{e:?}"))?;
+
+    let variables_start = PROGRAM_START.wrapping_add(program_bytes.len() as u16);
+    let pointer_bytes = variables_start.to_le_bytes();
+    sna.add_data(&pointer_bytes, PTR_VARIABLES_START as usize)
+        .map_err(|e| format!("{e:?}"))?;
+    sna.add_data(&pointer_bytes, PTR_ARRAYS_START as usize)
+        .map_err(|e| format!("{e:?}"))?;
+
+    Ok(sna)
+}
+
 #[cfg(test)]
 mod tests {
     use cpclib_basic::BasicProgram;
 
     use super::*;
+
+    fn peek16(sna: &cpclib_sna::Snapshot, address: u16) -> u16 {
+        u16::from_le_bytes([sna.get_byte(address as u32), sna.get_byte(address as u32 + 1)])
+    }
+
+    #[test]
+    fn a_fresh_boot_snapshot_has_no_program_loaded() {
+        // The base every launch snapshot builds on: confirms PROGRAM_START
+        // and the "no program" state build_launch_snapshot expects to
+        // override are what this crate assumes they are, so a future
+        // cpclib-sna update changing the embedded base snapshot fails this
+        // test rather than silently breaking BASIC launches.
+        let mut sna = cpclib_sna::Snapshot::new_6128().unwrap();
+        sna.unwrap_memory_chunks();
+
+        assert_eq!(peek16(&sna, PTR_END_OF_RESERVED_AREA), PROGRAM_START - 1);
+        assert_eq!(peek16(&sna, PTR_CURRENT_LINE_NUMBER_FIELD), 0);
+        assert_eq!(peek16(&sna, VARIABLE_CHAIN_HEADS), 0);
+    }
+
+    #[test]
+    fn build_launch_snapshot_places_the_program_and_updates_variable_pointers() {
+        let prog = BasicProgram::parse("10 PRINT \"HI\"\n20 GOTO 10\n").unwrap();
+        let bytes = prog.as_bytes();
+
+        let sna = build_launch_snapshot(&bytes).unwrap();
+
+        for (i, &b) in bytes.iter().enumerate() {
+            assert_eq!(
+                sna.get_byte(PROGRAM_START as u32 + i as u32),
+                b,
+                "byte {i} of the program"
+            );
+        }
+
+        let expected_variables_start = PROGRAM_START + bytes.len() as u16;
+        assert_eq!(peek16(&sna, PTR_VARIABLES_START), expected_variables_start);
+        assert_eq!(peek16(&sna, PTR_ARRAYS_START), expected_variables_start);
+
+        // Untouched: the workspace boundary, not the program's own end.
+        assert_eq!(peek16(&sna, PTR_END_OF_RESERVED_AREA), PROGRAM_START - 1);
+        // Still idle - this snapshot loads the program but does not run it.
+        assert_eq!(peek16(&sna, PTR_CURRENT_LINE_NUMBER_FIELD), 0);
+    }
 
     #[test]
     fn direct_mode_is_a_null_pointer() {

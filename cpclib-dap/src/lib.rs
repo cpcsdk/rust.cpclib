@@ -21,6 +21,7 @@
 
 pub mod amspiritlite;
 pub mod basic;
+pub mod basic_session;
 pub mod callstack;
 pub mod disassemble;
 pub mod inspect;
@@ -233,10 +234,41 @@ impl Transcript {
 ///
 /// Stdout carries protocol frames and nothing else - the same discipline the
 /// language server keeps - so every diagnostic goes to stderr.
+/// Either flavour of session this adapter can run, dispatched to uniformly
+/// by `run_stdio` - which one is active for the life of the process is
+/// decided once, by `launch`, from whether `"program"` names a `.bas` file.
+enum ActiveSession {
+    Z80(session::Session<Backend>),
+    Basic(basic_session::BasicSession<Backend>)
+}
+
+impl ActiveSession {
+    fn on_editor_message(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
+        match self {
+            ActiveSession::Z80(s) => s.on_editor_message(message),
+            ActiveSession::Basic(s) => s.on_editor_message(message)
+        }
+    }
+
+    fn on_emulator_message(&mut self, message: &Value) -> Vec<Value> {
+        match self {
+            ActiveSession::Z80(s) => s.on_emulator_message(message),
+            ActiveSession::Basic(s) => s.on_emulator_message(message)
+        }
+    }
+
+    fn peer_mut(&mut self) -> &mut Backend {
+        match self {
+            ActiveSession::Z80(s) => s.peer_mut(),
+            ActiveSession::Basic(s) => s.peer_mut()
+        }
+    }
+}
+
 pub fn run_stdio() -> std::io::Result<()> {
     let mut output = std::io::stdout();
     let mut seq = 1i64;
-    let mut session: Option<session::Session<Backend>> = None;
+    let mut session: Option<ActiveSession> = None;
     let transcript = transcript();
     // The DAP spec only allows `progressStart`/`progressEnd` towards a
     // client that declared it accepts them, in its own `initialize`
@@ -312,7 +344,19 @@ pub fn run_stdio() -> std::io::Result<()> {
                             &mut output
                         )?;
                     }
-                    let outcome = start_session(&message);
+                    let is_basic = message
+                        .get("arguments")
+                        .and_then(|a| a.get("program"))
+                        .and_then(Value::as_str)
+                        .map(|p| p.to_ascii_lowercase().ends_with(".bas"))
+                        .unwrap_or(false);
+                    let outcome = if is_basic {
+                        start_basic_session(&message)
+                            .map(|(s, url, notices)| (ActiveSession::Basic(s), url, notices))
+                    }
+                    else {
+                        start_session(&message).map(|(s, url, notices)| (ActiveSession::Z80(s), url, notices))
+                    };
                     if client_accepts_progress {
                         seq += 1;
                         emit(
@@ -547,129 +591,8 @@ fn start_session(
         );
     };
 
-    // Which emulator this session talks to. They differ in everything except
-    // that both end up behind `DapPeer`.
-    // The launch configuration wins; the project's own setting is the default,
-    // so a rule can be debugged either way without editing the project.
-    // The project this session is for, from whichever of the two launch shapes
-    // named it.
-    let named_path = arguments
-        .get("program")
-        .or_else(|| arguments.get("buildFile"))
-        .and_then(Value::as_str)
-        .map(PathBuf::from);
-    // `_or_own_dir`, not plain `project_root`: a lone `.asm` with no `.git`/
-    // `Makefile`/etc. anywhere above it - a scratch file, an example folder -
-    // made `project_root` return `None`, which skipped `find_config_file`
-    // entirely and silently defaulted to 1984js regardless of what the
-    // project's own `cpclib-lsp.toml` said, since that file was never even
-    // looked for. `find_config_file` itself already searches upward from
-    // whatever root it is given, so the fallback (the entry's own directory)
-    // is enough for it to find a `cpclib-lsp.toml` sitting right there.
-    let dap_config = named_path
-        .as_deref()
-        .and_then(cpclib_project::root::project_root_or_own_dir)
-        .map(|root| {
-            cpclib_project::config::load_config(Some(root.as_path()))
-                .config
-                .dap
-        })
-        .unwrap_or_default();
-    let configured_emulator = dap_config.emulator.clone();
-    let chosen_emulator = arguments
-        .get("emulator")
-        .and_then(Value::as_str)
-        .unwrap_or(&configured_emulator)
-        .to_string();
+    let (backend, url, chosen_emulator) = connect_backend(&arguments, snapshot, &mut early_notices)?;
     let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
-
-    let (backend, url) = if wants_lite {
-        // An instance already serving, named by the configuration or found at
-        // the emulator's own default port.
-        //
-        // *Not* launched from here yet: starting it, loading the snapshot and
-        // waiting for the port is a separate piece of work, and connecting to
-        // one you started yourself is useful today rather than after it.
-        // An `endpoint` names an emulator the user is already running - useful
-        // for attaching to one with a window arranged how they like it.
-        // Without one, it is started here with the program loaded, which is
-        // what `F5` should do.
-        // `cpclib-lsp.toml` is the place these are set; a launch attribute is
-        // an override for the occasion, not the normal way to configure this.
-        let attached_to = arguments
-            .get("endpoint")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .or_else(|| Some(dap_config.endpoint.clone()).filter(|value| !value.trim().is_empty()));
-
-        let mut started: Option<std::process::Child> = None;
-        let endpoint = match attached_to.as_deref() {
-            Some(named) => {
-                amspiritlite::wait_until_listening(named, std::time::Duration::from_secs(5))
-                    .map_err(|e| {
-                        format!(
-                            "{e}. Start AMSpiriT Lite with --web-server, or drop \
-                             \"endpoint\" to have this session start it."
-                        )
-                    })?;
-                named.to_string()
-            },
-            None => {
-                let port = arguments
-                    .get("port")
-                    .and_then(Value::as_u64)
-                    .and_then(|port| u16::try_from(port).ok())
-                    .unwrap_or(dap_config.port);
-                let (endpoint, child) =
-                    amspiritlite::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?;
-                started = Some(child);
-                // Said out loud, because the emulator left behind is still on
-                // screen and still running the previous build: without this the
-                // user has two windows and no way to tell which one this
-                // session is driving.
-                if !endpoint.ends_with(&format!(":{port}")) {
-                    early_notices.push(format!(
-                        "port {port} was already answering - an emulator left behind by an \
-                         earlier session, most likely - so this one serves on {endpoint} \
-                         instead. The older window is not the one being debugged; close it."
-                    ));
-                }
-                endpoint
-            }
-        };
-
-        let peer = amspiritlite::AmspiritLitePeer::connect(&endpoint)
-            .map_err(|e| format!("cannot reach AMSpiriT Lite at {endpoint}: {e}"))?;
-        // Only an emulator this session started is closed with it; one the
-        // user started is theirs.
-        let peer = match started {
-            Some(child) => peer.owning(child),
-            None => peer
-        };
-        // No URL for the editor to open.
-        //
-        // Handing it this endpoint makes it show the emulator's *own* debug
-        // client in a tab - and that page is not a viewer. It opens its own
-        // event stream and posts `{"paused": false}` in several places, so it
-        // resumes the machine behind this session's back: a breakpoint stops
-        // the emulator, the page starts it again, and the stop is gone before
-        // anyone can see it. AMSpiriT Lite has its own window; there is nothing
-        // to show in an editor tab.
-        (Backend::AmspiritLite(peer), String::new())
-    }
-    else {
-        let web_root = cpclib_runner::web::js1984::install()?;
-        let server = cpclib_runner::web::serve(&web_root, Some(snapshot))
-            .map_err(|e| format!("cannot serve the emulator: {e}"))?;
-        let url = server.debug_url();
-        (
-            Backend::Served(ServedPeer {
-                server,
-                buffer: Vec::new()
-            }),
-            url
-        )
-    };
 
     let mut session = session::Session::new(backend, source_map);
     // The call stack is reconstructed from the stack contents, which needs the
@@ -792,6 +715,198 @@ fn start_session(
         .map_err(|e| e.to_string())?;
 
     Ok((session, url, notices))
+}
+
+/// Picks and connects to whichever emulator this session talks to (1984js
+/// or AMSpiriT Lite), loaded with `snapshot`. Shared between the Z80
+/// launch flow above and the BASIC one below - they differ only in how the
+/// snapshot itself gets built, never in how the emulator is found and
+/// started, since both end up behind the same [`DapPeer`].
+///
+/// Returns the chosen emulator's own name alongside the connected peer:
+/// `start_session` still needs it afterwards, to warn about an emulator
+/// name it does not recognise and to explain AMSpiriT Lite's own window
+/// rather than duplicate the lookup that produced it.
+fn connect_backend(
+    arguments: &Value,
+    snapshot: Vec<u8>,
+    early_notices: &mut Vec<String>
+) -> Result<(Backend, String, String), String> {
+    // The launch configuration wins; the project's own setting is the default,
+    // so a rule can be debugged either way without editing the project.
+    // The project this session is for, from whichever of the two launch shapes
+    // named it.
+    let named_path = arguments
+        .get("program")
+        .or_else(|| arguments.get("buildFile"))
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    // `_or_own_dir`, not plain `project_root`: a lone `.asm` with no `.git`/
+    // `Makefile`/etc. anywhere above it - a scratch file, an example folder -
+    // made `project_root` return `None`, which skipped `find_config_file`
+    // entirely and silently defaulted to 1984js regardless of what the
+    // project's own `cpclib-lsp.toml` said, since that file was never even
+    // looked for. `find_config_file` itself already searches upward from
+    // whatever root it is given, so the fallback (the entry's own directory)
+    // is enough for it to find a `cpclib-lsp.toml` sitting right there.
+    let dap_config = named_path
+        .as_deref()
+        .and_then(cpclib_project::root::project_root_or_own_dir)
+        .map(|root| {
+            cpclib_project::config::load_config(Some(root.as_path()))
+                .config
+                .dap
+        })
+        .unwrap_or_default();
+    let configured_emulator = dap_config.emulator.clone();
+    let chosen_emulator = arguments
+        .get("emulator")
+        .and_then(Value::as_str)
+        .unwrap_or(&configured_emulator)
+        .to_string();
+    let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
+
+    let (backend, url) = if wants_lite {
+        // An instance already serving, named by the configuration or found at
+        // the emulator's own default port.
+        //
+        // *Not* launched from here yet: starting it, loading the snapshot and
+        // waiting for the port is a separate piece of work, and connecting to
+        // one you started yourself is useful today rather than after it.
+        // An `endpoint` names an emulator the user is already running - useful
+        // for attaching to one with a window arranged how they like it.
+        // Without one, it is started here with the program loaded, which is
+        // what `F5` should do.
+        // `cpclib-lsp.toml` is the place these are set; a launch attribute is
+        // an override for the occasion, not the normal way to configure this.
+        let attached_to = arguments
+            .get("endpoint")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| Some(dap_config.endpoint.clone()).filter(|value| !value.trim().is_empty()));
+
+        let mut started: Option<std::process::Child> = None;
+        let endpoint = match attached_to.as_deref() {
+            Some(named) => {
+                amspiritlite::wait_until_listening(named, std::time::Duration::from_secs(5))
+                    .map_err(|e| {
+                        format!(
+                            "{e}. Start AMSpiriT Lite with --web-server, or drop \
+                             \"endpoint\" to have this session start it."
+                        )
+                    })?;
+                named.to_string()
+            },
+            None => {
+                let port = arguments
+                    .get("port")
+                    .and_then(Value::as_u64)
+                    .and_then(|port| u16::try_from(port).ok())
+                    .unwrap_or(dap_config.port);
+                let (endpoint, child) =
+                    amspiritlite::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?;
+                started = Some(child);
+                // Said out loud, because the emulator left behind is still on
+                // screen and still running the previous build: without this the
+                // user has two windows and no way to tell which one this
+                // session is driving.
+                if !endpoint.ends_with(&format!(":{port}")) {
+                    early_notices.push(format!(
+                        "port {port} was already answering - an emulator left behind by an \
+                         earlier session, most likely - so this one serves on {endpoint} \
+                         instead. The older window is not the one being debugged; close it."
+                    ));
+                }
+                endpoint
+            }
+        };
+
+        let peer = amspiritlite::AmspiritLitePeer::connect(&endpoint)
+            .map_err(|e| format!("cannot reach AMSpiriT Lite at {endpoint}: {e}"))?;
+        // Only an emulator this session started is closed with it; one the
+        // user started is theirs.
+        let peer = match started {
+            Some(child) => peer.owning(child),
+            None => peer
+        };
+        // No URL for the editor to open.
+        //
+        // Handing it this endpoint makes it show the emulator's *own* debug
+        // client in a tab - and that page is not a viewer. It opens its own
+        // event stream and posts `{"paused": false}` in several places, so it
+        // resumes the machine behind this session's back: a breakpoint stops
+        // the emulator, the page starts it again, and the stop is gone before
+        // anyone can see it. AMSpiriT Lite has its own window; there is nothing
+        // to show in an editor tab.
+        (Backend::AmspiritLite(peer), String::new())
+    }
+    else {
+        let web_root = cpclib_runner::web::js1984::install()?;
+        let server = cpclib_runner::web::serve(&web_root, Some(snapshot))
+            .map_err(|e| format!("cannot serve the emulator: {e}"))?;
+        let url = server.debug_url();
+        (
+            Backend::Served(ServedPeer {
+                server,
+                buffer: Vec::new()
+            }),
+            url
+        )
+    };
+
+    Ok((backend, url, chosen_emulator))
+}
+
+/// Build the BASIC program and put the emulator in front of it, idle at
+/// the Ready prompt.
+///
+/// Unlike `start_session`, this never has "the program is already running"
+/// as an option to boot straight into - see `basic::build_launch_snapshot`'s
+/// own doc comment for why. The session that comes back arms its one
+/// breakpoint and starts the program running through the ROM's own normal
+/// dispatch the moment the user types `RUN` themselves.
+fn start_basic_session(
+    request: &Value
+) -> Result<(basic_session::BasicSession<Backend>, String, Vec<String>), String> {
+    let arguments = request.get("arguments").cloned().unwrap_or(json!({}));
+    let mut early_notices: Vec<String> = Vec::new();
+
+    let program = arguments
+        .get("program")
+        .and_then(Value::as_str)
+        .ok_or("the launch configuration named no \"program\"")?;
+    let source_path = PathBuf::from(program);
+    let source_text = std::fs::read_to_string(&source_path)
+        .map_err(|e| format!("{}: {e}", source_path.display()))?;
+    let parsed = cpclib_basic::BasicProgram::parse(&source_text)
+        .map_err(|e| format!("{}: {e}", source_path.display()))?;
+    let program_bytes = parsed.as_bytes();
+
+    let sna = basic::build_launch_snapshot(&program_bytes)?;
+    let mut snapshot = Vec::new();
+    sna.write_all(&mut snapshot, cpclib_sna::SnapshotVersion::V2)
+        .map_err(|e| e.to_string())?;
+
+    let (backend, url, _chosen_emulator) =
+        connect_backend(&arguments, snapshot, &mut early_notices)?;
+
+    let mut session = basic_session::BasicSession::new(
+        backend,
+        source_path,
+        &source_text,
+        basic::PROGRAM_START,
+        program_bytes.len()
+    );
+
+    early_notices.push(
+        "the program is loaded but not yet running - type RUN in the emulator \
+         window to start it. Breakpoints and stepping work normally from there."
+            .to_string()
+    );
+
+    session.attach().map_err(|e| e.to_string())?;
+
+    Ok((session, url, early_notices))
 }
 
 /// The nearest build file, searching upwards from the working directory.
