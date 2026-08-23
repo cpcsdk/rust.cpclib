@@ -2211,7 +2211,7 @@ mod tests {
     fn the_crtc_pane_flags_a_known_bad_configuration() {
         let mut regs = vec![0; 18];
         regs[0] = 63;
-        regs[2] = 50;
+        regs[2] = 60;
         regs[3] = 0x8c;
         let body = json!({ "regs": regs, "selected_reg": 0, "rasterline": 0 });
 

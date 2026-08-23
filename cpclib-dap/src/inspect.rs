@@ -589,13 +589,15 @@ pub fn validate_crtc(regs: &[u8]) -> Vec<CrtcWarning> {
     let r3_low = u32::from(regs[3]) & 0x0f;
 
     // CRTC type 2 loses horizontal sync unless the sync position plus the
-    // HSYNC width stays inside the line total.
-    if r2 + r3_low < r0 {
+    // HSYNC width stays *inside* the line total - the safe relationship is
+    // R2+(R3&0x0f) < R0, so the warning is raised on its negation, not on
+    // the relationship itself.
+    if r2 + r3_low >= r0 {
         out.push(CrtcWarning {
             registers: &["R0", "R2", "R3"],
             severity: CrtcSeverity::Error,
             message: format!(
-                "R2+(R3&0x0f) < R0 ({r2}+{r3_low}={} < {r0}): a CRTC type 2 loses horizontal \
+                "R2+(R3&0x0f) >= R0 ({r2}+{r3_low}={} >= {r0}): a CRTC type 2 loses horizontal \
                  sync with this combination",
                 r2 + r3_low
             )
@@ -901,19 +903,20 @@ mod tests {
 
     use super::*;
 
-/// The example from the bug report: R0=63, R2=50, R3=0x8c loses sync
-    /// (0x8c & 0x0f = 12, 50+12=62 < 63).
+    /// R0=63, R2=60, R3=0x8c does not respect R2+(R3&0x0f) < R0
+    /// (0x8c & 0x0f = 12, 60+12=72, and 72 is not < 63) - the warning is
+    /// raised on that failure, not on the safe relationship itself.
     #[test]
     fn a_known_sync_losing_combination_is_flagged() {
         let mut regs = [0u8; 18];
         regs[0] = 63;
-        regs[2] = 50;
+        regs[2] = 60;
         regs[3] = 0x8c;
         let warnings = validate_crtc(&regs);
         let sync = warnings
             .iter()
             .find(|w| w.registers.contains(&"R2"))
-            .expect("R2+(R3&0x0f) < R0 should be flagged");
+            .expect("R2+(R3&0x0f) < R0 not holding should be flagged");
         assert_eq!(sync.severity, CrtcSeverity::Error);
         assert!(sync.registers.contains(&"R0"));
         assert!(sync.registers.contains(&"R3"));
@@ -924,7 +927,7 @@ mod tests {
     fn r0_63_raises_no_line_duration_warning() {
         let mut regs = [0u8; 18];
         regs[0] = 63;
-        regs[2] = 63;
+        regs[2] = 10; // well under R0, so this does not also raise sync-loss
         regs[3] = 0x00;
         let warnings = validate_crtc(&regs);
         assert!(
@@ -939,7 +942,7 @@ mod tests {
     fn a_line_not_64_nops_long_is_flagged() {
         let mut regs = [0u8; 18];
         regs[0] = 50;
-        regs[2] = 50; // no sync loss on its own, isolating the R0 rule
+        regs[2] = 10; // well under R0, so this does not also raise sync-loss
         let warnings = validate_crtc(&regs);
         let duration = warnings
             .iter()
@@ -958,7 +961,7 @@ mod tests {
 
         let mut sna = Snapshot::default();
         sna.set_value(SnapshotFlag::CRTC_REG(Some(0)), 63).unwrap();
-        sna.set_value(SnapshotFlag::CRTC_REG(Some(2)), 50).unwrap();
+        sna.set_value(SnapshotFlag::CRTC_REG(Some(2)), 60).unwrap();
         sna.set_value(SnapshotFlag::CRTC_REG(Some(3)), 0x8c).unwrap();
 
         let crtc = chip_variables(CRTC_REFERENCE, &sna).unwrap();
@@ -983,9 +986,10 @@ mod tests {
     fn a_well_formed_configuration_is_not_flagged() {
         let mut regs = [0u8; 18];
         regs[0] = 63;
-        // R2 + (R3 & 0x0f) = 50 + 13 = 63, exactly R0: not a sync loss.
+        // R2 + (R3 & 0x0f) = 50 + 12 = 62, strictly less than R0 (63): the
+        // safe relationship holds, so nothing is raised.
         regs[2] = 50;
-        regs[3] = 0x8d;
+        regs[3] = 0x8c;
         assert!(validate_crtc(&regs).is_empty());
     }
 

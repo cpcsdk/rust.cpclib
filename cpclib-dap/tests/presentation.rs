@@ -1485,7 +1485,7 @@ fn crtcview_flags_a_known_bad_configuration() {
     let mut sna = Snapshot::default();
     sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(0)), 63)
         .unwrap();
-    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(2)), 50)
+    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(2)), 60)
         .unwrap();
     sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(3)), 0x8c)
         .unwrap();
@@ -1534,8 +1534,8 @@ fn crtcview_is_quiet_about_a_well_formed_configuration() {
     let mut sna = Snapshot::default();
     sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(0)), 63)
         .unwrap();
-    // R2+(R3&0x0f) must reach R0 (63) for sync not to be lost.
-    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(2)), 63)
+    // R2+(R3&0x0f) must stay *under* R0 (63) for sync not to be lost.
+    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(2)), 10)
         .unwrap();
 
     let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
