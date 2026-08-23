@@ -658,15 +658,22 @@ impl<P: DapPeer> BasicSession<P> {
         let Some(chunk) = bytes.get(0..4) else {
             return Vec::new();
         };
-        // PTR_CURRENT_STATEMENT's own value *is* the address to look up -
-        // unlike the line-number field below, it needs no further
-        // dereference. `None` (no match) leaves the previous stop's column
-        // standing rather than guessing; the very next line-number lookup
-        // either confirms this is a real stop (and the caller gets a
-        // column - or does not, on a statement layout the launch flow's
-        // own tokeniser did not expect) or a filtered-past one, in which
-        // case nobody reads it anyway.
-        let statement_address = u16::from_le_bytes([chunk[0], chunk[1]]);
+        // PTR_CURRENT_STATEMENT's own value needs no *pointer* dereference,
+        // unlike the line-number field below, but it is not the statement's
+        // own address either: `Execution.asm` names the ROM variable
+        // `address_of_byte_before_current_statement` and says so directly
+        // in its own comment ("HL points to byte before first token") -
+        // confirmed both for a line's first statement (HL last incremented
+        // to the line-number field's high byte, one below the first token)
+        // and every later one (HL left on the `StatementSeparator` token
+        // itself, again one below the next statement's first token). `+1`
+        // is that offset undone, universally, in both cases. `None` (no
+        // match) leaves the previous stop's column standing rather than
+        // guessing; the very next line-number lookup either confirms this
+        // is a real stop (and the caller gets a column - or does not, on a
+        // statement layout the launch flow's own tokeniser did not expect)
+        // or a filtered-past one, in which case nobody reads it anyway.
+        let statement_address = u16::from_le_bytes([chunk[0], chunk[1]]).wrapping_add(1);
         if let Some(statement) = self
             .statement_index
             .iter()
@@ -1396,7 +1403,10 @@ mod tests {
         }
 
         let seq = last_sent_seq(&mut session);
-        let mut response_bytes = second_statement.address.to_le_bytes().to_vec();
+        // PTR_CURRENT_STATEMENT holds the byte *before* the statement's own
+        // first token (see `on_line_pointer_read`'s doc comment) - `- 1` is
+        // what a real ROM would actually report here.
+        let mut response_bytes = second_statement.address.wrapping_sub(1).to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
         answer(&mut session, seq, read_memory_response(&response_bytes));
         let seq = last_sent_seq(&mut session);
