@@ -54,6 +54,12 @@ enum Purpose {
     /// running (AMSpiritLite's own `continue` handling blocks on exactly
     /// that) - the right moment to auto-type `RUN`, on a peer that can.
     LaunchResumed,
+    /// The one `setInstructionBreakpoints` this session ever sends. Its
+    /// answer used to be discarded (`Purpose::Plain`) - a peer that refused
+    /// or failed to verify it (an exhausted breakpoint-channel table, an
+    /// address it rejects) left every breakpoint and step silently inert for
+    /// the rest of the session, with nothing in the Debug Console to say so.
+    BreakpointArmed,
     /// Reading [`basic::PTR_CURRENT_LINE_NUMBER_FIELD`] itself - its value
     /// is a pointer to dereference next, or the direct-mode sentinel.
     CurrentLinePointer,
@@ -200,9 +206,56 @@ impl<P: DapPeer> BasicSession<P> {
         self.send_own(
             "setInstructionBreakpoints",
             json!({ "breakpoints": [{ "instructionReference": address_reference(LINE_BREAKPOINT_TARGET as u32) }] }),
-            Purpose::Plain
+            Purpose::BreakpointArmed
         )?;
         self.start_if_ready()
+    }
+
+    /// `None` if the peer verified the one breakpoint this session lives or
+    /// dies by; otherwise a message worth putting in front of the user,
+    /// since a silently-unarmed breakpoint looks identical to "stepping and
+    /// breakpoints just don't work" - which is exactly the bug report this
+    /// exists to rule in or out on the next attempt.
+    fn breakpoint_arm_warning(response: &Value) -> Option<String> {
+        if response.get("success").and_then(Value::as_bool) == Some(false) {
+            let message = response
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("the emulator refused it");
+            return Some(format!(
+                "could not arm the line breakpoint at {}: {message} - \
+                 breakpoints and stepping will not work this session",
+                address_reference(LINE_BREAKPOINT_TARGET as u32)
+            ));
+        }
+        let verified = response
+            .get("body")
+            .and_then(|b| b.get("breakpoints"))
+            .and_then(Value::as_array)
+            .and_then(|list| list.first())
+            .and_then(|bp| bp.get("verified"))
+            .and_then(Value::as_bool);
+        match verified {
+            Some(false) => {
+                let message = response
+                    .get("body")
+                    .and_then(|b| b.get("breakpoints"))
+                    .and_then(Value::as_array)
+                    .and_then(|list| list.first())
+                    .and_then(|bp| bp.get("message"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("not verified");
+                Some(format!(
+                    "the line breakpoint at {} did not verify: {message} - \
+                     breakpoints and stepping will not work this session",
+                    address_reference(LINE_BREAKPOINT_TARGET as u32)
+                ))
+            },
+            // `Some(true)`: verified. `None`: a peer that answers this
+            // request with no `body.breakpoints` at all (not one this crate
+            // has seen) - nothing to warn about from the shape alone.
+            Some(true) | None => None
+        }
     }
 
     fn start_if_ready(&mut self) -> std::io::Result<()> {
@@ -462,6 +515,15 @@ impl<P: DapPeer> BasicSession<P> {
                         return vec![protocol::event(
                             "output",
                             json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
+                },
+                Purpose::BreakpointArmed => {
+                    if let Some(warning) = Self::breakpoint_arm_warning(message) {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{warning}\n") }),
                             1
                         )];
                     }
@@ -737,6 +799,62 @@ mod tests {
             armed["arguments"]["breakpoints"][0]["instructionReference"],
             address_reference(LINE_BREAKPOINT_TARGET as u32)
         );
+    }
+
+    #[test]
+    fn an_unverified_breakpoint_is_reported_to_the_user() {
+        // The response used to be discarded outright (Purpose::Plain): a
+        // peer that answered "verified: false" left every breakpoint and
+        // step silently inert for the rest of the session, indistinguishable
+        // from the mechanism just not working at all.
+        let mut session = new_session(SOURCE);
+        session.attach().unwrap();
+        let attach_seq = last_sent_seq(&mut session);
+        answer(&mut session, attach_seq, json!({ "success": true }));
+
+        let arm_seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            arm_seq,
+            json!({
+                "success": true,
+                "body": {
+                    "breakpoints": [{
+                        "verified": false,
+                        "message": "all 16 breakpoint channels are in use"
+                    }]
+                }
+            })
+        );
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "output");
+        let output = events[0]["body"]["output"].as_str().unwrap();
+        assert!(output.contains("did not verify"), "{output}");
+        assert!(
+            output.contains("all 16 breakpoint channels are in use"),
+            "{output}"
+        );
+    }
+
+    #[test]
+    fn a_verified_breakpoint_is_silent() {
+        let mut session = new_session(SOURCE);
+        session.attach().unwrap();
+        let attach_seq = last_sent_seq(&mut session);
+        answer(&mut session, attach_seq, json!({ "success": true }));
+
+        let arm_seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            arm_seq,
+            json!({
+                "success": true,
+                "body": { "breakpoints": [{ "verified": true }] }
+            })
+        );
+
+        assert!(events.is_empty(), "{events:?}");
     }
 
     #[test]
