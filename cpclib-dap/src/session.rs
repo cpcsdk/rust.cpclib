@@ -43,6 +43,13 @@ const SYNTHETIC_FRAME_BASE: i64 = 0x4000_0000;
 /// Where the variable references for those frames start.
 const SYNTHETIC_SCOPE_BASE: i64 = 0x4800_0000;
 
+/// Where the variable references for array watches (`label,4,w`) start - far
+/// enough from `SYNTHETIC_SCOPE_BASE` above and the chip references at
+/// `0x7C00_000x` below that neither range's own bound test needs to know
+/// this one exists.
+const WATCH_ARRAY_REFERENCE_BASE: i64 = 0x5000_0000;
+const WATCH_ARRAY_RANGE: i64 = 0x1000_0000;
+
 /// How many ids each synthetic base owns.
 ///
 /// Bounded rather than open-ended: the flag and chip scopes this adapter also
@@ -100,7 +107,8 @@ CPC debug console commands:
   -help                         this list
 
 Anything not starting with `-` is read as a label: `animation_state` shows the
-byte there, `animation_state,w` the word.";
+byte there, `animation_state,w` the word, `table,4,w` four words as one
+expandable entry.";
 use crate::protocol::{self, address_reference, parse_address_reference};
 
 /// A breakpoint the assembled program asked for.
@@ -225,7 +233,20 @@ struct PendingWatch {
     request: Value,
     name: String,
     address: u32,
-    width: usize
+    width: usize,
+    /// How many `width`-wide elements: `label,4,w` is four words. `1` for the
+    /// ordinary single-value watch.
+    count: usize
+}
+
+/// An array watch's elements, already read - expanding it in the Watch panel
+/// needs no second round trip.
+#[derive(Debug, Clone)]
+struct WatchArray {
+    name: String,
+    address: u32,
+    width: usize,
+    bytes: Vec<u8>
 }
 
 /// A stopwatch counting the NOPs the program spends.
@@ -381,6 +402,12 @@ pub struct Session<P: DapPeer> {
     own_seq: i64,
     /// Watch expressions waiting on a memory read.
     pending_watches: Vec<PendingWatch>,
+    /// Array watches that have been read, so expanding one in the Watch panel
+    /// needs no second round trip. Indexed by `variablesReference -
+    /// WATCH_ARRAY_REFERENCE_BASE`; never shrinks, same as `synthetic_frames`
+    /// - a session-lifetime cache of a handful of small entries, not worth
+    /// recycling.
+    watch_arrays: Vec<WatchArray>,
     /// Memory views waiting on the same.
     pending_memory_views: Vec<PendingMemoryView>,
     /// The memory view that is open, if one is.
@@ -506,6 +533,7 @@ impl<P: DapPeer> Session<P> {
             own_requests: HashMap::new(),
             own_seq: OWN_REQUEST_BASE,
             pending_watches: Vec::new(),
+            watch_arrays: Vec::new(),
             pending_memory_views: Vec::new(),
             open_memory_view: None,
             pending_disassembly: Vec::new(),
@@ -964,6 +992,12 @@ impl<P: DapPeer> Session<P> {
             "variables" if self.is_synthetic_reference(message) => {
                 self.synthetic_variables(message)
             },
+            // An array watch (`label,4,w`), expanded - the elements it read
+            // are ours, never the emulator's; it has never heard of this
+            // reference.
+            "variables" if self.is_watch_array_reference(message) => {
+                self.watch_array_variables(message)
+            },
             // The editor's own disassembly view, decoded here rather than by
             // the emulator - so it reads exactly like `-dv` and like the source
             // beside it, whatever emulator is underneath.
@@ -1249,7 +1283,6 @@ impl<P: DapPeer> Session<P> {
         }
         // Reads are answered in order, so the oldest waiting watch is this one.
         let watch = self.pending_watches.remove(0);
-        let seq = self.next_seq();
 
         let bytes = response
             .get("body")
@@ -1259,6 +1292,7 @@ impl<P: DapPeer> Session<P> {
             .unwrap_or_default();
 
         if bytes.is_empty() {
+            let seq = self.next_seq();
             return Some(vec![protocol::failure(
                 &watch.request,
                 &format!(
@@ -1269,6 +1303,11 @@ impl<P: DapPeer> Session<P> {
                 seq
             )]);
         }
+
+        if watch.count > 1 {
+            return Some(self.complete_watch_array(watch, bytes));
+        }
+        let seq = self.next_seq();
 
         // Little-endian, like everything else the Z80 does with a word.
         let value = match watch.width {
@@ -1300,6 +1339,104 @@ impl<P: DapPeer> Session<P> {
                 "variablesReference": 0,
                 "memoryReference": address_reference(watch.address)
             }),
+            seq
+        )])
+    }
+
+    /// `label,N,w|b` came back: keep the elements and hand out a
+    /// `variablesReference` so the Watch panel can expand it, rather than
+    /// squeezing N values onto one line the way a scalar watch does.
+    fn complete_watch_array(&mut self, watch: PendingWatch, bytes: Vec<u8>) -> Vec<Value> {
+        let width = watch.width.max(1);
+        let elements = bytes.len() / width;
+        let reference = WATCH_ARRAY_REFERENCE_BASE + self.watch_arrays.len() as i64;
+        self.watch_arrays.push(WatchArray {
+            name: watch.name.clone(),
+            address: watch.address,
+            width,
+            bytes
+        });
+        let seq = self.next_seq();
+        vec![protocol::response(
+            &watch.request,
+            json!({
+                "result": format!(
+                    "{elements} element(s) from {} ({})",
+                    address_reference(watch.address),
+                    watch.name
+                ),
+                "type": format!("{elements} x {width}-byte element(s)"),
+                "variablesReference": reference,
+                "memoryReference": address_reference(watch.address)
+            }),
+            seq
+        )]
+    }
+
+    fn is_watch_array_reference(&self, request: &Value) -> bool {
+        request
+            .get("arguments")
+            .and_then(|a| a.get("variablesReference"))
+            .and_then(Value::as_i64)
+            .is_some_and(|reference| {
+                (WATCH_ARRAY_REFERENCE_BASE..WATCH_ARRAY_REFERENCE_BASE + WATCH_ARRAY_RANGE)
+                    .contains(&reference)
+            })
+    }
+
+    /// An array watch's elements, from what was already read - no second
+    /// round trip to the emulator to expand it in the Watch panel.
+    fn watch_array_variables(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        let index = request
+            .get("arguments")
+            .and_then(|a| a.get("variablesReference"))
+            .and_then(Value::as_i64)
+            .map(|reference| (reference - WATCH_ARRAY_REFERENCE_BASE) as usize)
+            .unwrap_or(0);
+
+        let Some(array) = self.watch_arrays.get(index)
+        else {
+            let seq = self.next_seq();
+            return Ok(vec![protocol::response(
+                request,
+                json!({ "variables": [] }),
+                seq
+            )]);
+        };
+
+        let width = array.width.max(1);
+        let variables: Vec<Value> = array
+            .bytes
+            .chunks(width)
+            .enumerate()
+            .map(|(i, chunk)| {
+                let value = if width == 2 && chunk.len() >= 2 {
+                    u32::from(chunk[0]) | (u32::from(chunk[1]) << 8)
+                }
+                else {
+                    u32::from(chunk[0])
+                };
+                let element_address = array.address + (i * width) as u32;
+                let rendered = if width == 2 {
+                    format!("0x{value:04X} ({value})")
+                }
+                else {
+                    format!("0x{value:02X} ({value})")
+                };
+                json!({
+                    "name": format!("[{i}]"),
+                    "value": rendered,
+                    "type": format!("{width} byte(s) at {}", address_reference(element_address)),
+                    "variablesReference": 0,
+                    "memoryReference": address_reference(element_address)
+                })
+            })
+            .collect();
+
+        let seq = self.next_seq();
+        Ok(vec![protocol::response(
+            request,
+            json!({ "variables": variables }),
             seq
         )])
     }
@@ -1587,11 +1724,25 @@ impl<P: DapPeer> Session<P> {
             return Ok(answer);
         }
 
-        // `label,w` asks for a word; plain `label` for a byte.
-        let (name, width) = match expression.rsplit_once(',') {
-            Some((name, "w" | "W")) => (name.trim(), 2usize),
-            Some((name, "b" | "B")) => (name.trim(), 1usize),
-            _ => (expression, 1usize)
+        // `label,w` asks for a word; plain `label` for a byte. `label,4,w` is
+        // four words: an array, expandable in the Watch panel rather than
+        // shown as one number - `event_queue,8,b` is the byte version of the
+        // same idea. The count is only recognised in front of a width suffix,
+        // so `label,w` alone still means exactly what it always has.
+        let (name, count, width) = match expression.rsplit_once(',') {
+            Some((rest, "w" | "W")) => match rest.rsplit_once(',') {
+                Some((name, count)) if count.trim().parse::<usize>().is_ok_and(|n| n > 0) => {
+                    (name.trim(), count.trim().parse().unwrap(), 2usize)
+                },
+                _ => (rest.trim(), 1usize, 2usize)
+            },
+            Some((rest, "b" | "B")) => match rest.rsplit_once(',') {
+                Some((name, count)) if count.trim().parse::<usize>().is_ok_and(|n| n > 0) => {
+                    (name.trim(), count.trim().parse().unwrap(), 1usize)
+                },
+                _ => (rest.trim(), 1usize, 1usize)
+            },
+            _ => (expression, 1usize, 1usize)
         };
 
         let Some(address) = self.resolve_watch_address(name)
@@ -1621,13 +1772,14 @@ impl<P: DapPeer> Session<P> {
             request: request.clone(),
             name: name.to_string(),
             address,
-            width
+            width,
+            count
         });
         self.send_own(
             "readMemory",
             json!({
                 "memoryReference": address_reference(address),
-                "count": width
+                "count": width * count
             }),
             Purpose::WatchRead
         )?;
@@ -2356,7 +2508,8 @@ impl<P: DapPeer> Session<P> {
                 request: request.clone(),
                 name: format!("({name})"),
                 address: value,
-                width: 1
+                width: 1,
+                count: 1
             });
             let sent = self.send_own(
                 "readMemory",

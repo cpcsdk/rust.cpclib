@@ -706,6 +706,87 @@ fn a_watch_can_ask_for_a_word() {
     assert_eq!(out[0]["body"]["result"], json!("0x9000 -> 0x1234 (4660)"));
 }
 
+/// `label,N,w` watches N words as one expandable entry, rather than one
+/// scalar value - `counter,4,w` is four words starting at `counter`.
+#[test]
+fn a_watch_can_ask_for_an_array_of_words() {
+    use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
+    let mut symbols = std::collections::HashMap::new();
+    symbols.insert("table".to_string(), 0x9000u32);
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["main.asm".into()],
+        rows: vec![SourceMapRow::flat(0, 1, 0x4000, 1)]
+    })
+    .with_symbols(symbols);
+
+    let mut session = Session::new(RecordingPeer::new(), map);
+    session.on_attached().unwrap();
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "table,4,w"}
+        }))
+        .unwrap();
+    let read = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(
+        read["arguments"]["count"],
+        json!(8),
+        "four words is eight bytes"
+    );
+
+    // Four little-endian words: 0x1234, 0x5678, 0x0001, 0xFFFF.
+    let out = session.on_emulator_message(&json!({
+        "type": "response", "command": "readMemory",
+        "request_seq": read["seq"].as_i64().unwrap(),
+        "success": true, "body": {"data": "NBJ4VgEA//8="}
+    }));
+    assert_eq!(out[0]["body"]["result"], json!("4 element(s) from 0x9000 (table)"));
+    let reference = out[0]["body"]["variablesReference"].as_i64().unwrap();
+    assert!(reference > 0, "expandable, not a scalar: {out:?}");
+
+    let expanded = session
+        .on_editor_message(&json!({
+            "seq": 2, "type": "request", "command": "variables",
+            "arguments": {"variablesReference": reference}
+        }))
+        .unwrap();
+    let elements = expanded[0]["body"]["variables"].as_array().unwrap();
+    assert_eq!(elements.len(), 4);
+    assert_eq!(elements[0]["name"], json!("[0]"));
+    assert_eq!(elements[0]["value"], json!("0x1234 (4660)"));
+    assert_eq!(elements[1]["value"], json!("0x5678 (22136)"));
+    assert_eq!(elements[2]["value"], json!("0x0001 (1)"));
+    assert_eq!(elements[3]["value"], json!("0xFFFF (65535)"));
+    // Element addresses advance by the width, so each can carry its own
+    // "View Memory" affordance to the right place.
+    assert_eq!(elements[2]["memoryReference"], json!("0x9004"));
+}
+
+/// `label,w` alone (no count) still means exactly what it always has: a
+/// single word, not an array of one.
+#[test]
+fn a_bare_width_suffix_is_not_mistaken_for_a_count() {
+    use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
+    let mut symbols = std::collections::HashMap::new();
+    symbols.insert("counter".to_string(), 0x9000u32);
+    let map = SourceMap::from_raw(&RawSourceMap {
+        files: vec!["main.asm".into()],
+        rows: vec![SourceMapRow::flat(0, 1, 0x4000, 1)]
+    })
+    .with_symbols(symbols);
+
+    let mut session = Session::new(RecordingPeer::new(), map);
+    session.on_attached().unwrap();
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "counter,w"}
+        }))
+        .unwrap();
+    let read = session.peer().last("readMemory").unwrap().clone();
+    assert_eq!(read["arguments"]["count"], json!(2), "still a plain word read");
+}
+
 /// An expression that is not one of our labels is refused *here*, with a
 /// reason.
 ///
