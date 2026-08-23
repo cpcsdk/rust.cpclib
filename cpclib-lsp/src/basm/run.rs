@@ -43,7 +43,17 @@ pub fn resolve_entry(document: &std::path::Path) -> EntryChoice {
             // `Unknown` covers both "nothing reaches it" and "several do". The
             // roots are what distinguishes them, and the user needs the list
             // either way.
-            let roots = cpclib_project::root::project_root(document)
+            //
+            // `_or_own_dir`, not plain `project_root`: a document with no
+            // `.git`/`Makefile`/etc. anywhere above it (a scratch file, an
+            // example folder with several related files but no such marker)
+            // made this return `None`, which skipped `scan_workspace`
+            // entirely - not "found no other candidates", but "never looked"
+            // - so a file genuinely `include`d by a sibling in the same
+            // directory was silently treated as its own standalone program
+            // instead. The fallback (the document's own directory) is enough
+            // for `scan_workspace` to at least see files sitting right there.
+            let roots = cpclib_project::root::project_root_or_own_dir(document)
                 .map(|root| {
                     let workspace = cpclib_project::entry::scan_workspace(&root);
                     cpclib_project::entry::graph_of(&workspace)
