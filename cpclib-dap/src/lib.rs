@@ -895,7 +895,7 @@ fn start_basic_session(
         source_path,
         &source_text,
         basic::PROGRAM_START,
-        program_bytes.len()
+        &program_bytes
     );
 
     // Only on a peer that cannot type RUN for us: `BasicSession` checks this

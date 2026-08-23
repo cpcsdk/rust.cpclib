@@ -17,7 +17,7 @@
 //! and `LoadSaveRun.asm`, which is the only source of the two.
 
 use cpclib_basic::binary_parser::line_or_end;
-use cpclib_basic::tokens::BasicFloat;
+use cpclib_basic::tokens::{BasicFloat, BasicToken, BasicTokenNoPrefix};
 use cpclib_basic::BasicLine;
 use cpclib_common::winnow::Parser;
 
@@ -160,6 +160,135 @@ pub fn program_with_addresses(
     }
 
     Ok(lines)
+}
+
+/// One `:`-separated statement's RAM address, paired with the source-text
+/// span (1-based columns, end exclusive) it corresponds to - the position
+/// [`PTR_CURRENT_STATEMENT`] identifies precisely, which the line-number
+/// pointer alone cannot: a breakpoint line five statements long stops at
+/// its first token every time without this, which is not "which one just
+/// ran" for anything but a one-statement line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatementPosition {
+    pub address: u16,
+    /// 0-based, matching [`AddressedLine`]'s own indexing convention for
+    /// the source file's lines.
+    pub source_line: usize,
+    pub column: u32,
+    pub end_column: u32
+}
+
+/// Every statement in `program_bytes`, addressed and matched back to the
+/// source text it came from - built once at launch, since both sides are
+/// already fully known then and nothing about a running program's own
+/// bytes changes afterwards.
+///
+/// The two sides are walked in lock step: `line_or_end`'s decoded tokens
+/// give the *byte* length of each statement (so its RAM address can be
+/// accumulated one token at a time, splitting at every
+/// [`BasicTokenNoPrefix::StatementSeparator`]), while [`statement_spans`]
+/// splits the *source line's own text* the same way, colon by colon. The
+/// two splits agree by construction - both are ultimately splitting on the
+/// same `:` this program's own author wrote - so pairing them up
+/// positionally is exact, not a heuristic.
+pub fn build_statement_index(
+    program_bytes: &[u8],
+    program_start: u16,
+    source_text: &str
+) -> Vec<StatementPosition> {
+    let Ok(addressed_lines) = program_with_addresses(program_bytes, program_start) else {
+        return Vec::new();
+    };
+    let source_lines: Vec<&str> = source_text.lines().collect();
+    let mut out = Vec::new();
+
+    for addressed in &addressed_lines {
+        let Some(source_line) = source_lines
+            .iter()
+            .position(|text| leading_line_number(text) == Some(addressed.line.line_number()))
+        else {
+            continue;
+        };
+        let spans = statement_spans(source_lines[source_line]);
+
+        // Tokens start right after the 4-byte header (length + line number)
+        // every `BasicLine::as_bytes()` writes before them.
+        let mut address = addressed.address.wrapping_add(4);
+        let mut statement_start = address;
+        let mut statement_index = 0usize;
+        for token in addressed.line.tokens() {
+            if matches!(
+                token,
+                BasicToken::SimpleToken(BasicTokenNoPrefix::StatementSeparator)
+            ) {
+                if let Some(&(column, end_column)) = spans.get(statement_index) {
+                    out.push(StatementPosition {
+                        address: statement_start,
+                        source_line,
+                        column,
+                        end_column
+                    });
+                }
+                statement_index += 1;
+                address = address.wrapping_add(token.as_bytes().len() as u16);
+                statement_start = address;
+                continue;
+            }
+            address = address.wrapping_add(token.as_bytes().len() as u16);
+        }
+        if let Some(&(column, end_column)) = spans.get(statement_index) {
+            out.push(StatementPosition {
+                address: statement_start,
+                source_line,
+                column,
+                end_column
+            });
+        }
+    }
+
+    out
+}
+
+/// The line number a source line starts with, if any - the same leading-
+/// digit-run scan [`crate::basic_session::line_index_from_source`] uses,
+/// kept separate so this module does not depend on that one.
+fn leading_line_number(text: &str) -> Option<u16> {
+    let trimmed = text.trim_start();
+    let digits: String = trimmed.chars().take_while(|c| c.is_ascii_digit()).collect();
+    (!digits.is_empty()).then(|| digits.parse().ok()).flatten()
+}
+
+/// Splits one source line into `:`-separated statement spans (1-based
+/// columns, end exclusive of the colon itself), skipping the leading line
+/// number: it is a label, not a statement, and `PTR_CURRENT_STATEMENT`
+/// never points at it. A colon inside a quoted string is not a separator -
+/// `PRINT "a:b"` is one statement, not two.
+fn statement_spans(text: &str) -> Vec<(u32, u32)> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut idx = 0usize;
+    while idx < chars.len() && chars[idx].is_ascii_digit() {
+        idx += 1;
+    }
+    while idx < chars.len() && chars[idx].is_whitespace() {
+        idx += 1;
+    }
+
+    let mut spans = Vec::new();
+    let mut start = idx;
+    let mut in_string = false;
+    while idx < chars.len() {
+        match chars[idx] {
+            '"' => in_string = !in_string,
+            ':' if !in_string => {
+                spans.push((start as u32 + 1, idx as u32 + 1));
+                start = idx + 1;
+            },
+            _ => {}
+        }
+        idx += 1;
+    }
+    spans.push((start as u32 + 1, chars.len() as u32 + 1));
+    spans
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -463,6 +592,66 @@ mod tests {
         let bytes = prog.as_bytes();
         let lines = program_with_addresses(&bytes, 0x170).unwrap();
         assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn statement_spans_skips_the_line_number_and_splits_on_colons() {
+        let spans = statement_spans("80 IF x THEN y=1:z=2");
+        // "IF x THEN y=1" starts right after "80 " (3 chars), ends right
+        // before the colon at 0-based index 16 (column 17).
+        assert_eq!(spans, vec![(4, 17), (18, 21)]);
+        let text: Vec<char> = "80 IF x THEN y=1:z=2".chars().collect();
+        let first: String = text[3..16].iter().collect();
+        assert_eq!(first, "IF x THEN y=1");
+        let second: String = text[17..20].iter().collect();
+        assert_eq!(second, "z=2");
+    }
+
+    #[test]
+    fn statement_spans_does_not_split_on_a_colon_inside_a_string() {
+        let spans = statement_spans("10 PRINT \"a:b\":x=1");
+        assert_eq!(spans.len(), 2, "{spans:?}");
+    }
+
+    #[test]
+    fn statement_spans_handles_a_single_statement_line() {
+        let spans = statement_spans("10 PRINT \"HI\"");
+        assert_eq!(spans.len(), 1);
+    }
+
+    #[test]
+    fn build_statement_index_addresses_every_statement_on_a_multi_statement_line() {
+        let source = "10 a=1:b=2:c=3\n";
+        let prog = BasicProgram::parse(source).unwrap();
+        let bytes = prog.as_bytes();
+
+        let index = build_statement_index(&bytes, 0x170, source);
+        assert_eq!(index.len(), 3, "{index:?}");
+        // Addresses strictly increase - each statement's own token bytes
+        // come before the next one's.
+        assert!(index[0].address < index[1].address);
+        assert!(index[1].address < index[2].address);
+        for statement in &index {
+            assert_eq!(statement.source_line, 0);
+        }
+        // Matches statement_spans's own columns for the same text, minus
+        // the leading "10 ".
+        assert_eq!(index[0].column, 4);
+    }
+
+    #[test]
+    fn build_statement_index_covers_a_program_with_several_lines() {
+        let source = "10 PRINT \"HI\"\n20 x=1:y=2\n30 GOTO 10\n";
+        let prog = BasicProgram::parse(source).unwrap();
+        let bytes = prog.as_bytes();
+
+        let index = build_statement_index(&bytes, 0x170, source);
+        // Line 10: 1 statement, line 20: 2 statements, line 30: 1 statement.
+        assert_eq!(index.len(), 4, "{index:?}");
+        assert_eq!(index[0].source_line, 0);
+        assert_eq!(index[1].source_line, 1);
+        assert_eq!(index[2].source_line, 1);
+        assert_eq!(index[3].source_line, 2);
     }
 
     /// Encodes `name` the way the ROM actually stores digits and `.` in a

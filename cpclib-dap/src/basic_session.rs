@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 
 use crate::basic::{
-    self, BasicVariableValue, LINE_BREAKPOINT_TARGET, PTR_CURRENT_LINE_NUMBER_FIELD,
+    self, BasicVariableValue, LINE_BREAKPOINT_TARGET, PTR_CURRENT_STATEMENT,
     VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
 };
 use crate::peer::DapPeer;
@@ -113,6 +113,17 @@ pub struct BasicSession<P: DapPeer> {
     /// session built the bytes itself - `variables_base` is just
     /// `program_start + program_len`, needing no round trip to recompute.
     program_len: u16,
+    /// Every statement's RAM address and source-text column span, built
+    /// once at launch (see [`basic::build_statement_index`]) - what makes a
+    /// stop on a multi-statement line point at the one statement that
+    /// actually ran rather than the line's first token every time.
+    statement_index: Vec<basic::StatementPosition>,
+    /// The current statement's source column span, once known - `None`
+    /// before the first stop, or when the current statement address does
+    /// not appear in `statement_index` (should not happen for a line this
+    /// session's own launch flow tokenised, but stack traces still need a
+    /// column either way).
+    current_statement_column: Option<(u32, u32)>,
     /// BASIC line numbers with a user breakpoint.
     breakpoints: Vec<u16>,
     seq: i64,
@@ -135,15 +146,18 @@ impl<P: DapPeer> BasicSession<P> {
         source_path: PathBuf,
         source_text: &str,
         program_start: u16,
-        program_bytes_len: usize
+        program_bytes: &[u8]
     ) -> Self {
         let line_index = line_index_from_source(source_text);
+        let statement_index = basic::build_statement_index(program_bytes, program_start, source_text);
         Self {
             peer,
             source_path,
             line_index,
             program_start,
-            program_len: program_bytes_len as u16,
+            program_len: program_bytes.len() as u16,
+            statement_index,
+            current_statement_column: None,
             breakpoints: Vec::new(),
             seq: 1,
             own_requests: HashMap::new(),
@@ -425,6 +439,12 @@ impl<P: DapPeer> BasicSession<P> {
             .find(|(n, _)| *n == line)
             .map(|(_, idx)| *idx as i64 + 1)
             .unwrap_or(1);
+        // Which statement on a multi-statement line actually ran, not just
+        // which line - `50 sp=0 : px=320 : py=300` is one line and five
+        // stops. `1` (no highlight) when the current address is not one
+        // this session's own launch flow tokenised - direct mode, most
+        // often, which has no statement to point at.
+        let (column, end_column) = self.current_statement_column.unwrap_or((1, 1));
 
         protocol::response(
             message,
@@ -433,7 +453,8 @@ impl<P: DapPeer> BasicSession<P> {
                     "id": 0,
                     "name": format!("BASIC {line}"),
                     "line": source_line,
-                    "column": 1,
+                    "column": column,
+                    "endColumn": end_column,
                     "source": {
                         "path": self.source_path.display().to_string()
                     }
@@ -588,12 +609,16 @@ impl<P: DapPeer> BasicSession<P> {
     /// The one Z80 breakpoint fired. Not necessarily a line the user
     /// actually wants to stop at - that is only known once the current
     /// line number has been read and compared.
+    ///
+    /// One 4-byte read rather than two: [`PTR_CURRENT_STATEMENT`] and
+    /// [`basic::PTR_CURRENT_LINE_NUMBER_FIELD`] are adjacent (`&AE1B`,
+    /// `&AE1D`), so both come back in the same round trip.
     fn on_z80_stopped(&mut self) -> Vec<Value> {
         if self.send_own(
             "readMemory",
             json!({
-                "memoryReference": address_reference(PTR_CURRENT_LINE_NUMBER_FIELD as u32),
-                "count": 2
+                "memoryReference": address_reference(PTR_CURRENT_STATEMENT as u32),
+                "count": 4
             }),
             Purpose::CurrentLinePointer
         )
@@ -606,10 +631,27 @@ impl<P: DapPeer> BasicSession<P> {
 
     fn on_line_pointer_read(&mut self, message: &Value) -> Vec<Value> {
         let bytes = Self::read_memory_bytes(message);
-        let Some(ptr_bytes) = bytes.get(0..2) else {
+        let Some(chunk) = bytes.get(0..4) else {
             return Vec::new();
         };
-        match basic::current_line_number_field_address([ptr_bytes[0], ptr_bytes[1]]) {
+        // PTR_CURRENT_STATEMENT's own value *is* the address to look up -
+        // unlike the line-number field below, it needs no further
+        // dereference. `None` (no match) leaves the previous stop's column
+        // standing rather than guessing; the very next line-number lookup
+        // either confirms this is a real stop (and the caller gets a
+        // column - or does not, on a statement layout the launch flow's
+        // own tokeniser did not expect) or a filtered-past one, in which
+        // case nobody reads it anyway.
+        let statement_address = u16::from_le_bytes([chunk[0], chunk[1]]);
+        if let Some(statement) = self
+            .statement_index
+            .iter()
+            .find(|s| s.address == statement_address)
+        {
+            self.current_statement_column = Some((statement.column, statement.end_column));
+        }
+
+        match basic::current_line_number_field_address([chunk[2], chunk[3]]) {
             Some(address) => {
                 let _ = self.send_own(
                     "readMemory",
@@ -758,7 +800,7 @@ mod tests {
             PathBuf::from("test.bas"),
             source,
             basic::PROGRAM_START,
-            bytes.len()
+            &bytes
         )
     }
 
@@ -911,7 +953,7 @@ mod tests {
             PathBuf::from("test.bas"),
             SOURCE,
             basic::PROGRAM_START,
-            bytes.len()
+            &bytes
         );
         complete_attach(&mut session);
         session
@@ -974,7 +1016,7 @@ mod tests {
             PathBuf::from("test.bas"),
             "10 PRINT \"HI\"\n20 GOTO 10\n\n",
             basic::PROGRAM_START,
-            program_bytes.len()
+            &program_bytes
         );
         let response = session
             .on_editor_message(&json!({
@@ -1002,14 +1044,16 @@ mod tests {
             session.on_emulator_message(&message);
         }
 
-        // First round trip: PTR_CURRENT_LINE_NUMBER_FIELD -> a pointer.
+        // First round trip: PTR_CURRENT_STATEMENT (a statement address, not
+        // under test here - out of range on purpose so it never happens to
+        // collide with a real entry) followed immediately by
+        // PTR_CURRENT_LINE_NUMBER_FIELD -> a pointer, both in one 4-byte
+        // read.
         let seq = last_sent_seq(session);
         let field_target = 0x9000u16;
-        answer(
-            session,
-            seq,
-            read_memory_response(&field_target.to_le_bytes())
-        );
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&field_target.to_le_bytes());
+        answer(session, seq, read_memory_response(&response_bytes));
 
         // Second round trip: dereferencing that pointer -> the line number.
         let seq = last_sent_seq(session);
@@ -1068,11 +1112,9 @@ mod tests {
         }
         let seq = last_sent_seq(&mut session);
         let field_target = 0x9000u16;
-        answer(
-            &mut session,
-            seq,
-            read_memory_response(&field_target.to_le_bytes())
-        );
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&field_target.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
         let seq = last_sent_seq(&mut session);
         let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
 
@@ -1092,7 +1134,9 @@ mod tests {
         }
 
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, read_memory_response(&0u16.to_le_bytes()));
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0u16.to_le_bytes());
+        let events = answer(&mut session, seq, read_memory_response(&response_bytes));
 
         assert_eq!(events.len(), 1);
         assert_eq!(events[0]["event"], "stopped");
@@ -1119,6 +1163,51 @@ mod tests {
         let frame = &response[0]["body"]["stackFrames"][0];
         assert_eq!(frame["name"], "BASIC 20");
         assert_eq!(frame["line"], 2);
+    }
+
+    #[test]
+    fn stack_trace_points_at_the_statement_that_actually_ran_not_the_lines_first_one() {
+        // "50 sp=0 : px=320 : py=300" is one BASIC line and several stops -
+        // this is what tells them apart, matching the Z80 session's own
+        // per-instruction highlight instead of only ever pointing at the
+        // start of the line.
+        let source = "10 a=1:b=2\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        assert_eq!(index.len(), 2, "{index:?}");
+        let second_statement = index[1].clone();
+
+        let mut session = BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = second_statement.address.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+
+        let response = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &response[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["column"], second_statement.column);
+        assert_eq!(frame["endColumn"], second_statement.end_column);
+        assert_ne!(
+            second_statement.column, 1,
+            "the test fixture must actually exercise a non-first statement"
+        );
     }
 
     #[test]
