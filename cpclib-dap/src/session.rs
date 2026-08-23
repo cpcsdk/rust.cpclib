@@ -293,7 +293,11 @@ struct PendingMemoryView {
     /// `Register` anchor moves) is not enough to find it again.
     anchor: MemoryAnchor,
     label: Option<String>,
-    address: u32
+    address: u32,
+    /// `-mv all,follow`'s own views all carry the same group name, so the
+    /// editor can render them together in one panel instead of one apiece -
+    /// `None` for an ordinary, independent view.
+    group: Option<&'static str>
 }
 
 /// A `-dv` waiting for its instructions.
@@ -373,7 +377,9 @@ struct OpenMemoryView {
     /// two stops - diffing bytes read from two different addresses would
     /// mark the whole view "changed" for no reason, so a diff only happens
     /// when this still matches.
-    previous_address: Option<u32>
+    previous_address: Option<u32>,
+    /// See `PendingMemoryView::group`.
+    group: Option<&'static str>
 }
 
 /// A source breakpoint the editor asked for, and where it ended up.
@@ -2742,6 +2748,7 @@ impl<P: DapPeer> Session<P> {
                 {
                     Some(open) => {
                         open.count = count;
+                        open.group = Some("registers");
                     },
                     None => self.open_memory_views.push(OpenMemoryView {
                         anchor: anchor.clone(),
@@ -2749,7 +2756,8 @@ impl<P: DapPeer> Session<P> {
                         count,
                         label: Some(name.to_string()),
                         previous: Vec::new(),
-                        previous_address: None
+                        previous_address: None,
+                        group: Some("registers")
                     })
                 }
                 // Only the first carries the request: DAP expects one
@@ -2761,7 +2769,8 @@ impl<P: DapPeer> Session<P> {
                     request: (opened == 0).then(|| request.clone()),
                     anchor,
                     label: Some(name.to_string()),
-                    address: value
+                    address: value,
+                    group: Some("registers")
                 });
                 self.send_own(
                     "readMemory",
@@ -2871,7 +2880,9 @@ impl<P: DapPeer> Session<P> {
         };
         // Each anchor is its own panel; asking again for one already open
         // updates it in place (a new count, most likely) rather than opening
-        // a duplicate beside it.
+        // a duplicate beside it. Named individually here, so it leaves
+        // `-mv all,follow`'s group if it was part of one - asking for it by
+        // name is asking to see it on its own.
         match self
             .open_memory_views
             .iter_mut()
@@ -2880,6 +2891,7 @@ impl<P: DapPeer> Session<P> {
             Some(open) => {
                 open.count = count;
                 open.label = label.clone();
+                open.group = None;
             },
             None => {
                 self.open_memory_views.push(OpenMemoryView {
@@ -2888,7 +2900,8 @@ impl<P: DapPeer> Session<P> {
                     count,
                     label: label.clone(),
                     previous: Vec::new(),
-                    previous_address: None
+                    previous_address: None,
+                    group: None
                 });
             }
         }
@@ -2896,7 +2909,8 @@ impl<P: DapPeer> Session<P> {
             request: Some(request.clone()),
             anchor,
             label,
-            address
+            address,
+            group: None
         });
         self.send_own(
             "readMemory",
@@ -3434,6 +3448,7 @@ impl<P: DapPeer> Session<P> {
             "cpclib/memoryView",
             json!({
                 "viewId": view.anchor.view_id(),
+                "group": view.group,
                 "requested": requested,
                 "address": view.address,
                 "label": view.label,
@@ -3479,18 +3494,27 @@ impl<P: DapPeer> Session<P> {
     /// *last* stop; `refresh_register_anchored_memory_view` is where that one
     /// gets refreshed instead, once fresh values are actually known.
     fn refresh_memory_view(&mut self) {
-        let fixed: Vec<(MemoryAnchor, u32, usize, Option<String>)> = self
+        let fixed: Vec<(MemoryAnchor, u32, usize, Option<String>, Option<&'static str>)> = self
             .open_memory_views
             .iter()
             .filter(|open| matches!(open.anchor, MemoryAnchor::Fixed(_)))
-            .map(|open| (open.anchor.clone(), open.address, open.count, open.label.clone()))
+            .map(|open| {
+                (
+                    open.anchor.clone(),
+                    open.address,
+                    open.count,
+                    open.label.clone(),
+                    open.group
+                )
+            })
             .collect();
-        for (anchor, address, count, label) in fixed {
+        for (anchor, address, count, label, group) in fixed {
             self.pending_memory_views.push(PendingMemoryView {
                 request: None,
                 anchor,
                 label,
-                address
+                address,
+                group
             });
             // A failure here is not worth reporting: the panel simply keeps
             // what it had, and the stop event must not be lost behind it.
@@ -3515,19 +3539,25 @@ impl<P: DapPeer> Session<P> {
     /// register is *this* stop" is a question with a real answer, rather than
     /// last stop's.
     fn refresh_register_anchored_memory_view(&mut self) {
-        let resolved: Vec<(MemoryAnchor, u32, usize, Option<String>)> = self
-            .open_memory_views
-            .iter()
-            .filter_map(|open| {
-                let MemoryAnchor::Register(name) = &open.anchor
-                else {
-                    return None;
-                };
-                let value = self.last_registers.get(name).copied()?;
-                Some((open.anchor.clone(), value, open.count, open.label.clone()))
-            })
-            .collect();
-        for (anchor, address, count, label) in resolved {
+        let resolved: Vec<(MemoryAnchor, u32, usize, Option<String>, Option<&'static str>)> =
+            self.open_memory_views
+                .iter()
+                .filter_map(|open| {
+                    let MemoryAnchor::Register(name) = &open.anchor
+                    else {
+                        return None;
+                    };
+                    let value = self.last_registers.get(name).copied()?;
+                    Some((
+                        open.anchor.clone(),
+                        value,
+                        open.count,
+                        open.label.clone(),
+                        open.group
+                    ))
+                })
+                .collect();
+        for (anchor, address, count, label, group) in resolved {
             if let Some(open) = self
                 .open_memory_views
                 .iter_mut()
@@ -3539,7 +3569,8 @@ impl<P: DapPeer> Session<P> {
                 request: None,
                 anchor,
                 label,
-                address
+                address,
+                group
             });
             let _ = self.send_own(
                 "readMemory",

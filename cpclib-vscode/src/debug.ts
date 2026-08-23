@@ -429,6 +429,9 @@ async function showEmulator(session: vscode.DebugSession, url: string | undefine
 
 interface MemoryDump {
     viewId?: string;
+    /** `-mv all,follow`'s own views all carry the same group name - the
+     * editor renders them together in one panel instead of one apiece. */
+    group?: string | null;
     /** A person typed this, rather than a stop silently refreshing an
      * already-open panel. */
     requested?: boolean;
@@ -440,6 +443,10 @@ interface MemoryDump {
 }
 
 const memoryPanels = new Map<string, vscode.WebviewPanel>();
+// A grouped panel's members, keyed the same way as the panel itself - kept
+// separately from the panel so a group's *other* members are still known
+// when only one of them just got a fresh read.
+const memoryGroupMembers = new Map<string, Map<string, MemoryDump>>();
 
 /**
  * A memory dump, in a tab of its own.
@@ -452,9 +459,16 @@ const memoryPanels = new Map<string, vscode.WebviewPanel>();
  * views apart, so `-mv HL,follow` and `-mv DE,follow` open two panels side by
  * side rather than one replacing the other; repeating the same view's command
  * still refreshes its own panel rather than opening a duplicate.
+ *
+ * `-mv all,follow`'s views are the exception: they share a `group`, and all
+ * land in one panel together instead - see `showGroupedMemory`.
  */
 function showMemory(session: vscode.DebugSession, dump: MemoryDump | undefined): void {
     if (!dump || !Array.isArray(dump.bytes)) { return; }
+    if (dump.group) {
+        showGroupedMemory(session, dump.group, dump);
+        return;
+    }
 
     const key = `${session.id}:${dump.viewId ?? 'default'}`;
     let panel = memoryPanels.get(key);
@@ -483,6 +497,40 @@ function showMemory(session: vscode.DebugSession, dump: MemoryDump | undefined):
     if (isNew || dump.requested) { panel.reveal(vscode.ViewColumn.Beside, true); }
 }
 
+/**
+ * One panel for a whole `-mv all,follow` group: each register's read updates
+ * its own section without disturbing the others', since the seven reads
+ * this triggers do not all complete at once.
+ */
+function showGroupedMemory(session: vscode.DebugSession, group: string, dump: MemoryDump): void {
+    const key = `${session.id}:group:${group}`;
+    const members = memoryGroupMembers.get(key) ?? new Map<string, MemoryDump>();
+    members.set(dump.viewId ?? dump.label ?? String(dump.address), dump);
+    memoryGroupMembers.set(key, members);
+
+    let panel = memoryPanels.get(key);
+    const isNew = panel === undefined;
+    if (!panel) {
+        panel = vscode.window.createWebviewPanel(
+            'cpclib.memory',
+            `CPC memory: registers — ${session.name}`,
+            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+            { enableScripts: false, retainContextWhenHidden: true },
+        );
+        const owned = panel;
+        panel.onDidDispose(() => {
+            if (memoryPanels.get(key) === owned) {
+                memoryPanels.delete(key);
+                memoryGroupMembers.delete(key);
+            }
+        });
+        memoryPanels.set(key, panel);
+    }
+
+    panel.webview.html = groupedMemoryHtml(members);
+    if (isNew || dump.requested) { panel.reveal(vscode.ViewColumn.Beside, true); }
+}
+
 const hex = (value: number, width: number) =>
     value.toString(16).toUpperCase().padStart(width, '0');
 
@@ -492,9 +540,10 @@ const escapeHtml = (text: string) =>
 /**
  * Sixteen bytes to a row, hex and ASCII, with the program's own labels marked
  * where they start - which is what turns a wall of digits into "this is
- * `animation_state`, and this is the four bytes after it".
+ * `animation_state`, and this is the four bytes after it". Just the table -
+ * shared between a single view's own page and a grouped panel's several.
  */
-function memoryHtml(dump: MemoryDump): string {
+function memoryTableHtml(dump: MemoryDump): string {
     const marks = new Map((dump.marks ?? []).map(m => [m.offset, m.name]));
     const changed = new Set(dump.changed ?? []);
     const rows: string[] = [];
@@ -530,19 +579,14 @@ function memoryHtml(dump: MemoryDump): string {
         );
     }
 
-    const title = dump.label
-        ? `${escapeHtml(dump.label)} &mdash; &amp;${hex(dump.address, 4)}`
-        : `&amp;${hex(dump.address, 4)}`;
+    return `<table>${rows.join('')}</table>`;
+}
 
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
-<style>
+const memoryPageStyle = `
   body { font-family: var(--vscode-editor-font-family, monospace);
          color: var(--vscode-editor-foreground); padding: 8px 12px; }
   h2 { font-size: 1em; font-weight: 600; margin: 0 0 8px; }
-  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
   td { padding: 1px 10px 1px 0; white-space: pre; }
   .addr { color: var(--vscode-descriptionForeground); }
   .ascii { color: var(--vscode-descriptionForeground); }
@@ -551,14 +595,65 @@ function memoryHtml(dump: MemoryDump): string {
   /* What moved since the last stop - the reason to keep this open at all. */
   .changed { background: var(--vscode-diffEditor-insertedTextBackground, #2a4);
              color: var(--vscode-editor-foreground); border-radius: 2px; }
+  section { margin-bottom: 18px; }
   footer { margin-top: 10px; color: var(--vscode-descriptionForeground); font-size: 0.9em; }
-</style>
+`;
+
+function memoryHtml(dump: MemoryDump): string {
+    const title = dump.label
+        ? `${escapeHtml(dump.label)} &mdash; &amp;${hex(dump.address, 4)}`
+        : `&amp;${hex(dump.address, 4)}`;
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+<style>${memoryPageStyle}</style>
 </head>
 <body>
 <h2>${title} &nbsp;<span class="addr">${dump.bytes.length} bytes</span></h2>
-<table>${rows.join('')}</table>
+${memoryTableHtml(dump)}
 <footer>Refreshed on every stop; highlighted bytes changed since the last one.
 Point it elsewhere with <code>-mv</code> in the debug console; <code>-help</code> lists the commands.</footer>
+</body>
+</html>`;
+}
+
+/**
+ * `-mv all,follow`'s panel: every register's memory in one page, one section
+ * apiece, instead of a tab per register - reusing `memoryTableHtml` per
+ * member is the whole difference from the single-view page above.
+ */
+function groupedMemoryHtml(members: Map<string, MemoryDump>): string {
+    // The order this was typed in - PC, SP, HL, DE, BC, IX, IY - not
+    // whatever order the Map happens to iterate in.
+    const order = ['register:PC', 'register:SP', 'register:HL', 'register:DE',
+        'register:BC', 'register:IX', 'register:IY'];
+    const ids = [...members.keys()].sort((a, b) => {
+        const ia = order.indexOf(a);
+        const ib = order.indexOf(b);
+        return (ia === -1 ? order.length : ia) - (ib === -1 ? order.length : ib);
+    });
+
+    const sections = ids.map(id => {
+        const dump = members.get(id)!;
+        const title = dump.label
+            ? `${escapeHtml(dump.label)} &mdash; &amp;${hex(dump.address, 4)}`
+            : `&amp;${hex(dump.address, 4)}`;
+        return `<section><h2>${title}</h2>${memoryTableHtml(dump)}</section>`;
+    });
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+<style>${memoryPageStyle}</style>
+</head>
+<body>
+${sections.join('')}
+<footer>Refreshed on every stop; highlighted bytes changed since the last one.
+<code>-mv &lt;register&gt;,follow</code> opens one of these on its own instead;
+<code>-help</code> lists the commands.</footer>
 </body>
 </html>`;
 }

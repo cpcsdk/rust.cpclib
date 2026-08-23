@@ -380,6 +380,22 @@ fn mv_all_follow_opens_one_view_per_pointer_register() {
         5,
         "one read per known pointer register, IX/IY silently skipped: {reads:?}"
     );
+
+    // Every one of them is tagged with the same group, so the editor can
+    // render them together in one panel instead of five.
+    let sent = session.peer().sent.clone();
+    let reads: Vec<Value> = sent
+        .into_iter()
+        .filter(|m| m["command"] == json!("readMemory"))
+        .collect();
+    assert_eq!(reads.len(), 5);
+    for (i, read) in reads.into_iter().enumerate() {
+        let out = session.on_emulator_message(&json!({
+            "seq": 10 + i as i64, "type": "response", "request_seq": read["seq"], "success": true,
+            "command": "readMemory", "body": {"address": read["arguments"]["memoryReference"], "data": "AAE="}
+        }));
+        assert_eq!(out[0]["body"]["group"], json!("registers"), "{out:?}");
+    }
 }
 
 /// Two memory views open at once are two panels, not one replacing the
