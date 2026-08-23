@@ -327,6 +327,54 @@ impl BuildFileAnalyzer {
         }
 
         let mut lenses = Vec::new();
+
+        // A second, summary lens per rule, all pinned to line 0 so VS Code
+        // stacks them together in one lens bar above the file - lets the
+        // user run/debug any rule without scrolling to find it. Reuses the
+        // exact same command/arguments as the per-rule lens below; only the
+        // range and title differ.
+        let top_of_file = Range {
+            start: Position { line: 0, character: 0 },
+            end: Position { line: 0, character: 0 }
+        };
+        for (rule_line, syms) in &groups {
+            let names = syms
+                .iter()
+                .map(|s| s.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let first_name = syms[0].name.clone();
+            lenses.push(CodeLens {
+                range: top_of_file,
+                command: Some(Command {
+                    title: format!("Build: {names}"),
+                    command: "cpclib.runRuleInTerminal".to_string(),
+                    arguments: Some(vec![
+                        serde_json::json!(first_name),
+                        serde_json::json!(file_path),
+                    ])
+                }),
+                data: None
+            });
+            if super::command::task_lines_in_rule(&text, *rule_line)
+                .iter()
+                .any(|(_, content)| rule_launches_an_emulator(content))
+            {
+                lenses.push(CodeLens {
+                    range: top_of_file,
+                    command: Some(Command {
+                        title: format!("Debug: {names}"),
+                        command: "cpclib.debugRule".to_string(),
+                        arguments: Some(vec![
+                            serde_json::json!(names),
+                            serde_json::json!(file_path),
+                        ])
+                    }),
+                    data: None
+                });
+            }
+        }
+
         for (rule_line, syms) in groups {
             let names = syms
                 .iter()

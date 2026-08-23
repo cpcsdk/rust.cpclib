@@ -440,6 +440,10 @@
       },
       "[basm]": {
         "editor.formatOnType": true
+      },
+      "files.associations": {
+        "*.bnd": "bndbuild",
+        "*.build": "bndbuild"
       }
     }
   },
