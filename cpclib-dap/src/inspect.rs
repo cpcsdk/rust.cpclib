@@ -646,6 +646,31 @@ pub fn crtc_registers_from_json(body: &Value) -> Option<[u8; 18]> {
     Some(out)
 }
 
+/// Extra rows the CRTC scope prepends whenever `validate_crtc` finds
+/// something - the standard Variables view has no per-row colour or
+/// severity, so a bad combination becomes a row of its own instead, right
+/// where the registers it is about already are. Run every time the CRTC
+/// scope is read, by both backends, rather than needing a console command
+/// first: `-crtcview`'s own panel is a nicer (and literally red) look at the
+/// same data for whoever opens it, not the only way to see it.
+pub fn crtc_warning_variables(regs: &[u8]) -> Vec<Value> {
+    validate_crtc(regs)
+        .into_iter()
+        .map(|w| {
+            let icon = match w.severity {
+                CrtcSeverity::Error => "\u{26D4}",
+                CrtcSeverity::Warning => "\u{26A0}"
+            };
+            json!({
+                "name": format!("{icon} {}", w.registers.join(",")),
+                "value": w.message,
+                "type": "a known-bad CRTC register combination",
+                "variablesReference": 0
+            })
+        })
+        .collect()
+}
+
 /// Read one chip's state out of a snapshot of the running machine.
 ///
 /// The emulator exposes nothing for the CRTC, the Gate Array, the PSG or the
@@ -690,14 +715,17 @@ pub fn chip_variables(reference: i64, sna: &cpclib_sna::Snapshot) -> Option<Vec<
                 "R16 light pen address (high)",
                 "R17 light pen address (low)"
             ];
-            let mut out = vec![
-                byte(
-                    "selected",
-                    get(F::CRTC_SEL),
-                    "the register &BCxx writes reach"
-                ),
-                byte("type", get(F::CRTC_TYPE), "which CRTC this machine has"),
-            ];
+            let mut out = crtc_warning_variables(&crtc_registers(sna));
+            out.push(byte(
+                "selected",
+                get(F::CRTC_SEL),
+                "the register &BCxx writes reach"
+            ));
+            out.push(byte(
+                "type",
+                get(F::CRTC_TYPE),
+                "which CRTC this machine has"
+            ));
             // The register &BCxx writes reach, underlined - the next &BDxx
             // write lands there.
             let selected = get(F::CRTC_SEL) as usize;
@@ -918,6 +946,37 @@ mod tests {
             .find(|w| w.registers == &["R0"])
             .expect("R0 != 63 should be flagged");
         assert_eq!(duration.severity, CrtcSeverity::Warning);
+    }
+
+    /// The CRTC scope carries its own warnings now, automatically - not just
+    /// the separate `-crtcview` panel. Reported from real use: the panel
+    /// requires a console command the user has to remember to run, but the
+    /// scope is already open every time the Variables view is.
+    #[test]
+    fn the_crtc_scope_flags_a_known_bad_configuration_on_its_own() {
+        use cpclib_sna::{Snapshot, SnapshotFlag};
+
+        let mut sna = Snapshot::default();
+        sna.set_value(SnapshotFlag::CRTC_REG(Some(0)), 63).unwrap();
+        sna.set_value(SnapshotFlag::CRTC_REG(Some(2)), 50).unwrap();
+        sna.set_value(SnapshotFlag::CRTC_REG(Some(3)), 0x8c).unwrap();
+
+        let crtc = chip_variables(CRTC_REFERENCE, &sna).unwrap();
+        let warning = crtc
+            .iter()
+            .find(|v| v["name"].as_str().unwrap_or_default().contains("R2"))
+            .unwrap_or_else(|| panic!("no warning row: {crtc:?}"));
+        assert!(
+            warning["value"].as_str().unwrap().contains("horizontal sync"),
+            "{warning:?}"
+        );
+        // Still first, ahead of the registers it is about - the reason to
+        // look is the first thing read, not the last.
+        assert!(
+            crtc.iter().position(|v| v == warning).unwrap()
+                < crtc.iter().position(|v| v["name"] == json!("selected")).unwrap(),
+            "{crtc:?}"
+        );
     }
 
     #[test]

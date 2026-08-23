@@ -2215,6 +2215,21 @@ impl<P: DapPeer> Session<P> {
             let regs = crate::inspect::crtc_registers(sna);
             return Ok(self.crtc_view_answer(request, &regs));
         }
+
+        // An emulator with a CRTC endpoint of its own is asked directly - see
+        // `chip_scope`'s identical branch. Only the one with none (1984js)
+        // has to save and parse a whole machine to answer, and only that one
+        // understands `cpclib/machineState` at all: AmspiritLite has no
+        // handler for it, so sending it unconditionally here (as this used
+        // to) got no answer, ever, for that backend.
+        if let Some(command) = crate::amspiritlite::chip_command(crate::inspect::CRTC_REFERENCE)
+            && self.peer.supports(command)
+        {
+            self.pending_crtc_views.push(request.clone());
+            self.send_own(command, json!({}), Purpose::MachineState)?;
+            return Ok(Vec::new());
+        }
+
         self.pending_crtc_views.push(request.clone());
         if self.pending_chip_scopes.is_empty()
             && self.pending_chip_prints.is_empty()

@@ -1402,6 +1402,35 @@ fn the_selected_crtc_register_is_marked() {
     );
 }
 
+/// A peer with its own CRTC endpoint (AmspiritLite) is asked there directly,
+/// not through `cpclib/machineState` - which it never claimed to support,
+/// and never answered, so `-crtcview` did nothing at all against it before
+/// this was fixed.
+#[test]
+fn crtcview_asks_a_peer_with_its_own_crtc_endpoint_directly() {
+    let mut session = Session::new(
+        RecordingPeer::new().also_supporting(&["cpclib/crtc"]),
+        map_with(&[])
+    );
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-crtcview", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("cpclib/crtc");
+    assert!(asked.is_some(), "{:?}", session.peer().commands());
+    assert!(
+        !session
+            .peer()
+            .commands()
+            .contains(&"cpclib/machineState".to_string()),
+        "never sent to a peer that does not implement it: {:?}",
+        session.peer().commands()
+    );
+}
+
 /// `-crtcview` flags a known-bad register combination, with every register
 /// the rule involves - not just one - so the panel can highlight all of them.
 #[test]

@@ -361,7 +361,9 @@ fn crtc_pane(body: &Value) -> Vec<Value> {
     ];
 
     let selected = body.get("selected_reg").and_then(Value::as_u64);
-    let mut out = Vec::new();
+    let mut out = crate::inspect::crtc_registers_from_json(body)
+        .map(|regs| crate::inspect::crtc_warning_variables(&regs))
+        .unwrap_or_default();
     if let Some(selected) = selected {
         out.push(scalar(
             "selected",
@@ -2200,6 +2202,26 @@ mod tests {
         assert!(names.iter().any(|n| n.contains('\u{0332}')), "{names:?}");
         // The counters the snapshot route could not give without a whole save.
         assert!(names.contains(&"rasterline".to_string()), "{names:?}");
+    }
+
+    /// The CRTC pane flags a known-bad register combination too, the same as
+    /// the snapshot-based pane does - both read the raw registers and both
+    /// go through the same `validate_crtc`.
+    #[test]
+    fn the_crtc_pane_flags_a_known_bad_configuration() {
+        let mut regs = vec![0; 18];
+        regs[0] = 63;
+        regs[2] = 50;
+        regs[3] = 0x8c;
+        let body = json!({ "regs": regs, "selected_reg": 0, "rasterline": 0 });
+
+        let pane = chip_variables(crate::inspect::CRTC_REFERENCE, &body);
+        assert!(
+            pane.iter()
+                .any(|v| v["name"].as_str().unwrap_or_default().contains("R2")
+                    && v["value"].as_str().unwrap_or_default().contains("horizontal sync")),
+            "{pane:?}"
+        );
     }
 
     /// The palette reads as ink numbers and the bytes that set them.
