@@ -10,11 +10,11 @@
 //! backend-specific here.
 //!
 //! The whole feature rests on one fact: the ROM calls
-//! [`crate::basic::EXECUTE_LINE_ENTRY`] once per BASIC line, with `HL`
-//! pointing at it. One instruction breakpoint at
-//! [`crate::basic::LINE_BREAKPOINT_TARGET`] (a few bytes into that same
-//! routine - see its own doc comment for why not the entry point itself),
-//! left armed for the whole session, plus reading
+//! [`crate::basic::EXECUTE_STATEMENT_ENTRY`] once per **statement** - every
+//! `:`-separated one on a line, not just its first. One instruction
+//! breakpoint at [`crate::basic::STATEMENT_BREAKPOINT_TARGET`] (a few bytes
+//! into that same routine - see its own doc comment for why not the entry
+//! point itself), left armed for the whole session, plus reading
 //! [`crate::basic::PTR_CURRENT_LINE_NUMBER_FIELD`] on every hit to compare
 //! against the user's actual breakpoints, is the entire stepping/breakpoint
 //! mechanism - no per-breakpoint address computation, unlike a Z80 session
@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 
 use crate::basic::{
-    self, BasicVariableValue, LINE_BREAKPOINT_TARGET, PTR_CURRENT_STATEMENT,
+    self, BasicVariableValue, STATEMENT_BREAKPOINT_TARGET, PTR_CURRENT_STATEMENT,
     VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
 };
 use crate::peer::DapPeer;
@@ -76,13 +76,22 @@ struct OwnRequest {
     purpose: Purpose
 }
 
-/// Why the program is being resumed - decides whether the next line
-/// boundary is reported unconditionally (a step) or only when it matches a
-/// user breakpoint (a plain continue, including the very first run after
-/// `configurationDone`).
+/// Why the program is being resumed - decides which of the (now
+/// statement-granular) breakpoint hits actually gets reported.
+///
+/// `next`/`stepOut` stay line-granular on purpose - "it is ok for me that
+/// step over execute the whole line, but not step into" - so a
+/// multi-statement line is still one step for them, exactly as before this
+/// session went statement-granular for everything else.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ResumeKind {
-    Step,
+    /// `stepIn`: stop at the very next statement, whatever line it is on -
+    /// several stops on one multi-statement line, matching the Z80
+    /// session's own per-instruction stepping.
+    StepStatement,
+    /// `next`/`stepOut`: stop only once execution reaches a *different*
+    /// line than `from_line` - a multi-statement line is one step.
+    StepLine { from_line: Option<u16> },
     Continue
 }
 
@@ -236,7 +245,7 @@ impl<P: DapPeer> BasicSession<P> {
         self.attached = true;
         self.send_own(
             "setInstructionBreakpoints",
-            json!({ "breakpoints": [{ "instructionReference": address_reference(LINE_BREAKPOINT_TARGET as u32) }] }),
+            json!({ "breakpoints": [{ "instructionReference": address_reference(STATEMENT_BREAKPOINT_TARGET as u32) }] }),
             Purpose::BreakpointArmed
         )?;
         self.start_if_ready()
@@ -256,7 +265,7 @@ impl<P: DapPeer> BasicSession<P> {
             return Some(format!(
                 "could not arm the line breakpoint at {}: {message} - \
                  breakpoints and stepping will not work this session",
-                address_reference(LINE_BREAKPOINT_TARGET as u32)
+                address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
             ));
         }
         let verified = response
@@ -279,7 +288,7 @@ impl<P: DapPeer> BasicSession<P> {
                 Some(format!(
                     "the line breakpoint at {} did not verify: {message} - \
                      breakpoints and stepping will not work this session",
-                    address_reference(LINE_BREAKPOINT_TARGET as u32)
+                    address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
                 ))
             },
             // `Some(true)`: verified. `None`: a peer that answers this
@@ -334,17 +343,20 @@ impl<P: DapPeer> BasicSession<P> {
                 Ok(vec![protocol::response(message, json!({}), seq)])
             },
             "continue" | "next" | "stepIn" | "stepOut" => {
-                // BASIC has no instruction-level step: "next"/"stepIn"/
-                // "stepOut" all mean "run to the next line boundary and
-                // stop there unconditionally", which at the Z80 level this
-                // session already gets by resuming past the one armed
-                // breakpoint and reporting the first hit regardless of the
-                // user's own breakpoints.
-                self.resuming_as = Some(if command == "continue" {
-                    ResumeKind::Continue
-                }
-                else {
-                    ResumeKind::Step
+                // `stepIn` stops at the very next statement - several stops
+                // on one multi-statement line. `next`/`stepOut` stay
+                // line-granular: "step over the whole line" is the point of
+                // them, so they keep filtering by line the way this session
+                // always has, just now against a statement-granular stream
+                // of hits instead of a line-granular one.
+                self.resuming_as = Some(match command {
+                    "continue" => ResumeKind::Continue,
+                    "stepIn" => ResumeKind::StepStatement,
+                    _ => {
+                        ResumeKind::StepLine {
+                            from_line: self.current_line
+                        }
+                    }
                 });
                 self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
                 let seq = self.next_seq();
@@ -675,7 +687,8 @@ impl<P: DapPeer> BasicSession<P> {
         let line = basic::decode_line_number([line_bytes[0], line_bytes[1]]);
 
         let should_stop = match self.resuming_as {
-            Some(ResumeKind::Step) => true,
+            Some(ResumeKind::StepStatement) => true,
+            Some(ResumeKind::StepLine { from_line }) => Some(line) != from_line,
             Some(ResumeKind::Continue) | None => self.breakpoints.contains(&line)
         };
 
@@ -857,20 +870,20 @@ mod tests {
     }
 
     #[test]
-    fn attach_arms_the_line_breakpoint_target_not_the_entry_point() {
+    fn attach_arms_the_statement_breakpoint_target_not_an_entry_point() {
         let mut session = new_session(SOURCE);
         complete_attach(&mut session);
 
         // Regression test: this used to arm EXECUTE_LINE_ENTRY itself, which
         // reads PTR_CURRENT_LINE_NUMBER_FIELD one line too early (the ROM
         // updates it a few bytes later in the same routine - see
-        // LINE_BREAKPOINT_TARGET's doc comment) - so every breakpoint
+        // STATEMENT_BREAKPOINT_TARGET's doc comment) - so every breakpoint
         // comparison was off by one line and a real breakpoint could go the
         // whole session without ever matching.
         let armed = session.peer_mut().last("setInstructionBreakpoints").unwrap();
         assert_eq!(
             armed["arguments"]["breakpoints"][0]["instructionReference"],
-            address_reference(LINE_BREAKPOINT_TARGET as u32)
+            address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
         );
     }
 
@@ -1119,6 +1132,105 @@ mod tests {
         let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
 
         assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "step");
+    }
+
+    #[test]
+    fn step_in_stops_at_every_statement_on_a_multi_statement_line() {
+        // "stepIn stops at the very next statement, whatever line it is on" -
+        // reported directly: `next` executes a multi-statement line whole,
+        // which is expected, but `stepIn` did too, which is not.
+        let source = "10 a=1:b=2:c=3\n20 d=4\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        // The hit reports line 10 again (its second statement) - stepIn
+        // must stop here even though the *line* has not changed.
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "step");
+    }
+
+    #[test]
+    fn next_skips_every_statement_on_the_current_line_and_stops_only_on_a_new_one() {
+        let source = "10 a=1:b=2:c=3\n20 d=4\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new(),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        // A real "next" always follows a previous stop - establish current_line
+        // = 10 first, the same way stepping through the debugger would.
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 1 }] } // "10 a=1:b=2:c=3"
+            }))
+            .unwrap();
+        stop_at_line(&mut session, 10);
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "next", "arguments": {} }))
+            .unwrap();
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        // First hit after "next": still line 10 (its second statement) -
+        // must NOT stop, matching "step over the whole line".
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0x9000u16.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&10u16.to_le_bytes()));
+        assert!(events.is_empty(), "{events:?}");
+
+        // Silently continuing sent its own "continue"; the peer, having run
+        // on, hits the breakpoint again for line 20 - which "next" does
+        // stop at.
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0x9100u16.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+        assert_eq!(events.len(), 1, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "step");
     }

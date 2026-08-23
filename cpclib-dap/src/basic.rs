@@ -67,29 +67,35 @@ pub const VARIABLE_CHAIN_HEADS_COUNT: usize = 26;
 pub const DEF_FN_CHAIN_HEAD: u16 = 0xADEB;
 
 /// ROM entry point called once per BASIC line about to execute (`HL` points
-/// at the line's length field on entry). *Not* the breakpoint target - see
-/// [`LINE_BREAKPOINT_TARGET`], which is a few bytes further into the same
-/// routine and exists specifically because this address is one line too
-/// early to read [`PTR_CURRENT_LINE_NUMBER_FIELD`] from.
+/// at the line's length field on entry). Reached once per line, on the way
+/// to [`EXECUTE_STATEMENT_ENTRY`] for that line's own first statement - not
+/// itself a breakpoint target (see [`STATEMENT_BREAKPOINT_TARGET`]).
 pub const EXECUTE_LINE_ENTRY: u16 = 0xDE77;
 
-/// The actual breakpoint target for line-granularity stepping/breakpoints -
-/// `EXECUTE_LINE_ENTRY + 9`, immediately *after* the ROM's own `ld
-/// (address_of_line_number_LB_of_line_of_cur),hl` at `EXECUTE_LINE_ENTRY+6`
-/// (confirmed against the annotated BASIC 1.1 disassembly's
-/// `Execution.asm`). Breakpointing at [`EXECUTE_LINE_ENTRY`] itself reads
-/// [`PTR_CURRENT_LINE_NUMBER_FIELD`] *before* the ROM updates it for the
-/// line about to run - it still holds the *previous* line's address at that
-/// exact PC, so every comparison against a user's breakpoint line is off by
-/// one line, and one that never happens to coincide with a real stop looks
-/// exactly like "breakpoints do nothing". This address is the first point at
-/// which the pointer is guaranteed fresh for the line the breakpoint is
-/// actually meant to catch.
-pub const LINE_BREAKPOINT_TARGET: u16 = 0xDE80;
-
-/// ROM entry point called once per statement - finer-grained than
-/// [`EXECUTE_LINE_ENTRY`], fires on every `:`-separated statement too.
+/// ROM entry point called once per **statement** - every `:`-separated one
+/// on a line, not just the first, confirmed against `Execution.asm`:
+/// `execute_line_atHL` (`EXECUTE_LINE_ENTRY`) is reached exactly once per
+/// line and falls through here for the line's first statement; every
+/// subsequent one on the same line loops back to this same address
+/// directly, `EXECUTE_LINE_ENTRY` never firing again until the *next* line.
+/// This is what makes statement-granularity stepping possible at all - not
+/// itself the breakpoint target, though: see [`STATEMENT_BREAKPOINT_TARGET`].
 pub const EXECUTE_STATEMENT_ENTRY: u16 = 0xDE60;
+
+/// The actual breakpoint target for both statement- and line-granularity
+/// stepping and breakpoints - `EXECUTE_STATEMENT_ENTRY + 3`, immediately
+/// *after* the ROM's own `ld (address_of_byte_before_current_statement),hl`
+/// at `EXECUTE_STATEMENT_ENTRY` itself (confirmed against `Execution.asm`).
+/// Breakpointing at the entry point itself reads
+/// [`PTR_CURRENT_STATEMENT`]/[`PTR_CURRENT_LINE_NUMBER_FIELD`] *before* the
+/// ROM updates the former for the statement about to run - the same
+/// staleness [`EXECUTE_LINE_ENTRY`] has for line breakpoints, one address
+/// earlier. [`PTR_CURRENT_LINE_NUMBER_FIELD`] is already fresh by this
+/// point regardless of which statement on a line this is: the line's own
+/// update (in `execute_line_atHL`) always runs once, before this routine is
+/// ever reached for that line's first statement, and stays put for every
+/// later one.
+pub const STATEMENT_BREAKPOINT_TARGET: u16 = 0xDE63;
 
 /// Where a tokenised BASIC program lives once loaded, on a freshly booted
 /// machine with default memory configuration. Confirmed empirically, not
