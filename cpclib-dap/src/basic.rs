@@ -35,6 +35,20 @@ pub const PTR_CURRENT_LINE_NUMBER_FIELD: u16 = 0xAE1D;
 /// `program_start = deref(PTR_END_OF_RESERVED_AREA) + 1`.
 pub const PTR_END_OF_RESERVED_AREA: u16 = 0xAE64;
 
+/// Pointer to the end of the tokenised program - the same address
+/// [`PTR_VARIABLES_START`] holds, but tracked as its own field rather than
+/// re-derived from it. On a fresh boot this coincides with variables/arrays
+/// start (an empty program), which made it easy to miss: a launch snapshot
+/// that patches the program in and updates [`PTR_VARIABLES_START`]/
+/// [`PTR_ARRAYS_START`] but leaves this one at its stale "empty program"
+/// value causes real corruption the moment BASIC creates its first
+/// variable, since some internal bookkeeping trusts this field over
+/// re-scanning the program. Confirmed independently by AMSpiriT Lite's own
+/// BASIC injector, whose documentation calls out updating "BASIC
+/// end-of-program pointers at 0xAE66" as a required step, not this crate's
+/// own reverse-engineering.
+pub const PTR_PROGRAM_END: u16 = 0xAE66;
+
 /// Pointer to the start of the variable storage area, immediately following
 /// the tokenised program.
 pub const PTR_VARIABLES_START: u16 = 0xAE68;
@@ -269,11 +283,16 @@ fn read_name(buffer: &[u8], mut idx: usize) -> Option<(String, usize)> {
 /// stepping still work identically to a program launched any other way,
 /// which is the actual value here.
 ///
-/// Only the two firmware pointers a freshly `LOAD`ed program actually
-/// needs updated are touched: [`PTR_VARIABLES_START`] and
-/// [`PTR_ARRAYS_START`], both to right after `program_bytes` (matching a
-/// real `LOAD`'s effect: no variables exist yet, so both point to the same
-/// place). [`PTR_END_OF_RESERVED_AREA`] does *not* change - it marks the
+/// The firmware pointers a freshly `LOAD`ed program actually needs updated
+/// are touched: [`PTR_PROGRAM_END`], [`PTR_VARIABLES_START`] and
+/// [`PTR_ARRAYS_START`], all three to right after `program_bytes` (matching
+/// a real `LOAD`'s effect: no variables exist yet, so all three point to the
+/// same place). Missing [`PTR_PROGRAM_END`] here previously left it at its
+/// stale "empty program" value from the base snapshot - harmless for a
+/// program that never creates a variable, but real corruption of the
+/// program's own bytes the moment one did, since some internal bookkeeping
+/// reads this field directly rather than re-scanning the program to find
+/// its end. [`PTR_END_OF_RESERVED_AREA`] does *not* change - it marks the
 /// fixed workspace boundary the program area starts after, not the
 /// program's own end, so it already reads correctly on the base snapshot
 /// regardless of what gets loaded on top.
@@ -285,6 +304,8 @@ pub fn build_launch_snapshot(program_bytes: &[u8]) -> Result<cpclib_sna::Snapsho
 
     let variables_start = PROGRAM_START.wrapping_add(program_bytes.len() as u16);
     let pointer_bytes = variables_start.to_le_bytes();
+    sna.add_data(&pointer_bytes, PTR_PROGRAM_END as usize)
+        .map_err(|e| format!("{e:?}"))?;
     sna.add_data(&pointer_bytes, PTR_VARIABLES_START as usize)
         .map_err(|e| format!("{e:?}"))?;
     sna.add_data(&pointer_bytes, PTR_ARRAYS_START as usize)
@@ -314,8 +335,39 @@ mod tests {
         sna.unwrap_memory_chunks();
 
         assert_eq!(peek16(&sna, PTR_END_OF_RESERVED_AREA), PROGRAM_START - 1);
+        // An empty program: PTR_PROGRAM_END/PTR_VARIABLES_START/
+        // PTR_ARRAYS_START all coincide right after PROGRAM_START, which is
+        // exactly what made a missing PTR_PROGRAM_END update so easy to
+        // miss - it silently reads as "correct" until a real, non-empty
+        // program is loaded and this field is not moved along with it.
+        assert_eq!(peek16(&sna, PTR_PROGRAM_END), PROGRAM_START + 2);
         assert_eq!(peek16(&sna, PTR_CURRENT_LINE_NUMBER_FIELD), 0);
         assert_eq!(peek16(&sna, VARIABLE_CHAIN_HEADS), 0);
+    }
+
+    #[test]
+    fn build_launch_snapshot_moves_program_end_past_a_non_empty_program() {
+        // Regression test: a real bug, not a hypothetical. build_launch_snapshot
+        // used to update only PTR_VARIABLES_START/PTR_ARRAYS_START, leaving
+        // PTR_PROGRAM_END at the base snapshot's "empty program" value
+        // (PROGRAM_START + 2). A program that never creates a variable never
+        // notices; the moment one does, BASIC's variable-creation code wrote
+        // through this stale pointer - landing inside the freshly loaded
+        // program's own bytes rather than past its end - and destroyed it.
+        // Confirmed against AMSpiriT Lite's own documented BASIC injector,
+        // which calls out updating "end-of-program pointers at 0xAE66" as a
+        // required step.
+        let prog = BasicProgram::parse("10 x=1\n20 x=x+1\n30 goto 20\n").unwrap();
+        let bytes = prog.as_bytes();
+        let sna = build_launch_snapshot(&bytes).unwrap();
+
+        let expected_variables_start = PROGRAM_START + bytes.len() as u16;
+        assert_eq!(peek16(&sna, PTR_PROGRAM_END), expected_variables_start);
+        assert_ne!(
+            peek16(&sna, PTR_PROGRAM_END),
+            PROGRAM_START + 2,
+            "left at the base snapshot's stale empty-program value"
+        );
     }
 
     #[test]
@@ -334,6 +386,7 @@ mod tests {
         }
 
         let expected_variables_start = PROGRAM_START + bytes.len() as u16;
+        assert_eq!(peek16(&sna, PTR_PROGRAM_END), expected_variables_start);
         assert_eq!(peek16(&sna, PTR_VARIABLES_START), expected_variables_start);
         assert_eq!(peek16(&sna, PTR_ARRAYS_START), expected_variables_start);
 
