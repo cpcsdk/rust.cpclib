@@ -1507,13 +1507,20 @@ async fn test_asm_file_without_an_embedded_block_has_no_code_lens_and_bnd_file_c
         .await
         .unwrap()
         .expect("a real .bnd file should still get its own code lens");
-    // One "▶ Run: real" rule lens, plus one "▶ Run this command" lens for
-    // its single task (`cmd: echo hi`).
-    assert_eq!(bnd_lenses.len(), 2, "{bnd_lenses:?}");
+    // One "▶ Run: real" rule lens, one "▶ Run this command" lens for its
+    // single task (`cmd: echo hi`), and one "Build: real" top-of-file
+    // summary lens (the rule is declared on line 0 here, same as its own
+    // lens, but titled differently).
+    assert_eq!(bnd_lenses.len(), 3, "{bnd_lenses:?}");
     assert!(
         bnd_lenses
             .iter()
             .any(|l| l.command.as_ref().unwrap().title == "▶ Run: real")
+    );
+    assert!(
+        bnd_lenses
+            .iter()
+            .any(|l| l.command.as_ref().unwrap().title == "Build: real")
     );
     assert!(
         bnd_lenses
