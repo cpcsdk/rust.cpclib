@@ -209,12 +209,42 @@ impl BasicProgram {
     pub fn parse<S: AsRef<str>>(code: S) -> Result<Self, BasicError> {
         let input = code.as_ref();
         match (parse_basic_program, space0).parse(input) {
-            Ok((prog, _)) => Ok(prog),
+            Ok((mut prog, _)) => {
+                prog.apply_def_type_declarations();
+                Ok(prog)
+            },
             Err(e) => {
                 Err(BasicError::ParseError {
                     msg: format!("Error while parsing the Basic content: {e}")
                 })
             },
+        }
+    }
+
+    /// After a `DEFINT`/`DEFSTR`/`DEFREAL` statement, every *later*
+    /// reference to a variable whose name starts with one of the declared
+    /// letters uses that type's marker, even with no explicit sigil at the
+    /// reference site - confirmed against a real CPC's own re-save of
+    /// mandelbrot.bas (`DEFINT c,i,p` makes every later `it`/`itmax`/
+    /// `px`/`py`/`c` reference use `VariableDefinition1`, not the
+    /// sigil-less default `VariableDefinition3` the parser gives it
+    /// locally). An explicit `$`/`%` sigil at the reference site always
+    /// wins - recognisable because it never parses to the sigil-less
+    /// default this only patches.
+    ///
+    /// Line-granularity, not token-granularity: a declaration takes effect
+    /// starting the *next* line, not partway through its own line. Every
+    /// real program only ever has one declaration per line with nothing
+    /// else on it (as does this one), so this is not a meaningful
+    /// simplification in practice - and getting the same-line ordering
+    /// exactly right would need threading position through the token
+    /// stream for no evidenced benefit.
+    fn apply_def_type_declarations(&mut self) {
+        let mut default_kind = [BasicTokenNoPrefix::VariableDefinition3; 26];
+
+        for line in &mut self.lines {
+            patch_sigil_less_variable_kinds(&mut line.tokens, &default_kind);
+            record_type_declarations(&line.tokens, &mut default_kind);
         }
     }
 
@@ -385,6 +415,96 @@ impl BasicProgram {
             .iter_mut()
             .for_each(|line| line.remove_useless_space());
     }
+}
+
+/// Rewrites every `BasicToken::Variable` still carrying the sigil-less
+/// default marker (`VariableDefinition3`) to whatever `default_kind` says
+/// its first letter currently resolves to - see
+/// `BasicProgram::apply_def_type_declarations`.
+fn patch_sigil_less_variable_kinds(
+    tokens: &mut [BasicToken],
+    default_kind: &[BasicTokenNoPrefix; 26]
+) {
+    for token in tokens {
+        if let BasicToken::Variable(kind, name, _offset) = token {
+            if *kind == BasicTokenNoPrefix::VariableDefinition3 {
+                if let Some(idx) = letter_index(name) {
+                    *kind = default_kind[idx];
+                }
+            }
+        }
+    }
+}
+
+/// If `tokens` contains a `DEFINT`/`DEFSTR`/`DEFREAL` statement, updates
+/// `default_kind` for every letter (or letter range, e.g. `A-Z`) it names.
+fn record_type_declarations(tokens: &[BasicToken], default_kind: &mut [BasicTokenNoPrefix; 26]) {
+    for (i, token) in tokens.iter().enumerate() {
+        let BasicToken::SimpleToken(tok) = token
+        else {
+            continue;
+        };
+        let target = match tok {
+            BasicTokenNoPrefix::Defint => BasicTokenNoPrefix::VariableDefinition1,
+            BasicTokenNoPrefix::Defstr => BasicTokenNoPrefix::StringVariableDefinition,
+            BasicTokenNoPrefix::Defreal => BasicTokenNoPrefix::VariableDefinition3,
+            _ => continue
+        };
+        for letter in declared_letters(&tokens[i + 1..]) {
+            if let Some(idx) = letter_index(&letter.to_string()) {
+                default_kind[idx] = target;
+            }
+        }
+    }
+}
+
+/// The letters a `DEFINT`/`DEFSTR`/`DEFREAL` statement's own tail names -
+/// `parse_defint`/`parse_defstr`/`parse_defreal` encode `C-P` as the plain
+/// characters `C`, `SubstractionOrUnaryMinus`, `P`, so a run of single
+/// letters and `-`-joined pairs is all that needs recognising here, up to
+/// the statement separator (or end of line) that ends the declaration.
+fn declared_letters(tail: &[BasicToken]) -> Vec<char> {
+    let mut chars = Vec::new();
+    for token in tail {
+        let BasicToken::SimpleToken(tok) = token
+        else {
+            break;
+        };
+        if *tok == BasicTokenNoPrefix::StatementSeparator {
+            break;
+        }
+        if let Some(c) = tok.char() {
+            if c.is_ascii_alphabetic() || c == '-' {
+                chars.push(c.to_ascii_uppercase());
+            }
+        }
+    }
+
+    let mut letters = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '-' {
+            i += 1;
+            continue;
+        }
+        if i + 2 < chars.len() && chars[i + 1] == '-' {
+            for b in (chars[i] as u8)..=(chars[i + 2] as u8) {
+                letters.push(b as char);
+            }
+            i += 3;
+        }
+        else {
+            letters.push(chars[i]);
+            i += 1;
+        }
+    }
+    letters
+}
+
+/// `name`'s first letter as a 0-25 index, if it has one.
+fn letter_index(name: &str) -> Option<usize> {
+    let first = name.chars().next()?.to_ascii_uppercase();
+    first.is_ascii_uppercase().then(|| first as usize - 'A' as usize)
 }
 
 #[allow(clippy::let_unit_value)]

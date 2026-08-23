@@ -704,7 +704,7 @@ impl BasicTokenNoPrefix {
     pub fn variable_sigil(self) -> Option<char> {
         match self {
             Self::StringVariableDefinition => Some('$'),
-            Self::IntegerVariableDefinition => Some('%'),
+            Self::VariableDefinition1 => Some('%'),
             _ => None
         }
     }
@@ -718,16 +718,20 @@ impl BasicTokenNoPrefix {
     /// resets every variable reference in a program back to exactly this
     /// marker ("&0d (real)").
     ///
-    /// The codes used for `$`/`%` (`StringVariableDefinition`/
-    /// `IntegerVariableDefinition`) are this crate's pre-existing choice -
-    /// plausible given how the ROM disassembly names the &02-&0D range,
-    /// but *not* independently confirmed against a primary source the way
-    /// the bare/`VariableDefinition3` case is. Revisit if a `$`/`%`
-    /// variable is ever seen to tokenise incorrectly.
+    /// `VariableDefinition1` for `%`/DEFINT-implied integer is directly
+    /// confirmed twice: a real CPC's own re-save of both mandelbrot.bas
+    /// (`itmax`, `it`, `px`, `py`, `c`) and magic8b.bas (`q`, DEFINT A-Z)
+    /// use exactly this marker for every DEFINT-typed reference - see
+    /// `BasicProgram`'s DEFINT/DEFSTR/DEFREAL handling. `StringVariableDefinition`
+    /// for `$` is *also* directly confirmed (magic8b.bas's `i$`), and
+    /// notably does *not* follow the same VariableDefinition1/2/3 family
+    /// as integer/real - an earlier guess that it would (`VariableDefinition2`)
+    /// was wrong. There is exactly one code per runtime type regardless of
+    /// how a variable came to have it (explicit sigil or DEFINT/DEFSTR).
     pub fn for_variable_sigil(sigil: Option<char>) -> Self {
         match sigil {
             Some('$') => Self::StringVariableDefinition,
-            Some('%') => Self::IntegerVariableDefinition,
+            Some('%') => Self::VariableDefinition1,
             _ => Self::VariableDefinition3
         }
     }
@@ -1553,7 +1557,7 @@ mod test {
         );
         assert_eq!(
             int_var.as_bytes()[0],
-            BasicTokenNoPrefix::IntegerVariableDefinition.value()
+            BasicTokenNoPrefix::VariableDefinition1.value()
         );
     }
 

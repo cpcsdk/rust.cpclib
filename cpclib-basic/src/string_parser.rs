@@ -37,7 +37,24 @@ macro_rules! simple_keyword_parser {
     ($fn_name:ident, $keyword:expr, $token:ident) => {
         #[doc = concat!("Parse ", $keyword, " keyword")]
         pub fn $fn_name<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-            Caseless($keyword)
+            // A short keyword (DI, ON, TO, ...) is also a valid prefix of
+            // countless identifiers (dir, once, total, ...) - with no
+            // boundary check this greedily matched the keyword and left
+            // the rest of the identifier as unparseable garbage. Confirmed
+            // against real programs: "DI" alone swallowed the start of a
+            // bare `dir = 0`/`dimx = 90` reference and broke the rest of
+            // the line.
+            (
+                Caseless($keyword),
+                peek(alt((
+                    ' '.void(),
+                    '\t'.void(),
+                    ':'.void(),
+                    '\n'.void(),
+                    '\r'.void(),
+                    eof.void()
+                )))
+            )
                 .map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::$token)])
                 .parse_next(input)
         }
@@ -328,7 +345,7 @@ pub fn parse_instruction<'src>(input: &mut &'src str) -> BasicSeveralTokensResul
                 parse_clg,
                 parse_mask
             )),
-            alt((parse_frame, parse_graphics_pen, parse_graphics_paper))
+            alt((parse_frame, parse_graphics_pen, parse_graphics_paper, parse_fill))
         )),
         // Screen/Display
         alt((
@@ -850,35 +867,84 @@ pub fn parse_print_expression<'src>(input: &mut &'src str) -> BasicSeveralTokens
 pub fn parse_print_stream_expression<'src>(
     input: &mut &'src str
 ) -> BasicSeveralTokensResult<'src> {
-    let mut first = parse_print_expression.parse_next(input)?;
+    // The very first item is optional too: `PRINT ,x` (tab to the next
+    // zone, then x) has nothing before its leading comma. Confirmed
+    // against gofish.bas's `print ,remca"cards remaining"`.
+    let mut tokens = opt(parse_print_expression)
+        .parse_next(input)?
+        .unwrap_or_default();
 
-    let mut next: Vec<Vec<BasicToken>> = repeat(
-        0..,
-        (
-            one_of([';', ',']),
-            parse_basic_space0,
-            opt(parse_print_expression)
-        )
-            .map(|(sep, mut space_a, expr)| {
-                let mut inner = Vec::with_capacity(
-                    1 + space_a.len() + expr.as_ref().map(|e| e.len()).unwrap_or(0)
-                );
-                inner.push(BasicToken::SimpleToken(sep.into()));
-                inner.append(&mut space_a);
-                if let Some(mut expr) = expr {
-                    inner.append(&mut expr);
-                }
+    loop {
+        // A ';'/',' separator is normally required between print items,
+        // but not when a quote mark already makes the boundary
+        // unambiguous on its own - either the previous item just closed a
+        // quoted string, or the next one is about to open one (a bare
+        // number/identifier running into another item, or into a quote,
+        // still needs an explicit separator; a quote never does, on
+        // either side). Confirmed against gofish.bas's `"Score: "name$`,
+        // snake.bas's `"SCORE:"p`, and mines.bas's `"There are"nmines"mines."`
+        // (both directions in the same line), all otherwise-unparseable
+        // without this.
+        let just_closed_a_string = matches!(
+            tokens.last(),
+            Some(BasicToken::CommentOrString(_, _, true))
+        );
 
-                inner
-            })
-    )
-    .parse_next(input)?;
+        let checkpoint = input.checkpoint();
+        let had_sep = match one_of::<_, _, ContextError>([';', ',']).parse_next(input) {
+            Ok(sep) => {
+                tokens.push(BasicToken::SimpleToken(sep.into()));
+                true
+            },
+            Err(_) => {
+                input.reset(&checkpoint);
+                false
+            }
+        };
 
-    for other in &mut next {
-        first.append(other);
+        if !had_sep {
+            let next_opens_a_string =
+                peek::<_, _, ContextError, _>((cpclib_common::winnow::ascii::space0, '"'))
+                    .parse_next(input)
+                    .is_ok();
+
+            if !just_closed_a_string && !next_opens_a_string {
+                break;
+            }
+            // `PRINT "x" ELSE ...`: ELSE ends the print list here, and
+            // must not be swallowed as if it were a bare variable named
+            // "else" the way any other identifier-shaped word would be -
+            // there is no separator to stop it otherwise. The space before
+            // ELSE (almost always present - "x" ELSE, not "x"ELSE) has to
+            // be skipped before checking, or this peek looks at the space
+            // itself and never actually matches.
+            let followed_by_else = peek::<_, _, ContextError, _>((
+                cpclib_common::winnow::ascii::space0::<_, ContextError>,
+                Caseless("ELSE"),
+                cpclib_common::winnow::combinator::not(one_of((
+                    'a'..='z',
+                    'A'..='Z',
+                    '0'..='9',
+                    '_'
+                )))
+            ))
+            .parse_next(input)
+            .is_ok();
+            if followed_by_else {
+                break;
+            }
+        }
+
+        let mut space = parse_basic_space0.parse_next(input)?;
+        tokens.append(&mut space);
+
+        match opt(parse_print_expression).parse_next(input)? {
+            Some(mut expr) => tokens.append(&mut expr),
+            None => break
+        }
     }
 
-    Ok(first)
+    Ok(tokens)
 }
 
 /// Parse a complete and valid print expression
@@ -1162,7 +1228,7 @@ keyword_expr_parser!(
     parse_mode,
     "MODE",
     Mode,
-    NumericExpressionConstraint::None,
+    NumericExpressionConstraint::AssignmentValue,
     "MODE value expected (0-3)"
 );
 /// GOTO/GOSUB's target: a bare decimal line number literal uses the
@@ -1177,7 +1243,13 @@ pub fn parse_line_number_expression<'src>(input: &mut &'src str) -> BasicSeveral
     alt((
         terminated(
             dec_u16_inner,
-            peek(alt((eof.void(), one_of((' ', '\t', ':', '\r', '\n')).void())))
+            // `,` too: ON ... GOTO/GOSUB's targets are comma-separated, and
+            // every one but the last is followed by a comma, not a
+            // statement/line boundary - missing this made every target but
+            // the last silently fall through to the generic 16-bit form,
+            // confirmed against a real CPC's own re-save of magic8b.bas's
+            // `ON q GOSUB 100,110,...,290`.
+            peek(alt((eof.void(), one_of((' ', '\t', ':', '\r', '\n', ',')).void())))
         )
         .map(|val| {
             vec![BasicToken::Constant(
@@ -1225,6 +1297,15 @@ keyword_expr_parser!(
     Call,
     NumericExpressionConstraint::Integer,
     "Address expected"
+);
+/// FILL ink - had no parser at all, so any use of it was an unparseable
+/// program (confirmed against yingyang.bas's `fill 1`).
+keyword_expr_parser!(
+    parse_fill,
+    "FILL",
+    Fill,
+    NumericExpressionConstraint::None,
+    "Ink expected"
 );
 
 /// INK pen, color1 [, color2]
@@ -1331,10 +1412,15 @@ pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     let var = cut_err(parse_variable.context(StrContext::Label("Variable expected")))
         .parse_next(input)?;
     let space_b = parse_basic_space0.parse_next(input)?;
-    let eq = cut_err('='.context(StrContext::Label("= expected"))).parse_next(input)?;
+    // `FOR var = start ...` is itself an assignment (it initialises the
+    // loop variable) - a real CPC's own tokenisation of `FOR py=0 TO 199
+    // STEP 2` uses the dedicated Equal token for '=' and the compact
+    // literal encodings for 0/199/2, exactly like a plain `LET`, for all
+    // three of start/end/step - not just start.
+    let _eq = cut_err('='.context(StrContext::Label("= expected"))).parse_next(input)?;
     let mut space_c = parse_basic_space0.parse_next(input)?;
     let mut start_val = cut_err(
-        parse_numeric_expression(NumericExpressionConstraint::None)
+        parse_numeric_expression(NumericExpressionConstraint::AssignmentValue)
             .context(StrContext::Label("Start value expected"))
     )
     .parse_next(input)?;
@@ -1342,7 +1428,7 @@ pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     let _ = cut_err(Caseless("TO").context(StrContext::Label("TO expected"))).parse_next(input)?;
     let mut space_e = parse_basic_space1.parse_next(input)?;
     let mut end_val = cut_err(
-        parse_numeric_expression(NumericExpressionConstraint::None)
+        parse_numeric_expression(NumericExpressionConstraint::AssignmentValue)
             .context(StrContext::Label("End value expected"))
     )
     .parse_next(input)?;
@@ -1350,7 +1436,7 @@ pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         parse_basic_space1,
         Caseless("STEP"),
         parse_basic_space1,
-        parse_numeric_expression(NumericExpressionConstraint::None)
+        parse_numeric_expression(NumericExpressionConstraint::AssignmentValue)
     ))
     .parse_next(input)?;
 
@@ -1360,7 +1446,7 @@ pub fn parse_for<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
         var,
         space_b
     );
-    res.push(BasicToken::SimpleToken(eq.into()));
+    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Equal));
     res.append(&mut space_c);
     res.append(&mut start_val);
     res.append(&mut space_d);
@@ -2319,8 +2405,7 @@ pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
     let (space_c, first_line) = (
         parse_basic_space1,
         cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
-                .context(StrContext::Label("Line number expected"))
+            parse_line_number_expression.context(StrContext::Label("Line number expected"))
         )
     )
         .parse_next(input)?;
@@ -2328,11 +2413,7 @@ pub fn parse_on_goto_gosub<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
     // Parse optional additional line numbers
     let rest_lines: Vec<Vec<BasicToken>> = repeat(
         0..,
-        (
-            parse_comma,
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
-        )
-            .map(|(mut c, mut line)| {
+        (parse_comma, parse_line_number_expression).map(|(mut c, mut line)| {
                 let mut tokens = vec![];
                 tokens.append(&mut c);
                 tokens.append(&mut line);
@@ -2371,8 +2452,7 @@ pub fn parse_on_error_goto<'src>(input: &mut &'src str) -> BasicSeveralTokensRes
         cut_err(Caseless("GOTO").context(StrContext::Label("GOTO expected"))),
         parse_basic_space1,
         cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
-                .context(StrContext::Label("Line number expected"))
+            parse_line_number_expression.context(StrContext::Label("Line number expected"))
         )
     )
         .parse_next(input)?;
@@ -2496,7 +2576,7 @@ pub fn parse_resume<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         parse_basic_space0,
         opt(alt((
             Caseless("NEXT").map(|_| vec![BasicToken::SimpleToken(BasicTokenNoPrefix::Next)]),
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
+            parse_line_number_expression
         )))
     )
         .parse_next(input)?;
@@ -2640,11 +2720,8 @@ pub fn parse_delete<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         Caseless("DELETE"),
         parse_basic_space0,
         opt((
-            parse_numeric_expression(NumericExpressionConstraint::Integer),
-            opt((
-                '-',
-                parse_numeric_expression(NumericExpressionConstraint::Integer)
-            ))
+            parse_line_number_expression,
+            opt(('-', parse_line_number_expression))
         ))
     )
         .parse_next(input)?;
@@ -2656,7 +2733,7 @@ pub fn parse_delete<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
                 space,
                 start,
                 vec![BasicToken::SimpleToken(
-                    BasicTokenNoPrefix::SubstractionOrUnaryMinus
+                    BasicTokenNoPrefix::CharHyphen
                 )],
                 end
             )
@@ -2700,10 +2777,7 @@ pub fn parse_auto<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
     let space = parse_basic_space0.parse_next(input)?;
 
     // Optional line number
-    let opt_line = opt(parse_numeric_expression(
-        NumericExpressionConstraint::Integer
-    ))
-    .parse_next(input)?;
+    let opt_line = opt(parse_line_number_expression).parse_next(input)?;
 
     // Optional increment after comma
     let opt_increment = if opt_line.is_some() {
@@ -2830,8 +2904,7 @@ pub fn parse_edit<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src>
         Caseless("EDIT"),
         parse_basic_space1,
         cut_err(
-            parse_numeric_expression(NumericExpressionConstraint::Integer)
-                .context(StrContext::Label("Line number expected"))
+            parse_line_number_expression.context(StrContext::Label("Line number expected"))
         )
     )
         .parse_next(input)?;
@@ -2928,7 +3001,7 @@ pub fn parse_defint<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         let mut tokens = vec![BasicToken::SimpleToken(first.into())];
         if let Some((_, second)) = range {
             tokens.push(BasicToken::SimpleToken(
-                BasicTokenNoPrefix::SubstractionOrUnaryMinus
+                BasicTokenNoPrefix::CharHyphen
             ));
             tokens.push(BasicToken::SimpleToken(second.into()));
         }
@@ -2981,7 +3054,7 @@ pub fn parse_defreal<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'s
         let mut tokens = vec![BasicToken::SimpleToken(first.into())];
         if let Some((_, second)) = range {
             tokens.push(BasicToken::SimpleToken(
-                BasicTokenNoPrefix::SubstractionOrUnaryMinus
+                BasicTokenNoPrefix::CharHyphen
             ));
             tokens.push(BasicToken::SimpleToken(second.into()));
         }
@@ -3034,7 +3107,7 @@ pub fn parse_defstr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'sr
         let mut tokens = vec![BasicToken::SimpleToken(first.into())];
         if let Some((_, second)) = range {
             tokens.push(BasicToken::SimpleToken(
-                BasicTokenNoPrefix::SubstractionOrUnaryMinus
+                BasicTokenNoPrefix::CharHyphen
             ));
             tokens.push(BasicToken::SimpleToken(second.into()));
         }
@@ -4371,6 +4444,7 @@ pub fn parse_numeric_expression<'code>(
                     alt((
                         parse_parenthesized_numeric_expression,
                         parse_pi,
+                        parse_time,
                         parse_basic_value.map(|v| vec![v]),
                         parse_integer_variable,
                         parse_float_variable
@@ -4405,6 +4479,7 @@ pub fn parse_numeric_expression<'code>(
                     alt((
                         parse_parenthesized_numeric_expression,
                         parse_pi,
+                        parse_time,
                         parse_basic_value_compact.map(|v| vec![v]),
                         parse_integer_variable,
                         parse_float_variable
@@ -4491,6 +4566,7 @@ pub fn parse_numeric_expression<'code>(
                             parse_all_generated_numeric_functions_int,
                             parse_parenthesized_numeric_expression,
                             parse_pi,
+                            parse_time,
                             parse_basic_value.map(|v| vec![v]),
                             parse_integer_variable,
                             parse_float_variable
@@ -4525,6 +4601,7 @@ pub fn parse_numeric_expression<'code>(
                             parse_all_generated_numeric_functions_int,
                             parse_parenthesized_numeric_expression,
                             parse_pi,
+                            parse_time,
                             parse_basic_value_compact.map(|v| vec![v]),
                             parse_integer_variable,
                             parse_float_variable
@@ -4800,6 +4877,51 @@ fn parse_upper_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'
     .parse_next(input)
 }
 
+/// INSTR([start,] haystack$, needle$) - the position of needle$ within
+/// haystack$, optionally starting the search at `start`. Had no parser at
+/// all, confirmed against gofish.bas's `instr(card$,upper$(c$))`.
+pub fn parse_instr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    let (_, mut space_a, _) = (Caseless("INSTR"), parse_basic_space0, '(').parse_next(input)?;
+
+    let mut tokens = vec![BasicToken::PrefixedToken(BasicTokenPrefixed::Instr)];
+    tokens.append(&mut space_a);
+    tokens.push(BasicToken::SimpleToken(
+        BasicTokenNoPrefix::CharOpenParenthesis
+    ));
+
+    // Optional leading numeric start position, only present when followed
+    // by a comma (otherwise this is the 2-argument form and what looks
+    // like a start position is actually the haystack string expression).
+    let checkpoint = input.checkpoint();
+    match (
+        parse_numeric_expression(NumericExpressionConstraint::None),
+        parse_comma
+    )
+        .parse_next(input)
+    {
+        Ok((mut start, mut comma)) => {
+            tokens.append(&mut start);
+            tokens.append(&mut comma);
+        },
+        Err(_) => input.reset(&checkpoint)
+    }
+
+    let (mut haystack, mut comma2, mut needle, close) = (
+        cut_err(parse_string_expression.context(StrContext::Label("Haystack string expected"))),
+        cut_err(parse_comma.context(StrContext::Label("Missing ','"))),
+        cut_err(parse_string_expression.context(StrContext::Label("Needle string expected"))),
+        cut_err(')'.context(StrContext::Label("Missing ')'")))
+    )
+        .parse_next(input)?;
+
+    tokens.append(&mut haystack);
+    tokens.append(&mut comma2);
+    tokens.append(&mut needle);
+    tokens.push(BasicToken::SimpleToken(BasicTokenNoPrefix::from(close)));
+
+    Ok(tokens)
+}
+
 /// BIN$(number[,width])
 /// Converts a number to its binary string representation with optional width
 fn parse_bin_dollar<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
@@ -5036,6 +5158,28 @@ pub fn parse_max<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> 
     )(input)
 }
 
+/// TEST(x,y) - the pixel colour at (x,y). Two arguments, not one: this was
+/// wired up via the single-argument `generate_numeric_functions!` macro,
+/// which made `TEST(x+1,y+1)` an unparseable "Missing ')'" error on the
+/// first comma.
+pub fn parse_test<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_two_arg_numeric_function(
+        "TEST",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::Test),
+        NumericExpressionConstraint::None
+    )(input)
+}
+
+/// TESTR(x,y) - like TEST, but relative to the graphics cursor. Same
+/// two-argument fix as TEST.
+pub fn parse_testr<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_any_two_arg_numeric_function(
+        "TESTR",
+        BasicToken::PrefixedToken(BasicTokenPrefixed::Teststr),
+        NumericExpressionConstraint::None
+    )(input)
+}
+
 pub fn parse_round<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     parse_any_two_arg_numeric_function(
         "ROUND",
@@ -5044,24 +5188,43 @@ pub fn parse_round<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src
     )(input)
 }
 
-/// PI - the built-in constant, a niladic prefixed token (no parentheses,
-/// no argument) unlike every other numeric function here. Previously
-/// unrecognised entirely: with no keyword parser for it, "PI" fell through
-/// to being parsed as a bare variable reference, silently different from
-/// what a real CPC tokenises it as - confirmed against a real emulator's
-/// own re-save of `theta=PI/2`.
+/// Parses a niladic prefixed keyword: no parentheses, no argument, and
+/// (unlike every parenthesised function here) needs its own word-boundary
+/// check since nothing after it marks where it ends.
+fn parse_niladic_prefixed<'code>(
+    name: &'static str,
+    code: BasicTokenPrefixed
+) -> impl Fn(&mut &'code str) -> BasicSeveralTokensResult<'code> {
+    move |input: &mut &'code str| {
+        (
+            Caseless(name),
+            peek(cpclib_common::winnow::combinator::not(one_of((
+                'a'..='z',
+                'A'..='Z',
+                '0'..='9',
+                '_'
+            ))))
+        )
+            .map(|_| vec![BasicToken::PrefixedToken(code.clone())])
+            .parse_next(input)
+    }
+}
+
+/// PI - the built-in constant. Previously unrecognised entirely: with no
+/// keyword parser for it, "PI" fell through to being parsed as a bare
+/// variable reference, silently different from what a real CPC tokenises
+/// it as - confirmed against a real emulator's own re-save of
+/// `theta=PI/2`.
 pub fn parse_pi<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
-    (
-        Caseless("PI"),
-        peek(cpclib_common::winnow::combinator::not(one_of((
-            'a'..='z',
-            'A'..='Z',
-            '0'..='9',
-            '_'
-        ))))
-    )
-        .map(|_| vec![BasicToken::PrefixedToken(BasicTokenPrefixed::Pi)])
-        .parse_next(input)
+    parse_niladic_prefixed("PI", BasicTokenPrefixed::Pi)(input)
+}
+
+/// TIME - the built-in frame counter, as in `RANDOMIZE TIME`. Same bug as
+/// PI: previously unrecognised, so it silently parsed as a bare variable
+/// reference - confirmed against a real emulator's own re-save of
+/// `RANDOMIZE TIME`.
+pub fn parse_time<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
+    parse_niladic_prefixed("TIME", BasicTokenPrefixed::Time)(input)
 }
 
 macro_rules! generate_numeric_functions {
@@ -5155,7 +5318,8 @@ pub fn parse_all_generated_numeric_functions_any2<'src>(
         parse_testr,
         parse_unt,
         parse_xpos,
-        parse_ypos
+        parse_ypos,
+        parse_instr
     ))
     .parse_next(input)
 }
@@ -5183,8 +5347,6 @@ generate_numeric_functions! {
         REMAIN: BasicToken::PrefixedToken(BasicTokenPrefixed::Remain),
         RND: BasicToken::PrefixedToken(BasicTokenPrefixed::Rnd),
         TAN: BasicToken::PrefixedToken(BasicTokenPrefixed::Tan),
-        TEST: BasicToken::PrefixedToken(BasicTokenPrefixed::Test),
-        TESTR: BasicToken::PrefixedToken(BasicTokenPrefixed::Teststr),
         UNT: BasicToken::PrefixedToken(BasicTokenPrefixed::Unt),
         XPOS: BasicToken::PrefixedToken(BasicTokenPrefixed::Xpos),
         YPOS: BasicToken::PrefixedToken(BasicTokenPrefixed::Ypos)
@@ -5200,7 +5362,6 @@ generate_numeric_functions! {
         INKEY:  BasicToken::PrefixedToken(BasicTokenPrefixed::Inkey),
         JOY:  BasicToken::PrefixedToken(BasicTokenPrefixed::Joy),
         POS: BasicToken::PrefixedToken(BasicTokenPrefixed::Pos),
-        TIME: BasicToken::PrefixedToken(BasicTokenPrefixed::Time),
         VPOS: BasicToken::PrefixedToken(BasicTokenPrefixed::Vpos)
     }
 }
@@ -5212,9 +5373,11 @@ pub fn f64_to_amstrad_float(nb: f64) -> Result<BasicFloat, BasicError> {
 }
 
 pub fn parse_floating_point<'src>(input: &mut &'src str) -> BasicOneTokenResult<'src> {
+    // The integer part is optional - Locomotive BASIC accepts ".9" as a
+    // literal (equivalent to "0.9"), not just "0.9" itself.
     let float_str = (
         opt('-'),
-        take_while(1.., '0'..='9'), // Integer part
+        take_while(0.., '0'..='9'), // Integer part
         '.',
         take_while(1.., '0'..='9') // Fractional part (no limit)
     )
@@ -6239,7 +6402,7 @@ mod test {
         match &line.tokens()[0] {
             BasicToken::Variable(kind, name, _offset) => {
                 assert_eq!(name, "i");
-                assert_eq!(*kind, BasicTokenNoPrefix::IntegerVariableDefinition);
+                assert_eq!(*kind, BasicTokenNoPrefix::VariableDefinition1);
             },
             other => panic!("expected a single Variable token, got {other:?}")
         }
