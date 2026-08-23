@@ -633,8 +633,12 @@ function showDisassembly(session: vscode.DebugSession, dump: Disassembly | undef
                 // place.
                 const from = Math.max(0, (message.column ?? 1) - 1);
                 const to = Math.max(from, (message.endColumn ?? message.column ?? 1) - 1);
+                // No `viewColumn`, and `preview: false` - same as `revealStop`
+                // below, and for the same reason: forcing a column here
+                // duplicated a tab the file already had open elsewhere
+                // instead of reusing it.
                 const opened = await vscode.window.showTextDocument(document, {
-                    viewColumn: vscode.ViewColumn.One,
+                    preview: false,
                     selection: new vscode.Range(line, from, line, to),
                 });
                 // Backwards, as on a stop: a click usually lands on the row the
