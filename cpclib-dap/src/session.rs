@@ -93,6 +93,9 @@ CPC debug console commands:
   -dv [address|label] [count]   disassemble memory (defaults to PC, and then
                                 follows it); rows link to your source
   -chips                        CRTC, Gate Array, PSG and PPI, with counters
+  -crtcview                     open a CRTC panel, flagging register
+                                combinations known to lose sync or mistime a
+                                raster line
   -timer [add|reset|rm] [name]  stopwatches in NOPs; bare -timer lists them
   -help                         this list
 
@@ -451,6 +454,8 @@ pub struct Session<P: DapPeer> {
     pending_chip_scopes: Vec<Value>,
     /// `-chips` requests waiting for the same.
     pending_chip_prints: Vec<Value>,
+    /// `-crtcview` requests waiting for the same.
+    pending_crtc_views: Vec<Value>,
     /// The last snapshot the emulator wrote, valid until it runs again.
     ///
     /// Expanding CRTC and then Gate Array must not cost two whole-machine
@@ -526,6 +531,7 @@ impl<P: DapPeer> Session<P> {
             started: false,
             pending_chip_scopes: Vec::new(),
             pending_chip_prints: Vec::new(),
+            pending_crtc_views: Vec::new(),
             machine_state: None,
             synthetic_frames: Vec::new(),
             extra_watches: Vec::new(),
@@ -2016,6 +2022,63 @@ impl<P: DapPeer> Session<P> {
         )])
     }
 
+    /// `-crtcview` - open the CRTC pane, with its known-bad register
+    /// combinations flagged.
+    ///
+    /// Same trigger/wait shape as `-chips`, deliberately: both read
+    /// `machine_state`, and a second fetch coordination scheme for the same
+    /// data would only be a second place for the two to disagree.
+    fn crtc_view_command(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        if let Some(sna) = self.machine_state.as_deref() {
+            let regs = crate::inspect::crtc_registers(sna);
+            return Ok(self.crtc_view_answer(request, &regs));
+        }
+        self.pending_crtc_views.push(request.clone());
+        if self.pending_chip_scopes.is_empty()
+            && self.pending_chip_prints.is_empty()
+            && self.pending_crtc_views.len() == 1
+        {
+            self.send_own("cpclib/machineState", json!({}), Purpose::MachineState)?;
+        }
+        Ok(Vec::new())
+    }
+
+    /// The `cpclib/crtcView` event plus its console receipt: raw registers,
+    /// and whatever `validate_crtc` makes of them.
+    fn crtc_view_answer(&mut self, request: &Value, regs: &[u8]) -> Vec<Value> {
+        let warnings: Vec<Value> = crate::inspect::validate_crtc(regs)
+            .into_iter()
+            .map(|w| {
+                json!({
+                    "registers": w.registers,
+                    "severity": match w.severity {
+                        crate::inspect::CrtcSeverity::Error => "error",
+                        crate::inspect::CrtcSeverity::Warning => "warning"
+                    },
+                    "message": w.message
+                })
+            })
+            .collect();
+        let registers: Vec<Value> = regs
+            .iter()
+            .enumerate()
+            .map(|(i, value)| json!({ "name": format!("R{i}"), "value": value }))
+            .collect();
+        let seq = self.next_seq();
+        let event = protocol::event(
+            "cpclib/crtcView",
+            json!({ "registers": registers, "warnings": warnings }),
+            seq
+        );
+        let seq = self.next_seq();
+        let receipt = protocol::response(
+            request,
+            json!({ "result": "CRTC view opened", "variablesReference": 0 }),
+            seq
+        );
+        vec![event, receipt]
+    }
+
     /// Every chip scope, flattened into console text.
     fn describe_chips(&self) -> String {
         let Some(sna) = self.machine_state.as_deref()
@@ -2084,7 +2147,8 @@ impl<P: DapPeer> Session<P> {
     fn complete_machine_state(&mut self, response: &Value) -> Vec<Value> {
         let waiting = std::mem::take(&mut self.pending_chip_scopes);
         let printing = std::mem::take(&mut self.pending_chip_prints);
-        if waiting.is_empty() && printing.is_empty() {
+        let viewing = std::mem::take(&mut self.pending_crtc_views);
+        if waiting.is_empty() && printing.is_empty() && viewing.is_empty() {
             return Vec::new();
         }
 
@@ -2110,6 +2174,11 @@ impl<P: DapPeer> Session<P> {
                     }),
                     seq
                 ));
+            }
+            if let Some(regs) = crate::inspect::crtc_registers_from_json(&body) {
+                for request in viewing {
+                    out.extend(self.crtc_view_answer(&request, &regs));
+                }
             }
             return out;
         }
@@ -2159,6 +2228,21 @@ impl<P: DapPeer> Session<P> {
                 json!({ "result": text, "variablesReference": 0 }),
                 seq
             ));
+        }
+        for request in viewing {
+            match self.machine_state.as_deref() {
+                Some(sna) => {
+                    let regs = crate::inspect::crtc_registers(sna);
+                    out.extend(self.crtc_view_answer(&request, &regs));
+                },
+                // No machine to describe itself: said plainly, rather than
+                // reporting all-zero registers that would raise a false
+                // "R0 != 63" warning about bytes that were never read.
+                None => {
+                    let seq = self.next_seq();
+                    out.push(protocol::failure(&request, &why, seq));
+                }
+            }
         }
         out
     }
@@ -2394,6 +2478,7 @@ impl<P: DapPeer> Session<P> {
             "-mv" | "-memoryview" => self.memory_view(request, &arguments),
             "-dv" | "-disassemble" => self.disassembly_view(request, &arguments),
             "-chips" | "-crtc" | "-ga" => self.chips_command(request),
+            "-crtcview" | "-cv" => self.crtc_view_command(request),
             "-timer" | "-t" => self.timer_command(request, &arguments),
             "-help" | "-h" => {
                 let seq = self.next_seq();

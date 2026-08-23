@@ -503,6 +503,99 @@ fn byte(name: &str, value: u8, meaning: &str) -> Value {
     })
 }
 
+/// A CRTC register combination known to misbehave on real hardware - not
+/// merely unusual, one that visibly breaks (lost sync, a raster line the
+/// wrong length).
+#[derive(Debug)]
+pub struct CrtcWarning {
+    /// Every register the rule that raised this reads from - the CRTC pane
+    /// highlights each of these, not just one.
+    pub registers: &'static [&'static str],
+    pub severity: CrtcSeverity,
+    pub message: String
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CrtcSeverity {
+    /// Loses sync or otherwise stops the picture outright.
+    Error,
+    /// Runs, but not the way the source most likely intends.
+    Warning
+}
+
+/// Rules that catch CRTC configurations known to misbehave on real hardware.
+///
+/// A `Vec` of independent checks on purpose, so the next rule is a new entry
+/// here rather than a change to the two that exist - and both backends
+/// already have the raw `R0..R17` bytes parsed by the time they build their
+/// CRTC pane, which is what this takes.
+pub fn validate_crtc(regs: &[u8]) -> Vec<CrtcWarning> {
+    let mut out = Vec::new();
+    if regs.len() < 4 {
+        return out;
+    }
+    let r0 = u32::from(regs[0]);
+    let r2 = u32::from(regs[2]);
+    let r3_low = u32::from(regs[3]) & 0x0f;
+
+    // CRTC type 2 loses horizontal sync unless the sync position plus the
+    // HSYNC width stays inside the line total.
+    if r2 + r3_low < r0 {
+        out.push(CrtcWarning {
+            registers: &["R0", "R2", "R3"],
+            severity: CrtcSeverity::Error,
+            message: format!(
+                "R2+(R3&0x0f) < R0 ({r2}+{r3_low}={} < {r0}): a CRTC type 2 loses horizontal \
+                 sync with this combination",
+                r2 + r3_low
+            )
+        });
+    }
+
+    // The raster-timing idiom (`defs 64 - duration(djnz $)-1`, NOP-budget
+    // counting, every fixed timing loop this toolchain's demos rely on)
+    // assumes a line is 64 NOPs long, which only holds at R0=63.
+    if regs[0] != 63 {
+        out.push(CrtcWarning {
+            registers: &["R0"],
+            severity: CrtcSeverity::Warning,
+            message: format!(
+                "R0={} (not 63): a raster line here is not 64 NOPs long, which most fixed-\
+                 timing code in this toolchain assumes",
+                regs[0]
+            )
+        });
+    }
+
+    out
+}
+
+/// Just the raw `R0..R17` bytes, for `validate_crtc` - `chip_variables`
+/// already reads every one of these but returns them already formatted for
+/// the pane.
+pub fn crtc_registers(sna: &cpclib_sna::Snapshot) -> [u8; 18] {
+    use cpclib_sna::SnapshotFlag as F;
+    let get = |i: usize| -> u8 {
+        match sna.get_value(&F::CRTC_REG(Some(i))) {
+            cpclib_sna::FlagValue::Byte(v) => v,
+            cpclib_sna::FlagValue::Word(v) => (v & 0xFF) as u8,
+            _ => 0
+        }
+    };
+    std::array::from_fn(get)
+}
+
+/// The same, from an AmspiritLite `/api/crtc` body (`crtc_pane`'s own `regs`
+/// array).
+pub fn crtc_registers_from_json(body: &Value) -> Option<[u8; 18]> {
+    let regs = body.get("regs")?.as_array()?;
+    let mut out = [0u8; 18];
+    for (slot, value) in out.iter_mut().zip(regs.iter()) {
+        *slot = value.as_u64().unwrap_or(0) as u8;
+    }
+    Some(out)
+}
+
 /// Read one chip's state out of a snapshot of the running machine.
 ///
 /// The emulator exposes nothing for the CRTC, the Gate Array, the PSG or the
@@ -729,6 +822,63 @@ mod tests {
     use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
 
     use super::*;
+
+/// The example from the bug report: R0=63, R2=50, R3=0x8c loses sync
+    /// (0x8c & 0x0f = 12, 50+12=62 < 63).
+    #[test]
+    fn a_known_sync_losing_combination_is_flagged() {
+        let mut regs = [0u8; 18];
+        regs[0] = 63;
+        regs[2] = 50;
+        regs[3] = 0x8c;
+        let warnings = validate_crtc(&regs);
+        let sync = warnings
+            .iter()
+            .find(|w| w.registers.contains(&"R2"))
+            .expect("R2+(R3&0x0f) < R0 should be flagged");
+        assert_eq!(sync.severity, CrtcSeverity::Error);
+        assert!(sync.registers.contains(&"R0"));
+        assert!(sync.registers.contains(&"R3"));
+    }
+
+    /// R0=63 exactly is the case the raster-timing rule exists to permit.
+    #[test]
+    fn r0_63_raises_no_line_duration_warning() {
+        let mut regs = [0u8; 18];
+        regs[0] = 63;
+        regs[2] = 63;
+        regs[3] = 0x00;
+        let warnings = validate_crtc(&regs);
+        assert!(
+            !warnings
+                .iter()
+                .any(|w| w.message.contains("64 NOPs")),
+            "{warnings:?}"
+        );
+    }
+
+    #[test]
+    fn a_line_not_64_nops_long_is_flagged() {
+        let mut regs = [0u8; 18];
+        regs[0] = 50;
+        regs[2] = 50; // no sync loss on its own, isolating the R0 rule
+        let warnings = validate_crtc(&regs);
+        let duration = warnings
+            .iter()
+            .find(|w| w.registers == &["R0"])
+            .expect("R0 != 63 should be flagged");
+        assert_eq!(duration.severity, CrtcSeverity::Warning);
+    }
+
+    #[test]
+    fn a_well_formed_configuration_is_not_flagged() {
+        let mut regs = [0u8; 18];
+        regs[0] = 63;
+        // R2 + (R3 & 0x0f) = 50 + 13 = 63, exactly R0: not a sync loss.
+        regs[2] = 50;
+        regs[3] = 0x8d;
+        assert!(validate_crtc(&regs).is_empty());
+    }
 
     #[test]
     fn flags_are_readable_at_a_glance() {

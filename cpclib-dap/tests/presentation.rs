@@ -1288,6 +1288,88 @@ fn the_selected_crtc_register_is_marked() {
     );
 }
 
+/// `-crtcview` flags a known-bad register combination, with every register
+/// the rule involves - not just one - so the panel can highlight all of them.
+#[test]
+fn crtcview_flags_a_known_bad_configuration() {
+    use cpclib_sna::{Snapshot, SnapshotVersion};
+
+    let mut sna = Snapshot::default();
+    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(0)), 63)
+        .unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(2)), 50)
+        .unwrap();
+    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(3)), 0x8c)
+        .unwrap();
+
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-crtcview", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("cpclib/machineState").unwrap().clone();
+    let mut buffer = Vec::new();
+    sna.write_all(&mut buffer, SnapshotVersion::V3).unwrap();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/machineState",
+        "body": {"snapshot": base64(&buffer)}
+    }));
+
+    assert_eq!(out[0]["event"], json!("cpclib/crtcView"));
+    let registers = out[0]["body"]["registers"].as_array().unwrap();
+    assert_eq!(registers[0]["value"], json!(63), "R0");
+    let warnings = out[0]["body"]["warnings"].as_array().unwrap();
+    let sync = warnings
+        .iter()
+        .find(|w| w["registers"].as_array().unwrap().contains(&json!("R2")))
+        .unwrap_or_else(|| panic!("no sync-loss warning: {warnings:?}"));
+    assert_eq!(sync["severity"], json!("error"));
+    let flagged: Vec<&str> = sync["registers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r.as_str().unwrap())
+        .collect();
+    assert_eq!(flagged, vec!["R0", "R2", "R3"]);
+    assert_eq!(out[1]["success"], json!(true), "the console line is answered too");
+}
+
+/// A well-formed configuration raises nothing to look at.
+#[test]
+fn crtcview_is_quiet_about_a_well_formed_configuration() {
+    use cpclib_sna::{Snapshot, SnapshotVersion};
+
+    let mut sna = Snapshot::default();
+    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(0)), 63)
+        .unwrap();
+    // R2+(R3&0x0f) must reach R0 (63) for sync not to be lost.
+    sna.set_value(cpclib_sna::SnapshotFlag::CRTC_REG(Some(2)), 63)
+        .unwrap();
+
+    let mut session = Session::new(RecordingPeer::new(), map_with(&[]));
+    session
+        .on_editor_message(&json!({
+            "seq": 1, "type": "request", "command": "evaluate",
+            "arguments": {"expression": "-crtcview", "context": "repl"}
+        }))
+        .unwrap();
+
+    let asked = session.peer().last("cpclib/machineState").unwrap().clone();
+    let mut buffer = Vec::new();
+    sna.write_all(&mut buffer, SnapshotVersion::V3).unwrap();
+    let out = session.on_emulator_message(&json!({
+        "seq": 3, "type": "response", "request_seq": asked["seq"], "success": true,
+        "command": "cpclib/machineState",
+        "body": {"snapshot": base64(&buffer)}
+    }));
+
+    assert_eq!(out[0]["body"]["warnings"], json!([]));
+}
+
 /// The disc scope carries what the snapshot has, and says plainly what it has
 /// not - an empty-looking scope invites the question this answers.
 #[test]
