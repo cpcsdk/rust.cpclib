@@ -11,12 +11,15 @@
 //!
 //! The whole feature rests on one fact: the ROM calls
 //! [`crate::basic::EXECUTE_LINE_ENTRY`] once per BASIC line, with `HL`
-//! pointing at it. One instruction breakpoint there, left armed for the
-//! whole session, plus reading [`crate::basic::PTR_CURRENT_LINE_NUMBER_FIELD`]
-//! on every hit to compare against the user's actual breakpoints, is the
-//! entire stepping/breakpoint mechanism - no per-breakpoint address
-//! computation, unlike a Z80 session or the reference `amspirit-basic`
-//! extension's own address-mapped approach.
+//! pointing at it. One instruction breakpoint at
+//! [`crate::basic::LINE_BREAKPOINT_TARGET`] (a few bytes into that same
+//! routine - see its own doc comment for why not the entry point itself),
+//! left armed for the whole session, plus reading
+//! [`crate::basic::PTR_CURRENT_LINE_NUMBER_FIELD`] on every hit to compare
+//! against the user's actual breakpoints, is the entire stepping/breakpoint
+//! mechanism - no per-breakpoint address computation, unlike a Z80 session
+//! or the reference `amspirit-basic` extension's own address-mapped
+//! approach.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -24,7 +27,7 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 
 use crate::basic::{
-    self, BasicVariableValue, EXECUTE_LINE_ENTRY, PTR_CURRENT_LINE_NUMBER_FIELD,
+    self, BasicVariableValue, LINE_BREAKPOINT_TARGET, PTR_CURRENT_LINE_NUMBER_FIELD,
     VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
 };
 use crate::peer::DapPeer;
@@ -196,7 +199,7 @@ impl<P: DapPeer> BasicSession<P> {
         self.attached = true;
         self.send_own(
             "setInstructionBreakpoints",
-            json!({ "breakpoints": [{ "instructionReference": address_reference(EXECUTE_LINE_ENTRY as u32) }] }),
+            json!({ "breakpoints": [{ "instructionReference": address_reference(LINE_BREAKPOINT_TARGET as u32) }] }),
             Purpose::Plain
         )?;
         self.start_if_ready()
@@ -719,14 +722,20 @@ mod tests {
     }
 
     #[test]
-    fn attach_arms_the_execute_line_breakpoint() {
+    fn attach_arms_the_line_breakpoint_target_not_the_entry_point() {
         let mut session = new_session(SOURCE);
         complete_attach(&mut session);
 
+        // Regression test: this used to arm EXECUTE_LINE_ENTRY itself, which
+        // reads PTR_CURRENT_LINE_NUMBER_FIELD one line too early (the ROM
+        // updates it a few bytes later in the same routine - see
+        // LINE_BREAKPOINT_TARGET's doc comment) - so every breakpoint
+        // comparison was off by one line and a real breakpoint could go the
+        // whole session without ever matching.
         let armed = session.peer_mut().last("setInstructionBreakpoints").unwrap();
         assert_eq!(
             armed["arguments"]["breakpoints"][0]["instructionReference"],
-            address_reference(EXECUTE_LINE_ENTRY as u32)
+            address_reference(LINE_BREAKPOINT_TARGET as u32)
         );
     }
 

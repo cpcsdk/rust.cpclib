@@ -67,9 +67,25 @@ pub const VARIABLE_CHAIN_HEADS_COUNT: usize = 26;
 pub const DEF_FN_CHAIN_HEAD: u16 = 0xADEB;
 
 /// ROM entry point called once per BASIC line about to execute (`HL` points
-/// at the line's length field on entry) - the breakpoint target for
-/// line-granularity stepping/breakpoints.
+/// at the line's length field on entry). *Not* the breakpoint target - see
+/// [`LINE_BREAKPOINT_TARGET`], which is a few bytes further into the same
+/// routine and exists specifically because this address is one line too
+/// early to read [`PTR_CURRENT_LINE_NUMBER_FIELD`] from.
 pub const EXECUTE_LINE_ENTRY: u16 = 0xDE77;
+
+/// The actual breakpoint target for line-granularity stepping/breakpoints -
+/// `EXECUTE_LINE_ENTRY + 9`, immediately *after* the ROM's own `ld
+/// (address_of_line_number_LB_of_line_of_cur),hl` at `EXECUTE_LINE_ENTRY+6`
+/// (confirmed against the annotated BASIC 1.1 disassembly's
+/// `Execution.asm`). Breakpointing at [`EXECUTE_LINE_ENTRY`] itself reads
+/// [`PTR_CURRENT_LINE_NUMBER_FIELD`] *before* the ROM updates it for the
+/// line about to run - it still holds the *previous* line's address at that
+/// exact PC, so every comparison against a user's breakpoint line is off by
+/// one line, and one that never happens to coincide with a real stop looks
+/// exactly like "breakpoints do nothing". This address is the first point at
+/// which the pointer is guaranteed fresh for the line the breakpoint is
+/// actually meant to catch.
+pub const LINE_BREAKPOINT_TARGET: u16 = 0xDE80;
 
 /// ROM entry point called once per statement - finer-grained than
 /// [`EXECUTE_LINE_ENTRY`], fires on every `:`-separated statement too.
