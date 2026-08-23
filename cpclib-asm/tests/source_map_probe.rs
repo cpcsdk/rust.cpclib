@@ -990,19 +990,13 @@ fn a_long_defs_run_is_never_marked_as_data() {
 /// covering real byte/string tables.
 #[test]
 fn other_data_directives_are_still_marked_as_data() {
-    let fixture = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/asm/basm1.o"
-    );
+    let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/asm/basm1.o");
 
     for (name, source) in [
         ("db text", "\torg 0x4000\n\tdb \"Hello\"\n".to_string()),
         ("defw", "\torg 0x4000\n\tdefw 0x1234\n".to_string()),
         ("str", "\torg 0x4000\n\tstr \"Hello\"\n".to_string()),
-        (
-            "incbin",
-            format!("\torg 0x4000\n\tincbin \"{fixture}\"\n")
-        )
+        ("incbin", format!("\torg 0x4000\n\tincbin \"{fixture}\"\n"))
     ] {
         let (_emitted, rows) = rows(&source);
         let data_row = rows

@@ -289,9 +289,7 @@ pub(crate) fn annotate_disassembly(
         // Some(None)` is that row saying so of itself, via the same signal
         // `overlay_data_rows` already sets - see the doc comment above.
         let is_data_row = matches!(costs.and_then(|c| c.get(index).copied()), Some(None));
-        if !is_data_row
-            && let Some(text) = instruction.get("instruction").and_then(Value::as_str)
-        {
+        if !is_data_row && let Some(text) = instruction.get("instruction").and_then(Value::as_str) {
             let named = name_operand_addresses(text, map, &located, index, &mut ambiguous);
             if !named.is_empty() {
                 instruction["symbols"] = json!(named);
@@ -906,7 +904,10 @@ mod tests {
         assert_eq!(ambiguous.len(), 1);
         assert_eq!(ambiguous[0].index, 0);
         assert_eq!(ambiguous[0].location.line, 2);
-        assert_eq!(ambiguous[0].candidates, vec!["b".to_string(), "table_data".to_string()]);
+        assert_eq!(
+            ambiguous[0].candidates,
+            vec!["b".to_string(), "table_data".to_string()]
+        );
     }
 
     /// The same ambiguity, but this row resolves to no source location at
@@ -933,7 +934,10 @@ mod tests {
         let ambiguous = annotate_disassembly(&mut instructions, &map, None, None);
 
         assert_eq!(instructions[0]["symbols"], json!(["b"]));
-        assert!(ambiguous.is_empty(), "no location, nothing to disambiguate against");
+        assert!(
+            ambiguous.is_empty(),
+            "no location, nothing to disambiguate against"
+        );
     }
 
     /// A `DB` row's own byte values must never be read as operand-address
