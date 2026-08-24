@@ -892,11 +892,16 @@ function showDisassembly(session: vscode.DebugSession, dump: Disassembly | undef
                 // place.
                 const from = Math.max(0, (message.column ?? 1) - 1);
                 const to = Math.max(from, (message.endColumn ?? message.column ?? 1) - 1);
-                // No `viewColumn`, and `preview: false` - same as `revealStop`
-                // below, and for the same reason: forcing a column here
-                // duplicated a tab the file already had open elsewhere
-                // instead of reusing it.
+                // Reuse the column the file is already open in, same as
+                // `revealStop` below and for the same reason: omitting
+                // `viewColumn` defaults to the *active* column, not wherever
+                // the file already happens to be open, so it duplicated a tab
+                // the file already had elsewhere instead of reusing it.
+                const already = vscode.window.visibleTextEditors.find(
+                    editor => editor.document.uri.toString() === document.uri.toString()
+                );
                 const opened = await vscode.window.showTextDocument(document, {
+                    viewColumn: already?.viewColumn,
                     preview: false,
                     selection: new vscode.Range(line, from, line, to),
                 });
@@ -1341,7 +1346,20 @@ async function revealStop(where: StopLocation | undefined): Promise<void> {
         : from;
     const selection = new vscode.Range(line, from, line, to);
 
+    // No `viewColumn` here defaults to the *active* column, not wherever the
+    // file already happens to be open - and the active column is whatever the
+    // user last clicked into, which between stops is routinely the emulator's
+    // own window, not this file. Every stop was opening a fresh tab in
+    // whichever column that left active, rather than reusing the one already
+    // showing this file - repeatedly stealing focus back from the emulator
+    // (1984js needs it to keep running: see cpclib-bridge.js) far more often
+    // than a debugger stop actually needs to.
+    const already = vscode.window.visibleTextEditors.find(
+        editor => editor.document.uri.toString() === document.uri.toString()
+    );
+
     const editor = await vscode.window.showTextDocument(document, {
+        viewColumn: already?.viewColumn,
         preserveFocus: false,
         preview: false,
         selection,

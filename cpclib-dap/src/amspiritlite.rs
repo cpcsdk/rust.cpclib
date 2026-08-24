@@ -1897,6 +1897,24 @@ fn read_events(host: &str, out: &std::sync::mpsc::Sender<Value>) {
         };
         let payload: Value = serde_json::from_str(rest.trim()).unwrap_or(Value::Null);
 
+        // `frame` arrives ten times a second and carries nothing worth a
+        // human's time; everything else is rare enough that seeing it in the
+        // Debug Console is worth more than it costs - this is what makes it
+        // possible to tell "the emulator never said basic_bp" apart from
+        // "it said basic_bp and something after that dropped it" from a
+        // `[dap] log` transcript alone, without a second logging channel.
+        if name != "frame" {
+            seq += 1;
+            let _ = out.send(crate::protocol::event(
+                "output",
+                json!({
+                    "category": "console",
+                    "output": format!("[amspiritlite] SSE event: {name} {payload}\n")
+                }),
+                seq
+            ));
+        }
+
         // Any event that mentions it updates our idea of the run state, and a
         // change is what the editor needs to hear about.
         let event = match payload.get("paused").and_then(Value::as_bool) {
@@ -2195,6 +2213,10 @@ mod tests {
 
         let (sender, receiver) = std::sync::mpsc::channel();
         read_events(&addr.to_string(), &sender);
+
+        let logged = receiver.try_recv().expect("a console echo of the raw SSE event");
+        assert_eq!(logged["event"], json!("output"));
+        assert!(logged["body"]["output"].as_str().unwrap().contains("basic_bp"));
 
         let event = receiver.try_recv().expect("a stopped event");
         assert_eq!(event["event"], json!("stopped"));
