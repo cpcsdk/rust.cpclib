@@ -198,7 +198,20 @@ pub struct BasicSession<P: DapPeer> {
     /// The editor's own `variables` request for the Workspace scope, held
     /// until whichever single read answering it (generic or native) comes
     /// back.
-    pending_workspace: Option<Value>
+    pending_workspace: Option<Value>,
+    /// Set when the editor asks to pause, cleared once a stop is actually
+    /// reported for it.
+    ///
+    /// The generic (1984js) path has no per-line breakpoint of its own: one
+    /// shared instruction breakpoint fires on *every* statement, and Rust
+    /// decides whether that statement matters, re-issuing `continue` itself
+    /// when it does not. A `pause` sent by the editor while that decision is
+    /// in flight was getting raced by our own next `continue` - both land at
+    /// the emulator, `continue` last, and the pause is undone before the
+    /// editor ever sees a stop. This flag is checked at the same point that
+    /// `continue` would otherwise be resent, so pausing takes effect at the
+    /// very next statement boundary instead of never.
+    pause_requested: bool
 }
 
 impl<P: DapPeer> BasicSession<P> {
@@ -232,7 +245,8 @@ impl<P: DapPeer> BasicSession<P> {
             resuming_as: None,
             current_line: None,
             pending_variables: None,
-            pending_workspace: None
+            pending_workspace: None,
+            pause_requested: false
         }
     }
 
@@ -454,6 +468,12 @@ impl<P: DapPeer> BasicSession<P> {
                 Ok(vec![protocol::response(message, json!({}), seq)])
             },
             "pause" => {
+                // Only the generic path's own auto-continue races a pause
+                // (see `pause_requested`'s own doc comment) - a native peer
+                // decides on its own when to actually stop.
+                if !self.native_amspirit {
+                    self.pause_requested = true;
+                }
                 self.peer.send(message.clone())?;
                 Ok(Vec::new())
             },
@@ -1002,12 +1022,15 @@ impl<P: DapPeer> BasicSession<P> {
     /// caller decides what stop reason that means, since a breakpoint-
     /// triggered stop and a completed step report it differently.
     ///
-    /// `stmt_addr` is used directly against `statement_index`, with no `+1`
-    /// the way the generic path's raw `&AE1B` read needs: this emulator's
-    /// own web UI compares it straight against `/api/basic_listing`'s own
-    /// statement addresses (`doBasicStepOver`), so it is already the
-    /// corrected first-token address, not the ROM's internal "byte before"
-    /// one.
+    /// `stmt_addr` gets the same `+1` the generic path's raw `&AE1B` read
+    /// needs. It was assumed to already be the corrected first-token address
+    /// (going by this emulator's own web UI, which compares it straight
+    /// against `/api/basic_listing`'s addresses) - but a live session never
+    /// found a single match against `statement_index` without it, landing on
+    /// the whole-line fallback column every time instead of the statement
+    /// actually running. `cpclib/basicState` reads the same ROM variable the
+    /// generic path does, and shares its "byte before the first token"
+    /// semantics.
     fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
         let body = message.get("body")?;
         let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
@@ -1016,7 +1039,7 @@ impl<P: DapPeer> BasicSession<P> {
         }
         self.current_line = Some(line);
         if let Some(address) = body.get("stmt_addr").and_then(Value::as_u64) {
-            let address = address as u16;
+            let address = (address as u16).wrapping_add(1);
             self.current_statement_address = Some(address);
             if let Some(statement) = self.statement_index.iter().find(|s| s.address == address) {
                 self.current_statement_column = Some((statement.column, statement.end_column));
@@ -1087,6 +1110,10 @@ impl<P: DapPeer> BasicSession<P> {
                     self.resuming_as = None;
                     self.report_stopped("entry")
                 }
+                else if self.pause_requested {
+                    self.resuming_as = None;
+                    self.report_stopped("pause")
+                }
                 else {
                     let _ = self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain);
                     Vec::new()
@@ -1119,6 +1146,10 @@ impl<P: DapPeer> BasicSession<P> {
                 "step"
             })
         }
+        else if self.pause_requested {
+            self.resuming_as = None;
+            self.report_stopped("pause")
+        }
         else {
             // Not a line the user cares about: keep going.
             let _ = self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain);
@@ -1127,6 +1158,11 @@ impl<P: DapPeer> BasicSession<P> {
     }
 
     fn report_stopped(&mut self, reason: &str) -> Vec<Value> {
+        // A stop for any reason answers whatever pause was pending - an
+        // unrelated breakpoint or step landing first is still a stop, and a
+        // pause left set past it would fire on the next unrelated `continue`
+        // that was never asked to pause at all.
+        self.pause_requested = false;
         let seq = self.next_seq();
         let mut out = vec![protocol::event(
             "stopped",
@@ -1459,6 +1495,53 @@ mod tests {
         assert_eq!(events[0]["body"]["reason"], "pause");
     }
 
+    /// Regression test: a live session against AMSpiriT Lite never once
+    /// matched `stmt_addr` against `statement_index` without this `+1` (every
+    /// stop fell back to the degenerate (1,1) column, highlighting the whole
+    /// line instead of the statement that actually ran) - `cpclib/basicState`
+    /// shares the ROM's own "byte before the first token" semantics with the
+    /// generic path's raw `&AE1B` read, contrary to the assumption this was
+    /// already corrected.
+    #[test]
+    fn a_native_stop_resolves_the_statement_column_from_stmt_addr_plus_one() {
+        let source = "10 a=1:b=2\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        assert_eq!(index.len(), 2, "{index:?}");
+        let second_statement = index[1].clone();
+
+        let mut session = native_session(source);
+        complete_attach(&mut session);
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({
+                "body": {
+                    "cur_linenum": 10,
+                    "stmt_addr": second_statement.address.wrapping_sub(1)
+                }
+            })
+        );
+
+        let frame = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &frame[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["column"], second_statement.column);
+        assert_eq!(frame["endColumn"], second_statement.end_column);
+        assert_ne!(
+            second_statement.column, 1,
+            "the test fixture must actually exercise a non-first statement"
+        );
+    }
+
     #[test]
     fn step_in_sends_a_native_statement_step_and_reports_where_it_landed() {
         let mut session = native_session(SOURCE);
@@ -1591,6 +1674,54 @@ mod tests {
         assert_eq!(events.len(), 1, "{events:?}");
         assert_eq!(events[0]["request_seq"], 7);
         assert_eq!(events[0]["success"], true);
+    }
+
+    /// Regression test, reported live: pausing while the generic path's own
+    /// "not a breakpoint line, keep going" logic was mid-flight raced that
+    /// very `continue` - both land at the emulator, ours last, undoing the
+    /// pause before the editor ever saw a stop. No breakpoint is armed here
+    /// on purpose, so without the fix every statement boundary auto-continues
+    /// forever and `pause` never gets a chance to matter.
+    #[test]
+    fn a_pause_requested_mid_auto_continue_stops_at_the_next_statement_instead_of_being_raced() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "pause", "arguments": { "threadId": 1 } }))
+            .unwrap();
+        session.peer_mut().push_incoming(json!({
+            "type": "response",
+            "request_seq": 1,
+            "success": true,
+            "command": "pause",
+            "body": {}
+        }));
+        for message in session.peer_mut().drain() {
+            session.on_emulator_message(&message);
+        }
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        for message in session.peer_mut().drain() {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let field_target = 0x9000u16;
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&field_target.to_le_bytes());
+        answer(&mut session, seq, read_memory_response(&response_bytes));
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "pause");
+        assert_ne!(
+            session.peer_mut().commands().last().unwrap(),
+            "continue",
+            "the pause must win, not another auto-continue"
+        );
     }
 
     #[test]
