@@ -1102,17 +1102,27 @@ impl<P: DapPeer> BasicSession<P> {
     /// caller decides what stop reason that means, since a breakpoint-
     /// triggered stop and a completed step report it differently.
     ///
-    /// `stmt_addr` is resolved by range, not exact match, and no offset is
-    /// applied: this emulator's own web UI - which does get this right, per
-    /// a live report that the source location it shows itself is correct -
-    /// looks a statement up by `sa >= a && sa < e` (`bi.stmt_addr` against
-    /// `line.stmts[i].addr`/`stmts[i+1].addr`, in `basicRenderListing`), not
-    /// by comparing it to any statement's own start address directly. A
-    /// fixed `+1` (matching the generic path's own raw `&AE1B` read)
-    /// happened to look plausible but was the wrong kind of fix: `stmt_addr`
-    /// can land anywhere inside the statement actually running, and the
-    /// range this session already has - each entry's address up to the
-    /// next one's - answers exactly the same question.
+    /// `stmt_addr` is resolved by range within `cur_linenum`'s own
+    /// statements only, not by a bare floor search across the whole program.
+    ///
+    /// `statement_index` comes from this session's *own* tokeniser
+    /// (`build_statement_index`, run once at launch against the same
+    /// source), not from anything AMSpiriT Lite itself reports - and a live
+    /// session showed the two do not agree on addresses byte-for-byte: a
+    /// line's own first `stmt_addr` regularly arrived a handful of bytes
+    /// *below* this tokeniser's computed start for that same line (off by 6
+    /// for one line, 7 for the next - a small, growing drift, not a fixed
+    /// offset), while later statements *within* an already-reached line
+    /// lined up correctly. An unscoped floor search took that low address
+    /// as license to walk backward into the *previous* line's last
+    /// statement - a real bug, not just an imprecise column: the wrong
+    /// token, on the wrong line, highlighted as if it were the one running.
+    /// `cur_linenum` itself is not in question (it is the line number
+    /// stored directly in the tokenised program, not a computed address),
+    /// so scoping the search to its own statements - falling back to the
+    /// first one instead of ever crossing into another line - trades a
+    /// possible wrong statement for one that is at least never on the wrong
+    /// line.
     fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
         let body = message.get("body")?;
         let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
@@ -1123,16 +1133,22 @@ impl<P: DapPeer> BasicSession<P> {
         if let Some(address) = body.get("stmt_addr").and_then(Value::as_u64) {
             let address = address as u16;
             self.current_statement_address = Some(address);
-            // `statement_index` is built walking the tokenised program in
-            // address order, so the last entry at or before `address` is the
-            // statement whose range contains it.
-            if let Some(statement) = self
-                .statement_index
-                .iter()
-                .rev()
-                .find(|s| s.address <= address)
-            {
-                self.current_statement_column = Some((statement.column, statement.end_column));
+            if let Some(source_line) = self.line_index.iter().find(|(l, _)| *l == line).map(|(_, i)| *i) {
+                let mut this_lines_statements =
+                    self.statement_index.iter().filter(|s| s.source_line == source_line);
+                // `statement_index` is built walking the tokenised program in
+                // address order, so within one line these are still in
+                // address order too: the last one at or before `address` is
+                // the statement whose range contains it, and the first one
+                // is the fallback when `address` lands before all of them.
+                let statement = this_lines_statements
+                    .clone()
+                    .filter(|s| s.address <= address)
+                    .last()
+                    .or_else(|| this_lines_statements.next());
+                if let Some(statement) = statement {
+                    self.current_statement_column = Some((statement.column, statement.end_column));
+                }
             }
         }
         Some(line)
@@ -1657,6 +1673,57 @@ mod tests {
             assert_eq!(frame["column"], second_statement.column, "offset {offset}");
             assert_eq!(frame["endColumn"], second_statement.end_column, "offset {offset}");
         }
+    }
+
+    /// Regression test, reported live as a wrong token being highlighted: a
+    /// captured session showed a new line's own first `stmt_addr` regularly
+    /// arriving a handful of bytes *below* this session's own tokeniser's
+    /// computed start for that line - the two tokenisers do not agree on
+    /// addresses byte-for-byte, and an unscoped floor search took that as
+    /// license to walk backward into the *previous* line's last statement.
+    /// `cur_linenum` is not in question (it is a stored line number, not a
+    /// computed address), so the lookup must never cross into a different
+    /// line than the one already known to be running - it should land on
+    /// this line's own first statement instead, however far off `stmt_addr`
+    /// actually is.
+    #[test]
+    fn a_native_stop_never_attributes_a_statement_to_the_wrong_line() {
+        let source = "10 a=1:b=2\n20 c=3\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        assert_eq!(index.len(), 3, "{index:?}");
+        let line_20_statement = index[2].clone();
+        assert_eq!(line_20_statement.source_line, 1);
+
+        let mut session = native_session(source);
+        complete_attach(&mut session);
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        // Below this session's own computed start for line 20 - simulating
+        // the drift a live session actually showed, not a fixed offset.
+        answer(
+            &mut session,
+            seq,
+            json!({
+                "body": {
+                    "cur_linenum": 20,
+                    "stmt_addr": line_20_statement.address.wrapping_sub(5)
+                }
+            })
+        );
+
+        let frame = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &frame[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["line"], 2, "must stay on line 20, not spill back into line 10");
+        assert_eq!(frame["column"], line_20_statement.column);
+        assert_eq!(frame["endColumn"], line_20_statement.end_column);
     }
 
     #[test]
