@@ -1881,7 +1881,10 @@ fn read_events(host: &str, out: &std::sync::mpsc::Sender<Value>) {
     // when it stops itself on a breakpoint - so waiting for one meant a
     // breakpoint hit was invisible and the session sat there as if nothing had
     // happened. The `frame` heartbeat carries `paused` ten times a second, so
-    // the transition is noticed from that instead, whatever caused it.
+    // the transition is noticed from that instead, whatever caused it - but a
+    // breakpoint hit is not guaranteed to move that same field (BASIC
+    // breakpoints in particular may not), so `basic_bp`/`z80_bp` are also
+    // handled by name below, independently of `paused`.
     let mut running = true;
     for line in reader.lines().map_while(Result::ok) {
         if let Some(rest) = line.strip_prefix("event:") {
@@ -1928,6 +1931,28 @@ fn read_events(host: &str, out: &std::sync::mpsc::Sender<Value>) {
                     // Already handled above by the state change; forwarding it
                     // again would report one stop twice.
                     "pause" | "frame" => None,
+                    // A breakpoint hit (Z80 or BASIC) is not guaranteed to also
+                    // carry a `paused` field the generic transition check above
+                    // recognises - the reference web client doesn't trust
+                    // `frame`'s `paused` for this either, it reacts to these
+                    // named events directly. Treat the event itself as
+                    // authoritative rather than depending on `paused` agreeing.
+                    "basic_bp" | "z80_bp" if running => {
+                        running = false;
+                        Some(crate::protocol::event(
+                            "stopped",
+                            json!({
+                                "reason": "breakpoint",
+                                "description": "Execution stopped",
+                                "threadId": 1,
+                                "allThreadsStopped": true
+                            }),
+                            seq
+                        ))
+                    },
+                    // Already known to be stopped - the state change above (or
+                    // an earlier basic_bp/z80_bp) already reported it.
+                    "basic_bp" | "z80_bp" => None,
                     other => event_for(other, &payload, seq)
                 }
             }
@@ -2143,6 +2168,38 @@ mod tests {
         for quiet in ["state", "basic_vars", "config_changed", "disk_status"] {
             assert!(event_for(quiet, &json!({}), 2).is_none(), "{quiet}");
         }
+    }
+
+    /// A BASIC breakpoint hit was reaching the stream and being dropped: its
+    /// payload does not necessarily flip `paused` the way `frame`'s does (the
+    /// reference web client does not trust `paused` for this either, it reacts
+    /// to `basic_bp`/`z80_bp` directly), so the session sat there as if
+    /// nothing had happened even though the emulator really did stop.
+    #[test]
+    fn a_basic_breakpoint_hit_is_reported_even_without_a_paused_field() {
+        use std::io::Write;
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0u8; 512];
+            let _ = std::io::Read::read(&mut stream, &mut buffer);
+            let body = "event: basic_bp\ndata: {\"line\":40}\n\n";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n{body}"
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        read_events(&addr.to_string(), &sender);
+
+        let event = receiver.try_recv().expect("a stopped event");
+        assert_eq!(event["event"], json!("stopped"));
+        assert_eq!(event["body"]["reason"], json!("breakpoint"));
+        assert!(receiver.try_recv().is_err(), "only one stop for one hit");
     }
 
     #[test]
