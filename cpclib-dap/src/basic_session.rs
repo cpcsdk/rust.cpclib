@@ -14,12 +14,21 @@
 //! `:`-separated one on a line, not just its first. One instruction
 //! breakpoint at [`crate::basic::STATEMENT_BREAKPOINT_TARGET`] (a few bytes
 //! into that same routine - see its own doc comment for why not the entry
-//! point itself), left armed for the whole session, plus reading
+//! point itself), plus reading
 //! [`crate::basic::PTR_CURRENT_LINE_NUMBER_FIELD`] on every hit to compare
-//! against the user's actual breakpoints, is the entire stepping/breakpoint
-//! mechanism - no per-breakpoint address computation, unlike a Z80 session
-//! or the reference `amspirit-basic` extension's own address-mapped
-//! approach.
+//! against the user's actual breakpoints, is what stepping is built on:
+//! catching *every* statement is the whole point of a step, whichever line
+//! it turns out to be on.
+//!
+//! `Continue` is different - see `resume`'s own doc comment. Arming the
+//! shared entry point for it too would mean *every* statement the program
+//! ever executes, not just the ones on an armed line, paying that same
+//! round trip - a tight inner loop pays it every iteration. `Continue`
+//! instead arms the real addresses of the user's own breakpoints (computed
+//! from [`basic::build_statement_index`], much like a Z80 session or the
+//! reference `amspirit-basic` extension's own address-mapped approach),
+//! falling back to the shared entry point only when there is nothing to
+//! narrow to.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -60,12 +69,21 @@ enum Purpose {
     /// running (AMSpiritLite's own `continue` handling blocks on exactly
     /// that) - the right moment to auto-type `RUN`, on a peer that can.
     LaunchResumed,
-    /// The one `setInstructionBreakpoints` this session ever sends. Its
-    /// answer used to be discarded (`Purpose::Plain`) - a peer that refused
-    /// or failed to verify it (an exhausted breakpoint-channel table, an
-    /// address it rejects) left every breakpoint and step silently inert for
-    /// the rest of the session, with nothing in the Debug Console to say so.
+    /// The very first `setInstructionBreakpoints` this session ever sends,
+    /// at attach time. Its answer used to be discarded (`Purpose::Plain`) - a
+    /// peer that refused or failed to verify it (an exhausted
+    /// breakpoint-channel table, an address it rejects) left every
+    /// breakpoint and step silently inert for the rest of the session, with
+    /// nothing in the Debug Console to say so.
     BreakpointArmed,
+    /// A generic-path re-arm sent right before an editor-requested resume,
+    /// answered by actually sending that resume's `continue` - see
+    /// `resume`'s own doc comment for why the armed set changes per resume.
+    ArmedForResume,
+    /// The same re-arm, but for the very first resume: its `continue` needs
+    /// [`Purpose::LaunchResumed`] instead, to still auto-type `RUN` once it
+    /// answers.
+    ArmedForLaunch,
     /// Reading [`basic::PTR_CURRENT_LINE_NUMBER_FIELD`] itself - its value
     /// is a pointer to dereference next, or the direct-mode sentinel.
     CurrentLinePointer,
@@ -386,13 +404,124 @@ impl<P: DapPeer> BasicSession<P> {
         }
     }
 
+    /// A `resume`-issued re-arm answered: report anything worth reporting
+    /// about it, then actually resume - re-arming failing to verify is
+    /// still better recovered from by resuming anyway than by leaving the
+    /// session stuck with a `continue` it never sent.
+    fn resumed_after_arming(&mut self, message: &Value, purpose: Purpose) -> Vec<Value> {
+        let mut out = Vec::new();
+        if let Some(warning) = Self::breakpoint_arm_warning(message) {
+            out.push(protocol::event(
+                "output",
+                json!({ "category": "stderr", "output": format!("{warning}\n") }),
+                1
+            ));
+        }
+        if let Err(problem) = self.send_own("continue", json!({ "threadId": THREAD_ID }), purpose) {
+            out.push(protocol::event(
+                "output",
+                json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                1
+            ));
+        }
+        out
+    }
+
     fn start_if_ready(&mut self) -> std::io::Result<()> {
         if self.attached && self.configured && !self.started {
             self.started = true;
-            self.resuming_as = Some(ResumeKind::Continue);
-            self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::LaunchResumed)?;
+            self.resume(ResumeKind::Continue, true)?;
         }
         Ok(())
+    }
+
+    /// Z80 addresses that catch a `Continue`'s own breakpoints - the first
+    /// statement on each armed BASIC line, since a line is only ever entered
+    /// there (`GOTO`/`GOSUB` target a line number, never a statement partway
+    /// through one).
+    fn statement_breakpoint_addresses(&self) -> Vec<u16> {
+        self.breakpoints
+            .iter()
+            .filter_map(|line| {
+                let idx = self.line_index.iter().find(|(l, _)| l == line)?.1;
+                self.statement_index
+                    .iter()
+                    .filter(|s| s.source_line == idx)
+                    .map(|s| s.address)
+                    .min()
+            })
+            .collect()
+    }
+
+    /// Arms the generic path's own Z80 breakpoints to match what this resume
+    /// needs to catch, then resumes once that is confirmed. `launching` picks
+    /// which `Purpose` the follow-up `continue` gets, so the very first
+    /// resume still auto-types `RUN` once it answers.
+    ///
+    /// Stepping still needs [`STATEMENT_BREAKPOINT_TARGET`] armed - every
+    /// statement, whatever line it turns out to be - but `Continue` only
+    /// needs the exact addresses of the user's own breakpoints. `Continue`
+    /// used to always arm the shared entry point regardless, meaning *every*
+    /// statement the program ever executes - not just ones on an armed line
+    /// - round-tripped through a `readMemory`/`readMemory`/`continue` cycle
+    /// just to be filtered out here. A tight inner loop pays that cost every
+    /// iteration: reported live as debugging feeling "way too slow", with a
+    /// breakpoint seemingly never firing because the emulator was still
+    /// working through everything in between. Arming the real addresses
+    /// instead lets the peer's own breakpoint check do the filtering, with
+    /// nothing left to round-trip for a statement that was never going to
+    /// match.
+    ///
+    /// Falls back to [`STATEMENT_BREAKPOINT_TARGET`] when there are no
+    /// breakpoints: nothing to filter for means no meaningful speedup either
+    /// way, and the shared entry point is still what lets a program that
+    /// simply runs to completion be noticed at all - on a native peer there
+    /// is nothing to arm here regardless, it resolves its own line numbers.
+    ///
+    /// Always sent from a stopped state - a resume has not gone out yet - so
+    /// there is nothing racing this the way a mid-run `setBreakpoints` from
+    /// the editor might.
+    fn resume(&mut self, kind: ResumeKind, launching: bool) -> std::io::Result<()> {
+        self.resuming_as = Some(kind);
+        let purpose = if launching {
+            Purpose::LaunchResumed
+        }
+        else {
+            Purpose::Plain
+        };
+
+        if self.native_amspirit {
+            return self.send_own("continue", json!({ "threadId": THREAD_ID }), purpose);
+        }
+
+        let targets = if matches!(kind, ResumeKind::Continue) {
+            let addresses = self.statement_breakpoint_addresses();
+            if addresses.is_empty() {
+                vec![STATEMENT_BREAKPOINT_TARGET]
+            }
+            else {
+                addresses
+            }
+        }
+        else {
+            vec![STATEMENT_BREAKPOINT_TARGET]
+        };
+
+        self.send_own(
+            "setInstructionBreakpoints",
+            json!({
+                "breakpoints": targets
+                    .iter()
+                    .map(|address| json!({ "instructionReference": address_reference(*address as u32) }))
+                    .collect::<Vec<_>>()
+            }),
+            if launching {
+                Purpose::ArmedForLaunch
+            }
+            else {
+                Purpose::ArmedForResume
+            }
+        )
     }
 
     /// Types `RUN` into the emulator, on a peer that can - the emulator's
@@ -453,7 +582,7 @@ impl<P: DapPeer> BasicSession<P> {
                     // this session always has, just now against a
                     // statement-granular stream of hits instead of a
                     // line-granular one.
-                    self.resuming_as = Some(match command {
+                    let kind = match command {
                         "continue" => ResumeKind::Continue,
                         "stepIn" => ResumeKind::StepStatement,
                         _ => {
@@ -461,8 +590,8 @@ impl<P: DapPeer> BasicSession<P> {
                                 from_line: self.current_line
                             }
                         }
-                    });
-                    self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
+                    };
+                    self.resume(kind, false)?;
                 }
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(message, json!({}), seq)])
@@ -899,6 +1028,10 @@ impl<P: DapPeer> BasicSession<P> {
                             1
                         )];
                     }
+                },
+                Purpose::ArmedForResume => return self.resumed_after_arming(message, Purpose::Plain),
+                Purpose::ArmedForLaunch => {
+                    return self.resumed_after_arming(message, Purpose::LaunchResumed);
                 },
                 Purpose::LaunchResumed => {
                     if let Err(problem) = self.autotype_run() {
@@ -1421,6 +1554,88 @@ mod tests {
         );
     }
 
+    /// Regression test, reported live as debugging feeling "way too slow"
+    /// and a breakpoint never seeming to fire: `Continue` used to always arm
+    /// [`STATEMENT_BREAKPOINT_TARGET`], so *every* statement the program
+    /// executes - not just the ones on an armed line - round-tripped through
+    /// Rust to be filtered out. Continuing with a breakpoint set should arm
+    /// its own real address instead, letting the peer's own breakpoint check
+    /// filter out everything that was never going to match.
+    #[test]
+    fn continuing_with_a_breakpoint_arms_its_own_address_not_every_statement() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, SOURCE);
+        let line_20 = index
+            .iter()
+            .find(|s| s.source_line == 1) // "20 GOTO 10", 0-based
+            .expect("line 20 must have a statement");
+
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let armed = session.peer_mut().last("setInstructionBreakpoints").unwrap();
+        let breakpoints = armed["arguments"]["breakpoints"].as_array().unwrap();
+        assert_eq!(
+            *breakpoints,
+            vec![json!({ "instructionReference": address_reference(line_20.address as u32) })],
+            "{breakpoints:?}"
+        );
+    }
+
+    /// With nothing armed, there is no meaningful speedup to have - and the
+    /// shared entry point is still what lets a program that simply runs to
+    /// completion be noticed at all.
+    #[test]
+    fn continuing_with_no_breakpoints_falls_back_to_the_shared_entry_point() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let armed = session.peer_mut().last("setInstructionBreakpoints").unwrap();
+        assert_eq!(
+            armed["arguments"]["breakpoints"][0]["instructionReference"],
+            address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
+        );
+    }
+
+    /// Stepping needs to catch whatever statement comes next, whichever line
+    /// it is on - narrowing to a breakpoint's own address the way `Continue`
+    /// now does would silently break every step past the first one.
+    #[test]
+    fn stepping_still_arms_the_shared_entry_point_even_with_a_breakpoint_set() {
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+
+        let armed = session.peer_mut().last("setInstructionBreakpoints").unwrap();
+        assert_eq!(
+            armed["arguments"]["breakpoints"][0]["instructionReference"],
+            address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
+        );
+    }
+
     #[test]
     fn a_native_peer_gets_no_generic_breakpoint_armed() {
         let mut session = native_session(SOURCE);
@@ -1773,7 +1988,9 @@ mod tests {
 
         let commands = session.peer_mut().commands();
         assert!(commands.len() > before);
-        assert_eq!(commands.last().unwrap(), "continue");
+        // `continue` is not sent until this re-arm answers - see `resume`'s
+        // own doc comment for why it needs to arm first.
+        assert_eq!(commands.last().unwrap(), "setInstructionBreakpoints");
     }
 
     #[test]
@@ -1791,9 +2008,18 @@ mod tests {
             .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
             .unwrap();
 
-        // The peer answering the very first `continue` is what triggers the
-        // autotype - matching AMSpiritLite's own `continue` handling, which
-        // does not answer until the machine is genuinely running.
+        // The re-arm this resume sends first has to answer before `continue`
+        // itself even goes out - see `resume`'s own doc comment.
+        let arm_seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            arm_seq,
+            json!({ "body": { "breakpoints": [{ "verified": true }] } })
+        );
+
+        // The peer answering that `continue` is what triggers the autotype -
+        // matching AMSpiritLite's own `continue` handling, which does not
+        // answer until the machine is genuinely running.
         let continue_seq = last_sent_seq(&mut session);
         answer(&mut session, continue_seq, json!({ "success": true }));
 
@@ -1809,6 +2035,13 @@ mod tests {
         session
             .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
             .unwrap();
+
+        let arm_seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            arm_seq,
+            json!({ "body": { "breakpoints": [{ "verified": true }] } })
+        );
 
         let continue_seq = last_sent_seq(&mut session);
         let before = session.peer_mut().commands().len();
