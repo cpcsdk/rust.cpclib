@@ -87,6 +87,14 @@ enum Purpose {
     /// The `cpclib/basicState` read [`Purpose::NativeStepDone`] itself
     /// triggers, to learn where the completed step actually landed.
     NativeStateAfterStep,
+    /// `Continue` on a native peer: `cpclib/basicStep` answering one
+    /// statement of the loop `resume` drives itself - see its own doc
+    /// comment for why `Continue` does not just trust `/api/basic_bp`.
+    NativeContinueStep,
+    /// The `cpclib/basicState` read [`Purpose::NativeContinueStep`] itself
+    /// triggers, to decide whether this statement is a breakpoint, a
+    /// pending pause, or another one to step past.
+    NativeContinueState,
     /// Reading [`crate::basic::PTR_ARRAYS_START`] for the Workspace scope,
     /// on a peer without native BASIC debugging - `PTR_VARIABLES_START`
     /// itself is not read at all: this session already knows it locally,
@@ -202,14 +210,18 @@ pub struct BasicSession<P: DapPeer> {
     /// Set when the editor asks to pause, cleared once a stop is actually
     /// reported for it.
     ///
-    /// The generic (1984js) path has no per-line breakpoint of its own: one
-    /// shared instruction breakpoint fires on *every* statement, and Rust
-    /// decides whether that statement matters, re-issuing `continue` itself
-    /// when it does not. A `pause` sent by the editor while that decision is
-    /// in flight was getting raced by our own next `continue` - both land at
-    /// the emulator, `continue` last, and the pause is undone before the
-    /// editor ever sees a stop. This flag is checked at the same point that
-    /// `continue` would otherwise be resent, so pausing takes effect at the
+    /// Neither path trusts the peer to decide `Continue`'s own stopping
+    /// point: the generic (1984js) path has no per-line breakpoint of its
+    /// own (one shared instruction breakpoint fires on *every* statement,
+    /// and Rust decides whether it matters), and AMSpiriT Lite's own
+    /// `/api/basic_bp` turned out not to be trustworthy either (a live
+    /// session saw it report a breakpoint stop with none armed, and resume
+    /// on its own unasked) - both loop their own "keep going" step/continue
+    /// themselves. A `pause` sent by the editor while that loop's own next
+    /// step was already in flight was getting raced by it: both land at the
+    /// emulator, ours last, and the pause is undone before the editor ever
+    /// sees a stop. This flag is checked at the same point the loop would
+    /// otherwise send its next step/continue, so pausing takes effect at the
     /// very next statement boundary instead of never.
     pause_requested: bool
 }
@@ -430,14 +442,31 @@ impl<P: DapPeer> BasicSession<P> {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(message, json!({}), seq)])
             },
-            "continue" | "next" | "stepIn" | "stepOut" => {
-                if self.native_amspirit && command != "continue" {
+            "continue" | "next" | "stepIn" | "stepOut" if self.native_amspirit => {
+                if command == "continue" {
+                    // AMSpiriT Lite's own `/api/basic_bp` cannot be trusted
+                    // to decide this: a live session showed it reporting a
+                    // "breakpoint" stop with zero breakpoints armed, and
+                    // resuming on its own with nothing having asked it to.
+                    // Its statement stepper is already proven correct
+                    // (stepIn/next already run on it) - looping that
+                    // ourselves and deciding the stop here, exactly like the
+                    // generic path already does, is simpler and more
+                    // trustworthy than a second, independent breakpoint
+                    // mechanism living entirely on the peer's side.
+                    self.resuming_as = Some(ResumeKind::Continue);
+                    self.send_own(
+                        "cpclib/basicStep",
+                        json!({ "mode": "stmt" }),
+                        Purpose::NativeContinueStep
+                    )?;
+                }
+                else {
                     // The emulator's own stepper: it pauses (if not
                     // already) and steps in the one call, so there is no
-                    // separate "resume, then filter every hit" cycle to
-                    // run here - `mode=stmt`/`mode=line` already encode the
-                    // stepIn/next distinction the generic path otherwise
-                    // needs `ResumeKind` for.
+                    // loop to run here - `mode=stmt`/`mode=line` already
+                    // encode the stepIn/next distinction the generic path
+                    // otherwise needs `ResumeKind` for.
                     let mode = if command == "stepIn" { "stmt" } else { "line" };
                     self.send_own(
                         "cpclib/basicStep",
@@ -445,35 +474,37 @@ impl<P: DapPeer> BasicSession<P> {
                         Purpose::NativeStepDone
                     )?;
                 }
-                else {
-                    // `stepIn` stops at the very next statement - several
-                    // stops on one multi-statement line. `next`/`stepOut`
-                    // stay line-granular: "step over the whole line" is the
-                    // point of them, so they keep filtering by line the way
-                    // this session always has, just now against a
-                    // statement-granular stream of hits instead of a
-                    // line-granular one.
-                    self.resuming_as = Some(match command {
-                        "continue" => ResumeKind::Continue,
-                        "stepIn" => ResumeKind::StepStatement,
-                        _ => {
-                            ResumeKind::StepLine {
-                                from_line: self.current_line
-                            }
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(message, json!({}), seq)])
+            },
+            "continue" | "next" | "stepIn" | "stepOut" => {
+                // `stepIn` stops at the very next statement - several stops
+                // on one multi-statement line. `next`/`stepOut` stay
+                // line-granular: "step over the whole line" is the point of
+                // them, so they keep filtering by line the way this session
+                // always has, just now against a statement-granular stream
+                // of hits instead of a line-granular one.
+                self.resuming_as = Some(match command {
+                    "continue" => ResumeKind::Continue,
+                    "stepIn" => ResumeKind::StepStatement,
+                    _ => {
+                        ResumeKind::StepLine {
+                            from_line: self.current_line
                         }
-                    });
-                    self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
-                }
+                    }
+                });
+                self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(message, json!({}), seq)])
             },
             "pause" => {
-                // Only the generic path's own auto-continue races a pause
-                // (see `pause_requested`'s own doc comment) - a native peer
-                // decides on its own when to actually stop.
-                if !self.native_amspirit {
-                    self.pause_requested = true;
-                }
+                // Both paths now drive their own "keep going" loop for
+                // Continue (see `pause_requested`'s own doc comment) and can
+                // race a pause the same way. Forwarded to the peer either
+                // way - harmless on the native path, where the CPU is
+                // already effectively paused between our own `basicStep`
+                // calls, but there is no reason to withhold it.
+                self.pause_requested = true;
                 self.peer.send(message.clone())?;
                 Ok(Vec::new())
             },
@@ -959,6 +990,38 @@ impl<P: DapPeer> BasicSession<P> {
                             self.report_stopped(reason)
                         },
                         None => self.report_stopped("entry")
+                    };
+                },
+                Purpose::NativeContinueStep => {
+                    // The peer has already paused and stepped by the time
+                    // this answers - what is left is reading where it
+                    // landed, to decide whether to report a stop or step
+                    // past it.
+                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeContinueState);
+                },
+                Purpose::NativeContinueState => {
+                    return match self.apply_native_basic_state(message) {
+                        Some(line) if self.breakpoints.contains(&line) => {
+                            self.resuming_as = None;
+                            self.report_stopped("breakpoint")
+                        },
+                        Some(_) if self.pause_requested => {
+                            self.resuming_as = None;
+                            self.report_stopped("pause")
+                        },
+                        // Not a line the user cares about: keep stepping.
+                        Some(_) => {
+                            let _ = self.send_own(
+                                "cpclib/basicStep",
+                                json!({ "mode": "stmt" }),
+                                Purpose::NativeContinueStep
+                            );
+                            Vec::new()
+                        },
+                        None => {
+                            self.resuming_as = None;
+                            self.report_stopped("entry")
+                        }
                     };
                 },
                 Purpose::WorkspaceArraysStart => {
@@ -1615,6 +1678,113 @@ mod tests {
             .unwrap();
         let step = session.peer_mut().last("cpclib/basicStep").unwrap();
         assert_eq!(step["arguments"]["mode"], "line");
+    }
+
+    /// Regression test, reported live: with breakpoints armed through
+    /// `cpclib/basicSetBreakpoints`, `Continue` still never stopped, and a
+    /// live session showed AMSpiriT Lite reporting a spontaneous "breakpoint"
+    /// stop with *zero* breakpoints set, and resuming on its own with
+    /// nothing having asked it to - proof its own `/api/basic_bp` cannot be
+    /// trusted to decide this. `Continue` now drives the same statement
+    /// stepper `stepIn` already uses, in a loop, deciding the stop here.
+    #[test]
+    fn continue_on_a_native_peer_steps_past_lines_it_does_not_care_about() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+        let step = session.peer_mut().last("cpclib/basicStep").unwrap();
+        assert_eq!(step["arguments"]["mode"], "stmt");
+
+        // Lands on line 10, not the armed line: step again rather than
+        // reporting anything.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 0 } })
+        );
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicStep",
+            "not a match - the loop must keep going, not stop"
+        );
+
+        // Lands on line 20, the armed line: report it.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    /// Same race as the generic path's own (`pause_requested`'s doc
+    /// comment), for the native loop: a pause requested while a
+    /// `cpclib/basicStep` was already in flight used to be undone by the
+    /// loop's own next step, sent right behind it.
+    #[test]
+    fn a_pause_requested_mid_native_continue_stops_instead_of_stepping_again() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "continue", "arguments": {} }))
+            .unwrap();
+        // Captured before `pause` is sent - `pause` is forwarded under the
+        // *editor's* own seq (2), which would otherwise shadow this one as
+        // "the last thing sent".
+        let step_seq = last_sent_seq(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "pause", "arguments": { "threadId": 1 } }))
+            .unwrap();
+        session.peer_mut().push_incoming(json!({
+            "type": "response",
+            "request_seq": 2,
+            "success": true,
+            "command": "pause",
+            "body": {}
+        }));
+        for message in session.peer_mut().drain() {
+            session.on_emulator_message(&message);
+        }
+
+        // The step already in flight lands on line 10 - not a breakpoint,
+        // but the pause must win over sending another step.
+        answer(&mut session, step_seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 0 } })
+        );
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "pause");
+        assert_ne!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicStep",
+            "the pause must win, not another step"
+        );
     }
 
     #[test]
