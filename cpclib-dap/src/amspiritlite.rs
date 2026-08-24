@@ -169,6 +169,47 @@ pub fn call_for(request: &Value) -> Option<Call> {
             Call::post("/api/keytype").body(json!({ "text": text }).to_string())
         },
 
+        // Native BASIC debugging - unlike the shared BasicSession machinery
+        // built on setInstructionBreakpoints/&AE1B (one breakpoint armed on
+        // every statement, filtered by line number after the fact), this
+        // emulator resolves BASIC line numbers to statement addresses
+        // itself and only pauses on a real match. Verified against this
+        // emulator's own bundled web UI source (`basicSyncBreakpoints`,
+        // `doBasicStep`, `basicRefresh` in its `amspirit-lite.html`) - not
+        // just its published API test page, which this crate's own doc
+        // comment already warns can be wrong - but not yet against a live
+        // instance the way every other mapping in this file has been.
+        "cpclib/basicSetBreakpoints" => {
+            let lines = arguments
+                .and_then(|a| a.get("lines"))
+                .and_then(Value::as_array)
+                .map(|list| {
+                    list.iter()
+                        .filter_map(Value::as_u64)
+                        .map(|n| n.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .unwrap_or_default();
+            Call::post("/api/basic_bp").body(lines)
+        },
+        // Current line, current statement address, program size and the
+        // variable/array zone boundaries, in one call - what this crate's
+        // own PTR_CURRENT_STATEMENT/PTR_CURRENT_LINE_NUMBER_FIELD need two
+        // readMemory round trips and a manual decode for on the generic
+        // path (see `basic.rs`).
+        "cpclib/basicState" => Call::get("/api/basic_state"),
+        // Steps to the next statement (mode=stmt, the default) or the next
+        // *line* (mode=line) - pausing first if the machine is still
+        // running. The native equivalent of BasicSession's own
+        // StepStatement/StepLine distinction.
+        "cpclib/basicStep" => {
+            let by_line = arguments.and_then(|a| a.get("mode")).and_then(Value::as_str)
+                == Some("line");
+            let call = Call::post("/api/basic_step");
+            if by_line { call.query("mode", "line") } else { call }
+        },
+
         // Which page is mapped where. The whole reason this backend is worth
         // having: 1984js cannot answer it at all, which is what forced the
         // byte-matching heuristic and the "most likely line" fallback.
@@ -1481,6 +1522,9 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 | "setInstructionBreakpoints"
                 | "cpclib/setPc"
                 | "cpclib/autotype"
+                | "cpclib/basicSetBreakpoints"
+                | "cpclib/basicState"
+                | "cpclib/basicStep"
                 | "cpclib/memmap"
                 | "cpclib/crtc"
                 | "cpclib/ga"
@@ -2382,6 +2426,46 @@ mod tests {
             call.body.as_deref(),
             Some(json!({ "text": "RUN\n" }).to_string().as_str())
         );
+    }
+
+    #[test]
+    fn basic_set_breakpoints_sends_a_comma_separated_line_list() {
+        let call = call_for(&request(
+            "cpclib/basicSetBreakpoints",
+            json!({ "lines": [10, 40, 100] })
+        ))
+        .unwrap();
+        assert_eq!(call.method, Method::Post);
+        assert_eq!(call.path, "/api/basic_bp");
+        assert_eq!(call.body.as_deref(), Some("10,40,100"));
+    }
+
+    #[test]
+    fn basic_set_breakpoints_with_none_clears_the_set() {
+        let call = call_for(&request("cpclib/basicSetBreakpoints", json!({ "lines": [] }))).unwrap();
+        assert_eq!(call.body.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn basic_state_is_a_plain_get() {
+        let call = call_for(&request("cpclib/basicState", json!({}))).unwrap();
+        assert_eq!(call.method, Method::Get);
+        assert_eq!(call.path, "/api/basic_state");
+        assert!(call.query.is_empty());
+    }
+
+    #[test]
+    fn basic_step_defaults_to_statement_granularity() {
+        let call = call_for(&request("cpclib/basicStep", json!({}))).unwrap();
+        assert_eq!(call.method, Method::Post);
+        assert_eq!(call.path, "/api/basic_step");
+        assert!(call.query.is_empty(), "{:?}", call.query);
+    }
+
+    #[test]
+    fn basic_step_with_mode_line_asks_for_the_line_granular_step() {
+        let call = call_for(&request("cpclib/basicStep", json!({ "mode": "line" }))).unwrap();
+        assert_eq!(call.query, vec![("mode".to_string(), "line".to_string())]);
     }
 
     /// Their answers are handed on unchanged: the caller asked for that

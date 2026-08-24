@@ -68,7 +68,19 @@ enum Purpose {
     /// The 27 chain heads, on the way to decoding variables.
     VariableChainHeads,
     /// The bulk variable-storage read, once the chain heads are known.
-    VariableStorage
+    VariableStorage,
+    /// `cpclib/basicState`, answered after a genuine stop on a peer with
+    /// native BASIC debugging - carries `cur_linenum`/`stmt_addr` directly,
+    /// replacing the two-round-trip readMemory dance the generic path
+    /// needs.
+    NativeBasicState,
+    /// `cpclib/basicStep` (`stepIn`/`next`/`stepOut` on a peer with native
+    /// BASIC debugging) - the emulator has already paused and stepped by
+    /// the time this answers, so what is left is reading where it landed.
+    NativeStepDone,
+    /// The `cpclib/basicState` read [`Purpose::NativeStepDone`] itself
+    /// triggers, to learn where the completed step actually landed.
+    NativeStateAfterStep
 }
 
 #[derive(Debug, Clone)]
@@ -135,6 +147,15 @@ pub struct BasicSession<P: DapPeer> {
     current_statement_column: Option<(u32, u32)>,
     /// BASIC line numbers with a user breakpoint.
     breakpoints: Vec<u16>,
+    /// Whether the peer answers `cpclib/basicState` - AMSpiriT Lite's own
+    /// native BASIC debugging (`/api/basic_bp`/`/api/basic_step`/
+    /// `/api/basic_state`), discovered once at `on_attached`. On a peer
+    /// that does, the generic setInstructionBreakpoints/&AE1B mechanism
+    /// (built for 1984js, which has nothing BASIC-aware to ask) is not
+    /// used at all: AMSpiriT Lite resolves BASIC line numbers to statement
+    /// addresses itself and only ever pauses on a real match, so there is
+    /// nothing here to arm, filter, or read memory for.
+    native_amspirit: bool,
     seq: i64,
     own_requests: HashMap<i64, OwnRequest>,
     own_seq: i64,
@@ -168,6 +189,7 @@ impl<P: DapPeer> BasicSession<P> {
             statement_index,
             current_statement_column: None,
             breakpoints: Vec::new(),
+            native_amspirit: false,
             seq: 1,
             own_requests: HashMap::new(),
             own_seq: 100_000,
@@ -243,11 +265,14 @@ impl<P: DapPeer> BasicSession<P> {
     /// the program if the editor has already finished configuring.
     fn on_attached(&mut self) -> std::io::Result<()> {
         self.attached = true;
-        self.send_own(
-            "setInstructionBreakpoints",
-            json!({ "breakpoints": [{ "instructionReference": address_reference(STATEMENT_BREAKPOINT_TARGET as u32) }] }),
-            Purpose::BreakpointArmed
-        )?;
+        self.native_amspirit = self.peer.supports("cpclib/basicState");
+        if !self.native_amspirit {
+            self.send_own(
+                "setInstructionBreakpoints",
+                json!({ "breakpoints": [{ "instructionReference": address_reference(STATEMENT_BREAKPOINT_TARGET as u32) }] }),
+                Purpose::BreakpointArmed
+            )?;
+        }
         self.start_if_ready()
     }
 
@@ -335,7 +360,7 @@ impl<P: DapPeer> BasicSession<P> {
             .unwrap_or_default();
 
         match command {
-            "setBreakpoints" => Ok(self.set_breakpoints(message)),
+            "setBreakpoints" => self.set_breakpoints(message),
             "configurationDone" => {
                 self.configured = true;
                 self.start_if_ready()?;
@@ -343,22 +368,39 @@ impl<P: DapPeer> BasicSession<P> {
                 Ok(vec![protocol::response(message, json!({}), seq)])
             },
             "continue" | "next" | "stepIn" | "stepOut" => {
-                // `stepIn` stops at the very next statement - several stops
-                // on one multi-statement line. `next`/`stepOut` stay
-                // line-granular: "step over the whole line" is the point of
-                // them, so they keep filtering by line the way this session
-                // always has, just now against a statement-granular stream
-                // of hits instead of a line-granular one.
-                self.resuming_as = Some(match command {
-                    "continue" => ResumeKind::Continue,
-                    "stepIn" => ResumeKind::StepStatement,
-                    _ => {
-                        ResumeKind::StepLine {
-                            from_line: self.current_line
+                if self.native_amspirit && command != "continue" {
+                    // The emulator's own stepper: it pauses (if not
+                    // already) and steps in the one call, so there is no
+                    // separate "resume, then filter every hit" cycle to
+                    // run here - `mode=stmt`/`mode=line` already encode the
+                    // stepIn/next distinction the generic path otherwise
+                    // needs `ResumeKind` for.
+                    let mode = if command == "stepIn" { "stmt" } else { "line" };
+                    self.send_own(
+                        "cpclib/basicStep",
+                        json!({ "mode": mode }),
+                        Purpose::NativeStepDone
+                    )?;
+                }
+                else {
+                    // `stepIn` stops at the very next statement - several
+                    // stops on one multi-statement line. `next`/`stepOut`
+                    // stay line-granular: "step over the whole line" is the
+                    // point of them, so they keep filtering by line the way
+                    // this session always has, just now against a
+                    // statement-granular stream of hits instead of a
+                    // line-granular one.
+                    self.resuming_as = Some(match command {
+                        "continue" => ResumeKind::Continue,
+                        "stepIn" => ResumeKind::StepStatement,
+                        _ => {
+                            ResumeKind::StepLine {
+                                from_line: self.current_line
+                            }
                         }
-                    }
-                });
-                self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
+                    });
+                    self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain)?;
+                }
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(message, json!({}), seq)])
             },
@@ -405,7 +447,7 @@ impl<P: DapPeer> BasicSession<P> {
         }
     }
 
-    fn set_breakpoints(&mut self, message: &Value) -> Vec<Value> {
+    fn set_breakpoints(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
         let requested = message
             .get("arguments")
             .and_then(|a| a.get("breakpoints"))
@@ -438,8 +480,20 @@ impl<P: DapPeer> BasicSession<P> {
         }
         self.breakpoints = lines;
 
+        // AMSpiriT Lite resolves these line numbers to statement addresses
+        // itself and only pauses on a real match - nothing to arm on the
+        // generic path (no single shared breakpoint there to filter after
+        // the fact).
+        if self.native_amspirit {
+            self.send_own(
+                "cpclib/basicSetBreakpoints",
+                json!({ "lines": self.breakpoints }),
+                Purpose::Plain
+            )?;
+        }
+
         let seq = self.next_seq();
-        vec![protocol::response(message, json!({ "breakpoints": verified }), seq)]
+        Ok(vec![protocol::response(message, json!({ "breakpoints": verified }), seq)])
     }
 
     fn stack_trace(&mut self, message: &Value) -> Value {
@@ -542,6 +596,7 @@ impl<P: DapPeer> BasicSession<P> {
                 json!({
                     "name": v.name,
                     "value": format_variable_value(&v.value),
+                    "type": variable_type_name(&v.value),
                     "variablesReference": 0
                 })
             })
@@ -612,6 +667,44 @@ impl<P: DapPeer> BasicSession<P> {
                         pending.storage = Some(Self::read_memory_bytes(message));
                     }
                     return self.complete_variables().unwrap_or_default();
+                },
+                Purpose::NativeBasicState => {
+                    return match self.apply_native_basic_state(message) {
+                        Some(line) => {
+                            let reason = if self.breakpoints.contains(&line) {
+                                "breakpoint"
+                            }
+                            else {
+                                "pause"
+                            };
+                            self.report_stopped(reason)
+                        },
+                        None => self.report_stopped("entry")
+                    };
+                },
+                Purpose::NativeStepDone => {
+                    // The emulator already paused and stepped by the time
+                    // this answers - what is left is reading where it
+                    // landed.
+                    let _ = self.send_own(
+                        "cpclib/basicState",
+                        json!({}),
+                        Purpose::NativeStateAfterStep
+                    );
+                },
+                Purpose::NativeStateAfterStep => {
+                    return match self.apply_native_basic_state(message) {
+                        Some(line) => {
+                            let reason = if self.breakpoints.contains(&line) {
+                                "breakpoint"
+                            }
+                            else {
+                                "step"
+                            };
+                            self.report_stopped(reason)
+                        },
+                        None => self.report_stopped("entry")
+                    };
                 }
             }
             return Vec::new();
@@ -630,27 +723,62 @@ impl<P: DapPeer> BasicSession<P> {
         Vec::new()
     }
 
-    /// The one Z80 breakpoint fired. Not necessarily a line the user
-    /// actually wants to stop at - that is only known once the current
-    /// line number has been read and compared.
-    ///
-    /// One 4-byte read rather than two: [`PTR_CURRENT_STATEMENT`] and
-    /// [`basic::PTR_CURRENT_LINE_NUMBER_FIELD`] are adjacent (`&AE1B`,
-    /// `&AE1D`), so both come back in the same round trip.
+    /// The peer just paused. On the generic path this is the one shared Z80
+    /// breakpoint firing - not necessarily a line the user actually wants
+    /// to stop at, which is only known once the current line has been read
+    /// and compared. On a peer with native BASIC debugging, the peer only
+    /// ever pauses on a real match (a breakpoint it was actually told
+    /// about, or a manual Pause), so there is nothing to filter - just
+    /// somewhere to read.
     fn on_z80_stopped(&mut self) -> Vec<Value> {
-        if self.send_own(
-            "readMemory",
-            json!({
-                "memoryReference": address_reference(PTR_CURRENT_STATEMENT as u32),
-                "count": 4
-            }),
-            Purpose::CurrentLinePointer
-        )
-        .is_err()
-        {
+        let sent = if self.native_amspirit {
+            self.send_own("cpclib/basicState", json!({}), Purpose::NativeBasicState)
+        }
+        else {
+            // One 4-byte read rather than two: PTR_CURRENT_STATEMENT and
+            // PTR_CURRENT_LINE_NUMBER_FIELD are adjacent (`&AE1B`, `&AE1D`),
+            // so both come back in the same round trip.
+            self.send_own(
+                "readMemory",
+                json!({
+                    "memoryReference": address_reference(PTR_CURRENT_STATEMENT as u32),
+                    "count": 4
+                }),
+                Purpose::CurrentLinePointer
+            )
+        };
+        if sent.is_err() {
             return Vec::new();
         }
         Vec::new()
+    }
+
+    /// Decodes `cpclib/basicState`'s body and updates `current_line`/
+    /// `current_statement_column` from it. Returns the decoded line
+    /// number, or `None` for direct mode (`cur_linenum` `0xFFFF`) - the
+    /// caller decides what stop reason that means, since a breakpoint-
+    /// triggered stop and a completed step report it differently.
+    ///
+    /// `stmt_addr` is used directly against `statement_index`, with no `+1`
+    /// the way the generic path's raw `&AE1B` read needs: this emulator's
+    /// own web UI compares it straight against `/api/basic_listing`'s own
+    /// statement addresses (`doBasicStepOver`), so it is already the
+    /// corrected first-token address, not the ROM's internal "byte before"
+    /// one.
+    fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
+        let body = message.get("body")?;
+        let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
+        if line == 0xffff {
+            return None;
+        }
+        self.current_line = Some(line);
+        if let Some(address) = body.get("stmt_addr").and_then(Value::as_u64) {
+            let address = address as u16;
+            if let Some(statement) = self.statement_index.iter().find(|s| s.address == address) {
+                self.current_statement_column = Some((statement.column, statement.end_column));
+            }
+        }
+        Some(line)
     }
 
     fn on_line_pointer_read(&mut self, message: &Value) -> Vec<Value> {
@@ -787,6 +915,20 @@ fn format_variable_value(value: &BasicVariableValue) -> String {
     }
 }
 
+/// The `Variable.type` DAP field - the editor asked for this outright
+/// (`"supportsVariableType": true` in its own `initialize`), and Locomotive
+/// BASIC already tells the difference apart by the same type byte
+/// [`BasicVariableValue`] itself came from, so there is nothing to infer.
+fn variable_type_name(value: &BasicVariableValue) -> &'static str {
+    match value {
+        BasicVariableValue::Integer(_) => "Integer",
+        BasicVariableValue::Real(_) => "Real",
+        BasicVariableValue::StringRef { .. } => "String",
+        BasicVariableValue::DefFn => "DEF FN",
+        BasicVariableValue::Unknown(_) => "Unknown"
+    }
+}
+
 /// Parses `source` with `cpclib_basic` and pairs each BASIC line number
 /// with the 0-based index of the source line it was written on - exact,
 /// since it comes from the same tokenizer the launch flow already used to
@@ -868,6 +1010,25 @@ mod tests {
         )
     }
 
+    /// A session over a peer with native BASIC debugging (AMSpiriT Lite),
+    /// rather than 1984js's generic Z80-breakpoint shape.
+    fn native_session(source: &str) -> BasicSession<RecordingPeer> {
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
+        BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep"
+            ]),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        )
+    }
+
     /// Sends `attach` and simulates the peer answering it successfully,
     /// processing whatever that answer triggers (arming the breakpoint).
     fn complete_attach(session: &mut BasicSession<RecordingPeer>) {
@@ -936,6 +1097,122 @@ mod tests {
             armed["arguments"]["breakpoints"][0]["instructionReference"],
             address_reference(STATEMENT_BREAKPOINT_TARGET as u32)
         );
+    }
+
+    #[test]
+    fn a_native_peer_gets_no_generic_breakpoint_armed() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        assert!(
+            session.peer_mut().last("setInstructionBreakpoints").is_none(),
+            "AMSpiriT Lite resolves its own breakpoints; nothing generic to arm"
+        );
+    }
+
+    #[test]
+    fn set_breakpoints_arms_them_natively_on_a_peer_that_supports_it() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        let armed = session.peer_mut().last("cpclib/basicSetBreakpoints").unwrap();
+        assert_eq!(armed["arguments"]["lines"], json!([20]));
+    }
+
+    #[test]
+    fn a_native_stop_is_reported_from_basic_state_directly() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    #[test]
+    fn a_native_pause_not_on_a_breakpoint_is_reported_as_pause() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 0 } })
+        );
+
+        assert_eq!(events[0]["body"]["reason"], "pause");
+    }
+
+    #[test]
+    fn step_in_sends_a_native_statement_step_and_reports_where_it_landed() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+        let step = session.peer_mut().last("cpclib/basicStep").unwrap();
+        assert_eq!(step["arguments"]["mode"], "stmt");
+
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        // basic_step's own answer triggers a follow-up basic_state read.
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 0 } })
+        );
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "step");
+    }
+
+    #[test]
+    fn next_sends_a_native_line_step() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "next", "arguments": {} }))
+            .unwrap();
+        let step = session.peer_mut().last("cpclib/basicStep").unwrap();
+        assert_eq!(step["arguments"]["mode"], "line");
     }
 
     #[test]
@@ -1455,5 +1732,6 @@ mod tests {
         let vars = &events[0]["body"]["variables"];
         assert_eq!(vars[0]["name"], "I");
         assert_eq!(vars[0]["value"], "42");
+        assert_eq!(vars[0]["type"], "Integer");
     }
 }
