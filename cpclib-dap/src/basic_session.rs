@@ -1102,15 +1102,17 @@ impl<P: DapPeer> BasicSession<P> {
     /// caller decides what stop reason that means, since a breakpoint-
     /// triggered stop and a completed step report it differently.
     ///
-    /// `stmt_addr` gets the same `+1` the generic path's raw `&AE1B` read
-    /// needs. It was assumed to already be the corrected first-token address
-    /// (going by this emulator's own web UI, which compares it straight
-    /// against `/api/basic_listing`'s addresses) - but a live session never
-    /// found a single match against `statement_index` without it, landing on
-    /// the whole-line fallback column every time instead of the statement
-    /// actually running. `cpclib/basicState` reads the same ROM variable the
-    /// generic path does, and shares its "byte before the first token"
-    /// semantics.
+    /// `stmt_addr` is resolved by range, not exact match, and no offset is
+    /// applied: this emulator's own web UI - which does get this right, per
+    /// a live report that the source location it shows itself is correct -
+    /// looks a statement up by `sa >= a && sa < e` (`bi.stmt_addr` against
+    /// `line.stmts[i].addr`/`stmts[i+1].addr`, in `basicRenderListing`), not
+    /// by comparing it to any statement's own start address directly. A
+    /// fixed `+1` (matching the generic path's own raw `&AE1B` read)
+    /// happened to look plausible but was the wrong kind of fix: `stmt_addr`
+    /// can land anywhere inside the statement actually running, and the
+    /// range this session already has - each entry's address up to the
+    /// next one's - answers exactly the same question.
     fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
         let body = message.get("body")?;
         let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
@@ -1119,9 +1121,17 @@ impl<P: DapPeer> BasicSession<P> {
         }
         self.current_line = Some(line);
         if let Some(address) = body.get("stmt_addr").and_then(Value::as_u64) {
-            let address = (address as u16).wrapping_add(1);
+            let address = address as u16;
             self.current_statement_address = Some(address);
-            if let Some(statement) = self.statement_index.iter().find(|s| s.address == address) {
+            // `statement_index` is built walking the tokenised program in
+            // address order, so the last entry at or before `address` is the
+            // statement whose range contains it.
+            if let Some(statement) = self
+                .statement_index
+                .iter()
+                .rev()
+                .find(|s| s.address <= address)
+            {
                 self.current_statement_column = Some((statement.column, statement.end_column));
             }
         }
@@ -1595,51 +1605,58 @@ mod tests {
         assert_eq!(events[0]["body"]["allThreadsContinued"], true);
     }
 
-    /// Regression test: a live session against AMSpiriT Lite never once
-    /// matched `stmt_addr` against `statement_index` without this `+1` (every
-    /// stop fell back to the degenerate (1,1) column, highlighting the whole
-    /// line instead of the statement that actually ran) - `cpclib/basicState`
-    /// shares the ROM's own "byte before the first token" semantics with the
-    /// generic path's raw `&AE1B` read, contrary to the assumption this was
-    /// already corrected.
+    /// Regression test: AMSpiriT Lite's own web UI - confirmed live to get
+    /// this right - resolves `stmt_addr` by range
+    /// (`sa >= a && sa < e`, in its own `basicRenderListing`), not by
+    /// comparing it to a statement's own start address, offset or not. A
+    /// fixed `+1` (guessing it shared the generic path's own "byte before
+    /// the first token" ROM semantics) happened to look plausible in
+    /// isolation but was never actually tested against a `stmt_addr` that
+    /// lands *inside* a statement rather than exactly on one boundary - the
+    /// case that actually matters, since nothing guarantees the emulator
+    /// only ever reports the very first byte.
     #[test]
-    fn a_native_stop_resolves_the_statement_column_from_stmt_addr_plus_one() {
+    fn a_native_stop_resolves_the_statement_column_by_range_not_exact_match() {
         let source = "10 a=1:b=2\n";
         let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
         let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
         assert_eq!(index.len(), 2, "{index:?}");
         let second_statement = index[1].clone();
-
-        let mut session = native_session(source);
-        complete_attach(&mut session);
-
-        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
-        let incoming = session.peer_mut().drain();
-        for message in incoming {
-            session.on_emulator_message(&message);
-        }
-        let seq = last_sent_seq(&mut session);
-        answer(
-            &mut session,
-            seq,
-            json!({
-                "body": {
-                    "cur_linenum": 10,
-                    "stmt_addr": second_statement.address.wrapping_sub(1)
-                }
-            })
-        );
-
-        let frame = session
-            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
-            .unwrap();
-        let frame = &frame[0]["body"]["stackFrames"][0];
-        assert_eq!(frame["column"], second_statement.column);
-        assert_eq!(frame["endColumn"], second_statement.end_column);
         assert_ne!(
             second_statement.column, 1,
             "the test fixture must actually exercise a non-first statement"
         );
+
+        // A handful of bytes into the statement, not its very first one -
+        // an exact-match lookup (offset or not) would miss this.
+        for offset in [0u16, 1, 2] {
+            let mut session = native_session(source);
+            complete_attach(&mut session);
+
+            session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+            let incoming = session.peer_mut().drain();
+            for message in incoming {
+                session.on_emulator_message(&message);
+            }
+            let seq = last_sent_seq(&mut session);
+            answer(
+                &mut session,
+                seq,
+                json!({
+                    "body": {
+                        "cur_linenum": 10,
+                        "stmt_addr": second_statement.address + offset
+                    }
+                })
+            );
+
+            let frame = session
+                .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+                .unwrap();
+            let frame = &frame[0]["body"]["stackFrames"][0];
+            assert_eq!(frame["column"], second_statement.column, "offset {offset}");
+            assert_eq!(frame["endColumn"], second_statement.end_column, "offset {offset}");
+        }
     }
 
     #[test]
