@@ -39,8 +39,14 @@ use crate::session::decode_base64;
 /// read, a reasonable safety limit rather than a measured one.
 const MAX_VARIABLE_BYTES: u16 = 8192;
 
-/// The one synthetic scope this session ever offers.
+/// The user's own BASIC variables.
 const VARIABLES_REFERENCE: i64 = 1000;
+/// Program size, variable/array zone boundaries, free RAM, BASIC version -
+/// what AMSpiriT Lite's own UI shows in a dedicated info panel
+/// ("TXTTOP.../Taille.../Zone variables..."), asked for inside the
+/// Variables pane instead: no dedicated webview to build, and the editor
+/// already refreshes this scope on every stop for free.
+const WORKSPACE_REFERENCE: i64 = 1001;
 
 const THREAD_ID: i64 = 1;
 
@@ -80,7 +86,18 @@ enum Purpose {
     NativeStepDone,
     /// The `cpclib/basicState` read [`Purpose::NativeStepDone`] itself
     /// triggers, to learn where the completed step actually landed.
-    NativeStateAfterStep
+    NativeStateAfterStep,
+    /// Reading [`crate::basic::PTR_ARRAYS_START`] for the Workspace scope,
+    /// on a peer without native BASIC debugging - `PTR_VARIABLES_START`
+    /// itself is not read at all: this session already knows it locally,
+    /// having chosen it when it built the boot snapshot.
+    WorkspaceArraysStart,
+    /// `cpclib/basicState`, answered for the Workspace scope on a peer
+    /// with native BASIC debugging - the same call
+    /// [`Purpose::NativeBasicState`] uses for a stop, but read here purely
+    /// for its workspace fields (`vartop`/`arrend`/`var_size`/`basic_ver`),
+    /// not to decide whether to report a stop at all.
+    NativeWorkspaceInfo
 }
 
 #[derive(Debug, Clone)]
@@ -150,6 +167,11 @@ pub struct BasicSession<P: DapPeer> {
     /// session's own launch flow tokenised, but stack traces still need a
     /// column either way).
     current_statement_column: Option<(u32, u32)>,
+    /// The current statement's own RAM address, for the "current
+    /// instruction" line of the Workspace scope - the address itself,
+    /// unlike `current_statement_column`, which is already resolved to a
+    /// source position.
+    current_statement_address: Option<u16>,
     /// BASIC line numbers with a user breakpoint.
     breakpoints: Vec<u16>,
     /// Whether the peer answers `cpclib/basicState` - AMSpiriT Lite's own
@@ -172,7 +194,11 @@ pub struct BasicSession<P: DapPeer> {
     resuming_as: Option<ResumeKind>,
     /// The line the program is stopped at, once known.
     current_line: Option<u16>,
-    pending_variables: Option<PendingVariables>
+    pending_variables: Option<PendingVariables>,
+    /// The editor's own `variables` request for the Workspace scope, held
+    /// until whichever single read answering it (generic or native) comes
+    /// back.
+    pending_workspace: Option<Value>
 }
 
 impl<P: DapPeer> BasicSession<P> {
@@ -194,6 +220,7 @@ impl<P: DapPeer> BasicSession<P> {
             program_len: program_bytes.len() as u16,
             statement_index,
             current_statement_column: None,
+            current_statement_address: None,
             breakpoints: Vec::new(),
             native_amspirit: false,
             seq: 1,
@@ -204,7 +231,8 @@ impl<P: DapPeer> BasicSession<P> {
             started: false,
             resuming_as: None,
             current_line: None,
-            pending_variables: None
+            pending_variables: None,
+            pending_workspace: None
         }
     }
 
@@ -441,6 +469,16 @@ impl<P: DapPeer> BasicSession<P> {
                 self.begin_variables(message)?;
                 Ok(Vec::new())
             },
+            "variables"
+                if message
+                    .get("arguments")
+                    .and_then(|a| a.get("variablesReference"))
+                    .and_then(Value::as_i64)
+                    == Some(WORKSPACE_REFERENCE) =>
+            {
+                self.begin_workspace(message)?;
+                Ok(Vec::new())
+            },
             "threads" => {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(
@@ -557,14 +595,156 @@ impl<P: DapPeer> BasicSession<P> {
         protocol::response(
             message,
             json!({
-                "scopes": [{
-                    "name": "Variables",
-                    "variablesReference": VARIABLES_REFERENCE,
-                    "expensive": false
-                }]
+                "scopes": [
+                    {
+                        "name": "Variables",
+                        "variablesReference": VARIABLES_REFERENCE,
+                        "expensive": false,
+                        // VS Code only auto-highlights a value that changed
+                        // since the last stop for a scope hinted this way -
+                        // there is no separate "changed" flag to set per
+                        // variable, the way the memory view's own custom
+                        // event has one. Not literally CPU registers, but
+                        // the same "small set of frequently-changing named
+                        // values" this hint is for, and the same one the
+                        // Z80 session's own Registers scope already uses.
+                        "presentationHint": "registers"
+                    },
+                    {
+                        "name": "Workspace",
+                        "variablesReference": WORKSPACE_REFERENCE,
+                        "expensive": false
+                    }
+                ]
             }),
             seq
         )
+    }
+
+    fn begin_workspace(&mut self, message: &Value) -> std::io::Result<()> {
+        self.pending_workspace = Some(message.clone());
+        if self.native_amspirit {
+            self.send_own("cpclib/basicState", json!({}), Purpose::NativeWorkspaceInfo)
+        }
+        else {
+            self.send_own(
+                "readMemory",
+                json!({
+                    "memoryReference": address_reference(basic::PTR_ARRAYS_START as u32),
+                    "count": 2
+                }),
+                Purpose::WorkspaceArraysStart
+            )
+        }
+    }
+
+    /// One `{name, value}` entry for the Workspace scope - always a leaf
+    /// (`variablesReference: 0`): everything shown here is a single
+    /// address, size or version string, nothing worth expanding.
+    fn workspace_entry(name: &str, value: impl Into<String>) -> Value {
+        json!({ "name": name, "value": value.into(), "variablesReference": 0 })
+    }
+
+    /// The Workspace scope on a peer without native BASIC debugging:
+    /// `PTR_VARIABLES_START` (TXTTOP) is not read at all, since this
+    /// session already knows it locally - only `vartop`
+    /// ([`basic::PTR_ARRAYS_START`]'s live value, which moves as variables
+    /// are created) needs a round trip.
+    fn complete_workspace_generic(&mut self, vartop: Option<u16>) -> Option<Vec<Value>> {
+        let request = self.pending_workspace.take()?;
+        let seq = self.next_seq();
+        let txttop = self.variables_base();
+
+        let mut entries = vec![
+            Self::workspace_entry("Program start", address_reference(self.program_start as u32)),
+            Self::workspace_entry("Program size", format!("{} B", self.program_len)),
+            Self::workspace_entry("BASIC version", "1.1")
+        ];
+        if let Some(vartop) = vartop {
+            entries.push(Self::workspace_entry(
+                "Variables zone",
+                format!(
+                    "{}\u{2013}{} ({} B)",
+                    address_reference(txttop as u32),
+                    address_reference(vartop as u32),
+                    vartop.saturating_sub(txttop)
+                )
+            ));
+        }
+        else {
+            entries.push(Self::workspace_entry(
+                "Variables start (TXTTOP)",
+                address_reference(txttop as u32)
+            ));
+        }
+        if let Some(address) = self.current_statement_address {
+            entries.push(Self::workspace_entry(
+                "Current instruction",
+                address_reference(address as u32)
+            ));
+        }
+
+        Some(vec![protocol::response(&request, json!({ "variables": entries }), seq)])
+    }
+
+    /// The Workspace scope on a peer with native BASIC debugging - every
+    /// field `cpclib/basicState` carries beyond what a stop itself needs
+    /// (`cur_linenum`/`stmt_addr`), matching this emulator's own info panel
+    /// field for field ("TXTTOP.../Taille.../Zone variables...") but with
+    /// English titles and inside the standard Variables pane rather than a
+    /// dedicated view.
+    fn complete_workspace_native(&mut self, message: &Value) -> Option<Vec<Value>> {
+        let request = self.pending_workspace.take()?;
+        let seq = self.next_seq();
+        let body = message.get("body");
+        let field = |key: &str| body.and_then(|b| b.get(key)).and_then(Value::as_u64);
+
+        let txttop = field("txttop");
+        let vartop = field("vartop");
+        let arrend = field("arrend");
+
+        let mut entries = Vec::new();
+        if let Some(size) = field("prog_size") {
+            entries.push(Self::workspace_entry("Program size", format!("{size} B")));
+        }
+        if let (Some(t), Some(v)) = (txttop, vartop) {
+            let size = field("var_size").unwrap_or_else(|| v.saturating_sub(t));
+            entries.push(Self::workspace_entry(
+                "Variables zone",
+                format!(
+                    "{}\u{2013}{} ({size} B)",
+                    address_reference(t as u32),
+                    address_reference(v as u32)
+                )
+            ));
+        }
+        if let (Some(v), Some(a)) = (vartop, arrend) {
+            entries.push(Self::workspace_entry(
+                "Arrays zone",
+                format!("{}\u{2013}{}", address_reference(v as u32), address_reference(a as u32))
+            ));
+        }
+        if let Some(end) = arrend {
+            // Matches this emulator's own web UI (`basicRefresh`'s "Free
+            // RAM" field): the gap from the array zone's end to the fixed
+            // start of the BASIC system workspace.
+            let free = if end < 0xae14 { 0xae14 - end } else { 0 };
+            entries.push(Self::workspace_entry("Free RAM", format!("{free} B")));
+        }
+        if let Some(version) = field("basic_ver") {
+            entries.push(Self::workspace_entry(
+                "BASIC version",
+                format!("1.{}", if version == 10 { "0" } else { "1" })
+            ));
+        }
+        if let Some(address) = field("stmt_addr") {
+            entries.push(Self::workspace_entry(
+                "Current instruction",
+                address_reference(address as u32)
+            ));
+        }
+
+        Some(vec![protocol::response(&request, json!({ "variables": entries }), seq)])
     }
 
     fn begin_variables(&mut self, message: &Value) -> std::io::Result<()> {
@@ -627,10 +807,18 @@ impl<P: DapPeer> BasicSession<P> {
         let entries: Vec<Value> = vars
             .iter()
             .map(|v| {
+                let type_name = variable_type_name(&v.value);
                 json!({
                     "name": v.name,
-                    "value": format_variable_value(&v.value),
-                    "type": variable_type_name(&v.value),
+                    // The DAP `type` field alone is not enough to actually
+                    // see it: VS Code's own Variables tree only ever shows
+                    // it in a hover tooltip, never inline, whatever
+                    // `supportsVariableType` the editor declared. Baked
+                    // into the value string instead, where it is always
+                    // visible - the field itself stays too, for whatever
+                    // else might read it.
+                    "value": format!("{} ({type_name})", format_variable_value(&v.value)),
+                    "type": type_name,
                     "variablesReference": 0
                 })
             })
@@ -752,6 +940,14 @@ impl<P: DapPeer> BasicSession<P> {
                         },
                         None => self.report_stopped("entry")
                     };
+                },
+                Purpose::WorkspaceArraysStart => {
+                    let bytes = Self::read_memory_bytes(message);
+                    let vartop = bytes.get(0..2).map(|b| u16::from_le_bytes([b[0], b[1]]));
+                    return self.complete_workspace_generic(vartop).unwrap_or_default();
+                },
+                Purpose::NativeWorkspaceInfo => {
+                    return self.complete_workspace_native(message).unwrap_or_default();
                 }
             }
             return Vec::new();
@@ -821,6 +1017,7 @@ impl<P: DapPeer> BasicSession<P> {
         self.current_line = Some(line);
         if let Some(address) = body.get("stmt_addr").and_then(Value::as_u64) {
             let address = address as u16;
+            self.current_statement_address = Some(address);
             if let Some(statement) = self.statement_index.iter().find(|s| s.address == address) {
                 self.current_statement_column = Some((statement.column, statement.end_column));
             }
@@ -849,6 +1046,7 @@ impl<P: DapPeer> BasicSession<P> {
         // statement layout the launch flow's own tokeniser did not expect)
         // or a filtered-past one, in which case nobody reads it anyway.
         let statement_address = u16::from_le_bytes([chunk[0], chunk[1]]).wrapping_add(1);
+        self.current_statement_address = Some(statement_address);
         if let Some(statement) = self
             .statement_index
             .iter()
@@ -1764,6 +1962,97 @@ mod tests {
     }
 
     #[test]
+    fn scopes_offers_both_variables_and_workspace() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({ "seq": 1, "command": "scopes", "arguments": {} }))
+            .unwrap();
+        let scopes = &response[0]["body"]["scopes"];
+        assert_eq!(scopes[0]["name"], "Variables");
+        assert_eq!(scopes[0]["variablesReference"], VARIABLES_REFERENCE);
+        // VS Code only auto-highlights a changed value between stops for a
+        // scope hinted this way - reported live as missing entirely.
+        assert_eq!(scopes[0]["presentationHint"], "registers");
+        assert_eq!(scopes[1]["name"], "Workspace");
+        assert_eq!(scopes[1]["variablesReference"], WORKSPACE_REFERENCE);
+    }
+
+    #[test]
+    fn workspace_variables_on_a_generic_peer_reads_only_arrays_start() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": WORKSPACE_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty());
+
+        let armed = session.peer_mut().last("readMemory").unwrap();
+        assert_eq!(
+            armed["arguments"]["memoryReference"],
+            address_reference(basic::PTR_ARRAYS_START as u32)
+        );
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&0x200u16.to_le_bytes()));
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        let vars = &events[0]["body"]["variables"];
+        let names: Vec<&str> = vars.as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+        assert!(names.contains(&"Program size"), "{names:?}");
+        assert!(names.contains(&"Variables zone"), "{names:?}");
+        assert!(names.contains(&"BASIC version"), "{names:?}");
+    }
+
+    #[test]
+    fn workspace_variables_on_a_native_peer_uses_basic_state_directly() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": WORKSPACE_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty());
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({
+                "body": {
+                    "txttop": 0x0200,
+                    "vartop": 0x0300,
+                    "arrend": 0x0300,
+                    "var_size": 256,
+                    "prog_size": 144,
+                    "basic_ver": 11,
+                    "stmt_addr": 0x0170
+                }
+            })
+        );
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        let vars = &events[0]["body"]["variables"];
+        let names: Vec<&str> = vars.as_array().unwrap().iter().map(|v| v["name"].as_str().unwrap()).collect();
+        for expected in [
+            "Program size",
+            "Variables zone",
+            "Arrays zone",
+            "Free RAM",
+            "BASIC version",
+            "Current instruction"
+        ] {
+            assert!(names.contains(&expected), "missing {expected:?} in {names:?}");
+        }
+    }
+
+    #[test]
     fn stack_trace_reports_the_current_line_and_its_source_line() {
         let mut session = new_session(SOURCE);
         session
@@ -1908,7 +2197,7 @@ mod tests {
         assert_eq!(events.len(), 1);
         let vars = &events[0]["body"]["variables"];
         assert_eq!(vars[0]["name"], "I");
-        assert_eq!(vars[0]["value"], "42");
+        assert_eq!(vars[0]["value"], "42 (Integer)");
         assert_eq!(vars[0]["type"], "Integer");
     }
 }
