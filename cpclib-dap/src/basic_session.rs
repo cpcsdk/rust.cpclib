@@ -979,6 +979,23 @@ impl<P: DapPeer> BasicSession<P> {
             if event == "stopped" {
                 return self.on_z80_stopped();
             }
+            if event == "continued" {
+                // The peer resuming on its own reaches here unsolicited (a
+                // native peer can decide this by itself - reported live: the
+                // emulator resumed, its own `continued` event arrived, and
+                // with nothing forwarding it the editor never found out and
+                // sat showing "paused" while the program was actually
+                // running again). Forward it as-is rather than dropping it.
+                let seq = self.next_seq();
+                return vec![protocol::event(
+                    "continued",
+                    message
+                        .get("body")
+                        .cloned()
+                        .unwrap_or_else(|| json!({ "threadId": THREAD_ID, "allThreadsContinued": true })),
+                    seq
+                )];
+            }
             if event == "initialized" {
                 return Vec::new();
             }
@@ -1493,6 +1510,26 @@ mod tests {
         );
 
         assert_eq!(events[0]["body"]["reason"], "pause");
+    }
+
+    /// Regression test: a live AMSpiriT Lite session had the peer resume on
+    /// its own - a real, unsolicited `continued` event arrived - and nothing
+    /// forwarded it, so the editor never found out and sat showing "paused"
+    /// while the program was actually running again.
+    #[test]
+    fn an_unsolicited_continued_event_reaches_the_editor() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        let events = session.on_emulator_message(&json!({
+            "type": "event",
+            "event": "continued",
+            "body": { "threadId": 1, "allThreadsContinued": true }
+        }));
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["event"], "continued");
+        assert_eq!(events[0]["body"]["allThreadsContinued"], true);
     }
 
     /// Regression test: a live session against AMSpiriT Lite never once
