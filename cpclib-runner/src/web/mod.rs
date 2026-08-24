@@ -56,6 +56,35 @@ const APP_HOOK: &str = "\n// added by cpclib: hand the DAP session to the bridge
                         \x20 globalThis.__cpclib_attach({ module: m, session: mlDap, connection: new JS1984DAP.Connection(mlDap), loadSnapshot: loadSnapshotFile, startAudio: startAudio, audioContext: () => audioCtx });\n\
                         }\n";
 
+/// The one line appended right after `frame()`'s own `lastFrame` counter is
+/// declared, exposing the same catch-up step upstream's `requestAnimationFrame`
+/// loop runs.
+///
+/// `frame()` is the only thing that ever calls `m._poc_step()`, and it is only
+/// ever invoked by `requestAnimationFrame` - which browsers suspend once the
+/// tab is not the visible one. That freezes CPU execution itself, not just
+/// rendering: a breakpoint ahead of the current PC is never reached until the
+/// tab is looked at again, no matter how the debugger tries to detect it.
+///
+/// This closes over the very same `lastFrame` binding `frame()` uses (it is
+/// inserted into the same enclosing scope, right after the `let`), so calling
+/// it from the bridge's own poll while the tab is hidden and calling it from
+/// `frame()` while visible can never double-count the same wall-clock gap -
+/// there is exactly one counter, advanced by whichever caller is active.
+const STEP_HOOK: &str = "\n// added by cpclib: let the bridge keep stepping the CPU while \
+                         requestAnimationFrame is suspended (a backgrounded tab), sharing this \
+                         same lastFrame counter so nothing is ever caught up twice\n\
+                         globalThis.__cpclib_step_catchup = function (time) {\n\
+                         \x20 while (time - lastFrame >= 20) {\n\
+                         \x20\x20 m._poc_step();\n\
+                         \x20\x20 lastFrame += 20;\n\
+                         \x20\x20 scheduleAudio();\n\
+                         \x20\x20 pollGamepad();\n\
+                         \x20\x20 updateLed();\n\
+                         \x20\x20 updateTapeDeck();\n\
+                         \x20 }\n\
+                         };\n";
+
 /// The `<script>` added to `index.html`, immediately before `</body>` so the
 /// bridge loads after `dap.js` and `app.js`.
 const INDEX_HOOK: &str = "<script src=\"cpclib-bridge.js\"></script>\n</body>";
@@ -147,6 +176,25 @@ pub fn apply_bridge_patch(root: &Utf8Path) -> Result<(), PatchError> {
         )?;
     }
 
+    // app.js: expose frame()'s catch-up step so the bridge can drive it while
+    // the tab is hidden and requestAnimationFrame is not calling frame() at all.
+    let app_text = read(&app)?;
+    if !app_text.contains("__cpclib_step_catchup") {
+        let anchor = "let lastFrame = 0;";
+        let found = app_text.matches(anchor).count();
+        if found != 1 {
+            return Err(PatchError::AnchorNotUnique {
+                file: app.clone(),
+                anchor,
+                found
+            });
+        }
+        write(
+            &app,
+            &app_text.replace(anchor, &format!("{anchor}{STEP_HOOK}"))
+        )?;
+    }
+
     Ok(())
 }
 
@@ -190,7 +238,9 @@ mod tests {
         .unwrap();
         std::fs::write(
             tmp.path().join("app.js"),
-            "function boot() {\n  createMlDapSession();\n}\n"
+            "function boot() {\n  createMlDapSession();\n}\n\
+             let lastFrame = 0;\n\
+             function frame(time) {\n  m._poc_step();\n}\n"
         )
         .unwrap();
         tmp
@@ -210,6 +260,28 @@ mod tests {
         );
         let app = std::fs::read_to_string(tmp.path().join("app.js")).unwrap();
         assert!(app.contains("__cpclib_attach"));
+        assert!(app.contains("__cpclib_step_catchup"));
+        assert!(
+            app.find("let lastFrame = 0;").unwrap() < app.find("__cpclib_step_catchup").unwrap(),
+            "the hook must close over lastFrame, so it has to come after the declaration"
+        );
+    }
+
+    /// Upstream drifting on the stepping anchor specifically must also fail
+    /// loudly - losing this one silently would mean a backgrounded tab quietly
+    /// stops running the machine again, with no error anywhere to explain why.
+    #[test]
+    fn a_missing_step_anchor_is_refused_by_name() {
+        let tmp = fake_dist();
+        std::fs::write(
+            tmp.path().join("app.js"),
+            "function boot() {\n  createMlDapSession();\n}\n"
+        )
+        .unwrap();
+        let error = apply_bridge_patch(tmp.path()).unwrap_err();
+        let text = error.to_string();
+        assert!(text.contains("app.js"), "{text}");
+        assert!(text.contains("1984js has changed"), "{text}");
     }
 
     /// Re-installing must not double-apply.
@@ -295,6 +367,14 @@ mod tests {
             (
                 "poc_save_snapshot",
                 "the CRTC and Gate Array are readable only through a snapshot"
+            ),
+            (
+                "__cpclib_step_catchup",
+                "without it a backgrounded tab never reaches a breakpoint at all, not just never reports one"
+            ),
+            (
+                "document.hidden",
+                "the fallback must stay off while requestAnimationFrame is already stepping, or the two would race"
             )
         ] {
             assert!(

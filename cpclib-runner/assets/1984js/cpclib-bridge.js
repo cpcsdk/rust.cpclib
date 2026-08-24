@@ -295,6 +295,16 @@
   setInterval(function () {
     if (!ownConnection) { return; }
     try {
+      // `frame()` is what steps the CPU, and it only runs from
+      // requestAnimationFrame - which a backgrounded tab suspends. Without
+      // this, a program never reaches a breakpoint ahead of wherever it was
+      // when the tab lost focus, no matter how long the wait: it is not that
+      // the stop goes unreported, it is that it never happens. This shares
+      // frame()'s own lastFrame counter (see STEP_HOOK), so there is nothing
+      // to double-count once requestAnimationFrame resumes.
+      if (document.hidden && typeof globalThis.__cpclib_step_catchup === "function") {
+        globalThis.__cpclib_step_catchup(performance.now());
+      }
       // Writes first: `sync()` is what flushes the queue, so an event raised
       // here goes out in the same pass rather than waiting fifty more
       // milliseconds.
