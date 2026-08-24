@@ -120,6 +120,11 @@ struct PendingVariables {
 pub struct BasicSession<P: DapPeer> {
     peer: P,
     source_path: PathBuf,
+    /// The source text itself, kept only for `cpclib/basicInject` (AMSpiriT
+    /// Lite's own tokeniser - see `native_amspirit`); nothing else here
+    /// needs it, since `line_index`/`statement_index` already extracted
+    /// what they need from it once at launch.
+    source_text: String,
     /// BASIC line number -> 0-based index into the source file's own
     /// lines, computed once at launch by parsing the source text directly
     /// - exact, unlike the reference extension's own regex-based
@@ -183,6 +188,7 @@ impl<P: DapPeer> BasicSession<P> {
         Self {
             peer,
             source_path,
+            source_text: source_text.to_string(),
             line_index,
             program_start,
             program_len: program_bytes.len() as u16,
@@ -266,7 +272,22 @@ impl<P: DapPeer> BasicSession<P> {
     fn on_attached(&mut self) -> std::io::Result<()> {
         self.attached = true;
         self.native_amspirit = self.peer.supports("cpclib/basicState");
-        if !self.native_amspirit {
+        if self.native_amspirit {
+            // Re-injects the program through the emulator's own tokeniser
+            // and workspace bookkeeping, on top of whatever the launch
+            // snapshot already put there - this emulator keeps producing
+            // corrupted BASIC state from the hand-built snapshot alone,
+            // even with every known pointer fixed and breakpoints/stepping
+            // already switched to its own native API, so this sidesteps
+            // needing to know why by not depending on the hand-built
+            // version at all once this answers.
+            self.send_own(
+                "cpclib/basicInject",
+                json!({ "source": self.source_text }),
+                Purpose::Plain
+            )?;
+        }
+        else {
             self.send_own(
                 "setInstructionBreakpoints",
                 json!({ "breakpoints": [{ "instructionReference": address_reference(STATEMENT_BREAKPOINT_TARGET as u32) }] }),
@@ -576,15 +597,28 @@ impl<P: DapPeer> BasicSession<P> {
         let pending = self.pending_variables.as_ref()?;
         let (chain_heads, storage) = (pending.chain_heads.as_ref()?, pending.storage.as_ref()?);
 
+        // Both reads have arrived, but "arrived" is not "succeeded": a
+        // `readMemory` the peer refused (real transcript - AMSpiriT Lite's
+        // "The CPC must be stopped for this request", when the editor asks
+        // for variables while a step is still in flight) comes back with no
+        // `body.data` at all, and `read_memory_bytes` turns that into an
+        // empty `Vec` rather than failing outright. Indexing into that
+        // blindly - `chain_heads[i * 2]` on a 0-length buffer - is exactly
+        // what crashed the whole adapter process, taking the session with
+        // it. An empty variables list is a far better answer than a panic.
         let mut heads = [0u16; VARIABLE_CHAIN_HEADS_COUNT];
         for (i, h) in heads.iter_mut().enumerate() {
-            *h = u16::from_le_bytes([chain_heads[i * 2], chain_heads[i * 2 + 1]]);
+            let Some(pair) = chain_heads.get(i * 2..i * 2 + 2) else {
+                return self.fail_variables();
+            };
+            *h = u16::from_le_bytes([pair[0], pair[1]]);
         }
         let def_fn_offset = VARIABLE_CHAIN_HEADS_COUNT * 2;
-        let def_fn_head = u16::from_le_bytes([
-            chain_heads[def_fn_offset],
-            chain_heads[def_fn_offset + 1]
-        ]);
+        let Some(def_fn_bytes) = chain_heads.get(def_fn_offset..def_fn_offset + 2)
+        else {
+            return self.fail_variables();
+        };
+        let def_fn_head = u16::from_le_bytes([def_fn_bytes[0], def_fn_bytes[1]]);
 
         let vars = basic::decode_variable_chains(&heads, def_fn_head, pending.variables_base, storage);
 
@@ -605,6 +639,19 @@ impl<P: DapPeer> BasicSession<P> {
         Some(vec![protocol::response(
             &request,
             json!({ "variables": entries }),
+            seq
+        )])
+    }
+
+    /// Answers a pending `variables` request with an empty list rather than
+    /// leaving it hanging - the editor asked something, and something is
+    /// always owed back, even when the read behind it did not succeed.
+    fn fail_variables(&mut self) -> Option<Vec<Value>> {
+        let request = self.pending_variables.take()?.request?;
+        let seq = self.next_seq();
+        Some(vec![protocol::response(
+            &request,
+            json!({ "variables": [] }),
             seq
         )])
     }
@@ -819,10 +866,34 @@ impl<P: DapPeer> BasicSession<P> {
                 );
                 Vec::new()
             },
-            // Direct/immediate mode: the program ended (or was never
-            // started). Report it stopped where it last was rather than
-            // silently doing nothing.
-            None => self.report_stopped("entry")
+            // Direct/immediate mode. Two very different things produce
+            // this, and only one is worth reporting: the program ending
+            // (or being stepped past its last line) - and the "RUN"
+            // command autotype itself just typed, executed as a direct-
+            // mode statement before the program has run a single line of
+            // its own. Reported live: a spurious "stopped" the instant the
+            // program was told to run at all, well before any real
+            // breakpoint had a chance to matter. `current_line` being
+            // still unset (this session has never seen a real program
+            // line yet) is what tells the two apart when nothing else can
+            // - direct mode carries no line number either way - except
+            // during an active step, where landing back in direct mode is
+            // itself the answer regardless of what came before it.
+            None => {
+                let seen_a_real_line = self.current_line.is_some();
+                let actively_stepping = matches!(
+                    self.resuming_as,
+                    Some(ResumeKind::StepStatement) | Some(ResumeKind::StepLine { .. })
+                );
+                if seen_a_real_line || actively_stepping {
+                    self.resuming_as = None;
+                    self.report_stopped("entry")
+                }
+                else {
+                    let _ = self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::Plain);
+                    Vec::new()
+                }
+            }
         }
     }
 
@@ -1108,6 +1179,19 @@ mod tests {
             session.peer_mut().last("setInstructionBreakpoints").is_none(),
             "AMSpiriT Lite resolves its own breakpoints; nothing generic to arm"
         );
+    }
+
+    #[test]
+    fn a_native_peer_gets_the_program_re_injected_through_its_own_tokeniser() {
+        // The hand-built launch snapshot alone kept producing corrupted
+        // BASIC state on this emulator specifically, even with every known
+        // pointer fixed - re-injecting through its own /api/basic sidesteps
+        // needing to know why.
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+
+        let injected = session.peer_mut().last("cpclib/basicInject").unwrap();
+        assert_eq!(injected["arguments"]["source"], SOURCE);
     }
 
     #[test]
@@ -1612,23 +1696,71 @@ mod tests {
     }
 
     #[test]
-    fn direct_mode_after_a_stop_is_reported_as_entry() {
+    fn direct_mode_after_the_program_has_run_is_reported_as_entry() {
+        // Realistic scenario: the program has already run at least one
+        // real line, then returns to direct mode - a genuine "the program
+        // ended" transition, worth reporting.
         let mut session = new_session(SOURCE);
-        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 1 }] } // line 10
+            }))
+            .unwrap();
+        stop_at_line(&mut session, 10);
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "next", "arguments": {} }))
+            .unwrap();
+
         session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
         let incoming = session.peer_mut().drain();
         for message in incoming {
             session.on_emulator_message(&message);
         }
-
         let seq = last_sent_seq(&mut session);
         let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
         response_bytes.extend_from_slice(&0u16.to_le_bytes());
         let events = answer(&mut session, seq, read_memory_response(&response_bytes));
 
-        assert_eq!(events.len(), 1);
+        assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "entry");
+    }
+
+    #[test]
+    fn direct_mode_before_the_program_has_run_a_line_is_not_reported() {
+        // Regression test, reported live: the very first statement
+        // breakpoint hit of a session is the autotyped "RUN" command
+        // itself, executed as a direct-mode statement before the program
+        // has run a single line of its own - PTR_CURRENT_LINE_NUMBER_FIELD
+        // reads 0 (direct mode) exactly the same way "the program just
+        // ended" does. Reporting it unconditionally produced a spurious
+        // "stopped" the instant the program was told to run at all, before
+        // any real breakpoint had a chance to matter - "a breakpoint
+        // raised just before the first instruction".
+        let mut session = new_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let commands_before = session.peer_mut().commands().len();
+        let seq = last_sent_seq(&mut session);
+        let mut response_bytes = 0xffffu16.to_le_bytes().to_vec();
+        response_bytes.extend_from_slice(&0u16.to_le_bytes());
+        let events = answer(&mut session, seq, read_memory_response(&response_bytes));
+
+        assert!(events.is_empty(), "{events:?}");
+        // Silently resumed rather than left hanging.
+        let commands = session.peer_mut().commands();
+        assert!(commands.len() > commands_before);
+        assert_eq!(commands.last().unwrap(), "continue");
     }
 
     #[test]
@@ -1699,6 +1831,51 @@ mod tests {
             second_statement.column, 1,
             "the test fixture must actually exercise a non-first statement"
         );
+    }
+
+    #[test]
+    fn a_refused_read_answers_with_an_empty_list_instead_of_panicking() {
+        // Regression test for a real crash: a `readMemory` the peer refused
+        // ("The CPC must be stopped for this request" - the editor asked
+        // for variables while a step was still in flight, a real DAP
+        // client's own doing, not a bug in this crate) came back with no
+        // `body.data`, which `read_memory_bytes` turns into an empty `Vec`
+        // rather than `None`. Indexing into that directly used to panic and
+        // take the whole adapter process down with it.
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": VARIABLES_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty());
+
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        let refused = json!({
+            "type": "response",
+            "request_seq": seq,
+            "success": false,
+            "message": "notStopped",
+            "body": { "error": { "format": "The CPC must be stopped for this request" } }
+        });
+        session.peer_mut().push_incoming(refused.clone());
+        let mut events = Vec::new();
+        for message in session.peer_mut().drain() {
+            events.extend(session.on_emulator_message(&message));
+        }
+        // The second (storage) read refused the same way.
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        let mut second = refused;
+        second["request_seq"] = json!(seq);
+        session.peer_mut().push_incoming(second);
+        for message in session.peer_mut().drain() {
+            events.extend(session.on_emulator_message(&message));
+        }
+
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["body"]["variables"], json!([]));
     }
 
     #[test]

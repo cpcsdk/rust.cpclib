@@ -169,6 +169,25 @@ pub fn call_for(request: &Value) -> Option<Call> {
             Call::post("/api/keytype").body(json!({ "text": text }).to_string())
         },
 
+        // The emulator's own BASIC tokeniser and workspace bookkeeping,
+        // rather than this crate's own hand-built launch snapshot: `POST
+        // /api/basic` (body: the raw source text, `Content-Type:
+        // text/plain`) tokenises it and writes it into RAM directly,
+        // updating every workspace pointer itself - "BASIC end-of-program
+        // pointers at 0xAE66 are updated automatically" is this emulator's
+        // own documentation, for exactly the pointer this crate's own
+        // build_launch_snapshot once missed (see PTR_PROGRAM_END). Used
+        // because the hand-built snapshot, loaded via this emulator's
+        // generic FILE argument rather than through this endpoint, kept
+        // producing corrupted BASIC state here specifically even after
+        // that fix and after switching breakpoints/stepping to this same
+        // emulator's native API - this sidesteps the question of why by
+        // not depending on the answer.
+        "cpclib/basicInject" => {
+            let source = arguments.and_then(|a| a.get("source")).and_then(Value::as_str)?;
+            Call::post("/api/basic").body(source.to_string())
+        },
+
         // Native BASIC debugging - unlike the shared BasicSession machinery
         // built on setInstructionBreakpoints/&AE1B (one breakpoint armed on
         // every statement, filtered by line number after the fact), this
@@ -1522,6 +1541,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 | "setInstructionBreakpoints"
                 | "cpclib/setPc"
                 | "cpclib/autotype"
+                | "cpclib/basicInject"
                 | "cpclib/basicSetBreakpoints"
                 | "cpclib/basicState"
                 | "cpclib/basicStep"
@@ -2426,6 +2446,15 @@ mod tests {
             call.body.as_deref(),
             Some(json!({ "text": "RUN\n" }).to_string().as_str())
         );
+    }
+
+    #[test]
+    fn basic_inject_posts_the_raw_source_as_plain_text() {
+        let source = "10 PRINT \"HI\"\n20 GOTO 10\n";
+        let call = call_for(&request("cpclib/basicInject", json!({ "source": source }))).unwrap();
+        assert_eq!(call.method, Method::Post);
+        assert_eq!(call.path, "/api/basic");
+        assert_eq!(call.body.as_deref(), Some(source));
     }
 
     #[test]
