@@ -307,6 +307,18 @@ pub struct BasicSession<P: DapPeer> {
     /// unlike `current_statement_column`, which is already resolved to a
     /// source position.
     current_statement_address: Option<u16>,
+    /// AMSpiriT Lite's own live `txttop` (the real, ROM-tokeniser-driven
+    /// start of variable storage), cached from the first `cpclib/basicState`
+    /// body that carries it. `variables_base` prefers this over computing
+    /// the same address from `program_start + program_len` - live-confirmed
+    /// against a real instance to disagree by 8 bytes for a real program
+    /// (`program_len`, this session's own tokeniser's byte count, landed on
+    /// 516 for a source AMSpiriT's own tokeniser placed at 508), which
+    /// silently shifted every variable read 8 bytes short of where the real
+    /// data starts - reported live as decoded variable names full of stray
+    /// control characters and most of the program's variables missing
+    /// outright, not a cosmetic drift.
+    native_txttop: Option<u16>,
     /// BASIC line numbers with a user breakpoint.
     breakpoints: Vec<u16>,
     /// Whether the peer answers `cpclib/basicState` - AMSpiriT Lite's own
@@ -447,6 +459,7 @@ impl<P: DapPeer> BasicSession<P> {
             native_listing: None,
             current_statement_column: None,
             current_statement_address: None,
+            native_txttop: None,
             breakpoints: Vec::new(),
             native_amspirit: false,
             seq: 1,
@@ -497,8 +510,15 @@ impl<P: DapPeer> BasicSession<P> {
         self.send_own("attach", json!({}), Purpose::Attach)
     }
 
+    /// Where variable storage actually starts. Prefers AMSpiriT's own live
+    /// `txttop` (`native_txttop`) when it is known - see that field's own
+    /// doc comment for why the `program_len`-based fallback below cannot be
+    /// trusted on a native peer. The fallback itself is still correct and
+    /// necessary for the generic (1984js) peer, which has no `txttop` of its
+    /// own to report.
     fn variables_base(&self) -> u16 {
-        self.program_start.wrapping_add(self.program_len)
+        self.native_txttop
+            .unwrap_or_else(|| self.program_start.wrapping_add(self.program_len))
     }
 
     fn next_seq(&mut self) -> i64 {
@@ -1153,6 +1173,12 @@ impl<P: DapPeer> BasicSession<P> {
         let txttop = field("txttop");
         let vartop = field("vartop");
         let arrend = field("arrend");
+        // See `native_txttop`'s own doc comment - cached here too, so a
+        // Workspace query before any statement-level poll still gives
+        // `variables_base` the right answer.
+        if let Some(t) = txttop {
+            self.native_txttop = Some(t as u16);
+        }
 
         let mut entries = Vec::new();
         if let Some(size) = field("prog_size") {
@@ -1479,6 +1505,22 @@ impl<P: DapPeer> BasicSession<P> {
                                 self.native_reinjection_attempts, MAX_NATIVE_REINJECTION_ATTEMPTS
                             );
                             self.injection_landed = false;
+                            // The program is restarting from scratch - any
+                            // position tracked from before the corruption is
+                            // not just stale, it belongs to a run that no
+                            // longer exists. Left in place, live-confirmed:
+                            // the entry stop this restart reports next can
+                            // carry a transient out-of-range `stmt_addr`
+                            // (`apply_native_basic_state`'s own doc comment
+                            // covers why that gets rejected rather than
+                            // trusted), which used to leave the *previous
+                            // run's* last-known statement highlighted -
+                            // right up until the next real update, wrongly
+                            // implying the machine was still sitting where
+                            // the corruption caught it.
+                            self.current_statement_column = None;
+                            self.current_statement_address = None;
+                            self.current_line = None;
                             let _ = self.send_own(
                                 "cpclib/basicInject",
                                 json!({ "source": self.source_text }),
@@ -1759,6 +1801,13 @@ impl<P: DapPeer> BasicSession<P> {
     /// than actively pointing at the wrong token.
     fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
         let body = message.get("body")?;
+        // See `native_txttop`'s own doc comment - cached from every body
+        // that carries it, direct mode included, since variable reads can
+        // be asked for at any point and should not have to wait for a
+        // "real" line first.
+        if let Some(t) = body.get("txttop").and_then(Value::as_u64) {
+            self.native_txttop = Some(t as u16);
+        }
         let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
         if line == 0xffff {
             return None;
@@ -4232,5 +4281,41 @@ mod tests {
         assert_eq!(vars[0]["name"], "I");
         assert_eq!(vars[0]["value"], "42 (Integer)");
         assert_eq!(vars[0]["type"], "Integer");
+    }
+
+    #[test]
+    /// Regression test, reported live: decoded variable names came back full
+    /// of stray control characters and most of a real program's variables
+    /// were missing outright. Root cause: `variables_base` computed where
+    /// variable storage starts from `program_start + program_len`, using
+    /// this session's own tokeniser's byte count - which, live-confirmed,
+    /// can disagree with AMSpiriT Lite's own ROM-tokeniser-driven `txttop`
+    /// by several bytes for a real program. Every variable read landed that
+    /// many bytes short of where the real data actually starts, and the
+    /// chain-walk decoder had no way to know. Confirms `variables_base`
+    /// prefers AMSpiriT's own live `txttop`, once seen, over the computed
+    /// address.
+    fn variables_base_prefers_amspirits_own_live_txttop_over_the_computed_one() {
+        let mut session = native_session(SOURCE);
+        let computed = basic::PROGRAM_START.wrapping_add(session.program_len);
+        assert_eq!(
+            session.variables_base(),
+            computed,
+            "falls back to the computed address before any basicState is seen"
+        );
+
+        // AMSpiriT's own tokeniser disagrees with this session's - an 8-byte
+        // gap was the live-observed case - so its real `txttop` is not the
+        // same address `program_len` alone would compute.
+        let live_txttop = computed - 8;
+        session.apply_native_basic_state(&json!({
+            "body": {
+                "cur_linenum": 10,
+                "stmt_addr": basic::PROGRAM_START,
+                "txttop": live_txttop
+            }
+        }));
+
+        assert_eq!(session.variables_base(), live_txttop);
     }
 }
