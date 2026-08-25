@@ -911,6 +911,7 @@ fn start_basic_session(
         basic::PROGRAM_START,
         &program_bytes
     );
+    session.set_stop_on_entry(arguments.get("stopOnEntry").and_then(Value::as_bool) == Some(true));
 
     // Only on a peer that cannot type RUN for us: `BasicSession` checks this
     // exact same `supports()` before deciding whether to auto-type it, so

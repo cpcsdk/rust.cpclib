@@ -319,6 +319,16 @@ pub struct BasicSession<P: DapPeer> {
     /// control characters and most of the program's variables missing
     /// outright, not a cosmetic drift.
     native_txttop: Option<u16>,
+    /// The launch's own `stopOnEntry` argument - mirrors the generic Z80
+    /// session's own handling of the same DAP argument (`session.rs`),
+    /// which only arms a stop-at-entry breakpoint when this is explicitly
+    /// requested. Set via `set_stop_on_entry`, since `BasicSession::new`
+    /// does not otherwise see the launch's own arguments. Checked by
+    /// `Purpose::NativeAwaitRunState`'s own free-run poll - see its doc
+    /// comment for why unconditionally pausing at the first real line
+    /// regardless of this was a real, reported bug, not the intended
+    /// design.
+    stop_on_entry: bool,
     /// BASIC line numbers with a user breakpoint.
     breakpoints: Vec<u16>,
     /// Whether the peer answers `cpclib/basicState` - AMSpiriT Lite's own
@@ -460,6 +470,7 @@ impl<P: DapPeer> BasicSession<P> {
             current_statement_column: None,
             current_statement_address: None,
             native_txttop: None,
+            stop_on_entry: false,
             breakpoints: Vec::new(),
             native_amspirit: false,
             seq: 1,
@@ -484,6 +495,12 @@ impl<P: DapPeer> BasicSession<P> {
 
     pub fn peer_mut(&mut self) -> &mut P {
         &mut self.peer
+    }
+
+    /// Call before `attach`, from the launch's own `stopOnEntry` argument -
+    /// see `stop_on_entry`'s own doc comment.
+    pub fn set_stop_on_entry(&mut self, value: bool) {
+        self.stop_on_entry = value;
     }
 
     /// Sends the peer's own `initialize`/`attach` handshake. Called once,
@@ -1582,6 +1599,20 @@ impl<P: DapPeer> BasicSession<P> {
                         // `amspiritlite.rs`), which it already sustains
                         // without trouble.
                         None | Some(0xffff) => {
+                            // A real line was seen before (recorded below,
+                            // in the "not a reason to stop, keep running"
+                            // arm) and now it is back in direct mode: the
+                            // program genuinely finished running, not merely
+                            // still warming up from typing RUN.
+                            // `decide_continue_stop` already uses "entry" as
+                            // the reason for this same situation later in a
+                            // session - matched here rather than inventing a
+                            // second name for "back in direct mode after a
+                            // real run".
+                            if self.current_line.is_some() {
+                                self.resuming_as = None;
+                                return self.report_stopped("entry");
+                            }
                             std::thread::sleep(std::time::Duration::from_millis(30));
                             let _ = self.send_own(
                                 "cpclib/basicState",
@@ -1589,13 +1620,38 @@ impl<P: DapPeer> BasicSession<P> {
                                 Purpose::NativeAwaitRunState
                             );
                         },
-                        // A real line at last: stop free-running and only
-                        // now start caring about breakpoints/statements.
-                        Some(_) => {
+                        // A real line, and a reason to actually stop free-
+                        // running for it: a breakpoint on it, `stopOnEntry`
+                        // explicitly asked for, or the editor's own pause
+                        // request racing this window.
+                        Some(line)
+                            if self.breakpoints.contains(&line)
+                                || self.stop_on_entry
+                                || self.pause_requested =>
+                        {
                             let _ = self.send_own(
                                 "pause",
                                 json!({ "threadId": THREAD_ID }),
                                 Purpose::NativeAwaitRunPaused
+                            );
+                        },
+                        // A real line, but nothing the user asked to stop
+                        // for: keep free-running rather than pausing
+                        // unconditionally at whatever line the poll first
+                        // happened to catch - reported live, that used to
+                        // surprise a user who set no breakpoints at all with
+                        // a stop on "wherever the machine happened to be",
+                        // not a meaningful entry point. Recorded here (not
+                        // just left for `apply_native_basic_state` to set
+                        // later) so the direct-mode arm above can tell
+                        // "still warming up" apart from "really finished".
+                        Some(line) => {
+                            self.current_line = Some(line);
+                            std::thread::sleep(std::time::Duration::from_millis(30));
+                            let _ = self.send_own(
+                                "cpclib/basicState",
+                                json!({}),
+                                Purpose::NativeAwaitRunState
                             );
                         }
                     }
@@ -3523,6 +3579,73 @@ mod tests {
     }
 
     #[test]
+    /// Regression test, reported live: with no breakpoints set at all
+    /// (`stopOnEntry` off, the launch's own default), the session used to
+    /// pause unconditionally at whatever line the launch's free-run poll
+    /// first happened to catch - not a meaningful entry point, just
+    /// "wherever the machine was" by the time the poll asked. Confirms the
+    /// fix: a real line that is not a breakpoint, with `stopOnEntry` off,
+    /// keeps the machine free-running (still no `basicStep` in the mix,
+    /// same reasoning as `autotype_run`'s own doc comment) instead of
+    /// pausing and reporting a stop nobody asked for - and that a later
+    /// breakpoint line is still honored once actually reached.
+    fn a_real_line_with_no_breakpoint_and_no_stop_on_entry_keeps_running() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/autotype"
+            ]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        let landed_seq = last_sent_seq(&mut session);
+        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+
+        // A breakpoint on line 20 only - line 10 is not one.
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+        let autotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, autotype_seq, json!({ "success": true }));
+
+        // Line 10 at last - a real line, but not a breakpoint. No pause: the
+        // session keeps polling instead.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 10, "prog_size": 20 } }));
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState",
+            "a non-breakpoint line with stopOnEntry off must not pause"
+        );
+
+        // Line 20 - the armed breakpoint - is still honored once reached.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20, "prog_size": 20 } }));
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
+    }
+
+    #[test]
     /// Regression test for the corruption `native_reinjection_attempts`'s own
     /// doc comment describes: `prog_size` reverting to the empty baseline
     /// mid-poll, well after injection was already confirmed landed once.
@@ -3546,6 +3669,12 @@ mod tests {
             basic::PROGRAM_START,
             &bytes
         );
+        // Not what this test is about - `stopOnEntry` on, so the clean run
+        // this test checks for after recovery still pauses on the first
+        // real line the same way it did before the "don't stop for no
+        // reason" fix, without pulling that fix's own test coverage in here
+        // too.
+        session.set_stop_on_entry(true);
         complete_attach(&mut session);
 
         let inject_seq = last_sent_seq(&mut session);
@@ -3628,6 +3757,12 @@ mod tests {
             basic::PROGRAM_START,
             &bytes
         );
+        // This test is about the pause/settle race itself, not about
+        // whether the launch stops at all with no breakpoints set (see the
+        // "don't stop for no reason" fix's own tests for that) - `stopOnEntry`
+        // is what makes the first real line a reason to pause here, same as
+        // before that fix.
+        session.set_stop_on_entry(true);
         complete_attach(&mut session);
 
         // Injection confirmed landed before anything else can proceed.
