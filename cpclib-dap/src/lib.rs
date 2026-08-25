@@ -591,7 +591,8 @@ fn start_session(
         );
     };
 
-    let (backend, url, chosen_emulator) = connect_backend(&arguments, snapshot, &mut early_notices)?;
+    let (backend, url, chosen_emulator) =
+        connect_backend(&arguments, snapshot, &mut early_notices, false)?;
     let wants_lite = chosen_emulator.eq_ignore_ascii_case("amspiritlite");
 
     let mut session = session::Session::new(backend, source_map);
@@ -730,7 +731,8 @@ fn start_session(
 fn connect_backend(
     arguments: &Value,
     snapshot: Vec<u8>,
-    early_notices: &mut Vec<String>
+    early_notices: &mut Vec<String>,
+    is_basic: bool
 ) -> Result<(Backend, String, String), String> {
     // The launch configuration wins; the project's own setting is the default,
     // so a rule can be debugged either way without editing the project.
@@ -803,8 +805,20 @@ fn connect_backend(
                     .and_then(Value::as_u64)
                     .and_then(|port| u16::try_from(port).ok())
                     .unwrap_or(dap_config.port);
-                let (endpoint, child) =
-                    amspiritlite::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?;
+                // Native BASIC debugging never needed a snapshot to begin
+                // with (`on_attached` injects the real source through
+                // `cpclib/basicInject` once attached) - and reported live,
+                // every snapshot this crate can build or embed resumes with
+                // garbage already queued as if freshly typed, a property of
+                // the snapshot bytes themselves, not anything sent
+                // afterward. See `launch_without_snapshot`'s own doc
+                // comment for the full story.
+                let (endpoint, child) = if is_basic {
+                    amspiritlite::launch_without_snapshot(port, &cpclib_common::event::DiscardObserver)?
+                }
+                else {
+                    amspiritlite::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?
+                };
                 started = Some(child);
                 // Said out loud, because the emulator left behind is still on
                 // screen and still running the previous build: without this the
@@ -888,7 +902,7 @@ fn start_basic_session(
         .map_err(|e| e.to_string())?;
 
     let (backend, url, _chosen_emulator) =
-        connect_backend(&arguments, snapshot, &mut early_notices)?;
+        connect_backend(&arguments, snapshot, &mut early_notices, true)?;
 
     let mut session = basic_session::BasicSession::new(
         backend,

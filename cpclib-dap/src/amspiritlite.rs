@@ -774,6 +774,66 @@ where
     Ok((endpoint, child))
 }
 
+/// Start the emulator with no snapshot at all - its own default cold boot,
+/// exactly as launching it by hand with no file argument would (confirmed:
+/// `[FILE]` is optional in the emulator's own `--help`). For native BASIC
+/// debugging, which never needed a snapshot to begin with -
+/// `BasicSession::on_attached` already injects the real source through
+/// `cpclib/basicInject` once attached, regardless of what the machine held
+/// before that.
+///
+/// Reported live and confirmed directly against a real instance: *every*
+/// boot snapshot this crate can build or embed -
+/// `basic::build_launch_snapshot`'s own output, and even
+/// `cpclib_sna::Snapshot::new_6128`/`new_6128_v2` used bare - resumes with
+/// garbage already queued as if freshly typed (`963RUN"`, `785120`, a
+/// spurious `Syntax error`), on *both* AMSpiriT Lite 1.13.4 and 1.14.3,
+/// entirely independent of anything sent afterward (no `cpclib/autotype`
+/// call, no `cpclib/basicInject`, nothing - reproduced with a bare
+/// `POST /api/config {"paused":false}` and nothing else). Whatever state
+/// those captures carry, resuming from it alone is enough - purely a
+/// property of the snapshot bytes, not of this session's own request
+/// sequence or timing, which a real cold boot through the emulator's own
+/// reset path (confirmed live, screenshotted, clean) never carries in the
+/// first place.
+pub fn launch_without_snapshot<E>(
+    port: u16,
+    observer: &E
+) -> Result<(String, std::process::Child), String>
+where
+    E: cpclib_common::event::EventObserver + 'static
+{
+    use cpclib_runner::runner::emulator::{AmspiritLiteVersion, Emulator};
+
+    let emulator = Emulator::AmspiritLite(AmspiritLiteVersion::default());
+    let configuration = emulator.configuration::<E>();
+    if !configuration.is_cached() {
+        configuration.install(observer)?;
+    }
+
+    let port = port_to_serve_on(port);
+
+    // No snapshot to imply a model from - named explicitly, matching what
+    // every fixed address this crate relies on (`basic.rs`'s own pointer
+    // table, `PROGRAM_START`) already assumes.
+    let executable = configuration.exec_fname();
+    let child = std::process::Command::new(executable.as_str())
+        .arg("--model")
+        .arg("6128")
+        .arg("--web-server")
+        .arg("--web-port")
+        .arg(port.to_string())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("cannot start {executable}: {e}"))?;
+
+    let endpoint = format!("http://127.0.0.1:{port}");
+    wait_until_listening(&endpoint, std::time::Duration::from_secs(30))?;
+    Ok((endpoint, child))
+}
+
 /// Where to start an emulator that was asked to serve on `asked`.
 ///
 /// `asked` itself whenever it is free, and a port the operating system says is
