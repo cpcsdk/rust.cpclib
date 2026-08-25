@@ -308,6 +308,17 @@ pub struct BasicSession<P: DapPeer> {
     attached: bool,
     configured: bool,
     started: bool,
+    /// `true` unless a native peer's own injection is still in flight -
+    /// see `Purpose::NativeAwaitInjectionState`'s own doc comment. Not
+    /// enough on its own to gate `start_if_ready` by *sequencing*
+    /// (`NativeInjected`'s own chain already only calls it once landing is
+    /// confirmed): `configurationDone`'s handler calls `start_if_ready`
+    /// directly and independently, on the editor's own timing, with no idea
+    /// injection is still pending - reported live, it almost always won
+    /// that race, since it does not wait on anything. `start_if_ready`
+    /// checks this explicitly so *whichever* of the two paths runs last is
+    /// the one that actually starts the machine, not whichever runs first.
+    injection_landed: bool,
     /// Set while resuming, until the next line boundary is reported or
     /// filtered past.
     resuming_as: Option<ResumeKind>,
@@ -411,6 +422,9 @@ impl<P: DapPeer> BasicSession<P> {
             attached: false,
             configured: false,
             started: false,
+            // No native injection has even been sent yet - nothing to wait
+            // on until `on_attached` sends one.
+            injection_landed: true,
             resuming_as: None,
             current_line: None,
             pending_variables: None,
@@ -494,14 +508,14 @@ impl<P: DapPeer> BasicSession<P> {
         self.attached = true;
         self.native_amspirit = self.peer.supports("cpclib/basicState");
         if self.native_amspirit {
-            // Re-injects the program through the emulator's own tokeniser
-            // and workspace bookkeeping, on top of whatever the launch
-            // snapshot already put there - this emulator keeps producing
-            // corrupted BASIC state from the hand-built snapshot alone,
-            // even with every known pointer fixed and breakpoints/stepping
-            // already switched to its own native API, so this sidesteps
-            // needing to know why by not depending on the hand-built
-            // version at all once this answers.
+            // Injects the program through the emulator's own tokeniser and
+            // workspace bookkeeping - the machine was booted cold, with no
+            // snapshot at all (see `amspiritlite::launch_without_snapshot`'s
+            // own doc comment for why), so this is the only thing that ever
+            // puts a program in it. See `Purpose::NativeAwaitInjectionState`
+            // for why `start_if_ready` must not run until this is confirmed
+            // to have actually landed, not merely acknowledged.
+            self.injection_landed = false;
             self.send_own(
                 "cpclib/basicInject",
                 json!({ "source": self.source_text }),
@@ -565,7 +579,7 @@ impl<P: DapPeer> BasicSession<P> {
     }
 
     fn start_if_ready(&mut self) -> std::io::Result<()> {
-        if self.attached && self.configured && !self.started {
+        if self.attached && self.configured && self.injection_landed && !self.started {
             self.started = true;
             self.resuming_as = Some(ResumeKind::Continue);
             self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::LaunchResumed)?;
@@ -1482,6 +1496,12 @@ impl<P: DapPeer> BasicSession<P> {
                         );
                         return Vec::new();
                     }
+                    // Set *before* proceeding: `configurationDone`'s own
+                    // handler calls `start_if_ready` directly, on the
+                    // editor's own timing, with no idea this chain exists -
+                    // see `injection_landed`'s own doc comment for why that
+                    // race needs this flag rather than sequencing alone.
+                    self.injection_landed = true;
                     return self.proceed_once_injection_landed();
                 },
                 Purpose::NativeListingFetched => {
@@ -2703,6 +2723,47 @@ mod tests {
         assert_eq!(session.peer_mut().commands().last().unwrap(), "continue");
     }
 
+    /// Regression test, reported live: `configurationDone`'s own handler
+    /// calls `start_if_ready` *directly*, on the editor's own timing, with
+    /// no idea a native peer's injection might still be in flight - and it
+    /// almost always won that race, since it does not wait on anything.
+    /// Unlike `injection_is_confirmed_landed_before_run_is_typed` (which
+    /// happens to call `configurationDone` *before* `attach` even
+    /// completes, so `attached` alone was already blocking it), this drives
+    /// the exact order a real launch actually uses: attach completes first
+    /// (injection sent), *then* `configurationDone` arrives while that
+    /// injection is still unconfirmed.
+    #[test]
+    fn configuration_done_does_not_race_ahead_of_injection_landing() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+
+        // `configurationDone` arrives before injection's own answer has
+        // even come back - must not fire `continue`.
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+        assert!(
+            !session.peer_mut().commands().contains(&"continue".to_string()),
+            "{:?}",
+            session.peer_mut().commands()
+        );
+
+        // Injection's own answer arrives, kicking off the landing poll -
+        // still must not fire `continue` yet.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert!(!session.peer_mut().commands().contains(&"continue".to_string()));
+
+        // Landed: only now, even though `configurationDone` arrived long
+        // ago, does the launch actually proceed.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "prog_size": 20 } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "continue");
+    }
+
     #[test]
     fn step_in_sends_a_native_statement_step_and_reports_where_it_landed() {
         let mut session = native_session(SOURCE);
@@ -3217,6 +3278,15 @@ mod tests {
             &bytes
         );
         complete_attach(&mut session);
+
+        // Injection confirmed landed before anything else can proceed - see
+        // `injection_landed`'s own doc comment for why `configurationDone`
+        // (right below) cannot be allowed to race ahead of this.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        let landed_seq = last_sent_seq(&mut session);
+        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+
         session
             .on_editor_message(&json!({
                 "seq": 1,
@@ -3301,6 +3371,13 @@ mod tests {
             &bytes
         );
         complete_attach(&mut session);
+
+        // Injection confirmed landed before anything else can proceed.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        let landed_seq = last_sent_seq(&mut session);
+        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+
         session
             .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
             .unwrap();
