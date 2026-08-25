@@ -50,7 +50,7 @@ const WORKSPACE_REFERENCE: i64 = 1001;
 
 const THREAD_ID: i64 = 1;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 enum Purpose {
     Plain,
     /// The peer's own `attach` handshake, for a peer that needs one.
@@ -149,7 +149,16 @@ enum Purpose {
     /// documents as interfering with the machine, which then ran the
     /// program right back into direct mode before ever reporting anything
     /// sensible to the editor.
-    NativeAwaitRunSettled
+    NativeAwaitRunSettled,
+    /// One chip's own endpoint (`cpclib/crtc`/`ga`/`psg`/`fdc`) answering a
+    /// `variables` request against that scope - `reference` says which one,
+    /// `request` is what to reply to. Carries its own data rather than going
+    /// through a `pending_*` field like `Workspace` does: unlike the Z80
+    /// session's `chip_scope` (which batches every expanded chip pane behind
+    /// one shared `machineState` snapshot fetch), each chip here has its own
+    /// endpoint and its own round trip, so there is nothing to batch and no
+    /// reason to force them to serialize through one shared slot.
+    NativeChipScope { reference: i64, request: Value }
 }
 
 #[derive(Debug, Clone)]
@@ -693,6 +702,16 @@ impl<P: DapPeer> BasicSession<P> {
                 self.begin_workspace(message)?;
                 Ok(Vec::new())
             },
+            "variables"
+                if self.native_amspirit
+                    && message
+                        .get("arguments")
+                        .and_then(|a| a.get("variablesReference"))
+                        .and_then(Value::as_i64)
+                        .is_some_and(crate::inspect::is_chip_scope) =>
+            {
+                self.begin_chip_scope(message)
+            },
             "threads" => {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(
@@ -806,33 +825,56 @@ impl<P: DapPeer> BasicSession<P> {
 
     fn scopes(&mut self, message: &Value) -> Value {
         let seq = self.next_seq();
-        protocol::response(
-            message,
+        let mut scopes = vec![
             json!({
-                "scopes": [
-                    {
-                        "name": "Variables",
-                        "variablesReference": VARIABLES_REFERENCE,
-                        "expensive": false,
-                        // VS Code only auto-highlights a value that changed
-                        // since the last stop for a scope hinted this way -
-                        // there is no separate "changed" flag to set per
-                        // variable, the way the memory view's own custom
-                        // event has one. Not literally CPU registers, but
-                        // the same "small set of frequently-changing named
-                        // values" this hint is for, and the same one the
-                        // Z80 session's own Registers scope already uses.
-                        "presentationHint": "registers"
-                    },
-                    {
-                        "name": "Workspace",
-                        "variablesReference": WORKSPACE_REFERENCE,
-                        "expensive": false
-                    }
-                ]
+                "name": "Variables",
+                "variablesReference": VARIABLES_REFERENCE,
+                "expensive": false,
+                // VS Code only auto-highlights a value that changed
+                // since the last stop for a scope hinted this way -
+                // there is no separate "changed" flag to set per
+                // variable, the way the memory view's own custom
+                // event has one. Not literally CPU registers, but
+                // the same "small set of frequently-changing named
+                // values" this hint is for, and the same one the
+                // Z80 session's own Registers scope already uses.
+                "presentationHint": "registers"
             }),
-            seq
-        )
+            json!({
+                "name": "Workspace",
+                "variablesReference": WORKSPACE_REFERENCE,
+                "expensive": false
+            })
+        ];
+        // The chips behind the BASIC program: added on request, to help
+        // diagnose a screen/timing problem the BASIC variables alone cannot
+        // explain (a broken snapshot, a CRTC left in a bad state, ...) -
+        // native only, since unlike the Z80 session's own chip scopes there
+        // is no `machineState`-snapshot fallback wired up on this session
+        // for a peer without a dedicated endpoint per chip. `expensive: true`
+        // keeps every one of these opt-in, fetched only once actually
+        // expanded rather than on every stop - the same reasoning that
+        // throttled the RUN-await poll loop applies here too: this session
+        // has already seen what hammering AMSpiriT Lite's HTTP server with
+        // requests it did not ask to be asked does to it.
+        if self.native_amspirit {
+            for (name, reference, command) in [
+                ("CRTC", crate::inspect::CRTC_REFERENCE, "cpclib/crtc"),
+                ("Gate Array", crate::inspect::GATE_ARRAY_REFERENCE, "cpclib/ga"),
+                ("PSG", crate::inspect::PSG_REFERENCE, "cpclib/psg"),
+                ("Disc", crate::inspect::DISC_REFERENCE, "cpclib/fdc")
+            ] {
+                if self.peer.supports(command) {
+                    scopes.push(json!({
+                        "name": name,
+                        "variablesReference": reference,
+                        "expensive": true,
+                        "presentationHint": "registers"
+                    }));
+                }
+            }
+        }
+        protocol::response(message, json!({ "scopes": scopes }), seq)
     }
 
     fn begin_workspace(&mut self, message: &Value) -> std::io::Result<()> {
@@ -850,6 +892,32 @@ impl<P: DapPeer> BasicSession<P> {
                 Purpose::WorkspaceArraysStart
             )
         }
+    }
+
+    /// Fetches one chip's own endpoint directly - no snapshot, no batching,
+    /// see [`Purpose::NativeChipScope`]. `reference` not being one of the
+    /// four this session actually advertises in `scopes` (stale state from
+    /// before a peer swap, or a client that asks anyway) answers empty
+    /// rather than sending a request nobody can route.
+    fn begin_chip_scope(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
+        let reference = message
+            .get("arguments")
+            .and_then(|a| a.get("variablesReference"))
+            .and_then(Value::as_i64)
+            .unwrap_or_default();
+        let Some(command) = crate::amspiritlite::chip_command(reference) else {
+            let seq = self.next_seq();
+            return Ok(vec![protocol::response(message, json!({ "variables": [] }), seq)]);
+        };
+        self.send_own(
+            command,
+            json!({}),
+            Purpose::NativeChipScope {
+                reference,
+                request: message.clone()
+            }
+        )?;
+        Ok(Vec::new())
     }
 
     /// One `{name, value}` entry for the Workspace scope - always a leaf
@@ -1264,6 +1332,12 @@ impl<P: DapPeer> BasicSession<P> {
                         },
                         _ => self.report_stopped("entry")
                     };
+                },
+                Purpose::NativeChipScope { reference, request } => {
+                    let body = message.get("body").cloned().unwrap_or_default();
+                    let variables = crate::amspiritlite::chip_variables(reference, &body);
+                    let seq = self.next_seq();
+                    return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
                 },
                 Purpose::WorkspaceArraysStart => {
                     let bytes = Self::read_memory_bytes(message);
@@ -1794,6 +1868,31 @@ mod tests {
                 "cpclib/basicSetBreakpoints",
                 "cpclib/basicStep",
                 "cpclib/basicListing"
+            ]),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        )
+    }
+
+    /// Same as [`native_session`], but the peer also offers the four chip
+    /// endpoints - for tests exercising the chip scopes, kept separate so
+    /// every other native test still covers the (still supported) peer
+    /// that does not have them.
+    fn native_session_with_chips(source: &str) -> BasicSession<RecordingPeer> {
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
+        BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/crtc",
+                "cpclib/ga",
+                "cpclib/psg",
+                "cpclib/fdc"
             ]),
             PathBuf::from("test.bas"),
             source,
@@ -3048,6 +3147,66 @@ mod tests {
         assert_eq!(scopes[0]["presentationHint"], "registers");
         assert_eq!(scopes[1]["name"], "Workspace");
         assert_eq!(scopes[1]["variablesReference"], WORKSPACE_REFERENCE);
+    }
+
+    /// Requested live: chip state visible from the BASIC debugger, to
+    /// diagnose a screen/timing problem the BASIC variables alone cannot
+    /// explain - a broken snapshot, a CRTC left in a bad state.
+    #[test]
+    fn scopes_offers_chip_panes_on_a_native_peer_that_supports_them() {
+        let mut session = native_session_with_chips(SOURCE);
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({ "seq": 1, "command": "scopes", "arguments": {} }))
+            .unwrap();
+        let scopes = response[0]["body"]["scopes"].as_array().unwrap();
+        let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["Variables", "Workspace", "CRTC", "Gate Array", "PSG", "Disc"]);
+        let crtc = scopes.iter().find(|s| s["name"] == "CRTC").unwrap();
+        assert_eq!(crtc["variablesReference"], crate::inspect::CRTC_REFERENCE);
+        // Opt-in only: this session has already seen what hammering AMSpiriT
+        // Lite's HTTP server with requests nobody asked for does to it.
+        assert_eq!(crtc["expensive"], true);
+    }
+
+    /// A native peer without the dedicated per-chip endpoints (an older
+    /// build, or a future native peer that never grows them) still works -
+    /// just without the extra panes, rather than advertising a scope
+    /// nothing can answer.
+    #[test]
+    fn scopes_omits_chip_panes_on_a_native_peer_without_them() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({ "seq": 1, "command": "scopes", "arguments": {} }))
+            .unwrap();
+        let scopes = response[0]["body"]["scopes"].as_array().unwrap();
+        assert_eq!(scopes.len(), 2, "{scopes:?}");
+    }
+
+    /// Each chip has its own endpoint and its own round trip - no shared
+    /// `machineState` snapshot to batch behind, unlike the Z80 session's own
+    /// chip scopes.
+    #[test]
+    fn a_chip_scope_variables_request_fetches_its_own_endpoint_and_answers_the_right_request() {
+        let mut session = native_session_with_chips(SOURCE);
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "variables",
+                "arguments": { "variablesReference": crate::inspect::PSG_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/psg");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "regs": [1, 2, 3] } }));
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["command"], "variables");
+        assert_eq!(events[0]["request_seq"], 9);
+        assert!(events[0]["body"]["variables"].is_array());
     }
 
     #[test]
