@@ -22,7 +22,7 @@
 //! approach.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 
@@ -952,6 +952,38 @@ impl<P: DapPeer> BasicSession<P> {
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
+
+        // VS Code sends one `setBreakpoints` request per source file that
+        // carries a breakpoint, to every active debug session regardless of
+        // which file it is actually debugging - normal DAP behaviour for a
+        // client that does not know a given session is single-file.
+        // Reported live: a leftover breakpoint on an unrelated file
+        // (`hello.bas` line 2, never cleared from an earlier session) got
+        // silently reinterpreted against *this* session's own line index
+        // (built for `mandelbrot.bas`) - line 2 there resolves to BASIC
+        // line 20, so the session armed a breakpoint nobody asked for on
+        // this program, with nothing to explain why it stopped there. Any
+        // request naming a different file is answered as unverified and
+        // never touches `self.breakpoints` at all.
+        let source_path = message
+            .get("arguments")
+            .and_then(|a| a.get("source"))
+            .and_then(|s| s.get("path"))
+            .and_then(Value::as_str);
+        if let Some(source_path) = source_path
+            && self.source_path != Path::new(source_path)
+        {
+            let verified = vec![
+                json!({ "verified": false, "message": "not part of this debug session" });
+                requested.len()
+            ];
+            let seq = self.next_seq();
+            return Ok(vec![protocol::response(
+                message,
+                json!({ "breakpoints": verified }),
+                seq
+            )]);
+        }
 
         let mut verified = Vec::new();
         let mut lines = Vec::new();
@@ -3821,6 +3853,36 @@ mod tests {
 
         assert_eq!(response.len(), 1);
         assert_eq!(response[0]["body"]["breakpoints"][0]["verified"], true);
+    }
+
+    #[test]
+    /// Regression test, reported live: VS Code sends one `setBreakpoints`
+    /// request per source file that carries a breakpoint, to every active
+    /// debug session - not just the file it is actually debugging. A
+    /// leftover breakpoint on an unrelated file (`hello.bas` line 2, never
+    /// cleared from an earlier session) got silently reinterpreted against
+    /// this session's own line index (built for a different program),
+    /// arming a breakpoint on whatever BASIC line happened to share that
+    /// line number - the user set no breakpoint on the program actually
+    /// being debugged and had no way to know why it stopped. Confirms a
+    /// request naming a different file is rejected rather than touching
+    /// `self.breakpoints`.
+    fn set_breakpoints_for_a_different_file_are_rejected_not_reinterpreted() {
+        let mut session = new_session(SOURCE); // source_path is "test.bas"
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": {
+                    "breakpoints": [{ "line": 2 }],
+                    "source": { "name": "hello.bas", "path": "hello.bas" }
+                }
+            }))
+            .unwrap();
+
+        assert_eq!(response.len(), 1);
+        assert_eq!(response[0]["body"]["breakpoints"][0]["verified"], false);
+        assert!(session.breakpoints.is_empty());
     }
 
     #[test]
