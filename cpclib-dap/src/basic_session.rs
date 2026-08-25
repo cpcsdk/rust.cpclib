@@ -253,7 +253,34 @@ pub struct BasicSession<P: DapPeer> {
     /// sees a stop. This flag is checked at the same point the loop would
     /// otherwise send its next step/continue, so pausing takes effect at the
     /// very next statement boundary instead of never.
-    pause_requested: bool
+    pause_requested: bool,
+    /// Set while a native peer's own step/continue mechanism has a
+    /// `cpclib/basicStep` in flight, cleared centrally in `report_stopped`
+    /// alongside `pause_requested`.
+    ///
+    /// `cpclib/basicStep`'s own internal mechanism resumes the machine and
+    /// re-pauses it - and fires the *same* `basic_bp` SSE event as a side
+    /// effect of that, on *every* call, whether or not the line it lands on
+    /// is one the user actually armed (confirmed directly: injecting a
+    /// program and stepping through it live showed `basic_bp` firing once
+    /// per step, addresses matching exactly, entirely independent of what
+    /// was armed). A live session showed the cost of not knowing that: every
+    /// step this session's own Rust-driven loop takes - one `Continue`
+    /// click, dozens of statements - reached the generic unsolicited
+    /// `stopped`/`continued` handling too, which cannot tell "our own step
+    /// just resumed and re-paused the machine, as designed" apart from "the
+    /// peer decided to stop or resume on its own" - and reported *both*, one
+    /// spurious stop/continue pair per internal step, on top of whatever the
+    /// loop's own tracked chain (`NativeStepDone`/`NativeStateAfterStep`/
+    /// `NativeContinueStep`/`NativeContinueState`) already reports correctly
+    /// on its own. The editor saw the debug session flicker between paused
+    /// and running continuously - exactly what it looked like happening.
+    /// This flag tells that generic handling "a Purpose-tracked chain is
+    /// already answering for this, stay quiet" - it does not suppress a
+    /// genuine unsolicited stop (a manual pause with nothing of ours in
+    /// flight, say), only the noise this session's own in-flight request
+    /// causes as a side effect of itself.
+    native_operation_pending: bool
 }
 
 impl<P: DapPeer> BasicSession<P> {
@@ -289,7 +316,8 @@ impl<P: DapPeer> BasicSession<P> {
             current_line: None,
             pending_variables: None,
             pending_workspace: None,
-            pause_requested: false
+            pause_requested: false,
+            native_operation_pending: false
         }
     }
 
@@ -478,6 +506,11 @@ impl<P: DapPeer> BasicSession<P> {
             return Ok(());
         }
         let purpose = if self.native_amspirit {
+            // See `native_operation_pending`'s own doc comment - this is a
+            // separate trigger site from the editor's own "continue" (the
+            // launch's first run, not requested through it), so it needs
+            // the same flag set here too.
+            self.native_operation_pending = true;
             Purpose::NativeContinueStep
         }
         else {
@@ -501,6 +534,13 @@ impl<P: DapPeer> BasicSession<P> {
                 Ok(vec![protocol::response(message, json!({}), seq)])
             },
             "continue" | "next" | "stepIn" | "stepOut" if self.native_amspirit => {
+                // See `native_operation_pending`'s own doc comment: every
+                // one of these makes `cpclib/basicStep` fire the same
+                // `basic_bp` SSE event as a side effect, and the generic
+                // unsolicited handling needs to know not to report that
+                // itself while this session's own tracked chain already
+                // will.
+                self.native_operation_pending = true;
                 if command == "continue" {
                     // AMSpiriT Lite's own `/api/basic_bp` cannot be trusted
                     // to decide this: a live session showed it reporting a
@@ -1138,6 +1178,20 @@ impl<P: DapPeer> BasicSession<P> {
         let kind = message.get("type").and_then(Value::as_str).unwrap_or_default();
         if kind == "event" {
             let event = message.get("event").and_then(Value::as_str).unwrap_or_default();
+            // See `native_operation_pending`'s own doc comment: this
+            // session's own step/continue loop makes the peer pause and
+            // resume as a normal, internal part of itself, and both are
+            // *also* visible here, unsolicited, on a native peer - reported
+            // live as the whole debug session appearing to flicker between
+            // paused and running continuously while a single `Continue`
+            // click's own loop was quietly working through dozens of
+            // statements underneath it. Neither is dropped outright (a
+            // manual pause with nothing of ours in flight still needs this
+            // path), only while this session's own tracked chain is already
+            // going to answer for it.
+            if self.native_amspirit && self.native_operation_pending {
+                return Vec::new();
+            }
             if event == "stopped" {
                 return self.on_z80_stopped();
             }
@@ -1165,13 +1219,15 @@ impl<P: DapPeer> BasicSession<P> {
         Vec::new()
     }
 
-    /// The peer just paused. On the generic path this is the one shared Z80
-    /// breakpoint firing - not necessarily a line the user actually wants
-    /// to stop at, which is only known once the current line has been read
-    /// and compared. On a peer with native BASIC debugging, the peer only
-    /// ever pauses on a real match (a breakpoint it was actually told
-    /// about, or a manual Pause), so there is nothing to filter - just
-    /// somewhere to read.
+    /// The peer just paused, with nothing of this session's own already
+    /// in flight to account for it (`on_emulator_message`'s own caller
+    /// already filtered out the case where there is - see
+    /// `native_operation_pending`'s doc comment). On the generic path this
+    /// is the one shared Z80 breakpoint firing - not necessarily a line the
+    /// user actually wants to stop at, which is only known once the current
+    /// line has been read and compared. On a native peer, reaching here
+    /// unfiltered means either a real armed breakpoint or a manual pause -
+    /// nothing left to distinguish beyond reading where it landed.
     fn on_z80_stopped(&mut self) -> Vec<Value> {
         let sent = if self.native_amspirit {
             self.send_own("cpclib/basicState", json!({}), Purpose::NativeBasicState)
@@ -1423,6 +1479,11 @@ impl<P: DapPeer> BasicSession<P> {
         // pause left set past it would fire on the next unrelated `continue`
         // that was never asked to pause at all.
         self.pause_requested = false;
+        // Whatever native operation was in flight is answered too - this is
+        // the one place every Purpose-tracked native chain converges on a
+        // real, editor-visible stop, so it is the one place safe to say the
+        // generic unsolicited handling can stop staying quiet.
+        self.native_operation_pending = false;
         let seq = self.next_seq();
         let mut out = vec![protocol::event(
             "stopped",
@@ -1795,6 +1856,70 @@ mod tests {
         assert_eq!(events.len(), 1, "{events:?}");
         assert_eq!(events[0]["event"], "continued");
         assert_eq!(events[0]["body"]["allThreadsContinued"], true);
+    }
+
+    /// Regression test, reported live: the whole debug session appeared to
+    /// flicker continuously between paused and running during a single
+    /// `Continue` click. `cpclib/basicStep`'s own internal mechanism (which
+    /// this session's own Rust-driven loop calls once per statement) fires
+    /// the same unsolicited `stopped`/`continued` events as a side effect of
+    /// every call, whether or not the statement it lands on is one the user
+    /// armed - and both of those unsolicited events used to reach the editor
+    /// on top of whatever the loop's own tracked chain already reported,
+    /// once per statement stepped.
+    #[test]
+    fn unsolicited_stopped_and_continued_are_suppressed_while_a_native_operation_is_in_flight() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicStep");
+
+        // The step loop's own cpclib/basicStep is now in flight - an
+        // unsolicited pair arriving before it answers must not reach the
+        // editor at all.
+        let stopped = session.on_emulator_message(&json!({
+            "type": "event",
+            "event": "stopped",
+            "body": {}
+        }));
+        assert!(stopped.is_empty(), "{stopped:?}");
+        let continued = session.on_emulator_message(&json!({
+            "type": "event",
+            "event": "continued",
+            "body": { "threadId": 1, "allThreadsContinued": true }
+        }));
+        assert!(continued.is_empty(), "{continued:?}");
+
+        // The loop's own tracked chain still works once it actually answers.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+
+        // The stop cleared the flag: an unsolicited event now (nothing of
+        // this session's own in flight) reaches the editor again.
+        let continued = session.on_emulator_message(&json!({
+            "type": "event",
+            "event": "continued",
+            "body": { "threadId": 1, "allThreadsContinued": true }
+        }));
+        assert_eq!(continued.len(), 1, "{continued:?}");
     }
 
     /// Regression test: AMSpiriT Lite's own web UI - confirmed live to get
