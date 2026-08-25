@@ -322,7 +322,25 @@ pub struct BasicSession<P: DapPeer> {
     /// genuine unsolicited stop (a manual pause with nothing of ours in
     /// flight, say), only the noise this session's own in-flight request
     /// causes as a side effect of itself.
-    native_operation_pending: bool
+    native_operation_pending: bool,
+    /// Set alongside `native_operation_pending` at every one of the same
+    /// sites, but on a longer clock: `native_operation_pending` clears the
+    /// moment *this session's own* tracked chain reports a stop
+    /// (`report_stopped`), while this stays set straight through that and
+    /// only clears at the next resume. Needed because the emulator does not
+    /// stop signalling once: reported live, a single real pause produced
+    /// three separate `stopped` events reaching the editor as three
+    /// separate "unwanted breakpoints" for one actual stop - our own tracked
+    /// chain answers the first one and clears `native_operation_pending`
+    /// right there, but the straggler `basic_bp`/`stopped` events the
+    /// emulator keeps sending for that same pause (its own `pause` SSE
+    /// event, `basic_bp`'s own side effect, sometimes both) arrive in
+    /// *later* poll cycles, by which point nothing was suppressing them any
+    /// more and each got read and reported as if it were a brand new stop.
+    /// The editor already knows the machine is stopped once this is set -
+    /// nothing unsolicited it hears before the next resume is new
+    /// information.
+    native_already_stopped: bool
 }
 
 impl<P: DapPeer> BasicSession<P> {
@@ -359,7 +377,8 @@ impl<P: DapPeer> BasicSession<P> {
             pending_variables: None,
             pending_workspace: None,
             pause_requested: false,
-            native_operation_pending: false
+            native_operation_pending: false,
+            native_already_stopped: false
         }
     }
 
@@ -583,8 +602,15 @@ impl<P: DapPeer> BasicSession<P> {
             // See `native_operation_pending`'s own doc comment - this is a
             // separate trigger site from the editor's own "continue" (the
             // launch's first run, not requested through it), so it needs
-            // the same flag set here too.
+            // the same flag set here too. `native_already_stopped` has
+            // nothing to clear yet at this specific site (nothing has been
+            // reported stopped before the very first run) but is reset here
+            // anyway for the same reason `resuming_as`/`pause_requested` are
+            // reset at every resume site: this being the one that is ever
+            // skipped is how a stale `true` survives to cause the next
+            // straggler to be dropped.
             self.native_operation_pending = true;
+            self.native_already_stopped = false;
             Purpose::NativeAwaitRun
         }
         else {
@@ -613,8 +639,11 @@ impl<P: DapPeer> BasicSession<P> {
                 // `basic_bp` SSE event as a side effect, and the generic
                 // unsolicited handling needs to know not to report that
                 // itself while this session's own tracked chain already
-                // will.
+                // will. `native_already_stopped` clears here too - see its
+                // own doc comment: the machine is about to actually resume,
+                // so anything unsolicited from here on is new again.
                 self.native_operation_pending = true;
+                self.native_already_stopped = false;
                 if command == "continue" {
                     // AMSpiriT Lite's own `/api/basic_bp` cannot be trusted
                     // to decide this: a live session showed it reporting a
@@ -1392,6 +1421,13 @@ impl<P: DapPeer> BasicSession<P> {
                 return Vec::new();
             }
             if event == "stopped" {
+                // The editor already knows the machine is stopped - see
+                // `native_already_stopped`'s own doc comment for why the
+                // emulator alone does not stop saying so just because this
+                // session's own tracked chain already reported it once.
+                if self.native_amspirit && self.native_already_stopped {
+                    return Vec::new();
+                }
                 return self.on_z80_stopped();
             }
             if event == "continued" {
@@ -1401,6 +1437,9 @@ impl<P: DapPeer> BasicSession<P> {
                 // with nothing forwarding it the editor never found out and
                 // sat showing "paused" while the program was actually
                 // running again). Forward it as-is rather than dropping it.
+                // The machine is not stopped any more either way, so a
+                // `stopped` seen after this is new again, not a straggler.
+                self.native_already_stopped = false;
                 let seq = self.next_seq();
                 return vec![protocol::event(
                     "continued",
@@ -1463,6 +1502,21 @@ impl<P: DapPeer> BasicSession<P> {
     /// comparison is not trustworthy even scoped to one line, and
     /// `native_listing`'s for how position sidesteps that entirely when it
     /// is available.
+    ///
+    /// `stmt_addr` itself is not always trustworthy either: reported live
+    /// (and directly reproduced against a real instance), a `basicState`
+    /// read taken right after a fresh `pause` can answer with a `stmt_addr`
+    /// nowhere near this program at all (`63`, once, against a program
+    /// starting at `368`) - stale bookkeeping the pause has not caught up
+    /// on yet, not a real statement address. Trusting it anyway silently
+    /// misattributed the highlight to the *first* statement on the line
+    /// (the floor search in `statement_position_in_line` finds nothing at
+    /// or below a too-small address and falls back to position `0`) -
+    /// reported live as "the right line is selected but not the right
+    /// token." Anything outside this program's own address range is
+    /// rejected instead: `current_statement_column` is left as it was
+    /// (whole-line highlight, via `report_stopped`'s own fallback) rather
+    /// than actively pointing at the wrong token.
     fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
         let body = message.get("body")?;
         let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
@@ -1470,8 +1524,13 @@ impl<P: DapPeer> BasicSession<P> {
             return None;
         }
         self.current_line = Some(line);
-        if let Some(address) = body.get("stmt_addr").and_then(Value::as_u64) {
-            let address = address as u16;
+        let program_range = self.program_start..self.program_start.wrapping_add(self.program_len);
+        if let Some(address) = body
+            .get("stmt_addr")
+            .and_then(Value::as_u64)
+            .map(|a| a as u16)
+            .filter(|address| program_range.contains(address))
+        {
             self.current_statement_address = Some(address);
             if let Some(source_line) = self.line_index.iter().find(|(l, _)| *l == line).map(|(_, i)| *i) {
                 let position = self.statement_position_in_line(line, source_line, address);
@@ -1681,8 +1740,13 @@ impl<P: DapPeer> BasicSession<P> {
         // Whatever native operation was in flight is answered too - this is
         // the one place every Purpose-tracked native chain converges on a
         // real, editor-visible stop, so it is the one place safe to say the
-        // generic unsolicited handling can stop staying quiet.
+        // generic unsolicited handling can stop staying quiet about *this*
+        // in-flight request. It is not safe yet to stop staying quiet about
+        // stragglers this same stop is still causing - see
+        // `native_already_stopped`'s own doc comment - so that one is set,
+        // not cleared, here.
         self.native_operation_pending = false;
+        self.native_already_stopped = true;
         let seq = self.next_seq();
         let mut out = vec![protocol::event(
             "stopped",
@@ -2146,6 +2210,68 @@ mod tests {
         assert_eq!(continued.len(), 1, "{continued:?}");
     }
 
+    /// Regression test, reported live: one real pause produced three
+    /// separate `stopped` events reaching the editor - "2 or 3 unwanted
+    /// breakpoints at the beginning". `native_operation_pending` answers for
+    /// the *in-flight request*, cleared the moment this session's own
+    /// tracked chain reports the stop - but the emulator keeps sending
+    /// straggler `stopped` events for that same pause afterwards (its own
+    /// `pause` SSE event, `basic_bp`'s own side effect, sometimes both),
+    /// arriving once nothing was suppressing them any more. Every one of
+    /// them before the next resume must be dropped, not just the first.
+    #[test]
+    fn stragglers_after_an_already_reported_stop_are_dropped_until_the_next_resume() {
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+
+        // The loop's own tracked chain reports the one real stop.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events[0]["event"], "stopped");
+
+        // Two straggler `stopped` events for that exact same pause, arriving
+        // after the flag that suppressed the in-flight request has already
+        // cleared - neither is a new stop, both must be dropped.
+        for _ in 0..2 {
+            let stopped = session.on_emulator_message(&json!({
+                "type": "event",
+                "event": "stopped",
+                "body": {}
+            }));
+            assert!(stopped.is_empty(), "{stopped:?}");
+        }
+
+        // A genuinely new stop, after an actual resume, is not suppressed.
+        session
+            .on_editor_message(&json!({ "seq": 3, "command": "continue", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events[0]["event"], "stopped", "{events:?}");
+    }
+
     /// Regression test: AMSpiriT Lite's own web UI - confirmed live to get
     /// this right - resolves `stmt_addr` by range
     /// (`sa >= a && sa < e`, in its own `basicRenderListing`), not by
@@ -2198,6 +2324,42 @@ mod tests {
             assert_eq!(frame["column"], second_statement.column, "offset {offset}");
             assert_eq!(frame["endColumn"], second_statement.end_column, "offset {offset}");
         }
+    }
+
+    /// Regression test, reported live: a `basicState` read taken right after
+    /// a fresh `pause` answered with `stmt_addr: 63` against a program
+    /// starting at `368` - stale bookkeeping nowhere near this program,
+    /// still on `cur_linenum`'s own real, correct line. Trusted anyway, the
+    /// floor search in `statement_position_in_line` found nothing at or
+    /// below `63` and silently fell back to this line's *first* statement -
+    /// "the right line is selected but not the right token." An address
+    /// outside the program's own range must be rejected instead: no
+    /// specific-token highlight at all (the (1,1) "whole line" fallback)
+    /// beats a confidently wrong one.
+    #[test]
+    fn a_stmt_addr_outside_the_program_is_rejected_not_floored_to_the_first_statement() {
+        let source = "10 a=1:b=2\n";
+        let mut session = native_session(source);
+        complete_attach(&mut session);
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": 63 } })
+        );
+
+        let frame = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &frame[0]["body"]["stackFrames"][0];
+        assert_eq!(frame["column"], 1, "{frame:?}");
+        assert_eq!(frame["endColumn"], 1, "{frame:?}");
     }
 
     /// Regression test, reported live as a wrong token being highlighted: a
