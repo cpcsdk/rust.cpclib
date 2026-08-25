@@ -50,6 +50,22 @@ const WORKSPACE_REFERENCE: i64 = 1001;
 
 const THREAD_ID: i64 = 1;
 
+/// `prog_size` at or below this is AMSpiriT Lite's own empty-program
+/// baseline (confirmed live: exactly 2 bytes fresh off a cold boot) - both
+/// the injection-landing check and the mid-run corruption recovery treat
+/// dropping to or below it as "no program is actually loaded right now",
+/// never as a legitimately tiny program (the shortest real BASIC program
+/// still tokenises to more than this).
+const EMPTY_PROGRAM_BASELINE: u16 = 2;
+
+/// How many times `Purpose::NativeAwaitRunState` will re-inject the program
+/// to recover from the corruption its own doc comment describes before
+/// giving up and falling back to the pre-recovery behaviour (poll forever,
+/// stuck in direct mode). A peer that corrupts the injection on every single
+/// retry is not something re-injecting a third or fourth time is going to
+/// fix.
+const MAX_NATIVE_REINJECTION_ATTEMPTS: u32 = 3;
+
 #[derive(Debug, Clone)]
 enum Purpose {
     Plain,
@@ -390,7 +406,24 @@ pub struct BasicSession<P: DapPeer> {
     /// The editor already knows the machine is stopped once this is set -
     /// nothing unsolicited it hears before the next resume is new
     /// information.
-    native_already_stopped: bool
+    native_already_stopped: bool,
+    /// How many times this session has re-injected the program to recover
+    /// from the corruption `Purpose::NativeAwaitRunState` watches for -
+    /// live-observed on AMSpiriT Lite (never reproduced in isolation, only
+    /// in a real session under real host load): `prog_size` correctly shows
+    /// the injected program's real size for a number of polls while the
+    /// program runs, then, with no corresponding request from this crate
+    /// (confirmed via AMSpiriT's own `--debug-webapi` log: exactly one
+    /// `POST /api/basic` is ever sent, at injection time), spontaneously
+    /// reverts to the empty-program baseline (2 bytes, the same constant
+    /// `Purpose::NativeAwaitInjectionState` checks against) and
+    /// `cur_linenum` gets stuck in direct mode for the rest of the session.
+    /// Capped so a peer that corrupts on every single re-injection attempt
+    /// does not retry forever - after the cap, this session gives up
+    /// recovering and falls back to the pre-recovery behaviour (poll
+    /// forever, machine stuck in direct mode), just with the attempts logged
+    /// to the Debug Console instead of silently.
+    native_reinjection_attempts: u32
 }
 
 impl<P: DapPeer> BasicSession<P> {
@@ -431,7 +464,8 @@ impl<P: DapPeer> BasicSession<P> {
             pending_workspace: None,
             pause_requested: false,
             native_operation_pending: false,
-            native_already_stopped: false
+            native_already_stopped: false,
+            native_reinjection_attempts: 0
         }
     }
 
@@ -596,7 +630,7 @@ impl<P: DapPeer> BasicSession<P> {
         if self.peer.supports("cpclib/basicListing") {
             let _ = self.send_own("cpclib/basicListing", json!({}), Purpose::NativeListingFetched);
         }
-        else if let Err(problem) = self.start_if_ready() {
+        else if let Err(problem) = self.resume_after_injection_landed() {
             return vec![protocol::event(
                 "output",
                 json!({ "category": "stderr", "output": format!("{problem}\n") }),
@@ -604,6 +638,23 @@ impl<P: DapPeer> BasicSession<P> {
             )];
         }
         Vec::new()
+    }
+
+    /// What to do once injection is confirmed landed - covers both the
+    /// launch's very first injection (nothing started yet: `start_if_ready`)
+    /// and a *recovery* re-injection sent mid-session by
+    /// `Purpose::NativeAwaitRunState` after the corruption its own doc
+    /// comment describes (`self.started` is already `true` by then, so
+    /// `start_if_ready` itself would be a silent no-op - what actually needs
+    /// to happen instead is retyping `RUN`, exactly as the original launch
+    /// did).
+    fn resume_after_injection_landed(&mut self) -> std::io::Result<()> {
+        if self.started {
+            self.autotype_run()
+        }
+        else {
+            self.start_if_ready()
+        }
     }
 
     /// Types `RUN` into the emulator, on a peer that can - the emulator's
@@ -1399,6 +1450,69 @@ impl<P: DapPeer> BasicSession<P> {
                     let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunState);
                 },
                 Purpose::NativeAwaitRunState => {
+                    let prog_size = message
+                        .get("body")
+                        .and_then(|b| b.get("prog_size"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u16;
+                    // This handler is only ever reached after
+                    // `Purpose::NativeAwaitInjectionState` already confirmed
+                    // `prog_size` past the empty baseline once - so seeing it
+                    // back at or below the baseline here is never "hasn't
+                    // landed yet", it is the corruption
+                    // `native_reinjection_attempts`'s own doc comment
+                    // describes: live-observed, only in a real session, with
+                    // no request from this crate that could explain it
+                    // (confirmed against AMSpiriT's own `--debug-webapi` log:
+                    // exactly one `POST /api/basic` is ever sent, at
+                    // injection time). Re-inject and retype `RUN` rather than
+                    // leaving the session stuck polling a direct-mode prompt
+                    // forever with nothing in the Debug Console to explain
+                    // why.
+                    if prog_size <= EMPTY_PROGRAM_BASELINE {
+                        if self.native_reinjection_attempts < MAX_NATIVE_REINJECTION_ATTEMPTS {
+                            self.native_reinjection_attempts += 1;
+                            let note = format!(
+                                "AMSpiriT Lite's own program state reverted to \
+                                 empty mid-run (attempt {}/{}) - re-injecting and \
+                                 retyping RUN\n",
+                                self.native_reinjection_attempts, MAX_NATIVE_REINJECTION_ATTEMPTS
+                            );
+                            self.injection_landed = false;
+                            let _ = self.send_own(
+                                "cpclib/basicInject",
+                                json!({ "source": self.source_text }),
+                                Purpose::NativeInjected
+                            );
+                            return vec![protocol::event(
+                                "output",
+                                json!({ "category": "stderr", "output": note }),
+                                1
+                            )];
+                        }
+                        else if self.native_reinjection_attempts == MAX_NATIVE_REINJECTION_ATTEMPTS {
+                            // One-shot: move past the cap so this does not
+                            // re-warn on every subsequent poll while still
+                            // corrupted - falls through to the pre-recovery
+                            // behaviour (poll forever, stuck in direct mode)
+                            // from here on.
+                            self.native_reinjection_attempts += 1;
+                            return vec![protocol::event(
+                                "output",
+                                json!({
+                                    "category": "stderr",
+                                    "output": format!(
+                                        "AMSpiriT Lite's own program state kept \
+                                         reverting to empty after {MAX_NATIVE_REINJECTION_ATTEMPTS} \
+                                         re-injection attempts - giving up; the \
+                                         session will likely stay stuck in direct \
+                                         mode\n"
+                                    )
+                                }),
+                                1
+                            )];
+                        }
+                    }
                     let line = message
                         .get("body")
                         .and_then(|b| b.get("cur_linenum"))
@@ -1497,7 +1611,7 @@ impl<P: DapPeer> BasicSession<P> {
                     // `native_listing`/`statement_position_in_line` exist at
                     // all elsewhere in this file - nothing here should have
                     // trusted them to agree either.
-                    let landed = prog_size > 2;
+                    let landed = prog_size > EMPTY_PROGRAM_BASELINE;
                     if !landed {
                         std::thread::sleep(std::time::Duration::from_millis(30));
                         let _ = self.send_own(
@@ -1517,7 +1631,7 @@ impl<P: DapPeer> BasicSession<P> {
                 },
                 Purpose::NativeListingFetched => {
                     self.apply_native_listing(message);
-                    if let Err(problem) = self.start_if_ready() {
+                    if let Err(problem) = self.resume_after_injection_landed() {
                         return vec![protocol::event(
                             "output",
                             json!({ "category": "stderr", "output": format!("{problem}\n") }),
@@ -3325,14 +3439,18 @@ mod tests {
         // exactly what used to stop RUN from ever registering.
         for _ in 0..2 {
             let seq = last_sent_seq(&mut session);
-            let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 65535 } }));
+            let events = answer(
+                &mut session,
+                seq,
+                json!({ "body": { "cur_linenum": 65535, "prog_size": 20 } })
+            );
             assert!(events.is_empty(), "{events:?}");
             assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
         }
 
         // A real line at last: stop free-running before doing anything else.
         let seq = last_sent_seq(&mut session);
-        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20 } }));
+        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20, "prog_size": 20 } }));
         assert!(events.is_empty(), "{events:?}");
         assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
 
@@ -3353,6 +3471,86 @@ mod tests {
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    #[test]
+    /// Regression test for the corruption `native_reinjection_attempts`'s own
+    /// doc comment describes: `prog_size` reverting to the empty baseline
+    /// mid-poll, well after injection was already confirmed landed once.
+    /// Live-observed only against a real AMSpiriT Lite instance under real
+    /// host load, never reproduced in isolation - this test models the
+    /// signature (the observable symptom over the wire), not the emulator's
+    /// own internal cause, which is unknown. Confirms the session recovers
+    /// by re-injecting and retyping `RUN` instead of polling a direct-mode
+    /// prompt forever with nothing to explain why.
+    fn prog_size_reverting_mid_poll_triggers_a_reinjection_and_retype() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/autotype"
+            ]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        let landed_seq = last_sent_seq(&mut session);
+        answer(&mut session, landed_seq, json!({ "body": { "prog_size": 20 } }));
+
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+        let autotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, autotype_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // The poll sees `prog_size` back at the empty baseline, despite
+        // injection already having been confirmed landed once - the
+        // corruption signature. No stop is reported; the session quietly
+        // re-injects instead.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 65535, "prog_size": 2 } })
+        );
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["event"], "output");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+
+        // The recovery re-injection lands, confirmed the same way the launch
+        // itself confirms it.
+        let reinject_seq = last_sent_seq(&mut session);
+        answer(&mut session, reinject_seq, json!({ "success": true }));
+        let relanded_seq = last_sent_seq(&mut session);
+        answer(&mut session, relanded_seq, json!({ "body": { "prog_size": 20 } }));
+
+        // Unlike the very first landing, `self.started` is already `true` at
+        // this point - `start_if_ready` would be a silent no-op, so this
+        // must retype `RUN` directly instead.
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/autotype");
+        let reautotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, reautotype_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // From here on, a clean run proceeds exactly like any other.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "prog_size": 20 } })
+        );
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
     }
 
     /// Regression test, reported live: `pause` is itself asynchronous - the
@@ -3401,7 +3599,7 @@ mod tests {
         // The poll sees a real line (10, no breakpoint on it) and asks to
         // pause.
         let seq = last_sent_seq(&mut session);
-        answer(&mut session, seq, json!({ "body": { "cur_linenum": 10 } }));
+        answer(&mut session, seq, json!({ "body": { "cur_linenum": 10, "prog_size": 20 } }));
         assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
 
         // By the time the pause actually lands, the machine has moved on to

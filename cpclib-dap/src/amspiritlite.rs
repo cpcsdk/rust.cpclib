@@ -823,6 +823,18 @@ where
         .arg("--web-server")
         .arg("--web-port")
         .arg(port.to_string())
+        // TEMPORARY diagnostic, not meant to stay: every reproduction
+        // attempt against this same launch path, driven by hand at the
+        // exact same request cadence/content/sequence a real session uses,
+        // succeeds cleanly - the corruption a real session hits (prog_size
+        // silently reverting to the empty-program baseline right as the
+        // program is running) has not been reproducible outside the real
+        // session. This asks the emulator itself to log every API call it
+        // actually receives, from its own side, to see what a real session
+        // sends that no manual reproduction attempt has captured yet.
+        .arg("--debug-webapi")
+        .arg("--save-log")
+        .arg("/tmp/amspiritlite-debug.log")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
