@@ -1216,11 +1216,27 @@ impl<P: DapPeer> BasicSession<P> {
                         .map(|n| n as u16);
                     match line {
                         // Still direct mode: RUN hasn't reached the
-                        // interpreter yet. Poll again immediately - no
-                        // `basicStep` here, see `autotype_run`'s doc comment
-                        // for why stepping this window is what breaks
-                        // autotype in the first place.
+                        // interpreter yet. No `basicStep` here, see
+                        // `autotype_run`'s doc comment for why stepping this
+                        // window is what breaks autotype in the first place
+                        // - but a bare throttled sleep before polling again
+                        // instead of firing back to back: reported live,
+                        // polling at the request rate `perform`'s own
+                        // one-connection-per-call design allowed (every
+                        // request opens and tears down a fresh TCP
+                        // connection - hundreds of these in a couple of
+                        // seconds) reproduced the exact keyboard/rendering
+                        // corruption this whole poll-not-step design exists
+                        // to avoid, just from a different cause: connection
+                        // churn competing with the emulator's own
+                        // single-threaded frame/keyboard-scan loop for CPU
+                        // time, not pause/resume cycling. Paced at roughly
+                        // the same ballpark as the emulator's own `frame`
+                        // SSE heartbeat (ten times a second, see
+                        // `amspiritlite.rs`), which it already sustains
+                        // without trouble.
                         None | Some(0xffff) => {
+                            std::thread::sleep(std::time::Duration::from_millis(30));
                             let _ = self.send_own(
                                 "cpclib/basicState",
                                 json!({}),
