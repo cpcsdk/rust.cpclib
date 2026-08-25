@@ -1480,13 +1480,24 @@ impl<P: DapPeer> BasicSession<P> {
                         .and_then(Value::as_u64)
                         .unwrap_or(0) as u16;
                     // Confirmed live: a fresh boot's own empty-program
-                    // baseline is 2 bytes - moving past that, *and* roughly
-                    // matching this session's own tokenised length (allowing
-                    // a few bytes either side, see `program_len`'s own field
-                    // doc for why the two tokenisers do not always agree
-                    // exactly), is what actually confirms the write landed,
-                    // not merely that the emulator acknowledged it.
-                    let landed = prog_size > 2 && prog_size.saturating_add(4) >= self.program_len;
+                    // baseline is 2 bytes - moving past that is what
+                    // actually confirms the write landed, not merely that
+                    // the emulator acknowledged it. Deliberately *not*
+                    // compared against this session's own tokenised length
+                    // (`program_len`) any more - tried first, and reported
+                    // live as an even worse hang than the bug this whole
+                    // chain exists to fix: for the real mandelbrot.bas,
+                    // AMSpiriT Lite's own tokeniser lands on `prog_size: 508`
+                    // while this session's own tokeniser computes `516` for
+                    // the identical source, an 8-byte gap - comfortably
+                    // outside a few bytes' tolerance, so the poll never once
+                    // saw "landed" and spun forever even though the program
+                    // had genuinely, correctly loaded. The two tokenisers
+                    // disagreeing on byte count is exactly why
+                    // `native_listing`/`statement_position_in_line` exist at
+                    // all elsewhere in this file - nothing here should have
+                    // trusted them to agree either.
+                    let landed = prog_size > 2;
                     if !landed {
                         std::thread::sleep(std::time::Duration::from_millis(30));
                         let _ = self.send_own(
