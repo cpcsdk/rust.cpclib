@@ -231,6 +231,14 @@ pub fn call_for(request: &Value) -> Option<Call> {
         // readMemory round trips and a manual decode for on the generic
         // path (see `basic.rs`).
         "cpclib/basicState" => Call::get("/api/basic_state"),
+        // The program decoded into lines and statements, each carrying its
+        // own {addr,end} - the same tokeniser that produces stmt_addr, so
+        // there is nothing here for this session's own independent
+        // tokeniser to drift against (see `apply_native_basic_state`'s own
+        // doc comment for why that drift is a real, reproduced bug and not
+        // a hypothetical one). `GET /api/doc/basic_listing` confirms this
+        // shape as of 1.14.3.
+        "cpclib/basicListing" => Call::get("/api/basic_listing"),
         // Steps to the next statement (mode=stmt, the default) or the next
         // *line* (mode=line) - pausing first if the machine is still
         // running. The native equivalent of BasicSession's own
@@ -1558,6 +1566,7 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
                 | "cpclib/basicSetBreakpoints"
                 | "cpclib/basicState"
                 | "cpclib/basicStep"
+                | "cpclib/basicListing"
                 | "cpclib/memmap"
                 | "cpclib/crtc"
                 | "cpclib/ga"
@@ -2572,6 +2581,14 @@ mod tests {
         let call = call_for(&request("cpclib/basicState", json!({}))).unwrap();
         assert_eq!(call.method, Method::Get);
         assert_eq!(call.path, "/api/basic_state");
+        assert!(call.query.is_empty());
+    }
+
+    #[test]
+    fn basic_listing_is_a_plain_get() {
+        let call = call_for(&request("cpclib/basicListing", json!({}))).unwrap();
+        assert_eq!(call.method, Method::Get);
+        assert_eq!(call.path, "/api/basic_listing");
         assert!(call.query.is_empty());
     }
 

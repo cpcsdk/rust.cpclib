@@ -87,9 +87,11 @@ enum Purpose {
     /// The `cpclib/basicState` read [`Purpose::NativeStepDone`] itself
     /// triggers, to learn where the completed step actually landed.
     NativeStateAfterStep,
-    /// `Continue` on a native peer: `cpclib/basicStep` answering one
-    /// statement of the loop `resume` drives itself - see its own doc
-    /// comment for why `Continue` does not just trust `/api/basic_bp`.
+    /// `Continue` on a native peer, and the launch's own first run
+    /// (`autotype_run`) alike: `cpclib/basicStep` answering one statement
+    /// of the loop that drives either - see `cpclib/basicSetBreakpoints`'s
+    /// own doc comment for why neither trusts `/api/basic_bp` to decide
+    /// when to stop.
     NativeContinueStep,
     /// The `cpclib/basicState` read [`Purpose::NativeContinueStep`] itself
     /// triggers, to decide whether this statement is a breakpoint, a
@@ -105,7 +107,16 @@ enum Purpose {
     /// [`Purpose::NativeBasicState`] uses for a stop, but read here purely
     /// for its workspace fields (`vartop`/`arrend`/`var_size`/`basic_ver`),
     /// not to decide whether to report a stop at all.
-    NativeWorkspaceInfo
+    NativeWorkspaceInfo,
+    /// `cpclib/basicInject` answering at attach time, on a native peer.
+    /// `cpclib/basicListing` is fetched next if the peer offers it (see
+    /// [`Purpose::NativeListingFetched`]); either way, `start_if_ready` is
+    /// only called once this is known, not fired blind alongside it.
+    NativeInjected,
+    /// `cpclib/basicListing`, fetched once right after injection on a peer
+    /// that supports it - decoded into `native_listing`, then
+    /// `start_if_ready` runs.
+    NativeListingFetched
 }
 
 #[derive(Debug, Clone)]
@@ -169,6 +180,25 @@ pub struct BasicSession<P: DapPeer> {
     /// stop on a multi-statement line point at the one statement that
     /// actually ran rather than the line's first token every time.
     statement_index: Vec<basic::StatementPosition>,
+    /// Each BASIC line's own statements, in address order, as AMSpiriT
+    /// Lite's own tokeniser laid them out - `(addr, end)` per statement,
+    /// straight from `GET /api/basic_listing` (`cpclib/basicListing`),
+    /// fetched once after injection on a peer that supports it. `None` on a
+    /// peer without it (nothing to fall back to but `statement_index`'s own
+    /// address-based guess), or before the fetch answers.
+    ///
+    /// Exists because `statement_index` - this session's *own*, independent
+    /// tokeniser - does not agree with AMSpiriT Lite's on byte addresses: a
+    /// live session showed the drift compounding within a single
+    /// multi-statement line, misattributing a later statement's `stmt_addr`
+    /// to an earlier one every time (see `apply_native_basic_state`'s doc
+    /// comment). This is addressed by position, not address: the *n*th
+    /// entry here for a line and the *n*th `statement_index` entry for the
+    /// same line are the same statement, whichever addresses either
+    /// tokeniser happened to give it - matching by index sidesteps needing
+    /// the two to agree on bytes at all, only on how many statements a line
+    /// splits into, which just depends on counting colons.
+    native_listing: Option<HashMap<u16, Vec<(u16, u16)>>>,
     /// The current statement's source column span, once known - `None`
     /// before the first stop, or when the current statement address does
     /// not appear in `statement_index` (should not happen for a line this
@@ -244,6 +274,7 @@ impl<P: DapPeer> BasicSession<P> {
             program_start,
             program_len: program_bytes.len() as u16,
             statement_index,
+            native_listing: None,
             current_statement_column: None,
             current_statement_address: None,
             breakpoints: Vec::new(),
@@ -323,6 +354,14 @@ impl<P: DapPeer> BasicSession<P> {
 
     /// Arms the one breakpoint this whole session ever needs, and starts
     /// the program if the editor has already finished configuring.
+    ///
+    /// On a native peer, `start_if_ready` is not called here directly - it
+    /// waits for injection to answer (and, on a peer that also offers it,
+    /// for `cpclib/basicListing` too) so the very first run already has
+    /// `native_listing` in place, the same as any later one. Injection's
+    /// own request is otherwise a plain, synchronous "tokenise and place
+    /// this" - nothing here needs the fire-and-forget timing the generic
+    /// path's own arm-then-start still uses.
     fn on_attached(&mut self) -> std::io::Result<()> {
         self.attached = true;
         self.native_amspirit = self.peer.supports("cpclib/basicState");
@@ -338,16 +377,15 @@ impl<P: DapPeer> BasicSession<P> {
             self.send_own(
                 "cpclib/basicInject",
                 json!({ "source": self.source_text }),
-                Purpose::Plain
+                Purpose::NativeInjected
             )?;
+            return Ok(());
         }
-        else {
-            self.send_own(
-                "setInstructionBreakpoints",
-                json!({ "breakpoints": [{ "instructionReference": address_reference(STATEMENT_BREAKPOINT_TARGET as u32) }] }),
-                Purpose::BreakpointArmed
-            )?;
-        }
+        self.send_own(
+            "setInstructionBreakpoints",
+            json!({ "breakpoints": [{ "instructionReference": address_reference(STATEMENT_BREAKPOINT_TARGET as u32) }] }),
+            Purpose::BreakpointArmed
+        )?;
         self.start_if_ready()
     }
 
@@ -421,11 +459,31 @@ impl<P: DapPeer> BasicSession<P> {
     /// flow's own notice (`lib.rs`) covers that case by telling the user to
     /// type it themselves, checked against this same `supports()` call so
     /// the two do not disagree.
+    ///
+    /// On a native peer, typing `RUN` alone would leave the machine running
+    /// freely from here on, trusting `/api/basic_bp` to catch a breakpoint -
+    /// the exact mechanism `cpclib/basicSetBreakpoints`'s own doc comment
+    /// documents as unreliable, reproduced live: a breakpoint set *before*
+    /// this very first run went uncaught, the program simply finished, and
+    /// only a later manual pause (on an unrelated line) ever stopped
+    /// anything. The Rust-driven `cpclib/basicStep` loop an editor-requested
+    /// `continue` already drives (the native `"continue"` arm in
+    /// `on_editor_message`) exists for exactly this - it was just never
+    /// reached by the launch's own first run, which resumed the machine
+    /// before that loop had anything to do with it. Once the keystrokes are
+    /// queued, start that same loop immediately instead of leaving the
+    /// machine to run unwatched.
     fn autotype_run(&mut self) -> std::io::Result<()> {
         if !self.peer.supports("cpclib/autotype") {
             return Ok(());
         }
-        self.send_own("cpclib/autotype", json!({ "text": "RUN\n" }), Purpose::Plain)
+        let purpose = if self.native_amspirit {
+            Purpose::NativeContinueStep
+        }
+        else {
+            Purpose::Plain
+        };
+        self.send_own("cpclib/autotype", json!({ "text": "RUN\n" }), purpose)
     }
 
     pub fn on_editor_message(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
@@ -1018,6 +1076,24 @@ impl<P: DapPeer> BasicSession<P> {
                             );
                             Vec::new()
                         },
+                        // Direct mode. Reached from the very first resume,
+                        // this loop is *typing* RUN, not running the program
+                        // yet - `cur_linenum` stays direct-mode for the few
+                        // steps it takes the typed keystrokes to actually
+                        // reach the interpreter, exactly the way the generic
+                        // path's own noise-stop fix already distinguishes
+                        // (`current_line.is_some()`: has a real line ever
+                        // been seen this session). Reported only once one
+                        // has - landing back in direct mode with a real line
+                        // already behind it is the program genuinely ending.
+                        None if self.current_line.is_none() => {
+                            let _ = self.send_own(
+                                "cpclib/basicStep",
+                                json!({ "mode": "stmt" }),
+                                Purpose::NativeContinueStep
+                            );
+                            Vec::new()
+                        },
                         None => {
                             self.resuming_as = None;
                             self.report_stopped("entry")
@@ -1031,6 +1107,29 @@ impl<P: DapPeer> BasicSession<P> {
                 },
                 Purpose::NativeWorkspaceInfo => {
                     return self.complete_workspace_native(message).unwrap_or_default();
+                },
+                Purpose::NativeInjected => {
+                    if self.peer.supports("cpclib/basicListing") {
+                        let _ =
+                            self.send_own("cpclib/basicListing", json!({}), Purpose::NativeListingFetched);
+                    }
+                    else if let Err(problem) = self.start_if_ready() {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
+                },
+                Purpose::NativeListingFetched => {
+                    self.apply_native_listing(message);
+                    if let Err(problem) = self.start_if_ready() {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
                 }
             }
             return Vec::new();
@@ -1102,27 +1201,13 @@ impl<P: DapPeer> BasicSession<P> {
     /// caller decides what stop reason that means, since a breakpoint-
     /// triggered stop and a completed step report it differently.
     ///
-    /// `stmt_addr` is resolved by range within `cur_linenum`'s own
-    /// statements only, not by a bare floor search across the whole program.
-    ///
-    /// `statement_index` comes from this session's *own* tokeniser
-    /// (`build_statement_index`, run once at launch against the same
-    /// source), not from anything AMSpiriT Lite itself reports - and a live
-    /// session showed the two do not agree on addresses byte-for-byte: a
-    /// line's own first `stmt_addr` regularly arrived a handful of bytes
-    /// *below* this tokeniser's computed start for that same line (off by 6
-    /// for one line, 7 for the next - a small, growing drift, not a fixed
-    /// offset), while later statements *within* an already-reached line
-    /// lined up correctly. An unscoped floor search took that low address
-    /// as license to walk backward into the *previous* line's last
-    /// statement - a real bug, not just an imprecise column: the wrong
-    /// token, on the wrong line, highlighted as if it were the one running.
-    /// `cur_linenum` itself is not in question (it is the line number
-    /// stored directly in the tokenised program, not a computed address),
-    /// so scoping the search to its own statements - falling back to the
-    /// first one instead of ever crossing into another line - trades a
-    /// possible wrong statement for one that is at least never on the wrong
-    /// line.
+    /// `stmt_addr` is resolved to a *position* within `cur_linenum` - the
+    /// statement's index on the line, first/second/third - not directly to
+    /// an address, and that position is what actually picks the column: see
+    /// `statement_position_in_line`'s own doc comment for why an address
+    /// comparison is not trustworthy even scoped to one line, and
+    /// `native_listing`'s for how position sidesteps that entirely when it
+    /// is available.
     fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
         let body = message.get("body")?;
         let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
@@ -1134,24 +1219,93 @@ impl<P: DapPeer> BasicSession<P> {
             let address = address as u16;
             self.current_statement_address = Some(address);
             if let Some(source_line) = self.line_index.iter().find(|(l, _)| *l == line).map(|(_, i)| *i) {
-                let mut this_lines_statements =
-                    self.statement_index.iter().filter(|s| s.source_line == source_line);
-                // `statement_index` is built walking the tokenised program in
-                // address order, so within one line these are still in
-                // address order too: the last one at or before `address` is
-                // the statement whose range contains it, and the first one
-                // is the fallback when `address` lands before all of them.
-                let statement = this_lines_statements
-                    .clone()
-                    .filter(|s| s.address <= address)
-                    .last()
-                    .or_else(|| this_lines_statements.next());
+                let position = self.statement_position_in_line(line, source_line, address);
+                let statement = self
+                    .statement_index
+                    .iter()
+                    .filter(|s| s.source_line == source_line)
+                    .nth(position);
                 if let Some(statement) = statement {
                     self.current_statement_column = Some((statement.column, statement.end_column));
                 }
             }
         }
         Some(line)
+    }
+
+    /// Which statement of `line` (already resolved to its 0-based
+    /// `source_line` index into `statement_index`) contains `address` - a
+    /// *position* on the line (first, second, third...), not the address
+    /// itself.
+    ///
+    /// Prefers `native_listing`'s own `{addr,end}` ranges for `line` when
+    /// available: those come from AMSpiriT Lite's own tokeniser, the same
+    /// one that produced `address`, so there is nothing to disagree with -
+    /// matching by position rather than address only matters for lining
+    /// this session's own `statement_index` (a *different*, independent
+    /// tokeniser) up against it afterward.
+    ///
+    /// Without `native_listing`, falls back to a floor match against
+    /// `statement_index`'s own addresses directly - right most of the time,
+    /// but a live session showed it is not trustworthy even scoped to one
+    /// line: a later statement's `stmt_addr` can land *below* this
+    /// tokeniser's computed address for it (the two tokenisers' addresses
+    /// drift against each other, growing statement by statement, not just
+    /// line by line), silently misattributing it to an earlier statement on
+    /// the same line instead - the wrong token, still on the right line.
+    fn statement_position_in_line(&self, line: u16, source_line: usize, address: u16) -> usize {
+        if let Some(spans) = self.native_listing.as_ref().and_then(|listing| listing.get(&line)) {
+            return spans
+                .iter()
+                .enumerate()
+                .rev()
+                .find(|(_, (addr, _))| *addr <= address)
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+        }
+        self.statement_index
+            .iter()
+            .filter(|s| s.source_line == source_line)
+            .enumerate()
+            .filter(|(_, s)| s.address <= address)
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(0)
+    }
+
+    /// Decodes `cpclib/basicListing`'s body into `native_listing`. Absent or
+    /// malformed leaves `native_listing` at `None` - `statement_position_in_line`
+    /// already falls back cleanly, so a peer that answers this oddly costs
+    /// nothing beyond losing the improvement it would have offered.
+    fn apply_native_listing(&mut self, message: &Value) {
+        let Some(lines) = message
+            .get("body")
+            .and_then(|b| b.get("lines"))
+            .and_then(Value::as_array)
+        else {
+            return;
+        };
+        let mut listing = HashMap::new();
+        for line in lines {
+            let Some(num) = line.get("num").and_then(Value::as_u64) else {
+                continue;
+            };
+            let Some(stmts) = line.get("stmts").and_then(Value::as_array) else {
+                continue;
+            };
+            let spans: Vec<(u16, u16)> = stmts
+                .iter()
+                .filter_map(|s| {
+                    let addr = s.get("addr").and_then(Value::as_u64)? as u16;
+                    let end = s.get("end").and_then(Value::as_u64)? as u16;
+                    Some((addr, end))
+                })
+                .collect();
+            if !spans.is_empty() {
+                listing.insert(num as u16, spans);
+            }
+        }
+        self.native_listing = Some(listing);
     }
 
     fn on_line_pointer_read(&mut self, message: &Value) -> Vec<Value> {
@@ -1432,6 +1586,28 @@ mod tests {
                 "cpclib/basicState",
                 "cpclib/basicSetBreakpoints",
                 "cpclib/basicStep"
+            ]),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        )
+    }
+
+    /// Same as [`native_session`], but the peer also offers
+    /// `cpclib/basicListing` - for tests exercising `native_listing` itself,
+    /// kept separate so every other native test still covers the (still
+    /// supported) peer that does not have it.
+    fn native_session_with_listing(source: &str) -> BasicSession<RecordingPeer> {
+        let bytes = cpclib_basic::BasicProgram::parse(source)
+            .unwrap()
+            .as_bytes();
+        BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/basicListing"
             ]),
             PathBuf::from("test.bas"),
             source,
@@ -1724,6 +1900,85 @@ mod tests {
         assert_eq!(frame["line"], 2, "must stay on line 20, not spill back into line 10");
         assert_eq!(frame["column"], line_20_statement.column);
         assert_eq!(frame["endColumn"], line_20_statement.end_column);
+    }
+
+    /// The case `native_listing` exists for: even scoped to the right line,
+    /// an address-based floor search can still misattribute a later
+    /// statement to an earlier one once the two tokenisers' addresses have
+    /// drifted enough *within* that line - reported live as "the right line
+    /// is selected but not the right token". `native_listing`'s own
+    /// `{addr,end}` ranges come from the same tokeniser that produces
+    /// `stmt_addr`, so matching against them (by position, then translated
+    /// into this session's own `statement_index` at that same position)
+    /// sidesteps the drift entirely rather than working around it.
+    #[test]
+    fn a_native_stop_with_basic_listing_resolves_the_right_statement_despite_drift() {
+        let source = "10 a=1:b=2:c=3\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        assert_eq!(index.len(), 3, "{index:?}");
+        let second_statement = index[1].clone();
+        assert_ne!(
+            second_statement.column, index[0].column,
+            "the test fixture must actually exercise a distinct second statement"
+        );
+
+        let mut session = native_session_with_listing(source);
+        session.attach().unwrap();
+        let attach_seq = last_sent_seq(&mut session);
+        answer(&mut session, attach_seq, json!({ "success": true }));
+
+        // Injection's own answer triggers the basic_listing fetch, on a peer
+        // that offers it.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicListing");
+
+        // The second statement's own address, from AMSpiriT Lite's own
+        // tokeniser, deliberately *below* this session's own tokeniser's
+        // computed address for it - the drift a live session actually
+        // showed, but now with the authoritative range to resolve against.
+        let drifted_addr = second_statement.address.wrapping_sub(5);
+        let listing_seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            listing_seq,
+            json!({
+                "body": {
+                    "lines": [{
+                        "addr": 0,
+                        "num": 10,
+                        "stmts": [
+                            { "addr": 100, "end": drifted_addr, "colon": false, "text": "a=1", "vars": [] },
+                            { "addr": drifted_addr, "end": drifted_addr + 10, "colon": true, "text": "b=2", "vars": [] },
+                            { "addr": drifted_addr + 10, "end": drifted_addr + 20, "colon": true, "text": "c=3", "vars": [] }
+                        ]
+                    }]
+                }
+            })
+        );
+
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": drifted_addr } })
+        );
+
+        let frame = session
+            .on_editor_message(&json!({ "seq": 2, "command": "stackTrace", "arguments": {} }))
+            .unwrap();
+        let frame = &frame[0]["body"]["stackFrames"][0];
+        assert_eq!(
+            frame["column"], second_statement.column,
+            "must resolve to the second statement, not fall back to the first"
+        );
+        assert_eq!(frame["endColumn"], second_statement.end_column);
     }
 
     #[test]
@@ -2071,6 +2326,74 @@ mod tests {
         // Plain RecordingPeer claims no cpclib/autotype support - nothing
         // extra should have been sent for it to reject or misinterpret.
         assert_eq!(session.peer_mut().commands().len(), before);
+    }
+
+    /// Regression test, reported live: a breakpoint armed *before* launch
+    /// went uncaught on a native peer's very first run - the program simply
+    /// finished, and only an unrelated later manual pause ever stopped
+    /// anything. The launch's own first run resumed the machine and typed
+    /// RUN without ever engaging the Rust-driven step loop an
+    /// editor-requested `continue` already uses - this drives the same
+    /// chain (`autotype_run` -> `NativeContinueStep` -> `NativeContinueState`)
+    /// end to end, through the "still typing RUN" direct-mode steps a
+    /// launch actually has to get through before a real line ever shows up.
+    #[test]
+    fn a_breakpoint_armed_before_launch_is_caught_on_the_first_run() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/autotype"
+            ]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        // The bare `continue` that unfreezes the machine so RUN can be typed.
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/autotype");
+
+        // Autotype's own answer must now kick off the step loop, not stop
+        // here trusting /api/basic_bp.
+        let autotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, autotype_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // A couple of steps still typing RUN: direct mode, nothing reported.
+        for _ in 0..2 {
+            let seq = last_sent_seq(&mut session);
+            let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 65535 } }));
+            assert!(events.is_empty(), "{events:?}");
+            let seq = last_sent_seq(&mut session);
+            answer(&mut session, seq, json!({ "success": true }));
+        }
+
+        // Now the program is genuinely running: line 20, the armed one.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": 0 } })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
     }
 
     #[test]
