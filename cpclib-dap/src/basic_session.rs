@@ -133,11 +133,23 @@ enum Purpose {
     /// start caring about breakpoints/statements - see `autotype_run`.
     NativeAwaitRunState,
     /// The `pause` sent once [`Purpose::NativeAwaitRunState`] finally saw a
-    /// real line. Re-reads `cpclib/basicState` and feeds it through the same
-    /// decision [`Purpose::NativeContinueState`] uses, so a breakpoint that
-    /// happens to sit on this very first real line is still honored instead
-    /// of silently skipped.
-    NativeAwaitRunPaused
+    /// real line. Re-reads `cpclib/basicState` next
+    /// ([`Purpose::NativeAwaitRunSettled`]) to see where the (asynchronous,
+    /// not instant - confirmed live: it can still land several lines further
+    /// than the one that triggered it) pause actually landed.
+    NativeAwaitRunPaused,
+    /// The `cpclib/basicState` [`Purpose::NativeAwaitRunPaused`] re-reads
+    /// once actually paused. Reports a stop right here on whatever real line
+    /// this is - breakpoint if it happens to be one, entry otherwise -
+    /// rather than feeding it to [`Purpose::NativeContinueState`]'s own
+    /// "not a line I care about, keep stepping" logic: reusing that here
+    /// was tried and reproduced the exact same hang this whole chain exists
+    /// to avoid, live - a non-breakpoint line right after launch restarted
+    /// the very `cpclib/basicStep` loop `autotype_run`'s doc comment
+    /// documents as interfering with the machine, which then ran the
+    /// program right back into direct mode before ever reporting anything
+    /// sensible to the editor.
+    NativeAwaitRunSettled
 }
 
 #[derive(Debug, Clone)]
@@ -531,14 +543,29 @@ impl<P: DapPeer> BasicSession<P> {
     /// the same program reached its very first real line in well under a
     /// second. So this starts `Purpose::NativeAwaitRun` instead: poll
     /// `cpclib/basicState` alone, back to back, no `basicStep` in between,
-    /// until `cur_linenum` leaves direct mode, then pause and hand off to
-    /// the same breakpoint-checking `NativeContinueState` a `Continue` uses.
-    /// The real cost is precision: the program is not observed statement by
-    /// statement during this window the way a later `Continue` is, so a
-    /// breakpoint on a line reached very early (before the first poll
-    /// catches a real line at all) can still be run straight past - a
-    /// narrower version of the same problem this function's own launch fix
-    /// exists for, traded deliberately for not hanging the launch itself.
+    /// until `cur_linenum` leaves direct mode, then pause
+    /// (`Purpose::NativeAwaitRunPaused`) and report a stop right on whatever
+    /// real line the pause actually lands on
+    /// (`Purpose::NativeAwaitRunSettled`) - breakpoint if it is one, entry
+    /// otherwise. It does *not* hand off into `NativeContinueState`'s own
+    /// "keep stepping past lines I don't care about" loop: that was tried
+    /// too and reproduced the same hang one level down, live - `pause` is
+    /// itself asynchronous (confirmed live: the state read right after a
+    /// successful `pause` response can already be several lines past the
+    /// one the poll saw), so a non-breakpoint landing line would restart
+    /// exactly the `basicStep` cycling this function exists to avoid, and it
+    /// did, running the program straight back into direct mode before
+    /// anything sensible ever reached the editor. There is nothing to debug
+    /// yet at this point anyway (the user's own framing) - Continue/step
+    /// only need to start caring about breakpoints once the editor actually
+    /// asks for one, not during this handoff. The real cost is precision:
+    /// the program is not observed statement by statement during the poll
+    /// window the way a later `Continue` is, so a breakpoint on a line
+    /// reached very early (before the first poll catches a real line at
+    /// all, or between the poll and the pause actually landing) can still be
+    /// run straight past - a narrower version of the same problem this
+    /// function's own launch fix exists for, traded deliberately for not
+    /// hanging the launch itself.
     fn autotype_run(&mut self) -> std::io::Result<()> {
         if !self.peer.supports("cpclib/autotype") {
             return Ok(());
@@ -1212,7 +1239,15 @@ impl<P: DapPeer> BasicSession<P> {
                     }
                 },
                 Purpose::NativeAwaitRunPaused => {
-                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeContinueState);
+                    let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunSettled);
+                },
+                Purpose::NativeAwaitRunSettled => {
+                    return match self.apply_native_basic_state(message) {
+                        Some(line) if self.breakpoints.contains(&line) => {
+                            self.report_stopped("breakpoint")
+                        },
+                        _ => self.report_stopped("entry")
+                    };
                 },
                 Purpose::WorkspaceArraysStart => {
                     let bytes = Self::read_memory_bytes(message);
@@ -2530,12 +2565,12 @@ mod tests {
     /// Regression test, reported live: a breakpoint armed *before* launch
     /// went uncaught on a native peer's very first run - the program simply
     /// finished, and only an unrelated later manual pause ever stopped
-    /// anything. The launch's own first run resumed the machine and typed
-    /// RUN without ever engaging the Rust-driven step loop an
-    /// editor-requested `continue` already uses - this drives the same
-    /// chain (`autotype_run` -> `NativeContinueStep` -> `NativeContinueState`)
-    /// end to end, through the "still typing RUN" direct-mode steps a
-    /// launch actually has to get through before a real line ever shows up.
+    /// anything. Drives `autotype_run`'s own poll-then-pause chain
+    /// (`NativeAwaitRun` -> `NativeAwaitRunState` -> `NativeAwaitRunPaused`
+    /// -> `NativeAwaitRunSettled`) end to end, through the "still typing
+    /// RUN" direct-mode polls a launch actually has to get through before a
+    /// real line ever shows up, confirming the breakpoint set before launch
+    /// is honored right where the poll-and-pause lands.
     #[test]
     fn a_breakpoint_armed_before_launch_is_caught_on_the_first_run() {
         let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
@@ -2607,6 +2642,70 @@ mod tests {
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    /// Regression test, reported live: `pause` is itself asynchronous - the
+    /// state the poll loop saw right before sending it (a line with no
+    /// breakpoint on it) was already stale by the time the machine actually
+    /// stopped (landed on a different, later line instead). Feeding that into
+    /// `NativeContinueState`'s own "not a line I care about, keep stepping"
+    /// logic reproduced the exact hang this whole chain exists to avoid: it
+    /// restarted `cpclib/basicStep`, which ran the program straight back
+    /// into direct mode without ever reporting a sensible stop. This
+    /// confirms the fix - report a stop right where the pause landed,
+    /// breakpoint or not, with no `basicStep` sent at any point in the
+    /// chain.
+    #[test]
+    fn a_pause_after_run_lands_past_the_line_the_poll_saw_and_still_stops_cleanly() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep",
+                "cpclib/autotype"
+            ]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+
+        let continue_seq = last_sent_seq(&mut session);
+        answer(&mut session, continue_seq, json!({ "success": true }));
+        let autotype_seq = last_sent_seq(&mut session);
+        answer(&mut session, autotype_seq, json!({ "success": true }));
+
+        // The poll sees a real line (10, no breakpoint on it) and asks to
+        // pause.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "cur_linenum": 10 } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "pause");
+
+        // By the time the pause actually lands, the machine has moved on to
+        // a different, also non-breakpoint line - not the one that
+        // triggered the pause.
+        let pause_seq = last_sent_seq(&mut session);
+        answer(&mut session, pause_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, json!({ "body": { "cur_linenum": 20 } }));
+
+        // A stop is reported right here - no `cpclib/basicStep` sent at any
+        // point in this chain.
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "entry");
+        assert!(
+            !session.peer_mut().commands().contains(&"cpclib/basicStep".to_string()),
+            "{:?}",
+            session.peer_mut().commands()
+        );
     }
 
     #[test]
