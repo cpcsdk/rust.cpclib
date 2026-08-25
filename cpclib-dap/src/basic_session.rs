@@ -87,6 +87,17 @@ enum Purpose {
     /// The `cpclib/basicState` read [`Purpose::NativeStepDone`] itself
     /// triggers, to learn where the completed step actually landed.
     NativeStateAfterStep,
+    /// A second `cpclib/basicState` read, sent only when
+    /// [`Purpose::NativeStateAfterStep`]'s own answer looked stale - see
+    /// [`Purpose::NativeContinueStateRetry`]'s doc comment for the same
+    /// mechanism on the `Continue` loop. Reported live as the *last*
+    /// statement of a multi-statement line never getting highlighted while
+    /// single-stepping through one with "Step Into": stepping onto it
+    /// echoed the position from *before* that step (still the
+    /// second-to-last statement), and stepping again from there moved
+    /// straight past it to the next line, so the last statement's own
+    /// position was never the one actually shown.
+    NativeStateAfterStepRetry,
     /// `Continue` on a native peer, and the launch's own first run
     /// (`autotype_run`) alike: `cpclib/basicStep` answering one statement
     /// of the loop that drives either - see `cpclib/basicSetBreakpoints`'s
@@ -97,6 +108,13 @@ enum Purpose {
     /// triggers, to decide whether this statement is a breakpoint, a
     /// pending pause, or another one to step past.
     NativeContinueState,
+    /// A second `cpclib/basicState` read, sent only when
+    /// [`Purpose::NativeContinueState`]'s own answer looked stale (see its
+    /// doc comment) - decided the same way, but never retried a second time:
+    /// a real self-loop (`10 GOTO 10`) legitimately revisits the exact same
+    /// address on every step, and this is what stops that case from polling
+    /// forever mistaking it for staleness.
+    NativeContinueStateRetry,
     /// Reading [`crate::basic::PTR_ARRAYS_START`] for the Workspace scope,
     /// on a peer without native BASIC debugging - `PTR_VARIABLES_START`
     /// itself is not read at all: this session already knows it locally,
@@ -611,6 +629,23 @@ impl<P: DapPeer> BasicSession<P> {
             // straggler to be dropped.
             self.native_operation_pending = true;
             self.native_already_stopped = false;
+            // The freshly-loaded snapshot is captured at the Ready prompt,
+            // firmware already set up - `continue` here is a plain unpause,
+            // not a cold boot, so there is no boot sequence to wait out. But
+            // "the CPU is executing" (confirmed synchronously inside
+            // `continue`'s own `send`, see `wait_until_it_is_really_running`)
+            // is not the same guarantee as "the keyboard-scan interrupt has
+            // actually run at least once since" - reported live, and
+            // directly visible in a captured screenshot: characters typed
+            // this early landed as if the line editor had *already* been mid
+            // multi-key-scan (a bare digit or two, then `RUN"` with a stray
+            // quote, echoed exactly the way BASIC's own line editor echoes
+            // real keystrokes it received - not garbled screen memory, real
+            // input landing before the machine had settled long enough to
+            // scan it correctly). A short settle here, before the very first
+            // keystroke of the whole session, costs one launch's worth of
+            // latency to avoid it.
+            std::thread::sleep(std::time::Duration::from_millis(500));
             Purpose::NativeAwaitRun
         }
         else {
@@ -1239,18 +1274,29 @@ impl<P: DapPeer> BasicSession<P> {
                     );
                 },
                 Purpose::NativeStateAfterStep => {
-                    return match self.apply_native_basic_state(message) {
-                        Some(line) => {
-                            let reason = if self.breakpoints.contains(&line) {
-                                "breakpoint"
-                            }
-                            else {
-                                "step"
-                            };
-                            self.report_stopped(reason)
-                        },
-                        None => self.report_stopped("entry")
-                    };
+                    // Stale-read guard - see `Purpose::NativeStateAfterStepRetry`'s
+                    // own doc comment. Capped at exactly one retry for the
+                    // same reason the `Continue` loop's own version is: a
+                    // real self-loop (`10 GOTO 10`) legitimately revisits
+                    // the same address every step.
+                    let address_before_step = self.current_statement_address;
+                    let line = self.apply_native_basic_state(message);
+                    if line.is_some()
+                        && address_before_step.is_some()
+                        && self.current_statement_address == address_before_step
+                    {
+                        let _ = self.send_own(
+                            "cpclib/basicState",
+                            json!({}),
+                            Purpose::NativeStateAfterStepRetry
+                        );
+                        return Vec::new();
+                    }
+                    return self.decide_step_stop(line);
+                },
+                Purpose::NativeStateAfterStepRetry => {
+                    let line = self.apply_native_basic_state(message);
+                    return self.decide_step_stop(line);
                 },
                 Purpose::NativeContinueStep => {
                     // The peer has already paused and stepped by the time
@@ -1260,47 +1306,40 @@ impl<P: DapPeer> BasicSession<P> {
                     let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeContinueState);
                 },
                 Purpose::NativeContinueState => {
-                    return match self.apply_native_basic_state(message) {
-                        Some(line) if self.breakpoints.contains(&line) => {
-                            self.resuming_as = None;
-                            self.report_stopped("breakpoint")
-                        },
-                        Some(_) if self.pause_requested => {
-                            self.resuming_as = None;
-                            self.report_stopped("pause")
-                        },
-                        // Not a line the user cares about: keep stepping.
-                        Some(_) => {
-                            let _ = self.send_own(
-                                "cpclib/basicStep",
-                                json!({ "mode": "stmt" }),
-                                Purpose::NativeContinueStep
-                            );
-                            Vec::new()
-                        },
-                        // Direct mode. Reached from the very first resume,
-                        // this loop is *typing* RUN, not running the program
-                        // yet - `cur_linenum` stays direct-mode for the few
-                        // steps it takes the typed keystrokes to actually
-                        // reach the interpreter, exactly the way the generic
-                        // path's own noise-stop fix already distinguishes
-                        // (`current_line.is_some()`: has a real line ever
-                        // been seen this session). Reported only once one
-                        // has - landing back in direct mode with a real line
-                        // already behind it is the program genuinely ending.
-                        None if self.current_line.is_none() => {
-                            let _ = self.send_own(
-                                "cpclib/basicStep",
-                                json!({ "mode": "stmt" }),
-                                Purpose::NativeContinueStep
-                            );
-                            Vec::new()
-                        },
-                        None => {
-                            self.resuming_as = None;
-                            self.report_stopped("entry")
-                        }
-                    };
+                    // Stale-read guard, reported live: a `basicState` read
+                    // taken immediately after `basicStep` can still echo the
+                    // address from *before* the step - the emulator's own
+                    // `basic_bp` SSE event already named the real, later
+                    // line by the time this same read came back showing the
+                    // old one. Trusted anyway, a breakpoint got reported
+                    // twice for what was really only one stop: this step
+                    // landed on it, was reported, `continue` was clicked,
+                    // one step ran, and the stale read said the machine was
+                    // still sitting on the exact same statement it had just
+                    // left. One extra read, only when nothing moved, is
+                    // cheap; capped at exactly one retry
+                    // (`NativeContinueStateRetry` does not check again) so a
+                    // real self-loop (`10 GOTO 10`, which legitimately
+                    // revisits the same address every step) cannot turn this
+                    // into an infinite poll.
+                    let address_before_step = self.current_statement_address;
+                    let line = self.apply_native_basic_state(message);
+                    if line.is_some()
+                        && address_before_step.is_some()
+                        && self.current_statement_address == address_before_step
+                    {
+                        let _ = self.send_own(
+                            "cpclib/basicState",
+                            json!({}),
+                            Purpose::NativeContinueStateRetry
+                        );
+                        return Vec::new();
+                    }
+                    return self.decide_continue_stop(line);
+                },
+                Purpose::NativeContinueStateRetry => {
+                    let line = self.apply_native_basic_state(message);
+                    return self.decide_continue_stop(line);
                 },
                 Purpose::NativeAwaitRun => {
                     let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunState);
@@ -1545,6 +1584,69 @@ impl<P: DapPeer> BasicSession<P> {
             }
         }
         Some(line)
+    }
+
+    /// The "breakpoint, step, or entry" decision for a single explicit
+    /// `stepIn`/`next`/`stepOut`, shared between
+    /// [`Purpose::NativeStateAfterStep`] and
+    /// [`Purpose::NativeStateAfterStepRetry`] - `line` is whatever
+    /// `apply_native_basic_state` already decoded from the read either of
+    /// them is answering.
+    fn decide_step_stop(&mut self, line: Option<u16>) -> Vec<Value> {
+        match line {
+            Some(line) => {
+                let reason = if self.breakpoints.contains(&line) {
+                    "breakpoint"
+                }
+                else {
+                    "step"
+                };
+                self.report_stopped(reason)
+            },
+            None => self.report_stopped("entry")
+        }
+    }
+
+    /// The actual "breakpoint, pause, keep stepping, or entry" decision for
+    /// the native step loop, shared between [`Purpose::NativeContinueState`]
+    /// and [`Purpose::NativeContinueStateRetry`] - `line` is whatever
+    /// `apply_native_basic_state` already decoded from the read either of
+    /// them is answering.
+    fn decide_continue_stop(&mut self, line: Option<u16>) -> Vec<Value> {
+        match line {
+            Some(line) if self.breakpoints.contains(&line) => {
+                self.resuming_as = None;
+                self.report_stopped("breakpoint")
+            },
+            Some(_) if self.pause_requested => {
+                self.resuming_as = None;
+                self.report_stopped("pause")
+            },
+            // Not a line the user cares about: keep stepping.
+            Some(_) => {
+                let _ =
+                    self.send_own("cpclib/basicStep", json!({ "mode": "stmt" }), Purpose::NativeContinueStep);
+                Vec::new()
+            },
+            // Direct mode. Reached from the very first resume, this loop is
+            // *typing* RUN, not running the program yet - `cur_linenum`
+            // stays direct-mode for the few steps it takes the typed
+            // keystrokes to actually reach the interpreter, exactly the way
+            // the generic path's own noise-stop fix already distinguishes
+            // (`current_line.is_some()`: has a real line ever been seen this
+            // session). Reported only once one has - landing back in direct
+            // mode with a real line already behind it is the program
+            // genuinely ending.
+            None if self.current_line.is_none() => {
+                let _ =
+                    self.send_own("cpclib/basicStep", json!({ "mode": "stmt" }), Purpose::NativeContinueStep);
+                Vec::new()
+            },
+            None => {
+                self.resuming_as = None;
+                self.report_stopped("entry")
+            }
+        }
     }
 
     /// Which statement of `line` (already resolved to its 0-based
@@ -2518,6 +2620,76 @@ mod tests {
         assert_eq!(events[0]["body"]["reason"], "step");
     }
 
+    /// Regression test, reported live: stepping through a multi-statement
+    /// line with "Step Into" never showed the *last* statement highlighted -
+    /// the display jumped straight from the second-to-last statement to the
+    /// first one of the next line. Root cause matches the `Continue` loop's
+    /// own stale-read bug (`a_stale_step_read_that_echoes_the_old_position_is_retried_not_reported_twice`):
+    /// `basicState` read right after `basicStep` can still echo the
+    /// pre-step position, so stepping *onto* the last statement reported the
+    /// second-to-last one again, and the next step (now genuinely landing on
+    /// the first statement of the next line) was the first read to ever show
+    /// real movement - the last statement's own position was never the one
+    /// actually reported.
+    #[test]
+    fn a_stale_step_in_read_is_retried_not_reported_as_no_movement() {
+        let source = "10 a=1:b=2:c=3\n20 d=4\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, source);
+        let second_statement_address = index[1].address; // line 10's "b=2"
+        let third_statement_address = index[2].address; // line 10's "c=3"
+
+        let mut session = native_session(source);
+        complete_attach(&mut session);
+
+        // A real stop on the second statement first, establishing a known
+        // "before" position.
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": second_statement_address } })
+        );
+
+        // Step Into again, onto the third (last) statement - but the read
+        // right after the step echoes back the exact same position as
+        // before it: stale, not a second real visit to the same statement.
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "stepIn", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": second_statement_address } })
+        );
+        assert!(events.is_empty(), "a stale echo must not be reported as a stop: {events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState",
+            "retried with another read, not another step"
+        );
+
+        // The retry shows where the step actually landed - the real, last
+        // statement, reported normally instead of silently skipped.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": third_statement_address } })
+        );
+        assert_eq!(events[0]["event"], "stopped", "{events:?}");
+        assert_eq!(events[0]["body"]["reason"], "step");
+        assert_eq!(events[1]["body"]["column"], index[2].column);
+    }
+
     #[test]
     fn next_sends_a_native_line_step() {
         let mut session = native_session(SOURCE);
@@ -2584,6 +2756,78 @@ mod tests {
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    /// Regression test, reported live: `basicState` read right after
+    /// `basicStep` can still echo the address from *before* the step - the
+    /// emulator's own `basic_bp` SSE event already named the real, later
+    /// line, but this read had not caught up yet. Trusted anyway, a
+    /// breakpoint the user had already been stopped at once got reported a
+    /// *second* time as soon as they clicked Continue, for a step that had
+    /// actually already moved on. One extra `basicState` read, triggered
+    /// only when nothing appears to have moved, must resolve it instead.
+    #[test]
+    fn a_stale_step_read_that_echoes_the_old_position_is_retried_not_reported_twice() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let index = basic::build_statement_index(&bytes, basic::PROGRAM_START, SOURCE);
+        let line_10_address = index[0].address; // "10 PRINT ..."
+        let line_20_address = index[1].address; // "20 GOTO 10"
+
+        let mut session = native_session(SOURCE);
+        complete_attach(&mut session);
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+
+        // A real stop at the armed line first, establishing a known
+        // "before" position.
+        session.peer_mut().push_incoming(json!({ "type": "event", "event": "stopped", "body": {} }));
+        let incoming = session.peer_mut().drain();
+        for message in incoming {
+            session.on_emulator_message(&message);
+        }
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": line_20_address } })
+        );
+
+        // Continue: one step runs, but the read right after it echoes back
+        // the exact same line and address as before the step - stale, not a
+        // second real visit.
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": line_20_address } })
+        );
+        assert!(events.is_empty(), "a stale echo must not be reported as a stop: {events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicState",
+            "retried with another read, not another step"
+        );
+
+        // The retry shows where the step actually landed - real movement
+        // (line 20's own `GOTO 10` looping back), reported normally.
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 10, "stmt_addr": line_10_address } })
+        );
+        assert!(events.is_empty(), "line 10 is not armed: {events:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicStep");
     }
 
     /// Same race as the generic path's own (`pause_requested`'s doc
