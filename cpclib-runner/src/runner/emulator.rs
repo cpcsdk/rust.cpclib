@@ -112,7 +112,7 @@ impl Emulator {
             Emulator::Cpcec(_) => window_name.starts_with("CPCEC "),
             Emulator::Winape(_) => window_name.starts_with("Windows Amstrad Plus"),
             Emulator::Amspirit(_) => window_name.starts_with("AMSpiriT"),
-            // "AMSpiriT Lite 1.13.4 (SDL2)" and the Qt builds both lead with
+            // "AMSpiriT Lite 1.14.3 (SDL2)" and the Qt builds both lead with
             // the product name, so the full one distinguishes it from its
             // bigger sibling above.
             Emulator::AmspiritLite(_) => window_name.starts_with("AMSpiriT Lite"),

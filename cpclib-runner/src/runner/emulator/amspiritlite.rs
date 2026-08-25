@@ -17,16 +17,16 @@ use crate::event::EventObserver;
 
 pub const AMSPIRIT_LITE_CMD: &str = "amspiritlite";
 
-pub const DOWNLOAD_URL_V1_13_WINDOWS: &str = "https://github.com/AMSpiriT-Emulator/amspirit-releases/releases/download/Lite-1.13/Amspirit-Lite-Qt-1.13.4-win64.zip";
-pub const DOWNLOAD_URL_V1_13_MACOS: &str = "https://github.com/AMSpiriT-Emulator/amspirit-releases/releases/download/Lite-1.13/Amspirit-Lite-Qt-1.13.4-mac-arm64.dmg";
+pub const DOWNLOAD_URL_V1_14_WINDOWS: &str = "https://github.com/AMSpiriT-Emulator/amspirit-releases/releases/download/Lite-1.14.3/Amspirit-lite-Qt-1.14.3-win64.zip";
+pub const DOWNLOAD_URL_V1_14_MACOS: &str = "https://github.com/AMSpiriT-Emulator/amspirit-releases/releases/download/Lite-1.14.3/Amspirit-lite-Qt-1.14.3-mac-arm64.dmg";
 /// SDL rather than Qt on Linux: the Qt build of this release does not work
 /// there, which is why the three platforms do not share a package.
-pub const DOWNLOAD_URL_V1_13_LINUX: &str = "https://github.com/AMSpiriT-Emulator/amspirit-releases/releases/download/Lite-1.13/Amspirit-Lite-SDL-ImGui-1.13.4-x86_64.AppImage";
+pub const DOWNLOAD_URL_V1_14_LINUX: &str = "https://github.com/AMSpiriT-Emulator/amspirit-releases/releases/download/Lite-1.14.3/Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage";
 
 #[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AmspiritLiteVersion {
     #[default]
-    V1_13_4
+    V1_14_3
 }
 
 impl AmspiritLiteVersion {
@@ -36,14 +36,14 @@ impl AmspiritLiteVersion {
 
     fn target_folder(&self) -> &'static str {
         match self {
-            Self::V1_13_4 => "amspirit_lite_1.13.4"
+            Self::V1_14_3 => "amspirit_lite_1.14.3"
         }
     }
 
     #[cfg(target_os = "windows")]
     fn target_url_generator(&self) -> UrlGenerator {
         match self {
-            Self::V1_13_4 => DOWNLOAD_URL_V1_13_WINDOWS
+            Self::V1_14_3 => DOWNLOAD_URL_V1_14_WINDOWS
         }
         .into()
     }
@@ -51,7 +51,7 @@ impl AmspiritLiteVersion {
     #[cfg(target_os = "linux")]
     fn target_url_generator(&self) -> UrlGenerator {
         match self {
-            Self::V1_13_4 => DOWNLOAD_URL_V1_13_LINUX
+            Self::V1_14_3 => DOWNLOAD_URL_V1_14_LINUX
         }
         .into()
     }
@@ -59,7 +59,7 @@ impl AmspiritLiteVersion {
     #[cfg(target_os = "macos")]
     fn target_url_generator(&self) -> UrlGenerator {
         match self {
-            Self::V1_13_4 => DOWNLOAD_URL_V1_13_MACOS
+            Self::V1_14_3 => DOWNLOAD_URL_V1_14_MACOS
         }
         .into()
     }
@@ -72,7 +72,7 @@ impl AmspiritLiteVersion {
 
         #[cfg(target_os = "linux")]
         {
-            return "Amspirit-Lite-SDL-ImGui-1.13.4-x86_64.AppImage";
+            return "Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage";
         }
 
         #[cfg(target_os = "macos")]
@@ -170,25 +170,25 @@ mod tests {
     #[test]
     fn every_platform_has_its_own_package() {
         for url in [
-            DOWNLOAD_URL_V1_13_WINDOWS,
-            DOWNLOAD_URL_V1_13_MACOS,
-            DOWNLOAD_URL_V1_13_LINUX
+            DOWNLOAD_URL_V1_14_WINDOWS,
+            DOWNLOAD_URL_V1_14_MACOS,
+            DOWNLOAD_URL_V1_14_LINUX
         ] {
             assert!(
                 url.starts_with("https://github.com/AMSpiriT-Emulator/"),
                 "{url}"
             );
-            assert!(url.contains("Lite-1.13"), "{url}");
+            assert!(url.contains("Lite-1.14"), "{url}");
         }
-        assert!(DOWNLOAD_URL_V1_13_WINDOWS.ends_with(".zip"));
-        assert!(DOWNLOAD_URL_V1_13_MACOS.ends_with(".dmg"));
+        assert!(DOWNLOAD_URL_V1_14_WINDOWS.ends_with(".zip"));
+        assert!(DOWNLOAD_URL_V1_14_MACOS.ends_with(".dmg"));
         assert!(
-            DOWNLOAD_URL_V1_13_LINUX.ends_with(".AppImage"),
+            DOWNLOAD_URL_V1_14_LINUX.ends_with(".AppImage"),
             "the Qt build does not work on Linux for this release"
         );
         // Three different packages, not one URL reused.
-        assert_ne!(DOWNLOAD_URL_V1_13_WINDOWS, DOWNLOAD_URL_V1_13_LINUX);
-        assert_ne!(DOWNLOAD_URL_V1_13_MACOS, DOWNLOAD_URL_V1_13_LINUX);
+        assert_ne!(DOWNLOAD_URL_V1_14_WINDOWS, DOWNLOAD_URL_V1_14_LINUX);
+        assert_ne!(DOWNLOAD_URL_V1_14_MACOS, DOWNLOAD_URL_V1_14_LINUX);
     }
 
     /// The executable this platform will actually run matches the package it
@@ -200,7 +200,7 @@ mod tests {
         let executable = version.target_exec_fname();
 
         #[cfg(target_os = "linux")]
-        assert_eq!(executable, "Amspirit-Lite-SDL-ImGui-1.13.4-x86_64.AppImage");
+        assert_eq!(executable, "Amspirit-Lite-SDL-ImGui-1.14.3-x86_64.AppImage");
         #[cfg(target_os = "windows")]
         assert!(executable.ends_with(".exe"), "{executable}");
         #[cfg(target_os = "macos")]
@@ -213,7 +213,7 @@ mod tests {
         let folder = AmspiritLiteVersion::default().target_folder();
         assert!(folder.contains("lite"), "{folder}");
         assert!(
-            folder.contains("1.13.4"),
+            folder.contains("1.14.3"),
             "and per release, so two versions never share one: {folder}"
         );
     }
