@@ -126,14 +126,35 @@ enum Purpose {
     /// for its workspace fields (`vartop`/`arrend`/`var_size`/`basic_ver`),
     /// not to decide whether to report a stop at all.
     NativeWorkspaceInfo,
-    /// `cpclib/basicInject` answering at attach time, on a native peer.
-    /// `cpclib/basicListing` is fetched next if the peer offers it (see
-    /// [`Purpose::NativeListingFetched`]); either way, `start_if_ready` is
-    /// only called once this is known, not fired blind alongside it.
+    /// `cpclib/basicInject` answering at attach time, on a native peer -
+    /// with `{"ok":true}`, unconditionally, whether or not the write has
+    /// actually landed yet: reported live and directly reproduced, a
+    /// `basicListing`/`basicState` read taken immediately after can still
+    /// describe the machine as it was *before* injection (`prog_size`
+    /// staying at the empty-program baseline for dozens of polls, ~1.5s,
+    /// before finally reflecting the real program) - the same "the API
+    /// answers before its own state catches up" pattern this session kept
+    /// finding for pause and step, now for injection. Kicks off
+    /// [`Purpose::NativeAwaitInjectionState`] to poll for it landing before
+    /// doing anything that depends on the program actually being there.
     NativeInjected,
-    /// `cpclib/basicListing`, fetched once right after injection on a peer
-    /// that supports it - decoded into `native_listing`, then
-    /// `start_if_ready` runs.
+    /// `cpclib/basicState`, polled (throttled, no `basicStep` - same
+    /// reasoning as [`Purpose::NativeAwaitRunState`]) until `prog_size`
+    /// moves off the empty-program baseline - confirming the injection this
+    /// session just sent has actually landed, not merely been acknowledged.
+    /// Reported live as the launch silently never running anything: `RUN`
+    /// was typed (successfully) before the program was actually in memory,
+    /// found nothing there, and left the machine sitting in direct mode
+    /// forever - `cur_linenum` never once left `0xffff` for the rest of the
+    /// session, despite the program eventually loading correctly moments
+    /// later. Once confirmed landed, proceeds exactly as
+    /// [`Purpose::NativeInjected`] used to unconditionally: fetch
+    /// `cpclib/basicListing` if the peer offers it, otherwise go straight to
+    /// `start_if_ready`.
+    NativeAwaitInjectionState,
+    /// `cpclib/basicListing` fetched once right after injection is confirmed
+    /// landed, on a peer that supports it - decoded into `native_listing`,
+    /// then `start_if_ready` runs.
     NativeListingFetched,
     /// `cpclib/autotype`'s own answer, on a native peer, right after typing
     /// `RUN\n` - kicks off the poll loop ([`Purpose::NativeAwaitRunState`]).
@@ -550,6 +571,25 @@ impl<P: DapPeer> BasicSession<P> {
             self.send_own("continue", json!({ "threadId": THREAD_ID }), Purpose::LaunchResumed)?;
         }
         Ok(())
+    }
+
+    /// Once injection is confirmed landed (`Purpose::NativeAwaitInjectionState`):
+    /// fetch `cpclib/basicListing` if the peer offers it, otherwise go
+    /// straight to `start_if_ready` - this is what `Purpose::NativeInjected`
+    /// used to do unconditionally, right after the injection request's own
+    /// answer, before that was found to be too early to trust.
+    fn proceed_once_injection_landed(&mut self) -> Vec<Value> {
+        if self.peer.supports("cpclib/basicListing") {
+            let _ = self.send_own("cpclib/basicListing", json!({}), Purpose::NativeListingFetched);
+        }
+        else if let Err(problem) = self.start_if_ready() {
+            return vec![protocol::event(
+                "output",
+                json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                1
+            )];
+        }
+        Vec::new()
     }
 
     /// Types `RUN` into the emulator, on a peer that can - the emulator's
@@ -1416,17 +1456,33 @@ impl<P: DapPeer> BasicSession<P> {
                     return self.complete_workspace_native(message).unwrap_or_default();
                 },
                 Purpose::NativeInjected => {
-                    if self.peer.supports("cpclib/basicListing") {
-                        let _ =
-                            self.send_own("cpclib/basicListing", json!({}), Purpose::NativeListingFetched);
+                    let _ =
+                        self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitInjectionState);
+                },
+                Purpose::NativeAwaitInjectionState => {
+                    let prog_size = message
+                        .get("body")
+                        .and_then(|b| b.get("prog_size"))
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0) as u16;
+                    // Confirmed live: a fresh boot's own empty-program
+                    // baseline is 2 bytes - moving past that, *and* roughly
+                    // matching this session's own tokenised length (allowing
+                    // a few bytes either side, see `program_len`'s own field
+                    // doc for why the two tokenisers do not always agree
+                    // exactly), is what actually confirms the write landed,
+                    // not merely that the emulator acknowledged it.
+                    let landed = prog_size > 2 && prog_size.saturating_add(4) >= self.program_len;
+                    if !landed {
+                        std::thread::sleep(std::time::Duration::from_millis(30));
+                        let _ = self.send_own(
+                            "cpclib/basicState",
+                            json!({}),
+                            Purpose::NativeAwaitInjectionState
+                        );
+                        return Vec::new();
                     }
-                    else if let Err(problem) = self.start_if_ready() {
-                        return vec![protocol::event(
-                            "output",
-                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
-                            1
-                        )];
-                    }
+                    return self.proceed_once_injection_landed();
                 },
                 Purpose::NativeListingFetched => {
                     self.apply_native_listing(message);
@@ -2541,10 +2597,20 @@ mod tests {
         let attach_seq = last_sent_seq(&mut session);
         answer(&mut session, attach_seq, json!({ "success": true }));
 
-        // Injection's own answer triggers the basic_listing fetch, on a peer
-        // that offers it.
+        // Injection's own answer triggers a poll confirming the write has
+        // actually landed - not the basic_listing fetch directly any more,
+        // see `Purpose::NativeAwaitInjectionState`'s own doc comment.
         let inject_seq = last_sent_seq(&mut session);
         answer(&mut session, inject_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+
+        // Confirmed landed: only now does the basic_listing fetch happen.
+        let landed_seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            landed_seq,
+            json!({ "body": { "prog_size": bytes.len() } })
+        );
         assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicListing");
 
         // The second statement's own address, from AMSpiriT Lite's own
@@ -2592,6 +2658,49 @@ mod tests {
             "must resolve to the second statement, not fall back to the first"
         );
         assert_eq!(frame["endColumn"], second_statement.end_column);
+    }
+
+    /// Regression test, reported live: `cpclib/basicInject` answers
+    /// `{"ok":true}` before the write has actually landed - a real session
+    /// showed `prog_size` sitting at the empty-program baseline (2) for
+    /// dozens of polls after injection's own answer came back, only
+    /// reflecting the real program roughly 1.5s later. Typing `RUN` before
+    /// that (the old, unguarded behaviour) found no program to run and left
+    /// the machine in direct mode for the rest of the session, with nothing
+    /// ever reported to the editor. `start_if_ready` (and, on this peer,
+    /// `RUN` itself) must not fire until a poll actually confirms the
+    /// program landed.
+    #[test]
+    fn injection_is_confirmed_landed_before_run_is_typed() {
+        let mut session = native_session(SOURCE);
+        session
+            .on_editor_message(&json!({ "seq": 1, "command": "configurationDone", "arguments": {} }))
+            .unwrap();
+        complete_attach(&mut session);
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicInject");
+
+        // Injection's own answer must not immediately hand off to
+        // start_if_ready (which would send `continue`) - a poll confirming
+        // the write landed comes first.
+        let inject_seq = last_sent_seq(&mut session);
+        answer(&mut session, inject_seq, json!({ "success": true }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert!(
+            !session.peer_mut().commands().contains(&"continue".to_string()),
+            "{:?}",
+            session.peer_mut().commands()
+        );
+
+        // Still the empty-program baseline: keep polling, not start_if_ready.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "prog_size": 2 } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicState");
+        assert!(!session.peer_mut().commands().contains(&"continue".to_string()));
+
+        // Landed: only now does the launch actually proceed.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "prog_size": 20 } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "continue");
     }
 
     #[test]
