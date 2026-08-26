@@ -66,6 +66,22 @@ const EMPTY_PROGRAM_BASELINE: u16 = 2;
 /// fix.
 const MAX_NATIVE_REINJECTION_ATTEMPTS: u32 = 3;
 
+/// An address or count typed at `-mv`/`-dv` - `0x`/`&`/`#`/`$`-prefixed hex,
+/// `0o`/`@`-prefixed octal, `%`/`0b`-prefixed binary, or plain decimal.
+/// Reuses `cpclib_common`'s own number parser (the same one the assembler's
+/// own source-level number literals go through) rather than a second,
+/// narrower implementation - the Z80 session's own console commands
+/// (`session.rs`) predate this being available and still have their own,
+/// which this deliberately does not copy.
+fn parse_address(text: &str) -> Option<u32> {
+    use cpclib_common::winnow::Parser;
+    use cpclib_common::winnow::error::ContextError;
+    use cpclib_common::winnow::stream::AsBStr;
+    cpclib_common::parse_value::<_, ContextError>
+        .parse(text.trim().as_bstr())
+        .ok()
+}
+
 #[derive(Debug, Clone)]
 enum Purpose {
     Plain,
@@ -229,7 +245,29 @@ enum Purpose {
     /// batching across every pane opened at once - this session does not
     /// open them in bulk the way that one's `-chips` console command does,
     /// so there is nothing worth batching here.
-    GenericChipScope { reference: i64, request: Value }
+    GenericChipScope { reference: i64, request: Value },
+    /// `-mv <address> [count]` - see the Z80 session's own `Purpose::MemoryView`
+    /// for the same idea. No `,follow`/register-anchored flavour here: unlike
+    /// the Z80 session, this one has no register scope to resolve one
+    /// against, so every view is a fixed-address snapshot, re-read by typing
+    /// the command again rather than tracked automatically.
+    MemoryView {
+        address: u32,
+        label: Option<String>,
+        request: Value
+    },
+    /// `-dv <address> [count]` - same idea as [`Purpose::MemoryView`], for
+    /// disassembly. Decoded with the exact same `crate::disassemble`
+    /// functions the Z80 session uses, but without its symbol annotation or
+    /// data-row overlay (both need a sourcemap this session does not have) -
+    /// still genuinely useful for a BASIC program that `CALL`s machine code,
+    /// just plainer.
+    DisassemblyView {
+        address: u32,
+        count: usize,
+        label: Option<String>,
+        request: Value
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -907,6 +945,26 @@ impl<P: DapPeer> BasicSession<P> {
                 self.peer.send(message.clone())?;
                 Ok(Vec::new())
             },
+            // `-mv`/`-dv`, DeZog's spelling, same as the Z80 session's own
+            // console commands - non-dash expressions fall through to the
+            // catch-all below unchanged (this session has no watch/hover
+            // evaluation of its own to intercept them for).
+            "evaluate"
+                if message
+                    .get("arguments")
+                    .and_then(|a| a.get("expression"))
+                    .and_then(Value::as_str)
+                    .is_some_and(|e| e.trim().starts_with('-')) =>
+            {
+                let expression = message
+                    .get("arguments")
+                    .and_then(|a| a.get("expression"))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+                self.console_command(message, &expression)
+            },
             "stackTrace" => Ok(vec![self.stack_trace(message)]),
             "scopes" => Ok(vec![self.scopes(message)]),
             "variables"
@@ -964,6 +1022,107 @@ impl<P: DapPeer> BasicSession<P> {
                 Ok(Vec::new())
             }
         }
+    }
+
+    /// A `-command` typed in the debug console - see the Z80 session's own
+    /// `console_command` for the same dispatch. Only `-mv`/`-dv` exist here:
+    /// this session has no registers/CRTC-view/timer console commands of
+    /// its own to mirror.
+    fn console_command(&mut self, request: &Value, line: &str) -> std::io::Result<Vec<Value>> {
+        let mut words = line.split_whitespace();
+        let command = words.next().unwrap_or_default();
+        let arguments: Vec<&str> = words.collect();
+        match command {
+            "-mv" | "-memoryview" => self.memory_view(request, &arguments),
+            "-dv" | "-disassemble" => self.disassembly_view(request, &arguments),
+            other => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::failure(
+                    request,
+                    &format!("unknown command '{other}'. Available: -mv <address> [count], -dv <address> [count]"),
+                    seq
+                )])
+            }
+        }
+    }
+
+    /// `-mv <address> [count]` - opens the same memory-view panel the Z80
+    /// session's own `-mv` does (`cpclib/memoryView`, reused verbatim), just
+    /// without its `,follow`-a-register flavour: this session has no
+    /// register scope to resolve one against, so every view here is a
+    /// fixed-address snapshot. Re-type the command to refresh it.
+    fn memory_view(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
+        let seq = self.next_seq();
+        let Some(where_) = arguments.first() else {
+            return Ok(vec![protocol::failure(
+                request,
+                "-mv needs an address: -mv 0xC000 [count]",
+                seq
+            )]);
+        };
+        let Some(address) = parse_address(where_) else {
+            return Ok(vec![protocol::failure(
+                request,
+                &format!("'{where_}' is not a number - BASIC debugging has no labels to look up"),
+                seq
+            )]);
+        };
+        let count = arguments
+            .get(1)
+            .and_then(|c| parse_address(c))
+            .unwrap_or(0x40)
+            .clamp(1, 0x1000);
+        self.send_own(
+            "readMemory",
+            json!({ "memoryReference": address_reference(address), "count": count }),
+            Purpose::MemoryView {
+                address,
+                label: None,
+                request: request.clone()
+            }
+        )?;
+        Ok(Vec::new())
+    }
+
+    /// `-dv <address> [count]` - same idea as `memory_view`, decoded through
+    /// `crate::disassemble` (the assembler's own instruction tables, not the
+    /// peer's) and emitted as the same `cpclib/disassemblyView` event the
+    /// Z80 session's own panel already renders.
+    fn disassembly_view(&mut self, request: &Value, arguments: &[&str]) -> std::io::Result<Vec<Value>> {
+        let seq = self.next_seq();
+        let Some(where_) = arguments.first() else {
+            return Ok(vec![protocol::failure(
+                request,
+                "-dv needs an address: -dv 0x4000 [count]",
+                seq
+            )]);
+        };
+        let Some(address) = parse_address(where_) else {
+            return Ok(vec![protocol::failure(
+                request,
+                &format!("'{where_}' is not a number - BASIC debugging has no labels to look up"),
+                seq
+            )]);
+        };
+        let count = arguments
+            .get(1)
+            .and_then(|c| parse_address(c))
+            .unwrap_or(32)
+            .clamp(1, 512) as usize;
+        // Four bytes per instruction is the Z80's worst case - see the Z80
+        // session's own `ask_for_disassembly` for the same reasoning.
+        let bytes = (count * 4).clamp(1, 0x1000);
+        self.send_own(
+            "readMemory",
+            json!({ "memoryReference": address_reference(address), "count": bytes }),
+            Purpose::DisassemblyView {
+                address,
+                count,
+                label: None,
+                request: request.clone()
+            }
+        )?;
+        Ok(Vec::new())
     }
 
     fn set_breakpoints(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
@@ -1797,6 +1956,101 @@ impl<P: DapPeer> BasicSession<P> {
                         .unwrap_or_default();
                     let seq = self.next_seq();
                     return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
+                },
+                Purpose::MemoryView {
+                    address,
+                    label,
+                    request
+                } => {
+                    let bytes = Self::read_memory_bytes(message);
+                    if bytes.is_empty() {
+                        let seq = self.next_seq();
+                        return vec![protocol::failure(
+                            &request,
+                            &format!("{} could not be read", address_reference(address)),
+                            seq
+                        )];
+                    }
+                    let seq = self.next_seq();
+                    let event = protocol::event(
+                        "cpclib/memoryView",
+                        json!({
+                            "viewId": format!("fixed:{address:08x}"),
+                            "group": Value::Null,
+                            "requested": true,
+                            "address": address,
+                            "label": label,
+                            "bytes": bytes,
+                            "marks": [],
+                            "changed": []
+                        }),
+                        seq
+                    );
+                    let seq = self.next_seq();
+                    let receipt = protocol::response(
+                        &request,
+                        json!({
+                            "result": format!(
+                                "{} bytes from {}{}",
+                                bytes.len(),
+                                address_reference(address),
+                                label.map(|l| format!(" ({l})")).unwrap_or_default()
+                            ),
+                            "variablesReference": 0,
+                            "memoryReference": address_reference(address)
+                        }),
+                        seq
+                    );
+                    return vec![event, receipt];
+                },
+                Purpose::DisassemblyView {
+                    address,
+                    count,
+                    label,
+                    request
+                } => {
+                    let bytes = Self::read_memory_bytes(message);
+                    let decoded = u16::try_from(address)
+                        .ok()
+                        .map(|address| crate::disassemble::decode(address, &bytes, count))
+                        .unwrap_or_default();
+                    if decoded.is_empty() {
+                        let seq = self.next_seq();
+                        return vec![protocol::failure(
+                            &request,
+                            &format!("{} could not be disassembled", address_reference(address)),
+                            seq
+                        )];
+                    }
+                    let instructions = crate::disassemble::as_dap_instructions(&decoded);
+                    let seq = self.next_seq();
+                    let event = protocol::event(
+                        "cpclib/disassemblyView",
+                        json!({
+                            "address": address,
+                            "label": label,
+                            "instructions": instructions,
+                            "pc": Value::Null,
+                            "followsPc": false
+                        }),
+                        seq
+                    );
+                    let seq = self.next_seq();
+                    let receipt = protocol::response(
+                        &request,
+                        json!({
+                            "result": format!(
+                                "{} instructions from {}{}",
+                                decoded.len(),
+                                address_reference(address),
+                                label.map(|l| format!(" ({l})")).unwrap_or_default()
+                            ),
+                            "variablesReference": 0,
+                            "memoryReference": address_reference(address)
+                        }),
+                        seq
+                    );
+                    return vec![event, receipt];
                 },
                 Purpose::WorkspaceArraysStart => {
                     let bytes = Self::read_memory_bytes(message);
@@ -4528,6 +4782,64 @@ mod tests {
             !events[0]["body"]["variables"].as_array().unwrap().is_empty(),
             "a real snapshot must decode to real CRTC register entries, {events:?}"
         );
+    }
+
+    #[test]
+    /// Reported live: no way to peek at raw memory while debugging BASIC.
+    /// Confirms `-mv`, typed as an `evaluate` expression the same way the
+    /// Z80 session's own console commands are, opens the exact same
+    /// `cpclib/memoryView` panel that session already renders.
+    fn mv_console_command_opens_a_memory_view() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "evaluate",
+                "arguments": { "expression": "-mv 0xC000 4" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(request["arguments"]["memoryReference"], address_reference(0xC000));
+        assert_eq!(request["arguments"]["count"], 4);
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&[1, 2, 3, 4]));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/memoryView");
+        assert_eq!(events[0]["body"]["address"], 0xC000);
+        assert_eq!(events[0]["body"]["bytes"], json!([1, 2, 3, 4]));
+        assert_eq!(events[1]["command"], "evaluate");
+    }
+
+    #[test]
+    /// Same as `mv_console_command_opens_a_memory_view`, for `-dv` and
+    /// `cpclib/disassemblyView` - decoded with `crate::disassemble`, the
+    /// exact functions the Z80 session's own panel already uses.
+    fn dv_console_command_opens_a_disassembly_view() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "evaluate",
+                "arguments": { "expression": "-dv 0x4000 2" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(request["arguments"]["memoryReference"], address_reference(0x4000));
+        assert_eq!(request["arguments"]["count"], 8, "2 instructions, 4 bytes worst case each");
+
+        let seq = last_sent_seq(&mut session);
+        // Two NOPs decode cleanly with no ambiguity.
+        let events = answer(&mut session, seq, read_memory_response(&[0x00, 0x00]));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/disassemblyView");
+        assert!(!events[0]["body"]["instructions"].as_array().unwrap().is_empty());
     }
 
     #[test]
