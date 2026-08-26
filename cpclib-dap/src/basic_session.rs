@@ -66,6 +66,50 @@ const EMPTY_PROGRAM_BASELINE: u16 = 2;
 /// fix.
 const MAX_NATIVE_REINJECTION_ATTEMPTS: u32 = 3;
 
+/// See the Z80 session's own `CONSOLE_HELP` (`session.rs`) - same idea, only
+/// the commands this session actually has.
+const BASIC_CONSOLE_HELP: &str = "\
+BASIC debug console commands:
+  -mv <address> [count]   a memory view at a fixed address (count defaults
+                          to 64 bytes) - re-type the command to refresh it
+  -dv <address> [count]   disassemble memory at a fixed address (count
+                          defaults to 32 instructions)
+  -bv                     the live BASIC listing, straight from the
+                          emulator's own memory
+  -help                   this list";
+
+/// AMSpiriT's own `cpclib/basicListing` response into readable text - each
+/// line's number followed by its statements' own `text`, colon-joined
+/// exactly the way the line reads on screen. Trusts AMSpiriT's tokeniser
+/// completely: no re-parsing, no column resolution, nothing this crate's own
+/// (different) tokeniser could disagree with it about. Shared between
+/// `BasicSession`'s and the Z80 `Session`'s own `-bv` command - the exact
+/// same response shape either way, whichever kind of program is being
+/// debugged.
+pub(crate) fn format_amspirit_basic_listing(body: &Value) -> String {
+    let mut out = String::new();
+    let Some(lines) = body.get("lines").and_then(Value::as_array) else {
+        return out;
+    };
+    for line in lines {
+        let Some(num) = line.get("num").and_then(Value::as_u64) else {
+            continue;
+        };
+        let stmts: Vec<&str> = line
+            .get("stmts")
+            .and_then(Value::as_array)
+            .map(|stmts| {
+                stmts
+                    .iter()
+                    .filter_map(|s| s.get("text").and_then(Value::as_str))
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.push_str(&format!("{num} {}\n", stmts.join(":")));
+    }
+    out
+}
+
 /// An address or count typed at `-mv`/`-dv` - `0x`/`&`/`#`/`$`-prefixed hex,
 /// `0o`/`@`-prefixed octal, `%`/`0b`-prefixed binary, or plain decimal.
 /// Reuses `cpclib_common`'s own number parser (the same one the assembler's
@@ -267,7 +311,14 @@ enum Purpose {
         count: usize,
         label: Option<String>,
         request: Value
-    }
+    },
+    /// `-bv` on a peer with `cpclib/basicListing` - see `basic_listing_view`'s
+    /// own doc comment for why AMSpiriT's own answer is trusted directly
+    /// rather than re-derived.
+    AmspiritBasicListingText { request: Value },
+    /// `-bv` on the generic peer - the raw program bytes read live, decoded
+    /// with `cpclib_basic::BasicProgram` once they arrive.
+    GenericBasicListingRead { request: Value }
 }
 
 #[derive(Debug, Clone)]
@@ -1035,11 +1086,20 @@ impl<P: DapPeer> BasicSession<P> {
         match command {
             "-mv" | "-memoryview" => self.memory_view(request, &arguments),
             "-dv" | "-disassemble" => self.disassembly_view(request, &arguments),
+            "-bv" | "-listing" => self.basic_listing_view(request),
+            "-help" | "-h" => {
+                let seq = self.next_seq();
+                Ok(vec![protocol::response(
+                    request,
+                    json!({ "result": BASIC_CONSOLE_HELP, "variablesReference": 0 }),
+                    seq
+                )])
+            },
             other => {
                 let seq = self.next_seq();
                 Ok(vec![protocol::failure(
                     request,
-                    &format!("unknown command '{other}'. Available: -mv <address> [count], -dv <address> [count]"),
+                    &format!("unknown command '{other}'. Type -help for the list."),
                     seq
                 )])
             }
@@ -1119,6 +1179,40 @@ impl<P: DapPeer> BasicSession<P> {
                 address,
                 count,
                 label: None,
+                request: request.clone()
+            }
+        )?;
+        Ok(Vec::new())
+    }
+
+    /// `-bv` - the live BASIC listing, straight from the emulator's own
+    /// memory rather than the source file this session was launched with
+    /// (which may have changed, or moved, since - `RENUM`, a direct-mode
+    /// edit, a program the user typed in by hand). AMSpiriT Lite's own
+    /// `cpclib/basicListing` already tokenises and renders it, so this
+    /// trusts that directly rather than re-deriving it; the generic peer
+    /// has no such endpoint, so its raw program bytes are read instead and
+    /// decoded with `cpclib_basic::BasicProgram` - the same crate this
+    /// session's own launch-time tokenising already goes through.
+    fn basic_listing_view(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        if self.peer.supports("cpclib/basicListing") {
+            return self
+                .send_own(
+                    "cpclib/basicListing",
+                    json!({}),
+                    Purpose::AmspiritBasicListingText {
+                        request: request.clone()
+                    }
+                )
+                .map(|()| Vec::new());
+        }
+        let base = self.program_start;
+        let end = self.variables_base();
+        let count = end.saturating_sub(base);
+        self.send_own(
+            "readMemory",
+            json!({ "memoryReference": address_reference(base as u32), "count": count }),
+            Purpose::GenericBasicListingRead {
                 request: request.clone()
             }
         )?;
@@ -2048,6 +2142,48 @@ impl<P: DapPeer> BasicSession<P> {
                             "variablesReference": 0,
                             "memoryReference": address_reference(address)
                         }),
+                        seq
+                    );
+                    return vec![event, receipt];
+                },
+                Purpose::AmspiritBasicListingText { request } => {
+                    let text = message
+                        .get("body")
+                        .map(format_amspirit_basic_listing)
+                        .unwrap_or_default();
+                    if text.is_empty() {
+                        let seq = self.next_seq();
+                        return vec![protocol::failure(&request, "the emulator answered no listing", seq)];
+                    }
+                    let seq = self.next_seq();
+                    let event = protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
+                    let seq = self.next_seq();
+                    let receipt = protocol::response(
+                        &request,
+                        json!({ "result": "listing opened", "variablesReference": 0 }),
+                        seq
+                    );
+                    return vec![event, receipt];
+                },
+                Purpose::GenericBasicListingRead { request } => {
+                    let bytes = Self::read_memory_bytes(message);
+                    let text = match cpclib_basic::BasicProgram::decode(&bytes) {
+                        Ok(program) => program.to_string(),
+                        Err(problem) => {
+                            let seq = self.next_seq();
+                            return vec![protocol::failure(
+                                &request,
+                                &format!("could not decode the program in memory: {problem}"),
+                                seq
+                            )];
+                        }
+                    };
+                    let seq = self.next_seq();
+                    let event = protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
+                    let seq = self.next_seq();
+                    let receipt = protocol::response(
+                        &request,
+                        json!({ "result": "listing opened", "variablesReference": 0 }),
                         seq
                     );
                     return vec![event, receipt];
@@ -4840,6 +4976,77 @@ mod tests {
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "cpclib/disassemblyView");
         assert!(!events[0]["body"]["instructions"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    /// Requested live: a way to see the live BASIC listing sitting in
+    /// memory, not just the source file the session launched with (which
+    /// may have moved on - `RENUM`, a direct-mode edit). On the generic
+    /// peer, confirms the raw program bytes are read and decoded through
+    /// `cpclib_basic::BasicProgram` - the same crate this session's own
+    /// launch-time tokenising already goes through.
+    fn bv_console_command_decodes_program_bytes_on_the_generic_peer() {
+        let mut session = new_session(SOURCE);
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "evaluate",
+                "arguments": { "expression": "-bv" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(
+            request["arguments"]["memoryReference"],
+            address_reference(basic::PROGRAM_START as u32)
+        );
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&bytes));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/basicListingView");
+        let text = events[0]["body"]["text"].as_str().unwrap();
+        assert!(text.contains("10"), "{text}");
+        assert!(text.contains("20"), "{text}");
+    }
+
+    #[test]
+    /// Same as `bv_console_command_decodes_program_bytes_on_the_generic_peer`,
+    /// on a native peer with `cpclib/basicListing` - trusts AMSpiriT's own
+    /// answer directly rather than re-decoding raw bytes with this crate's
+    /// own (different) tokeniser.
+    fn bv_console_command_uses_amspirits_own_listing_when_available() {
+        let mut session = native_session_with_listing(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "evaluate",
+                "arguments": { "expression": "-bv" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/basicListing");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({
+                "body": {
+                    "lines": [
+                        { "num": 10, "stmts": [{ "text": "PRINT \"HI\"" }] },
+                        { "num": 20, "stmts": [{ "text": "GOTO 10" }] }
+                    ]
+                }
+            })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/basicListingView");
+        assert_eq!(events[0]["body"]["text"], "10 PRINT \"HI\"\n20 GOTO 10\n");
     }
 
     #[test]

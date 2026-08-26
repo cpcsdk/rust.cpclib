@@ -224,6 +224,11 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.openBasicListing",
+        "title": "CPClib: Open the live BASIC listing",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.revealProgramCounter",
         "title": "CPClib: Reveal the program counter in the source",
         "category": "CPClib"
@@ -272,6 +277,10 @@
         },
         {
           "command": "cpclib.openCrtcView",
+          "when": "inDebugMode"
+        },
+        {
+          "command": "cpclib.openBasicListing",
           "when": "inDebugMode"
         },
         {

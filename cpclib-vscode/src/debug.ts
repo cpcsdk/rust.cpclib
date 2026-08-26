@@ -223,6 +223,7 @@ export function registerDebugging(
             () => consoleCommand('-mv all,follow'),
         ),
         vscode.commands.registerCommand('cpclib.openCrtcView', () => consoleCommand('-crtcview')),
+        vscode.commands.registerCommand('cpclib.openBasicListing', () => consoleCommand('-bv')),
         vscode.commands.registerCommand('cpclib.revealProgramCounter', async () => {
             const where = lastStop;
             if (!where) {
@@ -350,6 +351,9 @@ export function registerDebugging(
             }
             if (event.event === 'cpclib/crtcView') {
                 showCrtc(event.session, event.body);
+            }
+            if (event.event === 'cpclib/basicListingView') {
+                showBasicListing(event.session, event.body);
             }
             // The adapter opened a disassembly view by itself because the
             // program had left the source, and the program is back on a line it
@@ -646,6 +650,61 @@ function memoryHtml(dump: MemoryDump): string {
 ${memoryTableHtml(dump)}
 <footer>Refreshed on every stop; highlighted bytes changed since the last one.
 Point it elsewhere with <code>-mv</code> in the debug console; <code>-help</code> lists the commands.</footer>
+</body>
+</html>`;
+}
+
+interface BasicListingDump {
+    text: string;
+}
+
+const basicListingPanels = new Map<string, vscode.WebviewPanel>();
+
+/**
+ * The live BASIC listing, straight from the emulator's own memory - `-bv` in
+ * the debug console, one panel per session (there is only ever one program
+ * loaded at a time, unlike memory views which can point anywhere).
+ */
+function showBasicListing(session: vscode.DebugSession, dump: BasicListingDump | undefined): void {
+    if (!dump || typeof dump.text !== 'string') { return; }
+
+    const key = session.id;
+    let panel = basicListingPanels.get(key);
+    const isNew = panel === undefined;
+    if (!panel) {
+        panel = vscode.window.createWebviewPanel(
+            'cpclib.basicListing',
+            `BASIC listing — ${session.name}`,
+            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+            { enableScripts: false, retainContextWhenHidden: true },
+        );
+        const owned = panel;
+        panel.onDidDispose(() => {
+            if (basicListingPanels.get(key) === owned) { basicListingPanels.delete(key); }
+        });
+        basicListingPanels.set(key, panel);
+    }
+
+    panel.webview.html = basicListingHtml(dump.text);
+    if (isNew) { panel.reveal(vscode.ViewColumn.Beside, true); }
+}
+
+function basicListingHtml(text: string): string {
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
+<style>
+  body { font-family: var(--vscode-editor-font-family, monospace);
+         color: var(--vscode-editor-foreground); padding: 8px 12px; }
+  pre { white-space: pre-wrap; margin: 0; }
+  footer { margin-top: 10px; color: var(--vscode-descriptionForeground); font-size: 0.9em; }
+</style>
+</head>
+<body>
+<pre>${escapeHtml(text)}</pre>
+<footer>Read from the emulator's own memory, not from the source file on disk -
+re-type <code>-bv</code> in the debug console to refresh it.</footer>
 </body>
 </html>`;
 }

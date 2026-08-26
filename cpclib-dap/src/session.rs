@@ -112,6 +112,10 @@ CPC debug console commands:
                                 combinations known to lose sync or mistime a
                                 raster line
   -timer [add|reset|rm] [name]  stopwatches in NOPs; bare -timer lists them
+  -bv                           the live BASIC listing sitting in memory,
+                                tokenised and rendered - useful for a BASIC
+                                loader ahead of the machine code being
+                                debugged
   -help                         this list
 
 Anything not starting with `-` is read as a label: `animation_state` shows the
@@ -191,7 +195,16 @@ enum Purpose {
     /// Reading `SP` out of the register scope.
     StackRegisters,
     /// The stack itself.
-    StackRead
+    StackRead,
+    /// `cpclib/basicListing`'s own answer, on a peer that has it - see
+    /// `basic_listing_view`'s own doc comment.
+    BasicListingText,
+    /// `PTR_VARIABLES_START` dereferenced live, on a peer without
+    /// `cpclib/basicListing` - the end of the program in memory, on the
+    /// way to reading it.
+    BasicListingVariablesEnd,
+    /// The program's own bytes, once `BasicListingVariablesEnd` answered.
+    BasicListingRead
 }
 
 /// An editor `stackTrace` held while the stack is fetched.
@@ -518,6 +531,9 @@ pub struct Session<P: DapPeer> {
     pending_chip_prints: Vec<Value>,
     /// `-crtcview` requests waiting for the same.
     pending_crtc_views: Vec<Value>,
+    /// A `-bv` request waiting on its (one or two round trip) answer - see
+    /// `basic_listing_view`'s own doc comment.
+    pending_basic_listing: Option<Value>,
     /// The last snapshot the emulator wrote, valid until it runs again.
     ///
     /// Expanding CRTC and then Gate Array must not cost two whole-machine
@@ -595,6 +611,7 @@ impl<P: DapPeer> Session<P> {
             pending_chip_scopes: Vec::new(),
             pending_chip_prints: Vec::new(),
             pending_crtc_views: Vec::new(),
+            pending_basic_listing: None,
             machine_state: None,
             synthetic_frames: Vec::new(),
             extra_watches: Vec::new(),
@@ -1144,6 +1161,11 @@ impl<P: DapPeer> Session<P> {
                 Purpose::StackScopes => return self.stack_step_registers(message),
                 Purpose::StackRegisters => return self.stack_step_read(message),
                 Purpose::StackRead => return self.stack_step_finish(message),
+                Purpose::BasicListingText => return self.complete_basic_listing_text(message),
+                Purpose::BasicListingVariablesEnd => {
+                    return self.complete_basic_listing_variables_end(message);
+                },
+                Purpose::BasicListingRead => return self.complete_basic_listing_read(message),
                 Purpose::Plain => {}
             }
             let command = own.command;
@@ -2251,6 +2273,117 @@ impl<P: DapPeer> Session<P> {
         Ok(Vec::new())
     }
 
+    /// `-bv` - the live BASIC listing sitting in memory, useful even while
+    /// debugging assembly: a BASIC loader ahead of the machine code under
+    /// test is common, and this reads it straight from the machine rather
+    /// than needing a separate BASIC debug session to see it. Same idea as
+    /// `BasicSession`'s own `-bv` (`basic_session.rs`) - AMSpiriT's own
+    /// `cpclib/basicListing` is trusted directly when available, otherwise
+    /// `PTR_VARIABLES_START` is dereferenced live to find where the program
+    /// ends and the raw bytes are decoded with `cpclib_basic::BasicProgram`.
+    /// This session has no cached `txttop` the way `BasicSession` does (a
+    /// Z80 session has no reason to ask more than occasionally), so both
+    /// round trips happen fresh every time rather than being cached.
+    fn basic_listing_view(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
+        self.pending_basic_listing = Some(request.clone());
+        if self.peer.supports("cpclib/basicListing") {
+            self.send_own("cpclib/basicListing", json!({}), Purpose::BasicListingText)?;
+            return Ok(Vec::new());
+        }
+        self.send_own(
+            "readMemory",
+            json!({
+                "memoryReference": address_reference(crate::basic::PTR_VARIABLES_START as u32),
+                "count": 2
+            }),
+            Purpose::BasicListingVariablesEnd
+        )?;
+        Ok(Vec::new())
+    }
+
+    fn basic_listing_answer(&mut self, request: &Value, text: &str) -> Vec<Value> {
+        if text.is_empty() {
+            let seq = self.next_seq();
+            return vec![protocol::failure(request, "no BASIC program found in memory", seq)];
+        }
+        let seq = self.next_seq();
+        let event = protocol::event("cpclib/basicListingView", json!({ "text": text }), seq);
+        let seq = self.next_seq();
+        let receipt = protocol::response(
+            request,
+            json!({ "result": "listing opened", "variablesReference": 0 }),
+            seq
+        );
+        vec![event, receipt]
+    }
+
+    fn complete_basic_listing_text(&mut self, message: &Value) -> Vec<Value> {
+        let Some(request) = self.pending_basic_listing.take() else {
+            return Vec::new();
+        };
+        let text = message
+            .get("body")
+            .map(crate::basic_session::format_amspirit_basic_listing)
+            .unwrap_or_default();
+        self.basic_listing_answer(&request, &text)
+    }
+
+    fn complete_basic_listing_variables_end(&mut self, message: &Value) -> Vec<Value> {
+        if self.pending_basic_listing.is_none() {
+            return Vec::new();
+        }
+        let bytes = message
+            .get("body")
+            .and_then(|b| b.get("data"))
+            .and_then(Value::as_str)
+            .map(decode_base64)
+            .unwrap_or_default();
+        let Some(chunk) = bytes.get(0..2) else {
+            let request = self.pending_basic_listing.take().unwrap();
+            let seq = self.next_seq();
+            return vec![protocol::failure(
+                &request,
+                "could not read where the BASIC program ends",
+                seq
+            )];
+        };
+        let end = u16::from_le_bytes([chunk[0], chunk[1]]) as u32;
+        let base = crate::basic::PROGRAM_START as u32;
+        let count = end.saturating_sub(base);
+        if let Err(problem) =
+            self.send_own("readMemory", json!({ "memoryReference": address_reference(base), "count": count }), Purpose::BasicListingRead)
+        {
+            let request = self.pending_basic_listing.take().unwrap();
+            let seq = self.next_seq();
+            return vec![protocol::failure(&request, &problem.to_string(), seq)];
+        }
+        Vec::new()
+    }
+
+    fn complete_basic_listing_read(&mut self, message: &Value) -> Vec<Value> {
+        let Some(request) = self.pending_basic_listing.take() else {
+            return Vec::new();
+        };
+        let bytes = message
+            .get("body")
+            .and_then(|b| b.get("data"))
+            .and_then(Value::as_str)
+            .map(decode_base64)
+            .unwrap_or_default();
+        let text = match cpclib_basic::BasicProgram::decode(&bytes) {
+            Ok(program) => program.to_string(),
+            Err(problem) => {
+                let seq = self.next_seq();
+                return vec![protocol::failure(
+                    &request,
+                    &format!("could not decode the program in memory: {problem}"),
+                    seq
+                )];
+            }
+        };
+        self.basic_listing_answer(&request, &text)
+    }
+
     /// The `cpclib/crtcView` event plus its console receipt: raw registers,
     /// and whatever `validate_crtc` makes of them.
     fn crtc_view_answer(&mut self, request: &Value, regs: &[u8]) -> Vec<Value> {
@@ -2689,6 +2822,7 @@ impl<P: DapPeer> Session<P> {
             "-chips" | "-crtc" | "-ga" => self.chips_command(request),
             "-crtcview" | "-cv" => self.crtc_view_command(request),
             "-timer" | "-t" => self.timer_command(request, &arguments),
+            "-bv" | "-listing" => self.basic_listing_view(request),
             "-help" | "-h" => {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(
