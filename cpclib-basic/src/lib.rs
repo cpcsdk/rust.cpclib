@@ -56,7 +56,30 @@ pub struct BasicLine {
 impl fmt::Display for BasicLine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ", self.line_number)?;
-        for token in self.tokens().iter() {
+        let tokens = self.tokens();
+        for (i, token) in tokens.iter().enumerate() {
+            // `IF ... THEN <linenum>` (and the same after `ELSE`) is an
+            // implicit GOTO: the parser synthesises a real `Goto` token
+            // with nothing else between it and the number - confirmed
+            // against a real CPC's own saved bytes
+            // (`mandelbrot_matches_a_real_cpcs_own_save`: `... A0 1A 64 ...`,
+            // no space byte either) that the bytes really do carry a Goto
+            // token there. But a real ROM's own LIST prints just the bare
+            // number in this case, never the word "GOTO" (confirmed live
+            // against AMSpiriT Lite's own listing, which shows `THEN 100`,
+            // not `THEN GOTO 100`, for the identical source). An *explicit*
+            // `GOTO 80` can never reach this branch:
+            // `keyword_line_number_parser!` requires at least one real
+            // space token between the keyword and the number, so a `Goto`
+            // with truly nothing stored after it only ever happens for
+            // this synthesised, word-suppressed case - skipping the token
+            // entirely here does not touch the byte encoding at all, only
+            // what gets printed.
+            if matches!(token, BasicToken::SimpleToken(BasicTokenNoPrefix::Goto))
+                && matches!(tokens.get(i + 1), Some(BasicToken::Constant(..)))
+            {
+                continue;
+            }
             write!(f, "{token}")?;
         }
         Ok(())

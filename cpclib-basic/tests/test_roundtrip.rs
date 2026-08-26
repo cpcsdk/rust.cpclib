@@ -205,6 +205,31 @@ fn roundtrip_and_or_xor_mod_not_do_not_double_space() {
 }
 
 #[test]
+/// Regression test, reported live: `IF ... THEN 100` (a bare line number,
+/// Locomotive BASIC's implicit-GOTO shorthand) decoded back as
+/// `THEN GOTO100` - both a missing space and a spurious "GOTO" that was
+/// never typed. The parser synthesises a real `Goto` token for this shape
+/// (confirmed against a real CPC's own saved bytes,
+/// `mandelbrot_matches_a_real_cpcs_own_save`, that this matches real
+/// hardware's own tokenisation) - but a real ROM's own LIST prints just the
+/// bare number here (confirmed live against AMSpiriT Lite's own listing).
+/// Covers the same shorthand after `ELSE` too, and confirms an *explicit*
+/// `GOTO 80` is unaffected either way.
+fn roundtrip_implicit_then_and_else_linenumber_suppresses_the_synthesised_goto_word() {
+    let code = "10 IF a THEN 100\n\
+                20 IF b THEN 200 ELSE 300\n\
+                30 IF c THEN y=1:GOTO 80";
+    let prog = BasicProgram::parse(code).expect("parse");
+    let bytes = prog.as_bytes();
+    let decoded = BasicProgram::decode(&bytes).expect("decode");
+    assert_eq!(
+        decoded.to_string().trim(),
+        code.trim(),
+        "an implicit THEN/ELSE line number must print bare, with no GOTO word and no missing space"
+    );
+}
+
+#[test]
 fn roundtrip_edge_cases() {
     // Single character strings
     test_roundtrip("10 PRINT \"A\"");
