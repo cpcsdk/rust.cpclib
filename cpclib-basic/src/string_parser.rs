@@ -827,6 +827,16 @@ pub fn parse_base_variable_name<'src>(input: &mut &'src str) -> BasicNameResult<
         name.push_str(next);
     }
 
+    // Deliberately NOT uppercased. Tried once, and disproven immediately by
+    // the `mandelbrot_matches_a_real_cpcs_own_save` golden test: a real
+    // CPC's own saved .BAS file stores `itmax` in exactly the lowercase the
+    // user typed (bytes `69 74 6d 61 f8`, not `49 54 4d 41 d8`) - the real
+    // ROM's tokeniser does not fold case at all. AMSpiriT Lite's own
+    // `cpclib/basicListing` endpoint answering everything uppercase is that
+    // endpoint's own display-time normalisation, not evidence about the
+    // stored bytes - real hardware, not a live emulator's rendered text, is
+    // the actual ground truth here, and it says preserve case exactly as
+    // typed.
     Ok(name)
 }
 
