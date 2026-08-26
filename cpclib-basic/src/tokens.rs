@@ -635,11 +635,33 @@ impl fmt::Display for BasicTokenNoPrefix {
             Self::Division => write!(f, "/"),
             Self::Power => write!(f, "^"),
             Self::IntegerDivision => write!(f, "\\"),
-            Self::And => write!(f, " AND "),
-            Self::Not => write!(f, " NOT "),
-            Self::Mod => write!(f, " MOD "),
-            Self::Or => write!(f, " OR "),
-            Self::Xor => write!(f, " XOR "),
+            // No self-padding for the binary logical operators: confirmed
+            // against a real CPC's own saved bytes
+            // (`mandelbrot_matches_a_real_cpcs_own_save`) that a genuine
+            // space byte is *already* separately stored on each side of
+            // these tokens (`... 20 FA 20 ...` for ` AND `, where `FA` is
+            // And's own token byte) - both when parsed from text (the
+            // parser captures real spaces the same way it does for every
+            // other operator) and when decoded from real tokenised bytes
+            // (the same 0x20 bytes decode to the same `CharSpace` tokens
+            // either way). Self-padding here doubled every space reported
+            // live - the stored space token is not a stand-in this needs
+            // to compensate for, it is the actual spacing.
+            Self::And => write!(f, "AND"),
+            Self::Mod => write!(f, "MOD"),
+            Self::Or => write!(f, "OR"),
+            Self::Xor => write!(f, "XOR"),
+            // `NOT` is not the same shape as the four above: it is parsed
+            // as a unary prefix (`parse_not`-equivalent, matching
+            // `(Caseless("NOT"), alt((' ', '\t', '(')))`), which only peeks
+            // at the following character to disambiguate the keyword from
+            // an identifier starting with "not" - it does not keep that
+            // character as a stored token the way `AND`/`OR`/`XOR`/`MOD`'s
+            // own space-capturing does. Removing this token's own trailing
+            // space the same way turned `NOT a` into `NOTa` (caught by
+            // `roundtrip_and_or_xor_mod_not_do_not_double_space`) - kept
+            // here, deliberately not touched to match the other four.
+            Self::Not => write!(f, "NOT "),
 
             Self::SymbolQuote => write!(f, "'"),
             Self::StatementSeparator => write!(f, ":"),

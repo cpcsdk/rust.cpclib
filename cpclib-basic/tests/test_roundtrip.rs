@@ -177,6 +177,34 @@ fn roundtrip_quoted_comma() {
 }
 
 #[test]
+/// Regression test, reported live: decoding a program back to text doubled
+/// every space around AND/OR/XOR/MOD - `Display` for these tokens used to
+/// pad itself with its own leading/trailing space on top of the real space
+/// *already* separately stored around them (confirmed against a real CPC's
+/// own saved bytes, `mandelbrot_matches_a_real_cpcs_own_save`). `NOT` is
+/// included here too but for the opposite reason: it's parsed as a unary
+/// prefix that only peeks at (doesn't store) the character after it, so it
+/// genuinely needs its own trailing space and must NOT lose it the same way
+/// - this test pins both directions down together. `test_roundtrip` alone
+/// doesn't catch either - it only checks the two `Display` calls agree with
+/// *each other*, not that either matches the spacing actually typed.
+fn roundtrip_and_or_xor_mod_not_do_not_double_space() {
+    let code = "10 IF x2+y2<=4 AND it<itmax THEN y=1\n\
+                20 IF a OR b THEN y=2\n\
+                30 IF a XOR b THEN y=3\n\
+                40 c=a MOD b\n\
+                50 IF NOT a THEN y=5";
+    let prog = BasicProgram::parse(code).expect("parse");
+    let bytes = prog.as_bytes();
+    let decoded = BasicProgram::decode(&bytes).expect("decode");
+    assert_eq!(
+        decoded.to_string().trim(),
+        code.trim(),
+        "decoded spacing must match what was actually typed"
+    );
+}
+
+#[test]
 fn roundtrip_edge_cases() {
     // Single character strings
     test_roundtrip("10 PRINT \"A\"");
