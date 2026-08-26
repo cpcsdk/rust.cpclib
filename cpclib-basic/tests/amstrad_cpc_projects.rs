@@ -262,14 +262,21 @@ fn test_roundtrip_file(filename: &str) -> Result<(usize, usize, usize), String> 
                     // Normalize for comparison:
                     // 1. Collapse multiple spaces to single
                     // 2. Remove space before line numbers after GOTO (GOTO1230 -> GOTO 1230)
-                    // 3. Handle implicit GOTO after THEN/ELSE (THEN 1230 == THEN GOTO 1230)
+                    // 3. Handle implicit GOTO after THEN/ELSE (THEN 1230 == THEN GO TO 1230)
+                    //    - "GO TO", two words, not one: confirmed live against
+                    //    1984js (a true ROM emulator, not a reimplementation)
+                    //    executing this crate's own tokenised bytes for this
+                    //    exact shape - see `BasicLine`'s own Display in
+                    //    `lib.rs` for the full writeup.
                     let normalize = |s: &str| -> String {
                         let mut result = s.split_whitespace().collect::<Vec<_>>().join(" ");
                         // Add space after GOTO if followed immediately by digit
                         result = result.replace("GOTO", " GOTO ");
-                        // Normalize THEN/ELSE followed by line number
+                        // Normalize THEN/ELSE followed by an implicit GO TO
                         result = result.replace(" THEN  GOTO ", " THEN ");
                         result = result.replace(" ELSE  GOTO ", " ELSE ");
+                        result = result.replace(" THEN GO TO ", " THEN ");
+                        result = result.replace(" ELSE GO TO ", " ELSE ");
                         // Clean up extra spaces
                         result.split_whitespace().collect::<Vec<_>>().join(" ")
                     };

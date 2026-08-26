@@ -63,24 +63,31 @@ impl fmt::Display for BasicLine {
             // with nothing else between it and the number - confirmed
             // against a real CPC's own saved bytes
             // (`mandelbrot_matches_a_real_cpcs_own_save`: `... A0 1A 64 ...`,
-            // no space byte either) that the bytes really do carry a Goto
-            // token there. But a real ROM's own LIST prints just the bare
-            // number in this case, never the word "GOTO" (confirmed live
-            // against AMSpiriT Lite's own listing, which shows `THEN 100`,
-            // not `THEN GOTO 100`, for the identical source). An *explicit*
-            // `GOTO 80` can never reach this branch:
-            // `keyword_line_number_parser!` requires at least one real
-            // space token between the keyword and the number, so a `Goto`
-            // with truly nothing stored after it only ever happens for
-            // this synthesised, word-suppressed case - skipping the token
-            // entirely here does not touch the byte encoding at all, only
-            // what gets printed.
+            // no space byte either) that a keyboard-typed program's own
+            // tokenised bytes really do carry a `Goto` token there, same as
+            // an *explicit* `GOTO 80` - the difference is only that no
+            // space token was captured after it (`keyword_line_number_parser!`
+            // requires one for the explicit form, so a `Goto` with truly
+            // nothing stored after it only ever happens for this
+            // synthesised case). A real ROM's own LIST, executing these
+            // exact bytes (checked live: 1984js, a true ROM emulator, fed
+            // this crate's own tokenised output), renders this specific
+            // shape as "GO TO 100" - two words, with a space neither typed
+            // nor stored - not "GOTO 100" and not a bare "100". (AMSpiriT
+            // Lite's own `POST /api/basic` endpoint was checked too and
+            // produces genuinely different bytes for the same source - a
+            // bare `LineNumber` token with no `Goto` at all - which is why
+            // its own listing shows a bare "100" instead: a different,
+            // also-valid encoding of the same construct, not evidence
+            // about what this crate's own bytes should render as.)
             if matches!(token, BasicToken::SimpleToken(BasicTokenNoPrefix::Goto))
                 && matches!(tokens.get(i + 1), Some(BasicToken::Constant(..)))
             {
-                continue;
+                write!(f, "GO TO ")?;
             }
-            write!(f, "{token}")?;
+            else {
+                write!(f, "{token}")?;
+            }
         }
         Ok(())
     }
