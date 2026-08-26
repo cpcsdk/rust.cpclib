@@ -241,6 +241,48 @@ fn roundtrip_implicit_then_and_else_linenumber_renders_as_go_to() {
 }
 
 #[test]
+/// Regression test for a real ROM behavior: after a GOTO/GOSUB target first
+/// runs, the ROM self-modifies its `LineNumber` token (&1E) into a
+/// `LineMemoryAddressPointer` (&1D) whose payload is the target line's own
+/// memory address, not its line number - reported live as `GOTO
+/// <const:LineMemoryAddressPointer>` when decoding real (already-`RUN`)
+/// memory. `BasicProgram::decode` resolves this back to the line number by
+/// mapping each line's own address (assuming `PROGRAM_START`, same as
+/// `as_sna`/cpclib-dap's own live memory reads) - after which it displays
+/// exactly like an unmodified GOTO target.
+fn decode_resolves_self_modified_goto_cache_to_a_line_number() {
+    let code = "10 GOTO 20\n20 PRINT 1";
+    let prog = BasicProgram::parse(code).expect("parse");
+    let mut bytes = prog.as_bytes();
+
+    // Locate line 10's own length (its own first 2 bytes) to compute
+    // where line 20 actually starts in memory.
+    let line10_length = u16::from_le_bytes([bytes[0], bytes[1]]);
+    let line20_address = cpclib_basic::PROGRAM_START + line10_length;
+
+    // Find the `LineNumber` token (0x1E) followed by the little-endian
+    // value 20 within line 10's own bytes, and self-modify it exactly as
+    // the ROM would: swap the marker to LineMemoryAddressPointer (0x1D)
+    // and its payload to the target's absolute address.
+    let target_bytes = [20u8, 0u8];
+    let pos = bytes[..line10_length as usize]
+        .windows(3)
+        .position(|w| w[0] == 0x1E && w[1..] == target_bytes)
+        .expect("expected an unmodified LineNumber token for the GOTO target");
+    bytes[pos] = 0x1D;
+    let addr_bytes = line20_address.to_le_bytes();
+    bytes[pos + 1] = addr_bytes[0];
+    bytes[pos + 2] = addr_bytes[1];
+
+    let decoded = BasicProgram::decode(&bytes).expect("decode");
+    assert_eq!(
+        decoded.to_string().trim(),
+        code.trim(),
+        "a self-modified GOTO-cache token must resolve back to its target line number"
+    );
+}
+
+#[test]
 fn roundtrip_edge_cases() {
     // Single character strings
     test_roundtrip("10 PRINT \"A\"");

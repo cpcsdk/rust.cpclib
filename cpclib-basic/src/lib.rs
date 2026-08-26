@@ -16,9 +16,16 @@ use cpclib_common::winnow::ascii::space0;
 use cpclib_sna::Snapshot;
 use string_parser::parse_basic_program;
 use thiserror::Error;
-use tokens::BasicToken;
+use tokens::{BasicToken, BasicTokenNoPrefix, BasicValue};
 
-use crate::tokens::BasicTokenNoPrefix;
+/// Where a `LOAD`ed BASIC program's first byte sits in memory - matches
+/// `cpclib-dap`'s own `PROGRAM_START` (`cpclib-dap/src/basic.rs`), which
+/// reads live program bytes from exactly this address. Used both to place
+/// bytes in a snapshot (`as_sna`) and, in the other direction, to resolve
+/// [`BasicTokenNoPrefix::LineMemoryAddressPointer`] tokens back to line
+/// numbers when decoding bytes read from real (possibly already-`RUN`)
+/// memory - see [`BasicProgram::resolve_line_memory_address_pointers`].
+pub const PROGRAM_START: u16 = 0x170;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Basic line index represtation. Can be by line number of position in the list
@@ -281,12 +288,66 @@ impl BasicProgram {
     /// Create the program from a binary content
     pub fn decode(bytes: &[u8]) -> Result<Self, BasicError> {
         match binary_parser::program.parse(bytes) {
-            Ok(prog) => Ok(prog),
+            Ok(mut prog) => {
+                prog.resolve_line_memory_address_pointers();
+                Ok(prog)
+            },
             Err(e) => {
                 Err(BasicError::ParseError {
                     msg: format!("Error while parsing the Basic content: {e}")
                 })
             },
+        }
+    }
+
+    /// A GOTO/GOSUB/RESTORE/... target starts out as a plain
+    /// [`BasicTokenNoPrefix::LineNumber`] (&1E) - but the real ROM
+    /// self-modifies it, the first time it actually runs, into a
+    /// [`BasicTokenNoPrefix::LineMemoryAddressPointer`] (&1D) whose payload
+    /// is no longer the line number but the absolute memory address the
+    /// target line's own length-prefix starts at, so later jumps skip the
+    /// line-number search (see cpctech.cpcwiki.de/docs/bastech.html, &1D
+    /// vs &1E). Bytes freshly encoded by this crate's own `parse`/`as_bytes`
+    /// never contain this token - it only shows up when decoding real,
+    /// possibly-already-`RUN` memory (e.g. read live from an emulator).
+    ///
+    /// This walks the decoded program once to map each line's own address
+    /// (assuming it starts at [`PROGRAM_START`], same as `as_sna`/
+    /// cpclib-dap's own live memory reads) to its line number, then
+    /// rewrites every `LineMemoryAddressPointer` constant it can resolve
+    /// into an ordinary `LineNumber` constant carrying that line number -
+    /// after which it displays and behaves exactly like any other
+    /// unmodified GOTO target. A pointer whose address doesn't land exactly
+    /// on a line start (a stale/foreign snapshot, or a base other than
+    /// `PROGRAM_START`) is left as-is; `Display` still shows something
+    /// readable for that case (the raw address), never a debug placeholder.
+    fn resolve_line_memory_address_pointers(&mut self) {
+        let mut address_to_line = std::collections::HashMap::new();
+        let mut address = PROGRAM_START;
+        for line in &self.lines {
+            address_to_line.insert(address, line.line_number);
+            address = address.wrapping_add(line.public_bytes_length());
+        }
+
+        for line in &mut self.lines {
+            for token in &mut line.tokens {
+                if let BasicToken::Constant(BasicTokenNoPrefix::LineMemoryAddressPointer, value) =
+                    token
+                {
+                    if let Some(target_line) = value
+                        .as_integer()
+                        .and_then(|addr| address_to_line.get(&addr))
+                    {
+                        *token = BasicToken::Constant(
+                            BasicTokenNoPrefix::LineNumber,
+                            BasicValue::new_integer_by_bytes(
+                                (*target_line % 256) as u8,
+                                (*target_line / 256) as u8
+                            )
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -435,7 +496,8 @@ impl BasicProgram {
         let bytes = self.as_bytes();
         let mut sna = Snapshot::new_6128()?;
         sna.unwrap_memory_chunks();
-        sna.add_data(&bytes, 0x170).map_err(|e| format!("{e:?}"))?;
+        sna.add_data(&bytes, PROGRAM_START as usize)
+            .map_err(|e| format!("{e:?}"))?;
         Ok(sna)
     }
 

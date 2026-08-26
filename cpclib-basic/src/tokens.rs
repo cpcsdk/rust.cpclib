@@ -1356,6 +1356,16 @@ impl fmt::Display for BasicToken {
                             .float_representation()
                             .unwrap_or_else(|| "<float?>".to_string())
                     },
+                    // Only reached when `BasicProgram::decode` couldn't
+                    // resolve this self-modified GOTO-cache token back to a
+                    // line number (its stored address didn't land exactly
+                    // on a line start in this program) - show the raw
+                    // address rather than a debug placeholder.
+                    BasicTokenNoPrefix::LineMemoryAddressPointer => {
+                        constant
+                            .int_hexdecimal_representation()
+                            .unwrap_or_else(|| "<unresolved line>".to_string())
+                    },
                     _ => format!("<const:{:?}>", kind)
                 };
                 write!(f, "{repr}")?;
