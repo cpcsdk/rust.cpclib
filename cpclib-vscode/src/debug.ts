@@ -689,7 +689,71 @@ function showBasicListing(session: vscode.DebugSession, dump: BasicListingDump |
     if (isNew) { panel.reveal(vscode.ViewColumn.Beside, true); }
 }
 
+/**
+ * Locomotive BASIC keywords worth colouring in the `-bv` panel - a
+ * pragmatic, reasonably wide list rather than an exhaustive grammar
+ * (matched case-insensitively: AMSpiriT's own listing renders uppercase,
+ * this session's own generic-peer decode preserves whatever case was
+ * typed - see the case-folding investigation in `basic_session.rs`).
+ */
+const BASIC_KEYWORDS = new Set([
+    'MODE', 'INK', 'BORDER', 'PAPER', 'PEN', 'DEFINT', 'DEFSTR', 'DEFREAL', 'DIM', 'ERASE',
+    'FOR', 'TO', 'STEP', 'NEXT', 'IF', 'THEN', 'ELSE', 'GOTO', 'GOSUB', 'RETURN', 'ON',
+    'PRINT', 'INPUT', 'LINE', 'LOCATE', 'CLS', 'CLEAR', 'RUN', 'STOP', 'END', 'REM', 'LET',
+    'AND', 'OR', 'XOR', 'NOT', 'MOD', 'PLOT', 'PLOTR', 'DRAW', 'DRAWR', 'MOVE', 'MOVER',
+    'ORIGIN', 'WINDOW', 'SYMBOL', 'WHILE', 'WEND', 'DATA', 'READ', 'RESTORE', 'ERROR',
+    'RESUME', 'CALL', 'POKE', 'PEEK', 'OUT', 'INP', 'USR', 'RANDOMIZE', 'SOUND', 'ENV',
+    'ENT', 'TAG', 'TAGOFF', 'WAIT', 'FRAME', 'EVERY', 'AFTER', 'SPEED', 'KEY', 'ZONE',
+    'WIDTH', 'MASK', 'FILL', 'GRAPHICS', 'TROFF', 'TRON', 'LIST', 'NEW', 'SAVE', 'LOAD',
+    'MERGE', 'CAT', 'ERA', 'OPENOUT', 'OPENIN', 'CLOSEIN', 'CLOSEOUT', 'CHAIN', 'RENUM',
+    'CONT', 'DELETE', 'EDIT', 'AUTO', 'MID$', 'LEFT$', 'RIGHT$', 'STR$', 'CHR$', 'VAL',
+    'LEN', 'ASC', 'INT', 'ABS', 'SGN', 'SQR', 'SIN', 'COS', 'TAN', 'PI', 'RND', 'EOF',
+    'SPC', 'TAB', 'INKEY', 'INKEY$', 'JOY', 'FRE', 'HIMEM', 'XPOS', 'YPOS', 'TIME'
+]);
+
+/**
+ * A pragmatic BASIC syntax highlighter for the `-bv` panel: pulls out
+ * string literals first (so a keyword-looking word inside a quoted string
+ * is never coloured), then colours the leading line number and any
+ * recognised keyword in what remains. Not a real tokeniser - good enough
+ * for readability, not meant to be authoritative the way the debugger's
+ * own decode is.
+ */
 function basicListingHtml(text: string): string {
+    const highlightedLines = text.split('\n').map(line => {
+        const lineNumberMatch = line.match(/^(\d+)(\s*)/);
+        let rest = line;
+        let prefix = '';
+        if (lineNumberMatch) {
+            prefix = `<span class="linenum">${lineNumberMatch[1]}</span>${escapeHtml(lineNumberMatch[2])}`;
+            rest = line.slice(lineNumberMatch[0].length);
+        }
+
+        // Split on string literals first, so nothing inside one gets
+        // mistaken for a keyword.
+        const parts = rest.split(/("[^"]*")/);
+        const highlighted = parts
+            .map((part, i) => {
+                if (i % 2 === 1) {
+                    // A captured string literal (odd indices from the
+                    // split above).
+                    return `<span class="string">${escapeHtml(part)}</span>`;
+                }
+                return part
+                    .split(/([A-Za-z_][A-Za-z0-9_$]*)/)
+                    .map(word => {
+                        if (BASIC_KEYWORDS.has(word.toUpperCase())) {
+                            return `<span class="keyword">${escapeHtml(word)}</span>`;
+                        }
+                        return escapeHtml(word);
+                    })
+                    .join('');
+            })
+            .join('');
+
+        return prefix + highlighted;
+    });
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -698,11 +762,14 @@ function basicListingHtml(text: string): string {
   body { font-family: var(--vscode-editor-font-family, monospace);
          color: var(--vscode-editor-foreground); padding: 8px 12px; }
   pre { white-space: pre-wrap; margin: 0; }
+  .linenum { color: var(--vscode-editorLineNumber-foreground, var(--vscode-descriptionForeground)); }
+  .keyword { color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-debugTokenExpression-name, #569cd6)); font-weight: 600; }
+  .string { color: var(--vscode-debugTokenExpression-string, #ce9178); }
   footer { margin-top: 10px; color: var(--vscode-descriptionForeground); font-size: 0.9em; }
 </style>
 </head>
 <body>
-<pre>${escapeHtml(text)}</pre>
+<pre>${highlightedLines.join('\n')}</pre>
 <footer>Read from the emulator's own memory, not from the source file on disk -
 re-type <code>-bv</code> in the debug console to refresh it.</footer>
 </body>
