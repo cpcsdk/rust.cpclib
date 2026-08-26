@@ -1740,8 +1740,11 @@ impl<P: DapPeer> BasicSession<P> {
                     let _ = self.send_own("cpclib/basicState", json!({}), Purpose::NativeAwaitRunSettled);
                 },
                 Purpose::NativeAwaitRunSettled => {
-                    return match self.apply_native_basic_state(message) {
-                        Some(line) if self.breakpoints.contains(&line) => {
+                    let line = self.apply_native_basic_state(message);
+                    return match line {
+                        Some(line)
+                            if self.breakpoints.contains(&line) && self.is_first_statement_of_line(line) =>
+                        {
                             self.report_stopped("breakpoint")
                         },
                         _ => self.report_stopped("entry")
@@ -1993,6 +1996,32 @@ impl<P: DapPeer> BasicSession<P> {
         }
     }
 
+    /// Whether the statement at `self.current_statement_address` is the
+    /// *first* one on `line` - the point at which a breakpoint on that line
+    /// should actually trigger a stop, not on every later statement of a
+    /// multi-statement line the machine happens to still be executing.
+    /// Reported live: a breakpoint on a line inside a tight loop
+    /// (`x=1:y=2:GOTO <this line>`) stopped once per statement on the line
+    /// on every pass, not once per loop iteration - the user only ever
+    /// asked for the second. A plain "did the line number change since the
+    /// last statement" check would get this wrong the other way for a
+    /// self-looping line (`previous_line == line` is also true on a real,
+    /// new iteration reaching the line's first statement again) - position
+    /// on the line, not line-to-line movement, is the right question.
+    /// Defaults to `true` (does not suppress the stop) when the address or
+    /// position cannot be resolved, since a real breakpoint should never go
+    /// silently unreported over an unrelated resolution gap.
+    fn is_first_statement_of_line(&self, line: u16) -> bool {
+        let Some(address) = self.current_statement_address else {
+            return true;
+        };
+        let Some(source_line) = self.line_index.iter().find(|(l, _)| *l == line).map(|(_, i)| *i)
+        else {
+            return true;
+        };
+        self.statement_position_in_line(line, source_line, address) == 0
+    }
+
     /// The actual "breakpoint, pause, keep stepping, or entry" decision for
     /// the native step loop, shared between [`Purpose::NativeContinueState`]
     /// and [`Purpose::NativeContinueStateRetry`] - `line` is whatever
@@ -2000,7 +2029,7 @@ impl<P: DapPeer> BasicSession<P> {
     /// them is answering.
     fn decide_continue_stop(&mut self, line: Option<u16>) -> Vec<Value> {
         match line {
-            Some(line) if self.breakpoints.contains(&line) => {
+            Some(line) if self.breakpoints.contains(&line) && self.is_first_statement_of_line(line) => {
                 self.resuming_as = None;
                 self.report_stopped("breakpoint")
             },
@@ -2194,7 +2223,12 @@ impl<P: DapPeer> BasicSession<P> {
         let should_stop = match self.resuming_as {
             Some(ResumeKind::StepStatement) => true,
             Some(ResumeKind::StepLine { from_line }) => Some(line) != from_line,
-            Some(ResumeKind::Continue) | None => self.breakpoints.contains(&line)
+            // See `is_first_statement_of_line`'s own doc comment - a
+            // breakpoint should trigger once per line entry, not once per
+            // statement still on it.
+            Some(ResumeKind::Continue) | None => {
+                self.breakpoints.contains(&line) && self.is_first_statement_of_line(line)
+            }
         };
 
         self.current_line = Some(line);
@@ -3236,6 +3270,84 @@ mod tests {
         assert_eq!(events.len(), 2, "{events:?}");
         assert_eq!(events[0]["event"], "stopped");
         assert_eq!(events[0]["body"]["reason"], "breakpoint");
+    }
+
+    #[test]
+    /// Regression test, reported live: a breakpoint on a multi-statement
+    /// line inside a tight self-loop (`a=1:b=2:GOTO <same line>`) stopped
+    /// once per statement on the line, every pass - not once per loop
+    /// iteration, which is all the user asked for. Confirms
+    /// `decide_continue_stop` only reports a breakpoint stop for the line's
+    /// own *first* statement, and keeps stepping (not stopping) through the
+    /// rest of that same pass.
+    fn a_breakpoint_stops_once_per_line_entry_not_once_per_statement_on_it() {
+        let source = "10 x=0\n20 a=1:b=2:GOTO 20\n";
+        let bytes = cpclib_basic::BasicProgram::parse(source).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&[
+                "cpclib/basicState",
+                "cpclib/basicSetBreakpoints",
+                "cpclib/basicStep"
+            ]),
+            PathBuf::from("test.bas"),
+            source,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        // Line 20's three statements, in order - only their relative order
+        // matters here, not their exact tokenised lengths.
+        let first = basic::PROGRAM_START + 10;
+        let second = basic::PROGRAM_START + 15;
+        let third = basic::PROGRAM_START + 20;
+        session.native_listing =
+            Some(HashMap::from([(20u16, vec![(first, second), (second, third), (third, third + 6)])]));
+
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "setBreakpoints",
+                "arguments": { "breakpoints": [{ "line": 2 }] } // line 20
+            }))
+            .unwrap();
+        session
+            .on_editor_message(&json!({ "seq": 2, "command": "continue", "arguments": {} }))
+            .unwrap();
+        session.peer_mut().last("cpclib/basicStep").unwrap();
+
+        // First statement of line 20: a real breakpoint hit.
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": first } })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "stopped");
+        assert_eq!(events[0]["body"]["reason"], "breakpoint");
+
+        // The user clicks Continue: the loop re-enters line 20, this time
+        // at its *second* statement (a real `basicStep` landed there) -
+        // must not re-report the breakpoint, must keep stepping instead.
+        session
+            .on_editor_message(&json!({ "seq": 3, "command": "continue", "arguments": {} }))
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "success": true }));
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "cur_linenum": 20, "stmt_addr": second } })
+        );
+        assert!(events.is_empty(), "{events:?}");
+        assert_eq!(
+            session.peer_mut().commands().last().unwrap(),
+            "cpclib/basicStep",
+            "still on the breakpoint line but not its first statement - must keep going"
+        );
     }
 
     /// Regression test, reported live: `basicState` read right after
