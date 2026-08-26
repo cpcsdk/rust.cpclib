@@ -219,7 +219,17 @@ enum Purpose {
     /// one shared `machineState` snapshot fetch), each chip here has its own
     /// endpoint and its own round trip, so there is nothing to batch and no
     /// reason to force them to serialize through one shared slot.
-    NativeChipScope { reference: i64, request: Value }
+    NativeChipScope { reference: i64, request: Value },
+    /// A chip scope on the generic peer, which has no per-chip endpoint of
+    /// its own - `cpclib/machineState`'s answer is a whole snapshot,
+    /// decoded the exact same way the Z80 session's own `Purpose::MachineState`
+    /// already does (`cpclib_sna::Snapshot::from_buffer` +
+    /// `crate::inspect::chip_variables`), reused rather than reimplemented.
+    /// One round trip per scope expanded, unlike the Z80 session's own
+    /// batching across every pane opened at once - this session does not
+    /// open them in bulk the way that one's `-chips` console command does,
+    /// so there is nothing worth batching here.
+    GenericChipScope { reference: i64, request: Value }
 }
 
 #[derive(Debug, Clone)]
@@ -920,7 +930,7 @@ impl<P: DapPeer> BasicSession<P> {
                 Ok(Vec::new())
             },
             "variables"
-                if self.native_amspirit
+                if (self.native_amspirit || self.peer.supports("cpclib/machineState"))
                     && message
                         .get("arguments")
                         .and_then(|a| a.get("variablesReference"))
@@ -1097,15 +1107,13 @@ impl<P: DapPeer> BasicSession<P> {
         ];
         // The chips behind the BASIC program: added on request, to help
         // diagnose a screen/timing problem the BASIC variables alone cannot
-        // explain (a broken snapshot, a CRTC left in a bad state, ...) -
-        // native only, since unlike the Z80 session's own chip scopes there
-        // is no `machineState`-snapshot fallback wired up on this session
-        // for a peer without a dedicated endpoint per chip. `expensive: true`
-        // keeps every one of these opt-in, fetched only once actually
-        // expanded rather than on every stop - the same reasoning that
-        // throttled the RUN-await poll loop applies here too: this session
-        // has already seen what hammering AMSpiriT Lite's HTTP server with
-        // requests it did not ask to be asked does to it.
+        // explain (a broken snapshot, a CRTC left in a bad state, ...).
+        // `expensive: true` keeps every one of these opt-in, fetched only
+        // once actually expanded rather than on every stop - the same
+        // reasoning that throttled the RUN-await poll loop applies here
+        // too: this session has already seen what hammering AMSpiriT
+        // Lite's HTTP server with requests it did not ask to be asked does
+        // to it.
         if self.native_amspirit {
             for (name, reference, command) in [
                 ("CRTC", crate::inspect::CRTC_REFERENCE, "cpclib/crtc"),
@@ -1122,6 +1130,14 @@ impl<P: DapPeer> BasicSession<P> {
                     }));
                 }
             }
+        }
+        // The generic peer has no per-chip endpoint at all - same fallback
+        // the Z80 session already relies on for it (`Purpose::MachineState`,
+        // a whole snapshot parsed for its saved chip registers), reused
+        // here rather than reimplemented: `crate::inspect::extra_scopes`/
+        // `chip_variables` are the exact same functions that session calls.
+        else if self.peer.supports("cpclib/machineState") {
+            scopes.extend(crate::inspect::extra_scopes());
         }
         protocol::response(message, json!({ "scopes": scopes }), seq)
     }
@@ -1143,17 +1159,30 @@ impl<P: DapPeer> BasicSession<P> {
         }
     }
 
-    /// Fetches one chip's own endpoint directly - no snapshot, no batching,
-    /// see [`Purpose::NativeChipScope`]. `reference` not being one of the
-    /// four this session actually advertises in `scopes` (stale state from
-    /// before a peer swap, or a client that asks anyway) answers empty
-    /// rather than sending a request nobody can route.
+    /// Fetches one chip scope. On a native peer, its own endpoint directly -
+    /// no snapshot, no batching, see [`Purpose::NativeChipScope`].
+    /// `reference` not being one of the four AMSpiriT actually advertises
+    /// (stale state from before a peer swap, or a client that asks anyway)
+    /// answers empty rather than sending a request nobody can route. On the
+    /// generic peer, the same `cpclib/machineState` snapshot fallback the
+    /// Z80 session already relies on for it (see [`Purpose::GenericChipScope`]).
     fn begin_chip_scope(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
         let reference = message
             .get("arguments")
             .and_then(|a| a.get("variablesReference"))
             .and_then(Value::as_i64)
             .unwrap_or_default();
+        if !self.native_amspirit {
+            self.send_own(
+                "cpclib/machineState",
+                json!({}),
+                Purpose::GenericChipScope {
+                    reference,
+                    request: message.clone()
+                }
+            )?;
+            return Ok(Vec::new());
+        }
         let Some(command) = crate::amspiritlite::chip_command(reference) else {
             let seq = self.next_seq();
             return Ok(vec![protocol::response(message, json!({ "variables": [] }), seq)]);
@@ -1753,6 +1782,19 @@ impl<P: DapPeer> BasicSession<P> {
                 Purpose::NativeChipScope { reference, request } => {
                     let body = message.get("body").cloned().unwrap_or_default();
                     let variables = crate::amspiritlite::chip_variables(reference, &body);
+                    let seq = self.next_seq();
+                    return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
+                },
+                Purpose::GenericChipScope { reference, request } => {
+                    let variables = message
+                        .get("body")
+                        .and_then(|b| b.get("snapshot"))
+                        .and_then(Value::as_str)
+                        .map(decode_base64)
+                        .filter(|bytes| !bytes.is_empty())
+                        .and_then(|bytes| cpclib_sna::Snapshot::from_buffer(bytes).ok())
+                        .and_then(|sna| crate::inspect::chip_variables(reference, &sna))
+                        .unwrap_or_default();
                     let seq = self.next_seq();
                     return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
                 },
@@ -4414,6 +4456,78 @@ mod tests {
         assert_eq!(events[0]["command"], "variables");
         assert_eq!(events[0]["request_seq"], 9);
         assert!(events[0]["body"]["variables"].is_array());
+    }
+
+    #[test]
+    /// Reported live: the generic (1984js) peer's BASIC debug session had no
+    /// chip scopes at all, "unlike AMSpiriT". The Z80 session already
+    /// solves this for the same peer via a `cpclib/machineState` snapshot
+    /// fallback - confirms that scope is now offered here too, reusing (not
+    /// reimplementing) the exact same decode.
+    fn scopes_offers_chip_panes_on_a_generic_peer_with_machine_state() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/machineState"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({ "seq": 1, "command": "scopes", "arguments": {} }))
+            .unwrap();
+        let scopes = response[0]["body"]["scopes"].as_array().unwrap();
+        let names: Vec<&str> = scopes.iter().map(|s| s["name"].as_str().unwrap()).collect();
+        assert_eq!(
+            names,
+            ["Variables", "Workspace", "CRTC", "Gate Array", "PSG", "PPI", "Disc"]
+        );
+    }
+
+    #[test]
+    /// Confirms the generic chip-scope fallback actually decodes the
+    /// snapshot `cpclib/machineState` answers with, the same way the Z80
+    /// session's own `Purpose::MachineState` does - not just that the scope
+    /// is offered.
+    fn a_generic_chip_scope_decodes_the_machine_state_snapshot() {
+        let bytes = cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes();
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/machineState"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &bytes
+        );
+        complete_attach(&mut session);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "variables",
+                "arguments": { "variablesReference": crate::inspect::CRTC_REFERENCE }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/machineState");
+
+        let sna = cpclib_sna::Snapshot::new_6128().unwrap();
+        let mut snapshot_bytes = Vec::new();
+        sna.write_all(&mut snapshot_bytes, cpclib_sna::SnapshotVersion::V2)
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "snapshot": encode_base64(&snapshot_bytes) } })
+        );
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0]["command"], "variables");
+        assert_eq!(events[0]["request_seq"], 9);
+        assert!(events[0]["body"]["variables"].is_array());
+        assert!(
+            !events[0]["body"]["variables"].as_array().unwrap().is_empty(),
+            "a real snapshot must decode to real CRTC register entries, {events:?}"
+        );
     }
 
     #[test]
