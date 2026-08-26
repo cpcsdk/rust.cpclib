@@ -28,7 +28,7 @@ use serde_json::{Value, json};
 
 use crate::basic::{
     self, BasicVariableValue, STATEMENT_BREAKPOINT_TARGET, PTR_CURRENT_STATEMENT,
-    VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
+    PTR_VARIABLES_START, VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
 };
 use crate::peer::DapPeer;
 use crate::protocol::{self, address_reference};
@@ -87,6 +87,12 @@ enum Purpose {
     CurrentLinePointer,
     /// Dereferencing that pointer to get the actual line number.
     CurrentLineValue,
+    /// [`basic::PTR_VARIABLES_START`] dereferenced live, on the generic
+    /// peer only - see `known_txttop`'s own doc comment for why the
+    /// computed estimate is not trusted for this. Sent once per session
+    /// (`begin_variables` skips it once `known_txttop` is set), ahead of
+    /// [`Purpose::VariableChainHeads`].
+    GenericVariablesBase,
     /// The 27 chain heads, on the way to decoding variables.
     VariableChainHeads,
     /// The bulk variable-storage read, once the chain heads are known.
@@ -307,18 +313,23 @@ pub struct BasicSession<P: DapPeer> {
     /// unlike `current_statement_column`, which is already resolved to a
     /// source position.
     current_statement_address: Option<u16>,
-    /// AMSpiriT Lite's own live `txttop` (the real, ROM-tokeniser-driven
-    /// start of variable storage), cached from the first `cpclib/basicState`
-    /// body that carries it. `variables_base` prefers this over computing
-    /// the same address from `program_start + program_len` - live-confirmed
-    /// against a real instance to disagree by 8 bytes for a real program
-    /// (`program_len`, this session's own tokeniser's byte count, landed on
-    /// 516 for a source AMSpiriT's own tokeniser placed at 508), which
-    /// silently shifted every variable read 8 bytes short of where the real
-    /// data starts - reported live as decoded variable names full of stray
-    /// control characters and most of the program's variables missing
-    /// outright, not a cosmetic drift.
-    native_txttop: Option<u16>,
+    /// The real, live start of variable storage, once known - AMSpiriT
+    /// Lite's own `txttop` (cached from the first `cpclib/basicState` body
+    /// that carries it), or, on the generic peer, [`basic::PTR_VARIABLES_START`]
+    /// dereferenced live (see `begin_variables`). `variables_base` prefers
+    /// this over computing the same address from `program_start +
+    /// program_len` - live-confirmed against a real AMSpiriT instance to
+    /// disagree by 8 bytes for a real program (`program_len`, this
+    /// session's own tokeniser's byte count, landed on 516 for a source
+    /// AMSpiriT's own tokeniser placed at 508), which silently shifted
+    /// every variable read 8 bytes short of where the real data starts -
+    /// reported live as decoded variable names full of stray control
+    /// characters and most of the program's variables missing outright, not
+    /// a cosmetic drift. The generic peer has no equivalent self-reported
+    /// value, but the same drift applies to it too (the estimate is wrong
+    /// the same way for both peers) - only the way of learning the real
+    /// address differs.
+    known_txttop: Option<u16>,
     /// The launch's own `stopOnEntry` argument - mirrors the generic Z80
     /// session's own handling of the same DAP argument (`session.rs`),
     /// which only arms a stop-at-entry breakpoint when this is explicitly
@@ -469,7 +480,7 @@ impl<P: DapPeer> BasicSession<P> {
             native_listing: None,
             current_statement_column: None,
             current_statement_address: None,
-            native_txttop: None,
+            known_txttop: None,
             stop_on_entry: false,
             breakpoints: Vec::new(),
             native_amspirit: false,
@@ -528,13 +539,13 @@ impl<P: DapPeer> BasicSession<P> {
     }
 
     /// Where variable storage actually starts. Prefers AMSpiriT's own live
-    /// `txttop` (`native_txttop`) when it is known - see that field's own
+    /// `txttop` (`known_txttop`) when it is known - see that field's own
     /// doc comment for why the `program_len`-based fallback below cannot be
     /// trusted on a native peer. The fallback itself is still correct and
     /// necessary for the generic (1984js) peer, which has no `txttop` of its
     /// own to report.
     fn variables_base(&self) -> u16 {
-        self.native_txttop
+        self.known_txttop
             .unwrap_or_else(|| self.program_start.wrapping_add(self.program_len))
     }
 
@@ -1222,11 +1233,11 @@ impl<P: DapPeer> BasicSession<P> {
         let txttop = field("txttop");
         let vartop = field("vartop");
         let arrend = field("arrend");
-        // See `native_txttop`'s own doc comment - cached here too, so a
+        // See `known_txttop`'s own doc comment - cached here too, so a
         // Workspace query before any statement-level poll still gives
         // `variables_base` the right answer.
         if let Some(t) = txttop {
-            self.native_txttop = Some(t as u16);
+            self.known_txttop = Some(t as u16);
         }
 
         let mut entries = Vec::new();
@@ -1280,6 +1291,31 @@ impl<P: DapPeer> BasicSession<P> {
             storage: None,
             variables_base: self.variables_base()
         });
+        // See `known_txttop`'s own doc comment: the generic peer has no
+        // self-reported live `txttop` the way AMSpiriT does, but the
+        // computed estimate drifts from the real value the same way - so
+        // read the ROM's own pointer live instead of trusting it, the first
+        // time this session needs to know. Cached afterward
+        // (`Purpose::GenericVariablesBase`) exactly like AMSpiriT's own
+        // value, so this round trip only happens once per session.
+        if !self.native_amspirit && self.known_txttop.is_none() {
+            return self.send_own(
+                "readMemory",
+                json!({
+                    "memoryReference": address_reference(PTR_VARIABLES_START as u32),
+                    "count": 2
+                }),
+                Purpose::GenericVariablesBase
+            );
+        }
+        self.start_variable_reads()
+    }
+
+    fn start_variable_reads(&mut self) -> std::io::Result<()> {
+        let base = self.variables_base();
+        if let Some(pending) = self.pending_variables.as_mut() {
+            pending.variables_base = base;
+        }
         self.send_own(
             "readMemory",
             json!({
@@ -1288,7 +1324,6 @@ impl<P: DapPeer> BasicSession<P> {
             }),
             Purpose::VariableChainHeads
         )?;
-        let base = self.variables_base();
         self.send_own(
             "readMemory",
             json!({
@@ -1417,6 +1452,19 @@ impl<P: DapPeer> BasicSession<P> {
                 },
                 Purpose::CurrentLinePointer => return self.on_line_pointer_read(message),
                 Purpose::CurrentLineValue => return self.on_line_value_read(message),
+                Purpose::GenericVariablesBase => {
+                    let bytes = Self::read_memory_bytes(message);
+                    if let Some(chunk) = bytes.get(0..2) {
+                        self.known_txttop = Some(u16::from_le_bytes([chunk[0], chunk[1]]));
+                    }
+                    if let Err(problem) = self.start_variable_reads() {
+                        return vec![protocol::event(
+                            "output",
+                            json!({ "category": "stderr", "output": format!("{problem}\n") }),
+                            1
+                        )];
+                    }
+                },
                 Purpose::VariableChainHeads => {
                     if let Some(pending) = self.pending_variables.as_mut() {
                         pending.chain_heads = Some(Self::read_memory_bytes(message));
@@ -1889,12 +1937,12 @@ impl<P: DapPeer> BasicSession<P> {
     /// than actively pointing at the wrong token.
     fn apply_native_basic_state(&mut self, message: &Value) -> Option<u16> {
         let body = message.get("body")?;
-        // See `native_txttop`'s own doc comment - cached from every body
+        // See `known_txttop`'s own doc comment - cached from every body
         // that carries it, direct mode included, since variable reads can
         // be asked for at any point and should not have to wait for a
         // "real" line first.
         if let Some(t) = body.get("txttop").and_then(Value::as_u64) {
-            self.native_txttop = Some(t as u16);
+            self.known_txttop = Some(t as u16);
         }
         let line = body.get("cur_linenum").and_then(Value::as_u64)? as u16;
         if line == 0xffff {
@@ -4420,6 +4468,12 @@ mod tests {
             .unwrap();
         assert!(response.is_empty());
 
+        // The generic peer's own live-txttop read (see `known_txttop`'s doc
+        // comment) happens first, ahead of the chain-heads/storage reads
+        // this test is actually about.
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
+
         let seq = session.own_requests.keys().min().copied().unwrap();
         let refused = json!({
             "type": "response",
@@ -4458,6 +4512,12 @@ mod tests {
             }))
             .unwrap();
         assert!(response.is_empty(), "waits on two reads before answering");
+
+        // The generic peer's own live-txttop read (see `known_txttop`'s doc
+        // comment) happens first, ahead of the chain-heads/storage reads
+        // this test is actually about.
+        let seq = session.own_requests.keys().min().copied().unwrap();
+        answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
 
         // 27 chain heads: 'I' (9th letter) points at offset 1.
         let mut heads = vec![0u8; VARIABLE_CHAIN_HEADS_COUNT * 2 + 2];
@@ -4513,6 +4573,52 @@ mod tests {
             }
         }));
 
+        assert_eq!(session.variables_base(), live_txttop);
+    }
+
+    #[test]
+    /// Regression test, reported live: the generic (1984js) peer's own
+    /// variable pane was missing "lots of things" compared to AMSpiriT's -
+    /// same root cause as `variables_base_prefers_amspirits_own_live_txttop_over_the_computed_one`,
+    /// but the generic peer has no self-reported `txttop` to prefer, only
+    /// [`basic::PTR_VARIABLES_START`], a ROM pointer readable like any other
+    /// memory. Confirms `begin_variables` reads it live, ahead of the chain-
+    /// heads/storage reads, and that the storage read actually uses the
+    /// live value rather than the computed estimate.
+    fn begin_variables_reads_ptr_variables_start_live_on_the_generic_peer() {
+        let mut session = new_session(SOURCE);
+        let computed = basic::PROGRAM_START.wrapping_add(session.program_len);
+
+        session
+            .on_editor_message(&json!({
+                "seq": 1,
+                "command": "variables",
+                "arguments": { "variablesReference": VARIABLES_REFERENCE }
+            }))
+            .unwrap();
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(
+            request["arguments"]["memoryReference"],
+            address_reference(basic::PTR_VARIABLES_START as u32)
+        );
+
+        let live_txttop = computed - 8;
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, read_memory_response(&live_txttop.to_le_bytes()));
+
+        let heads = vec![0u8; VARIABLE_CHAIN_HEADS_COUNT * 2 + 2];
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, read_memory_response(&heads));
+
+        let request = session.peer_mut().sent.last().unwrap().clone();
+        assert_eq!(request["command"], "readMemory");
+        assert_eq!(
+            request["arguments"]["memoryReference"],
+            address_reference(live_txttop as u32),
+            "the storage read must target the live value, not the computed estimate"
+        );
         assert_eq!(session.variables_base(), live_txttop);
     }
 }
