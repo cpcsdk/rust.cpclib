@@ -7,12 +7,14 @@ use cpclib_sna::{
     RemuBreakPointAccessMode, RemuBreakPointType, WabpAnyBreakpoint, WinapeBreakPoint
 };
 
+use std::sync::Arc;
+
 use super::report::SavedFile;
 use super::save_command::SaveCommand;
 use super::string::PreprocessedFormattedString;
 use super::{Env, EnvEventObserver};
 use crate::error::{AssemblerError, build_simple_error_message};
-use crate::preamble::Z80Span;
+use crate::preamble::{LocatedListing, Z80Span};
 
 #[allow(unused)]
 trait DelayedCommand {}
@@ -31,21 +33,36 @@ impl PrintCommand {
 }
 #[derive(Debug, Clone)]
 pub struct FailedAssertCommand {
-    failure: Box<AssemblerError>
+    pub(crate) failure: Box<AssemblerError>,
+    /// Keeps alive whichever macro/struct-expansion buffer(s) `failure`'s
+    /// span (if any) points into - see `Env::active_expansion_listings`.
+    /// Without this, the buffer can be dropped (a later pass re-expanding
+    /// the same macro call, or the whole token tree going out of scope once
+    /// assembling finishes) before this command is finally formatted, e.g.
+    /// in `PageInformation::collect_assert_failure`, and formatting the
+    /// resulting error then dereferences a dangling `Z80Span`.
+    pub(crate) _keep_alive: Vec<Arc<LocatedListing>>
 }
 
-/// Expect an assert error or a exval error
+/// Expect an assert error or a exval error. Carries no keep-alive: only
+/// safe for a `failure` whose span (if any) doesn't point into a transient
+/// macro-expansion buffer - e.g. one already flattened via `.render()`, or
+/// one located against the top-level source file.
 impl From<AssemblerError> for FailedAssertCommand {
     fn from(failure: AssemblerError) -> Self {
         Self {
-            failure: Box::new(failure)
+            failure: Box::new(failure),
+            _keep_alive: Vec::new()
         }
     }
 }
 
 impl From<Box<AssemblerError>> for FailedAssertCommand {
     fn from(failure: Box<AssemblerError>) -> Self {
-        Self { failure }
+        Self {
+            failure,
+            _keep_alive: Vec::new()
+        }
     }
 }
 

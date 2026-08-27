@@ -872,14 +872,17 @@ impl AssemblerError {
                 location,
                 root
             } => {
+                // Root cause first, call-chain context after - the same
+                // "problem, then where it came from" order as an assert's own
+                // trailing "inside MACRO X, expanded from Y" note.
                 if let Some(location) = location {
                     write!(
                         f,
-                        "Error in macro call {name} (defined in {location})\n{root}"
+                        "{root}\nError in macro call {name} (defined in {location})"
                     )
                 }
                 else {
-                    write!(f, "Error in macro call: {name}\n{root}")
+                    write!(f, "{root}\nError in macro call: {name}")
                 }
             },
             AssemblerError::WrongSymbolType {
@@ -975,7 +978,15 @@ impl AssemblerError {
                             // recursively) will now use adjust_macro_source to prefix the
                             // source with the right number of blank lines, making codespan
                             // produce absolute file line numbers directly.
-                            write!(f, "{msg}\n{root}")
+                            //
+                            // Root cause first, call-chain context after: for a
+                            // chain nested through several macro calls, this
+                            // reads innermost (the actual failure) to outermost
+                            // (how it was reached) - the same order a normal
+                            // stack trace uses, and the same "problem, then
+                            // where it came from" shape as an assert's own
+                            // trailing "inside MACRO X, expanded from Y" note.
+                            write!(f, "{root}\n{msg}")
                         },
 
                         AssemblerError::BasicError { error } => {

@@ -416,6 +416,20 @@ pub trait EnvEventObserver: EventObserver {}
 
 impl<T> EnvEventObserver for T where T: EventObserver {}
 
+/// One entry of `Env::active_expansions` - see its doc comment.
+#[derive(Debug, Clone)]
+struct ActiveExpansion {
+    /// Keeps this expansion's buffer alive independently of the
+    /// `ExpandState` that owns it - see `Env::active_expansions`.
+    listing: Arc<LocatedListing>,
+    name: SmolStr,
+    /// Where the macro/struct itself is defined.
+    location: Option<SourceLocation>,
+    /// Where it is called from - the span an error should point at to lead
+    /// the user back to the actual call site, not just the macro body.
+    call_site: Z80Span
+}
+
 /// Environment of the assembly
 #[allow(missing_docs)]
 pub struct Env {
@@ -461,6 +475,25 @@ pub struct Env {
 
     /// Counter for the unique labels within macros
     macro_seed: usize,
+
+    /// Stack of the macro/struct calls currently being expanded, innermost
+    /// last. Serves two purposes for anything captured while one of these is
+    /// active (e.g. a failed `assert`'s span, see `FailedAssertCommand`):
+    ///
+    /// - cloning `listing` out of here keeps that expansion's buffer alive
+    ///   independently of the `ExpandState` that originally owned it - which
+    ///   is dropped well before such a delayed error is finally formatted
+    ///   (see `Env::handle_assert`);
+    /// - `name`/`location`/`call_site` let the error be wrapped in the same
+    ///   "error in macro call NAME (defined in LOCATION)" shape the
+    ///   propagated-error path builds automatically (`MacroCallOrBuildStruct`
+    ///   in `ProcessedToken::visited`) - a delayed `assert` never propagates
+    ///   as an `Err` (so every assert in a file can be collected in one
+    ///   run), so it never goes through that wrapping on its own and would
+    ///   otherwise point only at the assert's line inside the macro body,
+    ///   with no way back to the call site that actually supplied the bad
+    ///   arguments.
+    active_expansions: Vec<ActiveExpansion>,
 
     charset_encoding: CharsetEncoding,
 
@@ -599,6 +632,7 @@ impl Clone for Env {
             sna_version: self.sna_version,
             free_banks: self.free_banks.clone(),
             macro_seed: self.macro_seed,
+            active_expansions: self.active_expansions.clone(),
             charset_encoding: self.charset_encoding.clone(),
             byte_written: self.byte_written,
             symbols: self.symbols.clone(),
@@ -4047,6 +4081,7 @@ impl Env {
             ga_mmr: 0xC0, // standard memory configuration
 
             macro_seed: 0,
+            active_expansions: Vec::new(),
             charset_encoding: CharsetEncoding::new(),
             sna: SnaAssembler::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
@@ -7717,14 +7752,46 @@ impl Env {
         };
 
         if let Err(assert_error) = res {
-            let assert_error = if let Some(span) = span {
+            let mut assert_error = if let Some(span) = span {
                 assert_error.locate(span.clone())
             }
             else {
                 *assert_error
             };
+
+            // An `assert` never propagates as an `Err` (so every assert in a
+            // file can be collected in one run), so it never goes through
+            // the wrapping `ProcessedToken::visited`'s `MacroCallOrBuildStruct`
+            // arm applies automatically to a macro-body error that *does*
+            // propagate. Do it by hand here, innermost call first, so the
+            // rendered error leads all the way back to the call site that
+            // actually supplied the bad arguments - not just the assert's
+            // line inside the macro body.
+            for expansion in self.active_expansions.iter().rev() {
+                assert_error = AssemblerError::RelocatedError {
+                    span: expansion.call_site.clone(),
+                    error: Box::new(AssemblerError::MacroError {
+                        name: expansion.name.clone(),
+                        root: Box::new(assert_error),
+                        location: expansion.location.clone()
+                    })
+                };
+            }
+
+            // Keep whichever macro/struct-expansion buffer(s) `assert_error`'s
+            // spans point into alive for as long as this command lives (i.e.
+            // as long as `self` lives) - see `Env::active_expansions` and
+            // `FailedAssertCommand`.
+            let keep_alive = self
+                .active_expansions
+                .iter()
+                .map(|expansion| expansion.listing.clone())
+                .collect();
             self.active_page_info_mut()
-                .add_failed_assert_command(assert_error.into());
+                .add_failed_assert_command(FailedAssertCommand {
+                    failure: Box::new(assert_error),
+                    _keep_alive: keep_alive
+                });
             Ok(false)
         }
         else {

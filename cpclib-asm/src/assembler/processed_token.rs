@@ -20,6 +20,7 @@ use cpclib_tokens::{
 use ouroboros::*;
 
 use super::AssemblerWarning;
+use super::ActiveExpansion;
 use super::control::ControlOutputStore;
 use super::file::{get_filename_to_read, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
@@ -285,7 +286,13 @@ impl Debug for IncludeStateInner {
 
 #[self_referencing]
 struct ExpandState {
-    listing: LocatedListing,
+    /// Wrapped in `Arc` so a clone of the buffer this macro/struct expansion
+    /// parsed can be kept alive independently of this `ExpandState` - e.g. by
+    /// `Env::active_expansion_listings`, so a `Z80Span` captured while this
+    /// expansion is being visited (an `assert` failure, say) stays valid even
+    /// after this `ExpandState` itself is dropped (overwritten by a later
+    /// pass, or the whole token tree going out of scope).
+    listing: Arc<LocatedListing>,
     #[borrows(listing)]
     #[covariant]
     processed_tokens: Vec<ProcessedToken<'this, LocatedToken>>
@@ -298,6 +305,15 @@ impl PartialEq for ExpandState {
 }
 
 impl Eq for ExpandState {}
+
+impl ExpandState {
+    /// A clone of the `Arc` owning this expansion's buffer - stashing this
+    /// somewhere with a longer lifetime (see `Env::active_expansion_listings`)
+    /// keeps the buffer alive independently of this `ExpandState`.
+    fn listing_arc(&self) -> Arc<LocatedListing> {
+        self.borrow_listing().clone()
+    }
+}
 
 impl Clone for ExpandState {
     fn clone(&self) -> Self {
@@ -986,9 +1002,10 @@ where <T as ListingElement>::Expr: ExprEvaluationExt + Sync
         // Only wrap env in Arc when needed for processed tokens list
         let env_arc = std::sync::Arc::new(std::sync::RwLock::new(&mut *env));
         let env_arc_macro = env_arc.clone();
+        let listing = std::sync::Arc::new(listing);
         let expand_state = ExpandStateTryBuilder {
             listing,
-            processed_tokens_builder: move |listing: &LocatedListing| {
+            processed_tokens_builder: move |listing: &std::sync::Arc<LocatedListing>| {
                 // Minimize lock scope: clone Arc, do not hold lock across call
                 build_processed_tokens_list(listing, env_arc_macro.clone())
             }
@@ -1322,11 +1339,38 @@ where
 
                     Some(ProcessedTokenState::MacroCallOrBuildStruct(state)) => {
                         let name = self.token.macro_call_name();
+                        let location = env
+                            .symbols()
+                            .any_value(name)
+                            .ok()
+                            .flatten()
+                            .expect("BUG: macro name should exist in symbol table")
+                            .location()
+                            .cloned();
 
                         // Increment macro seed for this macro invocation
                         env.inc_macro_seed();
                         let macro_seed = env.macro_seed();
                         env.symbols_mut().push_seed(macro_seed);
+
+                        // Keep this expansion's buffer alive, and remember
+                        // this call's site, for as long as anything captured
+                        // while visiting it (e.g. a failed `assert`'s
+                        // `Z80Span`) might still need it - see
+                        // `Env::active_expansions`.
+                        // `self.token.possible_span()` (not `self.possible_span()`)
+                        // to borrow only the `token` field - `state` below is
+                        // already a live exclusive borrow of `self.state`.
+                        let call_site = self.token.possible_span().cloned();
+                        let pushed_expansion = call_site.is_some();
+                        if let Some(call_site) = call_site {
+                            env.active_expansions.push(ActiveExpansion {
+                                listing: state.listing_arc(),
+                                name: name.into(),
+                                location: location.clone(),
+                                call_site
+                            });
+                        }
 
                         // save the number of prints to patch the ones added by the macro
                         // to properly locate them
@@ -1345,23 +1389,16 @@ where
 
                         // Always pop the seed, even if an error occurred (RAII principle)
                         env.symbols_mut().pop_seed();
+                        if pushed_expansion {
+                            env.active_expansions.pop();
+                        }
 
                         process_result.map_err(|e| {
-                            let location = env
-                                .symbols()
-                                .any_value(name)
-                                .ok()
-                                .flatten()
-                                .expect("BUG: macro name should exist in symbol table")
-                                .location()
-                                .cloned();
-
                             let e = AssemblerError::MacroError {
                                 name: name.into(),
                                 root: e,
                                 location
                             };
-                            let _caller_span = self.possible_span();
                             relocate_error_with_span(e, self.token)
                         })?;
 

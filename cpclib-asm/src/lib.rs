@@ -813,6 +813,133 @@ mod test_super {
     }
 
     #[test]
+    fn assert_failure_inside_repeated_macro_body_can_be_displayed_after_assembling_finishes() {
+        // Regression test for a real-world segfault (`birthtro`'s
+        // `writter_font.asm`, calling a macro whose body asserts that all of
+        // its string-parameter arguments have the same length): a failed
+        // `assert` inside a macro body is recorded as a `FailedAssertCommand`
+        // holding a `Z80Span` into that macro's expansion buffer (owned by
+        // the `ExpandState` stashed in that call's `ProcessedToken::state`).
+        //
+        // A `REPEAT` block visits its body's `ProcessedToken`s more than
+        // once *within the same pass* (`Env::visit_repeat` calls
+        // `inner_visit_repeat` on the very same `&mut [ProcessedToken]`,
+        // `count` times) - so a macro call inside one has
+        // `update_macro_or_struct_state` build a *fresh* `ExpandState` on
+        // each iteration, dropping the previous one. `DelayedCommands` is
+        // only cleared at pass boundaries, not between REPEAT iterations, so
+        // the first iteration's `FailedAssertCommand` - still holding a span
+        // into the now-dropped first `ExpandState`'s buffer - survives
+        // uncleared until `Env::handle_post_actions` -> `handle_assert` ->
+        // `collect_assert_failure` finally formats it. Historically that
+        // span's `'static` lifetime was really an unsafe transmute into a
+        // buffer with nothing keeping it alive past the overwrite, so
+        // formatting it dereferenced a dangling pointer: a `debug_assert!`
+        // panic in winnow's `Offset::offset_from` in a debug build, plain
+        // undefined behavior (observed as a segfault) in release.
+        // `FailedAssertCommand` now keeps the buffer alive itself
+        // (`Env::active_expansions`, cloned into the command when it is
+        // built), so this must render cleanly instead of crashing.
+        let code = r#"
+		org 0x4000
+		MACRO CHECKLEN(a)
+			assert string_len({a}) == 3, "wrong length"
+		ENDM
+		repeat 2
+			CHECKLEN("ab")
+		endrepeat
+		ret
+		"#;
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let (_tok, mut env) =
+            match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+                Ok(ok) => ok,
+                Err((_t, _env, e)) => panic!("assembling should not fail outright: {e}")
+            };
+
+        let err = match env.handle_post_actions(&tokens) {
+            Ok(_) => panic!("the failing assert should be reported as an error"),
+            Err(e) => e
+        };
+
+        // This is the call that used to panic/UB: formatting an error whose
+        // span may point into an already-overwritten macro-expansion buffer.
+        let rendered = err.to_string();
+        assert!(rendered.contains("wrong length"), "{rendered}");
+    }
+
+    #[test]
+    fn assert_failure_inside_macro_body_points_back_to_the_call_site() {
+        // Regression test: a failed `assert` inside a macro body used to be
+        // reported *only* against the assert's own line inside the macro's
+        // body - fine for tracking down a bug in the macro's logic, but
+        // useless for tracking down a bug in *one particular call*'s
+        // arguments (e.g. `birthtro`'s `writter_font.asm`, calling
+        // `WRITTER_CREATE_CHAR` with mismatched-length scanline strings -
+        // the message pointed at the `assert` line inside `writter.asm`,
+        // never at the actual offending call in `writter_font.asm`). An
+        // `assert` never propagates as an `Err` (so every assert in a file
+        // gets collected in one run), so it never went through the
+        // "error in macro call NAME (defined in LOCATION)" wrapping that a
+        // genuinely propagated macro-body error gets automatically
+        // (`ProcessedToken::visited`'s `MacroCallOrBuildStruct` arm).
+        // `Env::active_expansions` now lets `visit_assert` apply that same
+        // wrapping by hand, so the rendered error must show both: the call
+        // site's own source line, and the assert's location inside the
+        // macro body.
+        let code = r#"
+		org 0x4000
+		MACRO CHECKLEN(a)
+			assert string_len({a}) == 3, "wrong length"
+		ENDM
+		CHECKLEN("ab")
+		ret
+		"#;
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let (_tok, mut env) =
+            match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+                Ok(ok) => ok,
+                Err((_t, _env, e)) => panic!("assembling should not fail outright: {e}")
+            };
+
+        let err = match env.handle_post_actions(&tokens) {
+            Ok(_) => panic!("the failing assert should be reported as an error"),
+            Err(e) => e
+        };
+
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("Error in macro call CHECKLEN"),
+            "missing the call-site wrapping: {rendered}"
+        );
+        assert!(
+            rendered.contains("CHECKLEN(\"ab\")"),
+            "missing the actual call site's source line: {rendered}"
+        );
+        assert!(
+            rendered.contains("wrong length"),
+            "missing the assert's own message: {rendered}"
+        );
+
+        // Root cause first, call-chain context after - the same order a
+        // normal stack trace uses (innermost frame first), and the same
+        // "problem, then where it came from" shape as an assert's own
+        // trailing "inside MACRO X, expanded from Y" note.
+        let assert_pos = rendered
+            .find("wrong length")
+            .expect("assert message should be present");
+        let call_site_pos = rendered
+            .find("Error in macro call CHECKLEN")
+            .expect("call-site wrapping should be present");
+        assert!(
+            assert_pos < call_site_pos,
+            "the assert's own message should come before the call-site wrapping: {rendered}"
+        );
+    }
+
+    #[test]
     fn overflow_warning_fires_for_16bit_immediates_and_defb_defw() {
         let code = "
 		org 0x4000
