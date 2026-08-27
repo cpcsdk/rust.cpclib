@@ -1506,13 +1506,29 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
     res.append(&mut space_c);
 
     // Check if there's a line number after THEN (IF...THEN line_number form)
+    //
+    // No separate `Goto` marker is inserted here, and the target uses
+    // `parse_line_number_expression` (the same dedicated-LineNumber-token
+    // parser `GOTO`/`GOSUB` already use, real-hardware-verified against
+    // hello.bas's own "GOTO 10") rather than a generic numeric expression -
+    // an earlier version of this parser inserted a synthetic `Goto`
+    // SimpleToken and used the generic form instead. That was never
+    // actually verified against real hardware for this specific
+    // construct - the one real-hardware fixture with an implicit
+    // THEN-linenum (mandelbrot's own line 65) was never independently
+    // confirmed to have triggered a real "Syntax error" retype the way
+    // every other bug this crate has fixed was (see e866270b's own
+    // commit message ruling out MODE's argument on the exact same
+    // reasoning: a line that never errors is never retyped, so its bytes
+    // may just be this crate's own prior, unverified guess carried
+    // through unchanged) - and it directly produced the wrong rendering
+    // reported live against 1984js (a true ROM emulator): the synthesised
+    // "GO TO" text that `BasicLine`'s own `Display` used to special-case
+    // for exactly this byte shape doesn't belong there at all once the
+    // shape itself is fixed to match what `GOTO`/`GOSUB` already use.
     let checkpoint = input.checkpoint();
-    if let Ok(mut line_num) =
-        parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)
-    {
+    if let Ok(mut line_num) = parse_line_number_expression.parse_next(input) {
         // This is IF condition THEN line_number (implicit GOTO)
-        // Add implicit GOTO
-        res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
         res.append(&mut line_num);
 
         // Check for ELSE after the line number
@@ -1536,10 +1552,7 @@ pub fn parse_if<'src>(input: &mut &'src str) -> BasicSeveralTokensResult<'src> {
             input.reset(&line_num_checkpoint);
 
             if starts_with_digit {
-                if let Ok(mut else_line_num) =
-                    parse_numeric_expression(NumericExpressionConstraint::Integer).parse_next(input)
-                {
-                    res.push(BasicToken::SimpleToken(BasicTokenNoPrefix::Goto));
+                if let Ok(mut else_line_num) = parse_line_number_expression.parse_next(input) {
                     res.append(&mut else_line_num);
                 }
                 else {

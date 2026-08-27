@@ -63,38 +63,21 @@ pub struct BasicLine {
 impl fmt::Display for BasicLine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ", self.line_number)?;
-        let tokens = self.tokens();
-        for (i, token) in tokens.iter().enumerate() {
-            // `IF ... THEN <linenum>` (and the same after `ELSE`) is an
-            // implicit GOTO: the parser synthesises a real `Goto` token
-            // with nothing else between it and the number - confirmed
-            // against a real CPC's own saved bytes
-            // (`mandelbrot_matches_a_real_cpcs_own_save`: `... A0 1A 64 ...`,
-            // no space byte either) that a keyboard-typed program's own
-            // tokenised bytes really do carry a `Goto` token there, same as
-            // an *explicit* `GOTO 80` - the difference is only that no
-            // space token was captured after it (`keyword_line_number_parser!`
-            // requires one for the explicit form, so a `Goto` with truly
-            // nothing stored after it only ever happens for this
-            // synthesised case). A real ROM's own LIST, executing these
-            // exact bytes (checked live: 1984js, a true ROM emulator, fed
-            // this crate's own tokenised output), renders this specific
-            // shape as "GO TO 100" - two words, with a space neither typed
-            // nor stored - not "GOTO 100" and not a bare "100". (AMSpiriT
-            // Lite's own `POST /api/basic` endpoint was checked too and
-            // produces genuinely different bytes for the same source - a
-            // bare `LineNumber` token with no `Goto` at all - which is why
-            // its own listing shows a bare "100" instead: a different,
-            // also-valid encoding of the same construct, not evidence
-            // about what this crate's own bytes should render as.)
-            if matches!(token, BasicToken::SimpleToken(BasicTokenNoPrefix::Goto))
-                && matches!(tokens.get(i + 1), Some(BasicToken::Constant(..)))
-            {
-                write!(f, "GO TO ")?;
-            }
-            else {
-                write!(f, "{token}")?;
-            }
+        // `IF ... THEN <linenum>` (and the same after `ELSE`) is an
+        // implicit GOTO: the parser (`parse_if`/`string_parser.rs`) stores
+        // a bare `LineNumber` constant there directly, no separate `Goto`
+        // token and no synthesised "GO TO"/"GOTO" text at display time -
+        // same dedicated token an *explicit* `GOTO 80` uses, so it needs
+        // no special-casing here either. An earlier version of this parser
+        // inserted a synthetic `Goto` token for the implicit form and this
+        // `Display` impl special-cased it back into literal "GO TO " text -
+        // reported live as wrong (a real CPC never stores or shows a
+        // "GOTO"/"GO TO" word the user never typed) and traced to the
+        // synthesised token never having been verified against real
+        // hardware for this specific construct (see `parse_if`'s own doc
+        // comment).
+        for token in self.tokens() {
+            write!(f, "{token}")?;
         }
         Ok(())
     }

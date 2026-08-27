@@ -167,11 +167,26 @@ fn mandelbrot_matches_a_real_cpcs_own_save() {
 
     // Line 0 ("10 MODE 0:INK 14,1:INK 15,16") never errored either - same
     // reasoning as pendulum's line 0 above.
+    //
+    // Line 6 ("65 xm=x0+1:IF ... THEN 100") is skipped for the same
+    // "never independently retyped" reason, discovered later: this
+    // fixture's own commit (e866270b) never mentions the implicit
+    // THEN-linenum construct among the bug classes it verified, and
+    // `parse_if` (the only code that produces this shape) was never
+    // touched by either commit that built these fixtures. Its bytes here
+    // (`... A0 1A 64 ...`, a synthetic `Goto` token plus the generic
+    // 16-bit form) is this crate's own original, unverified guess, not
+    // confirmed real-hardware ground truth - and it was wrong, reported
+    // live: 1984js (a true ROM emulator) rendered these exact bytes as
+    // "GO TO 100", a word the user never typed. `parse_if` now uses the
+    // same dedicated `LineNumber` token `GOTO`/`GOSUB` already use
+    // (verified via hello.bas's own "GOTO 10"), no synthetic `Goto`
+    // marker - see `parse_if`'s own doc comment for the full reasoning.
     assert_matches_real_cpc(
         source,
         "tests/fixtures/mandelbrot_real_cpc.dsk",
         "MANDEL2.BAS",
-        &[0]
+        &[0, 6]
     );
 }
 
