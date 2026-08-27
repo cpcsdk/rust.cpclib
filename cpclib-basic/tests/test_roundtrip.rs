@@ -243,13 +243,19 @@ fn roundtrip_implicit_then_and_else_linenumber_renders_as_go_to() {
 #[test]
 /// Regression test for a real ROM behavior: after a GOTO/GOSUB target first
 /// runs, the ROM self-modifies its `LineNumber` token (&1E) into a
-/// `LineMemoryAddressPointer` (&1D) whose payload is the target line's own
-/// memory address, not its line number - reported live as `GOTO
+/// `LineMemoryAddressPointer` (&1D) - reported live as `GOTO
 /// <const:LineMemoryAddressPointer>` when decoding real (already-`RUN`)
 /// memory. `BasicProgram::decode` resolves this back to the line number by
 /// mapping each line's own address (assuming `PROGRAM_START`, same as
 /// `as_sna`/cpclib-dap's own live memory reads) - after which it displays
 /// exactly like an unmodified GOTO target.
+///
+/// The cached payload is one byte *short* of the target line's own record
+/// start, not equal to it - confirmed live against a real, already-`RUN`
+/// 1984js session (`GOTO 80` cached as &26A when this crate's own encoding
+/// puts line 80 at &26B) - this test pins that -1 down; an earlier version
+/// of both the fix and this test assumed the payload was the address
+/// itself, which resolved nothing in the live session that reported it.
 fn decode_resolves_self_modified_goto_cache_to_a_line_number() {
     let code = "10 GOTO 20\n20 PRINT 1";
     let prog = BasicProgram::parse(code).expect("parse");
@@ -263,14 +269,14 @@ fn decode_resolves_self_modified_goto_cache_to_a_line_number() {
     // Find the `LineNumber` token (0x1E) followed by the little-endian
     // value 20 within line 10's own bytes, and self-modify it exactly as
     // the ROM would: swap the marker to LineMemoryAddressPointer (0x1D)
-    // and its payload to the target's absolute address.
+    // and its payload to one less than the target's absolute address.
     let target_bytes = [20u8, 0u8];
     let pos = bytes[..line10_length as usize]
         .windows(3)
         .position(|w| w[0] == 0x1E && w[1..] == target_bytes)
         .expect("expected an unmodified LineNumber token for the GOTO target");
     bytes[pos] = 0x1D;
-    let addr_bytes = line20_address.to_le_bytes();
+    let addr_bytes = (line20_address - 1).to_le_bytes();
     bytes[pos + 1] = addr_bytes[0];
     bytes[pos + 2] = addr_bytes[1];
 

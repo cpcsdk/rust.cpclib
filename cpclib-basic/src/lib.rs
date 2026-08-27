@@ -321,11 +321,22 @@ impl BasicProgram {
     /// on a line start (a stale/foreign snapshot, or a base other than
     /// `PROGRAM_START`) is left as-is; `Display` still shows something
     /// readable for that case (the raw address), never a debug placeholder.
+    ///
+    /// The cached payload itself is one byte *short* of the target line's
+    /// own record start - confirmed live (a real, already-`RUN` 1984js
+    /// session, target line 80 starting at &26B in this crate's own byte
+    /// layout, cached as &26A) - so the map is keyed one below each line's
+    /// address, not the address itself. Plausible ROM-internal reason: the
+    /// interpreter's line search leaves its pointer one byte short of the
+    /// match (matching the found line's own *previous* byte) and whatever
+    /// consumes the cached value re-adds the 1 itself; not documented
+    /// anywhere found so far, so treat the exact mechanism as inferred from
+    /// this one live example, not as an authoritative citation.
     fn resolve_line_memory_address_pointers(&mut self) {
         let mut address_to_line = std::collections::HashMap::new();
         let mut address = PROGRAM_START;
         for line in &self.lines {
-            address_to_line.insert(address, line.line_number);
+            address_to_line.insert(address.wrapping_sub(1), line.line_number);
             address = address.wrapping_add(line.public_bytes_length());
         }
 
