@@ -16,6 +16,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
@@ -28,7 +29,8 @@ pub struct ServerHandle {
     address: SocketAddr,
     token: String,
     outgoing: Sender<String>,
-    incoming: Receiver<String>
+    incoming: Receiver<String>,
+    disconnected: Arc<AtomicBool>
 }
 
 impl ServerHandle {
@@ -74,6 +76,20 @@ impl ServerHandle {
     pub fn incoming(&self) -> &Receiver<String> {
         &self.incoming
     }
+
+    /// Whether the browser tab holding the event stream has gone away.
+    ///
+    /// Reported live: closing the tab left a debug session sitting in the
+    /// editor forever, because nothing here ever said anything about it. Set
+    /// once, from the SSE connection's own write failure - see
+    /// `event_stream`'s own comment for why a write failing is exactly what
+    /// "the tab closed" looks like from this side. There is no un-setting
+    /// it: a session only ever serves one event-stream connection for its
+    /// whole life (`Site::outgoing` is taken once - see `event_stream`), so
+    /// "gone" is not a state that reconnects.
+    pub fn client_gone(&self) -> bool {
+        self.disconnected.load(Ordering::Relaxed)
+    }
 }
 
 struct Site {
@@ -82,7 +98,8 @@ struct Site {
     token: String,
     /// Handed to the one event-stream connection; `None` once taken.
     outgoing: Mutex<Option<Receiver<String>>>,
-    from_page: Sender<String>
+    from_page: Sender<String>,
+    disconnected: Arc<AtomicBool>
 }
 
 /// Start serving `root` on a loopback port the OS chooses.
@@ -98,13 +115,15 @@ pub fn serve(root: &Utf8Path, snapshot: Option<Vec<u8>>) -> std::io::Result<Serv
 
     let (to_page, page_receiver) = channel::<String>();
     let (from_page, page_sender) = channel::<String>();
+    let disconnected = Arc::new(AtomicBool::new(false));
 
     let site = Arc::new(Site {
         root: root.to_path_buf(),
         snapshot: Mutex::new(snapshot),
         token: token.clone(),
         outgoing: Mutex::new(Some(page_receiver)),
-        from_page
+        from_page,
+        disconnected: Arc::clone(&disconnected)
     });
 
     std::thread::Builder::new()
@@ -126,7 +145,8 @@ pub fn serve(root: &Utf8Path, snapshot: Option<Vec<u8>>) -> std::io::Result<Serv
         address,
         token,
         outgoing: to_page,
-        incoming: page_sender
+        incoming: page_sender,
+        disconnected
     })
 }
 
@@ -399,10 +419,17 @@ fn event_stream(mut stream: TcpStream, site: &Site) -> std::io::Result<()> {
         // apart would break the protocol, so a stray newline is refused rather
         // than sent as something the page would silently mis-parse.
         let single_line = message.replace(['\r', '\n'], " ");
-        writeln!(stream, "data: {single_line}")?;
-        writeln!(stream)?;
-        if stream.flush().is_err() {
-            break; // the page went away
+        // A write failing here - the browser tab having closed, most often -
+        // is the only way this side ever learns that; SSE has no explicit
+        // goodbye. `ServerHandle::client_gone` is how the debug session on
+        // the other end of `disconnected` finds out and ends itself, instead
+        // of sitting open forever the way it used to (reported live).
+        if writeln!(stream, "data: {single_line}").is_err()
+            || writeln!(stream).is_err()
+            || stream.flush().is_err()
+        {
+            site.disconnected.store(true, Ordering::Relaxed);
+            break;
         }
     }
     let _ = stream.shutdown(Shutdown::Both);
@@ -434,6 +461,57 @@ fn respond(
     )?;
     stream.write_all(body)?;
     stream.flush()
+}
+
+#[cfg(test)]
+mod disconnect_tests {
+    use std::io::{BufRead, BufReader};
+    use std::net::TcpStream;
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    /// Reported live: closing the emulator's own browser tab left a debug
+    /// session sitting open in the editor forever, because nothing here had
+    /// ever noticed the tab was gone. `client_gone` is the fix's whole
+    /// mechanism - a real client connecting to `/session/events` and then
+    /// disappearing must flip it, not just compile.
+    #[test]
+    fn client_gone_flips_once_the_event_stream_connection_really_closes() {
+        let root = Utf8PathBuf::from(std::env::temp_dir().to_string_lossy().to_string());
+        let handle = serve(&root, None).expect("serve");
+        assert!(!handle.client_gone(), "nothing has connected yet");
+
+        let stream = TcpStream::connect(("127.0.0.1", handle.port())).expect("connect");
+        write!(
+            &stream,
+            "GET /session/events?token={} HTTP/1.1\r\nHost: x\r\n\r\n",
+            handle.token()
+        )
+        .unwrap();
+        // Read the status line, so the connection is confirmed genuinely
+        // open (not just TCP-accepted) before it is closed again.
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut status_line = String::new();
+        reader.read_line(&mut status_line).expect("read status line");
+        assert!(status_line.starts_with("HTTP/1.1 200"), "{status_line}");
+
+        drop(stream);
+        drop(reader);
+
+        // A message has to actually be *sent* down the stream for its own
+        // write to fail and notice the close - see `event_stream`'s own
+        // comment for why SSE has no other way to learn this.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            let _ = handle.send("{}".to_string());
+            if handle.client_gone() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        panic!("client_gone never became true within 5s of the connection closing");
+    }
 }
 
 #[cfg(test)]

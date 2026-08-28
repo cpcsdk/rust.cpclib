@@ -21,6 +21,7 @@ cpclib-sna.workspace = true
 # The Gate Array palette is a hardware colour number; turning one into an
 # actual colour is this crate's table, not a second copy of it here.
 cpclib-image.workspace = true
+image.workspace = true
 cpclib-tokens.workspace = true
 cpclib-common.workspace = true
 cpclib-runner = { workspace = true, default-features = false }

@@ -39,7 +39,11 @@ use serde_json::{Value, json};
 /// over POST.
 struct ServedPeer {
     server: cpclib_runner::web::ServerHandle,
-    buffer: Vec<u8>
+    buffer: Vec<u8>,
+    /// `client_gone` latches; this is our own one-shot on top of that latch,
+    /// so the synthesised `terminated` below is sent exactly once rather than
+    /// on every `drain` for the rest of the (already-ending) session.
+    reported_gone: bool
 }
 
 impl peer::DapPeer for ServedPeer {
@@ -55,7 +59,36 @@ impl peer::DapPeer for ServedPeer {
         while let Some(frame) = self.server.try_recv() {
             self.buffer.extend_from_slice(frame.as_bytes());
         }
-        protocol::decode(&mut self.buffer)
+        let mut messages = protocol::decode(&mut self.buffer);
+
+        // Reported live: closing the emulator's browser tab left the debug
+        // session open in the editor forever - nothing here had ever told it
+        // the tab was gone. `client_gone` is set the moment the SSE
+        // connection's own write fails (see `ServerHandle::client_gone`'s own
+        // comment); `terminated` is what tells the editor to end the session,
+        // and nothing upstream intercepts that event name (see
+        // `Session::on_emulator_message`'s event fallthrough), so it reaches
+        // VS Code exactly as sent.
+        if !self.reported_gone && self.server.client_gone() {
+            self.reported_gone = true;
+            // Well clear of `Session::next_seq`'s own small, low counter -
+            // the same "out of the adapter's own range" convention
+            // `amspiritlite::watch_run_state` already uses for events it
+            // synthesises on a peer's behalf (there, starting at
+            // `1_000_000`; here, deliberately further still, since this
+            // fires only once, right at the very end).
+            messages.push(protocol::event(
+                "output",
+                json!({
+                    "category": "console",
+                    "output": "The emulator tab is no longer connected - it was probably \
+                               closed. Ending the debug session.\n"
+                }),
+                999_999_000
+            ));
+            messages.push(protocol::event("terminated", json!({}), 999_999_001));
+        }
+        messages
     }
 
     /// Nothing to do with it: 1984js implements `next` itself, and decides
@@ -937,7 +970,8 @@ fn connect_backend(
         (
             Backend::Served(ServedPeer {
                 server,
-                buffer: Vec::new()
+                buffer: Vec::new(),
+                reported_gone: false
             }),
             url
         )

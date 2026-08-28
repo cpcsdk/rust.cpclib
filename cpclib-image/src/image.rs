@@ -259,7 +259,7 @@ impl<C:AmstradColor> ColorMatrix<C> {
             height
         };
 
-        Self::from_screen_at(data, 0xC000, bytes_width, pixel_height, mode, palette)
+        Self::from_screen_at(data, 0xC000, bytes_width, pixel_height, 8, mode, palette)
     }
 
     /// Like [`Self::from_screen`], but the interleaved "every 8th raster
@@ -269,26 +269,132 @@ impl<C:AmstradColor> ColorMatrix<C> {
     /// memory read, where the screen may sit at any 16K-page start and the
     /// caller wants a specific height, not "as much as fits".
     ///
-    /// A scrolled BASIC screen's start address is not necessarily 16K-page
+    /// A scrolled BASIC screen's start address is not necessarily 16K-bank
     /// aligned (reported live: a real CPC's own CRTC start address mid-
     /// program, R12=0x30/R13=0x88, landing at 0xC110), and the interleaved
     /// layout's own `+0x800`-per-subline term can then push the computed
-    /// address past 0xFFFF entirely (confirmed against a second real
-    /// fixture, `cpclib-dap/tests/graphics/hello/`: R12=0x32/R13=0xF0 puts
-    /// the screen at 0xC5E0, and its own last on-screen line computes to
-    /// 0x10420) - **real hardware wraps this as plain 16-bit address
-    /// arithmetic, at 0x10000, not within the CRTC's own 16K page**. An
-    /// earlier version of this function wrapped at 0x4000 (page-relative)
-    /// instead, on the theory that the page-select bits are separate
-    /// circuitry from the interleave offset - live-verified wrong against
-    /// that second fixture's own WinAPE capture: page-relative wrap reads
-    /// a real, non-background byte (0xE0 at 0xC420) where the *correct*,
-    /// WinAPE-and-real-hardware-matching value is 0x00, only found by
-    /// wrapping the full 16-bit address (0x10420 -> 0x0420) instead.
-    /// `data` is addressed modulo its own length accordingly - callers
-    /// pass the full 64K address space (`data[0]` = real address 0x0000),
-    /// not just one 16K page.
+    /// offset past a bank's own 0x4000 span. **The wrap stays inside
+    /// whichever of the four independent 16K banks (0000-3FFF, 4000-7FFF,
+    /// 8000-BFFF, C000-FFFF) `base_address` itself falls in, confirmed
+    /// live**: the CRTC's own `MA`/`RA` counters are a 14-bit address with
+    /// no idea about paging at all - the Gate Array places that 14-bit
+    /// result into whichever bank R12's page-select bits chose, a bank that
+    /// never changes mid-frame, so an overflowing `MA`/`RA` computation
+    /// wraps back into the *same* bank rather than spilling into the next
+    /// one (a computed offset that would land on 0x0006 lands on 0xC006 for
+    /// a C000-based screen, not on the bare 0x0006 of a different bank
+    /// entirely).
+    ///
+    /// **This reverses an earlier version of this same fix**, which wrapped
+    /// at the full 64K address space instead (crossing banks freely) after
+    /// live-testing one specific address (0xC5E0, from
+    /// `cpclib-dap/tests/graphics/hello/`) against that fixture's own
+    /// memory bytes and a WinAPE screen capture: the byte at the bank-
+    /// confined candidate (0xC420) read as a real, non-background 0xE0,
+    /// while the cross-bank candidate (0x0420) read 0x00 and looked clean
+    /// against the capture. That comparison is not itself explained by the
+    /// bank-confined formula reinstated here - flagged rather than silently
+    /// dropped, since the earlier finding was real data, not a guess. Two
+    /// honest candidates for the discrepancy: the source screenshot's own
+    /// alignment was never guaranteed pixel-exact (flagged as a real risk
+    /// from the very first fixture this feature was built against), or
+    /// 0xC420 genuinely held live (non-screen) data that only *looked*
+    /// like garbling by coincidence. Re-confirming against a live emulator
+    /// - this crate's own tests cannot, `hello`/`blight` are static
+    /// fixtures - is the way to actually settle it if it resurfaces.
+    /// `data` is still addressed modulo its own length as a safety bound,
+    /// but every real caller passes the full 64K address space
+    /// (`data[0]` = real address 0x0000), not just one bank.
+    ///
+    /// `lines_per_char_row` replaces what used to be a hard-coded `8` for
+    /// when `MA` (character position) itself advances to the next row - the
+    /// Gate Array combines `MA` and `RA` (raster-within-row) as `address =
+    /// MA*2 + RA*0x800 + base`, and how many `RA` values occur before `MA`
+    /// advances is the CRTC's own `R9 + 1`, not always 8. `RA` itself,
+    /// though, is a 3-bit field in this address path on real hardware
+    /// regardless of how tall `R9` configures a row to actually be -
+    /// reported live: a row configured taller than 8 lines does not reach
+    /// new addresses past line 7, it repeats them - so only the low 3 bits
+    /// of the within-row line number ever reach `RA*0x800`, even though the
+    /// full `lines_per_char_row` still governs when `MA` advances.
     pub fn from_screen_at(
+        data: &[u8],
+        base_address: usize,
+        bytes_width: usize,
+        pixel_height: usize,
+        lines_per_char_row: usize,
+        mode: Mode,
+        palette: &Palette<C>
+    ) -> Self {
+        let _pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
+        let space_size = data.len();
+        let lines_per_char_row = lines_per_char_row.max(1);
+
+        // Corrected against real hardware, reported live: the CRTC's own MA
+        // (character position) and RA (raster-within-row) counters combine
+        // into a 14-bit address, and the CRTC itself has no idea about
+        // paging at all - the Gate Array places that 14-bit result into
+        // whichever of the four independent 16K banks (0000-3FFF,
+        // 4000-7FFF, 8000-BFFF, C000-FFFF) `base_address`'s own top two
+        // bits select, and that bank never changes mid-frame. So MA/RA
+        // arithmetic wraps at 0x4000 (one bank), confined to it, never
+        // spilling into the next one - a screen based at 0xC5E0 can only
+        // ever read 0xC000-0xFFFF, and an overflowing computation wraps
+        // back into that same range (e.g. an overflow that would land on
+        // 0x0006 lands on 0xC006 instead), not into page 0.
+        //
+        // `RA` specifically is 3 bits wide in this address path - real CRTC
+        // hardware accepts `R9` values that configure a character row
+        // taller than 8 lines, but the extra lines do not reach new
+        // addresses: `RA` wraps at 8 regardless of how tall the row is
+        // configured to be, repeating the same 8 raster lines' worth of
+        // addresses again for the remainder of the row. `lines_per_char_row`
+        // still governs when `MA` itself advances to the next row (the
+        // *real*, possibly-taller-than-8 row height), only the term this
+        // wrap feeds into `RA*0x800` is narrowed.
+        let page_base = base_address & !0x3FFFusize;
+        let offset_in_page = base_address & 0x3FFF;
+
+        (0..pixel_height)
+            .map(|line| {
+                let row = line / lines_per_char_row;
+                let ra = (line % lines_per_char_row) % 8;
+                let offset_in_page = (offset_in_page + row * bytes_width + ra * 0x800) % 0x4000;
+                let line_bytes: Vec<u8> = (0..bytes_width)
+                    .map(|col| {
+                        let byte_offset = (offset_in_page + col) % 0x4000;
+                        data[(page_base + byte_offset) % space_size]
+                    })
+                    .collect();
+                line_bytes
+                    .iter()
+                    .flat_map(|b| pixels::byte_to_pens(*b, mode))
+                    .collect::<Vec<crate::ga::Pen>>()
+            })
+            .map(move |pens| {
+                // build lines of inks
+                pens.iter()
+                    .map(|pen| palette.get(pen))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    /// The other of WinAPE's own two "browse memory as pixels" encodings -
+    /// "CPC" there, next to "Screen" (what [`Self::from_screen_at`]
+    /// implements). No CRTC interleaving at all: `bytes_width` bytes read,
+    /// then the very next `bytes_width` bytes, and so on - straight,
+    /// sequential memory, top to bottom, left to right, wrapped at the full
+    /// 64K address space rather than confined to one 16K bank (there is no
+    /// real CRTC/Gate Array display behaviour being modelled here, so
+    /// there is no bank to stay confined to - this is a raw memory scan,
+    /// looking for a repeating structure whose real shape is not yet
+    /// known). Bytes still decode via the chosen CPC screen `mode`
+    /// (0-3) exactly as `from_screen_at` does - only the *addressing*
+    /// differs between the two encodings, never the pixel decode.
+    pub fn from_linear_memory(
         data: &[u8],
         base_address: usize,
         bytes_width: usize,
@@ -296,14 +402,11 @@ impl<C:AmstradColor> ColorMatrix<C> {
         mode: Mode,
         palette: &Palette<C>
     ) -> Self {
-        let _pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
         let space_size = data.len();
 
         (0..pixel_height)
             .map(|line| {
-                let screen_address =
-                    base_address + ((line / 8) * bytes_width) + ((line % 8) * 0x800);
-                let data_address = screen_address % space_size;
+                let data_address = (base_address + line * bytes_width) % space_size;
                 let line_bytes: Vec<u8> = (0..bytes_width)
                     .map(|col| data[(data_address + col) % space_size])
                     .collect();
@@ -313,7 +416,6 @@ impl<C:AmstradColor> ColorMatrix<C> {
                     .collect::<Vec<crate::ga::Pen>>()
             })
             .map(move |pens| {
-                // build lines of inks
                 pens.iter()
                     .map(|pen| palette.get(pen))
                     .cloned()
@@ -440,6 +542,26 @@ impl<C: AmstradColor> ColorMatrix<C> {
         }
 
         // Set them in the right position
+        std::mem::swap(&mut self.data, &mut new_data)
+    }
+
+    /// Double the height (each row printed twice) - the vertical half of the
+    /// CPC's own pixel aspect ratio: a raster line is roughly twice as tall
+    /// as it is wide compared to a Mode 2 dot, on every mode alike, unlike
+    /// the horizontal ratio which is mode-dependent (see
+    /// [`Self::double_horizontally`], called a mode-dependent number of times
+    /// instead).
+    #[allow(clippy::needless_range_loop, clippy::identity_op)]
+    pub fn double_vertically(&mut self) {
+        let mut new_data =
+            vec![vec![C::black(); self.width() as usize]; (2 * self.height()) as usize];
+        for y in 0..(self.height() as usize) {
+            for x in 0..(self.width() as usize) {
+                let color = self.get_color(x, y);
+                new_data[y * 2 + 0][x] = *color;
+                new_data[y * 2 + 1][x] = *color;
+            }
+        }
         std::mem::swap(&mut self.data, &mut new_data)
     }
 
@@ -1537,28 +1659,94 @@ mod tests {
     /// the (out of bounds, if it even ran) unwrapped position - nor the
     /// wrong, page-relative position the first fix would have used.
     #[test]
-    fn from_screen_at_wraps_at_the_full_64k_address_space_not_just_one_page() {
+    fn from_screen_at_wraps_within_the_same_16k_bank_not_into_the_next_one() {
         let mut palette = Palette::<Ink>::new();
         palette.set(0u8, Ink::BLACK);
         palette.set(1u8, Ink::WHITE);
 
         let mut data = vec![0u8; 0x10000];
-        let base_address = 0xFFF0usize;
-        // Where line 1 (subline 1, `1 * 0x800`) wraps to:
-        // (base_address + 0x800) % 0x10000 - not % 0x4000 (which would
-        // wrongly land at 0xB7F0, still inside the *previous* 16K page).
-        let wrapped_offset = (base_address + 0x800) % 0x10000;
-        assert_eq!(wrapped_offset, 0x07F0);
+        let base_address = 0xFFF0usize; // bank 3: 0xC000-0xFFFF
+        // Where line 1 (subline 1, `1 * 0x800`) wraps to: confined to the
+        // *same* bank as `base_address` - (0xFFF0 & 0x3FFF) + 0x800,
+        // wrapped at 0x4000 and re-based at 0xC000 - not the bank `base_
+        // address`'s own raw arithmetic would spill into if left
+        // unconfined (0xFFF0 + 0x800 = 0x107F0, which crosses out of
+        // 16-bit range entirely, let alone out of bank 3).
+        let offset_in_page = (base_address & 0x3FFF) + 0x800;
+        let wrapped_offset = 0xC000 + (offset_in_page % 0x4000);
+        assert_eq!(wrapped_offset, 0xC7F0);
         data[wrapped_offset] = 0xFF; // one full byte "on" - Mode::Two, 8 lit pixels
 
-        let matrix = ColorMatrix::from_screen_at(&data, base_address, 1, 16, Mode::Two, &palette);
+        let matrix = ColorMatrix::from_screen_at(&data, base_address, 1, 16, 8, Mode::Two, &palette);
 
         let line0_lit = (0..matrix.width()).any(|x| *matrix.get_color(x as usize, 0) == Ink::WHITE);
         let line1_lit = (0..matrix.width()).any(|x| *matrix.get_color(x as usize, 1) == Ink::WHITE);
         assert!(!line0_lit, "line 0 reads an untouched (zero) byte, must stay background");
         assert!(
             line1_lit,
-            "line 1 must read the marker byte wrapped at the full 64K boundary, not panic or miss it"
+            "line 1 must read the marker byte wrapped within the same 16K bank, not panic or miss it"
+        );
+    }
+
+    /// Reported live: real CRTC hardware accepts an `R9` (maximum raster
+    /// address) taller than 8 lines, but the address path's own `RA` field
+    /// is only 3 bits wide - a row configured taller than 8 lines does not
+    /// reach new addresses past line 7, it repeats them. `lines_per_char_row`
+    /// = 16 here (an `R9` of 15) still governs when `MA` advances (once
+    /// every 16 lines, not 8), but line 8 must read the *same* byte line 0
+    /// did - not a new one 8*0x800 further on, and not (with the old,
+    /// pre-fix `line % lines_per_char_row` feeding `RA*0x800` directly)
+    /// skip the 8 lines in between as though they used addresses that were
+    /// never really reachable.
+    #[test]
+    fn from_screen_at_wraps_the_raster_address_at_8_regardless_of_the_configured_row_height() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::WHITE);
+
+        let mut data = vec![0u8; 0x10000];
+        let base_address = 0xC000usize;
+        data[base_address] = 0xFF; // line 0's own byte - Mode::Two, 8 lit pixels
+
+        let matrix =
+            ColorMatrix::from_screen_at(&data, base_address, 1, 16, 16, Mode::Two, &palette);
+
+        let lit = |line: usize| {
+            let m = &matrix;
+            (0..m.width()).any(|x| *m.get_color(x as usize, line) == Ink::WHITE)
+        };
+        assert!(lit(0), "line 0 reads its own marker byte");
+        assert!(
+            lit(8),
+            "line 8 (RA=8, wraps to RA=0) must read the same byte line 0 did, not a blank one"
+        );
+        assert!(!lit(1), "line 1 (RA=1) reads an untouched, still-blank byte");
+    }
+
+    /// WinAPE's "CPC" encoding, next to its "Screen" one: plain sequential
+    /// bytes, no interleave, wrapped at the full 64K space rather than
+    /// confined to one 16K bank.
+    #[test]
+    fn from_linear_memory_reads_sequential_bytes_wrapped_at_the_full_64k_space() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::WHITE);
+
+        let mut data = vec![0u8; 0x10000];
+        let base_address = 0xFFFEusize;
+        data[0xFFFE] = 0xFF; // line 0, byte 0
+        data[0xFFFF] = 0x00; // line 0, byte 1
+        data[0x0000] = 0xFF; // line 1, byte 0 - only reachable by wrapping past 0xFFFF
+        data[0x0001] = 0x00; // line 1, byte 1
+
+        let matrix =
+            ColorMatrix::from_linear_memory(&data, base_address, 2, 2, Mode::Two, &palette);
+
+        let lit = |line: usize, x: usize| *matrix.get_color(x, line) == Ink::WHITE;
+        assert!(lit(0, 0), "line 0 reads 0xFFFE, its own marker byte");
+        assert!(
+            lit(1, 0),
+            "line 1 must wrap straight past 0xFFFF to 0x0000, not stop or panic"
         );
     }
 
@@ -1626,4 +1814,28 @@ mod tests {
         assert_eq!(mask, mask2);
         assert_eq!(sprite, sprite2);
     }
+
+    /// Every row printed twice, in place, with the width and the row order
+    /// otherwise untouched - the vertical half of the CPC pixel-aspect-ratio
+    /// stretch `-sv`'s screen viewer applies on every mode alike.
+    #[test]
+    fn double_vertically_repeats_each_row_immediately_after_itself() {
+        let mut matrix: ColorMatrix<Ink> = vec![
+            vec![Ink::BLACK, Ink::WHITE],
+            vec![Ink::WHITE, Ink::BLACK]
+        ]
+        .into();
+
+        matrix.double_vertically();
+
+        assert_eq!(matrix.width(), 2);
+        assert_eq!(matrix.height(), 4);
+        assert_eq!(
+            *matrix.get_color(0, 0), Ink::BLACK
+        );
+        assert_eq!(*matrix.get_color(0, 1), Ink::BLACK);
+        assert_eq!(*matrix.get_color(0, 2), Ink::WHITE);
+        assert_eq!(*matrix.get_color(0, 3), Ink::WHITE);
+    }
+
 }

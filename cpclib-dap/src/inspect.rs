@@ -677,6 +677,76 @@ pub fn crtc_screen_start_address(r12: u8, r13: u8) -> usize {
     page * 0x4000 + offset * 2
 }
 
+/// `-sv`'s own defaults for width and "lines per character row", read
+/// straight off the live CRTC rather than assumed as a fixed 80x8: `R1`
+/// (horizontal displayed) counts *character* positions, and the CPC's
+/// screen memory is addressed in word pairs - one address step per
+/// character, two bytes per step - so the byte width of a line is `R1 * 2`.
+/// `R9` (maximum raster address) is the last raster line of a character
+/// row, 0-based, so a row is `R9 + 1` lines tall; that is also the modulus
+/// `ColorMatrix::from_screen_at`'s own interleaved addressing needs (see its
+/// `lines_per_char_row` parameter's doc comment) - the standard `R9 = 7`
+/// (8 lines) was hard-coded everywhere until this existed only because
+/// every fixture this crate had ever seen used it.
+///
+/// `R1 == 0` is treated as "unknown" (an all-zero/never-answered register
+/// bank, not a real CRTC state actively displaying anything) and falls back
+/// to [`DEFAULT_SCREEN_WIDTH`]; `R9` has no such fallback; needed since
+/// `R9 = 0` (one raster line per row) is unusual but real.
+pub fn crtc_screen_defaults(regs: &[u8; 18]) -> (usize, usize) {
+    let width = (regs[1] as usize) * 2;
+    let width = if width == 0 { DEFAULT_SCREEN_WIDTH } else { width };
+    let lines_per_char_row = regs[9] as usize + 1;
+    (width, lines_per_char_row)
+}
+
+/// `-sv`'s 5th argument, resolved: the WinAPE-style char-row-strip view
+/// (a black separator every `lines_per_char_row` real lines) is now the
+/// *default* appearance, on the reasoning that a flat image was never as
+/// useful for reverse engineering as one that shows character-row
+/// boundaries - explicitly asked for as this feature's whole point. `0` is
+/// how that is turned back off (a screen genuinely has no natural strip
+/// height smaller than itself, so `0` was never a meaningful "real"
+/// request); any other explicit value asks for a different grouping than
+/// the live CRTC's own.
+/// `-sv`'s 6th argument, parsed: a comma-separated list of up to 16 CPC
+/// hardware ink numbers (0-26), one per pen starting at pen 0 - an empty
+/// entry between commas (`",,5,"`) means "no override for this pen, keep
+/// whatever the live Gate Array put there", the same way every other
+/// unset `-sv` argument already means "use the live default". Not sent at
+/// all (an empty slice) is exactly the same as every entry being empty -
+/// nothing overridden.
+pub fn parse_palette_override(text: &str) -> Vec<Option<Ink>> {
+    text.split(',')
+        .take(16)
+        .map(|token| {
+            token
+                .trim()
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| Ink::INKS.get(index))
+                .copied()
+        })
+        .collect()
+}
+
+/// The char-row-height argument, resolved: real WinAPE's own memory-
+/// browsing tool this view is modelled on treats it as `R9 + 1` for the
+/// address interleaving itself, not only as a display value - the CRTC's
+/// own live value is only the *default*, not the only value this view can
+/// ever use. Reported live: a taller/shorter row than the live CRTC's own
+/// is exactly the point of browsing raw memory this way (finding a
+/// repeating structure whose real height is not yet known), so leaving the
+/// address math pinned to the live CRTC while only a cosmetic value moved
+/// missed the entire feature. Unset or an explicit `0` both mean "use the
+/// live CRTC value".
+pub fn resolve_char_row_height(row_height_override: Option<usize>, live_lines_per_char_row: usize) -> usize {
+    match row_height_override {
+        Some(n) if n > 0 => n,
+        _ => live_lines_per_char_row
+    }
+}
+
 /// A `Palette<Ink>` built from 17 raw Gate Array pen values (pens 0-15, then
 /// the border at index 16) - the same shape `chip_variables`'s
 /// `GATE_ARRAY_REFERENCE` branch already reads via `GA_PAL(Some(index))`.
@@ -738,12 +808,47 @@ pub const DEFAULT_SCREEN_HEIGHT: usize = 200;
 
 /// A sane range for the interactive panel's own width/height controls - a
 /// user is free to type anything, but nothing here should be able to ask
-/// for a multi-megabyte PNG by mistake. `MAX_HEIGHT` is generous on
-/// purpose: a WinAPE-style "enlarge the window past the visible screen" is
-/// exactly how the address-wrap bugs in this feature's own history were
-/// actually found, and clamping too tight would make that impossible again.
+/// for a multi-megabyte PNG by mistake. `MAX_SCREEN_HEIGHT` is generous on
+/// purpose, and deliberately large enough to cover the panel's own multi-
+/// column tiling: reported live, a narrow requested width tiles into many
+/// columns side by side, each wanting a full column's worth of real lines
+/// of its own - `columns * linesPerColumn` real lines requested in total,
+/// which a merely screen-sized cap (a couple of thousand) silently
+/// truncated, leaving the bottom of a many-column layout blank even though
+/// there was real panel space left to fill. `0x10000` is a natural ceiling
+/// regardless: no `-sv` request ever needs to show more real lines than
+/// there are bytes in the whole address space to read them from.
 const MAX_SCREEN_WIDTH: usize = 255;
-const MAX_SCREEN_HEIGHT: usize = 2048;
+const MAX_SCREEN_HEIGHT: usize = 0x10000;
+
+/// WinAPE's own two "browse memory as pixels" encodings, next to each other
+/// in its own menu - `-sv`'s 7th argument selects between them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScreenEncoding {
+    /// The CRTC-accurate one: interleaved (`MA`/`RA`), confined to the
+    /// screen's own 16K bank - `ColorMatrix::from_screen_at`.
+    Screen,
+    /// The raw one: sequential bytes, wrapped at the full 64K space,
+    /// `charRowHeight` a pure display spacer with no effect on which bytes
+    /// are read - `ColorMatrix::from_linear_memory`.
+    Cpc
+}
+
+impl ScreenEncoding {
+    pub fn from_wire(value: u8) -> Self {
+        match value {
+            1 => Self::Cpc,
+            _ => Self::Screen
+        }
+    }
+
+    fn as_wire(self) -> u8 {
+        match self {
+            Self::Screen => 0,
+            Self::Cpc => 1
+        }
+    }
+}
 
 /// A known screen address, mode and palette plus a raw memory window
 /// (`memory[0]` = real address 0x0000, i.e. the full 64K space - see
@@ -756,13 +861,24 @@ const MAX_SCREEN_HEIGHT: usize = 2048;
 /// `Option`s here - this function only clamps them to a sane range, it
 /// does not decide what "unset" means, since the two session types
 /// resolve that from slightly different pending-state shapes.
+///
+/// No visual spacer/separator of any kind is drawn into the image itself:
+/// an earlier version inserted a black row every `lines_per_char_row` real
+/// lines (`ColorMatrix::insert_blank_row_every`), but a real gap looked
+/// nothing like the padding the panel's own multi-column tiling already
+/// draws between columns - reported live as visually inconsistent. All
+/// spacing, in both directions alike, is the panel's own doing now,
+/// entirely client-side, on a plain, ungapped render.
 pub fn render_screen_view(
     address: usize,
     width: usize,
     height: usize,
     mode: u8,
     palette: &Palette<Ink>,
-    memory: &[u8]
+    memory: &[u8],
+    lines_per_char_row: usize,
+    palette_override: &[Option<Ink>],
+    encoding: ScreenEncoding
 ) -> Result<Value, String> {
     if memory.is_empty() {
         return Err("could not read the screen's own memory".to_string());
@@ -771,8 +887,63 @@ pub fn render_screen_view(
     let bytes_width = width.clamp(1, MAX_SCREEN_WIDTH);
     let pixel_height = height.clamp(1, MAX_SCREEN_HEIGHT);
 
-    let matrix: ColorMatrix<Ink> =
-        ColorMatrix::from_screen_at(memory, address, bytes_width, pixel_height, mode, palette);
+    // The window's own palette, not the CPC's: the Gate Array supplies the
+    // starting point (`palette`) for every pen, but nothing here is ever
+    // written back to it - there is no known way to write ink registers
+    // through the emulator's own debug API, and there does not need to be
+    // one for this. A pen this session has overridden keeps that choice
+    // across every re-render (including the automatic ones `-sv` never
+    // asked for again), until the view is asked to auto-detect afresh.
+    let mut palette = palette.clone();
+    for (pen, ink) in palette_override.iter().enumerate() {
+        if let Some(ink) = ink {
+            palette.set(pen as u8, *ink);
+        }
+    }
+    let palette = &palette;
+
+    let mut matrix: ColorMatrix<Ink> = match encoding {
+        ScreenEncoding::Screen => {
+            ColorMatrix::from_screen_at(
+                memory,
+                address,
+                bytes_width,
+                pixel_height,
+                lines_per_char_row,
+                mode,
+                palette
+            )
+        },
+        // `lines_per_char_row` is deliberately not passed here at all - the
+        // whole point of this encoding, per the user's own correction, is
+        // that the char-row-height value never touches address computation
+        // at all for this encoding, only the panel's own client-side
+        // layout.
+        ScreenEncoding::Cpc => {
+            ColorMatrix::from_linear_memory(memory, address, bytes_width, pixel_height, mode, palette)
+        }
+    };
+
+    // The CPC's own pixel aspect ratio, reported live as missing from the
+    // first cut of this view: every mode shares the same physical screen
+    // width, achieved by wider dots in a lower-resolution mode - Mode 2's
+    // 8 dots/byte are already the real width, Mode 1's 4 dots/byte are each
+    // shown twice, Mode 0/3's 2 dots/byte are each shown four times, so
+    // every mode ends up exactly 8 displayed dots wide per byte regardless
+    // of its own native resolution. `double_horizontally` doubles in place,
+    // so 4x is two calls, 2x is one, 1x is none.
+    match mode {
+        Mode::Zero | Mode::Three => {
+            matrix.double_horizontally();
+            matrix.double_horizontally();
+        },
+        Mode::One => matrix.double_horizontally(),
+        Mode::Two => {}
+    }
+    // Vertical stretch is uniform across every mode - a raster line reads
+    // roughly twice as tall as it is a Mode 2 dot wide.
+    matrix.double_vertically();
+
     let png = matrix
         .as_png_bytes()
         .map_err(|problem| format!("could not encode the screen as an image: {problem}"))?;
@@ -783,8 +954,41 @@ pub fn render_screen_view(
         "width": bytes_width,
         "height": pixel_height,
         "mode": mode as u8 as i64,
-        "bytes": crate::amspiritlite::encode_base64(memory)
+        "bytes": crate::amspiritlite::encode_base64(memory),
+        "charRowHeight": lines_per_char_row,
+        "palette": palette_as_hex(palette),
+        "hardwarePalette": hardware_palette_as_hex(),
+        "encoding": encoding.as_wire()
     }))
+}
+
+/// The live palette as `"#RRGGBB"` strings, pen 0 first - what the
+/// interactive panel's own swatches show. Always all 16 slots: a Mode 1/2/3
+/// screen only *uses* fewer of them, but the Gate Array still holds real
+/// values in the rest, and showing all sixteen is simpler than threading
+/// "how many pens does this mode have" through here too when the panel can
+/// decide that for itself from `mode` alone.
+fn palette_as_hex(palette: &Palette<Ink>) -> Vec<String> {
+    (0..16u8)
+        .map(|pen| {
+            let ink = *palette.get(&cpclib_image::pen::Pen::from(pen));
+            ink_to_hex(ink)
+        })
+        .collect()
+}
+
+fn ink_to_hex(ink: Ink) -> String {
+    let rgb: image::Rgb<u8> = ink.into();
+    format!("#{:02X}{:02X}{:02X}", rgb.0[0], rgb.0[1], rgb.0[2])
+}
+
+/// The 27 real CPC hardware inks, in their canonical ink-number order - what
+/// the palette editor's own picker offers, one pen at a time, in place of
+/// whatever the live Gate Array put there. `Ink::INKS` itself is 32 long
+/// (see its own doc comment: "do not take into account the few duplicates")
+/// - only the first 27 are real, distinct hardware colours.
+pub fn hardware_palette_as_hex() -> Vec<String> {
+    Ink::INKS[..27].iter().copied().map(ink_to_hex).collect()
 }
 
 /// Extra rows the CRTC scope prepends whenever `validate_crtc` finds
@@ -1068,7 +1272,7 @@ mod tests {
         let memory = &full_memory[..0x10000.min(full_memory.len())];
         let matrix: cpclib_image::image::ColorMatrix<cpclib_image::ink::Ink> =
             cpclib_image::image::ColorMatrix::from_screen_at(
-                memory, address, 80, 400, mode.into(), &palette
+                memory, address, 80, 400, 8, mode.into(), &palette
             );
 
         let lit_pixels_in = |y_range: std::ops::Range<u32>| {
@@ -1109,15 +1313,58 @@ mod tests {
         // read at the full 16-bit address boundary, not within any 16K
         // page).
         let memory = vec![0u8; 0x10000];
-        let body = render_screen_view(0xC110, 80, 200, 1, &palette, &memory).unwrap();
+        let body = render_screen_view(0xC110, 80, 200, 1, &palette, &memory, 8, &[], ScreenEncoding::Screen).unwrap();
         assert_eq!(body["height"], 200);
 
         // A user enlarging the interactive panel's own height control past
         // the standard screen - exactly how the wrap-around bugs in this
         // feature's own history were actually found - must not be silently
         // clamped back down to 200.
-        let body = render_screen_view(0xC000, 80, 400, 1, &palette, &memory).unwrap();
+        let body = render_screen_view(0xC000, 80, 400, 1, &palette, &memory, 8, &[], ScreenEncoding::Screen).unwrap();
         assert_eq!(body["height"], 400);
+    }
+
+    /// The PNG's own pixel dimensions, not the wire `"width"`/`"height"`
+    /// (those stay the logical byte-grid values everything else - the
+    /// mouse-over readout's own byte-address math - keys off unchanged),
+    /// carry the CPC's pixel aspect ratio: every mode ends up displayed at
+    /// exactly 8 dots per byte horizontally (Mode 2's real 8, Mode 1's 4
+    /// doubled, Mode 0/3's 2 quadrupled), and every mode's rows are doubled
+    /// vertically. Reported live as missing from the first cut of this
+    /// view - Mode 1 and Mode 0 screens rendered squashed relative to a
+    /// real monitor.
+    #[test]
+    fn render_screen_view_stretches_the_png_to_the_cpc_pixel_aspect_ratio() {
+        let palette = palette_from_raw_ga(&[0u8; 17]);
+        let memory = vec![0u8; 0x10000];
+
+        // (mode, bytes_width, expected png width, png height for a 10-line request)
+        let cases = [
+            (0u8, 10usize, 10 * 8, 20),
+            (1u8, 10usize, 10 * 8, 20),
+            (2u8, 10usize, 10 * 8, 20),
+            (3u8, 10usize, 10 * 8, 20)
+        ];
+        for (mode, bytes_width, expected_png_width, expected_png_height) in cases {
+            let body = render_screen_view(
+                0xC000, bytes_width, 10, mode, &palette, &memory, 8, &[],
+                ScreenEncoding::Screen
+            )
+            .unwrap();
+            // The wire field is still the logical, unscaled grid - the
+            // mouse-over math and every other consumer keys off this.
+            assert_eq!(body["width"], bytes_width, "mode {mode}");
+            assert_eq!(body["height"], 10, "mode {mode}");
+
+            let png = crate::session::decode_base64(body["png"].as_str().unwrap());
+            // PNG signature (8 bytes) + chunk length (4) + "IHDR" (4), then
+            // width and height as big-endian u32 - the cheapest correct way
+            // to read a PNG's own pixel size without a new dependency.
+            let png_width = u32::from_be_bytes(png[16..20].try_into().unwrap());
+            let png_height = u32::from_be_bytes(png[20..24].try_into().unwrap());
+            assert_eq!(png_width, expected_png_width as u32, "mode {mode}");
+            assert_eq!(png_height, expected_png_height as u32, "mode {mode}");
+        }
     }
 
     /// Three independent live data points - see `crtc_screen_start_address`'s
@@ -1133,6 +1380,43 @@ mod tests {
         assert_eq!(crtc_screen_start_address(0x10, 0x00), 0x4000);
         assert_eq!(crtc_screen_start_address(0x00, 0x00), 0x0000);
         assert_eq!(crtc_screen_start_address(0x32, 0xF0), 0xC5E0);
+    }
+
+    /// `crtc_screen_defaults`: `2*R1` for width, `R9+1` for lines-per-char-
+    /// row - both a standard config (R1=40, R9=7, matching the constants
+    /// this replaced) and a non-standard one, so a bug that silently
+    /// ignores the registers and falls back to the old hard-coded 80/8
+    /// cannot hide behind a fixture that happens to match them anyway
+    /// (the one real integration test covering this, in `basic_session.rs`,
+    /// uses exactly the standard config for its own regs and would not
+    /// catch that).
+    #[test]
+    fn crtc_screen_defaults_reads_width_and_char_row_height_off_the_live_registers() {
+        let mut standard = [0u8; 18];
+        standard[1] = 40;
+        standard[9] = 7;
+        assert_eq!(crtc_screen_defaults(&standard), (80, 8));
+
+        let mut narrow_tall = [0u8; 18];
+        narrow_tall[1] = 20;
+        narrow_tall[9] = 3;
+        assert_eq!(crtc_screen_defaults(&narrow_tall), (40, 4));
+
+        // R1 == 0 reads as "unknown", not a real zero-width screen.
+        let unknown = [0u8; 18];
+        assert_eq!(crtc_screen_defaults(&unknown), (DEFAULT_SCREEN_WIDTH, 1));
+    }
+
+    /// Unset or an explicit `0` both mean "use the live CRTC value"; any
+    /// other explicit value overrides the address math's own row height,
+    /// not only a display value - reported live: a taller/shorter row than
+    /// the live CRTC's own is the whole point of browsing raw memory this
+    /// way, and this is the one thing that actually has to change for that.
+    #[test]
+    fn resolve_char_row_height_overrides_the_address_math_itself() {
+        assert_eq!(resolve_char_row_height(None, 8), 8, "unset: live CRTC value");
+        assert_eq!(resolve_char_row_height(Some(0), 8), 8, "explicit 0: also the live CRTC value");
+        assert_eq!(resolve_char_row_height(Some(16), 8), 16, "explicit 16: overrides it");
     }
 
     /// End-to-end rendering check against a real snapshot and a real
@@ -1155,14 +1439,15 @@ mod tests {
         let (mode, palette) = mode_and_palette_from_snapshot(&sna);
         let full_memory = sna.memory_dump();
         // The full 64K address space, from 0 - not just from `address`
-        // (0xC5E0, mid-page). `from_screen_at` wraps `data` at the full
-        // 16-bit boundary, not within any 16K page - see that function's
-        // own doc comment and `cpclib-image`'s
-        // `from_screen_at_wraps_at_the_full_64k_address_space_not_just_one_page`.
+        // (0xC5E0, mid-page): `data` is still addressed as the whole 64K
+        // buffer even though `from_screen_at` itself confines the actual
+        // *wrap* to the one 16K bank `address` falls in - see that
+        // function's own doc comment and `cpclib-image`'s
+        // `from_screen_at_wraps_within_the_same_16k_bank_not_into_the_next_one`.
         let memory = &full_memory[..0x10000.min(full_memory.len())];
         let matrix: cpclib_image::image::ColorMatrix<cpclib_image::ink::Ink> =
             cpclib_image::image::ColorMatrix::from_screen_at(
-                memory, address, 80, 200, mode.into(), &palette
+                memory, address, 80, 200, 8, mode.into(), &palette
             );
 
         // Pen 0 is the background; text is lit in other pens. A correctly
@@ -1193,6 +1478,105 @@ mod tests {
         let palette = palette_from_raw_ga(&pens);
         assert_eq!(*palette.get(&cpclib_image::pen::Pen::from(3)), ink);
         assert_eq!(*palette.get_border(), ink);
+    }
+
+    /// The palette swatch grid's own data: all 16 pens, `"#RRGGBB"`, pen 0
+    /// first - real hardware ink 0 (black) pins the format down exactly
+    /// rather than just "is a 7-character string"; every other pen is
+    /// checked for that same shape, since this crate's own `Ink` constants
+    /// do not promise which named ink is pure white (`Ink::WHITE` turned
+    /// out to be `#808080`, not `#FFFFFF`, when first written).
+    #[test]
+    fn render_screen_view_reports_the_live_palette_as_hex_colours() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::WHITE);
+        let memory = vec![0u8; 0x10000];
+
+        let body = render_screen_view(0xC000, 2, 2, 1, &palette, &memory, 8, &[], ScreenEncoding::Screen).unwrap();
+        let colours: Vec<&str> = body["palette"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(colours.len(), 16);
+        assert_eq!(colours[0], "#000000");
+        for colour in &colours {
+            assert!(
+                colour.len() == 7
+                    && colour.starts_with('#')
+                    && colour[1..].chars().all(|c| c.is_ascii_hexdigit()),
+                "{colour}"
+            );
+        }
+    }
+
+    /// The palette override is the window's own, never sent anywhere near
+    /// the Gate Array (there is no known way to write ink registers through
+    /// the emulator's debug API, and no need for one here): pen 0 keeps
+    /// whatever the live palette says because its override slot is `None`,
+    /// pen 1's explicit override wins over the live value, and both survive
+    /// into the reported `"palette"` field exactly as rendered.
+    #[test]
+    fn render_screen_view_lets_the_window_override_individual_pens() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::BLACK);
+        let memory = vec![0u8; 0x10000];
+
+        let overrides = [None, Some(Ink::WHITE)];
+        let body =
+            render_screen_view(0xC000, 2, 2, 1, &palette, &memory, 8, &overrides, ScreenEncoding::Screen).unwrap();
+        let colours: Vec<&str> = body["palette"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(colours[0], "#000000", "pen 0 has no override, stays live");
+        assert_eq!(colours[1], ink_to_hex(Ink::WHITE), "pen 1's override wins");
+    }
+
+    /// `ScreenEncoding::Cpc` reads straight through, wrapping at the full
+    /// 64K space - unlike `Screen`, which would confine the very same
+    /// request to the 16K bank `address` falls in. The wire `"encoding"`
+    /// field round-trips whichever was asked for, and `"charRowHeight"`
+    /// is unaffected either way (it plays no addressing role for `Cpc`).
+    #[test]
+    fn render_screen_view_cpc_encoding_wraps_at_the_full_64k_space_not_the_bank() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::WHITE);
+        let mut memory = vec![0u8; 0x10000];
+        memory[0x0000] = 0xFF; // only reachable by wrapping past 0xFFFF
+
+        let body = render_screen_view(
+            0xFFFF, 1, 2, 2, &palette, &memory, 8, &[], ScreenEncoding::Cpc
+        )
+        .unwrap();
+        assert_eq!(body["encoding"], 1);
+
+        let png = crate::session::decode_base64(body["png"].as_str().unwrap());
+        let decoded = image::load_from_memory(&png).unwrap().to_rgb8();
+        // Line 1, doubled vertically, starts at pixel row 2; Mode 2's own
+        // 8 dots/byte are shown 1x horizontally (already the real width).
+        let pixel = decoded.get_pixel(0, 2);
+        let expected: image::Rgb<u8> = Ink::WHITE.into();
+        assert_eq!(
+            *pixel, expected,
+            "line 1 must read the byte wrapped past 0xFFFF to 0x0000, not a blank one"
+        );
+    }
+
+    /// The picker's own data: all 27 real hardware inks, none of the
+    /// duplicate aliases `Ink::INKS` also carries past index 26.
+    #[test]
+    fn hardware_palette_as_hex_lists_exactly_the_27_real_inks() {
+        let hardware = hardware_palette_as_hex();
+        assert_eq!(hardware.len(), 27);
+        assert_eq!(hardware[0], ink_to_hex(Ink::INKS[0]));
+        assert_eq!(hardware[26], ink_to_hex(Ink::INKS[26]));
     }
 
     /// R0=63, R2=60, R3=0x8c does not respect R2+(R3&0x0f) < R0

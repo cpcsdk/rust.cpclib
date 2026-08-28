@@ -76,10 +76,27 @@ BASIC debug console commands:
                           defaults to 32 instructions)
   -bv                     the live BASIC listing, straight from the
                           emulator's own memory
-  -sv [a] [w] [h] [mode]  render video memory as an image, opening an
+  -sv [a] [w] [h] [mode] [rowheight] [palette] [encoding]
+                          render video memory as an image, opening an
                           interactive panel; each argument overrides the
                           live CRTC/Gate Array value it replaces (default
-                          80x200, palette always live)
+                          address/width from R12R13/R1, height 200);
+                          `rowheight` is read as R9+1 for the 'Screen'
+                          encoding's own address math (default the live R9,
+                          not always 8 - real CRTC hardware wraps the
+                          raster-address term at 8 regardless of a taller
+                          configured row) and, for either encoding, is how
+                          many real lines make up one tile of the panel's
+                          own grid layout; `palette`
+                          overrides individual pens for the window only
+                          (never written to the Gate Array) - a comma-
+                          separated list of ink numbers 0-26, one per pen
+                          from pen 0, empty entries left live; `encoding`
+                          picks WinAPE's own 'Screen' (0, default: CRTC-
+                          interleaved, confined to the screen's own 16K
+                          bank) or 'CPC' (1: plain sequential bytes, wrapped
+                          at the full 64K space, `rowheight` a pure layout
+                          value with no effect on which bytes are read)
   -help                   this list";
 
 /// AMSpiriT's own `cpclib/basicListing` response into readable text - each
@@ -334,6 +351,15 @@ enum Purpose {
         width_override: Option<usize>,
         height_override: Option<usize>,
         mode_override: Option<u8>,
+        row_height_override: Option<usize>,
+        /// The window's own per-pen overrides, never sent anywhere near the
+        /// Gate Array - see `crate::session::OpenScreenView`'s own doc
+        /// comment for why.
+        palette_override: Vec<Option<cpclib_image::ink::Ink>>,
+        /// WinAPE's own "Screen"/"CPC" encoding choice - see
+        /// `crate::inspect::ScreenEncoding`'s own doc comment. `None` means
+        /// `Screen`, the existing/default behaviour.
+        encoding_override: Option<u8>,
         request: Value
     },
     /// The Gate Array read, once `ScreenViewCrtc` answered.
@@ -343,6 +369,9 @@ enum Purpose {
         width_override: Option<usize>,
         height_override: Option<usize>,
         mode_override: Option<u8>,
+        row_height_override: Option<usize>,
+        palette_override: Vec<Option<cpclib_image::ink::Ink>>,
+        encoding_override: Option<u8>,
         request: Value
     },
     /// The pixel bytes, once address/width/height/mode/palette are all known.
@@ -350,6 +379,14 @@ enum Purpose {
         address: usize,
         width: Option<usize>,
         height: Option<usize>,
+        row_height_override: Option<usize>,
+        palette_override: Vec<Option<cpclib_image::ink::Ink>>,
+        encoding_override: Option<u8>,
+        /// Carried through from `ScreenViewGa` purely for
+        /// `crtc_screen_defaults` - width/lines-per-char-row default
+        /// resolution needs live `R1`/`R9`, and by this last step nothing
+        /// else still has them in scope.
+        crtc_regs: [u8; 18],
         mode: u8,
         palette: cpclib_image::palette::Palette<cpclib_image::ink::Ink>,
         request: Value
@@ -362,6 +399,9 @@ enum Purpose {
         width_override: Option<usize>,
         height_override: Option<usize>,
         mode_override: Option<u8>,
+        row_height_override: Option<usize>,
+        palette_override: Vec<Option<cpclib_image::ink::Ink>>,
+        encoding_override: Option<u8>,
         request: Value
     }
 }
@@ -1290,6 +1330,13 @@ impl<P: DapPeer> BasicSession<P> {
         let width_override = arguments.get(1).and_then(|a| parse_address(a)).map(|a| a as usize);
         let height_override = arguments.get(2).and_then(|a| parse_address(a)).map(|a| a as usize);
         let mode_override = arguments.get(3).and_then(|a| parse_address(a)).map(|a| a as u8);
+        let row_height_override =
+            arguments.get(4).and_then(|a| parse_address(a)).map(|a| a as usize);
+        let palette_override = arguments
+            .get(5)
+            .map(|a| crate::inspect::parse_palette_override(a))
+            .unwrap_or_default();
+        let encoding_override = arguments.get(6).and_then(|a| parse_address(a)).map(|a| a as u8);
         if self.native_amspirit {
             self.send_own(
                 "cpclib/crtc",
@@ -1299,6 +1346,9 @@ impl<P: DapPeer> BasicSession<P> {
                     width_override,
                     height_override,
                     mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
                     request: request.clone()
                 }
             )?;
@@ -1312,6 +1362,9 @@ impl<P: DapPeer> BasicSession<P> {
                     width_override,
                     height_override,
                     mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
                     request: request.clone()
                 }
             )?;
@@ -1328,13 +1381,31 @@ impl<P: DapPeer> BasicSession<P> {
         address: usize,
         width_override: Option<usize>,
         height_override: Option<usize>,
+        row_height_override: Option<usize>,
+        palette_override: &[Option<cpclib_image::ink::Ink>],
+        encoding_override: Option<u8>,
+        regs: &[u8; 18],
         mode: u8,
         palette: &cpclib_image::palette::Palette<cpclib_image::ink::Ink>,
         memory: &[u8]
     ) -> Vec<Value> {
-        let width = width_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_WIDTH);
+        let (default_width, live_lines_per_char_row) = crate::inspect::crtc_screen_defaults(regs);
+        let width = width_override.unwrap_or(default_width);
         let height = height_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_HEIGHT);
-        match crate::inspect::render_screen_view(address, width, height, mode, palette, memory) {
+        let lines_per_char_row =
+            crate::inspect::resolve_char_row_height(row_height_override, live_lines_per_char_row);
+        let encoding = crate::inspect::ScreenEncoding::from_wire(encoding_override.unwrap_or(0));
+        match crate::inspect::render_screen_view(
+            address,
+            width,
+            height,
+            mode,
+            palette,
+            memory,
+            lines_per_char_row,
+            palette_override,
+            encoding
+        ) {
             Ok(body) => {
                 let seq = self.next_seq();
                 let event = protocol::event("cpclib/screenView", body, seq);
@@ -2190,6 +2261,9 @@ impl<P: DapPeer> BasicSession<P> {
                     width_override,
                     height_override,
                     mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
                     request
                 } => {
                     let regs = message
@@ -2206,6 +2280,9 @@ impl<P: DapPeer> BasicSession<P> {
                             width_override,
                             height_override,
                             mode_override,
+                            row_height_override,
+                            palette_override,
+                            encoding_override,
                             request: request.clone()
                         }
                     ) {
@@ -2218,6 +2295,9 @@ impl<P: DapPeer> BasicSession<P> {
                     width_override,
                     height_override,
                     mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
                     request
                 } => {
                     let Some((mode, palette)) = message
@@ -2248,6 +2328,10 @@ impl<P: DapPeer> BasicSession<P> {
                             address,
                             width: width_override,
                             height: height_override,
+                            row_height_override,
+                            palette_override,
+                            encoding_override,
+                            crtc_regs,
                             mode,
                             palette,
                             request: request.clone()
@@ -2260,18 +2344,28 @@ impl<P: DapPeer> BasicSession<P> {
                     address,
                     width,
                     height,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
+                    crtc_regs,
                     mode,
                     palette,
                     request
                 } => {
                     let bytes = Self::read_memory_bytes(message);
-                    return self.screen_view_answer(&request, address, width, height, mode, &palette, &bytes);
+                    return self.screen_view_answer(
+                        &request, address, width, height, row_height_override, &palette_override,
+                        encoding_override, &crtc_regs, mode, &palette, &bytes
+                    );
                 },
                 Purpose::ScreenViewSnapshot {
                     address_override,
                     width_override,
                     height_override,
                     mode_override,
+                    row_height_override,
+                    palette_override,
+                    encoding_override,
                     request
                 } => {
                     let sna = message
@@ -2309,6 +2403,10 @@ impl<P: DapPeer> BasicSession<P> {
                         address,
                         width_override,
                         height_override,
+                        row_height_override,
+                        &palette_override,
+                        encoding_override,
+                        &regs,
                         mode,
                         &palette,
                         &memory

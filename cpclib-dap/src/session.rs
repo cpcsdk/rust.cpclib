@@ -118,10 +118,30 @@ CPC debug console commands:
                                 tokenised and rendered - useful for a BASIC
                                 loader ahead of the machine code being
                                 debugged
-  -sv [addr] [w] [h] [mode]      render video memory as an image, opening an
+  -sv [addr] [w] [h] [mode] [rowheight] [palette] [encoding]
+                                render video memory as an image, opening an
                                 interactive panel; each argument overrides
                                 the live CRTC/Gate Array value it replaces
-                                (default 80x200, palette always live)
+                                (default address/width from R12R13/R1, height
+                                200); `rowheight` is read as R9+1 for the
+                                'Screen' encoding's own address math (default
+                                the live R9, not always 8 - real CRTC
+                                hardware wraps the raster-address term at 8
+                                regardless of a taller configured row) and,
+                                for either encoding, is how many real lines
+                                make up one tile of the panel's own grid
+                                layout; `palette` overrides individual pens
+                                for the window only (never written to the
+                                Gate Array) - a comma-separated list of ink
+                                numbers 0-26, one per pen from pen 0, empty
+                                entries left live (e.g. `,,5,` overrides only
+                                pen 2); `encoding` picks WinAPE's own
+                                'Screen' (0, default: CRTC-interleaved,
+                                confined to the screen's own 16K bank) or
+                                'CPC' (1: plain sequential bytes, wrapped at
+                                the full 64K space, `rowheight` a pure
+                                layout value with no effect on which bytes
+                                are read)
   -help                         this list
 
 Anything not starting with `-` is read as a label: `animation_state` shows the
@@ -295,9 +315,45 @@ struct PendingScreenView {
     width_override: Option<usize>,
     height_override: Option<usize>,
     mode_override: Option<u8>,
+    /// `-sv`'s optional 5th argument: how many real lines make up one
+    /// character row, for the `Screen` encoding's own address interleaving
+    /// - see `crate::inspect::resolve_char_row_height`'s own doc comment
+    /// for why this is a real override, not only a display value. `None`
+    /// (the plain command's own default) uses the live CRTC's `R9 + 1`.
+    row_height_override: Option<usize>,
+    /// The window's own per-pen overrides, never sent anywhere near the
+    /// Gate Array - see `OpenScreenView`'s own doc comment.
+    palette_override: Vec<Option<Ink>>,
+    /// `-sv`'s optional 7th argument: WinAPE's own "Screen"/"CPC" encoding
+    /// choice - see `crate::inspect::ScreenEncoding`'s own doc comment.
+    /// `None` (unset) means `Screen`, the existing/default behaviour.
+    encoding_override: Option<u8>,
     crtc_regs: Option<[u8; 18]>,
     mode: Option<u8>,
     palette: Option<Palette<Ink>>
+}
+
+/// The overrides behind whichever `-sv` is currently open, kept around so
+/// `refresh_screen_view` can re-issue the exact same request on every stop -
+/// without this, the panel just showed whatever memory/CRTC state happened
+/// to be live at the moment it was first opened, forever, the same problem
+/// `refresh_memory_view`/`refresh_disassembly_view` already solve for their
+/// own panels.
+#[derive(Debug, Clone, Default)]
+struct OpenScreenView {
+    address_override: Option<usize>,
+    width_override: Option<usize>,
+    height_override: Option<usize>,
+    mode_override: Option<u8>,
+    row_height_override: Option<usize>,
+    /// The window's own palette - what pen `N` shows regardless of what the
+    /// Gate Array holds. There is no known way to write ink registers
+    /// through the emulator's debug API, and no need for one: this is a
+    /// display preference for the viewer, not something the CPC itself is
+    /// ever told about, and it survives every automatic refresh
+    /// (`refresh_screen_view`) exactly like the other overrides.
+    palette_override: Vec<Option<Ink>>,
+    encoding_override: Option<u8>
 }
 
 /// An array watch's elements, already read - expanding it in the Watch panel
@@ -577,6 +633,9 @@ pub struct Session<P: DapPeer> {
     /// A `-sv` request waiting on its (one, or up to three, round trip)
     /// answer - see `PendingScreenView`'s own doc comment.
     pending_screen_view: Option<PendingScreenView>,
+    /// The screen view currently open, if any - see `OpenScreenView`'s own
+    /// doc comment.
+    open_screen_view: Option<OpenScreenView>,
     /// The last snapshot the emulator wrote, valid until it runs again.
     ///
     /// Expanding CRTC and then Gate Array must not cost two whole-machine
@@ -656,6 +715,7 @@ impl<P: DapPeer> Session<P> {
             pending_crtc_views: Vec::new(),
             pending_basic_listing: None,
             pending_screen_view: None,
+            open_screen_view: None,
             machine_state: None,
             synthetic_frames: Vec::new(),
             extra_watches: Vec::new(),
@@ -1659,6 +1719,7 @@ impl<P: DapPeer> Session<P> {
 
         self.refresh_memory_view();
         self.refresh_disassembly_view();
+        self.refresh_screen_view();
         out
     }
 
@@ -2459,12 +2520,35 @@ impl<P: DapPeer> Session<P> {
         let width_override = arguments.get(1).and_then(|a| parse_number(a)).map(|a| a as usize);
         let height_override = arguments.get(2).and_then(|a| parse_number(a)).map(|a| a as usize);
         let mode_override = arguments.get(3).and_then(|a| parse_number(a)).map(|a| a as u8);
+        let row_height_override =
+            arguments.get(4).and_then(|a| parse_number(a)).map(|a| a as usize);
+        let palette_override = arguments
+            .get(5)
+            .map(|a| crate::inspect::parse_palette_override(a))
+            .unwrap_or_default();
+        let encoding_override = arguments.get(6).and_then(|a| parse_number(a)).map(|a| a as u8);
+        // Remembered so `refresh_screen_view` can keep re-issuing this exact
+        // request on every stop - every `-sv`, typed or from the panel's own
+        // controls, replaces whichever view was open before; there is only
+        // ever one.
+        self.open_screen_view = Some(OpenScreenView {
+            address_override,
+            width_override,
+            height_override,
+            mode_override,
+            row_height_override,
+            palette_override: palette_override.clone(),
+            encoding_override
+        });
         self.pending_screen_view = Some(PendingScreenView {
             request: Some(request.clone()),
             address_override,
             width_override,
             height_override,
             mode_override,
+            row_height_override,
+            palette_override,
+            encoding_override,
             ..Default::default()
         });
 
@@ -2563,16 +2647,29 @@ impl<P: DapPeer> Session<P> {
         let Some(pending) = self.pending_screen_view.take() else {
             return Vec::new();
         };
-        let Some(request) = pending.request else {
-            return Vec::new();
-        };
+        // `None` here is a silent refresh (`refresh_screen_view`, called on
+        // every stop) rather than something a person typed - nobody is
+        // waiting on a response, so a failure past this point is dropped
+        // rather than reported, same convention `refresh_memory_view`
+        // already follows.
+        let request = pending.request;
         let Some(mode) = pending.mode else {
-            let seq = self.next_seq();
-            return vec![protocol::failure(&request, "no screen mode known", seq)];
+            return match &request {
+                Some(request) => {
+                    let seq = self.next_seq();
+                    vec![protocol::failure(request, "no screen mode known", seq)]
+                },
+                None => Vec::new()
+            };
         };
         let Some(palette) = pending.palette else {
-            let seq = self.next_seq();
-            return vec![protocol::failure(&request, "no palette known", seq)];
+            return match &request {
+                Some(request) => {
+                    let seq = self.next_seq();
+                    vec![protocol::failure(request, "no palette known", seq)]
+                },
+                None => Vec::new()
+            };
         };
         let regs = pending.crtc_regs.unwrap_or([0u8; 18]);
         let address = pending
@@ -2585,10 +2682,14 @@ impl<P: DapPeer> Session<P> {
             .map(decode_base64)
             .unwrap_or_default();
         self.screen_view_answer(
-            &request,
+            request.as_ref(),
             address,
             pending.width_override,
             pending.height_override,
+            pending.row_height_override,
+            &pending.palette_override,
+            pending.encoding_override,
+            &regs,
             mode,
             &palette,
             &bytes
@@ -2602,31 +2703,59 @@ impl<P: DapPeer> Session<P> {
     /// shared with `BasicSession`'s own identically-named method too.
     fn screen_view_answer(
         &mut self,
-        request: &Value,
+        request: Option<&Value>,
         address: usize,
         width_override: Option<usize>,
         height_override: Option<usize>,
+        row_height_override: Option<usize>,
+        palette_override: &[Option<Ink>],
+        encoding_override: Option<u8>,
+        regs: &[u8; 18],
         mode: u8,
         palette: &Palette<Ink>,
         memory: &[u8]
     ) -> Vec<Value> {
-        let width = width_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_WIDTH);
+        let (default_width, live_lines_per_char_row) = crate::inspect::crtc_screen_defaults(regs);
+        let width = width_override.unwrap_or(default_width);
         let height = height_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_HEIGHT);
-        match crate::inspect::render_screen_view(address, width, height, mode, palette, memory) {
+        let lines_per_char_row =
+            crate::inspect::resolve_char_row_height(row_height_override, live_lines_per_char_row);
+        let encoding = crate::inspect::ScreenEncoding::from_wire(encoding_override.unwrap_or(0));
+        match crate::inspect::render_screen_view(
+            address,
+            width,
+            height,
+            mode,
+            palette,
+            memory,
+            lines_per_char_row,
+            palette_override,
+            encoding
+        ) {
             Ok(body) => {
                 let seq = self.next_seq();
                 let event = protocol::event("cpclib/screenView", body, seq);
-                let seq = self.next_seq();
-                let receipt = protocol::response(
-                    request,
-                    json!({ "result": "screen view opened", "variablesReference": 0 }),
-                    seq
-                );
-                vec![event, receipt]
+                match request {
+                    Some(request) => {
+                        let seq = self.next_seq();
+                        let receipt = protocol::response(
+                            request,
+                            json!({ "result": "screen view opened", "variablesReference": 0 }),
+                            seq
+                        );
+                        vec![event, receipt]
+                    },
+                    None => vec![event]
+                }
             },
             Err(problem) => {
-                let seq = self.next_seq();
-                vec![protocol::failure(request, &problem, seq)]
+                match request {
+                    Some(request) => {
+                        let seq = self.next_seq();
+                        vec![protocol::failure(request, &problem, seq)]
+                    },
+                    None => Vec::new()
+                }
             }
         }
     }
@@ -2869,10 +2998,14 @@ impl<P: DapPeer> Session<P> {
                     // must stay at the real 16-bit boundary regardless.
                     let memory = full_memory[..0x10000.min(full_memory.len())].to_vec();
                     out.extend(self.screen_view_answer(
-                        &request,
+                        Some(&request),
                         address,
                         pending.width_override,
                         pending.height_override,
+                        pending.row_height_override,
+                        &pending.palette_override,
+                        pending.encoding_override,
+                        &regs,
                         mode,
                         &palette,
                         &memory
@@ -3502,6 +3635,48 @@ impl<P: DapPeer> Session<P> {
         // A failure here is not worth reporting: the panel keeps what it had,
         // and the stop event must not be lost behind it.
         let _ = self.ask_for_disassembly(address, count, label, None);
+    }
+
+    /// Re-render whichever screen view is open, if one is - called on every
+    /// stop for the same reason `refresh_memory_view`/
+    /// `refresh_disassembly_view` are: a program that has run since the view
+    /// was opened may well have changed the memory or the CRTC registers the
+    /// picture depends on, and a panel that never updates itself is not
+    /// actually showing "the screen", just one moment of it.
+    ///
+    /// Scoped to a peer with direct CRTC/GA endpoints (AmspiritLite) for
+    /// now: the other path (`complete_machine_state`'s single-snapshot
+    /// fallback for 1984js) reads a *cached* `self.machine_state`, cleared
+    /// on every stop and refetched lazily by whatever else asks for it - a
+    /// refresh from here would need to force that fetch itself rather than
+    /// assume it has already happened, which this does not yet do.
+    fn refresh_screen_view(&mut self) {
+        let Some(open) = self.open_screen_view.clone() else {
+            return;
+        };
+        let Some(command) = crate::amspiritlite::chip_command(crate::inspect::CRTC_REFERENCE)
+        else {
+            return;
+        };
+        if !self.peer.supports(command) {
+            return;
+        }
+        self.pending_screen_view = Some(PendingScreenView {
+            request: None,
+            address_override: open.address_override,
+            width_override: open.width_override,
+            height_override: open.height_override,
+            mode_override: open.mode_override,
+            row_height_override: open.row_height_override,
+            palette_override: open.palette_override,
+            encoding_override: open.encoding_override,
+            ..Default::default()
+        });
+        // A failure here is not worth reporting: the panel keeps what it
+        // had, and the stop event must not be lost behind it - same
+        // convention `refresh_memory_view`/`refresh_disassembly_view`
+        // already follow.
+        let _ = self.send_own(command, json!({}), Purpose::ScreenViewCrtc);
     }
 
     /// Note where the program is, charge the timers, and move a following
@@ -5050,6 +5225,28 @@ impl<P: DapPeer> Session<P> {
         else {
             return Vec::new();
         };
+
+        // The one place every stop passes through, whichever path got here -
+        // a stack walk that ran (`stack_step_finish`, which also notes `PC`
+        // itself) or one that could not (`annotate_stack_trace`, reached with
+        // no program image: a raw `.sna`/`.dsk` launched with nothing
+        // assembled for it, the reverse-engineering case). Without this,
+        // `PC` was only ever noted from wherever the Registers scope gets
+        // read (`cost_at_pc`'s own doc comment says as much) - and a
+        // disassembly-only workflow with no source and no reason to open
+        // Variables never reads it. Reported live: every step genuinely
+        // moved `PC` at the emulator (confirmed in the DAP transcript), but
+        // the auto-opened disassembly view stayed frozen on the address of
+        // the very first stop, because nothing had told it to look again.
+        if let Some(pc) = top
+            .get("instructionPointerReference")
+            .and_then(Value::as_str)
+            .and_then(parse_address_reference)
+            .and_then(|address| u16::try_from(address).ok())
+        {
+            self.note_program_counter(pc);
+        }
+
         let located = top
             .get("source")
             .and_then(|source| source.get("path"))

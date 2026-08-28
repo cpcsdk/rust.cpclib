@@ -1826,6 +1826,30 @@ fn watch_run_state(watched: &Stops) {
                 // is what counts as gone.
                 misses += 1;
                 if misses > 30 {
+                    // Reported live: closing the emulator's own window left
+                    // the debug session sitting in the editor forever - this
+                    // thread was the only thing that could have noticed, and
+                    // it used to just stop polling in silence rather than say
+                    // so. `terminated` is what tells VS Code the debuggee is
+                    // gone and to end the session; nothing upstream
+                    // intercepts that event name, so it reaches the editor
+                    // exactly as sent (see `Session::on_emulator_message`'s
+                    // own event fallthrough).
+                    seq += 1;
+                    let said = crate::protocol::event(
+                        "output",
+                        json!({
+                            "category": "console",
+                            "output": "AMSpiriT Lite is no longer answering - the window was \
+                                       probably closed. Ending the debug session.\n"
+                        }),
+                        seq
+                    );
+                    let _ = watched.out.send(said);
+                    seq += 1;
+                    let _ = watched
+                        .out
+                        .send(crate::protocol::event("terminated", json!({}), seq));
                     return;
                 }
                 continue;
@@ -4186,6 +4210,7 @@ mod live_tests {
                 address,
                 80,
                 200,
+                8,
                 mode.into(),
                 &palette
             );
