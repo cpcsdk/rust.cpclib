@@ -940,6 +940,45 @@ mod test_super {
     }
 
     #[test]
+    fn equ_redefinition_error_points_at_the_original_definition_not_itself() {
+        // Regression test: `visit_equ`'s "already defined" error used to
+        // build its `here: Option<SourceLocation>` from the *current*
+        // (failing) occurrence's own span, instead of looking up the
+        // *original* definition's location from the symbol table (as
+        // `visit_label` already correctly does). The rendered message ended
+        // up saying "already defined ... in FILE:LINE" immediately followed
+        // by a codespan block pointing at that exact same FILE:LINE - twice
+        // the same location, with the real, earlier definition nowhere to
+        // be found. It must report the *first* `equ`'s line, not duplicate
+        // the second (failing) one's.
+        let code = "
+		FOO equ 1
+		FOO equ 2
+		";
+        let tokens = parser::parse_z80_str(code).unwrap();
+        let options = EnvOptions::default();
+        let err = match assembler::visit_tokens_all_passes_with_options(&tokens, options) {
+            Ok(_) => panic!("redefining FOO should be an error"),
+            Err((_t, _env, e)) => e
+        };
+
+        let rendered = err.to_string();
+        assert!(rendered.contains("already defined"), "{rendered}");
+        // The original `equ` is on line 2, the failing redefinition on line
+        // 3 - the prose must reference the *original*'s line 2, and the
+        // codespan snippet below it must show the *redefinition*'s own
+        // source line, not repeat line 2's.
+        assert!(
+            rendered.contains(":2:"),
+            "should reference the original definition's line 2: {rendered}"
+        );
+        assert!(
+            rendered.contains("FOO equ 2"),
+            "should show the failing redefinition's own source line: {rendered}"
+        );
+    }
+
+    #[test]
     fn overflow_warning_fires_for_16bit_immediates_and_defb_defw() {
         let code = "
 		org 0x4000

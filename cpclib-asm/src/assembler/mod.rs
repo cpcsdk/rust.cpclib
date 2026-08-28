@@ -3282,7 +3282,10 @@ impl Env {
             return Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: destination.as_str().into(),
                 kind: kind.into(),
-                here: None
+                here: self
+                    .symbols()
+                    .any_value(destination.as_str())?
+                    .and_then(|v| v.location().cloned())
             }));
         }
 
@@ -5434,7 +5437,16 @@ impl Env {
             Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
                 kind: self.symbols().kind(label_span.as_str())?.into(),
-                here: label_span.possible_span().map(|s| s.into())
+                // The *original* definition's location, not this (the
+                // conflicting, about-to-fail) occurrence's - same pattern as
+                // `visit_label` above. Using `label_span.possible_span()`
+                // here reported the current line twice (once as prose, once
+                // as the codespan block), which is useless for finding the
+                // actual duplicate.
+                here: self
+                    .symbols()
+                    .any_value(label_span.as_str())?
+                    .and_then(|v| v.location().cloned())
             }))
         }
         else {
@@ -5551,7 +5563,10 @@ impl Env {
             Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
                 kind: self.symbols().kind(label_span.as_str())?.into(),
-                here: None
+                here: self
+                    .symbols()
+                    .any_value(label_span.as_str())?
+                    .and_then(|v| v.location().cloned())
             }))
         }
         else {
