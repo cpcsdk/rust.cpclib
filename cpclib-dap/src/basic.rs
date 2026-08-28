@@ -339,7 +339,23 @@ fn walk_chain(mut offset: u16, variables_base: u16, buffer: &[u8], out: &mut Vec
     // A chain link is a relative offset from the byte before
     // `variables_base` - buffer index 0 already *is* `variables_base`, so
     // offset `R` lands at buffer index `R - 1`.
+    //
+    // No cap here used to mean a cyclic chain - a stale or mid-write read,
+    // or a program that scribbles over its own variable area - would loop
+    // forever reading `offset = next` back into an already-visited node,
+    // hanging the whole (single-threaded) debug session. `callstack.rs`'s
+    // `walk_paged` guards the analogous problem with `MAX_STACK_ITEMS`; a
+    // real variable chain can never have more distinct links than there are
+    // bytes to hold them, so `buffer.len()` is an equally generous bound
+    // here - past it, the evidence is gone, same reasoning as that cap's own
+    // doc comment.
+    let mut remaining_links = buffer.len().max(1);
     while offset != 0 {
+        if remaining_links == 0 {
+            break;
+        }
+        remaining_links -= 1;
+
         let idx = (offset - 1) as usize;
         let Some(next_bytes) = buffer.get(idx..idx + 2)
         else {

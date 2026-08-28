@@ -366,20 +366,21 @@ impl<C:AmstradColor> ColorMatrix<C> {
                         data[(page_base + byte_offset) % space_size]
                     })
                     .collect();
-                line_bytes
-                    .iter()
-                    .flat_map(|b| pixels::byte_to_pens(*b, mode))
-                    .collect::<Vec<crate::ga::Pen>>()
-            })
-            .map(move |pens| {
-                // build lines of inks
-                pens.iter()
-                    .map(|pen| palette.get(pen))
-                    .cloned()
-                    .collect::<Vec<_>>()
+                Self::line_bytes_to_inks(&line_bytes, mode, palette)
             })
             .collect::<Vec<_>>()
             .into()
+    }
+
+    /// Shared by [`Self::from_screen_at`] and [`Self::from_linear_memory`] -
+    /// the two encodings differ only in how a line's source address is
+    /// computed, never in how its bytes decode into pens and then inks.
+    fn line_bytes_to_inks(line_bytes: &[u8], mode: Mode, palette: &Palette<C>) -> Vec<C> {
+        line_bytes
+            .iter()
+            .flat_map(|b| pixels::byte_to_pens(*b, mode))
+            .map(|pen| palette.get(&pen).clone())
+            .collect()
     }
 
     /// The other of WinAPE's own two "browse memory as pixels" encodings -
@@ -410,16 +411,7 @@ impl<C:AmstradColor> ColorMatrix<C> {
                 let line_bytes: Vec<u8> = (0..bytes_width)
                     .map(|col| data[(data_address + col) % space_size])
                     .collect();
-                line_bytes
-                    .iter()
-                    .flat_map(|b| pixels::byte_to_pens(*b, mode))
-                    .collect::<Vec<crate::ga::Pen>>()
-            })
-            .map(move |pens| {
-                pens.iter()
-                    .map(|pen| palette.get(pen))
-                    .cloned()
-                    .collect::<Vec<_>>()
+                Self::line_bytes_to_inks(&line_bytes, mode, palette)
             })
             .collect::<Vec<_>>()
             .into()
@@ -960,9 +952,10 @@ impl ColorMatrix<Ink> {
         let tot_height = stack.iter().map(|row| row.height()).sum::<u32>() as usize;
 
         let mut matrix = Self::new(max_width, tot_height);
-        let cumulative_height = 0;
+        let mut cumulative_height = 0;
         for row in stack.iter() {
-            matrix.draw_matrix_at(0, cumulative_height, row)
+            matrix.draw_matrix_at(0, cumulative_height, row);
+            cumulative_height += row.height() as usize;
         }
 
         matrix
@@ -1326,7 +1319,7 @@ impl<C: AmstradColor> Sprite<C> {
     /// TODO Use TryFrom once in standard rust
     /// The conversion can only work if a palette and a mode is provided
     pub fn to_color_matrix(&self) -> Option<ColorMatrix<C>> {
-        if self.mode.is_none() && self.palette.is_none() {
+        if self.mode.is_none() || self.palette.is_none() {
             return None;
         }
 

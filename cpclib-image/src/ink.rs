@@ -582,12 +582,20 @@ macro_rules! impl_from_ink_integer {
     ( $($t: ty),* ) => {
       $(  impl From<$t> for Ink {
             fn from(item: $t) -> Self {
+                // Compared through i64 rather than `item` itself so this
+                // works identically whether `$t` is signed or unsigned - a
+                // negative signed value used to slip past `item < 32`
+                // unchecked, then get reinterpreted as a large `u8` by the
+                // final `as _` cast, producing an `Ink` outside its own
+                // documented 0..=31 invariant instead of panicking here.
+                let raw = item as i64;
+                assert!(raw >= 0, "Ink value cannot be negative: {raw}");
 
-                let item = if item < 32 {
+                let item = if raw < 32 {
                     // Basic number provided
                     item
                 } else {
-                    assert!((item as i64) < 256);
+                    assert!(raw < 256);
                     // gate array number provided
                     INKS_GA_VALUE.iter()
                         .position(|&ink| ink == item as u8)

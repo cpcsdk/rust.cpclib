@@ -1967,7 +1967,13 @@ impl<P: DapPeer> BasicSession<P> {
                 Purpose::NativeBasicState => {
                     return match self.apply_native_basic_state(message) {
                         Some(line) => {
-                            let reason = if self.breakpoints.contains(&line) {
+                            // See `is_first_statement_of_line`'s own doc
+                            // comment - without this check, a breakpointed
+                            // line with several statements re-stops on
+                            // every one of them instead of once.
+                            let reason = if self.breakpoints.contains(&line)
+                                && self.is_first_statement_of_line(line)
+                            {
                                 "breakpoint"
                             }
                             else {

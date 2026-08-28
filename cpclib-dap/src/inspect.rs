@@ -700,15 +700,6 @@ pub fn crtc_screen_defaults(regs: &[u8; 18]) -> (usize, usize) {
     (width, lines_per_char_row)
 }
 
-/// `-sv`'s 5th argument, resolved: the WinAPE-style char-row-strip view
-/// (a black separator every `lines_per_char_row` real lines) is now the
-/// *default* appearance, on the reasoning that a flat image was never as
-/// useful for reverse engineering as one that shows character-row
-/// boundaries - explicitly asked for as this feature's whole point. `0` is
-/// how that is turned back off (a screen genuinely has no natural strip
-/// height smaller than itself, so `0` was never a meaningful "real"
-/// request); any other explicit value asks for a different grouping than
-/// the live CRTC's own.
 /// `-sv`'s 6th argument, parsed: a comma-separated list of up to 16 CPC
 /// hardware ink numbers (0-26), one per pen starting at pen 0 - an empty
 /// entry between commas (`",,5,"`) means "no override for this pen, keep

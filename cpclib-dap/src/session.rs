@@ -360,7 +360,6 @@ struct OpenScreenView {
 /// needs no second round trip.
 #[derive(Debug, Clone)]
 struct WatchArray {
-    name: String,
     address: u32,
     width: usize,
     bytes: Vec<u8>
@@ -1521,7 +1520,6 @@ impl<P: DapPeer> Session<P> {
         let elements = bytes.len() / width;
         let reference = WATCH_ARRAY_REFERENCE_BASE + self.watch_arrays.len() as i64;
         self.watch_arrays.push(WatchArray {
-            name: watch.name.clone(),
             address: watch.address,
             width,
             bytes
@@ -5122,6 +5120,11 @@ impl<P: DapPeer> Session<P> {
             Purpose::Plain
         )?;
         self.note_program_counter(address);
+        // `note_program_counter` only tracks `last_pc` (the disassembly/
+        // timer bookkeeping) - without this, evaluating `pc` in the console,
+        // or a `-mv PC,follow` view, would keep showing the pre-jump value
+        // until the next natural stop refreshes registers.
+        self.last_registers.insert("PC".into(), address as u32);
         let seq = self.next_seq();
         Ok(vec![protocol::response(
             request,

@@ -1059,8 +1059,17 @@ pub struct AmspiritLitePeer {
     /// Answers waiting for the next `drain`.
     pending: std::sync::mpsc::Receiver<Value>,
     outgoing: std::sync::mpsc::Sender<Value>,
-    /// Shared with the poller, which answers the editor while `send` is off
-    /// answering something else.
+    /// Advanced by `next_seq`/`self.next_seq()` on the request thread only -
+    /// found stale during a code-quality pass: this is *not* actually shared
+    /// with `watch_run_state`'s own poller thread, which keeps a separate
+    /// local counter offset by `1_000_000` to sidestep collisions, nor with
+    /// `read_events`'s SSE thread, which keeps a third, independent local
+    /// counter starting at 0 - one that *can* genuinely collide with this
+    /// atomic's own 0-based values on the same outgoing channel, since
+    /// neither thread was given a handle to it. Flagging this rather than
+    /// rewiring it blind: the fix (routing all three through one shared
+    /// counter, or a documented offset scheme covering all three) needs a
+    /// live emulator to confirm doesn't regress event ordering.
     seq: std::sync::Arc<std::sync::atomic::AtomicI64>
 }
 

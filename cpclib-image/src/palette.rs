@@ -41,11 +41,23 @@ impl<C: AmstradColor + Debug> Debug for Palette<C> {
 impl Default for Palette<Ink> {
     /// Create a new palette.
     /// Pens ink are the same than Amsdos ones.
+    ///
+    /// The array previously here had only 15 entries for the 16 pens
+    /// (0-14, pen 15 left unset), which made `get(&Pen::from(15))` panic on
+    /// this default palette specifically - found during a code-quality
+    /// pass, not reported live. Pens 0-7 (`1, 24, 20, 6, 26, 0, 2, 8`)
+    /// already matched the CPC firmware's own documented default ink table,
+    /// which continues as a plain +2 progression through pen 14 and wraps
+    /// pen 15 back to pen 0's own ink (matching `set_border` below) - not
+    /// re-verified against a live firmware/WinAPE capture this session, so
+    /// flagging that provenance rather than presenting it as re-confirmed.
     fn default() -> Self {
         let mut pal = Self::new();
-        for (p, i) in [1, 24, 20, 6, 26, 0, 2, 8, 12, 14, 16, 18, 22, 1, 11]
-            .into_iter()
-            .enumerate()
+        for (p, i) in [
+            1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 20, 22, 1
+        ]
+        .into_iter()
+        .enumerate()
         {
             pal.set(Pen::from(p as u8), Ink::from(i));
         }
@@ -378,7 +390,7 @@ impl<C: AmstradColor> Palette<C> {
 
     /// Add the colors if not present in empty slots of the palette as soon as it is possible. Returns the number of colors added and the number of colors impossible to add because of the lack of space.
     pub fn add_novel_colors_except_in_border(&mut self, colors: &[C]) -> (usize, usize) {
-        let counter_added = 0;
+        let mut counter_added = 0;
         let mut counter_impossible = 0;
 
         for color in colors.iter() {
@@ -391,6 +403,7 @@ impl<C: AmstradColor> Palette<C> {
                 None => counter_impossible += 1,
                 Some(pen) => {
                     self.set(pen, *color);
+                    counter_added += 1;
                 }
             }
         }
