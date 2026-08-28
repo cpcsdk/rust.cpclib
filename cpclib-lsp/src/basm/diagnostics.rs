@@ -591,18 +591,12 @@ pub(super) fn collect_asm_diagnostics(
                 DiagnosticSeverity::INFORMATION
             ));
         },
-        AssemblerError::IncludedFileError { span, path, error: inner } => {
-            out.push(asm_diag(
-                Some(span),
-                format!("File included here (\"{path}\")"),
-                DiagnosticSeverity::ERROR
-            ));
-            // Unlike the flat message this used to be (`error: inner`'s
-            // whole rendered text stuffed into one diagnostic here), also
-            // recurse so the actual failure gets its own diagnostic at its
-            // own location inside the included file - same shape as
-            // RelocatedError/IfIssue/ForIssue below.
-            collect_asm_diagnostics(inner, Some(span), document, out);
+        AssemblerError::WithChainNotes { error: inner, .. } => {
+            // The trailing "how we got here" notes have no span of their
+            // own (that's the whole point - see `WithChainNotes`'s doc
+            // comment) and `inner` renders/positions exactly as it would
+            // without this wrapping, so just recurse into it.
+            collect_asm_diagnostics(inner, parent_span, document, out);
         },
         AssemblerError::IfIssue { span, error: inner } => {
             collect_asm_diagnostics(inner, Some(span), document, out);

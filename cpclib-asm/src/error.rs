@@ -213,14 +213,18 @@ pub enum AssemblerError {
         error: Z80ParserError
     },
 
-    /// An error somewhere while reading or visiting a file reached via
-    /// `INCLUDE`/`READ`. `span` is the *including* directive's own span (in
-    /// the parent file); `path` is the included file's own path, relative to
-    /// the project root when possible - see `relative_to_project_root`.
-    IncludedFileError {
-        span: Z80Span,
-        path: String,
-        error: Box<AssemblerError>
+    /// `error`, with one or more trailing "how we got here" notes appended
+    /// after it (`Env::active_frames_as_notes`, or accumulated one at a time
+    /// via `with_chain_note` as an error propagates out through nested
+    /// macro calls/`INCLUDE`s) - innermost first. A compact alternative to
+    /// wrapping in an outer `RelocatedError`/`MacroError` (a whole extra
+    /// codespan block per level): `error`'s own box, exactly
+    /// as it already renders, with each macro call/`INCLUDE` that led there
+    /// simply listed below it - same shape as an assert's own trailing
+    /// "inside MACRO X, expanded from Y" note.
+    WithChainNotes {
+        error: Box<AssemblerError>,
+        notes: Vec<String>
     },
 
     //#[fail(display = "Basic error: {}", error)]
@@ -505,13 +509,31 @@ impl AssemblerError {
             AssemblerError::AlreadyRenderedWarningWithLocation { .. } => true,
             // IfIssue already carries the full IF block span; no need to re-wrap
             AssemblerError::IfIssue { .. } => true,
-            // IncludedFileError carries its own span directly (the INCLUDE
-            // directive's), unlike MacroError which always arrives wrapped in
-            // a RelocatedError instead - re-wrapping it here would double the
-            // codespan block (title becomes the whole already-rendered inner
-            // message, span repeated a second time with no title).
-            AssemblerError::IncludedFileError { .. } => true,
+            // WithChainNotes carries no span of its own - the box it
+            // renders is entirely `error`'s own, unaffected by the trailing
+            // notes - so re-wrapping here would, the same way, double it.
+            AssemblerError::WithChainNotes { .. } => true,
             _ => false
+        }
+    }
+
+    /// Append one more "how we got here" note - see `WithChainNotes`.
+    /// Accumulates: if `self` already carries notes (from a step closer to
+    /// the actual failure), `note` is appended after them, keeping the
+    /// overall list innermost-first as an error propagates out through
+    /// nested macro calls/`INCLUDE`s one level at a time.
+    pub fn with_chain_note(self: Box<Self>, note: String) -> Box<Self> {
+        match *self {
+            AssemblerError::WithChainNotes { error, mut notes } => {
+                notes.push(note);
+                Box::new(AssemblerError::WithChainNotes { error, notes })
+            },
+            other => {
+                Box::new(AssemblerError::WithChainNotes {
+                    error: Box::new(other),
+                    notes: vec![note]
+                })
+            }
         }
     }
 
@@ -722,17 +744,12 @@ impl AssemblerError {
                 write!(f, "{str}")
             },
 
-            AssemblerError::IncludedFileError { span, path, error } => {
-                let msg = build_simple_error_message(
-                    &format!("File included here (\"{path}\")"),
-                    span,
-                    Severity::Error
-                );
-                // Root cause first, call-chain context after - same order as
-                // `MacroError`: this reads innermost (the actual failure) to
-                // outermost (how it was reached), and matches an assert's own
-                // trailing "inside MACRO X, expanded from Y" note.
-                write!(f, "{error}\n{msg}")
+            AssemblerError::WithChainNotes { error, notes } => {
+                write!(f, "{error}")?;
+                for note in notes {
+                    write!(f, "\n    = {note}")?;
+                }
+                Ok(())
             },
 
             AssemblerError::OverrideMemory(address, count) => {

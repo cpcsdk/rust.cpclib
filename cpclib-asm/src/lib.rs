@@ -982,19 +982,18 @@ mod test_super {
     fn equ_redefinition_error_propagated_out_of_an_included_file_shows_the_include_chain_once() {
         // Regression test: unlike a delayed `assert`, this "already defined"
         // error propagates as a genuine `Err` out of the included file's own
-        // token visiting, straight back through `IncludeState::handle`'s new
+        // token visiting, straight back through `IncludeState::handle`'s
         // wrapping - a different code path from the delayed-assert case
         // above, worth covering on its own. It also caught a real bug while
-        // writing it: `IncludedFileError` carries its own span directly
-        // (unlike `MacroError`, always wrapped in a `RelocatedError`
-        // instead), so it must be listed in `AssemblerError::is_located` -
-        // otherwise the *generic* per-token error wrapper every
-        // `ProcessedToken::visited()` call goes through (which calls
-        // `.locate()` on whatever it gets) wraps it a second time: the
-        // message's own already-rendered text becomes the *title* of an
-        // outer, second codespan block using the same span, rendering as a
-        // doubled "error: error: ..." header followed by a stray, textless
-        // codespan snippet.
+        // writing it: `WithChainNotes` carries no span of its own (unlike
+        // `MacroError`, always wrapped in a `RelocatedError` instead), so it
+        // must be listed in `AssemblerError::is_located` - otherwise the
+        // *generic* per-token error wrapper every `ProcessedToken::visited()`
+        // call goes through (which calls `.locate()` on whatever it gets)
+        // wraps it a second time: the message's own already-rendered text
+        // becomes the *title* of an outer, second codespan block using the
+        // same span, rendering as a doubled "error: error: ..." header
+        // followed by a stray, textless codespan snippet.
         let directory = std::env::temp_dir().join(format!(
             "cpclib-equ-in-include-probe-{}",
             std::process::id()
@@ -1028,21 +1027,25 @@ mod test_super {
         let rendered = err.to_string();
         // Codespan colors "error" and the following ":" separately (an ANSI
         // reset sits between them), so count the bare word rather than
-        // "error:" - each of the two diagnostic blocks (the redefinition,
-        // then the include wrapping) must have exactly one.
+        // "error:" - there is only one diagnostic block now (the include
+        // chain is a trailing note on it, not a second block), so exactly
+        // one "error" header - not doubled up.
         assert_eq!(
             rendered.matches("error").count(),
-            2,
-            "exactly one \"error\" header per diagnostic block (the redefinition, \
-             then the include wrapping) - not doubled up on either: {rendered}"
+            1,
+            "exactly one \"error\" header - not doubled up: {rendered}"
         );
         assert!(
             rendered.contains("already defined"),
             "missing the redefinition's own message: {rendered}"
         );
         assert!(
-            rendered.contains("File included here") && rendered.contains("included.asm"),
-            "missing the include-chain wrapping: {rendered}"
+            rendered.contains("included.asm"),
+            "missing the redefinition's own file (included.asm): {rendered}"
+        );
+        assert!(
+            rendered.contains("= included from") && rendered.contains("main.asm"),
+            "missing the compact include-chain note: {rendered}"
         );
 
         let _ = std::fs::remove_dir_all(&directory);
@@ -1096,19 +1099,26 @@ mod test_super {
             rendered.contains("bad.asm"),
             "should show the failing redefinition's own source: {rendered}"
         );
-        // The original definition's chain renders as a compact trailing
-        // note ("= included from ..."); the failing redefinition's own
-        // chain renders as a full codespan block ("File included here
-        // (...)"), via the pre-existing propagated-error wrapping. Both
-        // must be present - only one of the two was ever shown before this
-        // feature.
-        assert!(
-            rendered.contains("= included from"),
-            "missing the original definition's own include chain: {rendered}"
+        // Both the original definition's own chain (a trailing note right
+        // after the "already defined" title) and the failing redefinition's
+        // own chain (a trailing note at the very end, via `WithChainNotes`)
+        // render as compact "= included from ..." notes - one naming
+        // main.asm's line 2 (`include "original.asm"`), the other its line
+        // 3 (`include "bad.asm"`). Only one of the two was ever shown before
+        // this feature.
+        assert_eq!(
+            rendered.matches("= included from").count(),
+            2,
+            "both the original definition's and the failing redefinition's \
+             include-chain notes should be shown: {rendered}"
         );
         assert!(
-            rendered.contains("File included here"),
-            "missing the failing redefinition's own include chain: {rendered}"
+            rendered.contains("main.asm:2:"),
+            "missing the original definition's own include line (main.asm:2): {rendered}"
+        );
+        assert!(
+            rendered.contains("main.asm:3:"),
+            "missing the failing redefinition's own include line (main.asm:3): {rendered}"
         );
 
         let _ = std::fs::remove_dir_all(&directory);
@@ -1122,9 +1132,11 @@ mod test_super {
         // the wrong file is included by mistake and the fix is finding that
         // `INCLUDE`, not the assert itself. `Env::active_frames` now tracks
         // `INCLUDE` the same way it already tracks macro calls, so
-        // `visit_assert` can wrap the error with an `IncludedFileError`
+        // `visit_assert` can append a compact "= included from ..." note
         // pointing at the `INCLUDE` directive's own line, in addition to the
-        // assert's own location.
+        // assert's own location - there's no call-argument content worth a
+        // whole extra codespan block for a plain `INCLUDE "..."` line, unlike
+        // a macro call (see `WithChainNotes`).
         let directory =
             std::env::temp_dir().join(format!("cpclib-include-chain-probe-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&directory);
@@ -1165,22 +1177,22 @@ mod test_super {
             "missing the assert's own message: {rendered}"
         );
         assert!(
-            rendered.contains("File included here") && rendered.contains("included.asm"),
-            "missing the include-chain wrapping: {rendered}"
+            rendered.contains("included.asm"),
+            "missing the assert's own file (included.asm): {rendered}"
         );
         assert!(
-            rendered.contains("main.asm"),
-            "should show the INCLUDE directive's own file (main.asm): {rendered}"
+            rendered.contains("= included from") && rendered.contains("main.asm"),
+            "should show the INCLUDE directive's own file (main.asm) as a compact note: {rendered}"
         );
         // Root cause first, then how it was reached - same convention as
         // the macro-call chain.
         let assert_pos = rendered.find("boom").expect("assert message present");
         let include_pos = rendered
-            .find("File included here")
-            .expect("include wrapping present");
+            .find("= included from")
+            .expect("include-chain note present");
         assert!(
             assert_pos < include_pos,
-            "the assert's own message should come before the include wrapping: {rendered}"
+            "the assert's own message should come before the include note: {rendered}"
         );
 
         let _ = std::fs::remove_dir_all(&directory);
@@ -1238,11 +1250,11 @@ mod test_super {
             .find("Error in macro call CHECKLEN")
             .expect("macro-call wrapping present (included.asm, where CHECKLEN is called)");
         let include_pos = rendered
-            .find("File included here")
-            .expect("include wrapping present (main.asm, where included.asm is included)");
+            .find("= included from")
+            .expect("include-chain note present (main.asm, where included.asm is included)");
         assert!(
             assert_pos < macro_pos && macro_pos < include_pos,
-            "expected order: assert, then macro call site, then include site: {rendered}"
+            "expected order: assert, then macro call site, then include note: {rendered}"
         );
 
         let _ = std::fs::remove_dir_all(&directory);

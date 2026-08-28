@@ -20,7 +20,7 @@ use cpclib_tokens::{
 use ouroboros::*;
 
 use super::AssemblerWarning;
-use super::{ActiveExpansion, ActiveFrame, IncludeFrame};
+use super::{ActiveExpansion, ActiveFrame, IncludeFrame, include_chain_note};
 use super::control::ControlOutputStore;
 use super::file::{get_filename_to_read, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
@@ -225,18 +225,10 @@ impl IncludeState {
 
         // Process the inclusion only if necessary
         if need_to_include {
-            let relative_path = relative_to_project_root(&fname);
-
             // most of the time, file has been loaded
             let state = self.retreive_listing(env.clone(), &fname).map_err(|e| {
                 match &call_site {
-                    Some(span) => {
-                        Box::new(AssemblerError::IncludedFileError {
-                            span: span.clone(),
-                            path: relative_path.to_string(),
-                            error: e
-                        })
-                    },
+                    Some(span) => e.with_chain_note(include_chain_note(span)),
                     None => e
                 }
             })?;
@@ -257,7 +249,6 @@ impl IncludeState {
                     .unwrap()
                     .active_frames
                     .push(ActiveFrame::Include(IncludeFrame {
-                        path: relative_path.clone(),
                         call_site: call_site.clone()
                     }));
             }
@@ -282,13 +273,7 @@ impl IncludeState {
 
             res.map_err(|e| {
                 match &call_site {
-                    Some(span) => {
-                        Box::new(AssemblerError::IncludedFileError {
-                            span: span.clone(),
-                            path: relative_path.to_string(),
-                            error: e
-                        })
-                    },
+                    Some(span) => e.with_chain_note(include_chain_note(span)),
                     None => e
                 }
             })?;
@@ -1432,12 +1417,12 @@ where
                         // already a live exclusive borrow of `self.state`.
                         let call_site = self.token.possible_span().cloned();
                         let pushed_expansion = call_site.is_some();
-                        if let Some(call_site) = call_site {
+                        if let Some(call_site) = &call_site {
                             env.active_frames.push(ActiveFrame::Expansion(ActiveExpansion {
                                 listing: state.listing_arc(),
                                 name: name.into(),
                                 location: location.clone(),
-                                call_site
+                                call_site: call_site.clone()
                             }));
                         }
 

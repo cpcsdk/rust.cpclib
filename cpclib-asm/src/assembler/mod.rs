@@ -445,11 +445,36 @@ struct ActiveExpansion {
 /// never goes stale.
 #[derive(Debug, Clone)]
 struct IncludeFrame {
-    /// The included file's own path, relative to the project root when
-    /// possible - see `relative_to_project_root`.
-    path: Utf8PathBuf,
-    /// Where the `INCLUDE`/`READ` directive itself is written.
+    /// Where the `INCLUDE`/`READ` directive itself is written - all
+    /// `include_chain_note`/`Display` actually need: the included file's own
+    /// name is whatever `error`'s own span already names, unaffected by this
+    /// wrapping.
     call_site: Z80Span
+}
+
+/// A one-line "how we got here" note for a single `INCLUDE`/`READ`, used
+/// both for `Env::active_frames_as_notes` (the whole stack, batched) and for
+/// accumulating one note at a time as a normally-propagated error travels
+/// out through nested `IncludeState::handle` calls (see
+/// `AssemblerError::with_chain_note`).
+fn include_chain_note(call_site: &Z80Span) -> String {
+    let (line, column) = call_site.relative_line_and_column();
+    let call_file =
+        processed_token::relative_to_project_root(&Utf8PathBuf::from(call_site.filename()));
+    format!("included from {call_file}:{line}:{column}")
+}
+
+/// Same as `include_chain_note`, for a macro/struct call.
+fn macro_chain_note(name: &SmolStr, location: &Option<SourceLocation>, call_site: &Z80Span) -> String {
+    let (line, column) = call_site.relative_line_and_column();
+    let call_file =
+        processed_token::relative_to_project_root(&Utf8PathBuf::from(call_site.filename()));
+    match location {
+        Some(location) => {
+            format!("inside MACRO {name} ({call_file}:{line}:{column}), defined in {location}")
+        },
+        None => format!("inside MACRO {name} ({call_file}:{line}:{column})")
+    }
 }
 
 /// Environment of the assembly
@@ -7815,10 +7840,10 @@ impl Env {
     }
 
     /// Human-readable "how we got here" notes for `self.active_frames`,
-    /// innermost first - same content and order as the boxed-diagnostic
-    /// wrapping `visit_assert` builds, but flattened to plain owned text so
-    /// it is safe to keep around after the `Z80Span`s in `active_frames`
-    /// stop being valid (see `Env::symbol_definition_chains`).
+    /// innermost first - flattened to plain owned text (via
+    /// `macro_chain_note`/`include_chain_note`) so it is safe to keep around
+    /// after the `Z80Span`s in `active_frames` stop being valid (see
+    /// `Env::symbol_definition_chains`).
     fn active_frames_as_notes(&self) -> Vec<String> {
         self.active_frames
             .iter()
@@ -7826,29 +7851,9 @@ impl Env {
             .map(|frame| {
                 match frame {
                     ActiveFrame::Expansion(expansion) => {
-                        let (line, column) = expansion.call_site.relative_line_and_column();
-                        let call_file = processed_token::relative_to_project_root(
-                            &Utf8PathBuf::from(expansion.call_site.filename())
-                        );
-                        match &expansion.location {
-                            Some(location) => {
-                                format!(
-                                    "inside MACRO {} ({call_file}:{line}:{column}), defined in {location}",
-                                    expansion.name
-                                )
-                            },
-                            None => {
-                                format!("inside MACRO {} ({call_file}:{line}:{column})", expansion.name)
-                            }
-                        }
+                        macro_chain_note(&expansion.name, &expansion.location, &expansion.call_site)
                     },
-                    ActiveFrame::Include(include) => {
-                        let (line, column) = include.call_site.relative_line_and_column();
-                        let call_file = processed_token::relative_to_project_root(
-                            &Utf8PathBuf::from(include.call_site.filename())
-                        );
-                        format!("included from {call_file}:{line}:{column}")
-                    }
+                    ActiveFrame::Include(include) => include_chain_note(&include.call_site)
                 }
             })
             .collect()
@@ -7892,7 +7897,7 @@ impl Env {
         };
 
         if let Err(assert_error) = res {
-            let mut assert_error = if let Some(span) = span {
+            let assert_error = if let Some(span) = span {
                 assert_error.locate(span.clone())
             }
             else {
@@ -7904,27 +7909,27 @@ impl Env {
             // the wrapping `ProcessedToken::visited`'s `MacroCallOrBuildStruct`/
             // `Include` arms apply automatically to a macro-body/included-file
             // error that *does* propagate. Do it by hand here, innermost
-            // frame first, so the rendered error leads all the way back
-            // through every macro call and `INCLUDE` that led here - not
-            // just the assert's own line.
+            // frame first: a macro call gets a whole extra codespan block
+            // (its call arguments are worth seeing - the same reason
+            // `MacroCallOrBuildStruct` gets one for a propagated `Err`), an
+            // `INCLUDE` gets a compact trailing note instead (there's
+            // nothing but the path to see in an `INCLUDE "..."` line the
+            // note doesn't already say - see `WithChainNotes`).
+            let mut assert_error = Box::new(assert_error);
             for frame in self.active_frames.iter().rev() {
                 assert_error = match frame {
                     ActiveFrame::Expansion(expansion) => {
-                        AssemblerError::RelocatedError {
+                        Box::new(AssemblerError::RelocatedError {
                             span: expansion.call_site.clone(),
                             error: Box::new(AssemblerError::MacroError {
                                 name: expansion.name.clone(),
-                                root: Box::new(assert_error),
+                                root: assert_error,
                                 location: expansion.location.clone()
                             })
-                        }
+                        })
                     },
                     ActiveFrame::Include(include) => {
-                        AssemblerError::IncludedFileError {
-                            span: include.call_site.clone(),
-                            path: include.path.to_string(),
-                            error: Box::new(assert_error)
-                        }
+                        assert_error.with_chain_note(include_chain_note(&include.call_site))
                     }
                 };
             }
@@ -7947,7 +7952,7 @@ impl Env {
                 .collect();
             self.active_page_info_mut()
                 .add_failed_assert_command(FailedAssertCommand {
-                    failure: Box::new(assert_error),
+                    failure: assert_error,
                     _keep_alive: keep_alive
                 });
             Ok(false)
