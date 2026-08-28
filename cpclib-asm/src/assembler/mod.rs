@@ -416,17 +416,39 @@ pub trait EnvEventObserver: EventObserver {}
 
 impl<T> EnvEventObserver for T where T: EventObserver {}
 
-/// One entry of `Env::active_expansions` - see its doc comment.
+/// One entry of `Env::active_frames` - see its doc comment.
+#[derive(Debug, Clone)]
+enum ActiveFrame {
+    Expansion(ActiveExpansion),
+    Include(IncludeFrame)
+}
+
+/// A macro/struct call currently being expanded - see `Env::active_frames`.
 #[derive(Debug, Clone)]
 struct ActiveExpansion {
     /// Keeps this expansion's buffer alive independently of the
-    /// `ExpandState` that owns it - see `Env::active_expansions`.
+    /// `ExpandState` that owns it - see `Env::active_frames`.
     listing: Arc<LocatedListing>,
     name: SmolStr,
     /// Where the macro/struct itself is defined.
     location: Option<SourceLocation>,
     /// Where it is called from - the span an error should point at to lead
     /// the user back to the actual call site, not just the macro body.
+    call_site: Z80Span
+}
+
+/// A file currently being visited because of an `INCLUDE`/`READ` directive -
+/// see `Env::active_frames`. Unlike `ActiveExpansion`, no keep-alive buffer
+/// is needed: an included file's `LocatedListing` is parsed once and cached
+/// for the whole assembling run (see `IncludeState::retreive_listing`), never
+/// rebuilt mid-run the way a macro's `ExpandState` is, so a `Z80Span` into it
+/// never goes stale.
+#[derive(Debug, Clone)]
+struct IncludeFrame {
+    /// The included file's own path, relative to the project root when
+    /// possible - see `relative_to_project_root`.
+    path: Utf8PathBuf,
+    /// Where the `INCLUDE`/`READ` directive itself is written.
     call_site: Z80Span
 }
 
@@ -476,24 +498,40 @@ pub struct Env {
     /// Counter for the unique labels within macros
     macro_seed: usize,
 
-    /// Stack of the macro/struct calls currently being expanded, innermost
-    /// last. Serves two purposes for anything captured while one of these is
-    /// active (e.g. a failed `assert`'s span, see `FailedAssertCommand`):
+    /// Stack of the macro/struct expansions and `INCLUDE`d files currently
+    /// being visited, innermost last, interleaved in true nesting order (an
+    /// `INCLUDE` inside a macro body, or a macro called from an included
+    /// file, both push/pop into this same stack). Serves two purposes for
+    /// anything captured while one of these is active (e.g. a failed
+    /// `assert`'s span, see `FailedAssertCommand`):
     ///
-    /// - cloning `listing` out of here keeps that expansion's buffer alive
-    ///   independently of the `ExpandState` that originally owned it - which
-    ///   is dropped well before such a delayed error is finally formatted
-    ///   (see `Env::handle_assert`);
-    /// - `name`/`location`/`call_site` let the error be wrapped in the same
-    ///   "error in macro call NAME (defined in LOCATION)" shape the
-    ///   propagated-error path builds automatically (`MacroCallOrBuildStruct`
-    ///   in `ProcessedToken::visited`) - a delayed `assert` never propagates
-    ///   as an `Err` (so every assert in a file can be collected in one
-    ///   run), so it never goes through that wrapping on its own and would
-    ///   otherwise point only at the assert's line inside the macro body,
-    ///   with no way back to the call site that actually supplied the bad
-    ///   arguments.
-    active_expansions: Vec<ActiveExpansion>,
+    /// - for an `Expansion`, cloning its `listing` out keeps that macro
+    ///   expansion's buffer alive independently of the `ExpandState` that
+    ///   originally owned it - which is dropped well before such a delayed
+    ///   error is finally formatted (see `Env::handle_assert`). An `Include`
+    ///   frame needs no such keep-alive - see `IncludeFrame`'s doc comment;
+    /// - both let the error be wrapped in the same "error in macro call NAME
+    ///   (defined in LOCATION)" / "error in included file PATH" shape the
+    ///   propagated-error path already builds automatically for a genuinely
+    ///   returned `Err` (`MacroCallOrBuildStruct`/`Include` arms of
+    ///   `ProcessedToken::visited`) - a delayed `assert` never propagates as
+    ///   an `Err` (so every assert in a file can be collected in one run),
+    ///   so it never goes through that wrapping on its own and would
+    ///   otherwise point only at the assert's own line, with no way back to
+    ///   the call site/include that actually led there.
+    active_frames: Vec<ActiveFrame>,
+
+    /// For a symbol defined while `active_frames` was non-empty, the same
+    /// "how we got here" chain as `active_frames` itself, but flattened to
+    /// plain, owned text (`Env::active_frames_as_notes`) at the moment of
+    /// definition - unlike `active_frames`, this must survive for as long as
+    /// the symbol table entry it describes might (an "already defined"
+    /// error can be raised passes later, once the `Z80Span`s that were
+    /// active back then are long gone), so it can never hold a live span.
+    /// Keyed by the same normalized symbol name `SymbolsTable` itself uses,
+    /// so a lookup here always agrees with `contains_symbol`/`any_value`
+    /// regardless of case-sensitivity settings.
+    symbol_definition_chains: HashMap<String, Vec<String>>,
 
     charset_encoding: CharsetEncoding,
 
@@ -632,7 +670,8 @@ impl Clone for Env {
             sna_version: self.sna_version,
             free_banks: self.free_banks.clone(),
             macro_seed: self.macro_seed,
-            active_expansions: self.active_expansions.clone(),
+            active_frames: self.active_frames.clone(),
+            symbol_definition_chains: self.symbol_definition_chains.clone(),
             charset_encoding: self.charset_encoding.clone(),
             byte_written: self.byte_written,
             symbols: self.symbols.clone(),
@@ -2811,10 +2850,25 @@ impl Env {
                     .unwrap()
                     .unwrap()
                     .location()
+                    .cloned(),
+                here_chain: self
+                    .symbol_definition_chains
+                    .get(label)
                     .cloned()
+                    .unwrap_or_default()
             }))
         }
         else {
+            // Remember how *this* definition was reached, in case a later
+            // label with the same name conflicts with it - see
+            // `Env::symbol_definition_chains`. Keyed by the same normalized
+            // `label` the error branch above looks up with, *before*
+            // `handle_global_and_local_labels` below resolves it further.
+            if !self.active_frames.is_empty() {
+                self.symbol_definition_chains
+                    .insert(label.to_string(), self.active_frames_as_notes());
+            }
+
             // TODO we should make the expansion right now because it is fucked up otherwise
 
             let label = self.handle_global_and_local_labels(label)?;
@@ -3285,7 +3339,8 @@ impl Env {
                 here: self
                     .symbols()
                     .any_value(destination.as_str())?
-                    .and_then(|v| v.location().cloned())
+                    .and_then(|v| v.location().cloned()),
+                here_chain: Vec::new()
             }));
         }
 
@@ -4084,7 +4139,8 @@ impl Env {
             ga_mmr: 0xC0, // standard memory configuration
 
             macro_seed: 0,
-            active_expansions: Vec::new(),
+            active_frames: Vec::new(),
+            symbol_definition_chains: HashMap::new(),
             charset_encoding: CharsetEncoding::new(),
             sna: SnaAssembler::default(),
             sna_version: cpclib_sna::SnapshotVersion::V3,
@@ -5434,6 +5490,11 @@ impl Env {
         exp: &E
     ) -> Result<(), Box<AssemblerError>> {
         if self.symbols().contains_symbol(label_span.as_str())? && self.pass.is_first_pass() {
+            let key = self
+                .symbols()
+                .normalize_symbol(label_span.as_str())
+                .value()
+                .to_string();
             Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
                 kind: self.symbols().kind(label_span.as_str())?.into(),
@@ -5446,7 +5507,17 @@ impl Env {
                 here: self
                     .symbols()
                     .any_value(label_span.as_str())?
-                    .and_then(|v| v.location().cloned())
+                    .and_then(|v| v.location().cloned()),
+                // How the *original* definition was itself reached (e.g. via
+                // `INCLUDE`) - just as important for tracking down a
+                // duplicate as this occurrence's own chain (already shown by
+                // the codespan block via the outer wrapping), and otherwise
+                // invisible: `here` is only a flat file:line:col.
+                here_chain: self
+                    .symbol_definition_chains
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_default()
             }))
         }
         else {
@@ -5454,6 +5525,19 @@ impl Env {
             let normalized_label = self.symbols().normalize_symbol(label);
             let normalized_label_value = normalized_label.value();
             let normalized_braced_label = format!("{{{}}}", normalized_label_value);
+
+            // Remember how *this* definition was reached, in case a later
+            // `equ` for the same name conflicts with it - see
+            // `Env::symbol_definition_chains`.
+            if !self.active_frames.is_empty() {
+                let key = self
+                    .symbols()
+                    .normalize_symbol(label_span.as_str())
+                    .value()
+                    .to_string();
+                self.symbol_definition_chains
+                    .insert(key, self.active_frames_as_notes());
+            }
 
             // Forbid self-referential EQU (e.g. `x equ y - x`), otherwise first-pass fallback
             // can silently inject a bogus value and make the symbol look valid.
@@ -5566,7 +5650,8 @@ impl Env {
                 here: self
                     .symbols()
                     .any_value(label_span.as_str())?
-                    .and_then(|v| v.location().cloned())
+                    .and_then(|v| v.location().cloned()),
+                here_chain: Vec::new()
             }))
         }
         else {
@@ -7729,6 +7814,46 @@ impl Env {
         }
     }
 
+    /// Human-readable "how we got here" notes for `self.active_frames`,
+    /// innermost first - same content and order as the boxed-diagnostic
+    /// wrapping `visit_assert` builds, but flattened to plain owned text so
+    /// it is safe to keep around after the `Z80Span`s in `active_frames`
+    /// stop being valid (see `Env::symbol_definition_chains`).
+    fn active_frames_as_notes(&self) -> Vec<String> {
+        self.active_frames
+            .iter()
+            .rev()
+            .map(|frame| {
+                match frame {
+                    ActiveFrame::Expansion(expansion) => {
+                        let (line, column) = expansion.call_site.relative_line_and_column();
+                        let call_file = processed_token::relative_to_project_root(
+                            &Utf8PathBuf::from(expansion.call_site.filename())
+                        );
+                        match &expansion.location {
+                            Some(location) => {
+                                format!(
+                                    "inside MACRO {} ({call_file}:{line}:{column}), defined in {location}",
+                                    expansion.name
+                                )
+                            },
+                            None => {
+                                format!("inside MACRO {} ({call_file}:{line}:{column})", expansion.name)
+                            }
+                        }
+                    },
+                    ActiveFrame::Include(include) => {
+                        let (line, column) = include.call_site.relative_line_and_column();
+                        let call_file = processed_token::relative_to_project_root(
+                            &Utf8PathBuf::from(include.call_site.filename())
+                        );
+                        format!("included from {call_file}:{line}:{column}")
+                    }
+                }
+            })
+            .collect()
+    }
+
     pub fn visit_assert<E: ExprEvaluationExt + ExprElement>(
         &mut self,
         exp: &E,
@@ -7776,31 +7901,49 @@ impl Env {
 
             // An `assert` never propagates as an `Err` (so every assert in a
             // file can be collected in one run), so it never goes through
-            // the wrapping `ProcessedToken::visited`'s `MacroCallOrBuildStruct`
-            // arm applies automatically to a macro-body error that *does*
-            // propagate. Do it by hand here, innermost call first, so the
-            // rendered error leads all the way back to the call site that
-            // actually supplied the bad arguments - not just the assert's
-            // line inside the macro body.
-            for expansion in self.active_expansions.iter().rev() {
-                assert_error = AssemblerError::RelocatedError {
-                    span: expansion.call_site.clone(),
-                    error: Box::new(AssemblerError::MacroError {
-                        name: expansion.name.clone(),
-                        root: Box::new(assert_error),
-                        location: expansion.location.clone()
-                    })
+            // the wrapping `ProcessedToken::visited`'s `MacroCallOrBuildStruct`/
+            // `Include` arms apply automatically to a macro-body/included-file
+            // error that *does* propagate. Do it by hand here, innermost
+            // frame first, so the rendered error leads all the way back
+            // through every macro call and `INCLUDE` that led here - not
+            // just the assert's own line.
+            for frame in self.active_frames.iter().rev() {
+                assert_error = match frame {
+                    ActiveFrame::Expansion(expansion) => {
+                        AssemblerError::RelocatedError {
+                            span: expansion.call_site.clone(),
+                            error: Box::new(AssemblerError::MacroError {
+                                name: expansion.name.clone(),
+                                root: Box::new(assert_error),
+                                location: expansion.location.clone()
+                            })
+                        }
+                    },
+                    ActiveFrame::Include(include) => {
+                        AssemblerError::IncludedFileError {
+                            span: include.call_site.clone(),
+                            path: include.path.to_string(),
+                            error: Box::new(assert_error)
+                        }
+                    }
                 };
             }
 
             // Keep whichever macro/struct-expansion buffer(s) `assert_error`'s
             // spans point into alive for as long as this command lives (i.e.
-            // as long as `self` lives) - see `Env::active_expansions` and
-            // `FailedAssertCommand`.
+            // as long as `self` lives) - see `Env::active_frames` and
+            // `FailedAssertCommand`. `Include` frames need no such keep-alive
+            // (see `IncludeFrame`'s doc comment), so only `Expansion` frames
+            // contribute here.
             let keep_alive = self
-                .active_expansions
+                .active_frames
                 .iter()
-                .map(|expansion| expansion.listing.clone())
+                .filter_map(|frame| {
+                    match frame {
+                        ActiveFrame::Expansion(expansion) => Some(expansion.listing.clone()),
+                        ActiveFrame::Include(_) => None
+                    }
+                })
                 .collect();
             self.active_page_info_mut()
                 .add_failed_assert_command(FailedAssertCommand {

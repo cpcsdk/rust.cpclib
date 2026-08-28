@@ -20,7 +20,7 @@ use cpclib_tokens::{
 use ouroboros::*;
 
 use super::AssemblerWarning;
-use super::ActiveExpansion;
+use super::{ActiveExpansion, ActiveFrame, IncludeFrame};
 use super::control::ControlOutputStore;
 use super::file::{get_filename_to_read, load_file, read_source};
 use super::function::{Function, FunctionBuilder};
@@ -204,7 +204,12 @@ impl IncludeState {
         env: Arc<RwLock<&mut Env>>,
         fname: &str,
         namespace: Option<&str>,
-        once: bool
+        once: bool,
+        // The `INCLUDE`/`READ` directive's own span (in the *including*
+        // file) - `None` only when the token genuinely has none. Used to
+        // give both a normally-propagated error and a delayed `assert`
+        // failure a way back to this inclusion - see `Env::active_frames`.
+        call_site: Option<Z80Span>
     ) -> Result<(), Box<AssemblerError>> {
         let fname = {
             let env_guard = env.read().unwrap();
@@ -220,14 +225,41 @@ impl IncludeState {
 
         // Process the inclusion only if necessary
         if need_to_include {
+            let relative_path = relative_to_project_root(&fname);
+
             // most of the time, file has been loaded
-            let state = self.retreive_listing(env.clone(), &fname)?;
+            let state = self.retreive_listing(env.clone(), &fname).map_err(|e| {
+                match &call_site {
+                    Some(span) => {
+                        Box::new(AssemblerError::IncludedFileError {
+                            span: span.clone(),
+                            path: relative_path.to_string(),
+                            error: e
+                        })
+                    },
+                    None => e
+                }
+            })?;
 
             // handle module if necessary
             if let Some(namespace) = namespace {
                 env.write().unwrap().enter_namespace(namespace)?;
                 // TODO handle the locating of error
                 //.map_err(|e| e.locate(span.clone()))?;
+            }
+
+            // Remember this inclusion, for as long as anything captured while
+            // visiting it (a delayed `assert` failure) or propagated out of
+            // it (a normal `Err`) might need to point back to it - see
+            // `Env::active_frames`.
+            if let Some(call_site) = &call_site {
+                env.write()
+                    .unwrap()
+                    .active_frames
+                    .push(ActiveFrame::Include(IncludeFrame {
+                        path: relative_path.clone(),
+                        call_site: call_site.clone()
+                    }));
             }
 
             // Visit the included listing
@@ -243,7 +275,23 @@ impl IncludeState {
                 })
             };
             env.write().unwrap().leave_current_working_file();
-            res?;
+
+            if call_site.is_some() {
+                env.write().unwrap().active_frames.pop();
+            }
+
+            res.map_err(|e| {
+                match &call_site {
+                    Some(span) => {
+                        Box::new(AssemblerError::IncludedFileError {
+                            span: span.clone(),
+                            path: relative_path.to_string(),
+                            error: e
+                        })
+                    },
+                    None => e
+                }
+            })?;
 
             // Remove module if necessary
             if namespace.is_some() {
@@ -254,6 +302,22 @@ impl IncludeState {
 
         Ok(())
     }
+}
+
+/// The project root is approximated as the process's current directory -
+/// where `basm`/`bndbuild` is invoked from, normally the project's own
+/// source directory. An included file resolved through it (the common case)
+/// ends up short and relative, matching how every other filename in these
+/// messages is already shown; anything outside it (or if the current
+/// directory can't even be determined) falls back to the resolved path
+/// as-is rather than failing or guessing.
+pub(crate) fn relative_to_project_root(path: &Utf8PathBuf) -> Utf8PathBuf {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| Utf8PathBuf::from_path_buf(cwd).ok())
+        .and_then(|cwd| path.strip_prefix(&cwd).ok())
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| path.to_path_buf())
 }
 
 #[self_referencing]
@@ -1291,6 +1355,10 @@ where
 
                     Some(ProcessedTokenState::Include(state)) => {
                         let fname = env.build_fname(self.token.include_fname())?;
+                        // `self.token.possible_span()`, not `self.possible_span()`, to
+                        // borrow only the `token` field - `state` above is already a
+                        // live exclusive borrow of `self.state`.
+                        let call_site = self.token.possible_span().cloned();
                         {
                             let env_arc_include: Arc<RwLock<&mut Env>> =
                                 std::sync::Arc::new(std::sync::RwLock::new(env));
@@ -1298,7 +1366,8 @@ where
                                 env_arc_include,
                                 &fname,
                                 self.token.include_namespace(),
-                                self.token.include_once()
+                                self.token.include_once(),
+                                call_site
                             )
                         }
                     },
@@ -1357,19 +1426,19 @@ where
                         // this call's site, for as long as anything captured
                         // while visiting it (e.g. a failed `assert`'s
                         // `Z80Span`) might still need it - see
-                        // `Env::active_expansions`.
+                        // `Env::active_frames`.
                         // `self.token.possible_span()` (not `self.possible_span()`)
                         // to borrow only the `token` field - `state` below is
                         // already a live exclusive borrow of `self.state`.
                         let call_site = self.token.possible_span().cloned();
                         let pushed_expansion = call_site.is_some();
                         if let Some(call_site) = call_site {
-                            env.active_expansions.push(ActiveExpansion {
+                            env.active_frames.push(ActiveFrame::Expansion(ActiveExpansion {
                                 listing: state.listing_arc(),
                                 name: name.into(),
                                 location: location.clone(),
                                 call_site
-                            });
+                            }));
                         }
 
                         // save the number of prints to patch the ones added by the macro
@@ -1390,7 +1459,7 @@ where
                         // Always pop the seed, even if an error occurred (RAII principle)
                         env.symbols_mut().pop_seed();
                         if pushed_expansion {
-                            env.active_expansions.pop();
+                            env.active_frames.pop();
                         }
 
                         process_result.map_err(|e| {
@@ -1614,5 +1683,35 @@ mod test_super {
             processed.unwrap().state,
             Some(ProcessedTokenState::Include(..))
         ));
+    }
+
+    #[test]
+    fn relative_to_project_root_shortens_a_path_under_the_current_directory() {
+        let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir().unwrap()).unwrap();
+        let under_cwd = cwd.join("some/included/file.asm");
+        assert_eq!(
+            relative_to_project_root(&under_cwd),
+            Utf8PathBuf::from("some/included/file.asm")
+        );
+    }
+
+    #[test]
+    fn relative_to_project_root_leaves_an_already_relative_path_untouched() {
+        // The common case: `get_filename_to_read` typically resolves an
+        // include to a path relative to the current directory already (e.g.
+        // just "included.asm" when it's right there next to the main file) -
+        // `strip_prefix` against the (absolute) cwd can't apply to a relative
+        // path, so this must fall back to it unchanged rather than erroring.
+        let already_relative = Utf8PathBuf::from("spectral_sprites_bank.asm");
+        assert_eq!(
+            relative_to_project_root(&already_relative),
+            already_relative
+        );
+    }
+
+    #[test]
+    fn relative_to_project_root_leaves_a_path_outside_the_current_directory_unchanged() {
+        let outside = Utf8PathBuf::from("/some/other/place/file.asm");
+        assert_eq!(relative_to_project_root(&outside), outside);
     }
 }

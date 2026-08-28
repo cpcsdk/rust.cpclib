@@ -979,6 +979,276 @@ mod test_super {
     }
 
     #[test]
+    fn equ_redefinition_error_propagated_out_of_an_included_file_shows_the_include_chain_once() {
+        // Regression test: unlike a delayed `assert`, this "already defined"
+        // error propagates as a genuine `Err` out of the included file's own
+        // token visiting, straight back through `IncludeState::handle`'s new
+        // wrapping - a different code path from the delayed-assert case
+        // above, worth covering on its own. It also caught a real bug while
+        // writing it: `IncludedFileError` carries its own span directly
+        // (unlike `MacroError`, always wrapped in a `RelocatedError`
+        // instead), so it must be listed in `AssemblerError::is_located` -
+        // otherwise the *generic* per-token error wrapper every
+        // `ProcessedToken::visited()` call goes through (which calls
+        // `.locate()` on whatever it gets) wraps it a second time: the
+        // message's own already-rendered text becomes the *title* of an
+        // outer, second codespan block using the same span, rendering as a
+        // doubled "error: error: ..." header followed by a stray, textless
+        // codespan snippet.
+        let directory = std::env::temp_dir().join(format!(
+            "cpclib-equ-in-include-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(directory.join("included.asm"), "\tFOO equ 2\n").unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(
+            &main,
+            "\torg 0x4000\n\tFOO equ 1\n\tinclude \"included.asm\"\n\tret\n"
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let err = match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+            Ok(_) => panic!("redefining FOO should be an error"),
+            Err((_t, _env, e)) => e
+        };
+
+        let rendered = err.to_string();
+        // Codespan colors "error" and the following ":" separately (an ANSI
+        // reset sits between them), so count the bare word rather than
+        // "error:" - each of the two diagnostic blocks (the redefinition,
+        // then the include wrapping) must have exactly one.
+        assert_eq!(
+            rendered.matches("error").count(),
+            2,
+            "exactly one \"error\" header per diagnostic block (the redefinition, \
+             then the include wrapping) - not doubled up on either: {rendered}"
+        );
+        assert!(
+            rendered.contains("already defined"),
+            "missing the redefinition's own message: {rendered}"
+        );
+        assert!(
+            rendered.contains("File included here") && rendered.contains("included.asm"),
+            "missing the include-chain wrapping: {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn equ_redefinition_across_two_includes_shows_both_include_chains() {
+        // Feature test: knowing the *current* (failing) definition's include
+        // chain isn't enough to find a real duplicate-definition bug -
+        // you also need to know how the *original* definition was reached,
+        // to tell which of the two inclusions is the mistaken one. Only
+        // showing one side (as the previous test in this pair effectively
+        // did) leaves half the picture missing.
+        let directory = std::env::temp_dir().join(format!(
+            "cpclib-double-include-chain-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(directory.join("original.asm"), "\tFOO equ 1\n").unwrap();
+        std::fs::write(directory.join("bad.asm"), "\tFOO equ 2\n").unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(
+            &main,
+            "\torg 0x4000\n\tinclude \"original.asm\"\n\tinclude \"bad.asm\"\n\tret\n"
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let err = match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+            Ok(_) => panic!("redefining FOO should be an error"),
+            Err((_t, _env, e)) => e
+        };
+
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("original.asm"),
+            "should name the original definition's own file: {rendered}"
+        );
+        assert!(
+            rendered.contains("bad.asm"),
+            "should show the failing redefinition's own source: {rendered}"
+        );
+        // The original definition's chain renders as a compact trailing
+        // note ("= included from ..."); the failing redefinition's own
+        // chain renders as a full codespan block ("File included here
+        // (...)"), via the pre-existing propagated-error wrapping. Both
+        // must be present - only one of the two was ever shown before this
+        // feature.
+        assert!(
+            rendered.contains("= included from"),
+            "missing the original definition's own include chain: {rendered}"
+        );
+        assert!(
+            rendered.contains("File included here"),
+            "missing the failing redefinition's own include chain: {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn assert_failure_inside_an_included_file_shows_the_include_chain() {
+        // Feature test: a failed `assert` deep inside a file reached via
+        // `INCLUDE` used to report only its own file:line, with no way to
+        // tell *which* `INCLUDE` pulled that file in - a real problem when
+        // the wrong file is included by mistake and the fix is finding that
+        // `INCLUDE`, not the assert itself. `Env::active_frames` now tracks
+        // `INCLUDE` the same way it already tracks macro calls, so
+        // `visit_assert` can wrap the error with an `IncludedFileError`
+        // pointing at the `INCLUDE` directive's own line, in addition to the
+        // assert's own location.
+        let directory =
+            std::env::temp_dir().join(format!("cpclib-include-chain-probe-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(
+            directory.join("included.asm"),
+            "\tassert 1 == 2, \"boom\"\n"
+        )
+        .unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(&main, "\torg 0x4000\n\tinclude \"included.asm\"\n\tret\n").unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let (_tok, mut env) =
+            match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+                Ok(ok) => ok,
+                Err((_t, _env, e)) => panic!("assembling should not fail outright: {e}")
+            };
+
+        let err = match env.handle_post_actions(&listing) {
+            Ok(_) => panic!("the failing assert should be reported as an error"),
+            Err(e) => e
+        };
+
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains("boom"),
+            "missing the assert's own message: {rendered}"
+        );
+        assert!(
+            rendered.contains("File included here") && rendered.contains("included.asm"),
+            "missing the include-chain wrapping: {rendered}"
+        );
+        assert!(
+            rendered.contains("main.asm"),
+            "should show the INCLUDE directive's own file (main.asm): {rendered}"
+        );
+        // Root cause first, then how it was reached - same convention as
+        // the macro-call chain.
+        let assert_pos = rendered.find("boom").expect("assert message present");
+        let include_pos = rendered
+            .find("File included here")
+            .expect("include wrapping present");
+        assert!(
+            assert_pos < include_pos,
+            "the assert's own message should come before the include wrapping: {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn assert_failure_inside_a_macro_inside_an_included_file_shows_the_full_chain_in_order() {
+        // `Env::active_frames` merges macro-expansion and `INCLUDE` frames
+        // into one stack specifically so a macro called from inside an
+        // included file (as here) - or an `INCLUDE` inside a macro body -
+        // interleaves in true nesting order rather than two independent,
+        // wrongly-ordered lists. Verify the whole chain renders, innermost
+        // (the assert) to outermost (the `INCLUDE`), for this direction.
+        let directory = std::env::temp_dir().join(format!(
+            "cpclib-include-macro-chain-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(
+            directory.join("included.asm"),
+            "\tMACRO CHECKLEN(a)\n\t\tassert string_len({a}) == 3, \"wrong length\"\n\tENDM\n\tCHECKLEN(\"ab\")\n"
+        )
+        .unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(&main, "\torg 0x4000\n\tinclude \"included.asm\"\n\tret\n").unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let (_tok, mut env) =
+            match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+                Ok(ok) => ok,
+                Err((_t, _env, e)) => panic!("assembling should not fail outright: {e}")
+            };
+
+        let err = match env.handle_post_actions(&listing) {
+            Ok(_) => panic!("the failing assert should be reported as an error"),
+            Err(e) => e
+        };
+
+        let rendered = err.to_string();
+        let assert_pos = rendered
+            .find("wrong length")
+            .expect("assert's own message present");
+        let macro_pos = rendered
+            .find("Error in macro call CHECKLEN")
+            .expect("macro-call wrapping present (included.asm, where CHECKLEN is called)");
+        let include_pos = rendered
+            .find("File included here")
+            .expect("include wrapping present (main.asm, where included.asm is included)");
+        assert!(
+            assert_pos < macro_pos && macro_pos < include_pos,
+            "expected order: assert, then macro call site, then include site: {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
     fn overflow_warning_fires_for_16bit_immediates_and_defb_defw() {
         let code = "
 		org 0x4000

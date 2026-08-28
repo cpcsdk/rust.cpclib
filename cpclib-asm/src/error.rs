@@ -213,8 +213,13 @@ pub enum AssemblerError {
         error: Z80ParserError
     },
 
+    /// An error somewhere while reading or visiting a file reached via
+    /// `INCLUDE`/`READ`. `span` is the *including* directive's own span (in
+    /// the parent file); `path` is the included file's own path, relative to
+    /// the project root when possible - see `relative_to_project_root`.
     IncludedFileError {
         span: Z80Span,
+        path: String,
         error: Box<AssemblerError>
     },
 
@@ -306,7 +311,14 @@ pub enum AssemblerError {
     AlreadyDefinedSymbol {
         symbol: SmolStr,
         kind: SmolStr,
-        here: Option<SourceLocation>
+        here: Option<SourceLocation>,
+        /// How the *original* definition (`here`) was itself reached (e.g.
+        /// through one or more `INCLUDE`s), innermost first - plain, owned
+        /// text (never a live `Z80Span`: this can be read long after the
+        /// pass/expansion that captured it - see
+        /// `Env::symbol_definition_chains`). Empty when the original
+        /// definition wasn't inside any macro expansion or `INCLUDE`.
+        here_chain: Vec<String>
     },
 
     //   #[fail(display = "IO error: {}", msg)]
@@ -493,6 +505,12 @@ impl AssemblerError {
             AssemblerError::AlreadyRenderedWarningWithLocation { .. } => true,
             // IfIssue already carries the full IF block span; no need to re-wrap
             AssemblerError::IfIssue { .. } => true,
+            // IncludedFileError carries its own span directly (the INCLUDE
+            // directive's), unlike MacroError which always arrives wrapped in
+            // a RelocatedError instead - re-wrapping it here would double the
+            // codespan block (title becomes the whole already-rendered inner
+            // message, span repeated a second time with no title).
+            AssemblerError::IncludedFileError { .. } => true,
             _ => false
         }
     }
@@ -704,26 +722,17 @@ impl AssemblerError {
                 write!(f, "{str}")
             },
 
-            AssemblerError::IncludedFileError { span, error } => {
-                match error.as_ref() {
-                    AssemblerError::IOError { msg } => {
-                        let msg = build_simple_error_message_with_message(
-                            "Error for imported file",
-                            msg,
-                            span
-                        );
-                        write!(f, "{msg}")
-                    },
-                    _ => {
-                        let msg = build_simple_error_message(
-                            "Error in imported file",
-                            span,
-                            Severity::Error
-                        );
-                        write!(f, "{msg}")?;
-                        error.fmt(f)
-                    }
-                }
+            AssemblerError::IncludedFileError { span, path, error } => {
+                let msg = build_simple_error_message(
+                    &format!("File included here (\"{path}\")"),
+                    span,
+                    Severity::Error
+                );
+                // Root cause first, call-chain context after - same order as
+                // `MacroError`: this reads innermost (the actual failure) to
+                // outermost (how it was reached), and matches an assert's own
+                // trailing "inside MACRO X, expanded from Y" note.
+                write!(f, "{error}\n{msg}")
             },
 
             AssemblerError::OverrideMemory(address, count) => {
@@ -766,16 +775,31 @@ impl AssemblerError {
                 write!(f, "Code  already exceeds limits of 0x{limit:X}")
             },
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
-            AssemblerError::AlreadyDefinedSymbol { symbol, kind, here } => {
+            AssemblerError::AlreadyDefinedSymbol {
+                symbol,
+                kind,
+                here,
+                here_chain
+            } => {
                 if let Some(here) = here {
                     write!(
                         f,
                         "Symbol \"{symbol}\" already defined as a {kind} in {here}"
-                    )
+                    )?;
                 }
                 else {
-                    write!(f, "Symbol \"{symbol}\" already defined as a {kind}")
+                    write!(f, "Symbol \"{symbol}\" already defined as a {kind}")?;
                 }
+                // Same convention as a macro-expansion's trailing "inside
+                // MACRO X, expanded from Y" note: how the *original*
+                // definition was itself reached, indented and marked "=" -
+                // it's exactly as relevant for tracking down the duplicate
+                // as this occurrence's own chain, already visible via the
+                // codespan block this whole message is positioned at.
+                for note in here_chain {
+                    write!(f, "\n    = {note}")?;
+                }
+                Ok(())
             },
 
             AssemblerError::MultipleErrors { errors } => {
