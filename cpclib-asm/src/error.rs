@@ -312,17 +312,22 @@ pub enum AssemblerError {
     },
 
     // TODO add symbol type
+    //
+    // How the *original* definition (`here`) was itself reached (e.g.
+    // through one or more `INCLUDE`s - see `Env::symbol_definition_chains`)
+    // is *not* a field here: it's attached with `with_chain_note` at
+    // construction time instead (`visit_equ`/`visit_label`), landing after
+    // the whole codespan block rather than between this title and it. A
+    // field rendered inline here would put a variable number of extra lines
+    // between the "error: ..." line and the "-->"/"┌─ file:line:col" line a
+    // consumer expects right after it - cpclib-vscode's `$basm` problem
+    // matcher (a fixed VS Code multi-line pattern array, one regex per
+    // expected line, no support for skipping a variable-length run of lines
+    // in between) is the concrete case that would silently stop matching.
     AlreadyDefinedSymbol {
         symbol: SmolStr,
         kind: SmolStr,
-        here: Option<SourceLocation>,
-        /// How the *original* definition (`here`) was itself reached (e.g.
-        /// through one or more `INCLUDE`s), innermost first - plain, owned
-        /// text (never a live `Z80Span`: this can be read long after the
-        /// pass/expansion that captured it - see
-        /// `Env::symbol_definition_chains`). Empty when the original
-        /// definition wasn't inside any macro expansion or `INCLUDE`.
-        here_chain: Vec<String>
+        here: Option<SourceLocation>
     },
 
     //   #[fail(display = "IO error: {}", msg)]
@@ -792,31 +797,16 @@ impl AssemblerError {
                 write!(f, "Code  already exceeds limits of 0x{limit:X}")
             },
             AssemblerError::RunAlreadySpecified => write!(f, "RUN has already been specified"),
-            AssemblerError::AlreadyDefinedSymbol {
-                symbol,
-                kind,
-                here,
-                here_chain
-            } => {
+            AssemblerError::AlreadyDefinedSymbol { symbol, kind, here } => {
                 if let Some(here) = here {
                     write!(
                         f,
                         "Symbol \"{symbol}\" already defined as a {kind} in {here}"
-                    )?;
+                    )
                 }
                 else {
-                    write!(f, "Symbol \"{symbol}\" already defined as a {kind}")?;
+                    write!(f, "Symbol \"{symbol}\" already defined as a {kind}")
                 }
-                // Same convention as a macro-expansion's trailing "inside
-                // MACRO X, expanded from Y" note: how the *original*
-                // definition was itself reached, indented and marked "=" -
-                // it's exactly as relevant for tracking down the duplicate
-                // as this occurrence's own chain, already visible via the
-                // codespan block this whole message is positioned at.
-                for note in here_chain {
-                    write!(f, "\n    = {note}")?;
-                }
-                Ok(())
             },
 
             AssemblerError::MultipleErrors { errors } => {

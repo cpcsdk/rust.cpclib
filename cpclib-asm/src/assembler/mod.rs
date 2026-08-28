@@ -2875,12 +2875,7 @@ impl Env {
                     .unwrap()
                     .unwrap()
                     .location()
-                    .cloned(),
-                here_chain: self
-                    .symbol_definition_chains
-                    .get(label)
                     .cloned()
-                    .unwrap_or_default()
             }))
         }
         else {
@@ -2939,7 +2934,34 @@ impl Env {
             return processed_token.visited(self);
         }
 
-        res
+        // Locate with *this* occurrence's own span, and attach how the
+        // *original* definition was itself reached, only now - not as
+        // fields of `AlreadyDefinedSymbol` itself, which would put a
+        // variable number of extra lines between the "error: ..." line and
+        // the "-->"/"┌─ file:line:col" line a consumer (cpclib-vscode's
+        // `$basm` problem matcher) expects right after it. `with_chain_note`
+        // instead appends after the whole codespan block already rendered
+        // by locating first - see `AlreadyDefinedSymbol`'s doc comment.
+        res.map_err(|e| {
+            if matches!(e.as_ref(), AssemblerError::AlreadyDefinedSymbol { .. }) {
+                let mut e = match label_span.possible_span() {
+                    Some(span) => Box::new((*e).locate(span.clone())),
+                    None => e
+                };
+                for note in self
+                    .symbol_definition_chains
+                    .get(label)
+                    .cloned()
+                    .unwrap_or_default()
+                {
+                    e = e.with_chain_note(note);
+                }
+                e
+            }
+            else {
+                e
+            }
+        })
     }
 
     fn visit_noexport<S: AsRef<str> + Display>(
@@ -3364,8 +3386,7 @@ impl Env {
                 here: self
                     .symbols()
                     .any_value(destination.as_str())?
-                    .and_then(|v| v.location().cloned()),
-                here_chain: Vec::new()
+                    .and_then(|v| v.location().cloned())
             }));
         }
 
@@ -5520,7 +5541,7 @@ impl Env {
                 .normalize_symbol(label_span.as_str())
                 .value()
                 .to_string();
-            Err(Box::new(AssemblerError::AlreadyDefinedSymbol {
+            let error = AssemblerError::AlreadyDefinedSymbol {
                 symbol: label_span.as_str().into(),
                 kind: self.symbols().kind(label_span.as_str())?.into(),
                 // The *original* definition's location, not this (the
@@ -5532,18 +5553,28 @@ impl Env {
                 here: self
                     .symbols()
                     .any_value(label_span.as_str())?
-                    .and_then(|v| v.location().cloned()),
-                // How the *original* definition was itself reached (e.g. via
-                // `INCLUDE`) - just as important for tracking down a
-                // duplicate as this occurrence's own chain (already shown by
-                // the codespan block via the outer wrapping), and otherwise
-                // invisible: `here` is only a flat file:line:col.
-                here_chain: self
-                    .symbol_definition_chains
-                    .get(&key)
-                    .cloned()
-                    .unwrap_or_default()
-            }))
+                    .and_then(|v| v.location().cloned())
+            };
+            // Locate with *this* occurrence's own span first, then attach
+            // how the *original* definition was itself reached (e.g. via
+            // `INCLUDE`) - just as important for tracking down a duplicate
+            // as this occurrence's own chain (already shown by the codespan
+            // block), and otherwise invisible (`here` is only a flat
+            // file:line:col). Appended *after* locating, not a field of
+            // `AlreadyDefinedSymbol` itself - see its doc comment for why.
+            let mut error = match label_span.possible_span() {
+                Some(span) => Box::new(error.locate(span.clone())),
+                None => Box::new(error)
+            };
+            for note in self
+                .symbol_definition_chains
+                .get(&key)
+                .cloned()
+                .unwrap_or_default()
+            {
+                error = error.with_chain_note(note);
+            }
+            Err(error)
         }
         else {
             let label = self.handle_global_and_local_labels(label_span.as_str())?;
@@ -5675,8 +5706,7 @@ impl Env {
                 here: self
                     .symbols()
                     .any_value(label_span.as_str())?
-                    .and_then(|v| v.location().cloned()),
-                here_chain: Vec::new()
+                    .and_then(|v| v.location().cloned())
             }))
         }
         else {

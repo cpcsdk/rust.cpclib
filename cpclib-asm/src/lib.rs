@@ -973,7 +973,16 @@ mod test_super {
             "should reference the original definition's line 2: {rendered}"
         );
         assert!(
-            rendered.contains("FOO equ 2"),
+            rendered.contains(":3:"),
+            "should reference the failing redefinition's own line 3: {rendered}"
+        );
+        // Codespan colors just the underlined span (here, the label itself -
+        // locating with the label's own span rather than the whole
+        // `LABEL equ EXPR` line), with an ANSI reset immediately after -
+        // splitting a literal "FOO equ 2" search across the reset, so check
+        // the pieces separately rather than as one contiguous substring.
+        assert!(
+            rendered.contains("FOO") && rendered.contains("equ 2"),
             "should show the failing redefinition's own source line: {rendered}"
         );
     }
@@ -1119,6 +1128,78 @@ mod test_super {
         assert!(
             rendered.contains("main.asm:3:"),
             "missing the failing redefinition's own include line (main.asm:3): {rendered}"
+        );
+
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[test]
+    fn already_defined_symbol_message_keeps_the_codespan_line_immediately_after_the_title() {
+        // Regression test for cpclib-vscode's `$basm` problem matcher
+        // (package.json): a fixed-length VS Code multi-line pattern array,
+        // one regex per expected output line, with no support for skipping
+        // a variable number of non-matching lines between two patterns (see
+        // https://github.com/microsoft/vscode/issues/9635 and
+        // https://github.com/microsoft/vscode/issues/112686). Its first
+        // pattern matches the "error: ..." title line; its second expects
+        // the *very next* line to be the "┌─ file:line:col" codespan
+        // header. `AlreadyDefinedSymbol`'s original-definition chain
+        // (`Env::symbol_definition_chains`) must therefore never be
+        // rendered as part of the title (which would insert a variable
+        // number of "= included from ..." lines between the two patterns,
+        // silently losing the diagnostic in VS Code's Problems panel) - it
+        // has to land after the codespan block instead, via
+        // `with_chain_note`, exactly like every other trailing chain note.
+        let directory = std::env::temp_dir().join(format!(
+            "cpclib-vscode-matcher-probe-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&directory);
+        std::fs::write(directory.join("original.asm"), "\tFOO equ 1\n").unwrap();
+        std::fs::write(directory.join("bad.asm"), "\tFOO equ 2\n").unwrap();
+        let main = directory.join("main.asm");
+        std::fs::write(
+            &main,
+            "\torg 0x4000\n\tinclude \"original.asm\"\n\tinclude \"bad.asm\"\n\tret\n"
+        )
+        .unwrap();
+
+        let text = std::fs::read_to_string(&main).unwrap();
+        let mut parse = crate::parser::context::ParserOptions::default();
+        parse.set_quiet(true);
+        let _ = parse.add_search_path(&directory);
+        let builder = parse
+            .clone()
+            .context_builder()
+            .set_current_filename(main.to_str().unwrap());
+        let listing =
+            crate::parser::parse_z80_with_context_builder(&text, builder).expect("parses");
+
+        let options = EnvOptions::new(parse, AssemblingOptions::default(), Arc::new(()));
+        let err = match assembler::visit_tokens_all_passes_with_options(&listing, options) {
+            Ok(_) => panic!("redefining FOO should be an error"),
+            Err((_t, _env, e)) => e
+        };
+
+        let rendered = err.to_string();
+        let title_line = rendered
+            .lines()
+            .find(|l| l.contains("already defined"))
+            .expect("title line present");
+        let title_idx = rendered
+            .lines()
+            .position(|l| l == title_line)
+            .expect("title line indexable");
+        let next_line = rendered
+            .lines()
+            .nth(title_idx + 1)
+            .expect("a line follows the title");
+        assert!(
+            next_line.contains("┌─"),
+            "the line right after the \"already defined\" title must be the \
+             codespan header (┌─ file:line:col), with no chain notes in \
+             between, or cpclib-vscode's $basm problem matcher loses this \
+             diagnostic entirely: next line was {next_line:?} in: {rendered}"
         );
 
         let _ = std::fs::remove_dir_all(&directory);
