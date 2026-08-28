@@ -76,6 +76,10 @@ BASIC debug console commands:
                           defaults to 32 instructions)
   -bv                     the live BASIC listing, straight from the
                           emulator's own memory
+  -sv [a] [w] [h] [mode]  render video memory as an image, opening an
+                          interactive panel; each argument overrides the
+                          live CRTC/Gate Array value it replaces (default
+                          80x200, palette always live)
   -help                   this list";
 
 /// AMSpiriT's own `cpclib/basicListing` response into readable text - each
@@ -318,7 +322,48 @@ enum Purpose {
     AmspiritBasicListingText { request: Value },
     /// `-bv` on the generic peer - the raw program bytes read live, decoded
     /// with `cpclib_basic::BasicProgram` once they arrive.
-    GenericBasicListingRead { request: Value }
+    GenericBasicListingRead { request: Value },
+    /// `-sv [address] [width] [height] [mode]` - see the Z80 session's own
+    /// `Purpose::ScreenViewCrtc` for the same two-mechanism idea and
+    /// override semantics. Each step here carries everything accumulated
+    /// so far in the variant itself, rather than a separate `pending_*`
+    /// field: unlike memory/disassembly views, this chain has no in-flight
+    /// -request bookkeeping to share with anything else.
+    ScreenViewCrtc {
+        address_override: Option<usize>,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        mode_override: Option<u8>,
+        request: Value
+    },
+    /// The Gate Array read, once `ScreenViewCrtc` answered.
+    ScreenViewGa {
+        crtc_regs: [u8; 18],
+        address_override: Option<usize>,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        mode_override: Option<u8>,
+        request: Value
+    },
+    /// The pixel bytes, once address/width/height/mode/palette are all known.
+    ScreenViewMemory {
+        address: usize,
+        width: Option<usize>,
+        height: Option<usize>,
+        mode: u8,
+        palette: cpclib_image::palette::Palette<cpclib_image::ink::Ink>,
+        request: Value
+    },
+    /// `-sv` on the generic peer - a single `cpclib/machineState` snapshot
+    /// carries CRTC/GA state *and* full memory together, so this is the
+    /// only round trip that path ever needs.
+    ScreenViewSnapshot {
+        address_override: Option<usize>,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        mode_override: Option<u8>,
+        request: Value
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1076,9 +1121,11 @@ impl<P: DapPeer> BasicSession<P> {
     }
 
     /// A `-command` typed in the debug console - see the Z80 session's own
-    /// `console_command` for the same dispatch. Only `-mv`/`-dv` exist here:
-    /// this session has no registers/CRTC-view/timer console commands of
-    /// its own to mirror.
+    /// `console_command` for the same dispatch. No registers/CRTC-view/
+    /// timer console commands of the Z80 session's own to mirror, but `-sv`
+    /// is - the WinAPE-style screen viewer works identically here, it just
+    /// has no register scope to resolve a `,follow` anchor against (not
+    /// needed: `-sv` never had one).
     fn console_command(&mut self, request: &Value, line: &str) -> std::io::Result<Vec<Value>> {
         let mut words = line.split_whitespace();
         let command = words.next().unwrap_or_default();
@@ -1087,6 +1134,7 @@ impl<P: DapPeer> BasicSession<P> {
             "-mv" | "-memoryview" => self.memory_view(request, &arguments),
             "-dv" | "-disassemble" => self.disassembly_view(request, &arguments),
             "-bv" | "-listing" => self.basic_listing_view(request),
+            "-sv" | "-screen" => self.screen_view_command(request, &arguments),
             "-help" | "-h" => {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(
@@ -1217,6 +1265,92 @@ impl<P: DapPeer> BasicSession<P> {
             }
         )?;
         Ok(Vec::new())
+    }
+
+    /// `-sv [address] [width] [height] [mode]` - render CPC video memory
+    /// as an actual image (WinAPE-style) in an interactive panel, auto-
+    /// detecting the current screen address/mode from the CRTC and Gate
+    /// Array unless a given argument overrides it (width/height default
+    /// to the CPC's own standard 80x200; the palette is never
+    /// overridable, always live from the Gate Array). Same two-mechanism
+    /// fallback as the chip scopes just above (`self.native_amspirit`): a
+    /// peer with its own CRTC/GA endpoints is asked directly (three round
+    /// trips: CRTC, then GA, then the pixel bytes - its direct endpoints
+    /// carry chip state only, never memory); the generic peer gets a
+    /// single `cpclib/machineState` snapshot instead, since a `.sna`
+    /// already carries CRTC/GA state *and* full memory together.
+    /// Rendering itself is `crate::inspect::render_screen_view`, shared
+    /// with the Z80 session's own identically-named method.
+    fn screen_view_command(
+        &mut self,
+        request: &Value,
+        arguments: &[&str]
+    ) -> std::io::Result<Vec<Value>> {
+        let address_override = arguments.first().and_then(|a| parse_address(a)).map(|a| a as usize);
+        let width_override = arguments.get(1).and_then(|a| parse_address(a)).map(|a| a as usize);
+        let height_override = arguments.get(2).and_then(|a| parse_address(a)).map(|a| a as usize);
+        let mode_override = arguments.get(3).and_then(|a| parse_address(a)).map(|a| a as u8);
+        if self.native_amspirit {
+            self.send_own(
+                "cpclib/crtc",
+                json!({}),
+                Purpose::ScreenViewCrtc {
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    request: request.clone()
+                }
+            )?;
+        }
+        else {
+            self.send_own(
+                "cpclib/machineState",
+                json!({}),
+                Purpose::ScreenViewSnapshot {
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    request: request.clone()
+                }
+            )?;
+        }
+        Ok(Vec::new())
+    }
+
+    /// Turns a known screen address, mode and palette plus a raw memory
+    /// window into the `cpclib/screenView` event and its console receipt -
+    /// see the Z80 session's own identically-named method.
+    fn screen_view_answer(
+        &mut self,
+        request: &Value,
+        address: usize,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        mode: u8,
+        palette: &cpclib_image::palette::Palette<cpclib_image::ink::Ink>,
+        memory: &[u8]
+    ) -> Vec<Value> {
+        let width = width_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_WIDTH);
+        let height = height_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_HEIGHT);
+        match crate::inspect::render_screen_view(address, width, height, mode, palette, memory) {
+            Ok(body) => {
+                let seq = self.next_seq();
+                let event = protocol::event("cpclib/screenView", body, seq);
+                let seq = self.next_seq();
+                let receipt = protocol::response(
+                    request,
+                    json!({ "result": "screen view opened", "variablesReference": 0 }),
+                    seq
+                );
+                vec![event, receipt]
+            },
+            Err(problem) => {
+                let seq = self.next_seq();
+                vec![protocol::failure(request, &problem, seq)]
+            }
+        }
     }
 
     fn set_breakpoints(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
@@ -2050,6 +2184,135 @@ impl<P: DapPeer> BasicSession<P> {
                         .unwrap_or_default();
                     let seq = self.next_seq();
                     return vec![protocol::response(&request, json!({ "variables": variables }), seq)];
+                },
+                Purpose::ScreenViewCrtc {
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    request
+                } => {
+                    let regs = message
+                        .get("body")
+                        .and_then(crate::inspect::crtc_registers_from_json)
+                        .unwrap_or([0u8; 18]);
+                    let seq = self.next_seq();
+                    if let Err(problem) = self.send_own(
+                        "cpclib/ga",
+                        json!({}),
+                        Purpose::ScreenViewGa {
+                            crtc_regs: regs,
+                            address_override,
+                            width_override,
+                            height_override,
+                            mode_override,
+                            request: request.clone()
+                        }
+                    ) {
+                        return vec![protocol::failure(&request, &problem.to_string(), seq)];
+                    }
+                },
+                Purpose::ScreenViewGa {
+                    crtc_regs,
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    request
+                } => {
+                    let Some((mode, palette)) = message
+                        .get("body")
+                        .and_then(crate::inspect::mode_and_palette_from_ga_json)
+                    else {
+                        let seq = self.next_seq();
+                        return vec![protocol::failure(
+                            &request,
+                            "could not read the Gate Array's mode/palette",
+                            seq
+                        )];
+                    };
+                    let mode = mode_override.unwrap_or(mode);
+                    let address = address_override.unwrap_or_else(|| {
+                        crate::inspect::crtc_screen_start_address(crtc_regs[12], crtc_regs[13])
+                    });
+                    let seq = self.next_seq();
+                    // The full 64K address space, from 0 - not just from
+                    // `address`, which may sit mid-scroll. Real hardware
+                    // wraps the interleaved display read at the full
+                    // 16-bit address boundary, not within any 16K page -
+                    // see `ColorMatrix::from_screen_at`'s own doc comment.
+                    if let Err(problem) = self.send_own(
+                        "readMemory",
+                        json!({ "memoryReference": address_reference(0), "count": 0x10000u32 }),
+                        Purpose::ScreenViewMemory {
+                            address,
+                            width: width_override,
+                            height: height_override,
+                            mode,
+                            palette,
+                            request: request.clone()
+                        }
+                    ) {
+                        return vec![protocol::failure(&request, &problem.to_string(), seq)];
+                    }
+                },
+                Purpose::ScreenViewMemory {
+                    address,
+                    width,
+                    height,
+                    mode,
+                    palette,
+                    request
+                } => {
+                    let bytes = Self::read_memory_bytes(message);
+                    return self.screen_view_answer(&request, address, width, height, mode, &palette, &bytes);
+                },
+                Purpose::ScreenViewSnapshot {
+                    address_override,
+                    width_override,
+                    height_override,
+                    mode_override,
+                    request
+                } => {
+                    let sna = message
+                        .get("body")
+                        .and_then(|b| b.get("snapshot"))
+                        .and_then(Value::as_str)
+                        .map(decode_base64)
+                        .filter(|bytes| !bytes.is_empty())
+                        .and_then(|bytes| cpclib_sna::Snapshot::from_buffer(bytes).ok());
+                    let Some(sna) = sna
+                    else {
+                        let seq = self.next_seq();
+                        let why = message
+                            .get("body")
+                            .and_then(|b| b.get("error"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("the emulator could not describe its machine state");
+                        return vec![protocol::failure(&request, why, seq)];
+                    };
+                    let regs = crate::inspect::crtc_registers(&sna);
+                    let (mode, palette) = crate::inspect::mode_and_palette_from_snapshot(&sna);
+                    let mode = mode_override.unwrap_or(mode);
+                    let address = address_override.unwrap_or_else(|| {
+                        crate::inspect::crtc_screen_start_address(regs[12], regs[13])
+                    });
+                    let full_memory = sna.memory_dump();
+                    // The full 64K address space, from 0 - see
+                    // `Purpose::ScreenViewGa`'s identical comment. Capped
+                    // at exactly 0x10000: a 128K machine's own snapshot
+                    // carries more than that, and the wrap must stay at
+                    // the real 16-bit boundary regardless.
+                    let memory = full_memory[..0x10000.min(full_memory.len())].to_vec();
+                    return self.screen_view_answer(
+                        &request,
+                        address,
+                        width_override,
+                        height_override,
+                        mode,
+                        &palette,
+                        &memory
+                    );
                 },
                 Purpose::MemoryView {
                     address,
@@ -4918,6 +5181,130 @@ mod tests {
             !events[0]["body"]["variables"].as_array().unwrap().is_empty(),
             "a real snapshot must decode to real CRTC register entries, {events:?}"
         );
+    }
+
+    #[test]
+    /// Reported live: `-sv` (the WinAPE-style screen viewer) only existed on
+    /// the Z80 session - a user debugging BASIC had no way to open it at
+    /// all. Confirms the native (AmspiritLite) path's three-round-trip
+    /// chain - CRTC, then Gate Array, then the pixel bytes - ends in a real
+    /// `cpclib/screenView` event, not just that each step is dispatched.
+    fn sv_console_command_renders_a_screen_on_the_native_path() {
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/basicState", "cpclib/crtc", "cpclib/ga"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes()
+        );
+        complete_attach(&mut session);
+
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "evaluate",
+                "arguments": { "expression": "-sv" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/crtc");
+
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "regs": [63,40,46,142,38,0,25,30,0,7,0,0,48,0] } }));
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/ga");
+
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "mode": 1, "ink_idx": vec![0; 16], "border_idx": 0 } })
+        );
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "readMemory");
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&[0u8; 0x4000]));
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/screenView");
+        assert!(events[0]["body"]["png"].as_str().is_some_and(|s| !s.is_empty()));
+        assert_eq!(events[1]["command"], "evaluate");
+        assert_eq!(events[1]["request_seq"], 9);
+    }
+
+    #[test]
+    /// The interactive panel's own controls re-issue `-sv` with all four
+    /// arguments filled in once the user changes one - confirms each is
+    /// actually honoured end to end, not just parsed: an explicit address
+    /// wins over the CRTC's own R12/R13 (regs here would compute 0xC000,
+    /// the override asks for 0x8000 instead), an explicit mode wins over
+    /// the Gate Array's own reported mode (GA says mode 0, the override
+    /// asks for mode 2), and width/height land in the event body verbatim.
+    fn sv_console_command_with_all_four_arguments_honours_every_override() {
+        let mut session = BasicSession::new(
+            RecordingPeer::new().also_supporting(&["cpclib/basicState", "cpclib/crtc", "cpclib/ga"]),
+            PathBuf::from("test.bas"),
+            SOURCE,
+            basic::PROGRAM_START,
+            &cpclib_basic::BasicProgram::parse(SOURCE).unwrap().as_bytes()
+        );
+        complete_attach(&mut session);
+
+        session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "evaluate",
+                "arguments": { "expression": "-sv 0x8000 40 100 2" }
+            }))
+            .unwrap();
+
+        let seq = last_sent_seq(&mut session);
+        answer(&mut session, seq, json!({ "body": { "regs": [63,40,46,142,38,0,25,30,0,7,0,0,48,0] } }));
+
+        let seq = last_sent_seq(&mut session);
+        answer(
+            &mut session,
+            seq,
+            json!({ "body": { "mode": 0, "ink_idx": vec![0; 16], "border_idx": 0 } })
+        );
+
+        let seq = last_sent_seq(&mut session);
+        let events = answer(&mut session, seq, read_memory_response(&[0u8; 0x10000]));
+        assert_eq!(events[0]["event"], "cpclib/screenView", "{events:?}");
+        let body = &events[0]["body"];
+        assert_eq!(body["address"], 0x8000, "address override was not honoured: {body}");
+        assert_eq!(body["width"], 40, "width override was not honoured: {body}");
+        assert_eq!(body["height"], 100, "height override was not honoured: {body}");
+        assert_eq!(body["mode"], 2, "mode override was not honoured: {body}");
+    }
+
+    #[test]
+    /// Same as above, on the generic (non-AmspiritLite) path: a single
+    /// `cpclib/machineState` snapshot must be enough, with no CRTC/GA round
+    /// trips at all.
+    fn sv_console_command_renders_a_screen_on_the_generic_path() {
+        let mut session = new_session(SOURCE);
+        let response = session
+            .on_editor_message(&json!({
+                "seq": 9,
+                "command": "evaluate",
+                "arguments": { "expression": "-sv" }
+            }))
+            .unwrap();
+        assert!(response.is_empty(), "{response:?}");
+        assert_eq!(session.peer_mut().commands().last().unwrap(), "cpclib/machineState");
+
+        let sna = cpclib_sna::Snapshot::new_6128().unwrap();
+        let mut snapshot_bytes = Vec::new();
+        sna.write_all(&mut snapshot_bytes, cpclib_sna::SnapshotVersion::V2)
+            .unwrap();
+        let seq = last_sent_seq(&mut session);
+        let events = answer(
+            &mut session,
+            seq,
+            json!({ "body": { "snapshot": encode_base64(&snapshot_bytes) } })
+        );
+        assert_eq!(events.len(), 2, "{events:?}");
+        assert_eq!(events[0]["event"], "cpclib/screenView");
+        assert!(events[0]["body"]["png"].as_str().is_some_and(|s| !s.is_empty()));
     }
 
     #[test]

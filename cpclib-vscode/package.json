@@ -179,6 +179,26 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.debugSnapshot",
+        "title": "CPClib: Debug a .sna snapshot",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runSnapshot",
+        "title": "CPClib: Run a .sna snapshot",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.debugDisk",
+        "title": "CPClib: Debug a .dsk disk",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runDisk",
+        "title": "CPClib: Run a .dsk disk",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.assembleThisFile",
         "title": "Assemble This File with basm",
         "category": "CPClib"
@@ -262,6 +282,28 @@
           "group": "9_cutcopypaste"
         }
       ],
+      "explorer/context": [
+        {
+          "command": "cpclib.debugSnapshot",
+          "when": "resourceExtname == .sna",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.runSnapshot",
+          "when": "resourceExtname == .sna",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.debugDisk",
+          "when": "resourceExtname == .dsk",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.runDisk",
+          "when": "resourceExtname == .dsk",
+          "group": "cpclib"
+        }
+      ],
       "commandPalette": [
         {
           "command": "cpclib.openDisassembly",
@@ -302,7 +344,7 @@
             "properties": {
               "program": {
                 "type": "string",
-                "description": "The .asm or .bas file to debug. A .bas file is tokenised and loaded but not auto-run - type RUN in the emulator once it opens.",
+                "description": "The .asm, .bas, .sna or .dsk file to debug. A .bas file is tokenised and loaded but not auto-run - type RUN in the emulator once it opens. A .sna is loaded exactly as saved, with no source map - breakpoints and stepping work at the address level only. A .dsk is mounted in drive A at a cold boot, landing at Ready - also not auto-run, and also with no source map.",
                 "default": "${file}"
               },
               "rule": {
@@ -379,6 +421,26 @@
               "type": "basm",
               "request": "launch",
               "name": "Debug this .bas file",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "CPC: debug a .sna snapshot",
+            "description": "Load a raw snapshot exactly as saved, no source map",
+            "body": {
+              "type": "basm",
+              "request": "launch",
+              "name": "Debug this snapshot",
+              "program": "^\"\\${file}\""
+            }
+          },
+          {
+            "label": "CPC: debug a .dsk disk",
+            "description": "Mount a raw disk in drive A at a cold boot, no source map",
+            "body": {
+              "type": "basm",
+              "request": "launch",
+              "name": "Debug this disk",
               "program": "^\"\\${file}\""
             }
           }

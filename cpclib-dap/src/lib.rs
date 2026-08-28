@@ -555,6 +555,58 @@ fn start_session(
         };
         (snapshot, map, breakpoints, image, entry_point)
     }
+    else if arguments
+        .get("program")
+        .and_then(Value::as_str)
+        .map(|p| p.to_ascii_lowercase().ends_with(".sna"))
+        .unwrap_or(false)
+    {
+        // A raw snapshot, not source: there is nothing to assemble and
+        // nothing to map addresses back to a file with - breakpoints and
+        // stepping work at the address level only, the same degraded shape
+        // the `rule` branch above already tolerates when a build names no
+        // entry point (`None =>` case just above). Loading it is the whole
+        // job: `std::fs::read` and go, matching the `rule` branch's own
+        // "read the snapshot a build produced" step exactly, just skipping
+        // the build.
+        let entry = PathBuf::from(arguments.get("program").and_then(Value::as_str).unwrap());
+        let snapshot = std::fs::read(&entry)
+            .map_err(|e| format!("{} could not be read: {e}", entry.display()))?;
+        let map = cpclib_project::srcmap::SourceMap::from_raw(
+            &cpclib_asm::assembler::listing_output::RawSourceMap::default()
+        );
+        (snapshot, map, Vec::new(), Vec::new(), None)
+    }
+    else if arguments
+        .get("program")
+        .and_then(Value::as_str)
+        .map(|p| p.to_ascii_lowercase().ends_with(".dsk"))
+        .unwrap_or(false)
+    {
+        // A disk image, not a snapshot: cold-booted with the disk in drive A,
+        // landing at Ready - the same "loaded, not run" contract the `.bas`
+        // launch path already has (see `amspiritlite::launch_with_disk`'s own
+        // doc comment). No sourcemap: breakpoints and stepping work at the
+        // address level only, the same degraded shape the `.sna` branch just
+        // above already tolerates. `connect_backend` recognises the `.dsk`
+        // extension on `arguments["program"]` itself and launches with the
+        // disk in drive A instead of loading `snapshot` as a memory image -
+        // the empty `Vec` below is never actually used as a snapshot there.
+        let entry = PathBuf::from(arguments.get("program").and_then(Value::as_str).unwrap());
+        if !entry.is_file() {
+            return Err(format!("{} does not exist", entry.display()));
+        }
+        early_notices.push(
+            "the disk is mounted in drive A but nothing runs automatically - type \
+             RUN\"filename once the emulator reaches Ready. Breakpoints and stepping \
+             work at the address level only (no source map for a raw disk)."
+                .to_string()
+        );
+        let map = cpclib_project::srcmap::SourceMap::from_raw(
+            &cpclib_asm::assembler::listing_output::RawSourceMap::default()
+        );
+        (Vec::new(), map, Vec::new(), Vec::new(), None)
+    }
     else if let Some(program) = arguments.get("program").and_then(Value::as_str) {
         let entry = PathBuf::from(program);
         let root = cpclib_project::root::project_root_or_own_dir(&entry);
@@ -760,6 +812,18 @@ fn connect_backend(
                 .dap
         })
         .unwrap_or_default();
+    // A `.dsk` is not a snapshot: it goes in drive A at boot instead of being
+    // loaded as a memory image. Detected once here, off the same `program`
+    // path already resolved above, and used both to pick the launch function
+    // below and to refuse cleanly on a peer that has no disk-drive concept.
+    let disk_path = named_path
+        .as_deref()
+        .filter(|p| {
+            p.to_string_lossy()
+                .to_ascii_lowercase()
+                .ends_with(".dsk")
+        });
+
     let configured_emulator = dap_config.emulator.clone();
     let chosen_emulator = arguments
         .get("emulator")
@@ -816,6 +880,9 @@ fn connect_backend(
                 let (endpoint, child) = if is_basic {
                     amspiritlite::launch_without_snapshot(port, &cpclib_common::event::DiscardObserver)?
                 }
+                else if let Some(disk) = disk_path {
+                    amspiritlite::launch_with_disk(disk, port, &cpclib_common::event::DiscardObserver)?
+                }
                 else {
                     amspiritlite::launch(&snapshot, port, &cpclib_common::event::DiscardObserver)?
                 };
@@ -855,6 +922,14 @@ fn connect_backend(
         (Backend::AmspiritLite(peer), String::new())
     }
     else {
+        if disk_path.is_some() {
+            return Err(
+                "running a .dsk directly is only supported with the \"amspiritlite\" \
+                 emulator today - set it in the launch configuration, or as `emulator` \
+                 under `[dap]` in cpclib-lsp.toml."
+                    .to_string()
+            );
+        }
         let web_root = cpclib_runner::web::js1984::install()?;
         let server = cpclib_runner::web::serve(&web_root, Some(snapshot))
             .map_err(|e| format!("cannot serve the emulator: {e}"))?;
@@ -995,5 +1070,78 @@ fn source_map_for_project(
                 ))
             )
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Reported live: no way to run or debug a raw `.sna` sitting on disk -
+    /// only source (`program`, assembled) or a bndbuild `rule` could be
+    /// launched. Confirms the new early branch in `start_session` is
+    /// actually reached and actually launches, not just that it compiles -
+    /// this is the exact request shape the VS Code extension's own
+    /// `debugSnapshot` sends, run against a real fixture
+    /// (`tests/graphics/hello/snapshot.sna`, already used elsewhere in this
+    /// crate's own screen-viewer tests).
+    #[test]
+    fn a_raw_sna_program_launches_with_no_assembly_and_an_empty_source_map() {
+        let request = json!({
+            "seq": 1,
+            "type": "request",
+            "command": "launch",
+            "arguments": {
+                "program": "tests/graphics/hello/snapshot.sna",
+                "stopOnEntry": false
+            }
+        });
+        let (_session, url, notices) = start_session(&request)
+            .expect("a raw .sna launch must succeed with no assembly step - run from the crate root");
+        assert!(url.starts_with("http://"), "{url}");
+        // Nothing was ever assembled for this launch, so nothing should
+        // complain about a missing entry/build - only the (harmless)
+        // stopOnEntry-with-no-known-start notice, if any.
+        assert!(
+            !notices.iter().any(|n| n.to_lowercase().contains("assembl")),
+            "{notices:?}"
+        );
+    }
+
+    /// A `.dsk` has no memory image to load - it goes in drive A at boot
+    /// instead, which only `amspiritlite` knows how to do (`launch_with_disk`).
+    /// The default emulator is `1984js` (`AsmConfig`'s own default, see
+    /// `cpclib-project/src/config.rs`), so a launch with no override reaches
+    /// `connect_backend`'s non-lite branch - this confirms that branch refuses
+    /// cleanly, naming the reason, rather than silently ignoring the disk and
+    /// booting an empty machine (which is what would happen if `disk_path`
+    /// were computed but never checked there).
+    #[test]
+    fn a_raw_dsk_program_with_the_default_emulator_is_refused_with_a_clear_reason() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("cpclib-dap-test-{}.dsk", std::process::id()));
+        std::fs::write(&path, b"not a real disk image, just needs to exist")
+            .expect("could not write the temporary fixture");
+
+        let request = json!({
+            "seq": 1,
+            "type": "request",
+            "command": "launch",
+            "arguments": {
+                "program": path.to_string_lossy(),
+                "stopOnEntry": false
+            }
+        });
+        let result = start_session(&request);
+        let _ = std::fs::remove_file(&path);
+
+        let error = match result {
+            Ok(_) => panic!("a .dsk launch on the default (1984js) emulator must fail"),
+            Err(error) => error
+        };
+        assert!(
+            error.to_lowercase().contains("amspiritlite"),
+            "{error}"
+        );
     }
 }

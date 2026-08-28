@@ -259,13 +259,54 @@ impl<C:AmstradColor> ColorMatrix<C> {
             height
         };
 
+        Self::from_screen_at(data, 0xC000, bytes_width, pixel_height, mode, palette)
+    }
+
+    /// Like [`Self::from_screen`], but the interleaved "every 8th raster
+    /// line is +0x800" addressing is anchored at `base_address` instead of
+    /// the hard-coded `0xC000`, and `pixel_height` is taken directly rather
+    /// than derived from a fixed 16K budget - for decoding a live debugger
+    /// memory read, where the screen may sit at any 16K-page start and the
+    /// caller wants a specific height, not "as much as fits".
+    ///
+    /// A scrolled BASIC screen's start address is not necessarily 16K-page
+    /// aligned (reported live: a real CPC's own CRTC start address mid-
+    /// program, R12=0x30/R13=0x88, landing at 0xC110), and the interleaved
+    /// layout's own `+0x800`-per-subline term can then push the computed
+    /// address past 0xFFFF entirely (confirmed against a second real
+    /// fixture, `cpclib-dap/tests/graphics/hello/`: R12=0x32/R13=0xF0 puts
+    /// the screen at 0xC5E0, and its own last on-screen line computes to
+    /// 0x10420) - **real hardware wraps this as plain 16-bit address
+    /// arithmetic, at 0x10000, not within the CRTC's own 16K page**. An
+    /// earlier version of this function wrapped at 0x4000 (page-relative)
+    /// instead, on the theory that the page-select bits are separate
+    /// circuitry from the interleave offset - live-verified wrong against
+    /// that second fixture's own WinAPE capture: page-relative wrap reads
+    /// a real, non-background byte (0xE0 at 0xC420) where the *correct*,
+    /// WinAPE-and-real-hardware-matching value is 0x00, only found by
+    /// wrapping the full 16-bit address (0x10420 -> 0x0420) instead.
+    /// `data` is addressed modulo its own length accordingly - callers
+    /// pass the full 64K address space (`data[0]` = real address 0x0000),
+    /// not just one 16K page.
+    pub fn from_screen_at(
+        data: &[u8],
+        base_address: usize,
+        bytes_width: usize,
+        pixel_height: usize,
+        mode: Mode,
+        palette: &Palette<C>
+    ) -> Self {
         let _pixel_width = mode.nb_pixels_for_bytes_width(bytes_width);
+        let space_size = data.len();
 
         (0..pixel_height)
             .map(|line| {
-                let screen_address = 0xC000 + ((line / 8) * bytes_width) + ((line % 8) * 0x800);
-                let data_address = screen_address - 0xC000;
-                let line_bytes = &data[data_address..(data_address + bytes_width)];
+                let screen_address =
+                    base_address + ((line / 8) * bytes_width) + ((line % 8) * 0x800);
+                let data_address = screen_address % space_size;
+                let line_bytes: Vec<u8> = (0..bytes_width)
+                    .map(|col| data[(data_address + col) % space_size])
+                    .collect();
                 line_bytes
                     .iter()
                     .flat_map(|b| pixels::byte_to_pens(*b, mode))
@@ -672,6 +713,16 @@ impl<C: AmstradColor> ColorMatrix<C> {
         }
 
         buffer
+    }
+
+    /// [`Self::as_image`], encoded as PNG bytes in memory - for a caller
+    /// that wants to hand the image to something other than the filesystem
+    /// (e.g. a debugger webview, over a `data:` URI).
+    pub fn as_png_bytes(&self) -> Result<Vec<u8>, im::ImageError> {
+        let buffer = self.as_image();
+        let mut bytes = Vec::new();
+        buffer.write_to(&mut std::io::Cursor::new(&mut bytes), im::ImageFormat::Png)?;
+        Ok(bytes)
     }
 
     /// Convert the matrix as a sprite, given the right mode and an optional palette
@@ -1452,8 +1503,64 @@ impl<C: AmstradColor> MultiModeSprite<C> {
 
 #[cfg(test)]
 mod tests {
-    use super::ColorMatrix;
+    use super::{ColorMatrix, Mode};
     use crate::ga::Ink;
+    use crate::palette::Palette;
+
+    /// Reported live: a real, scrolled BASIC screen (CRTC start address not
+    /// 16K-page-aligned) rendered via `-sv` cut the bottom of the screen
+    /// off ("Ready" and everything after it missing). Root cause: real CPC
+    /// hardware wraps the interleaved "+0x800 per subline" address as
+    /// plain 16-bit arithmetic, at the full 64K boundary - `from_screen_at`
+    /// used to index a plain, non-wrapping slice instead, which either
+    /// panicked (out of bounds) or forced a caller-side safety clamp that
+    /// shrank the image to stay in bounds.
+    ///
+    /// **This crate's own first fix was itself wrong**: it wrapped within
+    /// just the *page* (`base_address`'s own 16K region) rather than the
+    /// full 64K space, on the theory that the CRTC's page-select bits are
+    /// separate circuitry from the interleave offset. Live-verified wrong
+    /// against a second real fixture
+    /// (`cpclib-dap/tests/graphics/hello/`, address 0xC5E0): its own last
+    /// on-screen line computes to raw address 0x10420, which the page-wrap
+    /// theory placed at 0xC420 (a real, non-background byte, 0xE0) where
+    /// the *correct* value - matching both a real screenshot and a WinAPE
+    /// capture of the identical memory - is 0x00, only found by wrapping
+    /// the full 16-bit address (0x10420 -> 0x0420) instead.
+    ///
+    /// This pins the *corrected* (full 64K) wrap down directly:
+    /// `base_address` (0xFFF0) sits only 16 bytes before the very top of
+    /// the address space, so line 1's own subline term alone (`1 * 0x800`)
+    /// pushes the raw address past 0xFFFF - the exact shape of both real
+    /// bugs. A marker byte placed at the address the *full-space* wrap
+    /// should land on must be the one actually read, not a panic and not
+    /// the (out of bounds, if it even ran) unwrapped position - nor the
+    /// wrong, page-relative position the first fix would have used.
+    #[test]
+    fn from_screen_at_wraps_at_the_full_64k_address_space_not_just_one_page() {
+        let mut palette = Palette::<Ink>::new();
+        palette.set(0u8, Ink::BLACK);
+        palette.set(1u8, Ink::WHITE);
+
+        let mut data = vec![0u8; 0x10000];
+        let base_address = 0xFFF0usize;
+        // Where line 1 (subline 1, `1 * 0x800`) wraps to:
+        // (base_address + 0x800) % 0x10000 - not % 0x4000 (which would
+        // wrongly land at 0xB7F0, still inside the *previous* 16K page).
+        let wrapped_offset = (base_address + 0x800) % 0x10000;
+        assert_eq!(wrapped_offset, 0x07F0);
+        data[wrapped_offset] = 0xFF; // one full byte "on" - Mode::Two, 8 lit pixels
+
+        let matrix = ColorMatrix::from_screen_at(&data, base_address, 1, 16, Mode::Two, &palette);
+
+        let line0_lit = (0..matrix.width()).any(|x| *matrix.get_color(x as usize, 0) == Ink::WHITE);
+        let line1_lit = (0..matrix.width()).any(|x| *matrix.get_color(x as usize, 1) == Ink::WHITE);
+        assert!(!line0_lit, "line 0 reads an untouched (zero) byte, must stay background");
+        assert!(
+            line1_lit,
+            "line 1 must read the marker byte wrapped at the full 64K boundary, not panic or miss it"
+        );
+    }
 
     #[test]
     fn test_masking() {

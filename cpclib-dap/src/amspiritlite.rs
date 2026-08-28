@@ -834,6 +834,84 @@ where
     Ok((endpoint, child))
 }
 
+/// Start the emulator with `disk` in drive A, cold-booted with no snapshot -
+/// landing at Ready exactly like a real machine with a disk in the drive and
+/// no `!BOOT` file: mounting a disk is not the same as running it. `RUN"..."`
+/// is the user's job, the same contract the existing `.bas` launch path
+/// already has (see `launch_without_snapshot`'s own doc comment).
+///
+/// Confirmed live (2026-08-27, via `POST /api/media`): mounting is recognised
+/// immediately, with no reset needed, and never auto-runs anything by itself
+/// - a soft reset with the disk mounted still lands at a bare `Ready`. This
+/// function reaches the same destination by a different, cheaper route: the
+/// emulator's own `[FILE]` positional argument is medium-agnostic (confirmed
+/// via `--help`, and already relied on for `.sna` in `launch` above) - the
+/// same slot a snapshot goes in is where a `.dsk` goes to be inserted into
+/// drive A at boot. `cpclib-runner/src/emucontrol.rs`'s own `args_for_emu`
+/// already does exactly this (`args.push(drive_a.to_string())`, no flag) for
+/// a normal, non-debug launch of this same emulator - this mirrors that,
+/// rather than inventing a new argument shape. Sidesteps the binary-transport
+/// limitation `/api/media` would otherwise need (see `Call`/`perform`'s
+/// `String`-based HTTP body, which cannot carry raw disk bytes) since the
+/// disk never has to travel over the loopback API at all - the emulator
+/// reads it straight off disk itself, the same way it already does for the
+/// `.sna` case's temp file.
+///
+/// Confirmed live end to end (2026-08-28), against a real fixture
+/// (`cpclib-catart/AFC_Bulletin_6_...DSK`): the emulator's own log names the
+/// exact right thing happening (`load_bin: loaded ...DSK (194816 bytes)`,
+/// `load_disk: drive A: OK  tracks=40 sides=1`), and `CAT` from a cold boot
+/// lists the disk's real catalog (`AFC.001`, `AFC.002`, `159K free`) -
+/// matching what `/api/media` mounting showed the night before, bit for bit.
+/// One real gotcha found along the way, worth knowing before trusting a
+/// screen capture taken right after boot: `CAT`'s own catalog listing lags a
+/// couple of real seconds behind the `Ready` prompt - the FDC's motor
+/// spin-up/seek is genuinely emulated, not instant, so a screenshot grabbed
+/// too early after typing `CAT` catches `Drive A: user 0` with the file list
+/// not yet drawn, which reads exactly like an empty/failed mount until the
+/// next frame proves otherwise.
+pub fn launch_with_disk<E>(
+    disk: &std::path::Path,
+    port: u16,
+    observer: &E
+) -> Result<(String, std::process::Child), String>
+where
+    E: cpclib_common::event::EventObserver + 'static
+{
+    use cpclib_runner::runner::emulator::{AmspiritLiteVersion, Emulator};
+
+    if !disk.is_file() {
+        return Err(format!("{} does not exist", disk.display()));
+    }
+
+    let emulator = Emulator::AmspiritLite(AmspiritLiteVersion::default());
+    let configuration = emulator.configuration::<E>();
+    if !configuration.is_cached() {
+        configuration.install(observer)?;
+    }
+
+    // Same port-collision defence as `launch`/`launch_without_snapshot` - see
+    // `launch`'s own doc comment for the full story of why a busy port is
+    // silently somebody else's emulator, not a reason to fail.
+    let port = port_to_serve_on(port);
+
+    let executable = configuration.exec_fname();
+    let child = std::process::Command::new(executable.as_str())
+        .arg(disk.as_os_str())
+        .arg("--web-server")
+        .arg("--web-port")
+        .arg(port.to_string())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("cannot start {executable}: {e}"))?;
+
+    let endpoint = format!("http://127.0.0.1:{port}");
+    wait_until_listening(&endpoint, std::time::Duration::from_secs(30))?;
+    Ok((endpoint, child))
+}
+
 /// Where to start an emulator that was asked to serve on `asked`.
 ///
 /// `asked` itself whenever it is free, and a port the operating system says is
@@ -888,7 +966,7 @@ pub fn wait_until_listening(endpoint: &str, patience: std::time::Duration) -> Re
 }
 
 /// Bytes as DAP carries them: the emulator answers hex, DAP asks for base64.
-fn encode_base64(bytes: &[u8]) -> String {
+pub(crate) fn encode_base64(bytes: &[u8]) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
@@ -4057,6 +4135,69 @@ mod live_tests {
             disagreed > 0,
             "the emulator answered every step before doing it, which would make \
              a stepping walk trustworthy after all"
+        );
+    }
+
+    /// End-to-end smoke test for the WinAPE-style screen viewer's rendering
+    /// pipeline (`-sv`), against AMSpiriT's own live CRTC/GA/RAM - the same
+    /// three pieces `Session::screen_view_command`'s direct-endpoint path
+    /// reads, exercised here without needing a full DAP client. Confirms the
+    /// whole chain (raw JSON -> `crtc_screen_start_address` ->
+    /// `mode_and_palette_from_ga_json` -> a live `readMemory`-equivalent ->
+    /// `ColorMatrix::from_screen_at` -> PNG) produces a real, non-trivial
+    /// image at boot - not just that each piece compiles in isolation, which
+    /// caught nothing the first time `palette_from_raw_ga`'s masking bug
+    /// slipped through unit tests that only exercised the palette function
+    /// directly.
+    #[test]
+    #[ignore]
+    fn live_screen_view_renders_the_boot_prompt() {
+        assert!(reachable(), "start AMSpiriT Lite with --web-server first");
+        let endpoint = endpoint();
+
+        let crtc: Value =
+            serde_json::from_str(&perform(&endpoint, &Call::get("/api/crtc")).unwrap()).unwrap();
+        let ga: Value =
+            serde_json::from_str(&perform(&endpoint, &Call::get("/api/ga")).unwrap()).unwrap();
+
+        let regs = crate::inspect::crtc_registers_from_json(&crtc).expect("crtc regs");
+        let (mode, palette) =
+            crate::inspect::mode_and_palette_from_ga_json(&ga).expect("ga mode/palette");
+        let address = crate::inspect::crtc_screen_start_address(regs[12], regs[13]);
+        // A freshly booted machine's own default: confirmed live 2026-08-27
+        // (see `crtc_screen_start_address`'s own doc comment).
+        assert_eq!(address, 0xC000, "boot-time CRTC regs: {regs:?}");
+
+        let count = 0x4000usize.min(0x10000 - address);
+        let body: Value = serde_json::from_str(
+            &perform(
+                &endpoint,
+                &Call::get("/api/ram").query("addr", address).query("len", count)
+            )
+            .unwrap()
+        )
+        .unwrap();
+        let memory = bytes_from_hex(body["hex"].as_str().expect("hex"));
+        assert_eq!(memory.len(), count);
+
+        let matrix: cpclib_image::image::ColorMatrix<cpclib_image::ink::Ink> =
+            cpclib_image::image::ColorMatrix::from_screen_at(
+                &memory,
+                address,
+                80,
+                200,
+                mode.into(),
+                &palette
+            );
+        let png = matrix.as_png_bytes().expect("png encode");
+        // A blank/black screen would still encode a (tiny, mostly-empty)
+        // valid PNG - a real boot prompt with lit text pixels does not
+        // compress anywhere near that small.
+        assert!(
+            png.len() > 2000,
+            "suspiciously small PNG ({} bytes) for a screen with boot text on it - \
+             check the palette/address/mode are actually being read, not just defaulting",
+            png.len()
         );
     }
 }

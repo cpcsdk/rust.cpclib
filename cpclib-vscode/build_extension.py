@@ -235,6 +235,10 @@ class ExtensionBuilder:
             new_name = f"{original_vsix.stem}-{platform_suffix}.vsix"
         
         new_path = self.project_root / new_name
+        # Delete target file if it already exists (fixes Windows rename error)
+        if new_path.exists():
+            new_path.unlink()
+            self.info(f"Removed existing {new_path.name}")
         original_vsix.rename(new_path)
         return new_path
 

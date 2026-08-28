@@ -8,6 +8,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use cpclib_image::ink::Ink;
+use cpclib_image::palette::Palette;
 use cpclib_project::srcmap::{AddressResolution, SourceMap};
 use serde_json::{Value, json};
 
@@ -116,6 +118,10 @@ CPC debug console commands:
                                 tokenised and rendered - useful for a BASIC
                                 loader ahead of the machine code being
                                 debugged
+  -sv [addr] [w] [h] [mode]      render video memory as an image, opening an
+                                interactive panel; each argument overrides
+                                the live CRTC/Gate Array value it replaces
+                                (default 80x200, palette always live)
   -help                         this list
 
 Anything not starting with `-` is read as a label: `animation_state` shows the
@@ -204,7 +210,14 @@ enum Purpose {
     /// way to reading it.
     BasicListingVariablesEnd,
     /// The program's own bytes, once `BasicListingVariablesEnd` answered.
-    BasicListingRead
+    BasicListingRead,
+    /// `-sv`'s own CRTC read, on a peer with a direct endpoint - see
+    /// `screen_view_command`'s doc comment.
+    ScreenViewCrtc,
+    /// `-sv`'s own Gate Array read, once `ScreenViewCrtc` answered.
+    ScreenViewGa,
+    /// `-sv`'s own pixel bytes, once address/mode/palette are all known.
+    ScreenViewMemory
 }
 
 /// An editor `stackTrace` held while the stack is fetched.
@@ -258,6 +271,33 @@ struct PendingWatch {
     /// How many `width`-wide elements: `label,4,w` is four words. `1` for the
     /// ordinary single-value watch.
     count: usize
+}
+
+/// A `-sv` screen view waiting on CRTC/GA/memory round trips.
+///
+/// Two paths populate this, both ending at [`Session::screen_view_answer`]:
+/// a peer with direct CRTC/GA endpoints (AmspiritLite) fills `crtc_regs` then
+/// `mode`/`palette` one round trip at a time before a final `readMemory`;
+/// a peer without one (1984js) answers with a single `cpclib/machineState`
+/// snapshot that already carries all three, handled directly in
+/// `complete_machine_state` without ever populating this struct's fields.
+#[derive(Debug, Clone, Default)]
+struct PendingScreenView {
+    request: Option<Value>,
+    /// `-sv <address> <width> <height> <mode>`'s own overrides - `None`
+    /// uses the CRTC's own R12/R13 for the address, the Gate Array's own
+    /// mode for `mode`, and the CPC's standard screen geometry (80x200)
+    /// for width/height. The palette is never overridable this way - it
+    /// always comes fresh from the Gate Array (see `render_screen_view`'s
+    /// own doc comment on why a mode override still needs that round
+    /// trip).
+    address_override: Option<usize>,
+    width_override: Option<usize>,
+    height_override: Option<usize>,
+    mode_override: Option<u8>,
+    crtc_regs: Option<[u8; 18]>,
+    mode: Option<u8>,
+    palette: Option<Palette<Ink>>
 }
 
 /// An array watch's elements, already read - expanding it in the Watch panel
@@ -534,6 +574,9 @@ pub struct Session<P: DapPeer> {
     /// A `-bv` request waiting on its (one or two round trip) answer - see
     /// `basic_listing_view`'s own doc comment.
     pending_basic_listing: Option<Value>,
+    /// A `-sv` request waiting on its (one, or up to three, round trip)
+    /// answer - see `PendingScreenView`'s own doc comment.
+    pending_screen_view: Option<PendingScreenView>,
     /// The last snapshot the emulator wrote, valid until it runs again.
     ///
     /// Expanding CRTC and then Gate Array must not cost two whole-machine
@@ -612,6 +655,7 @@ impl<P: DapPeer> Session<P> {
             pending_chip_prints: Vec::new(),
             pending_crtc_views: Vec::new(),
             pending_basic_listing: None,
+            pending_screen_view: None,
             machine_state: None,
             synthetic_frames: Vec::new(),
             extra_watches: Vec::new(),
@@ -1166,6 +1210,9 @@ impl<P: DapPeer> Session<P> {
                     return self.complete_basic_listing_variables_end(message);
                 },
                 Purpose::BasicListingRead => return self.complete_basic_listing_read(message),
+                Purpose::ScreenViewCrtc => return self.complete_screen_view_crtc(message),
+                Purpose::ScreenViewGa => return self.complete_screen_view_ga(message),
+                Purpose::ScreenViewMemory => return self.complete_screen_view_memory(message),
                 Purpose::Plain => {}
             }
             let command = own.command;
@@ -2384,6 +2431,206 @@ impl<P: DapPeer> Session<P> {
         self.basic_listing_answer(&request, &text)
     }
 
+    /// `-sv [address] [width] [height] [mode]` - render CPC video memory as
+    /// an actual image (WinAPE-style) in an interactive panel, auto-
+    /// detecting the current screen address/mode from the CRTC and Gate
+    /// Array unless a given argument overrides it (width/height default to
+    /// the CPC's own standard 80x200; the palette is never overridable,
+    /// always live from the Gate Array). The panel's own controls re-issue
+    /// this exact command with all four values filled in once the user
+    /// changes one - see `cpclib-vscode/src/debug.ts`'s `screenHtml`. Same
+    /// two-mechanism fallback as `-crtcview`/`-chips`: a peer with its own
+    /// CRTC/GA endpoints (AmspiritLite) is asked directly (three round
+    /// trips: CRTC, then GA, then the pixel bytes themselves - its direct
+    /// endpoints carry chip state only, never memory); a peer without one
+    /// (1984js) gets a single `cpclib/machineState` snapshot instead,
+    /// handled in `complete_machine_state` - a `.sna` already carries
+    /// CRTC/GA state *and* full memory together, so that path never
+    /// touches `ScreenViewCrtc`/`ScreenViewGa`/`ScreenViewMemory` at all.
+    fn screen_view_command(
+        &mut self,
+        request: &Value,
+        arguments: &[&str]
+    ) -> std::io::Result<Vec<Value>> {
+        let address_override = arguments
+            .first()
+            .and_then(|a| parse_number(a))
+            .map(|a| a as usize);
+        let width_override = arguments.get(1).and_then(|a| parse_number(a)).map(|a| a as usize);
+        let height_override = arguments.get(2).and_then(|a| parse_number(a)).map(|a| a as usize);
+        let mode_override = arguments.get(3).and_then(|a| parse_number(a)).map(|a| a as u8);
+        self.pending_screen_view = Some(PendingScreenView {
+            request: Some(request.clone()),
+            address_override,
+            width_override,
+            height_override,
+            mode_override,
+            ..Default::default()
+        });
+
+        if let Some(command) = crate::amspiritlite::chip_command(crate::inspect::CRTC_REFERENCE)
+            && self.peer.supports(command)
+        {
+            self.send_own(command, json!({}), Purpose::ScreenViewCrtc)?;
+            return Ok(Vec::new());
+        }
+
+        self.send_own("cpclib/machineState", json!({}), Purpose::MachineState)?;
+        Ok(Vec::new())
+    }
+
+    fn complete_screen_view_crtc(&mut self, message: &Value) -> Vec<Value> {
+        let Some(pending) = self.pending_screen_view.as_mut() else {
+            return Vec::new();
+        };
+        let regs = message
+            .get("body")
+            .and_then(crate::inspect::crtc_registers_from_json)
+            .unwrap_or([0u8; 18]);
+        pending.crtc_regs = Some(regs);
+
+        let seq = self.next_seq();
+        if let Some(command) = crate::amspiritlite::chip_command(crate::inspect::GATE_ARRAY_REFERENCE)
+        {
+            if let Err(problem) = self.send_own(command, json!({}), Purpose::ScreenViewGa) {
+                let request = self.pending_screen_view.take().and_then(|p| p.request);
+                return request
+                    .map(|request| vec![protocol::failure(&request, &problem.to_string(), seq)])
+                    .unwrap_or_default();
+            }
+            return Vec::new();
+        }
+        let request = self.pending_screen_view.take().and_then(|p| p.request);
+        request
+            .map(|request| {
+                vec![protocol::failure(
+                    &request,
+                    "the emulator being debugged has no Gate Array endpoint",
+                    seq
+                )]
+            })
+            .unwrap_or_default()
+    }
+
+    fn complete_screen_view_ga(&mut self, message: &Value) -> Vec<Value> {
+        let Some(pending) = self.pending_screen_view.as_mut() else {
+            return Vec::new();
+        };
+        let Some((mode, palette)) = message
+            .get("body")
+            .and_then(crate::inspect::mode_and_palette_from_ga_json)
+        else {
+            let seq = self.next_seq();
+            let request = self.pending_screen_view.take().and_then(|p| p.request);
+            return request
+                .map(|request| {
+                    vec![protocol::failure(
+                        &request,
+                        "could not read the Gate Array's mode/palette",
+                        seq
+                    )]
+                })
+                .unwrap_or_default();
+        };
+        // The palette always comes fresh from the Gate Array - it is never
+        // overridable - but the *mode* the pixels are decoded as can be, so
+        // a user comparing encodings can lock it independently of whatever
+        // the machine is actually displaying in right now.
+        pending.mode = Some(pending.mode_override.unwrap_or(mode));
+        pending.palette = Some(palette);
+
+        let seq = self.next_seq();
+        // The full 64K address space, from 0 - not just from the screen's
+        // own (possibly mid-scroll) address, recomputed once it's actually
+        // needed in `complete_screen_view_memory`. Real hardware wraps the
+        // interleaved display read at the full 16-bit address boundary,
+        // not within any 16K page - see `ColorMatrix::from_screen_at`'s
+        // own doc comment.
+        if let Err(problem) = self.send_own(
+            "readMemory",
+            json!({ "memoryReference": address_reference(0), "count": 0x10000u32 }),
+            Purpose::ScreenViewMemory
+        ) {
+            let request = self.pending_screen_view.take().and_then(|p| p.request);
+            return request
+                .map(|request| vec![protocol::failure(&request, &problem.to_string(), seq)])
+                .unwrap_or_default();
+        }
+        Vec::new()
+    }
+
+    fn complete_screen_view_memory(&mut self, message: &Value) -> Vec<Value> {
+        let Some(pending) = self.pending_screen_view.take() else {
+            return Vec::new();
+        };
+        let Some(request) = pending.request else {
+            return Vec::new();
+        };
+        let Some(mode) = pending.mode else {
+            let seq = self.next_seq();
+            return vec![protocol::failure(&request, "no screen mode known", seq)];
+        };
+        let Some(palette) = pending.palette else {
+            let seq = self.next_seq();
+            return vec![protocol::failure(&request, "no palette known", seq)];
+        };
+        let regs = pending.crtc_regs.unwrap_or([0u8; 18]);
+        let address = pending
+            .address_override
+            .unwrap_or_else(|| crate::inspect::crtc_screen_start_address(regs[12], regs[13]));
+        let bytes = message
+            .get("body")
+            .and_then(|b| b.get("data"))
+            .and_then(Value::as_str)
+            .map(decode_base64)
+            .unwrap_or_default();
+        self.screen_view_answer(
+            &request,
+            address,
+            pending.width_override,
+            pending.height_override,
+            mode,
+            &palette,
+            &bytes
+        )
+    }
+
+    /// Turns a known screen address, mode and palette plus a raw memory
+    /// window into the `cpclib/screenView` event and its console receipt -
+    /// shared by both `-sv` paths, see `screen_view_command`'s own doc
+    /// comment. The actual rendering is `crate::inspect::render_screen_view`,
+    /// shared with `BasicSession`'s own identically-named method too.
+    fn screen_view_answer(
+        &mut self,
+        request: &Value,
+        address: usize,
+        width_override: Option<usize>,
+        height_override: Option<usize>,
+        mode: u8,
+        palette: &Palette<Ink>,
+        memory: &[u8]
+    ) -> Vec<Value> {
+        let width = width_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_WIDTH);
+        let height = height_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_HEIGHT);
+        match crate::inspect::render_screen_view(address, width, height, mode, palette, memory) {
+            Ok(body) => {
+                let seq = self.next_seq();
+                let event = protocol::event("cpclib/screenView", body, seq);
+                let seq = self.next_seq();
+                let receipt = protocol::response(
+                    request,
+                    json!({ "result": "screen view opened", "variablesReference": 0 }),
+                    seq
+                );
+                vec![event, receipt]
+            },
+            Err(problem) => {
+                let seq = self.next_seq();
+                vec![protocol::failure(request, &problem, seq)]
+            }
+        }
+    }
+
     /// The `cpclib/crtcView` event plus its console receipt: raw registers,
     /// and whatever `validate_crtc` makes of them.
     fn crtc_view_answer(&mut self, request: &Value, regs: &[u8]) -> Vec<Value> {
@@ -2489,12 +2736,19 @@ impl<P: DapPeer> Session<P> {
         let waiting = std::mem::take(&mut self.pending_chip_scopes);
         let printing = std::mem::take(&mut self.pending_chip_prints);
         let viewing = std::mem::take(&mut self.pending_crtc_views);
-        if waiting.is_empty() && printing.is_empty() && viewing.is_empty() {
+        let screen_view = self.pending_screen_view.take();
+        if waiting.is_empty() && printing.is_empty() && viewing.is_empty() && screen_view.is_none()
+        {
             return Vec::new();
         }
 
         // An answer straight from a chip endpoint carries the values
-        // themselves, not a snapshot to parse.
+        // themselves, not a snapshot to parse. `screen_view` never reaches
+        // here in practice - `screen_view_command` only sends
+        // `cpclib/machineState` when the peer has no direct CRTC endpoint at
+        // all, so this branch (a *direct* endpoint's own answer) cannot
+        // happen for it - but a request still deserves an answer if it
+        // somehow does.
         if response
             .get("body")
             .is_some_and(|body| body.get("snapshot").is_none() && body.get("error").is_none())
@@ -2520,6 +2774,14 @@ impl<P: DapPeer> Session<P> {
                 for request in viewing {
                     out.extend(self.crtc_view_answer(&request, &regs));
                 }
+            }
+            if let Some(request) = screen_view.and_then(|p| p.request) {
+                let seq = self.next_seq();
+                out.push(protocol::failure(
+                    &request,
+                    "unexpected answer shape for a screen view",
+                    seq
+                ));
             }
             return out;
         }
@@ -2579,6 +2841,43 @@ impl<P: DapPeer> Session<P> {
                 // No machine to describe itself: said plainly, rather than
                 // reporting all-zero registers that would raise a false
                 // "R0 != 63" warning about bytes that were never read.
+                None => {
+                    let seq = self.next_seq();
+                    out.push(protocol::failure(&request, &why, seq));
+                }
+            }
+        }
+        if let Some(pending) = screen_view
+            && let Some(request) = pending.request
+        {
+            match self.machine_state.as_deref() {
+                // A `.sna` carries CRTC/GA state *and* full memory together -
+                // one round trip already answered everything `-sv` needs,
+                // unlike the direct-endpoint path's three.
+                Some(sna) => {
+                    let regs = crate::inspect::crtc_registers(sna);
+                    let (mode, palette) = crate::inspect::mode_and_palette_from_snapshot(sna);
+                    let mode = pending.mode_override.unwrap_or(mode);
+                    let address = pending.address_override.unwrap_or_else(|| {
+                        crate::inspect::crtc_screen_start_address(regs[12], regs[13])
+                    });
+                    let full_memory = sna.memory_dump();
+                    // The full 64K address space, from 0 - not just one
+                    // page. See `complete_screen_view_ga`'s identical
+                    // comment. Capped at exactly 0x10000: a 128K machine's
+                    // own snapshot carries more than that, and the wrap
+                    // must stay at the real 16-bit boundary regardless.
+                    let memory = full_memory[..0x10000.min(full_memory.len())].to_vec();
+                    out.extend(self.screen_view_answer(
+                        &request,
+                        address,
+                        pending.width_override,
+                        pending.height_override,
+                        mode,
+                        &palette,
+                        &memory
+                    ));
+                },
                 None => {
                     let seq = self.next_seq();
                     out.push(protocol::failure(&request, &why, seq));
@@ -2823,6 +3122,7 @@ impl<P: DapPeer> Session<P> {
             "-crtcview" | "-cv" => self.crtc_view_command(request),
             "-timer" | "-t" => self.timer_command(request, &arguments),
             "-bv" | "-listing" => self.basic_listing_view(request),
+            "-sv" | "-screen" => self.screen_view_command(request, &arguments),
             "-help" | "-h" => {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(

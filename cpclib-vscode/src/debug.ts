@@ -140,6 +140,122 @@ export async function debugBasic(fileName?: string): Promise<void> {
 }
 
 /**
+ * Prompts for a `.sna` file: every one found in the open workspace,
+ * fuzzy-filterable as you type (`showQuickPick`'s own built-in matching -
+ * there is no separate "autocomplete" API for a bare file path in VS Code),
+ * plus a "Browse..." entry for one outside it.
+ */
+async function pickSnapshotFile(): Promise<string | undefined> {
+    const found = await vscode.workspace.findFiles(
+        '**/*.sna',
+        '**/{node_modules,.git,out}/**',
+        200,
+    );
+    const BROWSE = '$(folder-opened) Browse for a .sna file...';
+    const picked = await vscode.window.showQuickPick(
+        [
+            BROWSE,
+            ...found.map(uri => vscode.workspace.asRelativePath(uri)),
+        ],
+        { placeHolder: 'Which .sna snapshot should be run or debugged?' },
+    );
+    if (picked === undefined) { return undefined; }
+    if (picked === BROWSE) {
+        const chosen = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { 'CPC snapshot': ['sna'] },
+            openLabel: 'Run/Debug',
+        });
+        return chosen?.[0]?.fsPath;
+    }
+    const match = found.find(uri => vscode.workspace.asRelativePath(uri) === picked);
+    return match?.fsPath;
+}
+
+/**
+ * Run or debug a raw `.sna` snapshot directly - no build, no source, no
+ * assembly. `stopOnEntry` is the entire difference between the two: a
+ * snapshot's own `PC` is already mid-program, so "run" is just "don't stop
+ * before executing it", the same existing launch property `debugAssembly`'s
+ * own `stopOnEntry: false` default already gives .asm/.bas files - nothing
+ * new needed on the adapter side for that half. With no `fileName` (the
+ * Command Palette case), {@link pickSnapshotFile} offers every `.sna` in
+ * the workspace plus a file-browser fallback.
+ */
+export async function debugSnapshot(fileName?: string, stopOnEntry = true): Promise<void> {
+    if (!fileName) {
+        fileName = await pickSnapshotFile();
+        if (!fileName) { return; }
+    }
+    const uri = vscode.Uri.file(fileName);
+    await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), {
+        type: DEBUG_TYPE,
+        request: 'launch',
+        name: `${stopOnEntry ? 'Debug' : 'Run'} ${fileName}`,
+        program: fileName,
+        stopOnEntry,
+    });
+}
+
+/**
+ * Prompts for a `.dsk` file: every one found in the open workspace, plus a
+ * "Browse..." entry - the disk equivalent of {@link pickSnapshotFile}.
+ */
+async function pickDiskFile(): Promise<string | undefined> {
+    const found = await vscode.workspace.findFiles(
+        '**/*.dsk',
+        '**/{node_modules,.git,out}/**',
+        200,
+    );
+    const BROWSE = '$(folder-opened) Browse for a .dsk file...';
+    const picked = await vscode.window.showQuickPick(
+        [
+            BROWSE,
+            ...found.map(uri => vscode.workspace.asRelativePath(uri)),
+        ],
+        { placeHolder: 'Which .dsk disk should be run or debugged?' },
+    );
+    if (picked === undefined) { return undefined; }
+    if (picked === BROWSE) {
+        const chosen = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { 'CPC disk': ['dsk'] },
+            openLabel: 'Run/Debug',
+        });
+        return chosen?.[0]?.fsPath;
+    }
+    const match = found.find(uri => vscode.workspace.asRelativePath(uri) === picked);
+    return match?.fsPath;
+}
+
+/**
+ * Run or debug a raw `.dsk` disk image directly - mounted in drive A at a
+ * cold boot, landing at `Ready` exactly like a real machine with a disk in
+ * the drive and no `!BOOT` file: nothing auto-runs, `RUN"..."` is still the
+ * user's job. Unlike {@link debugSnapshot}, `stopOnEntry` makes no real
+ * difference here (there is no known entry point for a raw disk to stop
+ * at) - kept for symmetry with the `.sna` command pair and because the
+ * adapter already degrades a no-op `stopOnEntry` to a harmless notice rather
+ * than an error. With no `fileName` (the Command Palette case),
+ * {@link pickDiskFile} offers every `.dsk` in the workspace plus a
+ * file-browser fallback.
+ */
+export async function debugDisk(fileName?: string, stopOnEntry = true): Promise<void> {
+    if (!fileName) {
+        fileName = await pickDiskFile();
+        if (!fileName) { return; }
+    }
+    const uri = vscode.Uri.file(fileName);
+    await vscode.debug.startDebugging(vscode.workspace.getWorkspaceFolder(uri), {
+        type: DEBUG_TYPE,
+        request: 'launch',
+        name: `${stopOnEntry ? 'Debug' : 'Run'} ${fileName}`,
+        program: fileName,
+        stopOnEntry,
+    });
+}
+
+/**
  * Start a debug session from a bndbuild rule that launches an emulator.
  *
  * With no rule given, the server is asked which ones actually end in an
@@ -186,6 +302,30 @@ export function registerDebugging(
             debugAssembly(fileName)),
         vscode.commands.registerCommand('cpclib.debugBasic', (fileName?: string) =>
             debugBasic(fileName)),
+        // A file-explorer context-menu command's own argument is a `Uri`,
+        // not a plain path the way a CodeLens's is - both forms are
+        // accepted here so the same handler serves the context menu, the
+        // Command Palette (no argument at all) and any future CodeLens.
+        vscode.commands.registerCommand(
+            'cpclib.debugSnapshot',
+            (target?: string | vscode.Uri) =>
+                debugSnapshot(target instanceof vscode.Uri ? target.fsPath : target, true),
+        ),
+        vscode.commands.registerCommand(
+            'cpclib.runSnapshot',
+            (target?: string | vscode.Uri) =>
+                debugSnapshot(target instanceof vscode.Uri ? target.fsPath : target, false),
+        ),
+        vscode.commands.registerCommand(
+            'cpclib.debugDisk',
+            (target?: string | vscode.Uri) =>
+                debugDisk(target instanceof vscode.Uri ? target.fsPath : target, true),
+        ),
+        vscode.commands.registerCommand(
+            'cpclib.runDisk',
+            (target?: string | vscode.Uri) =>
+                debugDisk(target instanceof vscode.Uri ? target.fsPath : target, false),
+        ),
         // The Run lens asks the same question before building: the file you are
         // looking at is usually not the program.
         vscode.commands.registerCommand('cpclib.runAsm', async (fileName?: string) => {
@@ -355,6 +495,9 @@ export function registerDebugging(
             if (event.event === 'cpclib/basicListingView') {
                 showBasicListing(event.session, event.body);
             }
+            if (event.event === 'cpclib/screenView') {
+                showScreen(event.session, event.body);
+            }
             // The adapter opened a disassembly view by itself because the
             // program had left the source, and the program is back on a line it
             // was built from. The view has done its job.
@@ -396,6 +539,8 @@ export function registerDebugging(
                 memoryPanels.delete(session.id);
                 disassemblyPanels.get(session.id)?.dispose();
                 disassemblyPanels.delete(session.id);
+                screenPanels.get(session.id)?.dispose();
+                screenPanels.delete(session.id);
                 emulatorUrls.delete(session.id);
                 lastStop = undefined;
                 clearInstructionHint();
@@ -650,6 +795,176 @@ function memoryHtml(dump: MemoryDump): string {
 ${memoryTableHtml(dump)}
 <footer>Refreshed on every stop; highlighted bytes changed since the last one.
 Point it elsewhere with <code>-mv</code> in the debug console; <code>-help</code> lists the commands.</footer>
+</body>
+</html>`;
+}
+
+interface ScreenDump {
+    png: string;
+    address: number;
+    width: number;
+    height: number;
+    mode: number;
+    bytes: string;
+}
+
+const screenPanels = new Map<string, vscode.WebviewPanel>();
+
+/**
+ * CPC video memory rendered as an actual image (WinAPE-style) - `-sv` in the
+ * debug console, or the panel's own controls re-issuing it. Server-side PNG,
+ * not a client-side pixel decoder: the mode-aware bit layout stays in one
+ * place (`cpclib-image`'s own, already-tested `ColorMatrix`), not duplicated
+ * in TypeScript - see the WinAPE-style screen viewer plan's own "reuse,
+ * don't reimplement" reasoning. The one piece of address arithmetic that
+ * *is* duplicated here, in the page's own script, is the mouse-over
+ * readout's coordinate math (screen X/Y -> byte address) - the plan's own
+ * explicit exception, since it is simple and low-risk next to the full
+ * pixel decode. One panel per session, like `-bv` - there is only ever one
+ * screen worth looking at.
+ */
+function showScreen(session: vscode.DebugSession, dump: ScreenDump | undefined): void {
+    if (!dump || typeof dump.png !== 'string') { return; }
+
+    const key = session.id;
+    let panel = screenPanels.get(key);
+    const isNew = panel === undefined;
+    if (!panel) {
+        panel = vscode.window.createWebviewPanel(
+            'cpclib.screen',
+            `CPC screen — ${session.name}`,
+            { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+            { enableScripts: true, retainContextWhenHidden: true },
+        );
+        const owned = panel;
+        panel.onDidDispose(() => {
+            if (screenPanels.get(key) === owned) { screenPanels.delete(key); }
+        });
+        // The control row posts back exactly the four `-sv` arguments to
+        // re-render with - same round trip the console command itself
+        // takes, just triggered from the panel instead of typed.
+        panel.webview.onDidReceiveMessage((message: {
+            address?: string; width?: string; height?: string; mode?: string;
+        }) => {
+            if (!message) { return; }
+            const parts = [message.address, message.width, message.height, message.mode]
+                .map(v => (v ?? '').trim());
+            // Trailing empty arguments are dropped rather than sent as `""`,
+            // so leaving width/height/mode blank falls back to `-sv`'s own
+            // defaults instead of failing to parse a number.
+            while (parts.length > 0 && parts[parts.length - 1] === '') { parts.pop(); }
+            void consoleCommand(`-sv ${parts.join(' ')}`.trimEnd());
+        });
+        screenPanels.set(key, panel);
+    }
+
+    panel.webview.html = screenHtml(dump);
+    if (isNew) { panel.reveal(vscode.ViewColumn.Beside, true); }
+}
+
+const SCREEN_MODE_NAMES = [
+    '0 (16 colours)', '1 (4 colours)', '2 (2 colours)', '3 (4 colours)',
+];
+
+/** Pixels one byte decodes to, in each of the four screen modes. */
+const SCREEN_PIXELS_PER_BYTE = [2, 4, 8, 2];
+
+function screenHtml(dump: ScreenDump): string {
+    const nonce = Math.random().toString(36).slice(2);
+    const modeName = SCREEN_MODE_NAMES[dump.mode] ?? String(dump.mode);
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<style>
+body { font-family: var(--vscode-editor-font-family, monospace); color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); padding: 0.5em 1em; }
+img { image-rendering: pixelated; border: 1px solid var(--vscode-panel-border, #444); margin-top: 0.5em; cursor: crosshair; display: block; }
+.addr { color: var(--vscode-descriptionForeground); }
+footer { color: var(--vscode-descriptionForeground); margin-top: 0.6em; font-size: 0.9em; }
+code { background: var(--vscode-textCodeBlock-background); padding: 0 0.3em; }
+form { display: flex; gap: 0.8em; align-items: baseline; flex-wrap: wrap; margin-bottom: 0.3em; }
+label { display: flex; gap: 0.35em; align-items: baseline; font-size: 0.9em; }
+input, select {
+  font-family: var(--vscode-editor-font-family, monospace);
+  background: var(--vscode-input-background); color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent); border-radius: 2px; padding: 2px 4px;
+}
+input[type="number"] { width: 5em; }
+input[type="text"] { width: 6em; }
+button {
+  background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+  border: none; border-radius: 2px; padding: 3px 10px; cursor: pointer; font-size: 0.9em;
+}
+button:hover { background: var(--vscode-button-hoverBackground); }
+#readout { min-height: 1.2em; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<h2>Screen &nbsp;<span class="addr">mode ${modeName}</span></h2>
+<form id="controls">
+  <label>Address (hex) <input type="text" id="address" value="${hex(dump.address, 4)}"></label>
+  <label>Width (bytes) <input type="number" id="width" min="1" max="255" value="${dump.width}"></label>
+  <label>Height (lines) <input type="number" id="height" min="1" max="2048" value="${dump.height}"></label>
+  <label>Mode <select id="mode">
+    ${[0, 1, 2, 3].map(m => `<option value="${m}"${m === dump.mode ? ' selected' : ''}>${m}</option>`).join('')}
+  </select></label>
+  <button type="submit">Refresh</button>
+  <button type="button" id="auto">Auto-detect</button>
+</form>
+<img id="screen" src="data:image/png;base64,${dump.png}" width="${dump.width * (SCREEN_PIXELS_PER_BYTE[dump.mode] ?? 2)}" height="${dump.height}">
+<div id="readout">&nbsp;</div>
+<footer>Move the mouse over the image for the address/value under the cursor. Point it elsewhere with
+<code>-sv &lt;address&gt; &lt;width&gt; &lt;height&gt; &lt;mode&gt;</code> in the debug console, or the controls above;
+<code>-help</code> lists the commands.</footer>
+<script nonce="${nonce}">
+  const vscode = acquireVsCodeApi();
+  const dump = {
+    address: ${dump.address},
+    width: ${dump.width},
+    height: ${dump.height},
+    mode: ${dump.mode},
+    bytesBase64: ${JSON.stringify(dump.bytes)},
+  };
+  const pixelsPerByte = [2, 4, 8, 2][dump.mode] ?? 2;
+
+  // The event body's own \`bytes\` field is the full 64K address space
+  // (index === real address), base64-encoded - decoded once here rather
+  // than fetched again, the same "ship it alongside the PNG" design the
+  // plan called for.
+  const bytes = Uint8Array.from(atob(dump.bytesBase64), c => c.charCodeAt(0));
+
+  document.getElementById('controls').addEventListener('submit', event => {
+    event.preventDefault();
+    vscode.postMessage({
+      address: document.getElementById('address').value,
+      width: document.getElementById('width').value,
+      height: document.getElementById('height').value,
+      mode: document.getElementById('mode').value,
+    });
+  });
+  document.getElementById('auto').addEventListener('click', () => vscode.postMessage({}));
+
+  const img = document.getElementById('screen');
+  const readout = document.getElementById('readout');
+  img.addEventListener('mousemove', event => {
+    const rect = img.getBoundingClientRect();
+    const px = Math.floor((event.clientX - rect.left) * (img.naturalWidth / rect.width));
+    const py = Math.floor((event.clientY - rect.top) * (img.naturalHeight / rect.height));
+    if (px < 0 || py < 0 || px >= img.naturalWidth || py >= dump.height) { return; }
+    const col = Math.floor(px / pixelsPerByte);
+    // The CPC's own interleaved layout: every 8th raster line is +0x800,
+    // wrapped at the full 64K address space - the exact formula
+    // \`ColorMatrix::from_screen_at\` uses server-side (see its own doc
+    // comment for why it wraps at 0x10000, not within one 16K page).
+    const address = (dump.address + Math.floor(py / 8) * dump.width + (py % 8) * 0x800 + col) & 0xFFFF;
+    const value = bytes[address];
+    readout.textContent = \`&\${address.toString(16).toUpperCase().padStart(4, '0')}\` +
+      \` = &\${value.toString(16).toUpperCase().padStart(2, '0')} (\${value})\` +
+      \` — column \${col}, row \${py}\`;
+  });
+  img.addEventListener('mouseleave', () => { readout.textContent = '\\u00a0'; });
+</script>
 </body>
 </html>`;
 }

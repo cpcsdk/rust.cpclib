@@ -7,6 +7,9 @@
 //! one into the other on the way past.
 
 use cpclib_image::color::AmstradColor;
+use cpclib_image::image::{ColorMatrix, Mode};
+use cpclib_image::ink::Ink;
+use cpclib_image::palette::Palette;
 use cpclib_project::srcmap::{SourceLocation, SourceMap};
 use serde_json::{Value, json};
 
@@ -648,6 +651,142 @@ pub fn crtc_registers_from_json(body: &Value) -> Option<[u8; 18]> {
     Some(out)
 }
 
+/// R12/R13 (display start address, high/low) as a byte address.
+///
+/// The 16K page (`R12`'s top 2 bits, 0/0x4000/0x8000/0xC000) and the
+/// intra-page offset (`R12`'s low nibble + all of `R13`, a 12-bit value)
+/// do **not** share one uniform shift - live-verified 2026-08-27 (see the
+/// WinAPE-style screen viewer plan) against three independent data points:
+/// two live AMSpiriT boot-state pokes (R12=0x30/R13=0x00 -> 0xC000,
+/// R12=0x20/R13=0x00 -> 0x8000, both with a zero offset, which is why an
+/// initial `<<2`-everything version of this function passed both) and a
+/// real, already-scrolled BASIC snapshot's own CRTC state
+/// (`cpclib-dap/tests/graphics/hello/snapshot.sna`, R12=0x32/R13=0xF0)
+/// checked against a WinAPE capture of the exact same memory - the only
+/// data point with a non-zero offset, and the `<<2`-everything formula
+/// missed it by 1504 bytes (0xCBC0 instead of the correct 0xC5E0).
+/// Reverse-engineered from that mismatch: the page contributes
+/// `page * 0x4000`, but the 12-bit offset contributes only `offset * 2`,
+/// not `offset * 4` - i.e. the CRTC's 14-bit MA counter's top 2 bits are
+/// rerouted through separate page-select logic instead of sharing the
+/// same address-line weighting the other 12 bits get. All three data
+/// points confirm this corrected formula exactly.
+pub fn crtc_screen_start_address(r12: u8, r13: u8) -> usize {
+    let page = ((r12 >> 4) & 0x3) as usize;
+    let offset = (((r12 & 0x0F) as usize) << 8) | r13 as usize;
+    page * 0x4000 + offset * 2
+}
+
+/// A `Palette<Ink>` built from 17 raw Gate Array pen values (pens 0-15, then
+/// the border at index 16) - the same shape `chip_variables`'s
+/// `GATE_ARRAY_REFERENCE` branch already reads via `GA_PAL(Some(index))`.
+/// `Ink::from_gate_array_color_number` (like `gate_array_pen`, its
+/// Variables-pane sibling) matches against the full "written" byte a
+/// program writes to `&7Fxx` - bit 6 set, not a bare 5-bit colour number -
+/// so the raw stored value is masked to 5 bits and `0x40` reattached first,
+/// exactly as `gate_array_pen`'s own doc comment explains.
+pub fn palette_from_raw_ga(pens: &[u8; 17]) -> Palette<Ink> {
+    let written = |raw: u8| 0x40 | (raw & 0x1F);
+    let mut palette = Palette::new();
+    for (i, &raw) in pens.iter().enumerate().take(16) {
+        palette.set(i as u8, Ink::from_gate_array_color_number(written(raw)));
+    }
+    palette.set_border(Ink::from_gate_array_color_number(written(pens[16])));
+    palette
+}
+
+/// Screen mode + palette, from an AmspiritLite `/api/ga` body
+/// (`gate_array_pane`'s own `mode`/`ink_idx`/`border_idx` fields).
+pub fn mode_and_palette_from_ga_json(body: &Value) -> Option<(u8, Palette<Ink>)> {
+    let mode = (body.get("mode").and_then(Value::as_u64)? as u8) & 0b11;
+    let inks = body.get("ink_idx")?.as_array()?;
+    let mut pens = [0u8; 17];
+    for (i, slot) in pens.iter_mut().take(16).enumerate() {
+        *slot = inks.get(i).and_then(Value::as_u64).unwrap_or(0) as u8;
+    }
+    pens[16] = body.get("border_idx").and_then(Value::as_u64).unwrap_or(0) as u8;
+    Some((mode, palette_from_raw_ga(&pens)))
+}
+
+/// The screen mode and palette, read straight from a `.sna` snapshot - same
+/// source `chip_variables`'s `GATE_ARRAY_REFERENCE` branch already reads
+/// (`GA_ROMCFG` for the mode, `GA_PAL(Some(index))` per pen), packaged for
+/// the screen viewer instead of a Variables-pane row list.
+pub fn mode_and_palette_from_snapshot(sna: &cpclib_sna::Snapshot) -> (u8, Palette<Ink>) {
+    use cpclib_sna::SnapshotFlag as F;
+    let get = |flag: F| -> u8 {
+        match sna.get_value(&flag) {
+            cpclib_sna::FlagValue::Byte(v) => v,
+            cpclib_sna::FlagValue::Word(v) => (v & 0xFF) as u8,
+            _ => 0
+        }
+    };
+    let mode = get(F::GA_ROMCFG) & 0b11;
+    let mut pens = [0u8; 17];
+    for (i, slot) in pens.iter_mut().enumerate() {
+        *slot = get(F::GA_PAL(Some(i)));
+    }
+    (mode, palette_from_raw_ga(&pens))
+}
+
+/// The CPC's own standard screen geometry - 80 bytes wide (the real, fixed
+/// hardware width every mode shares, only the *pixel* count per byte
+/// differs) and 200 lines tall - `-sv`'s own defaults when the interactive
+/// panel's controls haven't overridden them yet.
+pub const DEFAULT_SCREEN_WIDTH: usize = 80;
+pub const DEFAULT_SCREEN_HEIGHT: usize = 200;
+
+/// A sane range for the interactive panel's own width/height controls - a
+/// user is free to type anything, but nothing here should be able to ask
+/// for a multi-megabyte PNG by mistake. `MAX_HEIGHT` is generous on
+/// purpose: a WinAPE-style "enlarge the window past the visible screen" is
+/// exactly how the address-wrap bugs in this feature's own history were
+/// actually found, and clamping too tight would make that impossible again.
+const MAX_SCREEN_WIDTH: usize = 255;
+const MAX_SCREEN_HEIGHT: usize = 2048;
+
+/// A known screen address, mode and palette plus a raw memory window
+/// (`memory[0]` = real address 0x0000, i.e. the full 64K space - see
+/// `ColorMatrix::from_screen_at`'s own doc comment for why) turned into a
+/// `cpclib/screenView` event's body - shared by both session types' `-sv`
+/// command, one rendering pipeline rather than two to keep in sync.
+///
+/// `width`/`height` are already-resolved (defaulted by the caller, e.g.
+/// via [`DEFAULT_SCREEN_WIDTH`]/[`DEFAULT_SCREEN_HEIGHT`]) rather than
+/// `Option`s here - this function only clamps them to a sane range, it
+/// does not decide what "unset" means, since the two session types
+/// resolve that from slightly different pending-state shapes.
+pub fn render_screen_view(
+    address: usize,
+    width: usize,
+    height: usize,
+    mode: u8,
+    palette: &Palette<Ink>,
+    memory: &[u8]
+) -> Result<Value, String> {
+    if memory.is_empty() {
+        return Err("could not read the screen's own memory".to_string());
+    }
+    let mode = Mode::from(mode.min(3));
+    let bytes_width = width.clamp(1, MAX_SCREEN_WIDTH);
+    let pixel_height = height.clamp(1, MAX_SCREEN_HEIGHT);
+
+    let matrix: ColorMatrix<Ink> =
+        ColorMatrix::from_screen_at(memory, address, bytes_width, pixel_height, mode, palette);
+    let png = matrix
+        .as_png_bytes()
+        .map_err(|problem| format!("could not encode the screen as an image: {problem}"))?;
+
+    Ok(json!({
+        "png": crate::amspiritlite::encode_base64(&png),
+        "address": address,
+        "width": bytes_width,
+        "height": pixel_height,
+        "mode": mode as u8 as i64,
+        "bytes": crate::amspiritlite::encode_base64(memory)
+    }))
+}
+
 /// Extra rows the CRTC scope prepends whenever `validate_crtc` finds
 /// something - the standard Variables view has no per-row colour or
 /// severity, so a bad combination becomes a row of its own instead, right
@@ -902,6 +1041,159 @@ mod tests {
     use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
 
     use super::*;
+
+    /// A second, independent real fixture (`cpclib-dap/tests/graphics/
+    /// blight/`) - a page-aligned address (0xC000, unlike `hello`'s
+    /// 0xC5E0) rendered *past* the standard 200-line screen height, the
+    /// same way the user enlarged WinAPE's own window specifically to
+    /// reveal what the wrap-around shows beyond the visible screen. WinAPE's
+    /// own "Screen" capture at this configuration shows the same demo-
+    /// credits text (`BLIGHT`, `A 1 SCREENED WONDER`, `BY BND AT BND 5`,
+    /// `CODE BY KRUSTY`, ...) genuinely *repeating*, wrapped and shifted,
+    /// once the interleaved addressing runs past the end of memory -
+    /// visually confirmed pixel-for-pixel matching this crate's own render
+    /// of the identical snapshot. This pins the repeat down as a real,
+    /// non-background render (not a blank/wrong-address void) at both the
+    /// original position and well into the wrapped repeat.
+    #[test]
+    fn blight_snapshot_wraps_into_a_real_repeat_past_200_lines() {
+        let sna = cpclib_sna::Snapshot::load("tests/graphics/blight/snapshot.sna")
+            .expect("load sna - run from the cpclib-dap crate root");
+        let regs = crtc_registers(&sna);
+        let address = crtc_screen_start_address(regs[12], regs[13]);
+        assert_eq!(address, 0xC000, "regs: {regs:?}");
+
+        let (mode, palette) = mode_and_palette_from_snapshot(&sna);
+        let full_memory = sna.memory_dump();
+        let memory = &full_memory[..0x10000.min(full_memory.len())];
+        let matrix: cpclib_image::image::ColorMatrix<cpclib_image::ink::Ink> =
+            cpclib_image::image::ColorMatrix::from_screen_at(
+                memory, address, 80, 400, mode.into(), &palette
+            );
+
+        let lit_pixels_in = |y_range: std::ops::Range<u32>| {
+            (0..matrix.width())
+                .flat_map(|x| y_range.clone().map(move |y| (x, y)))
+                .filter(|&(x, y)| {
+                    *matrix.get_color(x as usize, y as usize)
+                        != *palette.get(&cpclib_image::pen::Pen::from(0))
+                })
+                .count()
+        };
+        let original = lit_pixels_in(0..190);
+        let wrapped_repeat = lit_pixels_in(210..400);
+        assert!(original > 2000, "only {original} lit pixels in the original text");
+        assert!(
+            wrapped_repeat > 2000,
+            "only {wrapped_repeat} lit pixels past the wrap - reading blank/wrong memory?"
+        );
+    }
+
+    /// Reported live: a scrolled BASIC screen's CRTC address (R12=0x30,
+    /// R13=0x88 -> 0xC110, not page-aligned) rendered via `-sv` cut off
+    /// "Ready" and everything after it. Root cause and the actual fix live
+    /// in `cpclib-image` (`ColorMatrix::from_screen_at` now wraps within
+    /// the full 64K address space instead of indexing a plain, non-
+    /// wrapping slice - see that crate's own `from_screen_at_wraps_at_the_
+    /// full_64k_address_space_not_just_one_page` for the focused
+    /// regression test, including the follow-up correction from an initial,
+    /// wrong "wraps within one 16K page" theory). This confirms
+    /// `render_screen_view` itself no longer needs (or has) a safety clamp
+    /// shrinking the image to stay in bounds - 200 lines, unconditionally.
+    #[test]
+    fn render_screen_view_honours_the_default_and_an_overridden_height() {
+        let palette = palette_from_raw_ga(&[0u8; 17]);
+        // The full 64K address space, as every caller now provides - see
+        // `Session`/`BasicSession`'s own `screen_view_command` doc
+        // comments for why (real hardware wraps the interleaved display
+        // read at the full 16-bit address boundary, not within any 16K
+        // page).
+        let memory = vec![0u8; 0x10000];
+        let body = render_screen_view(0xC110, 80, 200, 1, &palette, &memory).unwrap();
+        assert_eq!(body["height"], 200);
+
+        // A user enlarging the interactive panel's own height control past
+        // the standard screen - exactly how the wrap-around bugs in this
+        // feature's own history were actually found - must not be silently
+        // clamped back down to 200.
+        let body = render_screen_view(0xC000, 80, 400, 1, &palette, &memory).unwrap();
+        assert_eq!(body["height"], 400);
+    }
+
+    /// Three independent live data points - see `crtc_screen_start_address`'s
+    /// own doc comment for how each was obtained. The first two alone
+    /// (both zero-offset) do not distinguish `page*0x4000 + offset*2` from
+    /// the simpler-but-wrong `MA << 2`; the third (a real, scrolled
+    /// snapshot, non-zero offset) is the one that actually pins the `*2`
+    /// down - `MA << 2` gives 0xCBC0 for it, not 0xC5E0.
+    #[test]
+    fn crtc_screen_start_address_matches_what_was_observed_live() {
+        assert_eq!(crtc_screen_start_address(0x30, 0x00), 0xC000);
+        assert_eq!(crtc_screen_start_address(0x20, 0x00), 0x8000);
+        assert_eq!(crtc_screen_start_address(0x10, 0x00), 0x4000);
+        assert_eq!(crtc_screen_start_address(0x00, 0x00), 0x0000);
+        assert_eq!(crtc_screen_start_address(0x32, 0xF0), 0xC5E0);
+    }
+
+    /// End-to-end rendering check against a real snapshot and a real
+    /// WinAPE capture of the same memory
+    /// (`cpclib-dap/tests/graphics/hello/`) - a BASIC program that printed
+    /// "hello" until the screen scrolled, `BREAK`-ed. Confirms the whole
+    /// chain (CRTC regs -> `crtc_screen_start_address` -> `.sna` memory ->
+    /// `ColorMatrix::from_screen_at`) lands on an image dominated by ink
+    /// (lit "hello" text pixels), not the small residual of a wrong,
+    /// mostly-background-colour address a few hundred bytes off would
+    /// produce.
+    #[test]
+    fn hello_snapshot_renders_a_screen_dominated_by_lit_text() {
+        let sna = cpclib_sna::Snapshot::load("tests/graphics/hello/snapshot.sna")
+            .expect("load sna - run from the cpclib-dap crate root");
+        let regs = crtc_registers(&sna);
+        let address = crtc_screen_start_address(regs[12], regs[13]);
+        assert_eq!(address, 0xC5E0, "regs: {regs:?}");
+
+        let (mode, palette) = mode_and_palette_from_snapshot(&sna);
+        let full_memory = sna.memory_dump();
+        // The full 64K address space, from 0 - not just from `address`
+        // (0xC5E0, mid-page). `from_screen_at` wraps `data` at the full
+        // 16-bit boundary, not within any 16K page - see that function's
+        // own doc comment and `cpclib-image`'s
+        // `from_screen_at_wraps_at_the_full_64k_address_space_not_just_one_page`.
+        let memory = &full_memory[..0x10000.min(full_memory.len())];
+        let matrix: cpclib_image::image::ColorMatrix<cpclib_image::ink::Ink> =
+            cpclib_image::image::ColorMatrix::from_screen_at(
+                memory, address, 80, 200, mode.into(), &palette
+            );
+
+        // Pen 0 is the background; text is lit in other pens. A correctly
+        // addressed render has thousands of non-background pixels; a wrong
+        // address landing mostly in never-written memory would not.
+        let lit_pixels = (0..matrix.width())
+            .flat_map(|x| (0..matrix.height()).map(move |y| (x, y)))
+            .filter(|&(x, y)| {
+                *matrix.get_color(x as usize, y as usize)
+                    != *palette.get(&cpclib_image::pen::Pen::from(0))
+            })
+            .count();
+        assert!(
+            lit_pixels > 2000,
+            "only {lit_pixels} non-background pixels - wrong screen address?"
+        );
+    }
+
+    #[test]
+    fn palette_from_raw_ga_round_trips_gate_array_values() {
+        let ink = Ink::INKS[5];
+        // The raw, *stored* form (5 bits, no bit 6) - what `GA_PAL` actually
+        // holds - not `gate_array_value()`'s "written to &7Fxx" form.
+        let raw = ink.gate_array_value() & 0x1F;
+        let mut pens = [0u8; 17];
+        pens[3] = raw;
+        pens[16] = raw; // border too
+        let palette = palette_from_raw_ga(&pens);
+        assert_eq!(*palette.get(&cpclib_image::pen::Pen::from(3)), ink);
+        assert_eq!(*palette.get_border(), ink);
+    }
 
     /// R0=63, R2=60, R3=0x8c does not respect R2+(R3&0x0f) < R0
     /// (0x8c & 0x0f = 12, 60+12=72, and 72 is not < 63) - the warning is
