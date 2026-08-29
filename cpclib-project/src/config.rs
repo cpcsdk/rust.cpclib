@@ -140,8 +140,18 @@ pub struct AsmConfig {
     /// when that is ambiguous - a shared file included by several programs has
     /// genuinely different addresses in each, so the LSP refuses to guess and
     /// simply reports no address-aware suggestions until told which to use.
+    ///
+    /// A plain `String` (empty means unset), like every other optional string
+    /// setting here (`[dap] endpoint`, for one) - not `Option<String>`.
+    /// `Option<T>` fields with a `None` default do not round-trip through
+    /// `toml::Value::try_from` at all (TOML has no null to represent one),
+    /// which made this field invisible to `every_setting_appears_in_the_
+    /// example_config`'s own drift check and to `--update-config`'s merge -
+    /// both compare *keys present in the serialized schema*, and a `None`
+    /// field is never one. Found via a live report: `--update-config` said
+    /// "already up to date" on a project that had never set this at all.
     #[serde(default)]
-    pub entry: Option<String>
+    pub entry: String
 }
 
 impl Default for AsmConfig {
@@ -157,7 +167,7 @@ impl Default for AsmConfig {
             breakpoint_directive: default_breakpoint_directive(),
             firmware_docs: true,
             peephole_goal: PeepholeGoal::default(),
-            entry: None
+            entry: String::new()
         }
     }
 }
@@ -543,6 +553,13 @@ breakpoint_directive = "BREAKPOINT"
 # latter two add extra rules that can actively disagree with each other
 # (e.g. turning jp into jr, or jr into jp), so only one is ever active.
 peephole_goal = "neutral"
+# The project's entry file, relative to the project root (e.g. "src/sna.asm") -
+# the one a real build assembles, needed for address-aware analysis like
+# jp2jr. Empty discovers it by following the include graph back to whichever
+# RUN-bearing file reaches the open document; set this only when that's
+# ambiguous (a file shared by several programs with genuinely different
+# addresses in each).
+entry = ""
 
 [asm.warnings]
 # ADD/ADC/SBC/CP/SUB/AND/OR/XOR with an explicit "A," prefix that isn't

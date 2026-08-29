@@ -317,7 +317,8 @@ impl AssemblyAnalyzer {
         // Shared across every document in the project: reading and parsing
         // the sources happens once per change, not once per document.
         let (fingerprint, graph) = self.project_graph_cached(&root);
-        match entry::entry_in_graph(&document_path, config.entry.as_deref(), &root, &graph) {
+        let configured_entry = (!config.entry.is_empty()).then(|| config.entry.as_str());
+        match entry::entry_in_graph(&document_path, configured_entry, &root, &graph) {
             entry::Entry::Standalone => {
                 if own_assemble_complete() {
                     AddressSource::OwnAssemble

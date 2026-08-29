@@ -1079,7 +1079,7 @@ fn source_map_for_project(
     // belong to" here: the file in hand is the build file, which is not in the
     // include graph at all. What is wanted is the program the project builds -
     // the file that declares the `RUN`.
-    let path = match config.entry.as_deref() {
+    let path = match (!config.entry.is_empty()).then(|| config.entry.as_str()) {
         Some(configured) => root.join(configured),
         None => {
             match graph.sole_run_root() {

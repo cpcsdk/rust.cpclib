@@ -53,7 +53,26 @@ enum Command {
     /// Same reasoning as `bndbuild` above: the editor already knows where this
     /// binary is, so exposing the adapter as a subcommand saves shipping and
     /// locating a second one. Stdout carries protocol frames only.
-    Dap
+    Dap,
+    /// Run as `cpclib-runner`'s own `emu` CLI (launch a `.sna`/`.dsk` in any
+    /// installed or installable emulator), instead of starting the language
+    /// server. Same reasoning as `bndbuild`/`dap` above - cpclib-lsp already
+    /// links cpclib-runner in full, so this saves shipping a third binary
+    /// just for an editor's "run/debug with a specific emulator" picker to
+    /// invoke. Every argument after `emu` is passed straight through to
+    /// `cpclib_runner::emucontrol::EmuCli`'s own parser unchanged (e.g.
+    /// `cpclib-lsp emu --emulator winape --snapshot game.sna run`).
+    Emu {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>
+    },
+    /// Print every emulator `cpclib-runner` knows how to run, as a JSON
+    /// array, for an editor's "run/debug with..." picker to render without
+    /// needing to link `cpclib-runner` itself - each entry names the exact
+    /// string `emu --emulator` accepts, a display label, whether the DAP
+    /// layer (this same binary's own `dap` subcommand) can debug it, and
+    /// whether it is already installed.
+    EmuList
 }
 
 /// A real, isolated clap subcommand (rather than a hand-rolled pre-`Cli::parse()`
@@ -100,11 +119,64 @@ fn run_as_bndbuild(args: Vec<String>) -> ! {
     }
 }
 
+/// A real, isolated clap subcommand for the same reason `run_as_bndbuild`'s
+/// own doc comment gives - `args` is everything after `emu`, passed straight
+/// through to `EmuCli`'s own parser, with a synthetic program-name slot
+/// prepended the same way.
+fn run_as_emu(args: Vec<String>) -> ! {
+    use cpclib_runner::emucontrol::{EmuCli, handle_arguments};
+
+    let cli = match EmuCli::try_parse_from(std::iter::once("emu".to_string()).chain(args)) {
+        Ok(cli) => cli,
+        Err(e) => {
+            e.print().ok();
+            let code = match e.kind() {
+                cpclib_common::clap::error::ErrorKind::DisplayHelp
+                | cpclib_common::clap::error::ErrorKind::DisplayVersion => 0,
+                _ => 2
+            };
+            std::process::exit(code);
+        }
+    };
+
+    match handle_arguments(cli, &()) {
+        Ok(_) => std::process::exit(0),
+        Err(e) => {
+            eprintln!("Failure\n{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_as_emu_list() -> ! {
+    let entries = cpclib_runner::emucontrol::list_emulators();
+    let json = serde_json::json!(
+        entries
+            .iter()
+            .map(|e| serde_json::json!({
+                "id": e.id,
+                "label": e.label,
+                "debuggable": e.debuggable,
+                "installed": e.installed,
+                "dapId": e.dap_id
+            }))
+            .collect::<Vec<_>>()
+    );
+    println!("{json}");
+    std::process::exit(0);
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
     if let Some(Command::Bndbuild { args }) = cli.command {
         run_as_bndbuild(args);
+    }
+    if let Some(Command::Emu { args }) = cli.command {
+        run_as_emu(args);
+    }
+    if let Some(Command::EmuList) = cli.command {
+        run_as_emu_list();
     }
     if let Some(Command::Dap) = cli.command {
         // Diagnostics to stderr: stdout is the protocol.

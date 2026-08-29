@@ -199,6 +199,16 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.debugWithEmulator",
+        "title": "CPClib: Debug with a specific emulator...",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runWithEmulator",
+        "title": "CPClib: Run with a specific emulator...",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.assembleThisFile",
         "title": "Assemble This File with basm",
         "category": "CPClib"
@@ -252,6 +262,196 @@
         "command": "cpclib.revealProgramCounter",
         "title": "CPClib: Reveal the program counter in the source",
         "category": "CPClib"
+      },
+      {
+        "command": "cpclib.runWith.ace",
+        "title": "CPClib: ACE-DL",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.ace.needsInstall",
+        "title": "CPClib: ACE-DL (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.amspirit",
+        "title": "CPClib: AMSpiriT",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.amspirit.needsInstall",
+        "title": "CPClib: AMSpiriT (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.amspiritlite",
+        "title": "CPClib: AMSpiriT Lite",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.amspiritlite.needsInstall",
+        "title": "CPClib: AMSpiriT Lite (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.winape",
+        "title": "CPClib: WinAPE",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.winape.needsInstall",
+        "title": "CPClib: WinAPE (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.cpcec",
+        "title": "CPClib: CPCEC",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.cpcec.needsInstall",
+        "title": "CPClib: CPCEC (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.sugarbox",
+        "title": "CPClib: SugarBox v2",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.sugarbox.needsInstall",
+        "title": "CPClib: SugarBox v2 (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.cpcemupower",
+        "title": "CPClib: CPCEmuPower",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.cpcemupower.needsInstall",
+        "title": "CPClib: CPCEmuPower (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.cpcemu",
+        "title": "CPClib: CPCEmu",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.cpcemu.needsInstall",
+        "title": "CPClib: CPCEmu (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.caprice",
+        "title": "CPClib: CaPriCe Forever",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.caprice.needsInstall",
+        "title": "CPClib: CaPriCe Forever (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.cadence",
+        "title": "CPClib: Cadence",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.cadence.needsInstall",
+        "title": "CPClib: Cadence (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.emulator1984",
+        "title": "CPClib: 1984 (native)",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.emulator1984.needsInstall",
+        "title": "CPClib: 1984 (native) (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.emulator1984-js",
+        "title": "CPClib: 1984js (browser)",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.emulator1984-js.needsInstall",
+        "title": "CPClib: 1984js (browser) (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.runWith.rvm",
+        "title": "CPClib: Retro Virtual Machine",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.runWith.rvm.needsInstall",
+        "title": "CPClib: Retro Virtual Machine (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.debugWith.amspiritlite",
+        "title": "CPClib: AMSpiriT Lite",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.debugWith.amspiritlite.needsInstall",
+        "title": "CPClib: AMSpiriT Lite (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.debugWith.1984js",
+        "title": "CPClib: 1984js (browser)",
+        "category": "CPClib",
+        "icon": "$(pass-filled)"
+      },
+      {
+        "command": "cpclib.debugWith.1984js.needsInstall",
+        "title": "CPClib: 1984js (browser) (not installed - fetched on first use)",
+        "category": "CPClib",
+        "icon": "$(cloud-download)"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "cpclib.debugWithEmulatorMenu",
+        "label": "CPClib: Debug with..."
+      },
+      {
+        "id": "cpclib.runWithEmulatorMenu",
+        "label": "CPClib: Run with..."
       }
     ],
     "menus": {
@@ -285,26 +485,310 @@
       "explorer/context": [
         {
           "command": "cpclib.debugSnapshot",
-          "when": "resourceExtname == .sna",
+          "when": "resourceExtname =~ /^\\.sna$/i",
           "group": "cpclib"
         },
         {
           "command": "cpclib.runSnapshot",
-          "when": "resourceExtname == .sna",
+          "when": "resourceExtname =~ /^\\.sna$/i",
           "group": "cpclib"
         },
         {
           "command": "cpclib.debugDisk",
-          "when": "resourceExtname == .dsk",
+          "when": "resourceExtname =~ /^\\.dsk$/i",
           "group": "cpclib"
         },
         {
           "command": "cpclib.runDisk",
-          "when": "resourceExtname == .dsk",
+          "when": "resourceExtname =~ /^\\.dsk$/i",
+          "group": "cpclib"
+        },
+        {
+          "submenu": "cpclib.debugWithEmulatorMenu",
+          "when": "resourceExtname =~ /^\\.(sna|dsk)$/i",
+          "group": "cpclib"
+        },
+        {
+          "submenu": "cpclib.runWithEmulatorMenu",
+          "when": "resourceExtname =~ /^\\.(sna|dsk)$/i",
           "group": "cpclib"
         }
       ],
+      "cpclib.debugWithEmulatorMenu": [
+        {
+          "command": "cpclib.debugWith.amspiritlite",
+          "when": "cpclib.emu.amspiritlite.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.debugWith.amspiritlite.needsInstall",
+          "when": "!cpclib.emu.amspiritlite.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.debugWith.1984js",
+          "when": "cpclib.emu.emulator1984-js.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.debugWith.1984js.needsInstall",
+          "when": "!cpclib.emu.emulator1984-js.installed",
+          "group": "1_installed"
+        }
+      ],
+      "cpclib.runWithEmulatorMenu": [
+        {
+          "command": "cpclib.runWith.ace",
+          "when": "cpclib.emu.ace.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.ace.needsInstall",
+          "when": "!cpclib.emu.ace.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.amspirit",
+          "when": "cpclib.emu.amspirit.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.amspirit.needsInstall",
+          "when": "!cpclib.emu.amspirit.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.amspiritlite",
+          "when": "cpclib.emu.amspiritlite.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.amspiritlite.needsInstall",
+          "when": "!cpclib.emu.amspiritlite.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.winape",
+          "when": "cpclib.emu.winape.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.winape.needsInstall",
+          "when": "!cpclib.emu.winape.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cpcec",
+          "when": "cpclib.emu.cpcec.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cpcec.needsInstall",
+          "when": "!cpclib.emu.cpcec.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.sugarbox",
+          "when": "cpclib.emu.sugarbox.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.sugarbox.needsInstall",
+          "when": "!cpclib.emu.sugarbox.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cpcemupower",
+          "when": "cpclib.emu.cpcemupower.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cpcemupower.needsInstall",
+          "when": "!cpclib.emu.cpcemupower.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cpcemu",
+          "when": "cpclib.emu.cpcemu.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cpcemu.needsInstall",
+          "when": "!cpclib.emu.cpcemu.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.caprice",
+          "when": "cpclib.emu.caprice.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.caprice.needsInstall",
+          "when": "!cpclib.emu.caprice.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cadence",
+          "when": "cpclib.emu.cadence.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.cadence.needsInstall",
+          "when": "!cpclib.emu.cadence.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.emulator1984",
+          "when": "cpclib.emu.emulator1984.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.emulator1984.needsInstall",
+          "when": "!cpclib.emu.emulator1984.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.emulator1984-js",
+          "when": "cpclib.emu.emulator1984-js.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.emulator1984-js.needsInstall",
+          "when": "!cpclib.emu.emulator1984-js.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.rvm",
+          "when": "cpclib.emu.rvm.installed",
+          "group": "1_installed"
+        },
+        {
+          "command": "cpclib.runWith.rvm.needsInstall",
+          "when": "!cpclib.emu.rvm.installed",
+          "group": "1_installed"
+        }
+      ],
       "commandPalette": [
+        {
+          "command": "cpclib.runWith.ace",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.ace.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.amspirit",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.amspirit.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.amspiritlite",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.amspiritlite.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.winape",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.winape.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cpcec",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cpcec.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.sugarbox",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.sugarbox.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cpcemupower",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cpcemupower.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cpcemu",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cpcemu.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.caprice",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.caprice.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cadence",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.cadence.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.emulator1984",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.emulator1984.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.emulator1984-js",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.emulator1984-js.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.rvm",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.runWith.rvm.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.debugWith.amspiritlite",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.debugWith.amspiritlite.needsInstall",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.debugWith.1984js",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.debugWith.1984js.needsInstall",
+          "when": "false"
+        },
         {
           "command": "cpclib.openDisassembly",
           "when": "inDebugMode"
@@ -357,7 +841,7 @@
               },
               "emulator": {
                 "type": "string",
-                "description": "Which emulator to debug in. Only 1984js can be debugged today.",
+                "description": "Which emulator to debug in - \"1984js\" or \"amspiritlite\". Any other value falls back to 1984js with a notice. Use the explorer context menu's \"Debug with a specific emulator...\" to pick one per launch instead of editing this.",
                 "default": "1984js"
               },
               "watchLabels": {
