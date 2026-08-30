@@ -113,9 +113,22 @@ pub fn call_for(request: &Value) -> Option<Call> {
                 .unwrap_or(16)
                 .max(1);
             // Decimal, both of them; the answer comes back as a hex string.
+            //
+            // `view=cpu` is not optional: `/api/ram`'s own default is
+            // `view=raw` ("physical bank, no paging/ROM resolution at
+            // all"), confirmed live via `GET /api/doc/ram` - omitting it
+            // here meant every read silently asked for raw physical bank
+            // 0, which only happens to match what the Z80 really sees
+            // under the *default*, unbanked RAM configuration. Reported
+            // live: disassembling/reading memory while banked (e.g. RAM
+            // config `&C4`) returned bytes that never matched what was
+            // really paged in - this is why. Feeds the Memory View, the
+            // Disassembly View and the screen viewer alike, since all
+            // three route through this same `readMemory` mapping.
             Call::get("/api/ram")
                 .query("addr", address)
                 .query("len", count)
+                .query("view", "cpu")
         },
 
         // Writing is the same endpoint as reading, with a JSON body. DAP
@@ -313,6 +326,15 @@ pub fn physical_of(memmap: &Value, address: u16) -> Option<u32> {
 fn physical_from_mmr(memmap: &Value, address: u16) -> Option<u32> {
     let mode = memmap.get("ram_mode").and_then(Value::as_u64)? as u32;
     let page = memmap.get("ram_page").and_then(Value::as_u64).unwrap_or(0) as u32;
+    Some(physical_bank(mode, page, address))
+}
+
+/// The published RAM-configuration decode table itself, shared by
+/// [`physical_from_mmr`] (reading `mode`/`page` off a live `/api/memmap`
+/// body) and [`physical_bank_for_config`] (an explicit, possibly-
+/// hypothetical choice, for a view that wants to show what a *chosen*
+/// configuration looks like independent of what's live).
+fn physical_bank(mode: u32, page: u32, address: u16) -> u32 {
     let slot = u32::from(address >> 14);
     // Absolute 16K banks, so the base 64K is page 0's banks 0..3 and page `p`
     // starts at `4p` - the same numbering `regions[].ram_bank` uses.
@@ -334,7 +356,23 @@ fn physical_from_mmr(memmap: &Value, address: u16) -> Option<u32> {
         (mode, 1) => paged(mode - 4),
         (_, slot) => slot
     };
-    Some(bank * 0x4000 + u32::from(address & 0x3FFF))
+    bank * 0x4000 + u32::from(address & 0x3FFF)
+}
+
+/// The physical bank/offset a logical `address` would map to under an
+/// explicit RAM configuration `config` (0-7, the same "RAM config C0-C7"
+/// numbering real hardware and BASIC's own `|RAM` command use) - the
+/// override path for a view that wants to show what a *chosen*
+/// configuration looks like, independent of whatever is live right now.
+/// Shares [`physical_from_mmr`]'s own already-tested decode table
+/// (`physical_bank`) verbatim; only the inputs are explicit here instead
+/// of read from a live `/api/memmap` body.
+///
+/// `page` is which extended-RAM page the configuration reads from -
+/// typically the live `ram_page`, since a bare config number alone
+/// doesn't say which page to use on hardware with more than one installed.
+pub fn physical_bank_for_config(config: u8, page: u32, address: u16) -> u32 {
+    physical_bank(config as u32, page, address)
 }
 
 /// The RAM page mapped at `address`, from an `/api/memmap` body.
@@ -1491,6 +1529,73 @@ impl AmspiritLitePeer {
         set.temporary.clear();
         let _ = push_breakpoints(&self.endpoint, &set);
     }
+
+    /// `readMemory` under an explicit, possibly-hypothetical RAM
+    /// configuration - see the `send` call site's own doc comment for why
+    /// this needs its own path rather than `call_for`'s ordinary one.
+    ///
+    /// `view=raw`+`bank`+`addr` reads a physical bank directly, bypassing
+    /// live paging entirely - `physical_bank_for_config` (this crate's own
+    /// already-tested RMR/MMR decode table) turns the chosen `config`
+    /// number plus a page into exactly which bank and offset that is.
+    /// Never stitches across a 16K slot boundary (clamped to the end of
+    /// the slot the requested range starts in) - a `-dv`/`-mv` window is
+    /// at most a few KB, well inside one slot in the ordinary case;
+    /// cross-boundary stitching would need its own multi-round-trip
+    /// pending-state machine this does not build.
+    ///
+    /// `explicit_page` is `-mv`/`-dv`'s own optional `mode:page` form -
+    /// `None` falls back to the live `ram_page` (its own round trip, since
+    /// a bare mode number does not carry it), `Some` skips that call
+    /// entirely and reads whichever page was actually asked for. Reported
+    /// live as needed on hardware with more than the base 128K's own one
+    /// extra page: naming a configuration by mode alone can never reach a
+    /// page other than whatever happens to be live.
+    fn read_memory_with_config_override(
+        &mut self,
+        message: &Value,
+        config: u8,
+        explicit_page: Option<u32>
+    ) -> std::io::Result<()> {
+        let arguments = message.get("arguments");
+        let address = arguments
+            .and_then(|a| a.get("memoryReference"))
+            .and_then(Value::as_str)
+            .and_then(crate::protocol::parse_address_reference)
+            .unwrap_or(0) as u16;
+        let count = arguments
+            .and_then(|a| a.get("count"))
+            .and_then(Value::as_i64)
+            .unwrap_or(16)
+            .max(1) as u32;
+
+        let page = match explicit_page {
+            Some(page) => page,
+            None => {
+                let memmap_body = perform(&self.endpoint, &Call::get("/api/memmap"))?;
+                let memmap: Value = serde_json::from_str(&memmap_body).unwrap_or(Value::Null);
+                memmap.get("ram_page").and_then(Value::as_u64).unwrap_or(0) as u32
+            }
+        };
+
+        let physical = physical_bank_for_config(config, page, address);
+        let bank = physical >> 16;
+        let raw_addr = physical & 0xFFFF;
+        let slot_end = (u32::from(address) | 0x3FFF) + 1;
+        let clamped_count = count.min(slot_end - u32::from(address));
+
+        let call = Call::get("/api/ram")
+            .query("addr", raw_addr)
+            .query("len", clamped_count)
+            .query("bank", bank)
+            .query("view", "raw");
+        let body = perform(&self.endpoint, &call)?;
+        let state: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+
+        let seq = self.next_seq();
+        let _ = self.outgoing.send(response_for(message, &state, seq));
+        Ok(())
+    }
 }
 
 /// The next sequence number, shared between the peer and the poller.
@@ -1506,10 +1611,16 @@ fn machine(endpoint: &str) -> std::io::Result<Value> {
 }
 
 /// The bytes at `address`, however the emulator is paged right now.
+///
+/// `view=cpu` for the same reason the `readMemory` DAP mapping needs it
+/// (see that call site's own doc comment) - these bytes drive the step-over
+/// heuristics below, which need what the Z80 is really about to execute,
+/// not raw physical bank 0.
 fn bytes_at(endpoint: &str, address: u16, count: u16) -> std::io::Result<Vec<u8>> {
     let call = Call::get("/api/ram")
         .query("addr", address)
-        .query("len", count);
+        .query("len", count)
+        .query("view", "cpu");
     let body = perform(endpoint, &call)?;
     let answer: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
     Ok(bytes_from_hex(
@@ -1612,6 +1723,30 @@ impl crate::peer::DapPeer for AmspiritLitePeer {
         // addresses - see `step_over`.
         if command == "next" || command == "stepOut" {
             return self.step_over(&message, command == "stepOut");
+        }
+
+        // A view (Memory View, Disassembly View) can ask what an *explicit*
+        // RAM configuration would show, independent of whatever is live
+        // right now - `-dv`/`-mv`'s own optional config-override argument,
+        // carried as `"config"`/`"page"` fields session.rs adds to the
+        // `readMemory` arguments it builds (not part of real DAP, which has
+        // no such concept). `call_for` cannot build this alone: resolving a
+        // bare mode with no explicit page needs the live `ram_page` - its
+        // own round trip, so this is handled here instead of after the
+        // fact, since the *first* call `call_for` would otherwise build is
+        // to the wrong endpoint entirely.
+        if command == "readMemory"
+            && let Some(config) = message
+                .get("arguments")
+                .and_then(|a| a.get("config"))
+                .and_then(Value::as_u64)
+        {
+            let page = message
+                .get("arguments")
+                .and_then(|a| a.get("page"))
+                .and_then(Value::as_u64)
+                .map(|page| page as u32);
+            return self.read_memory_with_config_override(&message, config as u8, page);
         }
 
         let Some(call) = call_for(&message)
@@ -2243,8 +2378,34 @@ mod tests {
             call.query,
             vec![
                 ("addr".to_string(), "16384".to_string()),
-                ("len".to_string(), "32".to_string())
+                ("len".to_string(), "32".to_string()),
+                ("view".to_string(), "cpu".to_string())
             ]
+        );
+    }
+
+    /// Reported live: disassembling/reading memory while the RAM
+    /// configuration was banked (e.g. `&C4`) returned bytes that never
+    /// matched what was really paged in there. Root cause, confirmed
+    /// against a live instance's own `GET /api/doc/ram`: `/api/ram`'s
+    /// `view` parameter defaults to `raw` ("physical bank, no paging/ROM
+    /// resolution at all"), and omitting it - as this crate always used to
+    /// - only happens to match the Z80's real view under the *default*,
+    /// unbanked configuration. This is the regression guard for the fix:
+    /// `view=cpu` must always be present, not just decimal `addr`/`len`.
+    #[test]
+    fn readmemory_asks_for_the_cpus_mapped_view_not_the_raw_physical_default() {
+        let call = call_for(&request(
+            "readMemory",
+            json!({ "memoryReference": "0x4000", "count": 32 })
+        ))
+        .unwrap();
+
+        assert!(
+            call.query.contains(&("view".to_string(), "cpu".to_string())),
+            "readMemory must ask for the CPU's mapped view, not /api/ram's own \
+             raw-physical-bank-0 default: {:?}",
+            call.query
         );
     }
 
@@ -2678,6 +2839,32 @@ mod tests {
         // ...and every one of them is page 1 only where the page is mapped.
         assert_eq!(page_at(&mmr(5), 0x79F3), Some(1));
         assert_eq!(page_at(&mmr(5), 0xC000), Some(0));
+    }
+
+    /// `physical_bank_for_config` takes explicit `mode`/`page` instead of a
+    /// live `/api/memmap` body - same table, same answers as
+    /// `physical_from_mmr` (via `physical_of`) for the identical inputs,
+    /// confirming the refactor that split `physical_bank` out kept the
+    /// decode logic byte-for-byte the same.
+    #[test]
+    fn physical_bank_for_config_matches_physical_from_mmr_for_the_same_inputs() {
+        assert_eq!(
+            physical_bank_for_config(5, 1, 0x79F3),
+            0x179F3,
+            "bank 1 of the page, same as the live-MMR path"
+        );
+        assert_eq!(physical_bank_for_config(4, 1, 0x79F3), 0x139F3);
+        assert_eq!(
+            physical_bank_for_config(0, 1, 0xC000),
+            0xC000,
+            "mode 0 (config C0, the default) is unbanked everywhere"
+        );
+        // The whole point of an explicit override: this asks what config C4
+        // looks like even while the live machine is in a different one -
+        // no live `/api/memmap` body enters into it at all. Mode 4, slot 1
+        // (#4000-#7FFF) is "S set" bank 0 of the page: absolute bank 4,
+        // i.e. physical #10000.
+        assert_eq!(physical_bank_for_config(4, 1, 0x4000), 0x10000);
     }
 
     #[test]
@@ -4205,7 +4392,10 @@ mod live_tests {
         let body: Value = serde_json::from_str(
             &perform(
                 &endpoint,
-                &Call::get("/api/ram").query("addr", address).query("len", count)
+                &Call::get("/api/ram")
+                    .query("addr", address)
+                    .query("len", count)
+                    .query("view", "cpu")
             )
             .unwrap()
         )

@@ -918,6 +918,10 @@ interface MemoryDump {
     bytes: number[];
     marks?: { offset: number; name: string }[];
     changed?: number[];
+    /** The RAM configuration (0-7, "C0"-"C7") these bytes were read under,
+     * if an override was in effect - `null`/absent means the CPU's own
+     * live view (the default). See `-mv`'s own `[config]` argument. */
+    config?: number | null;
 }
 
 const memoryPanels = new Map<string, vscode.WebviewPanel>();
@@ -957,11 +961,22 @@ function showMemory(session: vscode.DebugSession, dump: MemoryDump | undefined):
             'cpclib.memory',
             `CPC memory: ${title} — ${session.name}`,
             { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-            { enableScripts: false, retainContextWhenHidden: true },
+            { enableScripts: true, retainContextWhenHidden: true },
         );
         const owned = panel;
         panel.onDidDispose(() => {
             if (memoryPanels.get(key) === owned) { memoryPanels.delete(key); }
+        });
+        // The config picker's own change event - reissues -mv with the
+        // same anchor/count and the newly chosen RAM-configuration
+        // override, the same round trip the disassembly view's own picker
+        // takes.
+        panel.webview.onDidReceiveMessage(async (
+            message: { config?: string; anchor?: string; count?: number },
+        ) => {
+            if (message?.config === undefined) { return; }
+            const config = message.config === '' ? '_' : message.config;
+            await consoleCommand(`-mv ${message.anchor ?? '_'} ${message.count ?? 0x40} ${config}`);
         });
         memoryPanels.set(key, panel);
     }
@@ -1077,22 +1092,62 @@ const memoryPageStyle = `
   footer { margin-top: 10px; color: var(--vscode-descriptionForeground); font-size: 0.9em; }
 `;
 
+/** The viewId a `-mv`-opened panel carries (`"fixed:0000c000"`/
+ * `"register:HL"`, see `MemoryAnchor::view_id`) parsed back into the
+ * anchor argument `-mv` itself accepts - what the config picker's reissue
+ * needs to keep pointing at the same place. */
+function anchorArgumentFromViewId(viewId: string | undefined, address: number): string {
+    if (viewId?.startsWith('register:')) {
+        return `${viewId.slice('register:'.length)},follow`;
+    }
+    return `0x${hex(address, 4)}`;
+}
+
 function memoryHtml(dump: MemoryDump): string {
+    const nonce = Math.random().toString(36).slice(2);
     const title = dump.label
         ? `${escapeHtml(dump.label)} &mdash; &amp;${hex(dump.address, 4)}`
         : `&amp;${hex(dump.address, 4)}`;
+    // Same convention as the disassembly view's own picker.
+    const configOptions = ['<option value="">Live (CPU)</option>']
+        .concat(
+            [0, 1, 2, 3, 4, 5, 6, 7].map(
+                n => `<option value="${n}"${dump.config === n ? ' selected' : ''}>C${n}</option>`,
+            ),
+        )
+        .join('');
+    const anchorArgument = anchorArgumentFromViewId(dump.viewId, dump.address);
 
     return `<!DOCTYPE html>
 <html>
 <head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
-<style>${memoryPageStyle}</style>
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+<style>${memoryPageStyle}
+  .controls { margin-bottom: 8px; }
+  .controls select { font-family: inherit; }
+</style>
 </head>
 <body>
 <h2>${title} &nbsp;<span class="addr">${dump.bytes.length} bytes</span></h2>
+<div class="controls">
+  <label>RAM configuration: <select id="config">${configOptions}</select></label>
+</div>
 ${memoryTableHtml(dump)}
 <footer>Refreshed on every stop; highlighted bytes changed since the last one.
-Point it elsewhere with <code>-mv</code> in the debug console; <code>-help</code> lists the commands.</footer>
+Point it elsewhere with <code>-mv</code> in the debug console; <code>-help</code> lists the commands.
+Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
+<script nonce="${nonce}">
+  const vscode = acquireVsCodeApi();
+  // Reissues -mv with the same anchor/count and the newly chosen config.
+  document.getElementById('config').addEventListener('change', event => {
+    vscode.postMessage({
+      config: event.target.value,
+      anchor: ${JSON.stringify(anchorArgument)},
+      count: ${dump.bytes.length || 0x40},
+    });
+  });
+</script>
 </body>
 </html>`;
 }
@@ -1969,6 +2024,10 @@ interface Disassembly {
     pc?: number | null;
     /** Whether this view moves with the program on every step. */
     followsPc?: boolean;
+    /** The RAM configuration (0-7, "C0"-"C7") this read was made under, if
+     * an override was in effect - `null`/absent means the CPU's own live
+     * view (the default). See `-dv`'s own `[config]` argument. */
+    config?: number | null;
 }
 
 const disassemblyPanels = new Map<string, vscode.WebviewPanel>();
@@ -2014,10 +2073,21 @@ function showDisassembly(session: vscode.DebugSession, dump: Disassembly | undef
             }
         });
         // Clicking a row opens its source line - the "navigate both at once"
-        // half of having this open at all.
+        // half of having this open at all. A config-picker change is a
+        // different message shape entirely (`config` instead of `path`) -
+        // reissues -dv with the new RAM-configuration override, same anchor
+        // and count as before.
         panel.webview.onDidReceiveMessage(async (
-            message: { path?: string; line?: number; column?: number; endColumn?: number },
+            message: {
+                path?: string; line?: number; column?: number; endColumn?: number;
+                config?: string; address?: string; count?: number;
+            },
         ) => {
+            if (message?.config !== undefined) {
+                const config = message.config === '' ? '_' : message.config;
+                await consoleCommand(`-dv ${message.address ?? '_'} ${message.count ?? 32} ${config}`);
+                return;
+            }
             if (!message?.path) { return; }
             try {
                 const document = await vscode.workspace.openTextDocument(
@@ -2144,6 +2214,17 @@ function disassemblyHtml(dump: Disassembly): string {
     const title = dump.label
         ? `${escapeHtml(dump.label)} &mdash; &amp;${hex(dump.address, 4)}`
         : `&amp;${hex(dump.address, 4)}`;
+    // "Live (CPU)" (the default) plus every real RAM configuration - see
+    // the screen viewer's own `<select id="encoding">` for the pattern
+    // this mirrors. Value "" means unset/live, matching `-dv`'s own `_`
+    // placeholder for the same thing.
+    const configOptions = ['<option value="">Live (CPU)</option>']
+        .concat(
+            [0, 1, 2, 3, 4, 5, 6, 7].map(
+                n => `<option value="${n}"${dump.config === n ? ' selected' : ''}>C${n}</option>`,
+            ),
+        )
+        .join('');
 
     return `<!DOCTYPE html>
 <html>
@@ -2154,6 +2235,8 @@ function disassemblyHtml(dump: Disassembly): string {
   body { font-family: var(--vscode-editor-font-family, monospace);
          color: var(--vscode-editor-foreground); padding: 8px 12px; }
   h2 { font-size: 1em; font-weight: 600; margin: 0 0 8px; }
+  .controls { margin-bottom: 8px; }
+  .controls select { font-family: inherit; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 1px 12px 1px 0; white-space: pre; }
   .addr, .bytes, .src { color: var(--vscode-descriptionForeground); }
@@ -2178,6 +2261,9 @@ function disassemblyHtml(dump: Disassembly): string {
 </head>
 <body>
 <h2>${title} &nbsp;<span class="addr">${dump.instructions.length} instructions</span></h2>
+<div class="controls">
+  <label>RAM configuration: <select id="config">${configOptions}</select></label>
+</div>
 <table>${rows.join('')}</table>
 <footer>Decoded by <code>basm</code>'s own tables, not by the emulator - so this
 reads the same whichever emulator is underneath.
@@ -2185,7 +2271,8 @@ ${dump.followsPc
     ? 'Following <strong>PC</strong>: this re-reads itself on every step.'
     : 'Anchored here; <code>-dv</code> with no argument follows <strong>PC</strong> instead.'}
 Click a row to open the line it came from. This is what is <em>in memory</em>:
-after self-modifying code, or a macro, it will not match your source one-for-one.</footer>
+after self-modifying code, or a macro, it will not match your source one-for-one.
+Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   document.querySelectorAll('tr.linked').forEach(row => {
@@ -2195,6 +2282,17 @@ after self-modifying code, or a macro, it will not match your source one-for-one
       column: Number(row.dataset.column),
       endColumn: Number(row.dataset.endColumn),
     }));
+  });
+  // Reissues -dv with the same anchor/count and the newly chosen config -
+  // "_" for the address keeps a PC-following view following, since count
+  // and config are positional arguments after it (see -dv's own doc
+  // comment for why a bare "no argument at all" can't be used here).
+  document.getElementById('config').addEventListener('change', event => {
+    vscode.postMessage({
+      config: event.target.value,
+      address: ${dump.followsPc ? "'_'" : `'0x${hex(dump.address, 4)}'`},
+      count: ${dump.instructions.length || 32},
+    });
   });
 </script>
 </body>

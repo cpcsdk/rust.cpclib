@@ -96,19 +96,35 @@ const OUTER_FRAME_NOTE: &str = "the CPU's registers belong to the innermost fram
 /// What `-help` prints.
 const CONSOLE_HELP: &str = "\
 CPC debug console commands:
-  -mv [address|label] [count]   open a memory view (defaults to PC, and then
-                                follows it, like -dv; count defaults to 64)
-  -mv <register> [count]        ...or a register name - a snapshot of where
+  -mv [address|label] [count] [config]
+                                open a memory view (defaults to PC, and then
+                                follows it, like -dv; count defaults to 64).
+                                config is an optional RAM configuration
+                                (0-7, i.e. C0-C7) to read under instead of
+                                whatever is live right now - _ or unset
+                                means the CPU's own live view (the default).
+                                mode:page (e.g. 4:2) also picks an explicit
+                                extended-RAM page, for boards with more
+                                than the base 128K's own one extra page -
+                                a bare mode number leaves the live page
+                                alone. Only AMSpiriT Lite can honour it
+  -mv <register> [count] [config]
+                                ...or a register name - a snapshot of where
                                 it points right now, e.g. -mv HL
-  -mv <register>,follow [count] ...add ,follow to track it instead - HL,
+  -mv <register>,follow [count] [config]
+                                ...add ,follow to track it instead - HL,
                                 follow moves with wherever HL points, every
                                 stop. Each address/register opens its own
                                 panel; asking again for one already open
                                 updates it and brings it to the front
-  -mv all,follow [count]        ...one view per pointer register (PC, SP,
+  -mv all,follow [count] [config]
+                                ...one view per pointer register (PC, SP,
                                 HL, DE, BC, IX, IY) at once
-  -dv [address|label] [count]   disassemble memory (defaults to PC, and then
-                                follows it); rows link to your source
+  -dv [address|label] [count] [config]
+                                disassemble memory (defaults to PC, and then
+                                follows it); rows link to your source.
+                                config is the same RAM-configuration
+                                override -mv's own [config] argument is
   -chips                        CRTC, Gate Array, PSG and PPI, with counters
   -crtcview                     open a CRTC panel, flagging register
                                 combinations known to lose sync or mistime a
@@ -388,6 +404,27 @@ struct Timer {
     exact: bool
 }
 
+/// `-mv`/`-dv`'s optional trailing RAM-configuration-override argument,
+/// parsed - an explicit RAM configuration ("C0"-"C7", real hardware's own
+/// MMR mode bits) to interpret a read under instead of whatever is live
+/// right now, with an optional explicit extended-RAM page too.
+///
+/// `page: None` means "the live `ram_page`", the same default the whole
+/// override being absent means for `mode`. Reported live: a board with
+/// more than the base 128K's own one extra page puts useful data in pages
+/// the "C0"-"C7" names alone never address, since those names only ever
+/// vary the mode - `mode` and `page` are genuinely independent MMR fields
+/// (`ppp`/`M b b` in the register's own bit layout), and picking a
+/// configuration by name alone silently pins the read to whatever page
+/// happens to be live. See `amspiritlite::physical_bank_for_config`'s own
+/// doc comment for why an override needs a whole separate read path rather
+/// than adjusting the address.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ConfigOverride {
+    mode: u8,
+    page: Option<u32>
+}
+
 /// A memory view waiting for the bytes it asked for.
 #[derive(Debug, Clone)]
 struct PendingMemoryView {
@@ -405,7 +442,15 @@ struct PendingMemoryView {
     /// `-mv all,follow`'s own views all carry the same group name, so the
     /// editor can render them together in one panel instead of one apiece -
     /// `None` for an ordinary, independent view.
-    group: Option<&'static str>
+    group: Option<&'static str>,
+    /// An explicit RAM configuration (0-7, "C0"-"C7") this read should be
+    /// interpreted under instead of whatever is live right now - `-mv`'s
+    /// own optional trailing override argument, `None`/unset meaning "the
+    /// CPU's own live view" (the ordinary default). See
+    /// `amspiritlite::physical_bank_for_config`'s own doc comment for why
+    /// this needs a whole separate read path rather than adjusting the
+    /// address.
+    config_override: Option<ConfigOverride>
 }
 
 /// A `-dv` waiting for its instructions.
@@ -419,7 +464,9 @@ struct PendingDisassembly {
     /// Whether it feeds a view the adapter opened by itself. Such a read can
     /// still be in flight when the program returns to source and the view is
     /// closed, and its answer must not re-open the panel behind it.
-    automatic: bool
+    automatic: bool,
+    /// See `PendingMemoryView::config_override`'s own doc comment.
+    config_override: Option<ConfigOverride>
 }
 
 /// Where a disassembly view is looking.
@@ -441,7 +488,9 @@ struct OpenDisassemblyView {
     label: Option<String>,
     /// Where it was last fetched from, so a `PC`-following view is only
     /// re-asked when `PC` has actually moved.
-    fetched_at: Option<u32>
+    fetched_at: Option<u32>,
+    /// See `PendingMemoryView::config_override`'s own doc comment.
+    config_override: Option<ConfigOverride>
 }
 
 /// Where a memory view is looking. Mirrors `DisassemblyAnchor`.
@@ -487,7 +536,9 @@ struct OpenMemoryView {
     /// when this still matches.
     previous_address: Option<u32>,
     /// See `PendingMemoryView::group`.
-    group: Option<&'static str>
+    group: Option<&'static str>,
+    /// See `PendingMemoryView::config_override`'s own doc comment.
+    config_override: Option<ConfigOverride>
 }
 
 /// A source breakpoint the editor asked for, and where it ended up.
@@ -3299,6 +3350,7 @@ impl<P: DapPeer> Session<P> {
                 .and_then(|count| parse_number(count))
                 .unwrap_or(0x40)
                 .clamp(1, 0x1000) as usize;
+            let config_override = parse_config_override(arguments.get(2));
             let mut opened = 0;
             for name in POINTER_REGISTERS {
                 let Some(&value) = self.last_registers.get(name)
@@ -3322,7 +3374,8 @@ impl<P: DapPeer> Session<P> {
                         label: Some(name.to_string()),
                         previous: Vec::new(),
                         previous_address: None,
-                        group: Some("registers")
+                        group: Some("registers"),
+                        config_override
                     })
                 }
                 // Only the first carries the request: DAP expects one
@@ -3335,13 +3388,16 @@ impl<P: DapPeer> Session<P> {
                     anchor,
                     label: Some(name.to_string()),
                     address: value,
-                    group: Some("registers")
+                    group: Some("registers"),
+                    config_override
                 });
                 self.send_own(
                     "readMemory",
                     json!({
                         "memoryReference": address_reference(value),
-                        "count": count
+                        "count": count,
+                        "config": config_override.map(|c| c.mode),
+                        "page": config_override.and_then(|c| c.page)
                     }),
                     Purpose::MemoryView
                 )?;
@@ -3438,6 +3494,7 @@ impl<P: DapPeer> Session<P> {
             .and_then(|count| parse_number(count))
             .unwrap_or(0x40)
             .clamp(1, 0x1000) as usize;
+        let config_override = parse_config_override(arguments.get(2));
 
         let label = match &anchor {
             MemoryAnchor::Register(name) => Some(name.clone()),
@@ -3457,6 +3514,7 @@ impl<P: DapPeer> Session<P> {
                 open.count = count;
                 open.label = label.clone();
                 open.group = None;
+                open.config_override = config_override;
             },
             None => {
                 self.open_memory_views.push(OpenMemoryView {
@@ -3466,7 +3524,8 @@ impl<P: DapPeer> Session<P> {
                     label: label.clone(),
                     previous: Vec::new(),
                     previous_address: None,
-                    group: None
+                    group: None,
+                    config_override
                 });
             }
         }
@@ -3475,13 +3534,16 @@ impl<P: DapPeer> Session<P> {
             anchor,
             label,
             address,
-            group: None
+            group: None,
+            config_override
         });
         self.send_own(
             "readMemory",
             json!({
                 "memoryReference": address_reference(address),
-                "count": count
+                "count": count,
+                "config": config_override.map(|c| c.mode),
+                "page": config_override.and_then(|c| c.page)
             }),
             Purpose::MemoryView
         )?;
@@ -3505,8 +3567,12 @@ impl<P: DapPeer> Session<P> {
 
         // No argument means "where I am", which is what you want nine times out
         // of ten while stepping - and a view opened that way *follows* `PC`
-        // afterwards rather than being left behind by the next step.
-        let (anchor, address) = match arguments.first() {
+        // afterwards rather than being left behind by the next step. `_` is
+        // the same thing spelled out, so the panel's own config picker can
+        // reissue "still following PC" alongside an explicit trailing
+        // count/config argument, which position alone could not otherwise
+        // say without an address in front of them.
+        let (anchor, address) = match arguments.first().filter(|a| **a != "_") {
             None => {
                 let Some(pc) = self.last_pc
                 else {
@@ -3539,6 +3605,7 @@ impl<P: DapPeer> Session<P> {
             .and_then(|count| parse_number(count))
             .unwrap_or(32)
             .clamp(1, 512) as i64;
+        let config_override = parse_config_override(arguments.get(2));
 
         let label = self.map.symbol_at(address).map(str::to_owned);
         // Replaces whatever was open: there is one panel, and `-dv` elsewhere
@@ -3547,12 +3614,13 @@ impl<P: DapPeer> Session<P> {
             anchor,
             count,
             label: label.clone(),
-            fetched_at: Some(address)
+            fetched_at: Some(address),
+            config_override
         });
         // Asked for by hand, so it stays until it is closed by hand - even if
         // an automatic view was what was on screen a moment ago.
         self.disassembly_view_is_ours = false;
-        self.ask_for_disassembly(address, count, label, Some(request.clone()))?;
+        self.ask_for_disassembly(address, count, label, Some(request.clone()), config_override)?;
         Ok(Vec::new())
     }
 
@@ -3562,13 +3630,15 @@ impl<P: DapPeer> Session<P> {
         address: u32,
         count: i64,
         label: Option<String>,
-        request: Option<Value>
+        request: Option<Value>,
+        config_override: Option<ConfigOverride>
     ) -> std::io::Result<()> {
         self.pending_disassembly.push(PendingDisassembly {
             request,
             label,
             address,
-            automatic: self.disassembly_view_is_ours
+            automatic: self.disassembly_view_is_ours,
+            config_override
         });
         // Bytes, not a disassembly. The emulator can decode them, but its
         // mnemonics are *its* mnemonics: swap the emulator and the view changes
@@ -3584,7 +3654,9 @@ impl<P: DapPeer> Session<P> {
             "readMemory",
             json!({
                 "memoryReference": address_reference(address),
-                "count": bytes
+                "count": bytes,
+                "config": config_override.map(|c| c.mode),
+                "page": config_override.and_then(|c| c.page)
             }),
             Purpose::DisassemblyView
         )
@@ -3602,7 +3674,8 @@ impl<P: DapPeer> Session<P> {
         else {
             return;
         };
-        let (anchor, count, fetched_at) = (open.anchor, open.count, open.fetched_at);
+        let (anchor, count, fetched_at, config_override) =
+            (open.anchor, open.count, open.fetched_at, open.config_override);
 
         let address = match anchor {
             // A fixed view is re-read on every stop because the *bytes* may
@@ -3632,7 +3705,7 @@ impl<P: DapPeer> Session<P> {
         }
         // A failure here is not worth reporting: the panel keeps what it had,
         // and the stop event must not be lost behind it.
-        let _ = self.ask_for_disassembly(address, count, label, None);
+        let _ = self.ask_for_disassembly(address, count, label, None, config_override);
     }
 
     /// Re-render whichever screen view is open, if one is - called on every
@@ -3944,7 +4017,12 @@ impl<P: DapPeer> Session<P> {
                 "followsPc": matches!(
                     self.open_disassembly_view.as_ref().map(|open| open.anchor),
                     Some(DisassemblyAnchor::ProgramCounter)
-                )
+                ),
+                // So the panel's own config picker stays in sync with what
+                // this frame was actually read under, the same way the
+                // screen viewer's own encoding/palette selectors do.
+                "config": view.config_override.map(|c| c.mode),
+                "page": view.config_override.and_then(|c| c.page)
             }),
             seq
         );
@@ -4061,7 +4139,12 @@ impl<P: DapPeer> Session<P> {
                 "label": view.label,
                 "bytes": bytes,
                 "marks": marks,
-                "changed": changed
+                "changed": changed,
+                // So the panel's own config picker stays in sync with what
+                // this frame was actually read under, the same way the
+                // screen viewer's own encoding/palette selectors do.
+                "config": view.config_override.map(|c| c.mode),
+                "page": view.config_override.and_then(|c| c.page)
             }),
             seq
         );
@@ -4101,7 +4184,15 @@ impl<P: DapPeer> Session<P> {
     /// *last* stop; `refresh_register_anchored_memory_view` is where that one
     /// gets refreshed instead, once fresh values are actually known.
     fn refresh_memory_view(&mut self) {
-        let fixed: Vec<(MemoryAnchor, u32, usize, Option<String>, Option<&'static str>)> = self
+        #[allow(clippy::type_complexity)]
+        let fixed: Vec<(
+            MemoryAnchor,
+            u32,
+            usize,
+            Option<String>,
+            Option<&'static str>,
+            Option<ConfigOverride>
+        )> = self
             .open_memory_views
             .iter()
             .filter(|open| matches!(open.anchor, MemoryAnchor::Fixed(_)))
@@ -4111,17 +4202,19 @@ impl<P: DapPeer> Session<P> {
                     open.address,
                     open.count,
                     open.label.clone(),
-                    open.group
+                    open.group,
+                    open.config_override
                 )
             })
             .collect();
-        for (anchor, address, count, label, group) in fixed {
+        for (anchor, address, count, label, group, config_override) in fixed {
             self.pending_memory_views.push(PendingMemoryView {
                 request: None,
                 anchor,
                 label,
                 address,
-                group
+                group,
+                config_override
             });
             // A failure here is not worth reporting: the panel simply keeps
             // what it had, and the stop event must not be lost behind it.
@@ -4129,7 +4222,9 @@ impl<P: DapPeer> Session<P> {
                 "readMemory",
                 json!({
                     "memoryReference": address_reference(address),
-                    "count": count
+                    "count": count,
+                    "config": config_override.map(|c| c.mode),
+                    "page": config_override.and_then(|c| c.page)
                 }),
                 Purpose::MemoryView
             );
@@ -4146,25 +4241,34 @@ impl<P: DapPeer> Session<P> {
     /// register is *this* stop" is a question with a real answer, rather than
     /// last stop's.
     fn refresh_register_anchored_memory_view(&mut self) {
-        let resolved: Vec<(MemoryAnchor, u32, usize, Option<String>, Option<&'static str>)> =
-            self.open_memory_views
-                .iter()
-                .filter_map(|open| {
-                    let MemoryAnchor::Register(name) = &open.anchor
-                    else {
-                        return None;
-                    };
-                    let value = self.last_registers.get(name).copied()?;
-                    Some((
-                        open.anchor.clone(),
-                        value,
-                        open.count,
-                        open.label.clone(),
-                        open.group
-                    ))
-                })
-                .collect();
-        for (anchor, address, count, label, group) in resolved {
+        #[allow(clippy::type_complexity)]
+        let resolved: Vec<(
+            MemoryAnchor,
+            u32,
+            usize,
+            Option<String>,
+            Option<&'static str>,
+            Option<ConfigOverride>
+        )> = self
+            .open_memory_views
+            .iter()
+            .filter_map(|open| {
+                let MemoryAnchor::Register(name) = &open.anchor
+                else {
+                    return None;
+                };
+                let value = self.last_registers.get(name).copied()?;
+                Some((
+                    open.anchor.clone(),
+                    value,
+                    open.count,
+                    open.label.clone(),
+                    open.group,
+                    open.config_override
+                ))
+            })
+            .collect();
+        for (anchor, address, count, label, group, config_override) in resolved {
             if let Some(open) = self
                 .open_memory_views
                 .iter_mut()
@@ -4177,13 +4281,16 @@ impl<P: DapPeer> Session<P> {
                 anchor,
                 label,
                 address,
-                group
+                group,
+                config_override
             });
             let _ = self.send_own(
                 "readMemory",
                 json!({
                     "memoryReference": address_reference(address),
-                    "count": count
+                    "count": count,
+                    "config": config_override.map(|c| c.mode),
+                    "page": config_override.and_then(|c| c.page)
                 }),
                 Purpose::MemoryView
             );
@@ -5367,11 +5474,14 @@ impl<P: DapPeer> Session<P> {
         }
 
         let label = self.map.symbol_at(address as u32).map(str::to_owned);
+        // Opened by the adapter itself to show what is really executing -
+        // always the live/CPU view, never a hypothetical configuration.
         self.open_disassembly_view = Some(OpenDisassemblyView {
             anchor: DisassemblyAnchor::ProgramCounter,
             count: AUTOMATIC_DISASSEMBLY_INSTRUCTIONS,
             label: label.clone(),
-            fetched_at: Some(address as u32)
+            fetched_at: Some(address as u32),
+            config_override: None
         });
         self.disassembly_view_is_ours = true;
         // The bytes come back as their own message; a failure to ask leaves the
@@ -5381,6 +5491,7 @@ impl<P: DapPeer> Session<P> {
                 address as u32,
                 AUTOMATIC_DISASSEMBLY_INSTRUCTIONS,
                 label,
+                None,
                 None
             )
             .is_err()
@@ -5937,6 +6048,32 @@ fn parse_number(text: &str) -> Option<u32> {
     text.parse::<u32>().ok()
 }
 
+/// `-mv`/`-dv`'s optional trailing RAM-configuration-override argument -
+/// `_`, blank, or unset all mean "the CPU's own live view" (`None`, the
+/// ordinary default, the same placeholder convention `-sv`'s own overrides
+/// already use). `0`-`7` alone is an explicit RAM configuration ("C0"-"C7")
+/// with the live extended-RAM page left alone; `mode:page` (e.g. `4:2`)
+/// also picks an explicit page - reported live as needed on hardware with
+/// more than the base 128K's own one extra page, where "C0"-"C7" alone
+/// cannot reach anything past whatever page happens to be live, since
+/// those names only ever vary the mode. See `ConfigOverride`'s own doc
+/// comment and `amspiritlite::physical_bank_for_config`'s for what happens
+/// with the result.
+fn parse_config_override(text: Option<&&str>) -> Option<ConfigOverride> {
+    let text = text?.trim();
+    if text.is_empty() || text == "_" {
+        return None;
+    }
+    let (mode_text, page_text) = text.split_once(':').unwrap_or((text, ""));
+    let mode = mode_text.parse::<u8>().ok().filter(|n| *n <= 7)?;
+    let page = if page_text.is_empty() {
+        None
+    } else {
+        page_text.parse::<u32>().ok()
+    };
+    Some(ConfigOverride { mode, page })
+}
+
 pub(crate) fn decode_base64(encoded: &str) -> Vec<u8> {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = Vec::new();
@@ -6000,6 +6137,52 @@ pub(crate) fn mentions_word(text: &str, word: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::is_a_defs_directive;
+
+    /// `-mv`/`-dv`'s optional trailing RAM-configuration-override argument -
+    /// `_`, blank, and unset must all mean "live/CPU view" (`None`), a bare
+    /// `0`-`7` is a mode with the live page left alone, and `mode:page`
+    /// also picks an explicit page.
+    #[test]
+    fn config_override_parses_the_placeholder_mode_and_optional_page() {
+        use super::{ConfigOverride, parse_config_override};
+
+        let mode = |mode: u8| Some(ConfigOverride { mode, page: None });
+        let mode_and_page = |mode: u8, page: u32| {
+            Some(ConfigOverride {
+                mode,
+                page: Some(page)
+            })
+        };
+
+        assert_eq!(parse_config_override(None), None, "unset");
+        assert_eq!(parse_config_override(Some(&"_")), None, "placeholder");
+        assert_eq!(parse_config_override(Some(&"")), None, "blank");
+        assert_eq!(parse_config_override(Some(&"  ")), None, "blank, whitespace");
+        assert_eq!(
+            parse_config_override(Some(&"4")),
+            mode(4),
+            "C4, the reported case - live page"
+        );
+        assert_eq!(parse_config_override(Some(&"0")), mode(0));
+        assert_eq!(parse_config_override(Some(&"7")), mode(7));
+        assert_eq!(parse_config_override(Some(&"8")), None, "mode out of range");
+        assert_eq!(parse_config_override(Some(&"nope")), None, "not a number");
+        assert_eq!(
+            parse_config_override(Some(&"4:2")),
+            mode_and_page(4, 2),
+            "explicit page, for hardware with more than the base 128K's own one"
+        );
+        assert_eq!(
+            parse_config_override(Some(&"0:0")),
+            mode_and_page(0, 0),
+            "explicit page 0 is still explicit, not the same as leaving it live"
+        );
+        assert_eq!(
+            parse_config_override(Some(&"4:")),
+            mode(4),
+            "trailing colon with nothing after it is the same as no page at all"
+        );
+    }
 
     /// `line_cost`'s own tricky cases.
     ///
