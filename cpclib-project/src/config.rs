@@ -17,6 +17,15 @@ pub const CONFIG_FILE_NAME: &str = "cpclib-lsp.toml";
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(default)]
 pub struct LspConfig {
+    /// Write a transcript of the language server's own diagnostic tracing
+    /// (the `tracing::debug!`/`info!`/etc. calls throughout this crate) to
+    /// this file. Empty means no file - the server still honors `RUST_LOG`
+    /// for stderr output, but a GUI-launched editor sets no such env var and
+    /// has nowhere obvious to show a spawned process's stderr anyway, so a
+    /// symptom otherwise has no evidence behind it. Mirrors `[dap] log`
+    /// below, which solves the same problem for debug sessions. Relative
+    /// paths are resolved against the project root.
+    pub log: String,
     pub asm: AsmConfig,
     pub basic: BasicConfig,
     pub bndbuild: BndbuildConfig,
@@ -520,6 +529,12 @@ pub const EXAMPLE_CONFIG_TOML: &str = r#"# cpclib-lsp configuration file.
 # Every field's default reproduces the LSP's exact out-of-the-box behavior -
 # delete any section/field you don't want to override.
 
+# Write a transcript of the language server's own diagnostic tracing to this
+# file. Empty means no file. Mirrors [dap] log below, for the language server
+# itself rather than for a debug session. Relative paths resolve against the
+# project root.
+log = ""
+
 [asm]
 # Case-sensitive symbol matching for goto-definition/references, and for
 # real dry-run assembling (matches basm's own real default).
@@ -698,6 +713,21 @@ mod tests {
             unknown.is_empty(),
             "EXAMPLE_CONFIG_TOML documents settings that do not exist: {unknown:?}"
         );
+    }
+
+    #[test]
+    fn top_level_log_defaults_empty_and_is_configurable() {
+        assert!(LspConfig::default().log.is_empty());
+
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join(CONFIG_FILE_NAME),
+            "log = \"cpclib-lsp.log\"\n"
+        )
+        .unwrap();
+        let loaded = load_config(Some(tmp.path().as_std_path()));
+        assert!(loaded.error.is_none(), "{:?}", loaded.error);
+        assert_eq!(loaded.config.log, "cpclib-lsp.log");
     }
 
     #[test]

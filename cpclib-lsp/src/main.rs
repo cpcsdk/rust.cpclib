@@ -1,7 +1,10 @@
 use cpclib_common::clap;
 use cpclib_common::clap::{Parser, Subcommand};
 use cpclib_lsp::CpcLspBackend;
-use cpclib_lsp::config::{CONFIG_FILE_NAME, EXAMPLE_CONFIG_TOML, merge_missing_config_fields};
+use cpclib_lsp::config::{
+    CONFIG_FILE_NAME, EXAMPLE_CONFIG_TOML, find_config_file, load_config,
+    merge_missing_config_fields
+};
 use tower_lsp::{LspService, Server};
 
 #[derive(Parser, Debug)]
@@ -238,11 +241,61 @@ async fn main() {
         return;
     }
 
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_writer(std::io::stderr)
-        .init();
+    // Initialize tracing. `cpclib-lsp.toml`'s top-level `log` field (mirroring
+    // `[dap] log`, see `LspConfig::log`'s doc comment) can point tracing at a
+    // file instead of relying on `RUST_LOG` and a stderr that a GUI-launched
+    // editor has nowhere to show. This runs before `initialize` is received,
+    // so the workspace root isn't known from the LSP handshake yet - the
+    // current directory is used instead, which is why `cpclib-vscode` sets it
+    // to the workspace folder when it spawns this process.
+    let workspace_root = std::env::current_dir().ok();
+    let found_config = find_config_file(workspace_root.as_deref());
+    let log_setting = load_config(workspace_root.as_deref()).config.log;
+
+    let log_path = (!log_setting.trim().is_empty()).then(|| {
+        let configured = std::path::Path::new(log_setting.trim());
+        if configured.is_absolute() {
+            configured.to_path_buf()
+        }
+        else {
+            found_config
+                .as_deref()
+                .and_then(std::path::Path::parent)
+                .map(|dir| dir.join(configured))
+                .unwrap_or_else(|| {
+                    workspace_root.clone().unwrap_or_default().join(configured)
+                })
+        }
+    });
+
+    match log_path {
+        Some(path) => match std::fs::File::create(&path) {
+            Ok(file) => {
+                tracing_subscriber::fmt()
+                    .with_env_filter(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug"))
+                    )
+                    .with_writer(std::sync::Mutex::new(file))
+                    .with_ansi(false)
+                    .init();
+                tracing::info!("cpclib-lsp: writing trace log to {}", path.display());
+            },
+            Err(e) => {
+                tracing_subscriber::fmt()
+                    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                    .with_writer(std::io::stderr)
+                    .init();
+                tracing::warn!("cpclib-lsp: cannot write log file {}: {e}", path.display());
+            }
+        },
+        None => {
+            tracing_subscriber::fmt()
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                .with_writer(std::io::stderr)
+                .init();
+        }
+    }
 
     tracing::info!("Starting cpclib-lsp server");
 

@@ -110,9 +110,15 @@ export function activate(context: ExtensionContext) {
     );
     resolvedServerPath = serverPath;
 
+    // `cwd` matters beyond convention: the server looks for `cpclib-lsp.toml`
+    // relative to it at startup (before `initialize` gives it a workspace
+    // root over the protocol) to decide where to write its own trace log -
+    // see `LspConfig::log`. Mirrors the same `cwd` already set for the DAP in
+    // `debug.ts`.
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const serverOptions: ServerOptions = {
-        run: { command: serverPath, transport: TransportKind.stdio },
-        debug: { command: serverPath, transport: TransportKind.stdio }
+        run: { command: serverPath, transport: TransportKind.stdio, options: { cwd: workspaceRoot } },
+        debug: { command: serverPath, transport: TransportKind.stdio, options: { cwd: workspaceRoot } }
     };
 
     const clientOptions: LanguageClientOptions = {
