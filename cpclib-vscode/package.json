@@ -159,6 +159,11 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.editConfig",
+        "title": "CPClib: Edit Project Configuration",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.findPeepholeInFile",
         "title": "Find Peephole Optimizations in File",
         "category": "CPClib"
