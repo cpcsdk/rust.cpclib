@@ -134,7 +134,7 @@ CPC debug console commands:
                                 tokenised and rendered - useful for a BASIC
                                 loader ahead of the machine code being
                                 debugged
-  -sv [addr] [w] [h] [mode] [rowheight] [palette] [encoding]
+  -sv [addr] [w] [h] [mode] [rowheight] [palette] [encoding] [config]
                                 render video memory as an image, opening an
                                 interactive panel; each argument overrides
                                 the live CRTC/Gate Array value it replaces
@@ -157,7 +157,12 @@ CPC debug console commands:
                                 'CPC' (1: plain sequential bytes, wrapped at
                                 the full 64K space, `rowheight` a pure
                                 layout value with no effect on which bytes
-                                are read)
+                                are read); `config` is the same RAM-
+                                configuration override -mv's own [config]
+                                argument is - _ or unset for the live/CPU
+                                view (the default), 0-7 (C0-C7) or mode:page
+                                (e.g. 4:2) to render what a chosen
+                                configuration would show instead
   -help                         this list
 
 Anything not starting with `-` is read as a label: `animation_state` shows the
@@ -344,6 +349,13 @@ struct PendingScreenView {
     /// choice - see `crate::inspect::ScreenEncoding`'s own doc comment.
     /// `None` (unset) means `Screen`, the existing/default behaviour.
     encoding_override: Option<u8>,
+    /// `-sv`'s optional 8th argument - the same RAM-configuration override
+    /// `-mv`/`-dv` accept, see `ConfigOverride`'s own doc comment. Reported
+    /// live as missing entirely: the screen viewer's own memory fetch
+    /// (`complete_screen_view_ga`'s `readMemory`) is the *third* thing this
+    /// session reads memory for, and had no way to ask for a hypothetical
+    /// configuration at all until this field existed.
+    config_override: Option<ConfigOverride>,
     crtc_regs: Option<[u8; 18]>,
     mode: Option<u8>,
     palette: Option<Palette<Ink>>
@@ -369,7 +381,9 @@ struct OpenScreenView {
     /// ever told about, and it survives every automatic refresh
     /// (`refresh_screen_view`) exactly like the other overrides.
     palette_override: Vec<Option<Ink>>,
-    encoding_override: Option<u8>
+    encoding_override: Option<u8>,
+    /// See `PendingScreenView::config_override`'s own doc comment.
+    config_override: Option<ConfigOverride>
 }
 
 /// An array watch's elements, already read - expanding it in the Watch panel
@@ -2576,6 +2590,7 @@ impl<P: DapPeer> Session<P> {
             .map(|a| crate::inspect::parse_palette_override(a))
             .unwrap_or_default();
         let encoding_override = arguments.get(6).and_then(|a| parse_number(a)).map(|a| a as u8);
+        let config_override = parse_config_override(arguments.get(7));
         // Remembered so `refresh_screen_view` can keep re-issuing this exact
         // request on every stop - every `-sv`, typed or from the panel's own
         // controls, replaces whichever view was open before; there is only
@@ -2587,7 +2602,8 @@ impl<P: DapPeer> Session<P> {
             mode_override,
             row_height_override,
             palette_override: palette_override.clone(),
-            encoding_override
+            encoding_override,
+            config_override
         });
         self.pending_screen_view = Some(PendingScreenView {
             request: Some(request.clone()),
@@ -2598,6 +2614,7 @@ impl<P: DapPeer> Session<P> {
             row_height_override,
             palette_override,
             encoding_override,
+            config_override,
             ..Default::default()
         });
 
@@ -2671,6 +2688,7 @@ impl<P: DapPeer> Session<P> {
         // the machine is actually displaying in right now.
         pending.mode = Some(pending.mode_override.unwrap_or(mode));
         pending.palette = Some(palette);
+        let config_override = pending.config_override;
 
         let seq = self.next_seq();
         // The full 64K address space, from 0 - not just from the screen's
@@ -2681,7 +2699,12 @@ impl<P: DapPeer> Session<P> {
         // own doc comment.
         if let Err(problem) = self.send_own(
             "readMemory",
-            json!({ "memoryReference": address_reference(0), "count": 0x10000u32 }),
+            json!({
+                "memoryReference": address_reference(0),
+                "count": 0x10000u32,
+                "config": config_override.map(|c| c.mode),
+                "page": config_override.and_then(|c| c.page)
+            }),
             Purpose::ScreenViewMemory
         ) {
             let request = self.pending_screen_view.take().and_then(|p| p.request);
@@ -2738,6 +2761,7 @@ impl<P: DapPeer> Session<P> {
             pending.row_height_override,
             &pending.palette_override,
             pending.encoding_override,
+            pending.config_override,
             &regs,
             mode,
             &palette,
@@ -2759,6 +2783,7 @@ impl<P: DapPeer> Session<P> {
         row_height_override: Option<usize>,
         palette_override: &[Option<Ink>],
         encoding_override: Option<u8>,
+        config_override: Option<ConfigOverride>,
         regs: &[u8; 18],
         mode: u8,
         palette: &Palette<Ink>,
@@ -2781,7 +2806,20 @@ impl<P: DapPeer> Session<P> {
             palette_override,
             encoding
         ) {
-            Ok(body) => {
+            Ok(mut body) => {
+                // So the panel's own config picker stays in sync with what
+                // this frame was actually read under, the same way the
+                // Memory/Disassembly View's own pickers do.
+                if let Some(object) = body.as_object_mut() {
+                    object.insert(
+                        "config".to_string(),
+                        json!(config_override.map(|c| c.mode))
+                    );
+                    object.insert(
+                        "page".to_string(),
+                        json!(config_override.and_then(|c| c.page))
+                    );
+                }
                 let seq = self.next_seq();
                 let event = protocol::event("cpclib/screenView", body, seq);
                 match request {
@@ -3054,6 +3092,11 @@ impl<P: DapPeer> Session<P> {
                         pending.row_height_override,
                         &pending.palette_override,
                         pending.encoding_override,
+                        // Only AMSpiriT Lite can honour an explicit RAM
+                        // configuration - a `.sna`'s own memory dump has
+                        // no live paging concept to read anything else
+                        // from.
+                        None,
                         &regs,
                         mode,
                         &palette,
@@ -3741,6 +3784,7 @@ impl<P: DapPeer> Session<P> {
             row_height_override: open.row_height_override,
             palette_override: open.palette_override,
             encoding_override: open.encoding_override,
+            config_override: open.config_override,
             ..Default::default()
         });
         // A failure here is not worth reporting: the panel keeps what it

@@ -1537,12 +1537,16 @@ impl AmspiritLitePeer {
     /// `view=raw`+`bank`+`addr` reads a physical bank directly, bypassing
     /// live paging entirely - `physical_bank_for_config` (this crate's own
     /// already-tested RMR/MMR decode table) turns the chosen `config`
-    /// number plus a page into exactly which bank and offset that is.
-    /// Never stitches across a 16K slot boundary (clamped to the end of
-    /// the slot the requested range starts in) - a `-dv`/`-mv` window is
-    /// at most a few KB, well inside one slot in the ordinary case;
-    /// cross-boundary stitching would need its own multi-round-trip
-    /// pending-state machine this does not build.
+    /// number plus a page into exactly which bank and offset that is. A
+    /// requested range spanning more than one 16K slot (the screen
+    /// viewer's own full 64K read, most notably - reported live as
+    /// missing a config picker entirely) is split at each slot boundary
+    /// into its own `/api/ram` call, each slot's own physical bank
+    /// resolved independently, and the hex strings concatenated - up to 5
+    /// calls for any range up to 0x10000 bytes, since only the first and
+    /// last segment can be a partial slot. All synchronous, inside this
+    /// one `send` handler - no DAP-level multi-round-trip pending-state
+    /// machine needed, since `perform` is already a plain blocking call.
     ///
     /// `explicit_page` is `-mv`/`-dv`'s own optional `mode:page` form -
     /// `None` falls back to the live `ram_page` (its own round trip, since
@@ -1578,19 +1582,32 @@ impl AmspiritLitePeer {
             }
         };
 
-        let physical = physical_bank_for_config(config, page, address);
-        let bank = physical >> 16;
-        let raw_addr = physical & 0xFFFF;
-        let slot_end = (u32::from(address) | 0x3FFF) + 1;
-        let clamped_count = count.min(slot_end - u32::from(address));
+        let mut hex = String::new();
+        let mut cursor = address;
+        let mut remaining = count;
+        while remaining > 0 {
+            let physical = physical_bank_for_config(config, page, cursor);
+            let bank = physical >> 16;
+            let raw_addr = physical & 0xFFFF;
+            let slot_end = (u32::from(cursor) | 0x3FFF) + 1;
+            let chunk = remaining.min(slot_end - u32::from(cursor));
 
-        let call = Call::get("/api/ram")
-            .query("addr", raw_addr)
-            .query("len", clamped_count)
-            .query("bank", bank)
-            .query("view", "raw");
-        let body = perform(&self.endpoint, &call)?;
-        let state: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+            let call = Call::get("/api/ram")
+                .query("addr", raw_addr)
+                .query("len", chunk)
+                .query("bank", bank)
+                .query("view", "raw");
+            let body = perform(&self.endpoint, &call)?;
+            let piece: Value = serde_json::from_str(&body).unwrap_or(Value::Null);
+            hex.push_str(piece.get("hex").and_then(Value::as_str).unwrap_or_default());
+
+            remaining -= chunk;
+            // `chunk` is always at most 0x4000 (one slot), so this never
+            // overflows a u16 - the wrap at 0xFFFF -> 0x0000 is real CPU
+            // address-space wraparound, not a bug to guard against.
+            cursor = cursor.wrapping_add(chunk as u16);
+        }
+        let state = json!({ "hex": hex });
 
         let seq = self.next_seq();
         let _ = self.outgoing.send(response_for(message, &state, seq));

@@ -922,6 +922,10 @@ interface MemoryDump {
      * if an override was in effect - `null`/absent means the CPU's own
      * live view (the default). See `-mv`'s own `[config]` argument. */
     config?: number | null;
+    /** The explicit extended-RAM page these bytes were read under, if one
+     * was given (`config`'s own `mode:page` form) - `null`/absent means
+     * whichever page was live at the time. */
+    page?: number | null;
 }
 
 const memoryPanels = new Map<string, vscode.WebviewPanel>();
@@ -1117,6 +1121,7 @@ function memoryHtml(dump: MemoryDump): string {
         )
         .join('');
     const anchorArgument = anchorArgumentFromViewId(dump.viewId, dump.address);
+    const pageValue = typeof dump.page === 'number' ? dump.page : '';
 
     return `<!DOCTYPE html>
 <html>
@@ -1125,28 +1130,39 @@ function memoryHtml(dump: MemoryDump): string {
       content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <style>${memoryPageStyle}
   .controls { margin-bottom: 8px; }
-  .controls select { font-family: inherit; }
+  .controls select, .controls input { font-family: inherit; }
+  .controls input#page { width: 4em; }
 </style>
 </head>
 <body>
 <h2>${title} &nbsp;<span class="addr">${dump.bytes.length} bytes</span></h2>
 <div class="controls">
   <label>RAM configuration: <select id="config">${configOptions}</select></label>
+  &nbsp;
+  <label>Page: <input type="number" id="page" min="0" placeholder="live" value="${pageValue}"></label>
 </div>
 ${memoryTableHtml(dump)}
 <footer>Refreshed on every stop; highlighted bytes changed since the last one.
 Point it elsewhere with <code>-mv</code> in the debug console; <code>-help</code> lists the commands.
-Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
+Only AMSpiriT Lite can honour an explicit RAM configuration. Page only matters
+on hardware with more than the base 128K's own one extra page - leave it
+blank to use whichever page is live.</footer>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
-  // Reissues -mv with the same anchor/count and the newly chosen config.
-  document.getElementById('config').addEventListener('change', event => {
+  // Reissues -mv with the same anchor/count and the newly chosen config -
+  // config:page (e.g. "4:2") when a page was typed, config alone otherwise
+  // (leaving the live page in place).
+  function reissue() {
+    const config = document.getElementById('config').value;
+    const page = document.getElementById('page').value;
     vscode.postMessage({
-      config: event.target.value,
+      config: page !== '' ? \`\${config || 0}:\${page}\` : config,
       anchor: ${JSON.stringify(anchorArgument)},
       count: ${dump.bytes.length || 0x40},
     });
-  });
+  }
+  document.getElementById('config').addEventListener('change', reissue);
+  document.getElementById('page').addEventListener('change', reissue);
 </script>
 </body>
 </html>`;
@@ -1163,6 +1179,14 @@ interface ScreenDump {
     palette: string[];
     hardwarePalette: string[];
     encoding: number;
+    /** The RAM configuration (0-7, "C0"-"C7") this frame was read under, if
+     * an override was in effect - `null`/absent means the CPU's own live
+     * view (the default). See `-sv`'s own `[config]` argument. */
+    config?: number | null;
+    /** The explicit extended-RAM page this frame was read under, if one
+     * was given (`config`'s own `mode:page` form) - `null`/absent means
+     * whichever page was live at the time. */
+    page?: number | null;
 }
 
 const screenPanels = new Map<string, vscode.WebviewPanel>();
@@ -1223,12 +1247,18 @@ function showScreen(session: vscode.DebugSession, dump: ScreenDump | undefined):
     // sent, since the adapter has no way to know that itself.
     panel.webview.onDidReceiveMessage((message: {
         address?: string; width?: string; gap?: string; mode?: string; totalHeight?: number;
-        palette?: string; encoding?: string;
+        palette?: string; encoding?: string; config?: string; page?: string;
     }) => {
         if (!message) { return; }
+        // config:page (e.g. "4:2") when a page was typed, config alone
+        // otherwise - same combined form the Memory/Disassembly View's own
+        // pickers send, here folded into the single [config] slot -sv's
+        // own argument list has (see -mv's own doc comment for why).
+        const page = (message.page ?? '').trim();
+        const combinedConfig = page !== '' ? `${message.config || 0}:${page}` : message.config;
         const raw = [
             message.address, message.width, String(message.totalHeight ?? ''),
-            message.mode, message.gap, message.palette, message.encoding,
+            message.mode, message.gap, message.palette, message.encoding, combinedConfig,
         ];
         const parts = raw.map(v => {
             const trimmed = (v ?? '').trim();
@@ -1330,6 +1360,13 @@ canvas#screen { image-rendering: pixelated; border: 1px solid var(--vscode-panel
     <option value="0"${dump.encoding === 0 ? ' selected' : ''}>Screen</option>
     <option value="1"${dump.encoding === 1 ? ' selected' : ''}>CPC</option>
   </select></label>
+  <label>RAM configuration <select id="config">
+    <option value="">Live (CPU)</option>
+    ${[0, 1, 2, 3, 4, 5, 6, 7]
+        .map(n => `<option value="${n}"${dump.config === n ? ' selected' : ''}>C${n}</option>`)
+        .join('')}
+  </select></label>
+  <label>Page <input type="number" id="page" min="0" placeholder="live" value="${typeof dump.page === 'number' ? dump.page : ''}"></label>
   <button type="button" id="auto">Auto-detect</button>
 </form>
 <div id="palette" title="This window's own palette - starts from the live Gate Array, click a swatch to change it. Never written back to the emulator: the CPC itself never hears about it."></div>
@@ -1338,8 +1375,10 @@ canvas#screen { image-rendering: pixelated; border: 1px solid var(--vscode-panel
 <footer>Move the mouse over the image for the address/value under the cursor. The image fills the panel
 automatically, tiling into more columns when there is room for them; everything else applies the moment
 it changes. Point it elsewhere with
-<code>-sv &lt;address&gt; &lt;width&gt; &lt;height&gt; &lt;mode&gt; &lt;gap&gt; &lt;palette&gt; &lt;encoding&gt;</code>
-in the debug console - <code>-help</code> lists every command.</footer>
+<code>-sv &lt;address&gt; &lt;width&gt; &lt;height&gt; &lt;mode&gt; &lt;gap&gt; &lt;palette&gt; &lt;encoding&gt; &lt;config&gt;</code>
+in the debug console - <code>-help</code> lists every command. Only AMSpiriT
+Lite can honour an explicit RAM configuration; page only matters on
+hardware with more than the base 128K's own one extra page.</footer>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   // \`dump\` and \`bytes\` are reassigned by \`applyDump\` on every new frame -
@@ -1385,6 +1424,8 @@ in the debug console - <code>-help</code> lists every command.</footer>
   const charRowHeightField = document.getElementById('charRowHeight');
   const modeField = document.getElementById('mode');
   const encodingField = document.getElementById('encoding');
+  const configField = document.getElementById('config');
+  const pageField = document.getElementById('page');
   const imgWrap = document.getElementById('imgWrap');
   const canvas = document.getElementById('screen');
   const ctx = canvas.getContext('2d');
@@ -1439,6 +1480,8 @@ in the debug console - <code>-help</code> lists every command.</footer>
       gap: useDefaults ? '' : charRowHeightField.value,
       mode: useDefaults ? '' : modeField.value,
       encoding: useDefaults ? '' : encodingField.value,
+      config: useDefaults ? '' : configField.value,
+      page: useDefaults ? '' : pageField.value,
       totalHeight: columns * rows * rowHeightValue,
       palette: paletteArgument(useDefaults),
     });
@@ -1560,6 +1603,12 @@ in the debug console - <code>-help</code> lists every command.</footer>
     if (focused !== charRowHeightField) { charRowHeightField.value = String(dump.charRowHeight); }
     if (focused !== modeField) { modeField.value = String(dump.mode); }
     if (focused !== encodingField) { encodingField.value = String(dump.encoding); }
+    if (focused !== configField) {
+      configField.value = typeof dump.config === 'number' ? String(dump.config) : '';
+    }
+    if (focused !== pageField) {
+      pageField.value = typeof dump.page === 'number' ? String(dump.page) : '';
+    }
 
     renderPaletteSwatches();
     readout.textContent = '\\u00a0';
@@ -1641,6 +1690,8 @@ in the debug console - <code>-help</code> lists every command.</footer>
     palette: ${JSON.stringify(dump.palette)},
     hardwarePalette: ${JSON.stringify(dump.hardwarePalette)},
     encoding: ${dump.encoding},
+    config: ${JSON.stringify(dump.config ?? null)},
+    page: ${JSON.stringify(dump.page ?? null)},
   });
   requestRender(false);
 
@@ -2028,6 +2079,10 @@ interface Disassembly {
      * an override was in effect - `null`/absent means the CPU's own live
      * view (the default). See `-dv`'s own `[config]` argument. */
     config?: number | null;
+    /** The explicit extended-RAM page this read was made under, if one was
+     * given (`config`'s own `mode:page` form) - `null`/absent means
+     * whichever page was live at the time. */
+    page?: number | null;
 }
 
 const disassemblyPanels = new Map<string, vscode.WebviewPanel>();
@@ -2225,6 +2280,7 @@ function disassemblyHtml(dump: Disassembly): string {
             ),
         )
         .join('');
+    const pageValue = typeof dump.page === 'number' ? dump.page : '';
 
     return `<!DOCTYPE html>
 <html>
@@ -2236,7 +2292,8 @@ function disassemblyHtml(dump: Disassembly): string {
          color: var(--vscode-editor-foreground); padding: 8px 12px; }
   h2 { font-size: 1em; font-weight: 600; margin: 0 0 8px; }
   .controls { margin-bottom: 8px; }
-  .controls select { font-family: inherit; }
+  .controls select, .controls input { font-family: inherit; }
+  .controls input#page { width: 4em; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 1px 12px 1px 0; white-space: pre; }
   .addr, .bytes, .src { color: var(--vscode-descriptionForeground); }
@@ -2263,6 +2320,8 @@ function disassemblyHtml(dump: Disassembly): string {
 <h2>${title} &nbsp;<span class="addr">${dump.instructions.length} instructions</span></h2>
 <div class="controls">
   <label>RAM configuration: <select id="config">${configOptions}</select></label>
+  &nbsp;
+  <label>Page: <input type="number" id="page" min="0" placeholder="live" value="${pageValue}"></label>
 </div>
 <table>${rows.join('')}</table>
 <footer>Decoded by <code>basm</code>'s own tables, not by the emulator - so this
@@ -2272,7 +2331,9 @@ ${dump.followsPc
     : 'Anchored here; <code>-dv</code> with no argument follows <strong>PC</strong> instead.'}
 Click a row to open the line it came from. This is what is <em>in memory</em>:
 after self-modifying code, or a macro, it will not match your source one-for-one.
-Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
+Only AMSpiriT Lite can honour an explicit RAM configuration. Page only
+matters on hardware with more than the base 128K's own one extra page -
+leave it blank to use whichever page is live.</footer>
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
   document.querySelectorAll('tr.linked').forEach(row => {
@@ -2287,13 +2348,19 @@ Only AMSpiriT Lite can honour an explicit RAM configuration.</footer>
   // "_" for the address keeps a PC-following view following, since count
   // and config are positional arguments after it (see -dv's own doc
   // comment for why a bare "no argument at all" can't be used here).
-  document.getElementById('config').addEventListener('change', event => {
+  // config:page (e.g. "4:2") when a page was typed, config alone otherwise
+  // (leaving the live page in place).
+  function reissue() {
+    const config = document.getElementById('config').value;
+    const page = document.getElementById('page').value;
     vscode.postMessage({
-      config: event.target.value,
+      config: page !== '' ? \`\${config || 0}:\${page}\` : config,
       address: ${dump.followsPc ? "'_'" : `'0x${hex(dump.address, 4)}'`},
       count: ${dump.instructions.length || 32},
     });
-  });
+  }
+  document.getElementById('config').addEventListener('change', reissue);
+  document.getElementById('page').addEventListener('change', reissue);
 </script>
 </body>
 </html>`;
