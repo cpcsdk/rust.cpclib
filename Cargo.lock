@@ -2738,6 +2738,7 @@ dependencies = [
  "paste",
  "predicates",
  "query-shell",
+ "quick-xml 0.39.4",
  "rtzx",
  "self_cell",
  "self_update",

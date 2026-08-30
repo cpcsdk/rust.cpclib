@@ -414,7 +414,20 @@ pub struct MusicConfig {
     /// `cpclib_runner::emucontrol` accepts is valid here (the music player
     /// boots from a snapshot, not an auto-RUN disc, so there is no auto-RUN
     /// support requirement to check against).
-    pub run_emulator: String
+    pub run_emulator: String,
+    /// Only relevant to a song using Arkos Tracker's experimental single-PSG
+    /// -channel CPC "SID" feature (detected automatically - AKG/AKM cannot
+    /// play it at all, so a completely different, cycle-exact player is
+    /// generated instead when it's used).
+    ///
+    /// The generated player's own filler loop pads out to this many scanlines
+    /// after each call to the SID engine before calling it again, to keep its
+    /// cycle-exact timing grid fed between song updates - it's a safety
+    /// margin, not a value with one universally-correct answer: too low for
+    /// a given song and the generated player **freezes**. 72 is Arkos
+    /// Tracker's own official SID player example's default; if a SID song's
+    /// generated player freezes, raise this value and rebuild.
+    pub sid_wait_line_count: u16
 }
 
 impl Default for MusicConfig {
@@ -424,7 +437,8 @@ impl Default for MusicConfig {
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
-            run_emulator: "ace".to_string()
+            run_emulator: "ace".to_string(),
+            sid_wait_line_count: 72
         }
     }
 }
@@ -701,6 +715,12 @@ song_extensions = ["aks", "sks", "128", "vt2", "wyz"]
 # cpclib_runner::emucontrol accepts is valid (the player boots from a
 # snapshot, unlike basic.run_emulator's auto-RUN disc).
 run_emulator = "ace"
+# Only relevant to a song using Arkos Tracker's experimental "SID" feature
+# (detected automatically). Safety margin (in scanlines) the generated SID
+# player waits between engine updates - too low for a given song and the
+# player freezes. 72 is Arkos Tracker's own official SID example's default;
+# raise it and rebuild if a SID song's generated player freezes.
+sid_wait_line_count = 72
 "#;
 
 #[cfg(test)]

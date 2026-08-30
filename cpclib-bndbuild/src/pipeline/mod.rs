@@ -18,7 +18,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::Builder as TempBuilder;
 use cpclib_disc::amsdos::AmsdosFile;
 
+use cpclib_runner::runner::assembler::{ExternAssembler, RasmVersion};
+
 use crate::event::BndBuilderObserver;
+use crate::runners::assembler::Assembler;
 use crate::runners::emulator::Emulator;
 use crate::task::{InnerTask, StandardTaskArguments, Task};
 
@@ -144,6 +147,91 @@ pub fn convert_song_to_akg<E: BndBuilderObserver + 'static>(
     task.execute(observer)
 }
 
+/// Converts `song_path` to Arkos Tracker's AKY player format at `output_path`,
+/// in **source** mode (no `-bin`/`-adr`/`--exportPlayerConfig`) - unlike
+/// [`convert_song_to_akg`], this is meant to be `include`d as assembleable
+/// `.asm` source, not `incbin`'d as a fixed-address binary blob. Used by
+/// [`music_run`](self::music_run)'s SID player path: source mode is what
+/// Arkos Tracker's own official SID player example
+/// (`PlayerAkySidTester_CPC.asm`) uses and ships a checked-in, unmodified
+/// export of as a resource - whether binary mode's baked-in absolute
+/// addressing is even correct for SID-tagged content is unverified, so this
+/// sticks to the proven-working shape.
+pub fn convert_song_to_aky_source<E: BndBuilderObserver + 'static>(
+    song_path: &Utf8Path,
+    output_path: &Utf8Path,
+    observer: &Arc<E>
+) -> Result<(), String> {
+    let args = shlex::try_join([song_path.as_str(), output_path.as_str()].into_iter())
+        .map_err(|e| format!("Could not build SongToAky arguments: {e}"))?;
+
+    let task: Task = InnerTask::with_songconverter(
+        crate::runners::tracker::SongConverter::new_song_to_aky_default(),
+        StandardTaskArguments::new(args)
+    )
+    .into();
+    task.execute(observer)
+}
+
+/// Detects whether `song_path` (an Arkos Tracker `.aks` project - a ZIP
+/// archive with a single inner XML entry) uses AT3's experimental
+/// single-channel CPC "SID" feature, which the AKG/AKM players cannot play at
+/// all (a completely different, cycle-exact player is needed - see
+/// [`music_run`](self::music_run)).
+///
+/// Looks for a real `<sidIsActivated>true</sidIsActivated>` XML *element*
+/// (event-scanned with `quick_xml`, not a raw substring search over the whole
+/// blob) - a substring search would false-positive on a project that merely
+/// has an instrument named, or a comment containing, that text without the
+/// feature actually being on. Verified against real AT3-bundled SID and
+/// non-SID `.aks` files: the tag is emitted per-instrument-cell only when SID
+/// is used, and never emitted as `false` - it's simply absent otherwise.
+pub fn song_uses_sid(song_path: &Utf8Path) -> Result<bool, String> {
+    use std::io::Read;
+
+    let file = fs_err::File::open(song_path)
+        .map_err(|e| format!("Could not open {song_path}: {e}"))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("{song_path} is not a valid Arkos Tracker project: {e}"))?;
+    if archive.is_empty() {
+        return Err(format!("{song_path} is an empty archive"));
+    }
+
+    let mut xml = String::new();
+    archive
+        .by_index(0)
+        .map_err(|e| format!("Could not read {song_path}'s song data: {e}"))?
+        .read_to_string(&mut xml)
+        .map_err(|e| format!("Could not read {song_path}'s song data: {e}"))?;
+
+    let mut reader = quick_xml::Reader::from_str(&xml);
+    let mut in_sid_is_activated = false;
+    loop {
+        match reader
+            .read_event()
+            .map_err(|e| format!("Could not parse {song_path}'s song data: {e}"))?
+        {
+            quick_xml::events::Event::Start(tag) if tag.name().as_ref() == b"sidIsActivated" => {
+                in_sid_is_activated = true;
+            },
+            quick_xml::events::Event::Text(text) if in_sid_is_activated => {
+                // A boolean's text content never contains XML entities, so a
+                // plain UTF-8 decode (no unescape) is enough here.
+                if String::from_utf8_lossy(&text).trim() == "true" {
+                    return Ok(true);
+                }
+                in_sid_is_activated = false;
+            },
+            quick_xml::events::Event::End(tag) if tag.name().as_ref() == b"sidIsActivated" => {
+                in_sid_is_activated = false;
+            },
+            quick_xml::events::Event::Eof => break,
+            _ => {}
+        }
+    }
+    Ok(false)
+}
+
 /// Assembles `source_path`, with `extra_args` (`-D` definitions, `--snapshot
 /// -o <path>`, ...) inserted before it on the command line - runs in-process
 /// (`InnerTask::Assembler(Assembler::Basm, _)` is `TaskKind::Embedded`,
@@ -165,6 +253,33 @@ pub fn assemble_source<E: BndBuilderObserver + 'static>(
     .map_err(|e| format!("Could not build basm arguments: {e}"))?;
 
     let task: Task = InnerTask::new_basm(&args).into();
+    task.execute(observer)
+}
+
+/// Same as [`assemble_source`], but with `rasm` (auto-downloaded/cached the
+/// same way every other delegated tool in this codebase is) instead of basm -
+/// a real subprocess (`TaskKind::Delegated`), not in-process. Needed for the
+/// SID player harness in [`music_run`](self::music_run): it uses rasm-only
+/// directives (`COUNTNOPS`, `ASSERT`, local-label macro substitution) that
+/// basm doesn't implement.
+pub fn assemble_source_with_rasm<E: BndBuilderObserver + 'static>(
+    source_path: &Utf8Path,
+    extra_args: &[String],
+    observer: &Arc<E>
+) -> Result<(), String> {
+    let args = shlex::try_join(
+        extra_args
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(source_path.as_str()))
+    )
+    .map_err(|e| format!("Could not build rasm arguments: {e}"))?;
+
+    let task: Task = InnerTask::with_assembler(
+        Assembler::Extern(ExternAssembler::Rasm(RasmVersion::default())),
+        StandardTaskArguments::new(args)
+    )
+    .into();
     task.execute(observer)
 }
 
@@ -249,6 +364,33 @@ mod tests {
     /// parser (with `cpc` prepended, matching `EmulatorFacadeRunner::
     /// inner_run`'s own convention) without ever calling `handle_arguments`
     /// (which would try to launch/install a real emulator).
+    /// Real AT3-bundled fixtures, both SID and non-SID - needs a real AT3
+    /// install (downloaded on demand by other tests/real usage), so this is
+    /// `#[ignore]`d rather than assumed present in CI.
+    #[test]
+    #[ignore]
+    fn song_uses_sid_detects_real_sid_and_non_sid_fixtures() {
+        use cpclib_runner::delegated::InternetStaticCompiledApplication as _;
+
+        let songs_dir = cpclib_runner::runner::tracker::at3::At3Version::default()
+            .configuration::<()>()
+            .cache_folder()
+            .join("songs")
+            .join("ArkosTracker3");
+
+        let sid = songs_dir.join("sid").join("SidExamples.aks");
+        assert!(
+            song_uses_sid(&sid).expect("should parse"),
+            "{sid} should be detected as using SID"
+        );
+
+        let non_sid = songs_dir.join("Ok3anos - Cpc Dream.aks");
+        assert!(
+            !song_uses_sid(&non_sid).expect("should parse"),
+            "{non_sid} should NOT be detected as using SID"
+        );
+    }
+
     #[test]
     fn the_constructed_emulator_args_string_parses_against_the_real_cli() {
         let args_str = format!(

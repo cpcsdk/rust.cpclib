@@ -966,7 +966,8 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.breakpointLines",
     "cpclib.getDebuggableRules",
     "cpclib.musicPlay",
-    "cpclib.musicBuildDsk"
+    "cpclib.musicBuildDsk",
+    "cpclib.musicSidInfo"
 ];
 
 #[tower_lsp::async_trait]
@@ -2287,6 +2288,44 @@ impl LanguageServer for CpcLspBackend {
             return Ok(None);
         }
 
+        // Lets the VS Code extension decide, *before* actually launching the
+        // heavier `cpclib.musicPlay`/`cpclib.musicBuildDsk` commands, whether
+        // to prompt the user for a SID wait-line-count override: editing
+        // `cpclib-lsp.toml` by hand is not something a musician using this
+        // feature should have to do (see `MusicConfig::sid_wait_line_count`'s
+        // own doc comment for what the value controls). Only ever a quick
+        // ZIP+XML scan of the song file plus a config read, no external
+        // process - no need for `spawn_blocking` here.
+        if params.command == "cpclib.musicSidInfo" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let song_path = camino::Utf8PathBuf::from(fname);
+
+            let is_sid = cpclib_bndbuild::pipeline::song_uses_sid(&song_path)
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("could not inspect {song_path}: {e}").into(),
+                        data: None
+                    }
+                })?;
+            let default_wait_line_count = crate::common::config::load_config(
+                self.workspace_roots().first().map(|p| p.as_path())
+            )
+            .config
+            .music
+            .sid_wait_line_count;
+
+            return Ok(Some(serde_json::json!({
+                "isSid": is_sid,
+                "defaultWaitLineCount": default_wait_line_count
+            })));
+        }
+
         // File-browser "▶ Play music in emulator" - unlike `runBasic`/
         // `runAssembly`, this takes a raw file path straight from an Explorer
         // click, not an open text document: an Arkos Tracker source file is
@@ -2300,6 +2339,13 @@ impl LanguageServer for CpcLspBackend {
             else {
                 return Ok(None);
             };
+            // Second argument: a SID wait-line-count the user was prompted
+            // for client-side (see `cpclib.musicSidInfo` above) - overrides
+            // the config default when present. Absent for a non-SID song
+            // (the client only prompts/sends this when `musicSidInfo` said
+            // `isSid`) or when this is invoked some other way.
+            let sid_wait_line_count_override =
+                args.next().and_then(|v| v.as_u64()).and_then(|v| u16::try_from(v).ok());
             let song_path = camino::Utf8PathBuf::from(fname);
             let name_hint = song_path
                 .file_stem()
@@ -2330,19 +2376,21 @@ impl LanguageServer for CpcLspBackend {
                 })
             };
 
-            let emulator = crate::common::config::load_config(
+            let music_config = crate::common::config::load_config(
                 self.workspace_roots().first().map(|p| p.as_path())
             )
             .config
-            .music
-            .run_emulator;
+            .music;
+            let sid_wait_line_count =
+                sid_wait_line_count_override.unwrap_or(music_config.sid_wait_line_count);
 
             let outcome = tokio::task::spawn_blocking(move || {
                 let observer = std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
                 cpclib_bndbuild::pipeline::music_run::run_music_in_emulator(
                     &song_path,
                     &name_hint,
-                    &emulator,
+                    &music_config.run_emulator,
+                    sid_wait_line_count,
                     &observer
                 )
             })
@@ -2383,6 +2431,9 @@ impl LanguageServer for CpcLspBackend {
             else {
                 return Ok(None);
             };
+            // See `cpclib.musicPlay`'s identical second argument.
+            let sid_wait_line_count_override =
+                args.next().and_then(|v| v.as_u64()).and_then(|v| u16::try_from(v).ok());
             let song_path = camino::Utf8PathBuf::from(fname);
             let name_hint = song_path
                 .file_stem()
@@ -2414,6 +2465,15 @@ impl LanguageServer for CpcLspBackend {
                 })
             };
 
+            let sid_wait_line_count = sid_wait_line_count_override.unwrap_or_else(|| {
+                crate::common::config::load_config(
+                    self.workspace_roots().first().map(|p| p.as_path())
+                )
+                .config
+                .music
+                .sid_wait_line_count
+            });
+
             let result = {
                 let dest_path = dest_path.clone();
                 tokio::task::spawn_blocking(move || {
@@ -2422,6 +2482,7 @@ impl LanguageServer for CpcLspBackend {
                     let dsk_path = cpclib_bndbuild::pipeline::music_run::build_music_dsk(
                         &song_path,
                         &name_hint,
+                        sid_wait_line_count,
                         &observer
                     )?;
                     std::fs::copy(&dsk_path, &dest_path)

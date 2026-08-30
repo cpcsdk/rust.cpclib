@@ -252,6 +252,32 @@ impl At3Version {
             .join("z80")
             .join("PlayerAkyStabilized_CPC.asm")
     }
+
+    /// AT3's experimental single-PSG-channel CPC "SID" player - a
+    /// completely different, cycle-exact engine from the other `PlayerAky*`
+    /// variants, requiring its own macros (see [`Self::aky_sid_macros_path`]).
+    pub fn aky_sid_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("players")
+            .join("playerAky")
+            .join("sources")
+            .join("z80")
+            .join("PlayerAkySid_CPC.asm")
+    }
+
+    /// Macros [`Self::aky_sid_path`]'s player requires the caller to
+    /// `include` and use directly (`AKY_SID_WAIT_AND_CALL_TIMER_CODE` and
+    /// friends) to keep the SID engine's cycle-exact timing grid fed.
+    pub fn aky_sid_macros_path<E: EventObserver>(&self) -> Utf8PathBuf {
+        self.configuration::<E>()
+            .cache_folder()
+            .join("players")
+            .join("playerAky")
+            .join("sources")
+            .join("z80")
+            .join("PlayerAkySidMacros_CPC.asm")
+    }
 }
 
 pub mod extra {

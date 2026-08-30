@@ -37,6 +37,14 @@ const BUILD_FILE_GLOB =
 // `cpclib-lsp/src/main.rs`'s `run_as_bndbuild`).
 let resolvedServerPath: string;
 
+// Per-file "last SID wait-line-count tried" memory, set once in
+// `activate()` - see `musicCommandArgs`. Tuning this value is inherently
+// trial-and-error (raise it until playback stops freezing), so remembering
+// what was last tried *for this specific song* saves re-typing it on every
+// run; `globalState` persists across window reloads/restarts, which matters
+// since a tuning session realistically spans several of those.
+let musicSidWaitLineCountMemory: vscode.Memento;
+
 // Selection cycle-count status bar item - created in `activate()`, updated
 // by `updateCycleCountStatusBar` (see "Cycle count for selection" section
 // below).
@@ -103,6 +111,8 @@ function resolveServerPath(configured: string, extensionPath: string): string {
 }
 
 export function activate(context: ExtensionContext) {
+    musicSidWaitLineCountMemory = context.globalState;
+
     const config = workspace.getConfiguration('cpclib-lsp');
     const serverPath = resolveServerPath(
         config.get<string>('serverPath', 'cpclib-lsp'),
@@ -1252,17 +1262,77 @@ async function buildActiveFile(): Promise<void> {
     }
 }
 
+/** `cpclib.musicSidInfo`'s response shape - see its own doc comment in backend.rs. */
+interface MusicSidInfo {
+    isSid: boolean;
+    defaultWaitLineCount: number;
+}
+
+/**
+ * Checks whether `fileName` uses Arkos Tracker's experimental SID feature
+ * and, if so, prompts for a wait-line-count safety-margin override -
+ * pre-filled with the configured default (`[music] sid_wait_line_count` in
+ * `cpclib-lsp.toml`), so the common case needs no config file at all. Hand-
+ * editing that file isn't something a musician using this feature should
+ * have to do just to get playback that doesn't freeze.
+ *
+ * Returns the `arguments` array to send to `cpclib.musicPlay`/
+ * `cpclib.musicBuildDsk` (`[fileName]`, or `[fileName, chosenValue]` for a
+ * SID song), or `undefined` if the user cancelled the prompt - the caller
+ * should then abort entirely rather than silently falling back to the
+ * config default.
+ */
+/** `musicSidWaitLineCountMemory` key for `fileName`'s last-tried value. */
+function sidWaitLineCountMemoryKey(fileName: string): string {
+    return `cpclib.sidWaitLineCount:${fileName}`;
+}
+
+async function musicCommandArgs(fileName: string): Promise<unknown[] | undefined> {
+    let info: MusicSidInfo | null;
+    try {
+        info = await client.sendRequest<MusicSidInfo | null>('workspace/executeCommand', {
+            command: 'cpclib.musicSidInfo',
+            arguments: [fileName],
+        });
+    } catch {
+        info = null;
+    }
+    if (!info?.isSid) {
+        return [fileName];
+    }
+
+    // Prefer whatever was last tried for *this song* over the config
+    // default - tuning this value is inherently trial-and-error, so
+    // remembering it saves re-typing on every run of the same tune.
+    const memoryKey = sidWaitLineCountMemoryKey(fileName);
+    const remembered = musicSidWaitLineCountMemory.get<number>(memoryKey);
+
+    const picked = await vscode.window.showInputBox({
+        title: 'SID wait-line-count',
+        prompt: 'This song uses Arkos Tracker\'s SID feature. Safety margin '
+            + '(in scanlines) between engine updates - raise it if playback freezes.',
+        value: String(remembered ?? info.defaultWaitLineCount),
+        validateInput: v => /^\d+$/.test(v) ? undefined : 'Enter a whole number',
+    });
+    if (picked === undefined) { return undefined; }
+
+    const value = Number(picked);
+    await musicSidWaitLineCountMemory.update(memoryKey, value);
+    return [fileName, value];
+}
+
 /**
  * "▶ Play music in emulator" - converts an Arkos Tracker source song into a
- * standalone AKG player and launches it. Unlike `cpclib.runBasic`/
- * `cpclib.runAssembly` (CodeLens-only, invoked with an explicit `arguments:
- * [path]` VS Code never touches), this is a file-browser context-menu /
- * command-palette entry: VS Code hands it a `vscode.Uri`, not a string, and
- * that argument shape is exactly why this can't just be one of the
- * `executeCommandProvider`-advertised names bridged automatically the way
- * `cpclib.runRule`/`cpclib.runTask` are (see the NOTE above) - the server
- * command this forwards to (`cpclib.musicPlay`) is deliberately a different
- * name, same reason as the four peephole commands just above.
+ * standalone player and launches it (AKG, or a dedicated SID player - see
+ * {@link musicCommandArgs}). Unlike `cpclib.runBasic`/`cpclib.runAssembly`
+ * (CodeLens-only, invoked with an explicit `arguments: [path]` VS Code never
+ * touches), this is a file-browser context-menu / command-palette entry: VS
+ * Code hands it a `vscode.Uri`, not a string, and that argument shape is
+ * exactly why this can't just be one of the `executeCommandProvider`-
+ * advertised names bridged automatically the way `cpclib.runRule`/
+ * `cpclib.runTask` are (see the NOTE above) - the server command this
+ * forwards to (`cpclib.musicPlay`) is deliberately a different name, same
+ * reason as the four peephole commands just above.
  *
  * The server reports the outcome itself (`show_message`/`log_message`), so
  * there is nothing to do here with the response.
@@ -1270,9 +1340,11 @@ async function buildActiveFile(): Promise<void> {
 async function playMusic(target: string | vscode.Uri | undefined): Promise<void> {
     const fileName = target instanceof vscode.Uri ? target.fsPath : target;
     if (!fileName) { return; }
+    const args = await musicCommandArgs(fileName);
+    if (!args) { return; }
     await client.sendRequest('workspace/executeCommand', {
         command: 'cpclib.musicPlay',
-        arguments: [fileName],
+        arguments: args,
     });
 }
 
@@ -1285,9 +1357,11 @@ async function playMusic(target: string | vscode.Uri | undefined): Promise<void>
 async function buildMusicDsk(target: string | vscode.Uri | undefined): Promise<void> {
     const fileName = target instanceof vscode.Uri ? target.fsPath : target;
     if (!fileName) { return; }
+    const args = await musicCommandArgs(fileName);
+    if (!args) { return; }
     await client.sendRequest('workspace/executeCommand', {
         command: 'cpclib.musicBuildDsk',
-        arguments: [fileName],
+        arguments: args,
     });
 }
 
