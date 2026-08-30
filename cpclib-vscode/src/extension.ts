@@ -1322,6 +1322,47 @@ async function musicCommandArgs(fileName: string): Promise<unknown[] | undefined
 }
 
 /**
+ * Prompts for a music source file: every one found in the open workspace,
+ * plus a "Browse..." entry - the music equivalent of `pickSnapshotFile`/
+ * `pickDiskFile` in debug.ts. Needed for the Command Palette form of
+ * {@link playMusic}/{@link buildMusicDsk}: unlike most other Palette
+ * commands, there is no "active file" fallback to reach for here - a music
+ * project file is binary/AT3-native, never something opened as a text
+ * editor tab, so there is no "currently edited file" for these commands to
+ * mean.
+ *
+ * The extension glob is a static mirror of `MusicConfig::song_extensions`'s
+ * default (`aks`/`sks`/`128`/`vt2`/`wyz`) - kept manually in sync, same
+ * constraint as the `explorer/context` menu's `when` regex in package.json.
+ */
+async function pickMusicFile(): Promise<string | undefined> {
+    const found = await vscode.workspace.findFiles(
+        '**/*.{aks,sks,128,vt2,wyz,AKS,SKS,VT2,WYZ}',
+        '**/{node_modules,.git,out}/**',
+        200,
+    );
+    const BROWSE = '$(folder-opened) Browse for a music file...';
+    const picked = await vscode.window.showQuickPick(
+        [
+            BROWSE,
+            ...found.map(uri => vscode.workspace.asRelativePath(uri)),
+        ],
+        { placeHolder: 'Which music file?' },
+    );
+    if (picked === undefined) { return undefined; }
+    if (picked === BROWSE) {
+        const chosen = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { 'Arkos Tracker song': ['aks', 'sks', '128', 'vt2', 'wyz'] },
+            openLabel: 'Select',
+        });
+        return chosen?.[0]?.fsPath;
+    }
+    const match = found.find(uri => vscode.workspace.asRelativePath(uri) === picked);
+    return match?.fsPath;
+}
+
+/**
  * "▶ Play music in emulator" - converts an Arkos Tracker source song into a
  * standalone player and launches it (AKG, or a dedicated SID player - see
  * {@link musicCommandArgs}). Unlike `cpclib.runBasic`/`cpclib.runAssembly`
@@ -1334,12 +1375,19 @@ async function musicCommandArgs(fileName: string): Promise<unknown[] | undefined
  * forwards to (`cpclib.musicPlay`) is deliberately a different name, same
  * reason as the four peephole commands just above.
  *
+ * With no `target` (the Command Palette case - a context-menu invocation
+ * always supplies one), {@link pickMusicFile} asks which file, since there
+ * is no "active file" to fall back to for a binary music project file.
+ *
  * The server reports the outcome itself (`show_message`/`log_message`), so
  * there is nothing to do here with the response.
  */
 async function playMusic(target: string | vscode.Uri | undefined): Promise<void> {
-    const fileName = target instanceof vscode.Uri ? target.fsPath : target;
-    if (!fileName) { return; }
+    let fileName = target instanceof vscode.Uri ? target.fsPath : target;
+    if (!fileName) {
+        fileName = await pickMusicFile();
+        if (!fileName) { return; }
+    }
     const args = await musicCommandArgs(fileName);
     if (!args) { return; }
     await client.sendRequest('workspace/executeCommand', {
@@ -1352,11 +1400,15 @@ async function playMusic(target: string | vscode.Uri | undefined): Promise<void>
  * "💿 Build DSK with music" - same conversion as {@link playMusic}, but only
  * builds a DSK (saved next to the source song, server-side) instead of
  * launching an emulator. See {@link playMusic}'s doc comment for why this
- * is registered here rather than bridged automatically.
+ * is registered here rather than bridged automatically, and why a missing
+ * `target` (Command Palette) prompts via {@link pickMusicFile}.
  */
 async function buildMusicDsk(target: string | vscode.Uri | undefined): Promise<void> {
-    const fileName = target instanceof vscode.Uri ? target.fsPath : target;
-    if (!fileName) { return; }
+    let fileName = target instanceof vscode.Uri ? target.fsPath : target;
+    if (!fileName) {
+        fileName = await pickMusicFile();
+        if (!fileName) { return; }
+    }
     const args = await musicCommandArgs(fileName);
     if (!args) { return; }
     await client.sendRequest('workspace/executeCommand', {
