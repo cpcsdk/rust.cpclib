@@ -10,6 +10,7 @@
 
 pub mod basic_run;
 pub mod debug;
+pub mod music_run;
 
 use std::sync::Arc;
 
@@ -98,6 +99,72 @@ pub fn launch_emulator_with_snapshot<E: BndBuilderObserver + 'static>(
         ))
     )
     .into();
+    task.execute(observer)
+}
+
+/// Converts `song_path` (any format Arkos Tracker 3 can import: AKS/SKS/128/
+/// VT2/WYZ) to the AKG player format at `output_path`. AT3 also writes a
+/// companion `<output_path without extension>_playerconfig.asm` next to it -
+/// that naming is AT3's own convention, derived purely from `output_path`, not
+/// something this function controls or needs to report back.
+///
+/// `-bin -adr 0x506` is baked in rather than parameterized: it matches the AKG
+/// harness's own `org 0x500` / `assert $ == 0x506` in
+/// [`music_run`](self::music_run), and nothing else in this codebase calls
+/// `SongToAkg` with a different address.
+///
+/// `song_path`/`output_path` are shell-quoted before being joined into the
+/// single args string `StandardTaskArguments` expects (unlike this module's
+/// other helpers, whose paths are always spaceless temp files) - a real song
+/// file is user-supplied and routinely has spaces in its name (e.g. `Targhan -
+/// Crtc - End part.aks`, a real fixture in this repo's own `tests/at3`).
+pub fn convert_song_to_akg<E: BndBuilderObserver + 'static>(
+    song_path: &Utf8Path,
+    output_path: &Utf8Path,
+    observer: &Arc<E>
+) -> Result<(), String> {
+    let args = shlex::try_join(
+        [
+            "-bin",
+            "-adr",
+            "0x506",
+            "--exportPlayerConfig",
+            song_path.as_str(),
+            output_path.as_str()
+        ]
+        .into_iter()
+    )
+    .map_err(|e| format!("Could not build SongToAkg arguments: {e}"))?;
+
+    let task: Task = InnerTask::with_songconverter(
+        crate::runners::tracker::SongConverter::new_song_to_akg_default(),
+        StandardTaskArguments::new(args)
+    )
+    .into();
+    task.execute(observer)
+}
+
+/// Assembles `source_path`, with `extra_args` (`-D` definitions, `--snapshot
+/// -o <path>`, ...) inserted before it on the command line - runs in-process
+/// (`InnerTask::Assembler(Assembler::Basm, _)` is `TaskKind::Embedded`,
+/// calling `cpclib_basm::process` directly), no subprocess involved.
+///
+/// Each entry of `extra_args` is shell-quoted independently before joining -
+/// see [`convert_song_to_akg`]'s doc comment on why that matters here.
+pub fn assemble_source<E: BndBuilderObserver + 'static>(
+    source_path: &Utf8Path,
+    extra_args: &[String],
+    observer: &Arc<E>
+) -> Result<(), String> {
+    let args = shlex::try_join(
+        extra_args
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(source_path.as_str()))
+    )
+    .map_err(|e| format!("Could not build basm arguments: {e}"))?;
+
+    let task: Task = InnerTask::new_basm(&args).into();
     task.execute(observer)
 }
 

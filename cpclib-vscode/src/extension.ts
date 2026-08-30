@@ -256,6 +256,8 @@ export function activate(context: ExtensionContext) {
         vscode.commands.registerCommand('cpclib.findPeepholeInProject', () => analyzePeephole('project')),
         vscode.commands.registerCommand('cpclib.clearPeepholeResults', clearPeephole),
         vscode.commands.registerCommand('cpclib.assembleThisFile', assembleActiveFile),
+        vscode.commands.registerCommand('cpclib.playMusic', playMusic),
+        vscode.commands.registerCommand('cpclib.buildMusicDsk', buildMusicDsk),
     );
 
     registerDebugging(context, () => resolvedServerPath);
@@ -1248,6 +1250,45 @@ async function buildActiveFile(): Promise<void> {
     } else {
         window.showErrorMessage(`Could not find the '${chosen.target}' build task.`);
     }
+}
+
+/**
+ * "▶ Play music in emulator" - converts an Arkos Tracker source song into a
+ * standalone AKG player and launches it. Unlike `cpclib.runBasic`/
+ * `cpclib.runAssembly` (CodeLens-only, invoked with an explicit `arguments:
+ * [path]` VS Code never touches), this is a file-browser context-menu /
+ * command-palette entry: VS Code hands it a `vscode.Uri`, not a string, and
+ * that argument shape is exactly why this can't just be one of the
+ * `executeCommandProvider`-advertised names bridged automatically the way
+ * `cpclib.runRule`/`cpclib.runTask` are (see the NOTE above) - the server
+ * command this forwards to (`cpclib.musicPlay`) is deliberately a different
+ * name, same reason as the four peephole commands just above.
+ *
+ * The server reports the outcome itself (`show_message`/`log_message`), so
+ * there is nothing to do here with the response.
+ */
+async function playMusic(target: string | vscode.Uri | undefined): Promise<void> {
+    const fileName = target instanceof vscode.Uri ? target.fsPath : target;
+    if (!fileName) { return; }
+    await client.sendRequest('workspace/executeCommand', {
+        command: 'cpclib.musicPlay',
+        arguments: [fileName],
+    });
+}
+
+/**
+ * "💿 Build DSK with music" - same conversion as {@link playMusic}, but only
+ * builds a DSK (saved next to the source song, server-side) instead of
+ * launching an emulator. See {@link playMusic}'s doc comment for why this
+ * is registered here rather than bridged automatically.
+ */
+async function buildMusicDsk(target: string | vscode.Uri | undefined): Promise<void> {
+    const fileName = target instanceof vscode.Uri ? target.fsPath : target;
+    if (!fileName) { return; }
+    await client.sendRequest('workspace/executeCommand', {
+        command: 'cpclib.musicBuildDsk',
+        arguments: [fileName],
+    });
 }
 
 // ── Cycle count for selection ───────────────────────────────────────────────

@@ -964,7 +964,9 @@ pub(crate) const EXECUTE_COMMANDS: &[&str] = &[
     "cpclib.assembleFile",
     "cpclib.breakpointEdit",
     "cpclib.breakpointLines",
-    "cpclib.getDebuggableRules"
+    "cpclib.getDebuggableRules",
+    "cpclib.musicPlay",
+    "cpclib.musicBuildDsk"
 ];
 
 #[tower_lsp::async_trait]
@@ -2280,6 +2282,175 @@ impl LanguageServer for CpcLspBackend {
                         MessageType::ERROR
                     },
                     &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
+        // File-browser "▶ Play music in emulator" - unlike `runBasic`/
+        // `runAssembly`, this takes a raw file path straight from an Explorer
+        // click, not an open text document: an Arkos Tracker source file is
+        // typically binary, a poor fit for `self.load_document`'s
+        // text-document assumption, and `SongToAkg` reads the file itself
+        // anyway, so there is nothing to gain from loading it as a `Document`.
+        if params.command == "cpclib.musicPlay" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let song_path = camino::Utf8PathBuf::from(fname);
+            let name_hint = song_path
+                .file_stem()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "SONG".to_string());
+
+            self.client
+                .log_message(MessageType::INFO, "Converting and launching music...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let emulator = crate::common::config::load_config(
+                self.workspace_roots().first().map(|p| p.as_path())
+            )
+            .config
+            .music
+            .run_emulator;
+
+            let outcome = tokio::task::spawn_blocking(move || {
+                let observer = std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
+                cpclib_bndbuild::pipeline::music_run::run_music_in_emulator(
+                    &song_path,
+                    &name_hint,
+                    &emulator,
+                    &observer
+                )
+            })
+            .await
+            .map_err(|e| {
+                tower_lsp::jsonrpc::Error {
+                    code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                    message: format!("run task panicked: {e}").into(),
+                    data: None
+                }
+            })?;
+            let _ = log_task.await;
+
+            self.client
+                .show_message(
+                    if outcome.success {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    &outcome.message
+                )
+                .await;
+            return Ok(None);
+        }
+
+        // File-browser "💿 Build DSK with music" - same input shape as
+        // `cpclib.musicPlay` above, no emulator launch. The pipeline itself
+        // only ever returns a path inside a temp directory (fine for
+        // `cpclib.musicPlay`, which consumes it immediately) - since this
+        // command's whole point is a deliverable the user keeps, the built
+        // DSK is copied next to the source song file before reporting success.
+        if params.command == "cpclib.musicBuildDsk" {
+            let mut args = params.arguments.into_iter();
+            let fname = args.next().and_then(|v| v.as_str().map(|s| s.to_string()));
+            let Some(fname) = fname
+            else {
+                return Ok(None);
+            };
+            let song_path = camino::Utf8PathBuf::from(fname);
+            let name_hint = song_path
+                .file_stem()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "SONG".to_string());
+            let dest_path = song_path.with_extension("dsk");
+
+            self.client
+                .log_message(MessageType::INFO, "Converting and building DSK...")
+                .await;
+
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let log_task = {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    while let Some((is_err, line)) = rx.recv().await {
+                        client
+                            .log_message(
+                                if is_err {
+                                    MessageType::ERROR
+                                }
+                                else {
+                                    MessageType::LOG
+                                },
+                                line
+                            )
+                            .await;
+                    }
+                })
+            };
+
+            let result = {
+                let dest_path = dest_path.clone();
+                tokio::task::spawn_blocking(move || {
+                    let observer =
+                        std::sync::Arc::new(crate::bndbuild::command::StreamingObserver::new(tx));
+                    let dsk_path = cpclib_bndbuild::pipeline::music_run::build_music_dsk(
+                        &song_path,
+                        &name_hint,
+                        &observer
+                    )?;
+                    std::fs::copy(&dsk_path, &dest_path)
+                        .map_err(|e| format!("Could not write {dest_path}: {e}"))?;
+                    Ok::<(), String>(())
+                })
+                .await
+                .map_err(|e| {
+                    tower_lsp::jsonrpc::Error {
+                        code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+                        message: format!("build task panicked: {e}").into(),
+                        data: None
+                    }
+                })?
+            };
+            let _ = log_task.await;
+
+            self.client
+                .show_message(
+                    if result.is_ok() {
+                        MessageType::INFO
+                    }
+                    else {
+                        MessageType::ERROR
+                    },
+                    match &result {
+                        Ok(()) => format!("Built {dest_path}"),
+                        Err(e) => e.clone()
+                    }
                 )
                 .await;
             return Ok(None);

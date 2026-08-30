@@ -29,7 +29,8 @@ pub struct LspConfig {
     pub asm: AsmConfig,
     pub basic: BasicConfig,
     pub bndbuild: BndbuildConfig,
-    pub dap: DapConfig
+    pub dap: DapConfig,
+    pub music: MusicConfig
 }
 
 /// Debug-adapter settings.
@@ -392,6 +393,42 @@ impl Default for BndbuildWarningClasses {
     }
 }
 
+/// The "▶ Play in emulator" / "💿 Build DSK" file-browser context menu and
+/// command palette entries for Arkos Tracker music files.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct MusicConfig {
+    /// Arkos-Tracker-compatible source-file extensions (case-insensitive,
+    /// no leading dot) recognized by the file browser context menu / command
+    /// palette. User-editable - add/remove entries to taste.
+    ///
+    /// The VS Code extension's own `explorer/context` menu `when` clause is
+    /// a *static* regex (VS Code has no way to read this file at menu-render
+    /// time), so it is kept manually in sync with this list's default rather
+    /// than driven by it - this field still governs what the backend itself
+    /// accepts.
+    pub song_extensions: Vec<String>,
+    /// Same convention as `AsmConfig::run_emulator`/`BasicConfig::
+    /// run_emulator` - which emulator "▶ Play in emulator" launches. Unlike
+    /// `BasicConfig::run_emulator`, any emulator
+    /// `cpclib_runner::emucontrol` accepts is valid here (the music player
+    /// boots from a snapshot, not an auto-RUN disc, so there is no auto-RUN
+    /// support requirement to check against).
+    pub run_emulator: String
+}
+
+impl Default for MusicConfig {
+    fn default() -> Self {
+        Self {
+            song_extensions: cpclib_bndbuild::pipeline::music_run::DEFAULT_SONG_EXTENSIONS
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            run_emulator: "ace".to_string()
+        }
+    }
+}
+
 /// Result of trying to load `cpclib-lsp.toml`: an *always-usable* config
 /// (missing/unreadable/malformed all fall back to `LspConfig::default()` -
 /// a bad config file must never prevent the LSP from starting) plus an
@@ -651,6 +688,19 @@ code_lens = true
 missing_build_structure = true
 # A dependency that's neither an existing file nor a target this file builds.
 missing_dependency = true
+
+[music]
+# Arkos-Tracker-compatible source-file extensions recognized by the "Play in
+# emulator" / "Build DSK" file browser context menu and command palette
+# entries. Add/remove entries to taste - the VS Code extension's own menu
+# entries are a static regex kept manually in sync with this default, so
+# changing this alone won't add a new extension to the context menu without
+# also updating the extension.
+song_extensions = ["aks", "sks", "128", "vt2", "wyz"]
+# Emulator launched by "▶ Play in emulator". Any emulator
+# cpclib_runner::emucontrol accepts is valid (the player boots from a
+# snapshot, unlike basic.run_emulator's auto-RUN disc).
+run_emulator = "ace"
 "#;
 
 #[cfg(test)]

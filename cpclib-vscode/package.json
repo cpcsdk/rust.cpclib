@@ -149,6 +149,16 @@
         "category": "CPClib"
       },
       {
+        "command": "cpclib.playMusic",
+        "title": "CPClib: Play music in emulator",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.buildMusicDsk",
+        "title": "CPClib: Build DSK with music",
+        "category": "CPClib"
+      },
+      {
         "command": "cpclib.findPeepholeInFile",
         "title": "Find Peephole Optimizations in File",
         "category": "CPClib"
@@ -511,6 +521,16 @@
         {
           "submenu": "cpclib.runWithEmulatorMenu",
           "when": "resourceExtname =~ /^\\.(sna|dsk)$/i",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.playMusic",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz)$/i",
+          "group": "cpclib"
+        },
+        {
+          "command": "cpclib.buildMusicDsk",
+          "when": "resourceExtname =~ /^\\.(aks|sks|128|vt2|wyz)$/i",
           "group": "cpclib"
         }
       ],

@@ -14,6 +14,7 @@ pub const AT_CMD: &str = "at3";
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
 pub enum At3Version {
     #[default]
+    V3_7,
     V3_5_1,
     V3_5_1A,
     V3_5,
@@ -26,6 +27,7 @@ pub enum At3Version {
 impl Display for At3Version {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let v = match self {
+            At3Version::V3_7 => "v3.7",
             At3Version::V3_5_1 => "v3.5.1",
             At3Version::V3_5_1A => "v3.5.1a",
             At3Version::V3_5 => "v3.5",
@@ -42,6 +44,16 @@ impl Display for At3Version {
 impl StaticInformation for At3Version {
     fn static_download_urls(&self) -> &'static crate::delegated::MutiplatformUrls {
         match self {
+            At3Version::V3_7 => {
+                static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
+                URL.get_or_init(|| {
+                MutiplatformUrls::builder()
+                    .linux("https://www.julien-nevo.com/arkostracker/release/3.7/linux64/ArkosTracker-linux64-3.7.zip")
+                    .windows("https://www.julien-nevo.com/arkostracker/release/3.7/windows/ArkosTracker-windows-3.7.zip")
+                    .macos("https://www.julien-nevo.com/arkostracker/release/3.7/macosx/ArkosTracker-macosx-3.7.zip")
+                    .build()
+                })
+            },
             At3Version::V3_5_1 => {
                 static URL: OnceLock<MutiplatformUrls> = OnceLock::new();
                 URL.get_or_init(|| {
@@ -58,7 +70,7 @@ impl StaticInformation for At3Version {
                 MutiplatformUrls::builder()
                     .linux("https://www.julien-nevo.com/arkostracker/release/3.5.1a/linux64/ArkosTracker-linux64-3.5.1a.zip")
                     .windows("https://www.julien-nevo.com/arkostracker/release/3.5.1a/windows/ArkosTracker-windows-3.5.1a.zip")
-                    .macos("https://www.julien-nevo.com/arkostracker/release/3.5.1a/windows/ArkosTracker-windows-3.5.1a.zip")
+                    .macos("https://www.julien-nevo.com/arkostracker/release/3.5.1a/macosx/ArkosTracker-macosx-3.5.1a.zip")
                     .build()
                 })
             },
