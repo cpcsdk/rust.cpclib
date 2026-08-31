@@ -245,23 +245,28 @@ impl AssemblyAnalyzer {
     /// never fully laid out. Reading `reachableByJr` off one told a user a
     /// jump target was 127 bytes away when the real build measured 146, and
     /// the resulting `jr` did not assemble.
+    ///
+    /// Keyed by `(document.version, workspace fingerprint)`, not just
+    /// version: `dry_run_env` follows `include`s at any depth, so editing an
+    /// included file (in another buffer, or on disk) changes this result
+    /// without touching this document's own version. Same treatment as
+    /// `peephole::address_source_cache` - see [`super::workspace_fingerprint_of`].
     pub(super) fn dry_run_env_cached_checked(
         &self,
         document: &Document,
         listing: &LocatedListing
     ) -> (Env, bool) {
+        let key = (document.version, super::workspace_fingerprint_of(&document.uri));
         if let Some(entry) = self.env_cache.get(&document.uri)
-            && entry.0 == document.version
+            && entry.0 == key
         {
             return ((*entry.1).clone(), entry.2);
         }
         let config = self.config();
         let disabled = disabled_assembling_warning_categories(&config.warnings);
         let (env, complete) = dry_run_env(listing, &document.uri, config.case_sensitive, disabled);
-        self.env_cache.insert(
-            document.uri.clone(),
-            (document.version, Arc::new(env.clone()), complete)
-        );
+        self.env_cache
+            .insert(document.uri.clone(), (key, Arc::new(env.clone()), complete));
         (env, complete)
     }
 
@@ -841,6 +846,66 @@ mod dry_run_env_cache_tests {
 
         analyzer.evict(&d.uri);
         assert_eq!(analyzer.env_cache.len(), 0);
+    }
+
+    /// Regression test for the missing-fingerprint bug: `dry_run_env`
+    /// follows `include`s at any depth, but the cache check used to be
+    /// only `entry.0 == document.version` - no awareness of the include
+    /// tree - so editing an included file (without touching the
+    /// "root" document's own version) silently served a stale `Env`
+    /// forever, even though the real assemble would have produced a
+    /// different one. A workspace-roots fingerprint (`Cargo.toml` here,
+    /// so `cpclib_project::entry::root_of` finds a project root to
+    /// fingerprint) must now be part of the cache key.
+    #[test]
+    fn editing_an_included_file_recomputes_the_cached_env_even_though_the_document_version_did_not_change()
+     {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        // A project-root marker so `workspace_fingerprint_of` finds
+        // something to fingerprint instead of falling back to a constant
+        // `0` (which would defeat this very test).
+        std::fs::write(tmp.path().join("Cargo.toml"), "").unwrap();
+        let helper_path = tmp.path().join("helper.asm");
+        std::fs::write(&helper_path, "val equ 1\n").unwrap();
+        let main_path = tmp.path().join("main.asm");
+        let text = "include \"helper.asm\"\n";
+        std::fs::write(&main_path, text).unwrap();
+
+        let uri = Url::from_file_path(&main_path).unwrap();
+        let d = Document::new(uri, text.to_string(), 1);
+        let analyzer = AssemblyAnalyzer::new();
+        let listing = analyzer.parse_document(&d).ok().unwrap();
+
+        let (env1, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
+        assert_eq!(
+            env1.symbols()
+                .int_value("val")
+                .ok()
+                .flatten(),
+            Some(1)
+        );
+
+        // Edit the *included* file only - `d`'s own version is untouched -
+        // and bump its mtime forward like the sibling
+        // `disk_file_version_tests`/`address_source_cache` tests do, since
+        // the fingerprint is mtime-based and a same-second write could
+        // otherwise leave it unchanged.
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::write(&helper_path, "val equ 2\n").unwrap();
+        std::fs::File::open(&helper_path)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+
+        let (env2, _) = analyzer.dry_run_env_cached_checked(&d, &listing);
+        assert_eq!(
+            env2.symbols()
+                .int_value("val")
+                .ok()
+                .flatten(),
+            Some(2),
+            "stale cache: the included file's edit was not picked up"
+        );
     }
 }
 

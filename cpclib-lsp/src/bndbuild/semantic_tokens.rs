@@ -799,14 +799,13 @@ mod tests {
 /// * a tool has several aliases, and the list belongs to bndbuild rather than
 ///   to this file - hence `EMUCTRL_CMDS` rather than a copy that would drift.
 fn rule_launches_an_emulator(command: &str) -> bool {
-    let mut words = command.split_whitespace();
-    let Some(program) = words.next()
+    let Some((program, arguments)) = command.split_once(' ')
     else {
         return false;
     };
     let program = program.strip_prefix('-').unwrap_or(program);
-    let is_emulator = cpclib_bndbuild::task::EMUCTRL_CMDS.contains(&program);
-    is_emulator && words.any(|word| word == "run")
+    cpclib_bndbuild::task::EMUCTRL_CMDS.contains(&program)
+        && cpclib_bndbuild::pipeline::debug::debug_arguments(arguments).is_some()
 }
 
 #[cfg(test)]

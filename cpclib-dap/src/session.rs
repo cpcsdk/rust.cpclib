@@ -13,26 +13,13 @@ use cpclib_image::palette::Palette;
 use cpclib_project::srcmap::{AddressResolution, SourceMap};
 use serde_json::{Value, json};
 
-use crate::peer::{DapPeer, LineAtPc};
+use crate::peer::{DapPeer, LineAtPc, OWN_REQUEST_BASE, OwnRequestTracker};
 
 /// The Z80 has one thread of execution, and the emulator numbers it 1.
 pub const THREAD_ID: i64 = 1;
 
 /// The reference under which the decoded flags expand into one row per bit.
 const FLAGS_REFERENCE: i64 = 0x7C00_0003;
-
-/// Where our own requests to the emulator start numbering.
-///
-/// The editor and this adapter each number their requests from 1, and both
-/// conversations run over the same session. A response carries only the seq it
-/// answers, so an emulator reply to *our* `attach` (request_seq 2) is
-/// indistinguishable from a reply to the *editor's* request 2 - which is its
-/// `launch`. Forwarding one to the other tells the editor its launch was
-/// answered by an attach, and the session falls apart.
-///
-/// Numbering ours from far away keeps the two readable in a transcript; not
-/// forwarding their responses at all is what actually makes it correct.
-const OWN_REQUEST_BASE: i64 = 1_000_000;
 
 /// Where the frame ids we invent start.
 ///
@@ -571,14 +558,16 @@ struct PlacedBreakpoint {
 
 /// The translating session.
 pub struct Session<P: DapPeer> {
-    peer: P,
+    /// The peer, plus the editor-seq/own-seq bookkeeping needed to route
+    /// requests this session originates apart from the editor's. See
+    /// [`OwnRequestTracker`].
+    tracker: OwnRequestTracker<P, OwnRequest>,
     map: SourceMap,
     /// Source breakpoints per file. `setBreakpoints` is *per file* while the
     /// emulator's `setInstructionBreakpoints` replaces one global set, so every
     /// per-file update has to re-send the union of all files.
     breakpoints: HashMap<PathBuf, Vec<PlacedBreakpoint>>,
     next_breakpoint_id: i64,
-    seq: i64,
     /// Breakpoints the *program* asked for, via `BREAKPOINT` directives.
     ///
     /// Kept apart from the editor's, because the editor does not know about
@@ -597,12 +586,6 @@ pub struct Session<P: DapPeer> {
     /// Recorded by address rather than removed, so that re-adding the red dot
     /// brings the breakpoint back without needing the program reassembled.
     suppressed: std::collections::HashSet<u32>,
-    /// Requests this adapter originated, and what each answer is for.
-    ///
-    /// Their answers belong to us, never to the editor.
-    own_requests: HashMap<i64, OwnRequest>,
-    /// The next seq for a request of our own.
-    own_seq: i64,
     /// Watch expressions waiting on a memory read.
     pending_watches: Vec<PendingWatch>,
     /// Array watches that have been read, so expanding one in the Watch panel
@@ -757,15 +740,12 @@ pub struct Session<P: DapPeer> {
 impl<P: DapPeer> Session<P> {
     pub fn new(peer: P, map: SourceMap) -> Self {
         Self {
-            peer,
+            tracker: OwnRequestTracker::new(peer, OWN_REQUEST_BASE),
             map,
             breakpoints: HashMap::new(),
             next_breakpoint_id: 1,
-            seq: 1,
             program_breakpoints: Vec::new(),
             suppressed: std::collections::HashSet::new(),
-            own_requests: HashMap::new(),
-            own_seq: OWN_REQUEST_BASE,
             pending_watches: Vec::new(),
             watch_arrays: Vec::new(),
             pending_memory_views: Vec::new(),
@@ -808,9 +788,7 @@ impl<P: DapPeer> Session<P> {
     }
 
     fn next_seq(&mut self) -> i64 {
-        let seq = self.seq;
-        self.seq += 1;
-        seq
+        self.tracker.next_seq()
     }
 
     /// Give the session the assembled program's memory.
@@ -884,11 +862,11 @@ impl<P: DapPeer> Session<P> {
     }
 
     pub fn peer(&self) -> &P {
-        &self.peer
+        self.tracker.peer()
     }
 
     pub fn peer_mut(&mut self) -> &mut P {
-        &mut self.peer
+        self.tracker.peer_mut()
     }
 
     /// Send a request of our own to the emulator, and remember that its answer
@@ -903,22 +881,19 @@ impl<P: DapPeer> Session<P> {
         arguments: Value,
         purpose: Purpose
     ) -> std::io::Result<()> {
-        let seq = self.own_seq;
-        self.own_seq += 1;
-        self.own_requests.insert(
-            seq,
+        self.tracker.send_own(
+            command,
+            arguments,
             OwnRequest {
                 command: command.to_string(),
                 purpose
             }
-        );
-        self.peer.send(protocol::request(command, arguments, seq))
+        )
     }
 
     /// Whether `response` answers something we asked for.
     fn is_our_answer(&mut self, response: &Value) -> Option<OwnRequest> {
-        let request_seq = response.get("request_seq").and_then(Value::as_i64)?;
-        self.own_requests.remove(&request_seq)
+        self.tracker.is_our_answer(response)
     }
 
     /// Adopt the breakpoints the assembled program asked for.
@@ -1208,16 +1183,16 @@ impl<P: DapPeer> Session<P> {
                 // at a return address no source line describes.
                 if command == "next" {
                     let line = self.line_at_pc();
-                    self.peer.note_line_at_pc(line);
+                    self.peer_mut().note_line_at_pc(line);
                 }
-                self.peer.send(message.clone())?;
+                self.peer_mut().send(message.clone())?;
                 Ok(Vec::new())
             },
             // Noted *and* forwarded: the emulator wants it too, and this is
             // where the program is finally allowed to run.
             "configurationDone" => {
                 self.on_configuration_done()?;
-                self.peer.send(message.clone())?;
+                self.peer_mut().send(message.clone())?;
                 Ok(Vec::new())
             },
             // Watchpoints, from the editor's own right-click rather than from
@@ -1302,22 +1277,7 @@ impl<P: DapPeer> Session<P> {
                     seq
                 )])
             },
-            other => {
-                // Not ours - but a peer that rejects what it does not
-                // implement turns "forward and see" into an error message
-                // shown to the user in place of the thing they asked for. Ask
-                // first.
-                if self.peer.quirks().rejects_unknown_requests && !self.peer.supports(other) {
-                    let seq = self.next_seq();
-                    return Ok(vec![protocol::failure(
-                        message,
-                        &format!("the emulator being debugged does not implement '{other}'."),
-                        seq
-                    )]);
-                }
-                self.peer.send(message.clone())?;
-                Ok(Vec::new())
-            }
+            other => crate::peer::forward_or_reject(&mut self.tracker, message, other)
         }
     }
 
@@ -2229,7 +2189,7 @@ impl<P: DapPeer> Session<P> {
             // Could not ask; let the emulator answer rather than failing the
             // view outright.
             self.pending_editor_disassembly.pop();
-            self.peer.send(request.clone())?;
+            self.peer_mut().send(request.clone())?;
             return Ok(Vec::new());
         }
         Ok(Vec::new())
@@ -2262,7 +2222,7 @@ impl<P: DapPeer> Session<P> {
             // No alignment agrees with the address asked about - a region that
             // is mostly data. Guessing would put invented instructions in front
             // of the one being looked at, so the emulator answers this one.
-            if self.peer.send(request.clone()).is_err() {
+            if self.peer_mut().send(request.clone()).is_err() {
                 let seq = self.next_seq();
                 return vec![protocol::failure(
                     &request,
@@ -2447,7 +2407,7 @@ impl<P: DapPeer> Session<P> {
         // handler for it, so sending it unconditionally here (as this used
         // to) got no answer, ever, for that backend.
         if let Some(command) = crate::amspiritlite::chip_command(crate::inspect::CRTC_REFERENCE)
-            && self.peer.supports(command)
+            && self.peer_mut().supports(command)
         {
             self.pending_crtc_views.push(request.clone());
             self.send_own(command, json!({}), Purpose::MachineState)?;
@@ -2477,7 +2437,7 @@ impl<P: DapPeer> Session<P> {
     /// round trips happen fresh every time rather than being cached.
     fn basic_listing_view(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
         self.pending_basic_listing = Some(request.clone());
-        if self.peer.supports("cpclib/basicListing") {
+        if self.peer_mut().supports("cpclib/basicListing") {
             self.send_own("cpclib/basicListing", json!({}), Purpose::BasicListingText)?;
             return Ok(Vec::new());
         }
@@ -2639,7 +2599,7 @@ impl<P: DapPeer> Session<P> {
         });
 
         if let Some(command) = crate::amspiritlite::chip_command(crate::inspect::CRTC_REFERENCE)
-            && self.peer.supports(command)
+            && self.peer_mut().supports(command)
         {
             self.send_own(command, json!({}), Purpose::ScreenViewCrtc)?;
             return Ok(Vec::new());
@@ -2809,62 +2769,21 @@ impl<P: DapPeer> Session<P> {
         palette: &Palette<Ink>,
         memory: &[u8]
     ) -> Vec<Value> {
-        let (default_width, live_lines_per_char_row) = crate::inspect::crtc_screen_defaults(regs);
-        let width = width_override.unwrap_or(default_width);
-        let height = height_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_HEIGHT);
-        let lines_per_char_row =
-            crate::inspect::resolve_char_row_height(row_height_override, live_lines_per_char_row);
-        let encoding = crate::inspect::ScreenEncoding::from_wire(encoding_override.unwrap_or(0));
-        match crate::inspect::render_screen_view(
+        crate::inspect::screen_view_event_and_receipt(
             address,
-            width,
-            height,
+            width_override,
+            height_override,
+            row_height_override,
+            palette_override,
+            encoding_override,
+            config_override.map(|c| (c.mode, c.page)),
+            regs,
             mode,
             palette,
             memory,
-            lines_per_char_row,
-            palette_override,
-            encoding
-        ) {
-            Ok(mut body) => {
-                // So the panel's own config picker stays in sync with what
-                // this frame was actually read under, the same way the
-                // Memory/Disassembly View's own pickers do.
-                if let Some(object) = body.as_object_mut() {
-                    object.insert(
-                        "config".to_string(),
-                        json!(config_override.map(|c| c.mode))
-                    );
-                    object.insert(
-                        "page".to_string(),
-                        json!(config_override.and_then(|c| c.page))
-                    );
-                }
-                let seq = self.next_seq();
-                let event = protocol::event("cpclib/screenView", body, seq);
-                match request {
-                    Some(request) => {
-                        let seq = self.next_seq();
-                        let receipt = protocol::response(
-                            request,
-                            json!({ "result": "screen view opened", "variablesReference": 0 }),
-                            seq
-                        );
-                        vec![event, receipt]
-                    },
-                    None => vec![event]
-                }
-            },
-            Err(problem) => {
-                match request {
-                    Some(request) => {
-                        let seq = self.next_seq();
-                        vec![protocol::failure(request, &problem, seq)]
-                    },
-                    None => Vec::new()
-                }
-            }
-        }
+            request,
+            || self.next_seq()
+        )
     }
 
     /// The `cpclib/crtcView` event plus its console receipt: raw registers,
@@ -2951,7 +2870,7 @@ impl<P: DapPeer> Session<P> {
         // An emulator with an endpoint per chip is asked directly. Only the one
         // that has none has to save and parse a whole machine to answer.
         if let Some(command) = crate::amspiritlite::chip_command(reference)
-            && self.peer.supports(command)
+            && self.peer_mut().supports(command)
         {
             self.pending_chip_scopes.push(request.clone());
             self.send_own(command, json!({}), Purpose::MachineState)?;
@@ -3083,9 +3002,7 @@ impl<P: DapPeer> Session<P> {
                 }
             }
         }
-        if let Some(pending) = screen_view
-            && let Some(request) = pending.request
-        {
+        if let Some(pending) = screen_view {
             match self.machine_state.as_deref() {
                 // A `.sna` carries CRTC/GA state *and* full memory together -
                 // one round trip already answered everything `-sv` needs,
@@ -3104,8 +3021,14 @@ impl<P: DapPeer> Session<P> {
                     // own snapshot carries more than that, and the wrap
                     // must stay at the real 16-bit boundary regardless.
                     let memory = full_memory[..0x10000.min(full_memory.len())].to_vec();
+                    // `request` is `None` for a silent refresh
+                    // (`refresh_screen_view`, called on every stop) rather
+                    // than something a person typed - `screen_view_answer`
+                    // already handles that (event only, no response
+                    // receipt), same as `complete_screen_view_memory`'s
+                    // identical direct-endpoint path.
                     out.extend(self.screen_view_answer(
-                        Some(&request),
+                        pending.request.as_ref(),
                         address,
                         pending.width_override,
                         pending.height_override,
@@ -3123,9 +3046,15 @@ impl<P: DapPeer> Session<P> {
                         &memory
                     ));
                 },
+                // No machine to describe itself: a silent refresh drops
+                // the failure (nobody is waiting on a response, same
+                // convention `complete_screen_view_memory` follows), but
+                // an explicit `-sv` request still gets a real answer.
                 None => {
-                    let seq = self.next_seq();
-                    out.push(protocol::failure(&request, &why, seq));
+                    if let Some(request) = &pending.request {
+                        let seq = self.next_seq();
+                        out.push(protocol::failure(request, &why, seq));
+                    }
                 }
             }
         }
@@ -3788,13 +3717,6 @@ impl<P: DapPeer> Session<P> {
         let Some(open) = self.open_screen_view.clone() else {
             return;
         };
-        let Some(command) = crate::amspiritlite::chip_command(crate::inspect::CRTC_REFERENCE)
-        else {
-            return;
-        };
-        if !self.peer.supports(command) {
-            return;
-        }
         self.pending_screen_view = Some(PendingScreenView {
             request: None,
             address_override: open.address_override,
@@ -3811,7 +3733,28 @@ impl<P: DapPeer> Session<P> {
         // had, and the stop event must not be lost behind it - same
         // convention `refresh_memory_view`/`refresh_disassembly_view`
         // already follow.
-        let _ = self.send_own(command, json!({}), Purpose::ScreenViewCrtc);
+        if let Some(command) = crate::amspiritlite::chip_command(crate::inspect::CRTC_REFERENCE)
+            && self.peer_mut().supports(command)
+        {
+            let _ = self.send_own(command, json!({}), Purpose::ScreenViewCrtc);
+            return;
+        }
+        // No direct CRTC endpoint (1984js): force the same `cpclib/machineState`
+        // fetch `chips_command`/`crtc_view_command` already coordinate,
+        // instead of silently giving up - otherwise `-sv` opened against
+        // this backend never refreshes past whatever frame was showing
+        // when the panel was opened, while the memory/disassembly views
+        // (backed by `readMemory`, which both backends answer) correctly
+        // do. Only fire a fresh request when nothing else is already
+        // waiting on one for this same stop - `complete_machine_state`
+        // answers every pending consumer (including this one, via
+        // `pending_screen_view`) from whichever snapshot arrives.
+        if self.pending_chip_scopes.is_empty()
+            && self.pending_chip_prints.is_empty()
+            && self.pending_crtc_views.is_empty()
+        {
+            let _ = self.send_own("cpclib/machineState", json!({}), Purpose::MachineState);
+        }
     }
 
     /// Note where the program is, charge the timers, and move a following
@@ -4936,7 +4879,7 @@ impl<P: DapPeer> Session<P> {
         // banking state at all - it is a heuristic, and it fails honestly but
         // uselessly when two pages hold the same bytes. A backend that can
         // answer makes the whole question a lookup.
-        if self.peer.supports("cpclib/memmap") {
+        if self.peer_mut().supports("cpclib/memmap") {
             return self.send_own("cpclib/memmap", json!({}), Purpose::PageProbe);
         }
 
@@ -5002,7 +4945,7 @@ impl<P: DapPeer> Session<P> {
         //
         // No program image is needed for this: the page comes from the Gate
         // Array's MMR, not from comparing bytes.
-        if self.peer.supports("cpclib/memmap")
+        if self.peer_mut().supports("cpclib/memmap")
             && let Some(pc) = Self::frame_address(response)
             && !self.pages_to_tell_apart(pc as u32).is_empty()
         {
@@ -5384,7 +5327,7 @@ impl<P: DapPeer> Session<P> {
                 seq
             )]);
         }
-        if !self.peer.supports("cpclib/setPc") {
+        if !self.peer_mut().supports("cpclib/setPc") {
             return Ok(vec![protocol::failure(
                 request,
                 "this emulator offers no way to move PC",
@@ -5654,7 +5597,7 @@ impl<P: DapPeer> Session<P> {
         // Nothing to disassemble from without a way to read memory, and an
         // emulator that cannot be asked is not worth opening an empty panel
         // for.
-        if self.open_disassembly_view.is_some() || !self.peer.supports("readMemory") {
+        if self.open_disassembly_view.is_some() || !self.peer_mut().supports("readMemory") {
             return out;
         }
 
@@ -5730,7 +5673,7 @@ impl<P: DapPeer> Session<P> {
         column: i64,
         end_column: i64
     ) -> bool {
-        if !self.peer.supports("readMemory") {
+        if !self.peer_mut().supports("readMemory") {
             return false;
         }
         let written = u32::try_from(line)
@@ -5743,7 +5686,7 @@ impl<P: DapPeer> Session<P> {
             end_column,
             written,
             address,
-            request_seq: self.own_seq
+            request_seq: self.tracker.peek_own_seq()
         });
         let sent = self.send_own(
             "readMemory",
@@ -6586,6 +6529,97 @@ mod tests {
                 .with_image(image_with(0x4000, &[0xED, 0x00, 0xED, 0x01]));
 
             assert_eq!(session.line_cost(0x4001), None);
+        }
+    }
+
+    /// Regression coverage for `refresh_screen_view`'s 1984js gap: it used
+    /// to only force a refetch when the peer exposed a direct CRTC endpoint
+    /// (`crate::amspiritlite::chip_command`), silently no-oping on every
+    /// stop otherwise - so `-sv` opened against a backend with no such
+    /// endpoint (1984js, and `RecordingPeer` by default, exactly like it)
+    /// never refreshed past whatever frame was showing when the panel was
+    /// opened.
+    mod screen_view_refresh_tests {
+        use cpclib_project::srcmap::SourceMap;
+
+        use crate::peer::RecordingPeer;
+        use crate::session::{OpenScreenView, Session};
+
+        #[test]
+        fn refresh_forces_a_machine_state_fetch_on_a_backend_with_no_direct_crtc_endpoint() {
+            let map = SourceMap::from_raw(&Default::default());
+            let mut session = Session::new(RecordingPeer::new(), map);
+
+            // Simulate `-sv` having been opened once already - `open_screen_view`
+            // is what `refresh_screen_view` keys off to know a panel is open
+            // at all.
+            session.open_screen_view = Some(OpenScreenView {
+                address_override: None,
+                width_override: None,
+                height_override: None,
+                mode_override: None,
+                row_height_override: None,
+                palette_override: Vec::new(),
+                encoding_override: None,
+                config_override: None
+            });
+
+            session.refresh_screen_view();
+
+            assert!(
+                session.peer().commands().contains(&"cpclib/machineState".to_string()),
+                "expected a machineState fetch, got: {:?}",
+                session.peer().commands()
+            );
+            assert!(
+                session.pending_screen_view.is_some(),
+                "the pending screen view must be registered so \
+                 `complete_machine_state` can answer it once the snapshot arrives"
+            );
+        }
+
+        /// The other half of the fix: once the fetch this branch now issues
+        /// actually answers, `complete_machine_state` must not drop the
+        /// silent refresh on the floor just because nobody is waiting on a
+        /// response (`pending.request == None`) - it has to still emit the
+        /// `cpclib/screenView` event.
+        #[test]
+        fn a_silent_refresh_still_emits_a_screen_view_event_once_the_snapshot_arrives() {
+            let map = SourceMap::from_raw(&Default::default());
+            let mut session = Session::new(RecordingPeer::new(), map);
+            session.open_screen_view = Some(OpenScreenView {
+                address_override: None,
+                width_override: None,
+                height_override: None,
+                mode_override: None,
+                row_height_override: None,
+                palette_override: Vec::new(),
+                encoding_override: None,
+                config_override: None
+            });
+            session.refresh_screen_view();
+
+            // A minimal but well-formed `.sna`, standing in for whatever the
+            // emulator would answer `cpclib/machineState` with.
+            let snapshot = cpclib_sna::Snapshot::new_6128().unwrap();
+            let mut bytes = Vec::new();
+            snapshot
+                .write_all(&mut bytes, cpclib_sna::SnapshotVersion::V2)
+                .unwrap();
+            let encoded = crate::amspiritlite::encode_base64(&bytes);
+            let message = serde_json::json!({
+                "type": "response",
+                "command": "cpclib/machineState",
+                "success": true,
+                "body": { "snapshot": encoded }
+            });
+
+            let out = session.complete_machine_state(&message);
+            assert!(
+                out.iter().any(|m| m.get("event").and_then(serde_json::Value::as_str)
+                    == Some("cpclib/screenView")),
+                "expected a cpclib/screenView event, got: {out:?}"
+            );
         }
     }
 

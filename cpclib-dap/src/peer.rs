@@ -5,7 +5,133 @@
 //! shape rather than special-cased upstream, which is why the translation layer
 //! is written against this trait and never against a particular emulator.
 
+use std::collections::HashMap;
+
 use serde_json::Value;
+
+use crate::protocol;
+
+/// Where a session's own requests are numbered from.
+///
+/// The editor and a session each number their requests from 1, and both
+/// conversations run over the same connection. A response carries only the
+/// seq it answers, so an emulator reply to *our* `attach` (request_seq 2) is
+/// indistinguishable from a reply to the *editor's* request 2 - which is its
+/// `launch`. Forwarding one to the other tells the editor its launch was
+/// answered by an attach, and the session falls apart.
+///
+/// Numbering ours from far away keeps the two readable in a transcript; not
+/// forwarding their responses at all is what actually makes it correct.
+///
+/// Shared by `Session` and `BasicSession`: each owns its own peer connection
+/// and its own [`OwnRequestTracker`], so the two never see each other's
+/// numbers - there is nothing for the two ranges to need staying distinct
+/// from.
+pub const OWN_REQUEST_BASE: i64 = 1_000_000;
+
+/// Requests a session originated, tracked so an answer can be routed back to
+/// whichever internal consumer is waiting for it instead of forwarded to the
+/// editor.
+///
+/// `Session` and `BasicSession` each speak to their own peer over their own
+/// connection and used to carry near-identical `peer`/`seq`/`own_seq`/
+/// `own_requests` bookkeeping side by side with it; this wraps the four
+/// together so there is one implementation of "send a request of our own,
+/// remember what it is for, and recognise its answer" rather than two.
+///
+/// `R` is whatever a caller needs to remember about a request it sent - a
+/// plain purpose tag, or (`Session`'s case) a purpose plus the command name.
+pub struct OwnRequestTracker<P, R> {
+    peer: P,
+    /// The next seq for a request forwarded from the editor.
+    seq: i64,
+    /// The next seq for a request of our own.
+    own_seq: i64,
+    /// Requests this session originated, and what each answer is for.
+    own_requests: HashMap<i64, R>
+}
+
+impl<P: DapPeer, R> OwnRequestTracker<P, R> {
+    pub fn new(peer: P, own_seq_base: i64) -> Self {
+        Self {
+            peer,
+            seq: 1,
+            own_seq: own_seq_base,
+            own_requests: HashMap::new()
+        }
+    }
+
+    pub fn peer(&self) -> &P {
+        &self.peer
+    }
+
+    pub fn peer_mut(&mut self) -> &mut P {
+        &mut self.peer
+    }
+
+    /// The next seq for a request forwarded from the editor.
+    pub fn next_seq(&mut self) -> i64 {
+        let seq = self.seq;
+        self.seq += 1;
+        seq
+    }
+
+    /// The seq [`Self::send_own`] is about to hand out, without consuming it -
+    /// for a caller that needs to record it before the request actually goes
+    /// out.
+    pub fn peek_own_seq(&self) -> i64 {
+        self.own_seq
+    }
+
+    /// Send a request of our own to the peer, and remember `data` as what its
+    /// answer is for.
+    pub fn send_own(&mut self, command: &str, arguments: Value, data: R) -> std::io::Result<()> {
+        let seq = self.own_seq;
+        self.own_seq += 1;
+        self.own_requests.insert(seq, data);
+        self.peer.send(protocol::request(command, arguments, seq))
+    }
+
+    /// Whether `response` answers something this session asked for - and if
+    /// so, what it was for.
+    pub fn is_our_answer(&mut self, response: &Value) -> Option<R> {
+        let request_seq = response.get("request_seq").and_then(Value::as_i64)?;
+        self.own_requests.remove(&request_seq)
+    }
+
+    /// The seq of the oldest outstanding request of our own - for a test
+    /// that wants to answer it without predicting its number ahead of time.
+    #[cfg(test)]
+    pub(crate) fn smallest_pending_own_seq(&self) -> Option<i64> {
+        self.own_requests.keys().min().copied()
+    }
+}
+
+/// Either forward `message` (reporting itself as `command`) to the peer, or
+/// refuse it with a DAP failure response.
+///
+/// Not every command reaching here is ours - most are the editor's own,
+/// meant for the peer - but a peer that rejects requests it does not
+/// implement turns "forward and see" into an error message shown to the
+/// user in place of the thing they actually asked for. Ask first via
+/// [`DapPeer::supports`], and only when [`Quirks::rejects_unknown_requests`]
+/// says that matters for this peer.
+pub fn forward_or_reject<P: DapPeer, R>(
+    tracker: &mut OwnRequestTracker<P, R>,
+    message: &Value,
+    command: &str
+) -> std::io::Result<Vec<Value>> {
+    if tracker.peer().quirks().rejects_unknown_requests && !tracker.peer_mut().supports(command) {
+        let seq = tracker.next_seq();
+        return Ok(vec![crate::protocol::failure(
+            message,
+            &format!("the emulator being debugged does not implement '{command}'."),
+            seq
+        )]);
+    }
+    tracker.peer_mut().send(message.clone())?;
+    Ok(Vec::new())
+}
 
 /// What a peer cannot do, so the translation layer can adapt instead of
 /// guessing.

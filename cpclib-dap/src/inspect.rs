@@ -968,6 +968,91 @@ pub fn render_screen_view(
     }))
 }
 
+/// [`render_screen_view`] plus the DAP envelope every `-sv` path wraps it
+/// in: the `cpclib/screenView` event, and - when something is actually
+/// waiting on an answer - a console receipt or a failure.
+///
+/// Shared by `Session` and `BasicSession`'s own identically-shaped
+/// `screen_view_answer` methods, which otherwise built this same event/
+/// response/failure envelope independently around the same call.
+///
+/// `config_stamp`, when given, is `(mode, page)` - the RAM configuration this
+/// frame was actually read under, echoed onto the event body so the panel's
+/// own config picker stays in sync with it, the same way the Memory/
+/// Disassembly View's own pickers do. Only the Z80 session's memory-mapped-
+/// RAM views ever resolve one; `BasicSession` passes `None`.
+///
+/// `request` is `None` for the refresh a stop triggers automatically - event
+/// only, nothing to answer - and `Some` for a console command or a request
+/// that wants a receipt. `next_seq` is called once per message actually
+/// produced, never for one that ends up not being sent, so a caller's own
+/// seq counter advances exactly as it did before this was factored out.
+#[allow(clippy::too_many_arguments)]
+pub fn screen_view_event_and_receipt(
+    address: usize,
+    width_override: Option<usize>,
+    height_override: Option<usize>,
+    row_height_override: Option<usize>,
+    palette_override: &[Option<Ink>],
+    encoding_override: Option<u8>,
+    config_stamp: Option<(u8, Option<u32>)>,
+    regs: &[u8; 18],
+    mode: u8,
+    palette: &Palette<Ink>,
+    memory: &[u8],
+    request: Option<&Value>,
+    mut next_seq: impl FnMut() -> i64
+) -> Vec<Value> {
+    let (default_width, live_lines_per_char_row) = crtc_screen_defaults(regs);
+    let width = width_override.unwrap_or(default_width);
+    let height = height_override.unwrap_or(DEFAULT_SCREEN_HEIGHT);
+    let lines_per_char_row = resolve_char_row_height(row_height_override, live_lines_per_char_row);
+    let encoding = ScreenEncoding::from_wire(encoding_override.unwrap_or(0));
+    match render_screen_view(
+        address,
+        width,
+        height,
+        mode,
+        palette,
+        memory,
+        lines_per_char_row,
+        palette_override,
+        encoding
+    ) {
+        Ok(mut body) => {
+            if let Some((mode, page)) = config_stamp
+                && let Some(object) = body.as_object_mut()
+            {
+                object.insert("config".to_string(), json!(mode));
+                object.insert("page".to_string(), json!(page));
+            }
+            let seq = next_seq();
+            let event = crate::protocol::event("cpclib/screenView", body, seq);
+            match request {
+                Some(request) => {
+                    let seq = next_seq();
+                    let receipt = crate::protocol::response(
+                        request,
+                        json!({ "result": "screen view opened", "variablesReference": 0 }),
+                        seq
+                    );
+                    vec![event, receipt]
+                },
+                None => vec![event]
+            }
+        },
+        Err(problem) => {
+            match request {
+                Some(request) => {
+                    let seq = next_seq();
+                    vec![crate::protocol::failure(request, &problem, seq)]
+                },
+                None => Vec::new()
+            }
+        }
+    }
+}
+
 /// The live palette as `"#RRGGBB"` strings, pen 0 first - what the
 /// interactive panel's own swatches show. Always all 16 slots: a Mode 1/2/3
 /// screen only *uses* fewer of them, but the Gate Array still holds real
@@ -1022,6 +1107,31 @@ pub fn crtc_warning_variables(regs: &[u8]) -> Vec<Value> {
         .collect()
 }
 
+/// What each of the CRTC's 18 registers actually holds, in register-number
+/// order - shared by the snapshot-based CRTC pane here and AMSpiriT Lite's
+/// own live one (`amspiritlite::crtc_pane`), which reads the same registers
+/// out of a `cpclib/machineState` body instead of a `.sna`.
+pub(crate) const CRTC_REGISTER_MEANING: [&str; 18] = [
+    "R0 horizontal total",
+    "R1 horizontal displayed",
+    "R2 horizontal sync position",
+    "R3 sync widths (VSYNC:HSYNC)",
+    "R4 vertical total",
+    "R5 vertical total adjust",
+    "R6 vertical displayed",
+    "R7 vertical sync position",
+    "R8 interlace and skew",
+    "R9 maximum raster address",
+    "R10 cursor start raster",
+    "R11 cursor end raster",
+    "R12 display start address (high)",
+    "R13 display start address (low)",
+    "R14 cursor address (high)",
+    "R15 cursor address (low)",
+    "R16 light pen address (high)",
+    "R17 light pen address (low)"
+];
+
 /// Read one chip's state out of a snapshot of the running machine.
 ///
 /// The emulator exposes nothing for the CRTC, the Gate Array, the PSG or the
@@ -1046,26 +1156,6 @@ pub fn chip_variables(reference: i64, sna: &cpclib_sna::Snapshot) -> Option<Vec<
 
     let variables = match reference {
         CRTC_REFERENCE => {
-            const MEANING: [&str; 18] = [
-                "R0 horizontal total",
-                "R1 horizontal displayed",
-                "R2 horizontal sync position",
-                "R3 sync widths (VSYNC:HSYNC)",
-                "R4 vertical total",
-                "R5 vertical total adjust",
-                "R6 vertical displayed",
-                "R7 vertical sync position",
-                "R8 interlace and skew",
-                "R9 maximum raster address",
-                "R10 cursor start raster",
-                "R11 cursor end raster",
-                "R12 display start address (high)",
-                "R13 display start address (low)",
-                "R14 cursor address (high)",
-                "R15 cursor address (low)",
-                "R16 light pen address (high)",
-                "R17 light pen address (low)"
-            ];
             let mut out = crtc_warning_variables(&crtc_registers(sna));
             out.push(byte(
                 "selected",
@@ -1088,7 +1178,7 @@ pub fn chip_variables(reference: i64, sna: &cpclib_sna::Snapshot) -> Option<Vec<
                 else {
                     name
                 };
-                byte(&name, get(F::CRTC_REG(Some(i))), MEANING[i])
+                byte(&name, get(F::CRTC_REG(Some(i))), CRTC_REGISTER_MEANING[i])
             }));
             // Where in the frame we are - the question a raster effect is
             // actually asking.

@@ -30,7 +30,7 @@ use crate::basic::{
     self, BasicVariableValue, STATEMENT_BREAKPOINT_TARGET, PTR_CURRENT_STATEMENT,
     PTR_VARIABLES_START, VARIABLE_CHAIN_HEADS, VARIABLE_CHAIN_HEADS_COUNT
 };
-use crate::peer::DapPeer;
+use crate::peer::{DapPeer, OWN_REQUEST_BASE, OwnRequestTracker};
 use crate::protocol::{self, address_reference};
 use crate::session::decode_base64;
 
@@ -441,7 +441,10 @@ struct PendingVariables {
 }
 
 pub struct BasicSession<P: DapPeer> {
-    peer: P,
+    /// The peer, plus the editor-seq/own-seq bookkeeping needed to route
+    /// requests this session originates apart from the editor's. See
+    /// [`OwnRequestTracker`].
+    tracker: OwnRequestTracker<P, OwnRequest>,
     source_path: PathBuf,
     /// The source text itself, kept only for `cpclib/basicInject` (AMSpiriT
     /// Lite's own tokeniser - see `native_amspirit`); nothing else here
@@ -535,9 +538,6 @@ pub struct BasicSession<P: DapPeer> {
     /// addresses itself and only ever pauses on a real match, so there is
     /// nothing here to arm, filter, or read memory for.
     native_amspirit: bool,
-    seq: i64,
-    own_requests: HashMap<i64, OwnRequest>,
-    own_seq: i64,
     attached: bool,
     configured: bool,
     started: bool,
@@ -654,7 +654,7 @@ impl<P: DapPeer> BasicSession<P> {
         let line_index = line_index_from_source(source_text);
         let statement_index = basic::build_statement_index(program_bytes, program_start, source_text);
         Self {
-            peer,
+            tracker: OwnRequestTracker::new(peer, OWN_REQUEST_BASE),
             source_path,
             source_text: source_text.to_string(),
             line_index,
@@ -668,9 +668,6 @@ impl<P: DapPeer> BasicSession<P> {
             stop_on_entry: false,
             breakpoints: Vec::new(),
             native_amspirit: false,
-            seq: 1,
-            own_requests: HashMap::new(),
-            own_seq: 100_000,
             attached: false,
             configured: false,
             started: false,
@@ -689,7 +686,7 @@ impl<P: DapPeer> BasicSession<P> {
     }
 
     pub fn peer_mut(&mut self) -> &mut P {
-        &mut self.peer
+        self.tracker.peer_mut()
     }
 
     /// Call before `attach`, from the launch's own `stopOnEntry` argument -
@@ -734,21 +731,15 @@ impl<P: DapPeer> BasicSession<P> {
     }
 
     fn next_seq(&mut self) -> i64 {
-        let seq = self.seq;
-        self.seq += 1;
-        seq
+        self.tracker.next_seq()
     }
 
     fn send_own(&mut self, command: &str, arguments: Value, purpose: Purpose) -> std::io::Result<()> {
-        let seq = self.own_seq;
-        self.own_seq += 1;
-        self.own_requests.insert(seq, OwnRequest { purpose });
-        self.peer.send(protocol::request(command, arguments, seq))
+        self.tracker.send_own(command, arguments, OwnRequest { purpose })
     }
 
     fn is_our_answer(&mut self, response: &Value) -> Option<OwnRequest> {
-        let request_seq = response.get("request_seq").and_then(Value::as_i64)?;
-        self.own_requests.remove(&request_seq)
+        self.tracker.is_our_answer(response)
     }
 
     fn read_memory_bytes(response: &Value) -> Vec<u8> {
@@ -772,7 +763,7 @@ impl<P: DapPeer> BasicSession<P> {
     /// path's own arm-then-start still uses.
     fn on_attached(&mut self) -> std::io::Result<()> {
         self.attached = true;
-        self.native_amspirit = self.peer.supports("cpclib/basicState");
+        self.native_amspirit = self.peer_mut().supports("cpclib/basicState");
         if self.native_amspirit {
             // Injects the program through the emulator's own tokeniser and
             // workspace bookkeeping - the machine was booted cold, with no
@@ -859,7 +850,7 @@ impl<P: DapPeer> BasicSession<P> {
     /// used to do unconditionally, right after the injection request's own
     /// answer, before that was found to be too early to trust.
     fn proceed_once_injection_landed(&mut self) -> Vec<Value> {
-        if self.peer.supports("cpclib/basicListing") {
+        if self.peer_mut().supports("cpclib/basicListing") {
             let _ = self.send_own("cpclib/basicListing", json!({}), Purpose::NativeListingFetched);
         }
         else if let Err(problem) = self.resume_after_injection_landed() {
@@ -950,7 +941,7 @@ impl<P: DapPeer> BasicSession<P> {
     /// function's own launch fix exists for, traded deliberately for not
     /// hanging the launch itself.
     fn autotype_run(&mut self) -> std::io::Result<()> {
-        if !self.peer.supports("cpclib/autotype") {
+        if !self.peer_mut().supports("cpclib/autotype") {
             return Ok(());
         }
         let purpose = if self.native_amspirit {
@@ -1078,7 +1069,7 @@ impl<P: DapPeer> BasicSession<P> {
                 // already effectively paused between our own `basicStep`
                 // calls, but there is no reason to withhold it.
                 self.pause_requested = true;
-                self.peer.send(message.clone())?;
+                self.peer_mut().send(message.clone())?;
                 Ok(Vec::new())
             },
             // `-mv`/`-dv`, DeZog's spelling, same as the Z80 session's own
@@ -1124,7 +1115,7 @@ impl<P: DapPeer> BasicSession<P> {
                 Ok(Vec::new())
             },
             "variables"
-                if (self.native_amspirit || self.peer.supports("cpclib/machineState"))
+                if (self.native_amspirit || self.peer_mut().supports("cpclib/machineState"))
                     && message
                         .get("arguments")
                         .and_then(|a| a.get("variablesReference"))
@@ -1145,18 +1136,7 @@ impl<P: DapPeer> BasicSession<P> {
                 let seq = self.next_seq();
                 Ok(vec![protocol::response(message, json!({}), seq)])
             },
-            _ => {
-                if self.peer.quirks().rejects_unknown_requests && !self.peer.supports(command) {
-                    let seq = self.next_seq();
-                    return Ok(vec![protocol::failure(
-                        message,
-                        &format!("the emulator being debugged does not implement '{command}'."),
-                        seq
-                    )]);
-                }
-                self.peer.send(message.clone())?;
-                Ok(Vec::new())
-            }
+            _ => crate::peer::forward_or_reject(&mut self.tracker, message, command)
         }
     }
 
@@ -1283,7 +1263,7 @@ impl<P: DapPeer> BasicSession<P> {
     /// decoded with `cpclib_basic::BasicProgram` - the same crate this
     /// session's own launch-time tokenising already goes through.
     fn basic_listing_view(&mut self, request: &Value) -> std::io::Result<Vec<Value>> {
-        if self.peer.supports("cpclib/basicListing") {
+        if self.peer_mut().supports("cpclib/basicListing") {
             return self
                 .send_own(
                     "cpclib/basicListing",
@@ -1389,39 +1369,24 @@ impl<P: DapPeer> BasicSession<P> {
         palette: &cpclib_image::palette::Palette<cpclib_image::ink::Ink>,
         memory: &[u8]
     ) -> Vec<Value> {
-        let (default_width, live_lines_per_char_row) = crate::inspect::crtc_screen_defaults(regs);
-        let width = width_override.unwrap_or(default_width);
-        let height = height_override.unwrap_or(crate::inspect::DEFAULT_SCREEN_HEIGHT);
-        let lines_per_char_row =
-            crate::inspect::resolve_char_row_height(row_height_override, live_lines_per_char_row);
-        let encoding = crate::inspect::ScreenEncoding::from_wire(encoding_override.unwrap_or(0));
-        match crate::inspect::render_screen_view(
+        crate::inspect::screen_view_event_and_receipt(
             address,
-            width,
-            height,
+            width_override,
+            height_override,
+            row_height_override,
+            palette_override,
+            encoding_override,
+            // Only AMSpiriT Lite can honour an explicit RAM configuration,
+            // and this session has no `ConfigOverride` concept to begin
+            // with - nothing to stamp.
+            None,
+            regs,
             mode,
             palette,
             memory,
-            lines_per_char_row,
-            palette_override,
-            encoding
-        ) {
-            Ok(body) => {
-                let seq = self.next_seq();
-                let event = protocol::event("cpclib/screenView", body, seq);
-                let seq = self.next_seq();
-                let receipt = protocol::response(
-                    request,
-                    json!({ "result": "screen view opened", "variablesReference": 0 }),
-                    seq
-                );
-                vec![event, receipt]
-            },
-            Err(problem) => {
-                let seq = self.next_seq();
-                vec![protocol::failure(request, &problem, seq)]
-            }
-        }
+            Some(request),
+            || self.next_seq()
+        )
     }
 
     fn set_breakpoints(&mut self, message: &Value) -> std::io::Result<Vec<Value>> {
@@ -1579,7 +1544,7 @@ impl<P: DapPeer> BasicSession<P> {
                 ("PSG", crate::inspect::PSG_REFERENCE, "cpclib/psg"),
                 ("Disc", crate::inspect::DISC_REFERENCE, "cpclib/fdc")
             ] {
-                if self.peer.supports(command) {
+                if self.peer_mut().supports(command) {
                     scopes.push(json!({
                         "name": name,
                         "variablesReference": reference,
@@ -1594,7 +1559,7 @@ impl<P: DapPeer> BasicSession<P> {
         // a whole snapshot parsed for its saved chip registers), reused
         // here rather than reimplemented: `crate::inspect::extra_scopes`/
         // `chip_variables` are the exact same functions that session calls.
-        else if self.peer.supports("cpclib/machineState") {
+        else if self.peer_mut().supports("cpclib/machineState") {
             scopes.extend(crate::inspect::extra_scopes());
         }
         protocol::response(message, json!({ "scopes": scopes }), seq)
@@ -5707,10 +5672,10 @@ mod tests {
         // The generic peer's own live-txttop read (see `known_txttop`'s doc
         // comment) happens first, ahead of the chain-heads/storage reads
         // this test is actually about.
-        let seq = session.own_requests.keys().min().copied().unwrap();
+        let seq = session.tracker.smallest_pending_own_seq().unwrap();
         answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
 
-        let seq = session.own_requests.keys().min().copied().unwrap();
+        let seq = session.tracker.smallest_pending_own_seq().unwrap();
         let refused = json!({
             "type": "response",
             "request_seq": seq,
@@ -5724,7 +5689,7 @@ mod tests {
             events.extend(session.on_emulator_message(&message));
         }
         // The second (storage) read refused the same way.
-        let seq = session.own_requests.keys().min().copied().unwrap();
+        let seq = session.tracker.smallest_pending_own_seq().unwrap();
         let mut second = refused;
         second["request_seq"] = json!(seq);
         session.peer_mut().push_incoming(second);
@@ -5752,21 +5717,21 @@ mod tests {
         // The generic peer's own live-txttop read (see `known_txttop`'s doc
         // comment) happens first, ahead of the chain-heads/storage reads
         // this test is actually about.
-        let seq = session.own_requests.keys().min().copied().unwrap();
+        let seq = session.tracker.smallest_pending_own_seq().unwrap();
         answer(&mut session, seq, read_memory_response(&20u16.to_le_bytes()));
 
         // 27 chain heads: 'I' (9th letter) points at offset 1.
         let mut heads = vec![0u8; VARIABLE_CHAIN_HEADS_COUNT * 2 + 2];
         heads[8 * 2] = 1;
         heads[8 * 2 + 1] = 0;
-        let seq = session.own_requests.keys().min().copied().unwrap();
+        let seq = session.tracker.smallest_pending_own_seq().unwrap();
         answer(&mut session, seq, read_memory_response(&heads));
 
         // One node: next=0, name "I" (bit 7 set on its one char), type
         // 0x01 (integer), value 42.
         let mut storage = vec![0u8, 0u8, b'I' | 0x80, 0x01, 42, 0];
         storage.resize(64, 0);
-        let seq = session.own_requests.keys().min().copied().unwrap();
+        let seq = session.tracker.smallest_pending_own_seq().unwrap();
         let events = answer(&mut session, seq, read_memory_response(&storage));
 
         assert_eq!(events.len(), 1);

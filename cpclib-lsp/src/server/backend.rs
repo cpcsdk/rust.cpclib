@@ -563,21 +563,13 @@ impl CpcLspBackend {
         };
 
         let roots: Vec<PathBuf> = self.workspace_roots();
-        let includers =
-            crate::bndbuild::definition::files_transitively_including(&roots, &from_path);
+        let graph = self.build_analyzer.build_include_graph_cached(&roots);
+        let includers = crate::bndbuild::definition::files_transitively_including(&graph, &from_path);
 
-        for path in includers {
-            let Some(target_uri) = Url::from_file_path(&path).ok()
-            else {
-                continue;
-            };
+        for (target_uri, doc) in self.load_related_documents(includers) {
             if changes.contains_key(&target_uri) {
                 continue;
             }
-            let Some(doc) = self.load_document(&target_uri)
-            else {
-                continue;
-            };
             let edits: Vec<TextEdit> = self
                 .build_analyzer
                 .find_word_references(&doc, &word)
@@ -611,17 +603,13 @@ impl CpcLspBackend {
             return docs;
         };
         let roots: Vec<PathBuf> = self.workspace_roots();
-        for includer_path in
-            crate::bndbuild::definition::files_transitively_including(&roots, &path)
-        {
-            let Some(includer_uri) = Url::from_file_path(&includer_path).ok()
-            else {
-                continue;
-            };
-            if let Some(doc) = self.load_document(&includer_uri) {
-                docs.push(doc);
-            }
-        }
+        let graph = self.build_analyzer.build_include_graph_cached(&roots);
+        let includers = crate::bndbuild::definition::files_transitively_including(&graph, &path);
+        docs.extend(
+            self.load_related_documents(includers)
+                .into_iter()
+                .map(|(_, doc)| doc)
+        );
         docs
     }
 
@@ -642,22 +630,34 @@ impl CpcLspBackend {
         }
         let path = item_uri.to_file_path().ok()?;
         let roots: Vec<PathBuf> = self.workspace_roots();
-        for included_path in
-            crate::bndbuild::definition::files_transitively_included_by(&roots, &path)
-        {
-            let Some(included_uri) = Url::from_file_path(&included_path).ok()
-            else {
-                continue;
-            };
-            let Some(doc) = self.load_document(&included_uri)
-            else {
-                continue;
-            };
+        let graph = self.build_analyzer.build_include_graph_cached(&roots);
+        let included = crate::bndbuild::definition::files_transitively_included_by(&graph, &path);
+        for (_, doc) in self.load_related_documents(included) {
             if let Some(item) = resolve(&doc, name) {
                 return Some(item);
             }
         }
         None
+    }
+
+    /// `paths`, each turned into a `Url` and loaded via `load_document` -
+    /// silently skipping anything that isn't a valid file `Url` or that
+    /// fails to load. The shared tail of the "workspace roots →
+    /// transitively-related paths → `Url` → `load_document`" pipeline
+    /// `rename_jinja_variable_across_workspace`,
+    /// `bndbuild_incoming_candidate_docs` and `resolve_bndbuild_item` each
+    /// repeated after diverging on how `paths` was found
+    /// (`files_transitively_including` vs `files_transitively_included_by`)
+    /// and on what they do with the result.
+    fn load_related_documents(&self, paths: impl IntoIterator<Item = PathBuf>) -> Vec<(Url, Document)> {
+        paths
+            .into_iter()
+            .filter_map(|path| {
+                let uri = Url::from_file_path(&path).ok()?;
+                let doc = self.load_document(&uri)?;
+                Some((uri, doc))
+            })
+            .collect()
     }
 
     /// Resolves a `CallHierarchyItem.uri` back to its document for
@@ -926,7 +926,7 @@ fn non_empty_workspace_edit(
 /// here, since all that matters is "did this differ from the last read",
 /// not an accurate absolute time. Falls back to 0 (the previous fixed
 /// behavior) if the mtime can't be read.
-fn disk_file_version(path: &std::path::Path) -> i32 {
+pub(crate) fn disk_file_version(path: &std::path::Path) -> i32 {
     std::fs::metadata(path)
         .and_then(|m| m.modified())
         .ok()

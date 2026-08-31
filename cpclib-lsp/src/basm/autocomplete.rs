@@ -1246,7 +1246,25 @@ impl AssemblyAnalyzer {
             };
             let source_name = filename.rsplit('/').next().unwrap_or(&filename).to_string();
             let synthetic_uri = synthetic_include_uri(&filename, &document.uri);
-            let included_doc = Document::new(synthetic_uri, content, 0);
+            // `synthetic_uri` is stable per include path, so the version we
+            // hand this synthetic `Document` becomes the `parse_cache` key
+            // forever (`parse_cache` is keyed by `(uri, version)`). A
+            // hardcoded `0` meant the *first* parse of any given included
+            // file got cached permanently - later edits to it (in another
+            // open buffer, or on disk) never invalidated it for the
+            // server's whole lifetime. `inner://` resources are compiled
+            // into the binary and genuinely can't change at runtime, so
+            // they keep the stable version `0`; everything else uses the
+            // same mtime-based `disk_file_version` that `load_document`
+            // already relies on for this exact purpose.
+            let version = if super::includes::is_inner_uri(&filename) {
+                0
+            } else {
+                super::definition::resolve_include_path(&filename, &document.uri)
+                    .map(|path| crate::server::backend::disk_file_version(&path))
+                    .unwrap_or(0)
+            };
+            let included_doc = Document::new(synthetic_uri, content, version);
             for (sym, detail) in self.collect_symbols(&included_doc) {
                 out.push((source_name.clone(), sym, detail));
             }
@@ -1962,6 +1980,53 @@ mod include_tests {
             syms.iter()
                 .any(|(src, sym, _)| sym == "HELPER_LABEL" && src == "helper.asm"),
             "{syms:?}"
+        );
+    }
+
+    /// Regression test for the hardcoded-version-0 stale-cache bug: since
+    /// `synthetic_include_uri` is stable per include path, giving every
+    /// included file's synthetic `Document` version `0` meant the *first*
+    /// parse of a given included file got cached forever in
+    /// `parse_cache` (keyed by `(uri, version)`) - later edits to that
+    /// file on disk were never picked up, for the server's whole
+    /// lifetime. Version must now track the included file's on-disk
+    /// mtime (`disk_file_version`), the same way `load_document` already
+    /// does for opened documents.
+    #[test]
+    fn collect_symbols_from_includes_picks_up_edits_to_the_included_file() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let helper_path = tmp.path().join("helper.asm");
+        std::fs::write(&helper_path, "OLD_LABEL:\n    ret\n").unwrap();
+        let uri = Url::from_file_path(tmp.path().join("main.asm")).unwrap();
+        let doc = Document::new(uri, "    include \"helper.asm\"\n".to_string(), 1);
+
+        let analyzer = AssemblyAnalyzer::new();
+        let before = analyzer.collect_symbols_from_includes(&doc);
+        assert!(
+            before.iter().any(|(_, sym, _)| sym == "OLD_LABEL"),
+            "{before:?}"
+        );
+
+        // Simulate an on-disk edit to the included file, made in another
+        // buffer (so the *including* document's own version never
+        // changes) - bump mtime forward so `disk_file_version` sees it as
+        // a distinct version, exactly like the sibling
+        // `disk_file_version_tests` do.
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::write(&helper_path, "NEW_LABEL:\n    ret\n").unwrap();
+        std::fs::File::open(&helper_path)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+
+        let after = analyzer.collect_symbols_from_includes(&doc);
+        assert!(
+            after.iter().any(|(_, sym, _)| sym == "NEW_LABEL"),
+            "stale cache: {after:?}"
+        );
+        assert!(
+            !after.iter().any(|(_, sym, _)| sym == "OLD_LABEL"),
+            "stale cache still serving the old symbol: {after:?}"
         );
     }
 

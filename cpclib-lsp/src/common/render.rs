@@ -32,41 +32,24 @@ pub fn format_number_hover(label: &str, value: i64) -> String {
 /// `#BB5A`-shaped value text) into its `i64` value. Handles `$`/`&`/`#`
 /// (hex), `%` (binary), `0x`/`0b`/`0o`, and plain decimal — the same CPC/
 /// basm numeric-literal conventions `format_number_hover` displays.
+///
+/// Delegates to `cpclib_common::parse_value`, the parser `basm` itself uses
+/// for source-level numeric literals (also `_`-separated digit groups,
+/// which this narrower reimplementation used to reject) - rather than a
+/// second, independent implementation of the same conventions. That parser
+/// returns `u32`; this still returns `i64` for its own callers, but neither
+/// this function nor any current caller ever handled a *signed* literal (no
+/// branch here recognised a leading `-`, and both callers only ever isolate
+/// a token starting at a digit or a prefix), so the narrowing carries
+/// nothing to preserve.
 pub fn parse_numeric_literal_str(num_str: &str) -> Option<i64> {
-    if let Some(h) = num_str
-        .strip_prefix('$')
-        .or_else(|| num_str.strip_prefix('&'))
-        .or_else(|| num_str.strip_prefix('#'))
-    {
-        i64::from_str_radix(h, 16).ok()
-    }
-    else if let Some(b) = num_str.strip_prefix('%') {
-        i64::from_str_radix(b, 2).ok()
-    }
-    else if let Some(h) = num_str
-        .strip_prefix("0x")
-        .or_else(|| num_str.strip_prefix("0X"))
-    {
-        i64::from_str_radix(h, 16).ok()
-    }
-    else if let Some(b) = num_str
-        .strip_prefix("0b")
-        .or_else(|| num_str.strip_prefix("0B"))
-    {
-        i64::from_str_radix(b, 2).ok()
-    }
-    else if let Some(o) = num_str
-        .strip_prefix("0o")
-        .or_else(|| num_str.strip_prefix("0O"))
-    {
-        i64::from_str_radix(o, 8).ok()
-    }
-    else if num_str.bytes().all(|b| b.is_ascii_digit()) {
-        num_str.parse().ok()
-    }
-    else {
-        None
-    }
+    use cpclib_common::winnow::Parser;
+    use cpclib_common::winnow::error::ContextError;
+    use cpclib_common::winnow::stream::AsBStr;
+    cpclib_common::parse_value::<_, ContextError>
+        .parse(num_str.trim().as_bstr())
+        .ok()
+        .map(i64::from)
 }
 
 /// Extract a short one-line summary from a keyword/directive's full markdown
@@ -173,5 +156,27 @@ mod tests {
         let md = format_number_hover("x", -1);
         assert!(md.contains("&FFFF"), "{md}");
         assert!(!md.contains("&FFFFFFFFFFFFFFFF"), "{md}");
+    }
+
+    /// Regression coverage for delegating to `cpclib_common::parse_value`:
+    /// every prefix/suffix convention the narrower reimplementation used to
+    /// hand-parse must still resolve to the same value, plus the
+    /// underscore-separated groups the old implementation used to reject.
+    #[test]
+    fn parse_numeric_literal_str_covers_every_cpc_convention() {
+        assert_eq!(parse_numeric_literal_str("42"), Some(42));
+        assert_eq!(parse_numeric_literal_str("&BB5A"), Some(0xBB5A));
+        assert_eq!(parse_numeric_literal_str("$BB5A"), Some(0xBB5A));
+        assert_eq!(parse_numeric_literal_str("#BB5A"), Some(0xBB5A));
+        assert_eq!(parse_numeric_literal_str("0xBB5A"), Some(0xBB5A));
+        assert_eq!(parse_numeric_literal_str("%1010"), Some(0b1010));
+        assert_eq!(parse_numeric_literal_str("0b1010"), Some(0b1010));
+        assert_eq!(parse_numeric_literal_str("0o17"), Some(0o17));
+        // Underscore-separated digit groups - rejected by the old,
+        // narrower implementation, now handled the same way `basm` itself
+        // parses a source-level literal.
+        assert_eq!(parse_numeric_literal_str("&BB_5A"), Some(0xBB5A));
+        assert_eq!(parse_numeric_literal_str("1_000"), Some(1000));
+        assert_eq!(parse_numeric_literal_str("not a number"), None);
     }
 }

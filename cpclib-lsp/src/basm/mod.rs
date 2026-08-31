@@ -77,15 +77,22 @@ pub struct AssemblyAnalyzer {
     /// Cache for `expand::dry_run_env`'s result (a *real, full multi-pass
     /// assemble* of the whole document) - only used by features that
     /// genuinely need one (cross-file macro/`FUNCTION`/`STRUCT` lookup,
-    /// real assembler warnings). Same `(version, Arc<T>)` shape as
-    /// `parse_cache`.
-    /// `(document version, env, whether the assemble actually finished)`.
+    /// real assembler warnings).
+    /// `((document version, workspace fingerprint), env, whether the
+    /// assemble actually finished)`.
     ///
     /// The completeness flag matters because a *failed* assemble still yields a
     /// usable partial `Env` - good enough for hover and `EQU` values, and
     /// actively wrong for anything address-shaped. See
     /// `expand::dry_run_env_cached_checked`.
-    env_cache: DashMap<Url, (i32, Arc<Env>, bool)>,
+    ///
+    /// The fingerprint has to be in the key, not just the version - same
+    /// reason as `address_source_cache` below: `dry_run_env` follows
+    /// `include`s at any depth, so an edit to an *included* file changes
+    /// this document's real assemble without touching its own version.
+    /// Without it, diagnostics/semantic-tokens/macro-hover silently served
+    /// stale results after editing an included file in another buffer.
+    env_cache: DashMap<Url, ((i32, u128), Arc<Env>, bool)>,
     /// Cache for `expand::local_symbols_env`'s result (a lightweight,
     /// non-assembling local `EQU`/`SET` resolution) - what most hover
     /// value-substitution needs actually use, since `dry_run_env`'s real
@@ -228,4 +235,23 @@ impl Default for AssemblyAnalyzer {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Workspace fingerprint for `uri`'s project root - a `stat` per candidate
+/// source, no reads. Shared by every cache whose result depends on more
+/// than just `uri`'s own document version, because it follows `include`s:
+/// `env_cache` (`expand::dry_run_env_cached_checked`) and
+/// `address_source_cache` (`peephole::peephole_addresses`) both need this
+/// in their key, since an edit to an *included* file changes their result
+/// without touching the including document's own version. `0` when `uri`
+/// isn't a file path or has no discoverable project root (e.g. an unsaved
+/// buffer) - same fallback both call sites already used before this was
+/// shared.
+pub(super) fn workspace_fingerprint_of(uri: &Url) -> u128 {
+    uri.to_file_path()
+        .ok()
+        .as_deref()
+        .and_then(cpclib_project::entry::root_of)
+        .map(|root| cpclib_project::entry::fingerprint_of(&root))
+        .unwrap_or(0)
 }

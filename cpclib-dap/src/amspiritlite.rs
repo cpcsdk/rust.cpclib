@@ -467,27 +467,6 @@ fn flat_pane(body: &Value, consumed: &[&str]) -> Vec<Value> {
 
 /// The CRTC, with the selected register marked and the raster counter kept.
 fn crtc_pane(body: &Value) -> Vec<Value> {
-    const MEANING: [&str; 18] = [
-        "R0 horizontal total",
-        "R1 horizontal displayed",
-        "R2 horizontal sync position",
-        "R3 sync widths (VSYNC:HSYNC)",
-        "R4 vertical total",
-        "R5 vertical total adjust",
-        "R6 vertical displayed",
-        "R7 vertical sync position",
-        "R8 interlace and skew",
-        "R9 maximum raster address",
-        "R10 cursor start raster",
-        "R11 cursor end raster",
-        "R12 display start address (high)",
-        "R13 display start address (low)",
-        "R14 cursor address (high)",
-        "R15 cursor address (low)",
-        "R16 light pen address (high)",
-        "R17 light pen address (low)"
-    ];
-
     let selected = body.get("selected_reg").and_then(Value::as_u64);
     let mut out = crate::inspect::crtc_registers_from_json(body)
         .map(|regs| crate::inspect::crtc_warning_variables(&regs))
@@ -510,7 +489,14 @@ fn crtc_pane(body: &Value) -> Vec<Value> {
             else {
                 name
             };
-            scalar(&name, value, MEANING.get(index).copied().unwrap_or(""))
+            scalar(
+                &name,
+                value,
+                crate::inspect::CRTC_REGISTER_MEANING
+                    .get(index)
+                    .copied()
+                    .unwrap_or("")
+            )
         }));
     }
 

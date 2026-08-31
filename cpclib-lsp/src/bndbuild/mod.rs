@@ -4,6 +4,8 @@
 //! Each feature lives in its own file; they all extend the same
 //! `BuildFileAnalyzer` type through separate `impl` blocks.
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use dashmap::DashMap;
@@ -43,14 +45,21 @@ pub struct BuildFileAnalyzer {
     expand_cache: DashMap<Url, (i32, Arc<(String, sourcemap::SourceMap)>)>,
     /// Loaded once at `initialize()` - see `basm::AssemblyAnalyzer::config`'s
     /// own doc comment for the reasoning behind this shape.
-    config: RwLock<Arc<BndbuildConfig>>
+    config: RwLock<Arc<BndbuildConfig>>,
+    /// Cache for `definition::build_include_graph`'s result - see
+    /// `definition::BuildFileAnalyzer::build_include_graph_cached`'s own doc
+    /// comment. `(roots, fingerprint, graph)`; a single slot rather than a
+    /// map keyed by root list, since every caller passes the same
+    /// `self.workspace_roots()`.
+    include_graph_cache: RwLock<Option<(Vec<PathBuf>, u128, Arc<HashMap<PathBuf, Vec<PathBuf>>>)>>
 }
 
 impl BuildFileAnalyzer {
     pub fn new() -> Self {
         Self {
             expand_cache: DashMap::new(),
-            config: RwLock::new(Arc::new(BndbuildConfig::default()))
+            config: RwLock::new(Arc::new(BndbuildConfig::default())),
+            include_graph_cache: RwLock::new(None)
         }
     }
 

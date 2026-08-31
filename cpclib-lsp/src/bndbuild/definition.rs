@@ -627,19 +627,84 @@ pub(crate) fn build_include_graph(roots: &[PathBuf]) -> HashMap<PathBuf, Vec<Pat
     graph
 }
 
-/// Every file under `roots` that transitively `{% include %}`s `target`
-/// (directly or indirectly) — the set of files a rename of a variable
-/// defined in `target` needs to also update. Found by inverting
-/// [`build_include_graph`] and walking its reverse edges breadth-first from
+/// Cheap, mtime-based fingerprint over every [`build_include_graph`]
+/// candidate under `roots` - a `stat` per candidate, no reads, mirroring
+/// `cpclib_project::entry::fingerprint_of`'s own "newest mtime across the
+/// relevant files" shape. Not reused directly from there: its own filter
+/// only counts `.bnd`/`.build` extensions, missing `bndbuild.yml`-named
+/// roots that [`is_bndbuild_candidate`] (and so `build_include_graph`
+/// itself) does count - a root entry point using that name would go on
+/// silently serving a stale cached graph after every edit.
+fn build_include_graph_fingerprint(roots: &[PathBuf]) -> u128 {
+    cpclib_project::walk::files_under_all(roots)
+        .into_iter()
+        .filter(|entry| is_bndbuild_candidate(entry.path()))
+        .filter_map(|entry| entry.metadata().ok()?.modified().ok())
+        .filter_map(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|since_epoch| since_epoch.as_nanos())
+        .max()
+        .unwrap_or(0)
+}
+
+impl BuildFileAnalyzer {
+    /// [`build_include_graph`], cached by `roots` and its own fingerprint.
+    ///
+    /// One Call Hierarchy interaction can chain
+    /// `rename_jinja_variable_across_workspace`,
+    /// `bndbuild_incoming_candidate_docs` and `resolve_bndbuild_item` in
+    /// turn - each with its own `self.workspace_roots()` - which walked and
+    /// re-parsed every workspace bndbuild file two or three times over for
+    /// what is, every time, the same answer. Mirrors
+    /// `AssemblyAnalyzer`'s own fingerprinted caches
+    /// (`env_cache`/`address_source_cache`).
+    ///
+    /// `roots` is part of the key (not just the fingerprint) because,
+    /// unlike a document-keyed cache, there is no per-document slot to
+    /// begin with - every caller here happens to pass the same
+    /// `self.workspace_roots()`, but nothing enforces that, and comparing
+    /// `roots` too means a caller that ever passed a different set gets a
+    /// correct (if uncached) answer rather than someone else's graph.
+    pub(crate) fn build_include_graph_cached(
+        &self,
+        roots: &[PathBuf]
+    ) -> std::sync::Arc<HashMap<PathBuf, Vec<PathBuf>>> {
+        let fingerprint = build_include_graph_fingerprint(roots);
+        {
+            let cache = self
+                .include_graph_cache
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+            if let Some((cached_roots, cached_fingerprint, graph)) = cache.as_ref()
+                && *cached_fingerprint == fingerprint
+                && cached_roots.as_slice() == roots
+            {
+                return graph.clone();
+            }
+        }
+        let graph = std::sync::Arc::new(build_include_graph(roots));
+        *self
+            .include_graph_cache
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some((roots.to_vec(), fingerprint, graph.clone()));
+        graph
+    }
+}
+
+/// Every file in `graph` (see [`build_include_graph`]) that transitively
+/// `{% include %}`s `target` (directly or indirectly) — the set of files a
+/// rename of a variable defined in `target` needs to also update. Found by
+/// inverting `graph` and walking its reverse edges breadth-first from
 /// `target`. `target` itself is never included in the result.
-pub(crate) fn files_transitively_including(roots: &[PathBuf], target: &Path) -> Vec<PathBuf> {
-    let graph = build_include_graph(roots);
+pub(crate) fn files_transitively_including(
+    graph: &HashMap<PathBuf, Vec<PathBuf>>,
+    target: &Path
+) -> Vec<PathBuf> {
     let target = target
         .canonicalize()
         .unwrap_or_else(|_| target.to_path_buf());
 
     let mut reverse: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
-    for (from, tos) in &graph {
+    for (from, tos) in graph {
         for to in tos {
             reverse.entry(to.clone()).or_default().push(from.clone());
         }
@@ -670,11 +735,13 @@ pub(crate) fn files_transitively_including(roots: &[PathBuf], target: &Path) -> 
 /// indirectly) — the downward counterpart of
 /// [`files_transitively_including`], used to search for a target/macro
 /// definition that isn't in `from` itself but lives in a shared/common file
-/// it pulls in. Same [`build_include_graph`] adjacency map, walked forward
-/// over its direct edges instead of the other function's reverse-edge walk.
-/// `from` itself is never included in the result.
-pub(crate) fn files_transitively_included_by(roots: &[PathBuf], from: &Path) -> Vec<PathBuf> {
-    let graph = build_include_graph(roots);
+/// it pulls in. Same `graph` (see [`build_include_graph`]) adjacency map,
+/// walked forward over its direct edges instead of the other function's
+/// reverse-edge walk. `from` itself is never included in the result.
+pub(crate) fn files_transitively_included_by(
+    graph: &HashMap<PathBuf, Vec<PathBuf>>,
+    from: &Path
+) -> Vec<PathBuf> {
     let from = from.canonicalize().unwrap_or_else(|_| from.to_path_buf());
 
     let mut visited: HashSet<PathBuf> = HashSet::new();
@@ -755,8 +822,8 @@ mod rename_tests {
         .unwrap();
 
         let common_build = tmp.path().join("common.build").canonicalize().unwrap();
-        let includers =
-            files_transitively_including(&[tmp.path().to_path_buf().into()], &common_build);
+        let graph = build_include_graph(&[tmp.path().to_path_buf().into()]);
+        let includers = files_transitively_including(&graph, &common_build);
         assert_eq!(includers.len(), 2, "{includers:?}");
         assert!(includers.contains(&tmp.path().join("linking/build.bnd").canonicalize().unwrap()));
         assert!(
@@ -786,8 +853,8 @@ mod rename_tests {
         .unwrap();
 
         let root_build = tmp.path().join("root.build").canonicalize().unwrap();
-        let includers =
-            files_transitively_including(&[tmp.path().to_path_buf().into()], &root_build);
+        let graph = build_include_graph(&[tmp.path().to_path_buf().into()]);
+        let includers = files_transitively_including(&graph, &root_build);
         assert_eq!(includers.len(), 2, "{includers:?}");
         assert!(includers.contains(&tmp.path().join("middle.build").canonicalize().unwrap()));
         assert!(includers.contains(&tmp.path().join("leaf.bnd").canonicalize().unwrap()));
@@ -806,6 +873,71 @@ mod rename_tests {
         let refs = analyzer.find_word_references(&doc, "CPCIP");
         assert_eq!(refs.len(), 1, "{refs:?}");
         assert_eq!(refs[0].range.start.line, 2);
+    }
+}
+
+#[cfg(test)]
+mod build_include_graph_cache_tests {
+    use std::sync::Arc;
+
+    use super::*;
+
+    /// Same `roots` and nothing touched on disk: the second call must reuse
+    /// the exact same cached graph rather than re-walking and re-parsing
+    /// every workspace bndbuild file again - this is the whole point of
+    /// `build_include_graph_cached`, called two or three times per Call
+    /// Hierarchy interaction (`backend.rs`) with the same
+    /// `self.workspace_roots()` each time.
+    #[test]
+    fn repeated_calls_with_nothing_changed_reuse_the_cached_graph() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("common.build"),
+            "{% set X = 1 %}\n"
+        )
+        .unwrap();
+        let roots = vec![tmp.path().to_path_buf().into()];
+
+        let analyzer = BuildFileAnalyzer::new();
+        let first = analyzer.build_include_graph_cached(&roots);
+        let second = analyzer.build_include_graph_cached(&roots);
+
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    /// A file changing on disk after the first call must bust the cache -
+    /// otherwise a rename or a new `{% include %}` would go on being
+    /// invisible to Call Hierarchy for the rest of the session.
+    #[test]
+    fn a_changed_file_recomputes_the_cached_graph() {
+        let tmp = camino_tempfile::tempdir().unwrap();
+        let build_path = tmp.path().join("build.bnd");
+        std::fs::write(&build_path, "- tgt: t\n  cmd: echo hi\n").unwrap();
+        let roots = vec![tmp.path().to_path_buf().into()];
+
+        let analyzer = BuildFileAnalyzer::new();
+        let first = analyzer.build_include_graph_cached(&roots);
+
+        // Bump the mtime forward, like the sibling `disk_file_version`/
+        // `address_source_cache`/`env_cache` regression tests do - the
+        // fingerprint is mtime-based and a same-second rewrite could
+        // otherwise leave it unchanged.
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::write(&build_path, "{% include \"common.build\" %}\n").unwrap();
+        std::fs::write(tmp.path().join("common.build"), "{% set X = 1 %}\n").unwrap();
+        std::fs::File::open(&build_path)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+
+        let second = analyzer.build_include_graph_cached(&roots);
+        assert!(!Arc::ptr_eq(&first, &second));
+
+        let build_canon = build_path.canonicalize().unwrap();
+        assert!(
+            second.contains_key(&build_canon),
+            "the recomputed graph should see the new {{% include %}}: {second:?}"
+        );
     }
 }
 

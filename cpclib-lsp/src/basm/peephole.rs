@@ -254,15 +254,7 @@ impl AssemblyAnalyzer {
         document: &Document,
         own_assemble_complete: impl FnOnce() -> bool
     ) -> Arc<AddressSource> {
-        // The shared crate speaks paths; the LSP speaks document URIs. Convert
-        // here rather than teaching it about either.
-        let document_path = document.uri.to_file_path().ok();
-        let fingerprint = document_path
-            .as_deref()
-            .and_then(entry::root_of)
-            .map(|root| entry::fingerprint_of(&root))
-            .unwrap_or(0);
-        let key = (document.version, fingerprint);
+        let key = (document.version, super::workspace_fingerprint_of(&document.uri));
 
         if let Some(cached) = self.address_source_cache.get(&document.uri)
             && cached.0 == key
