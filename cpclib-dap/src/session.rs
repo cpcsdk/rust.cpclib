@@ -2273,7 +2273,7 @@ impl<P: DapPeer> Session<P> {
         let decoded = crate::disassemble::overlay_data_rows(
             decoded,
             |address| self.data_span_at(page, address),
-            |address, len| self.image_bytes(page.unwrap_or(0), address, len),
+            |address, len| self.image_bytes_precise(page.unwrap_or(0), address, len),
             last_pc
         );
 
@@ -3869,7 +3869,7 @@ impl<P: DapPeer> Session<P> {
         // Four bytes is the Z80's longest instruction.
         let window: Vec<u8> = (0..4)
             .filter_map(|offset| {
-                self.image_byte(self.pc_page.unwrap_or(0), address.wrapping_add(offset))
+                self.image_byte_precise(self.pc_page.unwrap_or(0), address.wrapping_add(offset))
             })
             .collect();
         crate::disassemble::decode(address, &window, 1)
@@ -4047,7 +4047,7 @@ impl<P: DapPeer> Session<P> {
         let decoded = crate::disassemble::overlay_data_rows(
             decoded,
             |address| self.data_span_at(page, address),
-            |address, len| self.image_bytes(page.unwrap_or(0), address, len),
+            |address, len| self.image_bytes_precise(page.unwrap_or(0), address, len),
             last_pc
         );
 
@@ -4670,8 +4670,22 @@ impl<P: DapPeer> Session<P> {
         else {
             return LineAtPc::Unknown;
         };
+        // The exact bank, when known, is what `annotate_stack_trace` already
+        // resolves `pc`'s own source line by - reusing it here keeps `defs`
+        // detection agreeing with what the editor is actually showing for a
+        // single-window remap (`C4`-`C7`). A miss under a *known* exact bank
+        // is a real "no source here", not a reason to fall back to the
+        // page-only lookup that could then name a different bank's line -
+        // the fallback is only for when no exact bank is known at all.
         let page = self.pc_page.unwrap_or(0);
-        let Some(at) = self.map.location_at_long(page, pc)
+        let physical = self
+            .pc_physical
+            .map(|pc_physical| (pc_physical & !0x3FFF) | u32::from(pc & 0x3FFF));
+        let at = match physical {
+            Some(physical) => self.map.location_at_physical(physical),
+            None => self.map.location_at_long(page, pc)
+        };
+        let Some(at) = at
         else {
             return LineAtPc::Unknown;
         };
@@ -4685,9 +4699,11 @@ impl<P: DapPeer> Session<P> {
         if !is_a_defs_directive(&text) {
             return LineAtPc::Ordinary;
         }
-        let Some(run) = self
-            .map
-            .line_extent_at(page, pc)
+        let run = match physical {
+            Some(physical) => self.map.line_extent_at_physical(physical),
+            None => self.map.line_extent_at(page, pc)
+        };
+        let Some(run) = run
             .and_then(|run| Some(u16::try_from(run.start).ok()?..u16::try_from(run.end).ok()?))
         else {
             // A run reaching the very top of memory has no address after it to
@@ -4716,7 +4732,17 @@ impl<P: DapPeer> Session<P> {
     /// is the only honest unit left.
     fn line_cost(&self, address: u16) -> Option<usize> {
         let page = self.pc_page.unwrap_or(0);
-        let Some(extent) = self.map.line_extent_at(page, address)
+        // Same reasoning as `line_at_pc`: the exact bank, when known, decides
+        // both which line's extent this is and which bytes it really holds -
+        // `image_byte_precise` reuses the same bank for the bytes below.
+        let physical = self
+            .pc_physical
+            .map(|pc_physical| (pc_physical & !0x3FFF) | u32::from(address & 0x3FFF));
+        let extent = match physical {
+            Some(physical) => self.map.line_extent_at_physical(physical),
+            None => self.map.line_extent_at(page, address)
+        };
+        let Some(extent) = extent
         else {
             return self.instruction_in_image(address)?.cost;
         };
@@ -4726,7 +4752,7 @@ impl<P: DapPeer> Session<P> {
             .map(|at| {
                 u16::try_from(at)
                     .ok()
-                    .and_then(|at| self.image_byte(page, at))
+                    .and_then(|at| self.image_byte_precise(page, at))
             })
             .collect::<Option<Vec<u8>>>()?;
 
@@ -4759,9 +4785,45 @@ impl<P: DapPeer> Session<P> {
     /// `offset_in_cpc()`: page 0 first, then one 64K block per extra page. So
     /// the same logical address in two pages is two different offsets, and the
     /// page selects between them.
+    ///
+    /// `address + page * 0x1_0000` is `offset_in_cpc()` only when `bank ==
+    /// address >> 14` - true for a whole-page swap (`C0`-`C3`, every window
+    /// comes from the same bank) but not for a single-window remap (`C4`-`C7`,
+    /// which changes *which* bank of the page sits at `&4000` while the other
+    /// three windows stay put). This is the coarse primitive for when only
+    /// `page` is known at all; prefer `image_byte_precise` wherever the exact
+    /// bank might be known instead.
     fn image_byte(&self, page: u8, address: u16) -> Option<u8> {
         let offset = address as usize + page as usize * 0x1_0000;
         self.image.as_ref()?.get(offset).copied()
+    }
+
+    /// The byte at a *physical* address - `bank * 0x4000 + offset`, the same
+    /// number `offset_in_cpc()` computes - which is exactly what the image is
+    /// laid out by. Unlike `image_byte`, this has no whole-page-swap
+    /// assumption to be wrong about: a physical address names one byte,
+    /// however it got selected.
+    fn image_byte_at_physical(&self, physical: u32) -> Option<u8> {
+        self.image.as_ref()?.get(physical as usize).copied()
+    }
+
+    /// `image_byte`, refined by the exact bank when one is known.
+    ///
+    /// `pc_physical` already carries a real bank (from AMSpiriT Lite naming
+    /// its own banking), and reusing it for `address` is exactly what
+    /// `annotate_stack_trace`/`annotate_disassembly` already do to resolve
+    /// *source* precisely - the same reuse makes *bytes* precise too, which
+    /// is what a `C4`-`C7` program's NOP costs and self-modified-code
+    /// detection need. Falls back to the coarse, page-only formula only when
+    /// no exact bank is known at all.
+    fn image_byte_precise(&self, page: u8, address: u16) -> Option<u8> {
+        match self.pc_physical {
+            Some(pc_physical) => {
+                let physical = (pc_physical & !0x3FFF) | u32::from(address & 0x3FFF);
+                self.image_byte_at_physical(physical)
+            },
+            None => self.image_byte(page, address)
+        }
     }
 
     /// Where the source map says `address` is a `db`/`defs`/`defw`/`incbin`
@@ -4769,13 +4831,17 @@ impl<P: DapPeer> Session<P> {
     /// `overlay_data_rows` needs to replace decode()'s guess with the real
     /// data.
     ///
-    /// Tries the known page first, since that is the accurate answer on a
-    /// paged program where the plain logical lookup cannot tell pages apart;
-    /// falls back to it for the common unpaged case where a page was never
+    /// Tries the exact bank first (see `image_byte_precise`'s own reasoning -
+    /// same fix, same reason), then the known page, since that is still more
+    /// accurate than the plain logical lookup on a paged program; falls back
+    /// to the plain lookup for the common unpaged case where neither was ever
     /// pinned down.
     fn data_span_at(&self, page: Option<u8>, address: u16) -> Option<(u16, u16)> {
-        let location = page
-            .and_then(|page| self.map.location_at_long(page, address))
+        let location = self
+            .pc_physical
+            .map(|pc_physical| (pc_physical & !0x3FFF) | u32::from(address & 0x3FFF))
+            .and_then(|physical| self.map.location_at_physical(physical))
+            .or_else(|| page.and_then(|page| self.map.location_at_long(page, address)))
             .or_else(|| self.map.location_at(address as u32))?;
         location.is_data.then_some((address, location.len as u16))
     }
@@ -4786,9 +4852,10 @@ impl<P: DapPeer> Session<P> {
     ///
     /// The primitive `overlay_data_rows` compares against to catch
     /// self-modified data: this is what was written, not what is live.
-    fn image_bytes(&self, page: u8, address: u16, len: usize) -> Option<Vec<u8>> {
+    /// Refined by the exact bank when one is known - see `image_byte_precise`.
+    fn image_bytes_precise(&self, page: u8, address: u16, len: usize) -> Option<Vec<u8>> {
         (0..len)
-            .map(|offset| self.image_byte(page, address.wrapping_add(offset as u16)))
+            .map(|offset| self.image_byte_precise(page, address.wrapping_add(offset as u16)))
             .collect()
     }
 
@@ -6302,6 +6369,16 @@ mod tests {
             image
         }
 
+        /// Same idea, but placed by *physical* address (`bank * 0x4000 +
+        /// offset`) rather than assumed to sit in page 0 - what a program
+        /// with extended-RAM pages actually is laid out by.
+        fn image_with_physical(physical: u32, bytes: &[u8]) -> Vec<u8> {
+            let mut image = vec![0u8; 0x2_0000];
+            let at = physical as usize;
+            image[at..at + bytes.len()].copy_from_slice(bytes);
+            image
+        }
+
         /// Costs come from the assembler's own table, applied to the
         /// program's own bytes - so pricing and the build cannot disagree
         /// about what code costs.
@@ -6316,6 +6393,53 @@ mod tests {
                 .with_image(image_with(0x4000, &[0x3E, 0x00]));
 
             assert_eq!(session.line_cost(0x4000), Some(2));
+        }
+
+        /// `line_cost` under a single-window remap (`C4` vs `C5`): two files
+        /// share `page` at the same logical address, so the page-only lookup
+        /// this used to be built on could grow the extent of - and read the
+        /// bytes of - the *wrong* bank's line. With the exact bank known
+        /// (`pc_physical`, as AMSpiriT Lite reports it), the cost follows the
+        /// bank, not whichever line happened to win the coarse pick.
+        #[test]
+        fn line_cost_follows_the_exact_bank_not_just_the_page() {
+            let map = SourceMap::from_raw(&RawSourceMap {
+                files: vec!["spectral_sprites.asm".into(), "animate.asm".into()],
+                rows: vec![
+                    SourceMapRow {
+                        file: 0,
+                        line: 177,
+                        logical: 0x42A8,
+                        physical: 0x102A8, // C4: page 1, bank 0
+                        page: 1,
+                        column: 1,
+                        column_end: 1,
+                        len: 2,
+                        is_data: false
+                    },
+                    SourceMapRow {
+                        file: 1,
+                        line: 308,
+                        logical: 0x42A8,
+                        physical: 0x142A8, // C5: page 1, bank 1
+                        page: 1,
+                        column: 1,
+                        column_end: 1,
+                        len: 1,
+                        is_data: false
+                    },
+                ]
+            });
+            let mut image = image_with_physical(0x102A8, &[0x3E, 0x00]); // LD A,0 - 2 NOPs
+            image[0x142A8] = 0x00; // NOP - 1 NOP
+
+            let mut session = Session::new(RecordingPeer::new(), map).with_image(image);
+
+            session.pc_physical = Some(0x102A8); // C4: spectral_sprites' bank
+            assert_eq!(session.line_cost(0x42A8), Some(2));
+
+            session.pc_physical = Some(0x142A8); // C5: animate's bank
+            assert_eq!(session.line_cost(0x42A8), Some(1));
         }
 
         /// Stepping into a `defs` run must not end the session: `defs N`

@@ -550,9 +550,40 @@ impl SourceMap {
             .spans
             .iter()
             .find(|s| s.page == page && address >= s.start && address < s.end)?;
-        let (file, line) = (anchor.file, anchor.line);
-        let mut extent = anchor.start..anchor.end;
+        Some(self.grow_extent_to_fixpoint(anchor.page, anchor.file, anchor.line, anchor.start..anchor.end))
+    }
 
+    /// `line_extent_at`, anchored by the exact `physical` address instead of a
+    /// page and a logical address.
+    ///
+    /// A single-window remap (`C4`-`C7`) makes `line_extent_at`'s own anchor
+    /// step ambiguous in exactly the way `location_at_physical` exists to fix
+    /// for source lookups: two rows can share `page` and cover the same
+    /// logical address while being different banks, so picking the anchor by
+    /// `page` alone can grow the extent of the *wrong* line. `physical` does
+    /// not have that ambiguity.
+    pub fn line_extent_at_physical(&self, physical: u32) -> Option<std::ops::Range<u32>> {
+        let anchor = self
+            .spans
+            .iter()
+            .find(|s| physical >= s.physical && physical < s.physical + (s.end - s.start))?;
+        Some(self.grow_extent_to_fixpoint(anchor.page, anchor.file, anchor.line, anchor.start..anchor.end))
+    }
+
+    /// The unbroken run of bytes one `(page, file, line)` occupies, starting
+    /// from `extent` and growing to include every row that shares them.
+    ///
+    /// Shared by `line_extent_at`/`line_extent_at_physical`: both need to grow
+    /// from an anchor row to every other row of that same source line once the
+    /// anchor itself is correctly pinned down - the growing step itself does
+    /// not care whether the anchor was found by page or by physical address.
+    fn grow_extent_to_fixpoint(
+        &self,
+        page: u8,
+        file: u16,
+        line: u32,
+        mut extent: std::ops::Range<u32>
+    ) -> std::ops::Range<u32> {
         // Grow to a fixpoint rather than in one pass: rows of one line are not
         // required to appear in address order, so a row that does not touch
         // the run yet may touch it once another row has widened it.
@@ -577,7 +608,7 @@ impl SourceMap {
                 }
             }
         }
-        Some(extent)
+        extent
     }
 
     /// Whether this program puts code from different pages at the same logical
@@ -915,6 +946,31 @@ mod tests {
             m.location_at(0x42A8),
             None,
             "no guess is made - same failure mode as two different pages"
+        );
+    }
+
+    /// `line_extent_at`'s own anchor step has the identical same-page
+    /// ambiguity `location_at_long` did - it can grow the extent of the
+    /// *wrong* bank's line. `line_extent_at_physical` anchors precisely
+    /// instead, and the growth from there still finds every row of the
+    /// right line (a two-row emission, `ld a,0 : ld b,0`-shaped).
+    #[test]
+    fn line_extent_at_physical_grows_the_right_banks_line_only() {
+        let m = remapped_map(&[
+            (0, 10, 0x4000, 1, 0x102A8, 1), // C4, line 10, first row
+            (0, 10, 0x4001, 1, 0x102A9, 1), // C4, line 10, second row
+            (1, 90, 0x4000, 1, 0x142A8, 2)  // C5, line 90, one two-byte row
+        ]);
+
+        assert_eq!(
+            m.line_extent_at_physical(0x102A8),
+            Some(0x4000..0x4002),
+            "both rows of C4's line 10, not C5's unrelated line 90"
+        );
+        assert_eq!(
+            m.line_extent_at_physical(0x142A8),
+            Some(0x4000..0x4002),
+            "C5's own line 90, not confused with C4's line 10 at the same logical range"
         );
     }
 
