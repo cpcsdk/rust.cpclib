@@ -671,9 +671,14 @@ pub struct Session<P: DapPeer> {
     /// when a page had to be guessed by comparing bytes, because a byte
     /// comparison only ever produces a page, never a bank within it.
     pc_physical: Option<u32>,
-    /// Which label each call site was found to name, so a stack walked on
-    /// every stop reads its few source lines once.
-    call_target_names: std::collections::HashMap<u16, String>,
+    /// Which label each `(call site, page)` was found to name, so a stack
+    /// walked on every stop reads its few source lines once.
+    ///
+    /// Keyed on the page too, not just the call site: a call site with more
+    /// than one candidate page (see `CallFrame::other_candidates`) can
+    /// genuinely name a different routine per page, and a call-site-only key
+    /// would hand one page's answer back for another's lookup.
+    call_target_names: std::collections::HashMap<(u16, u8), String>,
     /// Where the program last stopped. What `-dv` with no argument means, and
     /// what a `PC`-following disassembly view re-anchors to on every step.
     last_pc: Option<u16>,
@@ -5257,8 +5262,18 @@ impl<P: DapPeer> Session<P> {
                 // Naming the routine the `CALL` entered, not the address it
                 // returns to: "play_music" is what the user is looking at in
                 // the stack, "0x4003" is where they already are.
-                // The page came out of the walk, so a paged frame resolves to
-                // exactly one line rather than being reported as ambiguous.
+                //
+                // The page came out of the walk, so this is *a* page the code
+                // could live in, not the only one - `CallFrame::other_candidates`'
+                // own doc comment explains why reading the stack cannot know
+                // which memory configuration was actually live when this frame
+                // was pushed. The primary candidate names and locates the
+                // frame as before; every other candidate that resolves to a
+                // genuinely different answer is appended, so an ambiguity is
+                // shown rather than silently resolved to a guess - the same
+                // choice `annotate_stack_trace` makes for the frame at `PC`
+                // itself.
+                let primary_page = frame.page.unwrap_or(0);
                 let located = frame
                     .page
                     .and_then(|page| self.map.location_at_long(page, frame.call_site));
@@ -5266,9 +5281,36 @@ impl<P: DapPeer> Session<P> {
                 // addresses, so the name is sometimes a choice between several
                 // and the number is what makes that visible rather than
                 // silently authoritative.
-                let name = match self.name_of_call_target(frame.called, frame.call_site, &located) {
-                    Some(symbol) => format!("{symbol} @ 0x{:04X}", frame.called),
-                    None => format!("0x{:04X}", frame.called)
+                let primary_name =
+                    match self.name_of_call_target(frame.called, frame.call_site, primary_page, &located) {
+                        Some(symbol) => format!("{symbol} @ 0x{:04X}", frame.called),
+                        None => format!("0x{:04X}", frame.called)
+                    };
+                let alternatives: Vec<String> = frame
+                    .other_candidates
+                    .iter()
+                    .filter_map(|&(other_page, other_called)| {
+                        let other_located = self.map.location_at_long(other_page, frame.call_site);
+                        let other_name = match self.name_of_call_target(
+                            other_called,
+                            frame.call_site,
+                            other_page,
+                            &other_located
+                        ) {
+                            Some(symbol) => format!("{symbol} @ 0x{other_called:04X}"),
+                            None => format!("0x{other_called:04X}")
+                        };
+                        // Two pages can genuinely agree - only a different
+                        // answer is worth surfacing as an alternative.
+                        (other_name != primary_name)
+                            .then(|| format!("{other_name} (page {other_page})"))
+                    })
+                    .collect();
+                let name = if alternatives.is_empty() {
+                    primary_name
+                }
+                else {
+                    format!("{primary_name} (also possibly {})", alternatives.join("; "))
                 };
                 let locals = if frame.locals.is_empty() {
                     String::new()
@@ -5389,15 +5431,18 @@ impl<P: DapPeer> Session<P> {
     /// and does not end in `_end`. The call site itself is the evidence: read
     /// the line the call was made from, and prefer the candidate it names.
     ///
-    /// Cached on the call site, because reading a source line is not free and
-    /// a stack is walked on every single stop, over the same few call sites.
+    /// Cached on `(call site, page)`, because reading a source line is not
+    /// free and a stack is walked on every single stop, over the same few
+    /// call sites - see `call_target_names`' own doc comment for why the
+    /// page is part of the key.
     fn name_of_call_target(
         &mut self,
         called: u16,
         call_site: u16,
+        page: u8,
         located: &Option<cpclib_project::srcmap::SourceLocation>
     ) -> Option<String> {
-        if let Some(known) = self.call_target_names.get(&call_site) {
+        if let Some(known) = self.call_target_names.get(&(call_site, page)) {
             return known.clone().into();
         }
 
@@ -5429,7 +5474,7 @@ impl<P: DapPeer> Session<P> {
         };
 
         if let Some(best) = best.as_ref() {
-            self.call_target_names.insert(call_site, best.clone());
+            self.call_target_names.insert((call_site, page), best.clone());
         }
         best
     }
@@ -6653,6 +6698,99 @@ mod tests {
                 "page 0 is the lowest of the two ambiguous pages, and the \
                  existing fallback picks the lowest"
             );
+        }
+    }
+
+    /// A synthetic caller frame (`finish_stack_walk`'s own reconstruction of
+    /// the call stack) can be ambiguous by construction - reading the stack
+    /// after the fact cannot know which memory configuration was live when
+    /// a frame was pushed, only which configurations *could* have produced
+    /// the `CALL` it returned from. Rather than silently picking the first
+    /// candidate page, every genuinely different answer is shown.
+    mod finish_stack_walk {
+        use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
+        use cpclib_project::srcmap::SourceMap;
+        use serde_json::{Value, json};
+
+        use crate::callstack::CallFrame;
+        use crate::peer::RecordingPeer;
+        use crate::session::Session;
+
+        fn map_with_two_routines() -> SourceMap {
+            let row = |file: u16, line: u32, logical: u32, physical: u32, page: u8| SourceMapRow {
+                file,
+                line,
+                logical,
+                physical,
+                page,
+                column: 1,
+                column_end: 1,
+                len: 1,
+                is_data: false
+            };
+            SourceMap::from_raw(&RawSourceMap {
+                files: vec!["routine_a.asm".into(), "routine_b.asm".into()],
+                rows: vec![row(0, 10, 0x5000, 0x5000, 1), row(1, 20, 0x7000, 0x27000, 2)]
+            })
+            .with_symbols(
+                [
+                    ("routine_a".to_string(), 0x5000u32),
+                    ("routine_b".to_string(), 0x7000u32),
+                ]
+                .into_iter()
+                .collect()
+            )
+            .with_address_symbols(["routine_a".to_string(), "routine_b".to_string()].into())
+        }
+
+        fn empty_stack_trace_response() -> Value {
+            json!({"body": {"stackFrames": []}})
+        }
+
+        /// A call site valid in two pages, naming two different routines:
+        /// the primary candidate is shown as before, and the other survives
+        /// as a visible alternative instead of being thrown away.
+        #[test]
+        fn a_call_site_ambiguous_between_two_routines_shows_both() {
+            let mut session = Session::new(RecordingPeer::new(), map_with_two_routines());
+
+            let frame = CallFrame {
+                page: Some(1),
+                return_address: 0x4003,
+                call_site: 0x4000,
+                called: 0x5000,
+                locals: Vec::new(),
+                other_candidates: vec![(2, 0x7000)]
+            };
+            let out = session.finish_stack_walk(empty_stack_trace_response(), vec![frame]);
+
+            let response = out.last().unwrap();
+            let name = response["body"]["stackFrames"][0]["name"].as_str().unwrap();
+            assert!(name.starts_with("routine_a @ 0x5000"), "{name}");
+            assert!(
+                name.contains("also possibly routine_b @ 0x7000 (page 2)"),
+                "{name}"
+            );
+        }
+
+        /// Two pages agreeing is not an ambiguity worth mentioning.
+        #[test]
+        fn two_pages_agreeing_on_the_same_answer_show_no_alternative() {
+            let mut session = Session::new(RecordingPeer::new(), map_with_two_routines());
+
+            let frame = CallFrame {
+                page: Some(1),
+                return_address: 0x4003,
+                call_site: 0x4000,
+                called: 0x5000,
+                locals: Vec::new(),
+                other_candidates: vec![(1, 0x5000)] // same page, same target
+            };
+            let out = session.finish_stack_walk(empty_stack_trace_response(), vec![frame]);
+
+            let response = out.last().unwrap();
+            let name = response["body"]["stackFrames"][0]["name"].as_str().unwrap();
+            assert_eq!(name, "routine_a @ 0x5000");
         }
     }
 

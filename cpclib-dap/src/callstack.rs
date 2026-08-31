@@ -63,7 +63,18 @@ pub struct CallFrame {
     /// The values this frame pushed that are not return addresses: its locals,
     /// its saved registers, whatever it put there. Free, because they are what
     /// the walk skipped over.
-    pub locals: Vec<u16>
+    pub locals: Vec<u16>,
+    /// Every *other* page whose image also plausibly holds a `CALL` at this
+    /// same `call_site`, each with what it says was called.
+    ///
+    /// Genuinely ambiguous by construction, not a gap this crate could close:
+    /// reading the stack after the fact cannot know which memory
+    /// configuration was actually live when this frame was pushed, only
+    /// which configurations *could* have produced a `CALL` here. `page`/
+    /// `called` above are kept as the first candidate found, for every
+    /// caller that has not been taught to show more than one - this is the
+    /// rest, for the one that has.
+    pub other_candidates: Vec<(u8, u16)>
 }
 
 /// Whether the three bytes at a candidate's `V-3` are a `CALL`.
@@ -109,10 +120,13 @@ pub fn walk_paged(
             continue;
         };
 
-        // The first page holding a `CALL` here wins. A logical address that is
-        // a `CALL` in two banks is genuinely ambiguous, and the frame is shown
-        // either way - only the source line it resolves to would differ.
-        let found = pages.iter().find_map(|page| {
+        // Every page holding a `CALL` here is a candidate, not just the
+        // first: a logical address that is a `CALL` in two banks is
+        // genuinely ambiguous - reading the stack cannot know which
+        // configuration was live when this frame was pushed - and the first
+        // one found is not more likely correct than the rest, only cheaper
+        // to have found first.
+        let mut found = pages.iter().filter_map(|page| {
             match (
                 read(*page, call_site),
                 read(*page, call_site + 1),
@@ -126,7 +140,7 @@ pub fn walk_paged(
                 _ => None
             }
         });
-        let Some((page, call)) = found
+        let Some((page, call)) = found.next()
         else {
             pending_locals.push(value);
             // Past this much unexplained stack, a `CALL` three bytes before a
@@ -138,13 +152,15 @@ pub fn walk_paged(
             }
             continue;
         };
+        let other_candidates: Vec<(u8, u16)> = found.collect();
 
         frames.push(CallFrame {
             page: Some(page),
             return_address: value,
             call_site,
             called: call,
-            locals: std::mem::take(&mut pending_locals)
+            locals: std::mem::take(&mut pending_locals),
+            other_candidates
         });
     }
 
@@ -239,6 +255,56 @@ mod tests {
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].page, Some(1), "the page the code really lives in");
         assert_eq!(frames[0].called, 0x5000);
+    }
+
+    /// When more than one page has a real `CALL` at the same site, both are
+    /// kept - reading the stack cannot know which memory configuration was
+    /// live when the frame was pushed, so the second reading is genuine
+    /// information, not noise to discard.
+    #[test]
+    fn a_call_valid_in_two_pages_keeps_both_as_candidates() {
+        let mut page0 = vec![0u8; 0x1_0000];
+        let mut page1 = vec![0u8; 0x1_0000];
+        // Both pages hold a real CALL at 0x4000, to different targets - a
+        // single-window remap (C4 vs C5) reusing one logical call site.
+        page0[0x4000] = 0xCD;
+        page0[0x4001] = 0x00;
+        page0[0x4002] = 0x50; // CALL 0x5000
+        page1[0x4000] = 0xCD;
+        page1[0x4001] = 0x00;
+        page1[0x4002] = 0x70; // CALL 0x7000
+        let read = move |page: u8, address: u16| {
+            let image = if page == 0 { &page0 } else { &page1 };
+            Some(image[address as usize])
+        };
+
+        let frames = walk_paged(&stack(&[0x4003]), &[0, 1], read);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].page, Some(0), "the first page found wins as the primary");
+        assert_eq!(frames[0].called, 0x5000);
+        assert_eq!(
+            frames[0].other_candidates,
+            vec![(1, 0x7000)],
+            "page 1's own reading is kept, not thrown away"
+        );
+    }
+
+    /// The common, unambiguous case must not grow a spurious alternative.
+    #[test]
+    fn a_call_valid_in_only_one_page_has_no_other_candidates() {
+        let mut page0 = vec![0u8; 0x1_0000];
+        let mut page1 = vec![0u8; 0x1_0000];
+        page1[0x4000] = 0xCD;
+        page1[0x4001] = 0x00;
+        page1[0x4002] = 0x50;
+        let read = move |page: u8, address: u16| {
+            let image = if page == 0 { &page0 } else { &page1 };
+            Some(image[address as usize])
+        };
+
+        let frames = walk_paged(&stack(&[0x4003]), &[0, 1], read);
+        assert_eq!(frames.len(), 1);
+        assert!(frames[0].other_candidates.is_empty());
     }
 
     #[test]
