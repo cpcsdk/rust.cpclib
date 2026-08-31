@@ -101,6 +101,20 @@ struct Span {
     file: u16,
     line: u32,
     page: u8,
+    /// `offset_in_cpc()` of `start` - the same logical address in two banks
+    /// of one page gives two different values here, which `page` alone
+    /// cannot: `page` is `physical >> 16`, so a single-window remap (`C4`
+    /// through `C7`) that changes only which bank of *one* page is paged
+    /// in at `&4000` collapses every such config to the same `page`. See
+    /// [`SourceMap::location_at_physical`].
+    ///
+    /// `#[serde(default)]` for the same reason `SourceMapRow::is_data` has
+    /// it: a `SourceMap` handed over already serialised, from before this
+    /// field existed, must still deserialise - it reads back as `0`, which
+    /// simply never matches a real physical address, rather than refusing
+    /// the whole cached map over one additive field.
+    #[serde(default)]
+    physical: u32,
     column: u16,
     column_end: u16,
     is_data: bool
@@ -176,6 +190,7 @@ impl SourceMap {
                 file: row.file,
                 line: row.line,
                 page: row.page,
+                physical: row.physical,
                 column: row.column,
                 column_end: row.column_end,
                 is_data: row.is_data
@@ -411,14 +426,24 @@ impl SourceMap {
             .rev()
             .filter(|s| address >= s.start && address < s.end);
 
-        // Within one page the *latest* span wins, as it always has: a macro
-        // expanded five times, or an `ORG` rewind, legitimately puts several
-        // rows on one address and the last one assembled is what is there.
+        // Deduped by `(page, physical)`, not `page` alone. Two rows sharing
+        // both are the *same byte* - a macro expanded five times, or an
+        // `ORG` rewind - and the latest span wins, as it always has. Two
+        // rows sharing only `page` are not a repeat: `physical` differing
+        // means they are genuinely different bytes that a single-window
+        // remap (`C4`-`C7`) happens to fold into one `page` number, and both
+        // must survive as separate candidates - collapsing them here is
+        // exactly what let `resolution_at` hand back a silent `Line` for an
+        // address two banks disagree about, instead of the `Ambiguous` that
+        // is the whole reason this map tracks `physical` at all.
+        let mut seen: Vec<(u8, u32)> = Vec::new();
         let mut candidates: Vec<(u8, SourceLocation)> = Vec::new();
         for span in covering {
-            if candidates.iter().any(|(page, _)| *page == span.page) {
+            let key = (span.page, span.physical);
+            if seen.contains(&key) {
                 continue;
             }
+            seen.push(key);
             let Some(file) = self.files.get(span.file as usize)
             else {
                 continue;
@@ -468,6 +493,35 @@ impl SourceMap {
             .iter()
             .rev()
             .find(|s| s.page == page && address >= s.start && address < s.end)?;
+        Some(SourceLocation {
+            file: self.files.get(span.file as usize)?.clone(),
+            line: span.line,
+            column: span.column as u32,
+            column_end: span.column_end as u32,
+            is_data: span.is_data,
+            len: span.end - span.start
+        })
+    }
+
+    /// Which source line a *physical* address belongs to - `bank * 0x4000 +
+    /// offset`, the same number `offset_in_cpc()` computes.
+    ///
+    /// `location_at_long` answers "which page", but a page is 64K and a
+    /// single-window remap (`C4`-`C7`) can put any one of its four banks at
+    /// `&4000` while the other three windows stay on the base page - so two
+    /// rows can share a `page` and still be different code at different
+    /// addresses. Physical does not have that ambiguity: `bank` is the
+    /// absolute 16K bank actually selected, exactly what `regions[].ram_bank`
+    /// reports when something can read it. A caller holding that value
+    /// should use this instead of `location_at_long` - there is nothing to
+    /// choose between here, because at a given physical address there is at
+    /// most one row.
+    pub fn location_at_physical(&self, physical: u32) -> Option<SourceLocation> {
+        let span = self
+            .spans
+            .iter()
+            .rev()
+            .find(|s| physical >= s.physical && physical < s.physical + (s.end - s.start))?;
         Some(SourceLocation {
             file: self.files.get(span.file as usize)?.clone(),
             line: span.line,
@@ -778,6 +832,90 @@ mod tests {
         let m = banked_map(&[(0, 10, 0x4000, 0, 3), (0, 90, 0x4000, 0, 3)]);
         assert!(!m.has_banked_ambiguity());
         assert_eq!(m.location_at(0x4000).unwrap().line, 90);
+    }
+
+    /// Same shape as `banked_map`, but `physical` is given explicitly instead
+    /// of derived from `page` - what a single-window remap (`C4`-`C7`) needs:
+    /// two rows can share a `page` and a `logical` address and still be two
+    /// different banks, hence two different `physical` addresses.
+    fn remapped_map(rows: &[(u16, u32, u32, u8, u32, u16)]) -> SourceMap {
+        SourceMap::from_raw(&RawSourceMap {
+            files: vec!["main.asm".to_string(), "inc.asm".to_string()],
+            rows: rows
+                .iter()
+                .map(|&(file, line, logical, page, physical, len)| {
+                    SourceMapRow {
+                        file,
+                        line,
+                        logical,
+                        physical,
+                        page,
+                        column: 1,
+                        column_end: 1,
+                        len,
+                        is_data: false
+                    }
+                })
+                .collect()
+        })
+    }
+
+    /// Two files assembled under a single-window remap (`C4` vs `C5`, say)
+    /// share one `page` - the extended-RAM page never changes, only which of
+    /// its four banks sits at `&4000` - so `page` alone cannot tell them
+    /// apart. `physical` can: it is `bank * 0x4000 + offset`, and the two
+    /// configs put different banks there.
+    #[test]
+    fn same_page_different_bank_resolves_precisely_by_physical_address() {
+        let m = remapped_map(&[
+            (0, 177, 0x42A8, 1, 0x102A8, 2), // C4: page 1, bank 0
+            (1, 308, 0x42A8, 1, 0x142A8, 1)  // C5: page 1, bank 1
+        ]);
+
+        // The coarse, page-only lookup cannot distinguish them - this is the
+        // existing, unchanged behaviour a byte-comparison fallback still
+        // needs, kept here only as a regression guard.
+        assert!(m.location_at_long(1, 0x42A8).is_some());
+
+        // Physical does not have that problem.
+        assert_eq!(m.location_at_physical(0x102A8).unwrap().line, 177);
+        assert_eq!(m.location_at_physical(0x142A8).unwrap().line, 308);
+        assert_eq!(
+            m.location_at_physical(0x182A8),
+            None,
+            "a bank that emitted nothing here answers nothing"
+        );
+    }
+
+    /// The bug this whole fix chases: a single-window remap (`C4` vs `C5`)
+    /// shares one `page`, so a naive per-`page` dedup in `candidates_at`
+    /// folds the two banks' rows into one before `resolution_at` ever gets
+    /// to decide `Line` vs `Ambiguous` - the address gets answered with
+    /// silent, arbitrary certainty instead of the ambiguity a caller with
+    /// `location_at_physical` (or a byte comparison) could actually resolve.
+    /// Deduping by `(page, physical)` instead - same byte collapses,
+    /// different byte does not - is what makes this case reach `Ambiguous`
+    /// at all.
+    #[test]
+    fn same_page_different_bank_is_reported_as_ambiguous_not_silently_picked() {
+        let m = remapped_map(&[
+            (0, 177, 0x42A8, 1, 0x102A8, 2), // C4: page 1, bank 0
+            (1, 308, 0x42A8, 1, 0x142A8, 1)  // C5: page 1, bank 1
+        ]);
+
+        match m.resolution_at(0x42A8) {
+            AddressResolution::Ambiguous { candidates, .. } => {
+                assert_eq!(candidates.len(), 2);
+                let lines: Vec<u32> = candidates.iter().map(|(_, l)| l.line).collect();
+                assert!(lines.contains(&177) && lines.contains(&308));
+            },
+            other => panic!("expected ambiguity between the two banks, got {other:?}")
+        }
+        assert_eq!(
+            m.location_at(0x42A8),
+            None,
+            "no guess is made - same failure mode as two different pages"
+        );
     }
 
     #[test]

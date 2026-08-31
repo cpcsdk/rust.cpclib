@@ -659,6 +659,18 @@ pub struct Session<P: DapPeer> {
     /// The page the emulator turned out to have paged in at `PC`, for as long
     /// as the program is stopped there.
     pc_page: Option<u8>,
+    /// The same answer as `pc_page`, kept at full precision: `bank * 0x4000 +
+    /// (PC & 0x3FFF)` rather than `physical >> 16`.
+    ///
+    /// A single-window remap (`C4`-`C7`) changes which bank of one page is
+    /// paged in at `&4000` without changing the page, so two files can share
+    /// `pc_page` and still be different code - exactly the ambiguity
+    /// `location_at_physical` is built to resolve and `location_at_long`
+    /// cannot. `None` exactly when `pc_page` is: set only when the emulator
+    /// named its own banking (AMSpiriT Lite's `/api/memmap`); left `None`
+    /// when a page had to be guessed by comparing bytes, because a byte
+    /// comparison only ever produces a page, never a bank within it.
+    pc_physical: Option<u32>,
     /// Which label each call site was found to name, so a stack walked on
     /// every stop reads its few source lines once.
     call_target_names: std::collections::HashMap<u16, String>,
@@ -766,6 +778,7 @@ impl<P: DapPeer> Session<P> {
             pending_stop_hint: None,
             last_stop_reason: None,
             pc_page: None,
+            pc_physical: None,
             call_target_names: std::collections::HashMap::new(),
             last_pc: None,
             timers: Vec::new(),
@@ -1420,6 +1433,7 @@ impl<P: DapPeer> Session<P> {
                             instructions,
                             &self.map,
                             self.pc_page,
+                            self.pc_physical,
                             None
                         );
                         self.resolve_ambiguous_operand_symbols(instructions, ambiguous);
@@ -2272,6 +2286,7 @@ impl<P: DapPeer> Session<P> {
             &mut instructions,
             &self.map,
             self.pc_page,
+            self.pc_physical,
             Some(&costs)
         );
         self.resolve_ambiguous_operand_symbols(&mut instructions, ambiguous);
@@ -4045,6 +4060,7 @@ impl<P: DapPeer> Session<P> {
             &mut instructions,
             &self.map,
             self.pc_page,
+            self.pc_physical,
             Some(&costs)
         );
         self.resolve_ambiguous_operand_symbols(&mut instructions, ambiguous);
@@ -4900,6 +4916,7 @@ impl<P: DapPeer> Session<P> {
         // The page this stop is at has not been worked out yet, and last
         // stop's answer is about last stop.
         self.pc_page = None;
+        self.pc_physical = None;
 
         // An emulator that knows its own paging is asked before anything else,
         // and asked for *every* stop rather than only when a stack walk
@@ -5094,6 +5111,7 @@ impl<P: DapPeer> Session<P> {
         }
 
         self.pc_page = None;
+        self.pc_physical = None;
         self.finish_stack_walk(held.response, frames)
     }
 
@@ -5115,18 +5133,29 @@ impl<P: DapPeer> Session<P> {
         // A memmap answer is recognised by carrying the Gate Array's own
         // banking fields - the MMR decides this, and `regions` is only the
         // emulator's summary of it.
-        self.pc_page = match response.get("body").filter(|body| {
+        match response.get("body").filter(|body| {
             body.get("ram_mode").is_some()
                 || body.get("rmr").is_some()
                 || body.get("regions").is_some()
         }) {
-            // The page, and only the page: a source map row is keyed on the
-            // *logical* address the code was assembled to run at, which is the
-            // address the CPU is at. Translating `PC` into an offset within
-            // the page before looking it up would miss by exactly the bank
-            // remapping under MMR modes 4-7.
-            Some(memmap) => crate::amspiritlite::page_at(memmap, pc),
-            None => self.page_matching(pc, &bytes, &self.pages_to_tell_apart(pc as u32))
+            // The emulator named its own banking: keep the full physical
+            // answer, not just its page. `page_at` is `physical >> 16`, which
+            // is exactly precise enough for the byte-comparison fallback
+            // below (a page is all a set of candidate *images* can be
+            // compared by) but throws away which bank of that page is
+            // selected - the one thing a single-window remap (`C4`-`C7`)
+            // changes without changing the page.
+            Some(memmap) => {
+                self.pc_physical = crate::amspiritlite::physical_of(memmap, pc);
+                self.pc_page = self.pc_physical.map(|physical| (physical >> 16) as u8);
+            },
+            // A byte comparison only ever tells pages apart, never banks
+            // within one - the pages being compared are already 64K images,
+            // not per-bank slices - so there is no physical answer to keep.
+            None => {
+                self.pc_page = self.page_matching(pc, &bytes, &self.pages_to_tell_apart(pc as u32));
+                self.pc_physical = None;
+            }
         };
         self.finish_stack_walk(held, frames)
     }
@@ -5802,39 +5831,63 @@ impl<P: DapPeer> Session<P> {
                 // worth explaining, because "why is there no source here"
                 // otherwise has no visible answer.
                 AddressResolution::Ambiguous { candidates, .. } => {
-                    // The page was worked out from the bytes really at `PC`;
-                    // if it was, the address is not ambiguous after all.
-                    match self.pc_page.and_then(|page| {
-                        u16::try_from(address)
-                            .ok()
-                            .and_then(|address| self.map.location_at_long(page, address))
-                    }) {
-                        Some(resolved) => resolved,
-                        None => {
-                            // The most probable line, rather than none at all.
-                            //
-                            // `-dv` shows this address's source happily - it
-                            // asks `location_at`, which answers with the last
-                            // span covering the address. Only the stack frame
-                            // was stricter, and refusing here is what leaves
-                            // the editor with no source to open and a bare
-                            // disassembly view instead. The knowledge is the
-                            // same; the caution was costing more than it saved.
-                            //
-                            // Still reported once, because a guess presented as
-                            // certainty is the thing actually worth avoiding.
-                            // The lowest page that claims it - a guess, and
-                            // demonstrably the wrong one: `0x79F3` is claimed
-                            // by page 0's `writter.asm` and page 1's
-                            // `animate.asm`, and the code really running there
-                            // was page 1's. Only kept for an emulator that
-                            // cannot report its paging at all; one that can is
-                            // asked instead, above.
-                            let probable = candidates.first().map(|(_, l)| l.clone());
-                            ambiguities.push((address, candidates));
-                            match probable {
-                                Some(probable) => probable,
-                                None => continue
+                    // The exact bank, not only the page, was worked out from
+                    // the bytes really at `PC` - an emulator that names its
+                    // own banking says which of a page's four 16K banks is
+                    // paged in, not only which page, so a single-window
+                    // remap (`C4`-`C7`) does not leave this ambiguous either.
+                    // A miss here is a real "no source" answer: physical
+                    // does not have the coarseness `page` does, so there is
+                    // nothing left worth guessing at with the page-only
+                    // fallback below.
+                    if let Some(pc_physical) = self.pc_physical {
+                        let Some(address) = u16::try_from(address).ok()
+                        else {
+                            continue;
+                        };
+                        let physical =
+                            (pc_physical & !0x3FFF) | u32::from(address & 0x3FFF);
+                        match self.map.location_at_physical(physical) {
+                            Some(resolved) => resolved,
+                            None => continue
+                        }
+                    }
+                    else {
+                        // The page was worked out from the bytes really at
+                        // `PC`; if it was, the address is not ambiguous after
+                        // all.
+                        match self.pc_page.and_then(|page| {
+                            u16::try_from(address)
+                                .ok()
+                                .and_then(|address| self.map.location_at_long(page, address))
+                        }) {
+                            Some(resolved) => resolved,
+                            None => {
+                                // The most probable line, rather than none at all.
+                                //
+                                // `-dv` shows this address's source happily - it
+                                // asks `location_at`, which answers with the last
+                                // span covering the address. Only the stack frame
+                                // was stricter, and refusing here is what leaves
+                                // the editor with no source to open and a bare
+                                // disassembly view instead. The knowledge is the
+                                // same; the caution was costing more than it saved.
+                                //
+                                // Still reported once, because a guess presented as
+                                // certainty is the thing actually worth avoiding.
+                                // The lowest page that claims it - a guess, and
+                                // demonstrably the wrong one: `0x79F3` is claimed
+                                // by page 0's `writter.asm` and page 1's
+                                // `animate.asm`, and the code really running there
+                                // was page 1's. Only kept for an emulator that
+                                // cannot report its paging at all; one that can is
+                                // asked instead, above.
+                                let probable = candidates.first().map(|(_, l)| l.clone());
+                                ambiguities.push((address, candidates));
+                                match probable {
+                                    Some(probable) => probable,
+                                    None => continue
+                                }
                             }
                         }
                     }
@@ -6364,6 +6417,118 @@ mod tests {
                 .with_image(image_with(0x4000, &[0xED, 0x00, 0xED, 0x01]));
 
             assert_eq!(session.line_cost(0x4001), None);
+        }
+    }
+
+    /// `annotate_stack_trace`'s handling of a same-page single-window remap -
+    /// the bug two files sharing an extended-RAM page (`C4` vs `C5`, say)
+    /// used to trigger: `page` alone cannot tell them apart, but the exact
+    /// bank AMSpiriT Lite reports can.
+    mod annotate_stack_trace {
+        use cpclib_asm::assembler::listing_output::{RawSourceMap, SourceMapRow};
+        use cpclib_project::srcmap::SourceMap;
+        use serde_json::{Value, json};
+
+        use crate::peer::RecordingPeer;
+        use crate::protocol::address_reference;
+        use crate::session::Session;
+
+        /// `spectral_sprites.asm` (config `C4`: page 1, bank 0) and
+        /// `animate.asm` (config `C5`: page 1, bank 1) both at logical
+        /// `0x42A8`, plus `writter.asm` at the same logical address in page
+        /// 0 - the genuine cross-page ambiguity this map is built to also
+        /// still carry, exactly as the real project's did.
+        fn remapped_map() -> SourceMap {
+            let row = |file: u16, line: u32, physical: u32, page: u8, len: u16, is_data: bool| {
+                SourceMapRow {
+                    file,
+                    line,
+                    logical: 0x42A8,
+                    physical,
+                    page,
+                    column: 1,
+                    column_end: 1,
+                    len,
+                    is_data
+                }
+            };
+            SourceMap::from_raw(&RawSourceMap {
+                files: vec![
+                    "spectral_sprites.asm".into(),
+                    "animate.asm".into(),
+                    "writter.asm".into(),
+                ],
+                rows: vec![
+                    row(0, 177, 0x102A8, 1, 2, false),
+                    row(1, 308, 0x142A8, 1, 1, false),
+                    row(2, 583, 0x0042A8, 0, 1, true),
+                ]
+            })
+        }
+
+        fn stack_trace_response(address: u32) -> Value {
+            json!({
+                "body": {
+                    "stackFrames": [
+                        { "instructionPointerReference": address_reference(address) }
+                    ]
+                }
+            })
+        }
+
+        /// The bug this guards against: single-stepping through
+        /// `spectral_sprites.asm` must not show `animate.asm` just because
+        /// both live in page 1 - once the exact bank is known there is
+        /// nothing left to guess.
+        #[test]
+        fn an_exact_bank_resolves_a_same_page_remap_precisely() {
+            let mut session = Session::new(RecordingPeer::new(), remapped_map());
+            session.pc_physical = Some(0x102A8); // C4: spectral_sprites' bank
+
+            let annotated = session.annotate_stack_trace(&stack_trace_response(0x42A8));
+
+            // The mutated stack trace response is pushed last - notes and the
+            // "where we stopped" announcement, if any, come before it.
+            let frame = &annotated.last().unwrap()["body"]["stackFrames"][0];
+            assert_eq!(frame["line"], json!(177));
+            assert_eq!(frame["source"]["name"], json!("spectral_sprites.asm"));
+        }
+
+        /// The same address, the other bank: resolution follows the bank,
+        /// not whichever file happened to win the coarse, page-only pick.
+        #[test]
+        fn a_different_bank_at_the_same_address_resolves_to_the_other_file() {
+            let mut session = Session::new(RecordingPeer::new(), remapped_map());
+            session.pc_physical = Some(0x142A8); // C5: animate's bank
+
+            let annotated = session.annotate_stack_trace(&stack_trace_response(0x42A8));
+
+            // The mutated stack trace response is pushed last - notes and the
+            // "where we stopped" announcement, if any, come before it.
+            let frame = &annotated.last().unwrap()["body"]["stackFrames"][0];
+            assert_eq!(frame["line"], json!(308));
+            assert_eq!(frame["source"]["name"], json!("animate.asm"));
+        }
+
+        /// Without exact banking (no AMSpiriT-style report), behaviour is
+        /// unchanged from before this fix: a best-effort guess at the lowest
+        /// page, not a refusal - this is the pre-existing fallback for a
+        /// backend that cannot report its paging at all, left untouched.
+        #[test]
+        fn without_exact_banking_the_old_page_only_guess_is_unchanged() {
+            let mut session = Session::new(RecordingPeer::new(), remapped_map());
+            // pc_physical and pc_page both unset, as if nothing could ask.
+
+            let annotated = session.annotate_stack_trace(&stack_trace_response(0x42A8));
+
+            // The mutated stack trace response is pushed last - notes and the
+            // "where we stopped" announcement, if any, come before it.
+            let frame = &annotated.last().unwrap()["body"]["stackFrames"][0];
+            assert_eq!(
+                frame["source"]["name"], json!("writter.asm"),
+                "page 0 is the lowest of the two ambiguous pages, and the \
+                 existing fallback picks the lowest"
+            );
         }
     }
 

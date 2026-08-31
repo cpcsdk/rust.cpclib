@@ -234,6 +234,7 @@ pub(crate) fn annotate_disassembly(
     instructions: &mut [Value],
     map: &SourceMap,
     page: Option<u8>,
+    physical: Option<u32>,
     costs: Option<&[Option<usize>]>
 ) -> Vec<AmbiguousOperand> {
     let mut ambiguous = Vec::new();
@@ -252,13 +253,27 @@ pub(crate) fn annotate_disassembly(
         //
         // In a banked program the page has to come from somewhere, since the
         // logical address alone is claimed by more than one; `page` is what the
-        // bytes at `PC` turned out to match.
+        // bytes at `PC` turned out to match. `physical`, when the emulator named
+        // its own banking, is finer still: a single-window remap (`C4`-`C7`)
+        // changes which bank of one page is paged in at `&4000` without
+        // changing the page, so `page` alone still leaves several rows of a
+        // disassembly listing claiming each other's addresses - exactly the
+        // fault this view exists to avoid. `physical` does not have that
+        // ambiguity, so it is tried first and, on a hit, is the whole answer.
         //
         // Hoisted above the operand block below: disambiguating an operand
         // needs this row's own location to read the source line from.
-        let located = page
-            .and_then(|page| u16::try_from(address).ok().map(|address| (page, address)))
-            .and_then(|(page, address)| map.location_at_long(page, address))
+        let located = physical
+            .and_then(|physical| {
+                u16::try_from(address)
+                    .ok()
+                    .map(|address| (physical & !0x3FFF) | u32::from(address & 0x3FFF))
+            })
+            .and_then(|physical| map.location_at_physical(physical))
+            .or_else(|| {
+                page.and_then(|page| u16::try_from(address).ok().map(|address| (page, address)))
+                    .and_then(|(page, address)| map.location_at_long(page, address))
+            })
             .or_else(|| map.location_at(address));
 
         // The addresses in the operands, named. `CALL 0xBB5A` is a routine you
@@ -1748,7 +1763,7 @@ mod tests {
         );
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
-        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None);
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None, None);
 
         assert_eq!(instructions[0]["symbols"], json!(["table_data"]));
         assert!(ambiguous.is_empty(), "nothing to disambiguate");
@@ -1775,7 +1790,7 @@ mod tests {
         );
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "NOP"})];
-        annotate_disassembly(&mut instructions, &map, None, None);
+        annotate_disassembly(&mut instructions, &map, None, None, None);
 
         assert_eq!(instructions[0]["symbol"], json!("b"), "shortest first");
         assert_eq!(
@@ -1783,6 +1798,50 @@ mod tests {
             json!(["cd", "table_data"]),
             "the rest, in the same preference order"
         );
+    }
+
+    /// The disassembly-view counterpart of `Session::annotate_stack_trace`'s
+    /// same-page-remap fix: `spectral_sprites.asm` (config `C4`) and
+    /// `animate.asm` (config `C5`) both claim the very same logical address
+    /// in extended-RAM page 1, so `page` alone cannot tell them apart -
+    /// every row of a disassembly listing must be resolved against the exact
+    /// bank, or a screenful of opcodes at one genuine address flips between
+    /// two unrelated files exactly the way the reported bug did.
+    #[test]
+    fn a_disassembly_listing_follows_the_exact_bank_not_just_the_page() {
+        let row = |file: u16, line: u32, physical: u32, len: u16| SourceMapRow {
+            file,
+            line,
+            logical: 0x42A8,
+            physical,
+            page: 1,
+            column: 1,
+            column_end: 1,
+            len,
+            is_data: false
+        };
+        let map = SourceMap::from_raw(&RawSourceMap {
+            files: vec!["spectral_sprites.asm".into(), "animate.asm".into()],
+            rows: vec![
+                row(0, 177, 0x102A8, 2), // C4: page 1, bank 0
+                row(1, 308, 0x142A8, 1), // C5: page 1, bank 1
+            ]
+        });
+
+        // Fetched under `C4`: the exact bank says `spectral_sprites.asm`,
+        // even though `page` alone would leave this address ambiguous.
+        let mut c4 = vec![json!({"address": "0x42a8", "instruction": "LD B, 0x8"})];
+        annotate_disassembly(&mut c4, &map, Some(1), Some(0x102A8), None);
+        assert_eq!(c4[0]["line"], json!(177));
+        assert_eq!(c4[0]["location"]["name"], json!("spectral_sprites.asm"));
+
+        // The very same logical address, fetched under `C5` instead: the
+        // answer follows the bank, not whichever row happened to win the
+        // coarse, page-only pick.
+        let mut c5 = vec![json!({"address": "0x42a8", "instruction": "NOP"})];
+        annotate_disassembly(&mut c5, &map, Some(1), Some(0x142A8), None);
+        assert_eq!(c5[0]["line"], json!(308));
+        assert_eq!(c5[0]["location"]["name"], json!("animate.asm"));
     }
 
     /// Several labels at an operand's address, and this row resolved to a
@@ -1806,7 +1865,7 @@ mod tests {
         );
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
-        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None);
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None, None);
 
         // The default guess still stands until a caller overrides it.
         assert_eq!(instructions[0]["symbols"], json!(["b"]));
@@ -1841,7 +1900,7 @@ mod tests {
         );
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "JP 0x5000"})];
-        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None);
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None, None);
 
         assert_eq!(instructions[0]["symbols"], json!(["b"]));
         assert!(
@@ -1870,7 +1929,7 @@ mod tests {
             json!({"address": "0x4008", "instruction": "LD HL, 0x0"}),
         ];
         let costs: Vec<Option<usize>> = vec![None, Some(4)];
-        let ambiguous = annotate_disassembly(&mut instructions, &map, None, Some(&costs));
+        let ambiguous = annotate_disassembly(&mut instructions, &map, None, None, Some(&costs));
 
         assert!(
             instructions[0].get("symbols").is_none(),
@@ -1900,7 +1959,7 @@ mod tests {
         .with_symbols([("inks".to_string(), 0x0000u32)].into_iter().collect());
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "LD A, 0x0"})];
-        annotate_disassembly(&mut instructions, &map, None, None);
+        annotate_disassembly(&mut instructions, &map, None, None, None);
 
         assert!(
             instructions[0].get("symbols").is_none(),
@@ -1921,7 +1980,7 @@ mod tests {
 
         for text in ["XOR 0x0", "CP 0x0", "AND 0x0", "BIT 0x0, A"] {
             let mut instructions = vec![json!({"address": "0x4000", "instruction": text})];
-            annotate_disassembly(&mut instructions, &map, None, None);
+            annotate_disassembly(&mut instructions, &map, None, None, None);
             assert!(
                 instructions[0].get("symbols").is_none(),
                 "{text}: {:?}",
@@ -1942,7 +2001,7 @@ mod tests {
         .with_symbols([("reset".to_string(), 0x0000u32)].into_iter().collect());
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "RST 0x00"})];
-        annotate_disassembly(&mut instructions, &map, None, None);
+        annotate_disassembly(&mut instructions, &map, None, None, None);
 
         assert_eq!(instructions[0]["symbols"], json!(["reset"]));
     }
@@ -1958,7 +2017,7 @@ mod tests {
         .with_symbols([("inks".to_string(), 0x0000u32)].into_iter().collect());
 
         let mut instructions = vec![json!({"address": "0x4000", "instruction": "LD (0x0), A"})];
-        annotate_disassembly(&mut instructions, &map, None, None);
+        annotate_disassembly(&mut instructions, &map, None, None, None);
 
         assert_eq!(instructions[0]["symbols"], json!(["inks"]));
     }
