@@ -1,15 +1,17 @@
 // Disassembled memory, with every row a link back to the source it came
 // from - `-dv` in the debug console.
 //
-// Rendered as a real `basm` document via a `TextDocumentContentProvider`,
-// not a webview: mnemonics/operands are genuine basm syntax (real token
-// coloring, identical to source), a `symbol` heading becomes a real basm
-// label line, and address/opcode-bytes/source-location metadata rides in a
-// trailing `;`-comment. Interactive bits carried over from the old webview:
-// a RAM-configuration picker (now an `editor/title` toolbar button instead
-// of an in-page `<select>`) and click-to-navigate (now a
-// `DocumentLinkProvider` targeting `file:` URIs with a `line,col` fragment,
-// rather than a custom postMessage handler).
+// Rendered as a real text document (language `z80-disassembly`) via a
+// `TextDocumentContentProvider`, not a webview: each row keeps the original
+// ADDRESS | BYTES | INSTRUCTION | SOURCE column layout, but every column now
+// gets real syntax coloring instead of HTML spans. `syntaxes/z80-disasm.tmLanguage.json`
+// defines only the address/bytes columns itself and reuses cpclib's real
+// z80-asm grammar for the instruction column, so mnemonics/registers/numbers/
+// directives read exactly like real source. Interactive bits carried over
+// from the old webview: a RAM-configuration picker (now an `editor/title`
+// toolbar button instead of an in-page `<select>`) and click-to-navigate
+// (now a `DocumentLinkProvider` targeting `file:` URIs with a `line,col`
+// fragment, rather than a custom postMessage handler).
 //
 // Memory and source are not the same thing in a demo, in two ways that
 // matter while debugging: a macro or a `REPEAT` turns one source line into a
@@ -72,12 +74,26 @@ function padColumn(text: string, width: number): string {
     return text.length + 2 <= width ? text.padEnd(width) : `${text}  `;
 }
 
-const INSTRUCTION_COL_WIDTH = 36;
-const INDENT = '        ';
+// Column widths for the ADDRESS | BYTES | INSTRUCTION | SOURCE layout - the
+// same four columns the old webview table had, now as aligned plain text
+// instead of `<td>`s. BYTES_COL_MIN_WIDTH is a floor; the real bytes column
+// widens to fit the longest opcode-byte run in the dump (up to 4 bytes for
+// most Z80 instructions, occasionally more for some ED-prefixed/indexed
+// forms), so every row in one view lines up.
+//
+// ADDRESS_COL_WIDTH is not just cosmetic: z80-disasm.tmLanguage.json's
+// `#address_bytes` rule assumes the gap right after the address's own fixed
+// `&XXXX` width (5 chars) is exactly 3 spaces, so it can tell "no bytes on
+// this row" apart from "bytes present" without accidentally swallowing a
+// hex-letter-only mnemonic (CALL, DEFB, ADD, ...) that follows. Change this
+// constant only alongside that regex's literal `{3}`.
+const ADDRESS_COL_WIDTH = 8;
+const BYTES_COL_MIN_WIDTH = 10;
+const INSTRUCTION_COL_WIDTH = 30;
 
 /** Builds the document text, its click-to-navigate links, and the at-PC
- * line, from one `-dv` dump - the plain-text/basm-syntax counterpart to the
- * old `disassemblyHtml`. */
+ * line, from one `-dv` dump - the plain-text/z80-disassembly-syntax
+ * counterpart to the old `disassemblyHtml`. */
 function renderDisassemblyDocument(dump: Disassembly): {
     text: string;
     links: vscode.DocumentLink[];
@@ -92,6 +108,11 @@ function renderDisassemblyDocument(dump: Disassembly): {
         : `&${hex(dump.address, 4)}`;
     lines.push(`; ${title} — ${dump.instructions.length} instructions`);
     lines.push('');
+
+    const bytesWidth = dump.instructions.reduce(
+        (max, entry) => Math.max(max, (entry.instructionBytes ?? '').length),
+        BYTES_COL_MIN_WIDTH,
+    );
 
     for (const entry of dump.instructions) {
         if (entry.symbol) {
@@ -111,17 +132,22 @@ function renderDisassemblyDocument(dump: Disassembly): {
         const locationLabel = hasLocation
             ? `${locationName}:${entry.line}${entry.column ? `:${entry.column}` : ''}`
             : '';
-
-        const bytesPart = entry.instructionBytes ? ` ${entry.instructionBytes}` : '';
         const symbolsPart = (entry.symbols ?? []).length
             ? ` (${(entry.symbols ?? []).join(', ')})`
             : '';
-        const commentBody = hasLocation
-            ? `&${hex(addressNum, 4)}:${bytesPart} -> ${locationLabel}${symbolsPart}`
-            : `&${hex(addressNum, 4)}:${bytesPart}${symbolsPart}`;
+        const commentBody = hasLocation ? `${locationLabel}${symbolsPart}` : symbolsPart.trim();
 
-        const insnText = `${INDENT}${entry.instruction ?? ''}`;
-        const line = `${padColumn(insnText, INSTRUCTION_COL_WIDTH)}; ${commentBody}`;
+        // Marker + address + bytes: matched (and colored) as one unit by
+        // `#address_bytes` in the grammar - see z80-disasm.tmLanguage.json.
+        const marker = atPc ? '▶ ' : '  ';
+        const addressField = padColumn(`&${hex(addressNum, 4)}`, ADDRESS_COL_WIDTH);
+        const bytesField = padColumn(entry.instructionBytes ?? '', bytesWidth + 2);
+        const prefix = `${marker}${addressField}${bytesField}`;
+
+        const insnText = entry.instruction ?? '';
+        const line = commentBody
+            ? `${prefix}${padColumn(insnText, INSTRUCTION_COL_WIDTH)}; ${commentBody}`
+            : `${prefix}${insnText}`;
         lines.push(line);
         const lineIndex = lines.length - 1;
 
@@ -233,7 +259,7 @@ export async function showDisassembly(
         // Custom-scheme documents are not associated with a language by file
         // extension the way `file:`-scheme ones are - skipping this call
         // silently renders the tab as plain text with zero coloring.
-        await vscode.languages.setTextDocumentLanguage(document, 'basm');
+        await vscode.languages.setTextDocumentLanguage(document, 'z80-disassembly');
         await vscode.window.showTextDocument(document, {
             viewColumn: vscode.ViewColumn.Beside,
             preview: false,

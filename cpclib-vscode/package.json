@@ -70,6 +70,13 @@
           ".asc"
         ],
         "configuration": "./language-configuration-bas.json"
+      },
+      {
+        "id": "z80-disassembly",
+        "aliases": [
+          "Z80 Disassembly"
+        ],
+        "configuration": "./language-configuration-asm.json"
       }
     ],
     "grammars": [
@@ -86,6 +93,11 @@
           "meta.embedded.block.jinja": "jinja",
           "meta.embedded.inline.jinja": "jinja"
         }
+      },
+      {
+        "language": "z80-disassembly",
+        "scopeName": "source.z80-disasm",
+        "path": "./syntaxes/z80-disasm.tmLanguage.json"
       }
     ],
     "semanticTokenScopes": [

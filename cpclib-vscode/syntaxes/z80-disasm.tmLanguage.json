@@ -1,0 +1,27 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Z80 Disassembly (basm -dv)",
+    "scopeName": "source.z80-disasm",
+    "comment": "The disassembly view's own grammar (see disassemblyDoc.ts). It defines exactly one new thing - the leading address/opcode-bytes columns `showDisassembly` prints before every instruction - and reuses cpclib's real z80-asm grammar, unchanged, for everything after them: mnemonics, registers, numbers, strings, and the db/dw/defm/defs-style data directives the disassembler falls back to for bytes it can't decode as an instruction. That reuse is what makes the instruction text on each row read exactly like real source, not an approximation of it.",
+    "patterns": [
+        { "include": "#address_bytes" },
+        { "include": "source.z80#comment" },
+        { "include": "source.z80#label_definition" },
+        { "include": "source.z80#directive" },
+        { "include": "source.z80#instruction" },
+        { "include": "source.z80#register" },
+        { "include": "source.z80#string" },
+        { "include": "source.z80#number" },
+        { "include": "source.z80#operator" }
+    ],
+    "repository": {
+        "address_bytes": {
+            "comment": "`▶ ` (or two spaces) + `&XXXX` + the space-separated opcode bytes, exactly as `renderDisassemblyDocument` writes them at the start of every instruction row. The address gets a real number-ish look; the bytes are dimmed like metadata, not code, since they are not something you read as source. Two things pin this down precisely enough to never swallow the mnemonic that follows (CALL, DEFB, ADD, ... all start with valid hex digits, so an under-anchored match would eat into them): the gap right after the 4-digit address is always exactly 3 spaces (ADDRESS_COL_WIDTH minus the address's own fixed width), and the bytes themselves are only ever SINGLE-space-separated pairs, never a run of 2+ spaces - both facts come straight from `renderDisassemblyDocument`'s own column padding.",
+            "match": "^([^&\\n]{0,3})(&[0-9A-Fa-f]{4})( {3})((?:[0-9A-Fa-f]{2}(?: [0-9A-Fa-f]{2})*)?)",
+            "captures": {
+                "2": { "name": "constant.numeric.hex.address.z80disasm" },
+                "4": { "name": "comment.line.bytes.z80disasm" }
+            }
+        }
+    }
+}
