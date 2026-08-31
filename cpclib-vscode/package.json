@@ -120,6 +120,32 @@
             "entity.name.function.label.z80"
           ]
         }
+      },
+      {
+        "language": "locomotive-basic",
+        "scopes": {
+          "keyword": [
+            "keyword.control.basic"
+          ],
+          "function": [
+            "support.function.basic"
+          ],
+          "variable": [
+            "variable.other.basic"
+          ],
+          "number": [
+            "constant.numeric.basic"
+          ],
+          "string": [
+            "string.quoted.basic"
+          ],
+          "comment": [
+            "comment.basic"
+          ],
+          "operator": [
+            "keyword.operator.basic"
+          ]
+        }
       }
     ],
     "commands": [
@@ -150,17 +176,17 @@
       },
       {
         "command": "cpclib.playMusic",
-        "title": "CPClib: Play music in emulator",
+        "title": "Play music in emulator",
         "category": "CPClib"
       },
       {
         "command": "cpclib.buildMusicDsk",
-        "title": "CPClib: Build DSK with music",
+        "title": "Build DSK with music",
         "category": "CPClib"
       },
       {
         "command": "cpclib.editConfig",
-        "title": "CPClib: Edit Project Configuration",
+        "title": "Edit Project Configuration",
         "category": "CPClib"
       },
       {
@@ -185,42 +211,42 @@
       },
       {
         "command": "cpclib.debugThisFile",
-        "title": "CPClib: Debug this file in the emulator",
+        "title": "Debug this file in the emulator",
         "category": "CPClib"
       },
       {
         "command": "cpclib.debugRule",
-        "title": "CPClib: Debug a bndbuild rule in the emulator",
+        "title": "Debug a bndbuild rule in the emulator",
         "category": "CPClib"
       },
       {
         "command": "cpclib.debugSnapshot",
-        "title": "CPClib: Debug a .sna snapshot",
+        "title": "Debug a .sna snapshot",
         "category": "CPClib"
       },
       {
         "command": "cpclib.runSnapshot",
-        "title": "CPClib: Run a .sna snapshot",
+        "title": "Run a .sna snapshot",
         "category": "CPClib"
       },
       {
         "command": "cpclib.debugDisk",
-        "title": "CPClib: Debug a .dsk disk",
+        "title": "Debug a .dsk disk",
         "category": "CPClib"
       },
       {
         "command": "cpclib.runDisk",
-        "title": "CPClib: Run a .dsk disk",
+        "title": "Run a .dsk disk",
         "category": "CPClib"
       },
       {
         "command": "cpclib.debugWithEmulator",
-        "title": "CPClib: Debug with a specific emulator...",
+        "title": "Debug with a specific emulator...",
         "category": "CPClib"
       },
       {
         "command": "cpclib.runWithEmulator",
-        "title": "CPClib: Run with a specific emulator...",
+        "title": "Run with a specific emulator...",
         "category": "CPClib"
       },
       {
@@ -230,239 +256,284 @@
       },
       {
         "command": "cpclib.openEmulatorInBrowser",
-        "title": "CPClib: Open the emulator in a browser (with sound)",
+        "title": "Open the emulator in a browser (with sound)",
         "category": "CPClib"
       },
       {
         "command": "cpclib.debugAssembly",
-        "title": "CPClib: Debug this assembly file",
+        "title": "Debug this assembly file",
         "category": "CPClib"
       },
       {
         "command": "cpclib.debugBasic",
-        "title": "CPClib: Debug this BASIC program",
+        "title": "Debug this BASIC program",
         "category": "CPClib"
       },
       {
         "command": "cpclib.runAsm",
-        "title": "CPClib: Run this assembly file",
+        "title": "Run this assembly file",
         "category": "CPClib"
       },
       {
         "command": "cpclib.openDisassembly",
-        "title": "CPClib: Open the disassembly view",
+        "title": "Open the disassembly view",
         "category": "CPClib"
       },
       {
         "command": "cpclib.openMemoryView",
-        "title": "CPClib: Open the memory view",
+        "title": "Open the memory view",
         "category": "CPClib"
       },
       {
         "command": "cpclib.openAllRegisterMemoryViews",
-        "title": "CPClib: Open memory views for every pointer register",
+        "title": "Open memory views for every pointer register",
         "category": "CPClib"
       },
       {
         "command": "cpclib.openCrtcView",
-        "title": "CPClib: Open the CRTC view",
+        "title": "Open the CRTC view",
         "category": "CPClib"
       },
       {
         "command": "cpclib.openBasicListing",
-        "title": "CPClib: Open the live BASIC listing",
+        "title": "Open the live BASIC listing",
         "category": "CPClib"
       },
       {
         "command": "cpclib.revealProgramCounter",
-        "title": "CPClib: Reveal the program counter in the source",
+        "title": "Reveal the program counter in the source",
         "category": "CPClib"
       },
       {
         "command": "cpclib.runWith.ace",
-        "title": "CPClib: ACE-DL",
+        "title": "ACE-DL",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.ace.needsInstall",
-        "title": "CPClib: ACE-DL (not installed - fetched on first use)",
+        "title": "ACE-DL (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.amspirit",
-        "title": "CPClib: AMSpiriT",
+        "title": "AMSpiriT",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.amspirit.needsInstall",
-        "title": "CPClib: AMSpiriT (not installed - fetched on first use)",
+        "title": "AMSpiriT (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.amspiritlite",
-        "title": "CPClib: AMSpiriT Lite",
+        "title": "AMSpiriT Lite",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.amspiritlite.needsInstall",
-        "title": "CPClib: AMSpiriT Lite (not installed - fetched on first use)",
+        "title": "AMSpiriT Lite (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.winape",
-        "title": "CPClib: WinAPE",
+        "title": "WinAPE",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.winape.needsInstall",
-        "title": "CPClib: WinAPE (not installed - fetched on first use)",
+        "title": "WinAPE (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.cpcec",
-        "title": "CPClib: CPCEC",
+        "title": "CPCEC",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.cpcec.needsInstall",
-        "title": "CPClib: CPCEC (not installed - fetched on first use)",
+        "title": "CPCEC (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.sugarbox",
-        "title": "CPClib: SugarBox v2",
+        "title": "SugarBox v2",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.sugarbox.needsInstall",
-        "title": "CPClib: SugarBox v2 (not installed - fetched on first use)",
+        "title": "SugarBox v2 (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.cpcemupower",
-        "title": "CPClib: CPCEmuPower",
+        "title": "CPCEmuPower",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.cpcemupower.needsInstall",
-        "title": "CPClib: CPCEmuPower (not installed - fetched on first use)",
+        "title": "CPCEmuPower (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.cpcemu",
-        "title": "CPClib: CPCEmu",
+        "title": "CPCEmu",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.cpcemu.needsInstall",
-        "title": "CPClib: CPCEmu (not installed - fetched on first use)",
+        "title": "CPCEmu (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.caprice",
-        "title": "CPClib: CaPriCe Forever",
+        "title": "CaPriCe Forever",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.caprice.needsInstall",
-        "title": "CPClib: CaPriCe Forever (not installed - fetched on first use)",
+        "title": "CaPriCe Forever (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.cadence",
-        "title": "CPClib: Cadence",
+        "title": "Cadence",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.cadence.needsInstall",
-        "title": "CPClib: Cadence (not installed - fetched on first use)",
+        "title": "Cadence (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.emulator1984",
-        "title": "CPClib: 1984 (native)",
+        "title": "1984 (native)",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.emulator1984.needsInstall",
-        "title": "CPClib: 1984 (native) (not installed - fetched on first use)",
+        "title": "1984 (native) (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.emulator1984-js",
-        "title": "CPClib: 1984js (browser)",
+        "title": "1984js (browser)",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.emulator1984-js.needsInstall",
-        "title": "CPClib: 1984js (browser) (not installed - fetched on first use)",
+        "title": "1984js (browser) (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.runWith.rvm",
-        "title": "CPClib: Retro Virtual Machine",
+        "title": "Retro Virtual Machine",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.runWith.rvm.needsInstall",
-        "title": "CPClib: Retro Virtual Machine (not installed - fetched on first use)",
+        "title": "Retro Virtual Machine (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.debugWith.amspiritlite",
-        "title": "CPClib: AMSpiriT Lite",
+        "title": "AMSpiriT Lite",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.debugWith.amspiritlite.needsInstall",
-        "title": "CPClib: AMSpiriT Lite (not installed - fetched on first use)",
+        "title": "AMSpiriT Lite (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
       },
       {
         "command": "cpclib.debugWith.1984js",
-        "title": "CPClib: 1984js (browser)",
+        "title": "1984js (browser)",
         "category": "CPClib",
         "icon": "$(pass-filled)"
       },
       {
         "command": "cpclib.debugWith.1984js.needsInstall",
-        "title": "CPClib: 1984js (browser) (not installed - fetched on first use)",
+        "title": "1984js (browser) (not installed - fetched on first use)",
         "category": "CPClib",
         "icon": "$(cloud-download)"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.live",
+        "title": "$(chip) Live (CPU)",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.c0",
+        "title": "$(chip) C0",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.c1",
+        "title": "$(chip) C1",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.c2",
+        "title": "$(chip) C2",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.c3",
+        "title": "$(chip) C3",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.c4",
+        "title": "$(chip) C4",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.c5",
+        "title": "$(chip) C5",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.c6",
+        "title": "$(chip) C6",
+        "category": "CPClib"
+      },
+      {
+        "command": "cpclib.disassemblyConfigPicker.c7",
+        "title": "$(chip) C7",
+        "category": "CPClib"
       }
     ],
     "submenus": [
       {
         "id": "cpclib.debugWithEmulatorMenu",
-        "label": "CPClib: Debug with..."
+        "label": "CPClib: Debug with... (2 emulators support debugging)"
       },
       {
         "id": "cpclib.runWithEmulatorMenu",
@@ -472,29 +543,86 @@
     "menus": {
       "editor/context": [
         {
-          "command": "cpclib.pickInkColor",
-          "when": "(editorLangId == basm || editorLangId == locomotive-basic || editorLangId == catart-basic) && cpclib.cursorOnInkColor",
-          "group": "9_cutcopypaste"
+          "command": "cpclib.assembleThisFile",
+          "when": "editorLangId == basm",
+          "group": "cpclib.run@1"
         },
         {
-          "command": "cpclib.findPeepholeInSelection",
-          "when": "editorLangId == basm && editorHasSelection",
-          "group": "9_cutcopypaste"
+          "command": "cpclib.debugThisFile",
+          "when": "editorLangId == basm || editorLangId == locomotive-basic || editorLangId == catart-basic",
+          "group": "cpclib.run@2"
+        },
+        {
+          "command": "cpclib.buildActiveFile",
+          "when": "editorLangId == basm",
+          "group": "cpclib.run@3"
         },
         {
           "command": "cpclib.findPeepholeInFile",
           "when": "editorLangId == basm && !editorHasSelection",
-          "group": "9_cutcopypaste"
+          "group": "cpclib.peephole@1"
         },
         {
-          "command": "cpclib.assembleThisFile",
+          "command": "cpclib.findPeepholeInSelection",
+          "when": "editorLangId == basm && editorHasSelection",
+          "group": "cpclib.peephole@2"
+        },
+        {
+          "command": "cpclib.clearPeepholeResults",
           "when": "editorLangId == basm",
-          "group": "9_cutcopypaste"
+          "group": "cpclib.peephole@3"
         },
         {
-          "command": "cpclib.debugThisFile",
-          "when": "editorLangId == basm || editorLangId == locomotive-basic",
-          "group": "9_cutcopypaste"
+          "command": "cpclib.pickInkColor",
+          "when": "(editorLangId == basm || editorLangId == locomotive-basic || editorLangId == catart-basic) && cpclib.cursorOnInkColor",
+          "group": "cpclib.tools@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "cpclib.disassemblyConfigPicker.live",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == live",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c0",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c0",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c1",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c1",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c2",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c2",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c3",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c3",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c4",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c4",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c5",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c5",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c6",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c6",
+          "group": "navigation"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c7",
+          "when": "resourceScheme == cpclib-disasm && cpclib.disasmConfig == c7",
+          "group": "navigation"
         }
       ],
       "explorer/context": [
@@ -694,6 +822,42 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "cpclib.disassemblyConfigPicker.live",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c0",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c1",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c2",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c3",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c4",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c5",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c6",
+          "when": "false"
+        },
+        {
+          "command": "cpclib.disassemblyConfigPicker.c7",
+          "when": "false"
+        },
         {
           "command": "cpclib.runWith.ace",
           "when": "false"
@@ -1014,7 +1178,7 @@
       }
     ],
     "configuration": {
-      "title": "CPClib LSP",
+      "title": "CPClib",
       "properties": {
         "cpclib.debug.openInWebview": {
           "type": "boolean",
